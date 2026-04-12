@@ -2,11 +2,14 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
 
 jobs:
-  release:
+  build:
     runs-on: macos-15
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
     permissions:
       contents: write
     env:
@@ -29,7 +32,29 @@ jobs:
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="0.0.0"
           fi
-          ARCH=arm64 VERSION="$VERSION" mise run build
+          ARCH=${{ matrix.arch }} VERSION="$VERSION" mise run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: build/*.dmg
+
+  release:
+    needs: build
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dmgs
+          merge-multiple: true
 
       - name: Create GitHub release
         run: |
@@ -37,7 +62,6 @@ jobs:
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="0.0.0"
           fi
-          DMG="build/Macterm-${VERSION}-arm64.dmg"
           TAG="v${VERSION}"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Macterm $TAG" --generate-notes
-          gh release upload "$TAG" "$DMG" --clobber
+          gh release upload "$TAG" dmgs/*.dmg --clobber
