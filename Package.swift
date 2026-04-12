@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "Macterm",
     platforms: [
-        .macOS(.v14),
+        .macOS("26.0"),
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.1"),

@@ -26,7 +26,7 @@ xattr -cr /Applications/Macterm.app
 
 ## Requirements
 
-- macOS 14.0+
+- macOS 26.0+
 - Swift 6.0+
 - [mise](https://mise.jdx.dev/) (optional, but recommended)
 

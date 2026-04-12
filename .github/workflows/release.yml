@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     strategy:
       matrix:
         arch: [arm64, x86_64]
@@ -42,7 +42,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: macos-15
+    runs-on: macos-26
     permissions:
       contents: write
     env:
