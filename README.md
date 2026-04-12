@@ -1,14 +1,14 @@
 <h1 align="center">▞▚ macterm ▞▚</h1>
 
 <p align="center">
-  macterm is a modern terminal multiplexer for macOS, built with SwiftUI and powered by libghostty.
+  macterm is a modern terminal multiplexer for macOS, featuring a native sidebar for vertical project and tab management. Built with SwiftUI and powered by libghostty.
 </p>
 
 ![screenshot](./screenshot.png)
 
 ## Features
 
-- **Project Workspaces**: Keep your terminal sessions organized by project.
+- **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
 - **Split Panes**: Unlimited horizontal and vertical splits.
 - **Persistence**: Workspaces are saved and restored automatically.
 - **Quick Terminal**: Global dropdown terminal accessible from anywhere.
