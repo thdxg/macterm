@@ -23,6 +23,9 @@
 ## Quick Start
 
 ```bash
+# Install necessary tools (swiftlint, gh, etc.)
+mise install
+
 # Setup dependencies
 mise run setup
 

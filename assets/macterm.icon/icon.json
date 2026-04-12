@@ -17,16 +17,18 @@
       "layers" : [
         {
           "blend-mode" : "normal",
-          "fill" : "none",
-          "glass" : false,
+          "fill" : {
+            "solid" : "srgb:0.87843,0.87059,0.95686,1.00000"
+          },
+          "glass" : true,
           "hidden" : false,
           "image-name" : "icon_512@2x.png",
           "name" : "icon_512@2x",
           "position" : {
-            "scale" : 1.55,
+            "scale" : 0.78,
             "translation-in-points" : [
-              -0.5,
-              -0.5
+              -177.1640625,
+              -181.1171875
             ]
           }
         }

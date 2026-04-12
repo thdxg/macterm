@@ -11,10 +11,9 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.1"),
     ],
     targets: [
-        .target(
+        .binaryTarget(
             name: "GhosttyKit",
-            path: "GhosttyKit",
-            publicHeadersPath: "."
+            path: "GhosttyKit.xcframework"
         ),
         .executableTarget(
             name: "Macterm",
@@ -28,10 +27,6 @@ let package = Package(
                 .process("Resources"),
             ],
             linkerSettings: [
-                .unsafeFlags([
-                    "-L", "GhosttyKit.xcframework/macos-arm64_x86_64",
-                    "-lghostty",
-                ]),
                 .linkedFramework("AppKit"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("CoreGraphics"),

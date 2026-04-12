@@ -1,3 +1,8 @@
+[tools]
+gh = "latest"
+swiftformat = "latest"
+swiftlint = "latest"
+
 [tasks.run]
 description = "Run the app (checks first)"
 depends = ["check"]
@@ -126,7 +131,7 @@ run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
-FORK_REPO="macterm-app/ghostty"
+FORK_REPO="thdxg/ghostty"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 
 if [[ -d "$XCFRAMEWORK_DIR" ]]; then
@@ -139,8 +144,6 @@ LATEST_TAG=$(gh release list --repo "$FORK_REPO" --limit 1 --json tagName -q '.[
 gh release download "$LATEST_TAG" --pattern "GhosttyKit.xcframework.tar.gz" --repo "$FORK_REPO"
 tar xzf GhosttyKit.xcframework.tar.gz
 rm GhosttyKit.xcframework.tar.gz
-
-cp "$XCFRAMEWORK_DIR/macos-arm64_x86_64/Headers/ghostty.h" "GhosttyKit/ghostty.h"
 """
 
 [tasks.clean]
