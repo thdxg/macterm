@@ -1,8 +1,10 @@
 <h1 align="center">▞▚ macterm ▞▚</h1>
 
 <p align="center">
-  macterm is a modern, performance-oriented terminal multiplexer for macOS, built with SwiftUI and powered by libghostty.
+  macterm is a modern terminal multiplexer for macOS, built with SwiftUI and powered by libghostty.
 </p>
+
+![screenshot](./screenshot.png)
 
 ## Features
 
