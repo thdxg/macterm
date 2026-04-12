@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.macterm.app</string>
+	<key>CFBundleExecutable</key>
+	<string>Macterm</string>
+	<key>CFBundleName</key>
+	<string>Macterm</string>
+	<key>CFBundleDisplayName</key>
+	<string>Macterm</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleVersion</key>
+	<string>BUILD_NUMBER</string>
+	<key>CFBundleShortVersionString</key>
+	<string>VERSION_STRING</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to use AppleScript.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to use Bluetooth.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to access your calendar.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to use the camera.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to access your contacts.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to access the local network.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to access your location information.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to use your microphone.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to access motion data.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to access your photo library.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to access your reminders.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>A process running in Macterm's terminal would like to use speech recognition.</string>
+	<key>NSSystemAdministrationUsageDescription</key>
+	<string>A process running in Macterm's terminal requires elevated privileges.</string>
+</dict>
+</plist>

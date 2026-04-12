@@ -1,0 +1,187 @@
+import CoreGraphics
+import Foundation
+
+enum SplitDirection { case horizontal, vertical }
+enum SplitPosition { case first, second }
+
+/// A pane is the leaf of the split tree — one terminal surface.
+@MainActor @Observable
+final class Pane: Identifiable {
+    let id = UUID()
+    let projectPath: String
+    var title: String = "Terminal"
+    let searchState = TerminalSearchState()
+
+    var processTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Terminal" }
+
+        let tokens = trimmed.split(whereSeparator: \ .isWhitespace).map(String.init)
+        guard !tokens.isEmpty else { return "Terminal" }
+
+        func isPathLike(_ token: String) -> Bool {
+            token.contains("/") || token.hasPrefix("~")
+        }
+
+        func isNoise(_ token: String) -> Bool {
+            token.allSatisfy { !$0.isLetter && !$0.isNumber }
+        }
+
+        if let candidate = tokens.first(where: { !isPathLike($0) && !isNoise($0) }) {
+            return candidate
+        }
+
+        return tokens.first ?? "Terminal"
+    }
+
+    var sidebarSegmentTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "Terminal" else { return projectPath }
+
+        let tokens = trimmed.split(whereSeparator: \ .isWhitespace).map(String.init)
+        guard let first = tokens.first else { return projectPath }
+
+        func isPathLike(_ token: String) -> Bool {
+            token.contains("/") || token.hasPrefix("~")
+        }
+
+        func isNoise(_ token: String) -> Bool {
+            token.allSatisfy { !$0.isLetter && !$0.isNumber }
+        }
+
+        if isPathLike(first) {
+            if let running = tokens.dropFirst().first(where: { !isPathLike($0) && !isNoise($0) }) {
+                return running
+            }
+            return first
+        }
+
+        return processTitle
+    }
+
+    init(projectPath: String) {
+        self.projectPath = projectPath
+    }
+}
+
+/// Recursive split tree. Each leaf is a `Pane`, each branch splits two subtrees.
+enum SplitNode: Identifiable {
+    case pane(Pane)
+    indirect case split(SplitBranch)
+
+    var id: UUID {
+        switch self {
+        case let .pane(p): p.id
+        case let .split(b): b.id
+        }
+    }
+}
+
+@Observable
+final class SplitBranch: Identifiable {
+    let id = UUID()
+    var direction: SplitDirection
+    var ratio: CGFloat
+    var first: SplitNode
+    var second: SplitNode
+
+    init(direction: SplitDirection, ratio: CGFloat = 0.5, first: SplitNode, second: SplitNode) {
+        self.direction = direction
+        self.ratio = ratio
+        self.first = first
+        self.second = second
+    }
+}
+
+// MARK: - Tree operations
+
+@MainActor
+extension SplitNode {
+    func splitting(
+        paneID: UUID,
+        direction: SplitDirection,
+        position: SplitPosition,
+        projectPath: String
+    ) -> (node: SplitNode, newPaneID: UUID?) {
+        switch self {
+        case let .pane(p) where p.id == paneID:
+            let newPane = Pane(projectPath: projectPath)
+            let first: SplitNode = position == .first ? .pane(newPane) : .pane(p)
+            let second: SplitNode = position == .first ? .pane(p) : .pane(newPane)
+            return (.split(SplitBranch(direction: direction, first: first, second: second)), newPane.id)
+        case .pane:
+            return (self, nil)
+        case let .split(branch):
+            let (newFirst, id1) = branch.first.splitting(paneID: paneID, direction: direction, position: position, projectPath: projectPath)
+            branch.first = newFirst
+            if id1 != nil { return (.split(branch), id1) }
+            let (newSecond, id2) = branch.second.splitting(
+                paneID: paneID,
+                direction: direction,
+                position: position,
+                projectPath: projectPath
+            )
+            branch.second = newSecond
+            return (.split(branch), id2)
+        }
+    }
+
+    func removing(paneID: UUID) -> SplitNode? {
+        switch self {
+        case let .pane(p) where p.id == paneID: return nil
+        case .pane: return self
+        case let .split(branch):
+            if case let .pane(p) = branch.first, p.id == paneID { return branch.second }
+            if case let .pane(p) = branch.second, p.id == paneID { return branch.first }
+            if branch.first.contains(paneID: paneID), let n = branch.first.removing(paneID: paneID) {
+                branch.first = n
+                return .split(branch)
+            }
+            if branch.second.contains(paneID: paneID), let n = branch.second.removing(paneID: paneID) {
+                branch.second = n
+                return .split(branch)
+            }
+            return self
+        }
+    }
+
+    func contains(paneID: UUID) -> Bool {
+        switch self {
+        case let .pane(p): p.id == paneID
+        case let .split(b): b.first.contains(paneID: paneID) || b.second.contains(paneID: paneID)
+        }
+    }
+
+    func allPanes() -> [Pane] {
+        switch self {
+        case let .pane(p): [p]
+        case let .split(b): b.first.allPanes() + b.second.allPanes()
+        }
+    }
+
+    func findPane(id: UUID) -> Pane? {
+        switch self {
+        case let .pane(p): p.id == id ? p : nil
+        case let .split(b): b.first.findPane(id: id) ?? b.second.findPane(id: id)
+        }
+    }
+
+    func paneFrames(in rect: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)) -> [UUID: CGRect] {
+        switch self {
+        case let .pane(p):
+            return [p.id: rect]
+        case let .split(b):
+            let r = min(max(b.ratio, 0), 1)
+            if b.direction == .horizontal {
+                let w1 = rect.width * r
+                let r1 = CGRect(x: rect.minX, y: rect.minY, width: w1, height: rect.height)
+                let r2 = CGRect(x: rect.minX + w1, y: rect.minY, width: rect.width - w1, height: rect.height)
+                return b.first.paneFrames(in: r1).merging(b.second.paneFrames(in: r2)) { a, _ in a }
+            }
+            let h1 = rect.height * r
+            let r1 = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: h1)
+            let r2 = CGRect(x: rect.minX, y: rect.minY + h1, width: rect.width, height: rect.height - h1)
+            return b.first.paneFrames(in: r1).merging(b.second.paneFrames(in: r2)) { a, _ in a }
+        }
+    }
+}
