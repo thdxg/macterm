@@ -286,10 +286,6 @@ private struct KeymapSettings: View {
                         }
                     }
                 }
-
-                Text("Format: cmd+t, cmd+shift+d, ctrl+tab, option+cmd+o, or 'disabled'")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
