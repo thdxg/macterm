@@ -118,9 +118,8 @@ private struct WindowStyler: NSViewRepresentable {
     func updateNSView(_: NSView, context _: Context) {}
 
     private func applyStyle(to window: NSWindow) {
-        let opacity = GhosttyApp.shared.backgroundOpacity
-        window.isOpaque = false
-        window.backgroundColor = MactermTheme.nsBg.withAlphaComponent(opacity)
+        window.isOpaque = true
+        window.backgroundColor = MactermTheme.nsBg
     }
 
     final class Coordinator {
@@ -134,9 +133,8 @@ private struct WindowStyler: NSViewRepresentable {
             ) { [weak window] _ in
                 guard let window else { return }
                 MainActor.assumeIsolated {
-                    let opacity = GhosttyApp.shared.backgroundOpacity
-                    window.isOpaque = false
-                    window.backgroundColor = MactermTheme.nsBg.withAlphaComponent(opacity)
+                    window.isOpaque = true
+                    window.backgroundColor = MactermTheme.nsBg
                 }
             }
         }
