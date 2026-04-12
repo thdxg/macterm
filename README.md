@@ -14,6 +14,16 @@
 - **Quick Terminal**: Global dropdown terminal accessible from anywhere.
 - **Highly Configurable**: Custom hotkeys, themes, and more.
 
+## Install
+
+Download the latest `.dmg` from [Releases](https://github.com/thdxg/macterm/releases), open it, and drag Macterm to Applications.
+
+Since the app is not signed with an Apple Developer certificate, macOS will block it on first launch. To fix this, run:
+
+```bash
+xattr -cr /Applications/Macterm.app
+```
+
 ## Requirements
 
 - macOS 14.0+

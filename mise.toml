@@ -69,9 +69,15 @@ codesign --force --sign - "$SPARKLE_DIR/Versions/B/Autoupdate"
 codesign --force --sign - "$SPARKLE_DIR"
 codesign --force --sign - "$APP_BUNDLE"
 
-cd "$BUILD_DIR"
+DMG_STAGING="$BUILD_DIR/dmg-staging"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+cp -R "$APP_BUNDLE" "$DMG_STAGING/"
+ln -s /Applications "$DMG_STAGING/Applications"
+
 rm -f "$BUILD_DIR/$DMG_NAME"
-hdiutil create -volname "Macterm" -srcfolder "$APP_BUNDLE" -ov -format UDZO "$BUILD_DIR/$DMG_NAME"
+hdiutil create -volname "Macterm" -srcfolder "$DMG_STAGING" -ov -format UDZO "$BUILD_DIR/$DMG_NAME"
+rm -rf "$DMG_STAGING"
 """
 
 [tasks.install]
