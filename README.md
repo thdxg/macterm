@@ -1,10 +1,8 @@
-# macterm
+<h1 align="center">▞▚ macterm ▞▚</h1>
 
-```text
-  ▞▚ macterm ▞▚
-```
-
-macterm is a modern, performance-oriented terminal multiplexer for macOS, built with SwiftUI and powered by libghostty.
+<p align="center">
+  macterm is a modern, performance-oriented terminal multiplexer for macOS, built with SwiftUI and powered by libghostty.
+</p>
 
 ## Features
 
