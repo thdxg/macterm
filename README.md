@@ -1,9 +1,7 @@
 # macterm
 
 ```text
-  _
- | | macterm
- |_|
+  ▞▚ macterm ▞▚
 ```
 
 macterm is a modern, performance-oriented terminal multiplexer for macOS, built with SwiftUI and powered by libghostty.
