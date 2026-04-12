@@ -4,7 +4,7 @@
   macterm is a modern terminal multiplexer for macOS, featuring a native sidebar for vertical project and tab management. Built with SwiftUI and powered by libghostty.
 </p>
 
-![screenshot](./screenshot.png)
+![screenshot](./assets/screenshot.png)
 
 ## Features
 
