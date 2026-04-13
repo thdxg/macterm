@@ -43,101 +43,75 @@ private struct AppearanceSettings: View {
     @State
     private var monoFonts: [String] = []
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                GroupBox("Font") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        settingRow("Font Family") {
-                            MonoFontPicker(
-                                fonts: monoFonts,
-                                selection: $currentFont
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .onChange(of: currentFont) { _, v in
-                                if v.isEmpty {
-                                    MactermConfig.shared.removeValue("font-family")
-                                } else {
-                                    MactermConfig.shared.updateValue("font-family", value: v)
-                                }
-                                GhosttyApp.shared.reloadConfig()
-                            }
-                        }
+        Form {
+            Section("Font") {
+                Picker("Font Family", selection: $currentFont) {
+                    Text("Default").tag("")
+                    Divider()
+                    ForEach(monoFonts, id: \.self) { family in
+                        Text(family)
+                            .font(.custom(family, size: 13))
+                            .tag(family)
                     }
-                    .padding(8)
                 }
-                GroupBox("Theme") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        settingRow("Select Theme") {
-                            Picker("Select Theme", selection: $currentTheme) {
-                                Text("Default").tag("")
-                                Divider()
-                                ForEach(themes) { theme in
-                                    Text(theme.id).tag(theme.id)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .onChange(of: currentTheme) { _, v in
-                                MactermConfig.shared.updateValue("theme", value: "\"\(v)\"")
-                                GhosttyApp.shared.reloadConfig()
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        if let theme = themes.first(where: { $0.id == currentTheme }) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Preview")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-
-                                HStack(alignment: .top, spacing: 16) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("BG / FG")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.secondary)
-                                        HStack(spacing: 6) {
-                                            colorChip(theme.background)
-                                            colorChip(theme.foreground)
-                                        }
-                                    }
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Palette")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.secondary)
-                                        LazyVGrid(
-                                            columns: Array(repeating: GridItem(.fixed(16), spacing: 4, alignment: .leading), count: 8),
-                                            alignment: .leading,
-                                            spacing: 4
-                                        ) {
-                                            ForEach(Array(theme.palette.enumerated()), id: \.offset) { _, color in
-                                                colorChip(color)
-                                            }
-                                        }
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .padding(.top, 4)
-                        }
+                .onChange(of: currentFont) { _, v in
+                    if v.isEmpty {
+                        MactermConfig.shared.removeValue("font-family")
+                    } else {
+                        MactermConfig.shared.updateValue("font-family", value: v)
                     }
-                    .padding(8)
+                    GhosttyApp.shared.reloadConfig()
                 }
             }
-            .padding(16)
+
+            Section("Theme") {
+                Picker("Select Theme", selection: $currentTheme) {
+                    Text("Default").tag("")
+                    Divider()
+                    ForEach(themes) { theme in
+                        Text(theme.id).tag(theme.id)
+                    }
+                }
+                .onChange(of: currentTheme) { _, v in
+                    MactermConfig.shared.updateValue("theme", value: "\"\(v)\"")
+                    GhosttyApp.shared.reloadConfig()
+                }
+
+                if let theme = themes.first(where: { $0.id == currentTheme }) {
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("BG / FG")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                colorChip(theme.background)
+                                colorChip(theme.foreground)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Palette")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                            LazyVGrid(
+                                columns: Array(repeating: GridItem(.fixed(16), spacing: 4, alignment: .leading), count: 8),
+                                alignment: .leading,
+                                spacing: 4
+                            ) {
+                                ForEach(Array(theme.palette.enumerated()), id: \.offset) { _, color in
+                                    colorChip(color)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+        .formStyle(.grouped)
         .task { await loadThemes() }
         .onAppear {
             loadCurrentValues()
             monoFonts = Self.loadMonoFonts()
-        }
-    }
-
-    private func settingRow(_ label: String, @ViewBuilder content: () -> some View) -> some View {
-        HStack {
-            Text(label).font(.system(size: 12)).frame(width: 100, alignment: .leading)
-            content()
         }
     }
 
@@ -400,78 +374,6 @@ private struct HotkeyCaptureView: NSViewRepresentable {
                 }
                 self.onCapture(event, actionID)
                 return nil
-            }
-        }
-    }
-}
-
-// MARK: - Font picker
-
-private struct MonoFontPicker: NSViewRepresentable {
-    let fonts: [String]
-    @Binding var selection: String
-
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: false)
-        button.target = context.coordinator
-        button.action = #selector(Coordinator.selectionChanged(_:))
-        button.font = .systemFont(ofSize: 12)
-        rebuild(button)
-        return button
-    }
-
-    func updateNSView(_ button: NSPopUpButton, context: Context) {
-        if button.numberOfItems != fonts.count + 1 {
-            rebuild(button)
-        }
-        let title = selection.isEmpty ? "Default" : selection
-        if button.titleOfSelectedItem != title {
-            button.selectItem(withTitle: title)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    private func rebuild(_ button: NSPopUpButton) {
-        button.removeAllItems()
-        let menu = NSMenu()
-
-        let defaultItem = NSMenuItem(title: "Default", action: nil, keyEquivalent: "")
-        defaultItem.representedObject = ""
-        menu.addItem(defaultItem)
-        menu.addItem(.separator())
-
-        for family in fonts {
-            let item = NSMenuItem(title: family, action: nil, keyEquivalent: "")
-            item.representedObject = family
-            if let font = NSFont(name: family, size: 13) {
-                item.attributedTitle = NSAttributedString(
-                    string: family,
-                    attributes: [.font: font]
-                )
-            }
-            menu.addItem(item)
-        }
-
-        button.menu = menu
-        let title = selection.isEmpty ? "Default" : selection
-        button.selectItem(withTitle: title)
-    }
-
-    final class Coordinator: NSObject {
-        let parent: MonoFontPicker
-
-        init(_ parent: MonoFontPicker) {
-            self.parent = parent
-        }
-
-        @objc
-        func selectionChanged(_ sender: NSPopUpButton) {
-            let value = sender.selectedItem?.representedObject as? String ?? ""
-            if parent.selection != value {
-                parent.selection = value
             }
         }
     }
