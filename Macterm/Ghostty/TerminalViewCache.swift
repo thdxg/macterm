@@ -31,4 +31,8 @@ final class TerminalViewCache {
     func needsConfirmQuit(for paneID: UUID) -> Bool {
         views[paneID]?.needsConfirmQuit() ?? false
     }
+
+    func anyNeedsConfirmQuit() -> Bool {
+        views.values.contains { $0.needsConfirmQuit() }
+    }
 }

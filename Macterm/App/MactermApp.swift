@@ -63,6 +63,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onTerminate?()
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let hasRunning = TerminalViewCache.shared.anyNeedsConfirmQuit()
+            || QuickTerminalService.shared.viewCache.anyNeedsConfirmQuit()
+        guard hasRunning else { return .terminateNow }
+
+        let alert = NSAlert()
+        alert.messageText = "Quit Macterm?"
+        alert.informativeText = "There are still processes running. Quit anyway?"
+        alert.alertStyle = .warning
+        alert.icon = NSApp.applicationIconImage
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         false
     }
