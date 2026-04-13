@@ -1,3 +1,5 @@
+![icon](./assets/icon.png)
+
 <h1 align="center">▞▚ macterm ▞▚</h1>
 
 <p align="center">
