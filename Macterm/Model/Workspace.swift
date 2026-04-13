@@ -140,4 +140,8 @@ final class Workspace: Identifiable {
         guard index >= 0, index < tabs.count else { return }
         selectTab(tabs[index].id)
     }
+
+    func reorderTabs(fromOffsets source: IndexSet, toOffset destination: Int) {
+        tabs.move(fromOffsets: source, toOffset: destination)
+    }
 }

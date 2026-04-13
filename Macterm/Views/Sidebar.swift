@@ -31,6 +31,10 @@ struct SidebarContent: View {
                         }
                         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
                     }
+                    .onMove { source, destination in
+                        appState.workspaces[project.id]?.reorderTabs(fromOffsets: source, toOffset: destination)
+                        appState.saveWorkspaces()
+                    }
                 } label: {
                     SidebarProjectRow(project: project) {
                         appState.selectProject(project)
