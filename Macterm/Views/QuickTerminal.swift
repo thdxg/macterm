@@ -92,7 +92,7 @@ final class QuickTerminalService: NSObject {
         self.hostingView = hosting
 
         panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             self.hostingView?.window?.makeFirstResponder(self.viewCache.existingView(for: self.pane.id))
         }

@@ -45,7 +45,10 @@ final class MactermConfig {
     private func findLine(for key: String, in lines: [String]) -> Int? {
         lines.firstIndex { line in
             let t = line.trimmingCharacters(in: .whitespaces)
-            return t.hasPrefix(key) && t.dropFirst(key.count).trimmingCharacters(in: .whitespaces).hasPrefix("=")
+            guard t.hasPrefix(key) else { return false }
+            let rest = t.dropFirst(key.count)
+            guard let next = rest.first else { return false }
+            return next == "=" || next.isWhitespace
         }
     }
 

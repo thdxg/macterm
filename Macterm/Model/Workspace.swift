@@ -111,15 +111,29 @@ final class Workspace: Identifiable {
         selectTab(tabs[(i - 1 + tabs.count) % tabs.count].id)
     }
 
-    func selectRecentTab() {
-        guard tabs.count > 1 else { return }
+    /// Builds a recency-ordered list of tab IDs: current tab first, then most-recent-first from history.
+    func recencyOrder() -> [UUID] {
         let valid = Set(tabs.map(\.id))
-        for id in tabHistory.reversed() {
-            if valid.contains(id), id != activeTabID { selectTab(id)
-                return
-            }
+        var seen = Set<UUID>()
+        var order: [UUID] = []
+        if let active = activeTabID, valid.contains(active) {
+            order.append(active)
+            seen.insert(active)
         }
-        selectNextTab()
+        for id in tabHistory.reversed() where valid.contains(id) && seen.insert(id).inserted {
+            order.append(id)
+        }
+        // Append any tabs not in history
+        for tab in tabs where seen.insert(tab.id).inserted {
+            order.append(tab.id)
+        }
+        return order
+    }
+
+    /// Switch to a tab without recording history (used during Ctrl+Tab cycling).
+    func peekTab(_ tabID: UUID) {
+        guard tabs.contains(where: { $0.id == tabID }) else { return }
+        activeTabID = tabID
     }
 
     func selectTabByIndex(_ index: Int) {

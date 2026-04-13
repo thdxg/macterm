@@ -68,9 +68,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    private var flagsMonitor: Any?
+
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKeyEvent(event) == true ? nil : event
+        }
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
+            return event
+        }
+    }
+
+    private func handleFlagsChanged(_ event: NSEvent) {
+        guard let appState, appState.isTabCycling else { return }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if !flags.contains(.control) {
+            guard let projectID = appState.activeProjectID else { return }
+            appState.commitTabCycle(projectID: projectID)
         }
     }
 
@@ -82,8 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if HotkeyRegistry.matches(event, action: .recentTab) {
-            guard let projectStore else { return false }
-            appState.selectNextGlobalTab(projects: projectStore.projects)
+            guard let projectID = appState.activeProjectID else { return false }
+            appState.cycleRecentTab(projectID: projectID)
             return true
         }
 
@@ -125,15 +140,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        if HotkeyRegistry.matches(event, action: .nextTab) {
-            guard let projectID = appState.activeProjectID else { return false }
-            appState.selectNextTab(projectID: projectID)
+        if HotkeyRegistry.matches(event, action: .nextProject) {
+            guard let projectStore else { return false }
+            appState.selectNextProject(projects: projectStore.projects)
             return true
         }
 
-        if HotkeyRegistry.matches(event, action: .previousTab) {
+        if HotkeyRegistry.matches(event, action: .previousProject) {
+            guard let projectStore else { return false }
+            appState.selectPreviousProject(projects: projectStore.projects)
+            return true
+        }
+
+        if HotkeyRegistry.matches(event, action: .nextGlobalTab) {
+            guard let projectStore else { return false }
+            appState.selectNextGlobalTab(projects: projectStore.projects)
+            return true
+        }
+
+        if HotkeyRegistry.matches(event, action: .previousGlobalTab) {
+            guard let projectStore else { return false }
+            appState.selectPreviousGlobalTab(projects: projectStore.projects)
+            return true
+        }
+
+        let paneActions: [(HotkeyAction, AppState.PaneFocusDirection)] = [
+            (.focusPaneLeft, .left),
+            (.focusPaneDown, .down),
+            (.focusPaneUp, .up),
+            (.focusPaneRight, .right),
+        ]
+        if let (_, dir) = paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             guard let projectID = appState.activeProjectID else { return false }
-            appState.selectPreviousTab(projectID: projectID)
+            appState.focusPaneInDirection(dir, projectID: projectID)
             return true
         }
 

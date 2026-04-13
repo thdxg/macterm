@@ -144,30 +144,10 @@ final class GhosttyTerminalNSView: NSView {
         let key = (event.charactersIgnoringModifiers ?? "").lowercased()
         // Always let system Cmd shortcuts through
         if flags == .command, Self.systemKeys.contains(key) { return true }
-        // Let Cmd+T, Cmd+W, Cmd+D, Cmd+Shift+D, Cmd+B, Cmd+F, Cmd+[, Cmd+] through for app handling
-        if flags.contains(.command) {
-            let appKeys: Set = [
-                "t",
-                "w",
-                "d",
-                "b",
-                "f",
-                "o",
-                "r",
-                "[",
-                "]",
-                "1",
-                "2",
-                "3",
-                "4",
-                "5",
-                "6",
-                "7",
-                "8",
-                "9",
-            ]
-            if appKeys.contains(key) { return true }
-        }
+        // Cmd+1-9 for tab selection
+        if flags == .command, let n = Int(key), (1 ... 9).contains(n) { return true }
+        // Check all configurable hotkey actions
+        if HotkeyAction.allCases.contains(where: { HotkeyRegistry.matches(event, action: $0) }) { return true }
         return false
     }
 
@@ -331,11 +311,9 @@ final class GhosttyTerminalNSView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard let surface else { return }
-        let wasFirst = window?.firstResponder === self
         window?.makeFirstResponder(self)
-        if wasFirst { ghostty_surface_set_focus(surface, true)
-            onFocus?()
-        }
+        ghostty_surface_set_focus(surface, true)
+        onFocus?()
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
         _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, mods(event))

@@ -123,8 +123,9 @@ private struct WindowStyler: NSViewRepresentable {
     }
 
     final class Coordinator {
-        private var observer: Any?
+        nonisolated(unsafe) private var observer: Any?
 
+        @MainActor
         func observe(window: NSWindow) {
             observer = NotificationCenter.default.addObserver(
                 forName: .mactermConfigDidChange,

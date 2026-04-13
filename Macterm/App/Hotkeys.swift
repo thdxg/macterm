@@ -13,9 +13,15 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case splitRight = "split_right"
     case splitDown = "split_down"
     case toggleSidebar = "toggle_sidebar"
-    case nextTab = "next_tab"
-    case previousTab = "previous_tab"
     case recentTab = "recent_tab"
+    case nextProject = "next_project"
+    case previousProject = "previous_project"
+    case nextGlobalTab = "next_global_tab"
+    case previousGlobalTab = "previous_global_tab"
+    case focusPaneLeft = "focus_pane_left"
+    case focusPaneDown = "focus_pane_down"
+    case focusPaneUp = "focus_pane_up"
+    case focusPaneRight = "focus_pane_right"
     case openProject = "open_project"
 
     var id: String { rawValue }
@@ -27,9 +33,15 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .splitRight: "Split Right"
         case .splitDown: "Split Down"
         case .toggleSidebar: "Toggle Sidebar"
-        case .nextTab: "Next Tab"
-        case .previousTab: "Previous Tab"
-        case .recentTab: "Last Used Tab"
+        case .recentTab: "Recent Tab"
+        case .nextProject: "Next Project"
+        case .previousProject: "Previous Project"
+        case .nextGlobalTab: "Next Tab (All Projects)"
+        case .previousGlobalTab: "Previous Tab (All Projects)"
+        case .focusPaneLeft: "Focus Pane Left"
+        case .focusPaneDown: "Focus Pane Down"
+        case .focusPaneUp: "Focus Pane Up"
+        case .focusPaneRight: "Focus Pane Right"
         case .openProject: "Open Project"
         }
     }
@@ -43,9 +55,15 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .splitRight: "cmd+d"
         case .splitDown: "cmd+shift+d"
         case .toggleSidebar: "cmd+b"
-        case .nextTab: "cmd+]"
-        case .previousTab: "cmd+["
         case .recentTab: "ctrl+tab"
+        case .nextProject: "cmd+]"
+        case .previousProject: "cmd+["
+        case .nextGlobalTab: "ctrl+]"
+        case .previousGlobalTab: "ctrl+["
+        case .focusPaneLeft: "ctrl+h"
+        case .focusPaneDown: "ctrl+j"
+        case .focusPaneUp: "ctrl+k"
+        case .focusPaneRight: "ctrl+l"
         case .openProject: "cmd+o"
         }
     }
@@ -77,13 +95,13 @@ enum HotkeyRegistry {
     ]
     private static let modifierOnlyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62]
 
-    private static var keyTokensByCode: [UInt16: String] {
+    private static let keyTokensByCode: [UInt16: String] = {
         var map: [UInt16: String] = [:]
         for (token, code) in keyCodes where map[code] == nil {
             map[code] = token
         }
         return map
-    }
+    }()
 
     static func parseShortcut(_ raw: String) -> HotkeyShortcut? {
         let cleaned = raw.lowercased().replacingOccurrences(of: " ", with: "")

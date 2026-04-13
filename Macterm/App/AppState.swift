@@ -16,6 +16,11 @@ final class AppState {
         let projectID: UUID
     }
 
+    // Tab cycling state (Ctrl+Tab)
+    private var tabCycleOrder: [UUID] = []
+    private var tabCycleIndex: Int = 0
+    var isTabCycling: Bool { !tabCycleOrder.isEmpty }
+
     private let workspaceStore = WorkspaceStore()
     private var viewCache: TerminalViewCache { TerminalViewCache.shared }
 
@@ -110,8 +115,27 @@ final class AppState {
         workspaces[projectID]?.selectPreviousTab()
     }
 
-    func selectRecentTab(projectID: UUID) {
-        workspaces[projectID]?.selectRecentTab()
+    func cycleRecentTab(projectID: UUID) {
+        guard let ws = workspaces[projectID] else { return }
+        if tabCycleOrder.isEmpty {
+            tabCycleOrder = ws.recencyOrder()
+            tabCycleIndex = 0
+        }
+        guard tabCycleOrder.count > 1 else { return }
+        tabCycleIndex = (tabCycleIndex + 1) % tabCycleOrder.count
+        ws.peekTab(tabCycleOrder[tabCycleIndex])
+    }
+
+    func commitTabCycle(projectID: UUID) {
+        guard !tabCycleOrder.isEmpty, let ws = workspaces[projectID] else {
+            tabCycleOrder = []
+            return
+        }
+        let selectedID = tabCycleOrder[tabCycleIndex]
+        tabCycleOrder = []
+        tabCycleIndex = 0
+        ws.selectTab(selectedID)
+        saveWorkspaces()
     }
 
     func selectNextGlobalTab(projects: [Project]) {
@@ -236,27 +260,20 @@ final class AppState {
 
     private func isCandidate(_ c: CGRect, from f: CGRect, direction: PaneFocusDirection) -> Bool {
         switch direction {
-        case .left: c.midX < f.midX
-        case .right: c.midX > f.midX
-        case .up: c.midY < f.midY
-        case .down: c.midY > f.midY
+        case .left: c.midX < f.midX && c.maxY > f.minY && c.minY < f.maxY
+        case .right: c.midX > f.midX && c.maxY > f.minY && c.minY < f.maxY
+        case .up: c.midY < f.midY && c.maxX > f.minX && c.minX < f.maxX
+        case .down: c.midY > f.midY && c.maxX > f.minX && c.minX < f.maxX
         }
     }
 
     private func distance(from f: CGRect, to c: CGRect, direction: PaneFocusDirection) -> CGFloat {
-        let axial: CGFloat
-        let cross: CGFloat
         switch direction {
         case .left,
-             .right:
-            axial = abs(f.midX - c.midX)
-            cross = abs(f.midY - c.midY)
+             .right: abs(f.midX - c.midX)
         case .up,
-             .down:
-            axial = abs(f.midY - c.midY)
-            cross = abs(f.midX - c.midX)
+             .down: abs(f.midY - c.midY)
         }
-        return axial + cross * 0.5
     }
 
     // MARK: - Project navigation
