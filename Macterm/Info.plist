@@ -28,9 +28,7 @@
 	<string>NSApplication</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>NSAppleEventsUsageDescription</key>
+<key>NSAppleEventsUsageDescription</key>
 	<string>A process running in Macterm's terminal would like to use AppleScript.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>A process running in Macterm's terminal would like to use Bluetooth.</string>

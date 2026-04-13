@@ -56,17 +56,6 @@ cp "$ICON_SOURCE/icon_512@2x.png" "$ICONSET_DIR/icon_512x512@2x.png"
 iconutil -c icns "$ICONSET_DIR" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 rm -rf "$(dirname "$ICONSET_DIR")"
 
-SPARKLE_FRAMEWORK="$PROJECT_ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
-mkdir -p "$APP_BUNDLE/Contents/Frameworks"
-cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
-
-SPARKLE_DIR="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
-
-codesign --force --sign - "$SPARKLE_DIR/Versions/B/XPCServices/Installer.xpc"
-codesign --force --sign - "$SPARKLE_DIR/Versions/B/XPCServices/Downloader.xpc"
-codesign --force --sign - "$SPARKLE_DIR/Versions/B/Updater.app"
-codesign --force --sign - "$SPARKLE_DIR/Versions/B/Autoupdate"
-codesign --force --sign - "$SPARKLE_DIR"
 codesign --force --sign - "$APP_BUNDLE"
 
 DMG_STAGING="$BUILD_DIR/dmg-staging"
