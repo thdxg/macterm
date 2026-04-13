@@ -95,10 +95,6 @@ final class AppState {
             viewCache.remove(for: pane.id)
         }
         ws.closeTab(tabID)
-        if ws.tabs.isEmpty {
-            workspaces.removeValue(forKey: projectID)
-            activeProjectID = nil
-        }
         saveWorkspaces()
     }
 
@@ -172,13 +168,12 @@ final class AppState {
     }
 
     func closePane(_ paneID: UUID, projectID: UUID) {
-        guard let ws = workspaces[projectID], let tab = ws.activeTab else { return }
-        // Guard against double-close (e.g. process exit callback after manual close)
-        guard tab.splitRoot.findPane(id: paneID) != nil else { return }
+        guard let ws = workspaces[projectID] else { return }
+        // Find the tab that actually contains this pane (not just the active tab)
+        guard let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) else { return }
         viewCache.remove(for: paneID)
         let panes = tab.splitRoot.allPanes()
         if panes.count <= 1 {
-            // Last pane — close the tab
             closeTab(tab.id, projectID: projectID)
         } else {
             if let newRoot = tab.splitRoot.removing(paneID: paneID) {
