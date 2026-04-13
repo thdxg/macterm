@@ -48,9 +48,10 @@ struct MainWindow: View {
     private var activeTabTitle: String {
         guard let project = activeProject,
               let ws = appState.workspaces[project.id],
-              let tab = ws.activeTab
+              let tab = ws.activeTab,
+              let pane = tab.focusedPane
         else { return "" }
-        return tab.title
+        return pane.title
     }
 }
 
