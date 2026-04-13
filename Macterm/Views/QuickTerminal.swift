@@ -11,8 +11,8 @@ final class QuickTerminalService: NSObject {
     private(set) var isVisible = false
     private var carbonHotKeyRef: EventHotKeyRef?
     private var carbonEventHandler: EventHandlerRef?
-    private let pane = Pane(projectPath: NSHomeDirectory())
-    private let viewCache = TerminalViewCache()
+    let splitState = QuickTerminalSplitState()
+    let viewCache = TerminalViewCache()
     private let enabledKey = "macterm.quickTerminal.enabled"
 
     private var isEnabled: Bool {
@@ -84,17 +84,19 @@ final class QuickTerminalService: NSObject {
         let w = sf.width * wFrac, h = sf.height * hFrac
         panel.setFrame(NSRect(x: sf.minX + (sf.width - w) / 2, y: sf.minY + (sf.height - h) / 2, width: w, height: h), display: false)
 
-        let view = QuickTerminalView(pane: pane, viewCache: viewCache)
+        let view = QuickTerminalView(state: splitState, viewCache: viewCache)
         let hosting = NSHostingView(rootView: view)
         hosting.frame = panel.contentView?.bounds ?? .zero
         hosting.autoresizingMask = [.width, .height]
         panel.contentView?.addSubview(hosting)
-        self.hostingView = hosting
+        hostingView = hosting
 
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            self.hostingView?.window?.makeFirstResponder(self.viewCache.existingView(for: self.pane.id))
+            if let focusedID = self.splitState.focusedPaneID {
+                self.hostingView?.window?.makeFirstResponder(self.viewCache.existingView(for: focusedID))
+            }
         }
         isVisible = true
     }
@@ -120,6 +122,45 @@ final class QuickTerminalService: NSObject {
     }
 }
 
+// MARK: - Split state
+
+@MainActor @Observable
+final class QuickTerminalSplitState {
+    var splitRoot: SplitNode
+    var focusedPaneID: UUID?
+
+    init() {
+        let pane = Pane(projectPath: NSHomeDirectory())
+        splitRoot = .pane(pane)
+        focusedPaneID = pane.id
+    }
+
+    func split(paneID: UUID, direction: SplitDirection) {
+        let (newRoot, newID) = splitRoot.splitting(
+            paneID: paneID, direction: direction, position: .second, projectPath: NSHomeDirectory()
+        )
+        splitRoot = newRoot
+        if let newID { focusedPaneID = newID }
+    }
+
+    func closePane(_ paneID: UUID, viewCache: TerminalViewCache) {
+        guard splitRoot.findPane(id: paneID) != nil else { return }
+        viewCache.remove(for: paneID)
+        let panes = splitRoot.allPanes()
+        if panes.count <= 1 {
+            // Last pane — reset to a fresh pane instead of closing
+            let pane = Pane(projectPath: NSHomeDirectory())
+            splitRoot = .pane(pane)
+            focusedPaneID = pane.id
+        } else if let newRoot = splitRoot.removing(paneID: paneID) {
+            splitRoot = newRoot
+            if focusedPaneID == paneID { focusedPaneID = newRoot.allPanes().first?.id }
+        }
+    }
+}
+
+// MARK: - Panel
+
 final class QuickTerminalPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -132,30 +173,27 @@ final class QuickTerminalPanel: NSPanel {
     }
 }
 
+// MARK: - Views
+
 private struct QuickTerminalView: View {
-    let pane: Pane
+    @Bindable var state: QuickTerminalSplitState
     let viewCache: TerminalViewCache
 
     var body: some View {
-        QuickTerminalBridge(pane: pane, viewCache: viewCache)
-            .background(Color(nsColor: GhosttyApp.shared.backgroundColor))
+        SplitTreeView(
+            node: state.splitRoot,
+            focusedPaneID: state.focusedPaneID,
+            isActiveProject: true,
+            projectID: UUID(),
+            viewCache: viewCache,
+            onFocusPane: { state.focusedPaneID = $0 },
+            onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
+            onClosePane: { state.closePane($0, viewCache: viewCache) }
+        )
+        .background(Color(nsColor: GhosttyApp.shared.backgroundColor))
     }
 }
 
 private extension Double {
     var nonZero: Double? { self == 0 ? nil : self }
-}
-
-private struct QuickTerminalBridge: NSViewRepresentable {
-    let pane: Pane
-    let viewCache: TerminalViewCache
-
-    func makeNSView(context: Context) -> GhosttyTerminalNSView {
-        let view = viewCache.view(for: pane.id, workingDirectory: pane.projectPath)
-        view.isFocused = true
-        view.onTitleChange = { [weak pane] t in pane?.title = t }
-        return view
-    }
-
-    func updateNSView(_ nsView: GhosttyTerminalNSView, context: Context) {}
 }

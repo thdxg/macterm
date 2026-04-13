@@ -4,18 +4,17 @@ import SwiftUI
 struct TerminalPane: View {
     let pane: Pane
     let focused: Bool
+    let viewCache: TerminalViewCache
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
-    @Environment(AppState.self)
-    private var appState
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             TerminalBridge(
                 pane: pane,
                 focused: focused,
-                viewCache: appState.terminalViewCache,
+                viewCache: viewCache,
                 onFocus: onFocus,
                 onProcessExit: onProcessExit,
                 onSplitRequest: onSplitRequest
@@ -24,9 +23,9 @@ struct TerminalPane: View {
             if pane.searchState.isVisible {
                 TerminalSearchBar(
                     searchState: pane.searchState,
-                    onNavigateNext: { appState.terminalViewCache.existingView(for: pane.id)?.navigateSearch(direction: .next) },
-                    onNavigatePrevious: { appState.terminalViewCache.existingView(for: pane.id)?.navigateSearch(direction: .previous) },
-                    onClose: { appState.terminalViewCache.existingView(for: pane.id)?.endSearch() }
+                    onNavigateNext: { viewCache.existingView(for: pane.id)?.navigateSearch(direction: .next) },
+                    onNavigatePrevious: { viewCache.existingView(for: pane.id)?.navigateSearch(direction: .previous) },
+                    onClose: { viewCache.existingView(for: pane.id)?.endSearch() }
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
             }

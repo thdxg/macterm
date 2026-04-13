@@ -7,6 +7,7 @@ struct SplitTreeView: View {
     let focusedPaneID: UUID?
     let isActiveProject: Bool
     let projectID: UUID
+    let viewCache: TerminalViewCache
     let isSplit: Bool
     let onFocusPane: (UUID) -> Void
     let onSplit: (UUID, SplitDirection) -> Void
@@ -17,6 +18,7 @@ struct SplitTreeView: View {
         focusedPaneID: UUID?,
         isActiveProject: Bool,
         projectID: UUID,
+        viewCache: TerminalViewCache = .shared,
         isSplit: Bool = false,
         onFocusPane: @escaping (UUID) -> Void,
         onSplit: @escaping (UUID, SplitDirection) -> Void,
@@ -26,6 +28,7 @@ struct SplitTreeView: View {
         self.focusedPaneID = focusedPaneID
         self.isActiveProject = isActiveProject
         self.projectID = projectID
+        self.viewCache = viewCache
         self.isSplit = isSplit
         self.onFocusPane = onFocusPane
         self.onSplit = onSplit
@@ -39,6 +42,7 @@ struct SplitTreeView: View {
             TerminalPane(
                 pane: pane,
                 focused: isFocused,
+                viewCache: viewCache,
                 onFocus: { onFocusPane(pane.id) },
                 onProcessExit: { onClosePane(pane.id) },
                 onSplitRequest: { dir, _ in onSplit(pane.id, dir) }
@@ -57,6 +61,7 @@ struct SplitTreeView: View {
                     focusedPaneID: focusedPaneID,
                     isActiveProject: isActiveProject,
                     projectID: projectID,
+                    viewCache: viewCache,
                     isSplit: true,
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
@@ -68,6 +73,7 @@ struct SplitTreeView: View {
                     focusedPaneID: focusedPaneID,
                     isActiveProject: isActiveProject,
                     projectID: projectID,
+                    viewCache: viewCache,
                     isSplit: true,
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
