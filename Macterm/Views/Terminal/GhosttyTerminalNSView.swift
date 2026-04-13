@@ -97,8 +97,20 @@ final class GhosttyTerminalNSView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window != nil, surface == nil { createSurface() }
-        if window != nil { updateMetalLayerSize() }
+        guard let window else { return }
+        if surface == nil {
+            createSurface()
+        } else {
+            // Reconnect existing surface to the new window
+            let scale = Double(window.backingScaleFactor)
+            ghostty_surface_set_content_scale(surface, scale, scale)
+            let size = convertToBacking(bounds).size
+            if size.width > 0, size.height > 0 {
+                ghostty_surface_set_size(surface, UInt32(size.width), UInt32(size.height))
+            }
+            ghostty_surface_set_focus(surface, isFocused)
+        }
+        updateMetalLayerSize()
     }
 
     override func setFrameSize(_ newSize: NSSize) {

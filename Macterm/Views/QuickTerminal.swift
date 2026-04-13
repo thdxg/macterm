@@ -91,11 +91,16 @@ final class QuickTerminalService: NSObject {
         panel.contentView?.addSubview(hosting)
         hostingView = hosting
 
+        // Install portal overlay for this panel
+        TerminalPortal.host(for: panel).install()
+
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             if let focusedID = self.splitState.focusedPaneID {
-                self.hostingView?.window?.makeFirstResponder(self.viewCache.existingView(for: focusedID))
+                self.viewCache.existingView(for: focusedID)?.window?.makeFirstResponder(
+                    self.viewCache.existingView(for: focusedID)
+                )
             }
         }
         isVisible = true

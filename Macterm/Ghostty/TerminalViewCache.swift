@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Caches GhosttyTerminalNSView instances by pane ID so they survive SwiftUI re-renders.
@@ -19,9 +20,12 @@ final class TerminalViewCache {
     }
 
     func remove(for paneID: UUID) {
-        if let view = views.removeValue(forKey: paneID) {
-            view.destroySurface()
+        guard let view = views.removeValue(forKey: paneID) else { return }
+        // Unbind from any portal host
+        if let window = view.window ?? view.superview?.window {
+            TerminalPortal.host(for: window).unbind(paneID: paneID)
         }
+        view.destroySurface()
     }
 
     func allViews() -> [GhosttyTerminalNSView] {

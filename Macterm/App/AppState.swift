@@ -10,6 +10,7 @@ final class AppState {
     var workspaces: [UUID: Workspace] = [:]
     var sidebarVisible = true
     var pendingClosePane: PendingClosePane?
+    private(set) var hasRestoredSelection = false
 
     struct PendingClosePane: Equatable {
         let paneID: UUID
@@ -27,6 +28,7 @@ final class AppState {
     // MARK: - Restore / Save
 
     func restoreSelection(projects: [Project]) {
+        hasRestoredSelection = true
         let snapshots = workspaceStore.load()
         let valid = Set(projects.map(\.id))
         for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid) {

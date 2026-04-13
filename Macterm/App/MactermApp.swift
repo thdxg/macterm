@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var onTerminate: (() -> Void)?
     var appState: AppState?
     var projectStore: ProjectStore?
+    var mainWindow: NSWindow?
     private var keyMonitor: Any?
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -57,6 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = GhosttyApp.shared
         _ = QuickTerminalService.shared
         installKeyMonitor()
+        // Capture main window once it's available
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.mainWindow = NSApp.windows.first { $0.canBecomeMain }
+        }
     }
 
     func applicationWillTerminate(_: Notification) {
@@ -80,6 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag, let window = mainWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+        }
+        return false
     }
 
     private var flagsMonitor: Any?

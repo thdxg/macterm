@@ -11,7 +11,7 @@ struct TerminalPane: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            TerminalBridge(
+            TerminalAnchor(
                 pane: pane,
                 focused: focused,
                 viewCache: viewCache,
@@ -33,7 +33,9 @@ struct TerminalPane: View {
     }
 }
 
-private struct TerminalBridge: NSViewRepresentable {
+/// An NSViewRepresentable that creates an invisible placeholder.
+/// The real terminal view lives in the portal overlay and is positioned to match this anchor.
+private struct TerminalAnchor: NSViewRepresentable {
     let pane: Pane
     let focused: Bool
     let viewCache: TerminalViewCache
@@ -41,32 +43,97 @@ private struct TerminalBridge: NSViewRepresentable {
     let onProcessExit: () -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
 
-    final class Coordinator { var wasFocused = false }
+    final class Coordinator {
+        var wasFocused = false
+        var paneID: UUID?
+        var portalHost: TerminalPortalHost?
+        var terminalView: GhosttyTerminalNSView?
+        var frameObserver: NSObjectProtocol?
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> GhosttyTerminalNSView {
-        let view = viewCache.view(for: pane.id, workingDirectory: pane.projectPath)
-        configure(view)
+    func makeNSView(context: Context) -> NSView {
+        let anchor = NSView(frame: .zero)
+        // Invisible placeholder — the real terminal is in the portal
+        anchor.wantsLayer = false
         context.coordinator.wasFocused = focused
-        if focused {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { view.window?.makeFirstResponder(view) }
+
+        DispatchQueue.main.async {
+            guard let window = anchor.window else { return }
+            let host = TerminalPortal.host(for: window)
+            host.install()
+
+            let termView = viewCache.view(for: pane.id, workingDirectory: pane.projectPath)
+            configure(termView)
+
+            context.coordinator.paneID = pane.id
+            context.coordinator.portalHost = host
+            context.coordinator.terminalView = termView
+
+            host.bind(paneID: pane.id, terminalView: termView, anchor: anchor, visible: true)
+
+            // Create surface if needed (the terminal view is now in the window via portal)
+            if termView.surface == nil {
+                termView.createSurface()
+            }
+
+            if focused {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    termView.window?.makeFirstResponder(termView)
+                }
+            }
+
+            // Observe frame changes to reposition the terminal view
+            let paneID = pane.id
+            context.coordinator.frameObserver = NotificationCenter.default.addObserver(
+                forName: NSView.frameDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak host, weak anchor] _ in
+                guard let host, let anchor, anchor.window != nil else { return }
+                MainActor.assumeIsolated {
+                    host.layoutEntry(paneID)
+                }
+            }
         }
-        return view
+
+        return anchor
     }
 
-    func updateNSView(_ view: GhosttyTerminalNSView, context: Context) {
-        configure(view)
+    func updateNSView(_ anchor: NSView, context: Context) {
+        guard let termView = context.coordinator.terminalView,
+              let host = context.coordinator.portalHost
+        else { return }
+
+        configure(termView)
+
         let wasFocused = context.coordinator.wasFocused
         context.coordinator.wasFocused = focused
-        view.isFocused = focused
+        termView.isFocused = focused
         if focused, !wasFocused {
-            view.notifySurfaceFocused()
-            DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+            termView.notifySurfaceFocused()
+            DispatchQueue.main.async { termView.window?.makeFirstResponder(termView) }
         } else if !focused {
-            view.notifySurfaceUnfocused()
+            termView.notifySurfaceUnfocused()
+        }
+
+        // Update anchor reference and layout
+        host.bind(paneID: pane.id, terminalView: termView, anchor: anchor, visible: true)
+    }
+
+    static func dismantleNSView(_ anchor: NSView, coordinator: Coordinator) {
+        // Do NOT remove the terminal from the portal here.
+        // SwiftUI transiently dismantles views during tab switches.
+        // The terminal view stays in the portal until explicitly unbound (pane close).
+        if let observer = coordinator.frameObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        // Hide the terminal view since its anchor is gone
+        if let paneID = coordinator.paneID, let host = coordinator.portalHost {
+            host.setVisible(false, for: paneID)
         }
     }
 

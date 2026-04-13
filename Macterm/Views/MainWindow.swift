@@ -27,7 +27,8 @@ struct MainWindow: View {
             .navigationSubtitle(activeTabTitle)
         }
         .background(WindowStyler())
-        .onAppear {
+        .task {
+            guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
         }
         .onChange(of: appState.sidebarVisible) { _, visible in
@@ -112,6 +113,11 @@ private struct WindowStyler: NSViewRepresentable {
             window.titlebarSeparatorStyle = .none
             applyStyle(to: window)
             context.coordinator.observe(window: window)
+            // Install the terminal portal overlay
+            TerminalPortal.host(for: window).install()
+            // Intercept the close button to hide instead of close,
+            // preserving terminal surfaces and running processes.
+            context.coordinator.interceptClose(window: window)
         }
         return view
     }
@@ -123,8 +129,9 @@ private struct WindowStyler: NSViewRepresentable {
         window.backgroundColor = MactermTheme.nsBg
     }
 
-    final class Coordinator {
+    final class Coordinator: NSObject, NSWindowDelegate {
         nonisolated(unsafe) private var observer: Any?
+        weak var swiftuiDelegate: (any NSWindowDelegate)?
 
         @MainActor
         func observe(window: NSWindow) {
@@ -139,6 +146,28 @@ private struct WindowStyler: NSViewRepresentable {
                     window.backgroundColor = MactermTheme.nsBg
                 }
             }
+        }
+
+        @MainActor
+        func interceptClose(window: NSWindow) {
+            swiftuiDelegate = window.delegate
+            window.delegate = self
+        }
+
+        func windowShouldClose(_ sender: NSWindow) -> Bool {
+            sender.orderOut(nil)
+            return false
+        }
+
+        /// Forward everything else to SwiftUI's delegate
+        override func responds(to aSelector: Selector!) -> Bool {
+            if super.responds(to: aSelector) { return true }
+            return swiftuiDelegate?.responds(to: aSelector) ?? false
+        }
+
+        override func forwardingTarget(for aSelector: Selector!) -> Any? {
+            if swiftuiDelegate?.responds(to: aSelector) == true { return swiftuiDelegate }
+            return super.forwardingTarget(for: aSelector)
         }
 
         deinit {
