@@ -34,6 +34,14 @@ final class MactermConfig {
         try? Data(lines.joined(separator: "\n").utf8).write(to: ghosttyConfigURL, options: .atomic)
     }
 
+    func removeValue(_ key: String) {
+        var lines = readConfig().components(separatedBy: "\n")
+        if let index = findLine(for: key, in: lines) {
+            lines.remove(at: index)
+            try? Data(lines.joined(separator: "\n").utf8).write(to: ghosttyConfigURL, options: .atomic)
+        }
+    }
+
     func value(for key: String) -> String? {
         let lines = readConfig().components(separatedBy: .newlines)
         guard let index = findLine(for: key, in: lines) else { return nil }

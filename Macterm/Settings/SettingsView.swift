@@ -38,9 +38,33 @@ private struct AppearanceSettings: View {
     private var themes: [ThemePreview] = []
     @State
     private var currentTheme: String = ""
+    @State
+    private var currentFont: String = ""
+    @State
+    private var monoFonts: [String] = []
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                GroupBox("Font") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        settingRow("Font Family") {
+                            MonoFontPicker(
+                                fonts: monoFonts,
+                                selection: $currentFont
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .onChange(of: currentFont) { _, v in
+                                if v.isEmpty {
+                                    MactermConfig.shared.removeValue("font-family")
+                                } else {
+                                    MactermConfig.shared.updateValue("font-family", value: v)
+                                }
+                                GhosttyApp.shared.reloadConfig()
+                            }
+                        }
+                    }
+                    .padding(8)
+                }
                 GroupBox("Theme") {
                     VStack(alignment: .leading, spacing: 8) {
                         settingRow("Select Theme") {
@@ -104,7 +128,10 @@ private struct AppearanceSettings: View {
             .padding(16)
         }
         .task { await loadThemes() }
-        .onAppear { loadCurrentValues() }
+        .onAppear {
+            loadCurrentValues()
+            monoFonts = Self.loadMonoFonts()
+        }
     }
 
     private func settingRow(_ label: String, @ViewBuilder content: () -> some View) -> some View {
@@ -116,6 +143,17 @@ private struct AppearanceSettings: View {
 
     private func loadCurrentValues() {
         currentTheme = MactermConfig.shared.value(for: "theme")?.replacingOccurrences(of: "\"", with: "") ?? ""
+        currentFont = MactermConfig.shared.value(for: "font-family") ?? ""
+    }
+
+    private static func loadMonoFonts() -> [String] {
+        NSFontManager.shared
+            .availableFontFamilies
+            .filter { family in
+                guard let font = NSFont(name: family, size: 13) else { return false }
+                return font.isFixedPitch || font.fontDescriptor.symbolicTraits.contains(.monoSpace)
+            }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     private func loadThemes() async {
@@ -362,6 +400,78 @@ private struct HotkeyCaptureView: NSViewRepresentable {
                 }
                 self.onCapture(event, actionID)
                 return nil
+            }
+        }
+    }
+}
+
+// MARK: - Font picker
+
+private struct MonoFontPicker: NSViewRepresentable {
+    let fonts: [String]
+    @Binding var selection: String
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.selectionChanged(_:))
+        button.font = .systemFont(ofSize: 12)
+        rebuild(button)
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        if button.numberOfItems != fonts.count + 1 {
+            rebuild(button)
+        }
+        let title = selection.isEmpty ? "Default" : selection
+        if button.titleOfSelectedItem != title {
+            button.selectItem(withTitle: title)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    private func rebuild(_ button: NSPopUpButton) {
+        button.removeAllItems()
+        let menu = NSMenu()
+
+        let defaultItem = NSMenuItem(title: "Default", action: nil, keyEquivalent: "")
+        defaultItem.representedObject = ""
+        menu.addItem(defaultItem)
+        menu.addItem(.separator())
+
+        for family in fonts {
+            let item = NSMenuItem(title: family, action: nil, keyEquivalent: "")
+            item.representedObject = family
+            if let font = NSFont(name: family, size: 13) {
+                item.attributedTitle = NSAttributedString(
+                    string: family,
+                    attributes: [.font: font]
+                )
+            }
+            menu.addItem(item)
+        }
+
+        button.menu = menu
+        let title = selection.isEmpty ? "Default" : selection
+        button.selectItem(withTitle: title)
+    }
+
+    final class Coordinator: NSObject {
+        let parent: MonoFontPicker
+
+        init(_ parent: MonoFontPicker) {
+            self.parent = parent
+        }
+
+        @objc
+        func selectionChanged(_ sender: NSPopUpButton) {
+            let value = sender.selectedItem?.representedObject as? String ?? ""
+            if parent.selection != value {
+                parent.selection = value
             }
         }
     }
