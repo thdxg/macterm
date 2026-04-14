@@ -92,9 +92,9 @@ private struct TerminalAnchor: NSViewRepresentable {
                 forName: NSView.frameDidChangeNotification,
                 object: nil,
                 queue: .main
-            ) { [weak host, weak anchor] _ in
-                guard let host, let anchor, anchor.window != nil else { return }
+            ) { [weak host] _ in
                 MainActor.assumeIsolated {
+                    guard let host else { return }
                     host.layoutEntry(paneID)
                 }
             }
