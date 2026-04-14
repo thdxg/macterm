@@ -442,7 +442,8 @@ final class GhosttyTerminalNSView: NSView {
 
     func endSearch() {
         guard let surface else { return }
-        ghostty_surface_binding_action(surface, "end_search", 10)
+        let action = "end_search"
+        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
     func startSearch() {

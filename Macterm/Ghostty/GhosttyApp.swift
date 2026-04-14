@@ -82,7 +82,8 @@ final class GhosttyApp {
     var backgroundOpacity: Double {
         guard let config else { return 1.0 }
         var value = 1.0
-        return ghostty_config_get(config, &value, "background-opacity", 18) ? max(0, min(1, value)) : 1.0
+        let key = "background-opacity"
+        return ghostty_config_get(config, &value, key, UInt(key.utf8.count)) ? max(0, min(1, value)) : 1.0
     }
 
     var backgroundColor: NSColor { configColor("background") ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1) }
@@ -92,7 +93,8 @@ final class GhosttyApp {
     func paletteColor(at index: Int) -> NSColor? {
         guard let config, (0 ..< 256).contains(index) else { return nil }
         var palette = ghostty_config_palette_s()
-        guard ghostty_config_get(config, &palette, "palette", 7) else { return nil }
+        let key = "palette"
+        guard ghostty_config_get(config, &palette, key, UInt(key.utf8.count)) else { return nil }
         let c = withUnsafePointer(to: &palette.colors) {
             $0.withMemoryRebound(to: ghostty_config_color_s.self, capacity: 256) { $0[index] }
         }

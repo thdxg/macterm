@@ -53,7 +53,7 @@ struct PaneSnapshot: Codable {
 }
 
 struct SplitBranchSnapshot: Codable {
-    let direction: String // "horizontal" or "vertical"
+    let direction: SplitDirection
     let ratio: Double
     let first: SplitNodeSnapshot
     let second: SplitNodeSnapshot
@@ -130,7 +130,7 @@ enum WorkspaceSerializer {
             .pane(PaneSnapshot(id: p.id, projectPath: p.projectPath, title: p.title))
         case let .split(b):
             .split(SplitBranchSnapshot(
-                direction: b.direction == .horizontal ? "horizontal" : "vertical",
+                direction: b.direction,
                 ratio: Double(b.ratio),
                 first: snapshotNode(b.first),
                 second: snapshotNode(b.second)
@@ -146,7 +146,7 @@ enum WorkspaceSerializer {
             return .pane(pane)
         case let .split(b):
             return .split(SplitBranch(
-                direction: b.direction == "horizontal" ? .horizontal : .vertical,
+                direction: b.direction,
                 ratio: CGFloat(b.ratio),
                 first: restoreNode(b.first),
                 second: restoreNode(b.second)

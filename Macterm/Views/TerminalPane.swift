@@ -86,11 +86,12 @@ private struct TerminalAnchor: NSViewRepresentable {
                 }
             }
 
-            // Observe frame changes to reposition the terminal view
+            // Observe anchor frame changes to reposition the terminal view
+            anchor.postsFrameChangedNotifications = true
             let paneID = pane.id
             context.coordinator.frameObserver = NotificationCenter.default.addObserver(
                 forName: NSView.frameDidChangeNotification,
-                object: nil,
+                object: anchor,
                 queue: .main
             ) { [weak host] _ in
                 MainActor.assumeIsolated {

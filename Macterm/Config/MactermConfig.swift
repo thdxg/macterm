@@ -45,9 +45,9 @@ final class MactermConfig {
     func value(for key: String) -> String? {
         let lines = readConfig().components(separatedBy: .newlines)
         guard let index = findLine(for: key, in: lines) else { return nil }
-        let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
-        return trimmed.dropFirst(key.count).trimmingCharacters(in: .whitespaces).dropFirst().trimmingCharacters(in: .whitespaces)
-            .description
+        let line = lines[index]
+        guard let eqIndex = line.firstIndex(of: "=") else { return nil }
+        return String(line[line.index(after: eqIndex)...]).trimmingCharacters(in: .whitespaces)
     }
 
     private func findLine(for key: String, in lines: [String]) -> Int? {

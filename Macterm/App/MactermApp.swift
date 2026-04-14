@@ -51,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var mainWindow: NSWindow?
     private var keyMonitor: Any?
 
+    private var windowObserver: Any?
+
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
@@ -58,9 +60,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = GhosttyApp.shared
         _ = QuickTerminalService.shared
         installKeyMonitor()
-        // Capture main window once it's available
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.mainWindow = NSApp.windows.first { $0.canBecomeMain }
+        windowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeMainNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let window = note.object as? NSWindow
+            MainActor.assumeIsolated {
+                guard self?.mainWindow == nil, let window else { return }
+                self?.mainWindow = window
+            }
         }
     }
 
@@ -186,23 +195,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if HotkeyRegistry.matches(event, action: .nextGlobalTab) {
             guard let projectStore else { return false }
-            appState.selectNextGlobalTab(projects: projectStore.projects)
+            appState.selectGlobalTab(.next, projects: projectStore.projects)
             return true
         }
 
         if HotkeyRegistry.matches(event, action: .previousGlobalTab) {
             guard let projectStore else { return false }
-            appState.selectPreviousGlobalTab(projects: projectStore.projects)
+            appState.selectGlobalTab(.previous, projects: projectStore.projects)
             return true
         }
 
-        let paneActions: [(HotkeyAction, AppState.PaneFocusDirection)] = [
-            (.focusPaneLeft, .left),
-            (.focusPaneDown, .down),
-            (.focusPaneUp, .up),
-            (.focusPaneRight, .right),
-        ]
-        if let (_, dir) = paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
+        if let (_, dir) = Self.paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             guard let projectID = appState.activeProjectID else { return false }
             appState.focusPaneInDirection(dir, projectID: projectID)
             return true
@@ -235,13 +238,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    private static let paneActions: [(HotkeyAction, PaneFocusDirection)] = [
+        (.focusPaneLeft, .left),
+        (.focusPaneDown, .down),
+        (.focusPaneUp, .up),
+        (.focusPaneRight, .right),
+    ]
+
     private func handleQuickTerminalKeyEvent(_ event: NSEvent) -> Bool {
         let qt = QuickTerminalService.shared
         let state = qt.splitState
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        // Ctrl+` toggles quick terminal
         if event.keyCode == 50, flags.contains(.control) {
             NotificationCenter.default.post(name: .toggleQuickTerminal, object: nil)
             return true
@@ -265,48 +274,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        let paneActions: [(HotkeyAction, AppState.PaneFocusDirection)] = [
-            (.focusPaneLeft, .left),
-            (.focusPaneDown, .down),
-            (.focusPaneUp, .up),
-            (.focusPaneRight, .right),
-        ]
-        if let (_, dir) = paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
+        if let (_, dir) = Self.paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             guard let focusedID = state.focusedPaneID else { return false }
-            let frames = state.splitRoot.paneFrames()
-            guard let focusedFrame = frames[focusedID] else { return false }
-            var bestID: UUID?
-            var bestDist: CGFloat = .greatestFiniteMagnitude
-            for (id, frame) in frames where id != focusedID {
-                guard isQTCandidate(frame, from: focusedFrame, direction: dir) else { continue }
-                let dist = qtDistance(from: focusedFrame, to: frame, direction: dir)
-                if dist < bestDist { bestDist = dist
-                    bestID = id
-                }
+            if let bestID = state.splitRoot.nearestPane(from: focusedID, direction: dir) {
+                state.focusedPaneID = bestID
             }
-            if let bestID { state.focusedPaneID = bestID }
             return true
         }
 
         return false
-    }
-
-    private func isQTCandidate(_ c: CGRect, from f: CGRect, direction: AppState.PaneFocusDirection) -> Bool {
-        switch direction {
-        case .left: c.midX < f.midX && c.maxY > f.minY && c.minY < f.maxY
-        case .right: c.midX > f.midX && c.maxY > f.minY && c.minY < f.maxY
-        case .up: c.midY < f.midY && c.maxX > f.minX && c.minX < f.maxX
-        case .down: c.midY > f.midY && c.maxX > f.minX && c.minX < f.maxX
-        }
-    }
-
-    private func qtDistance(from f: CGRect, to c: CGRect, direction: AppState.PaneFocusDirection) -> CGFloat {
-        switch direction {
-        case .left,
-             .right: abs(f.midX - c.midX)
-        case .up,
-             .down: abs(f.midY - c.midY)
-        }
     }
 
     @MainActor

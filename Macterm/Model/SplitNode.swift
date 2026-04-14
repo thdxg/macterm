@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-enum SplitDirection { case horizontal, vertical }
+enum SplitDirection: String, Codable { case horizontal, vertical }
 enum SplitPosition { case first, second }
 
 /// A pane is the leaf of the split tree — one terminal surface.
@@ -15,48 +15,34 @@ final class Pane: Identifiable {
     var processTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Terminal" }
-
         let tokens = trimmed.split(whereSeparator: \ .isWhitespace).map(String.init)
         guard !tokens.isEmpty else { return "Terminal" }
-
-        func isPathLike(_ token: String) -> Bool {
-            token.contains("/") || token.hasPrefix("~")
-        }
-
-        func isNoise(_ token: String) -> Bool {
-            token.allSatisfy { !$0.isLetter && !$0.isNumber }
-        }
-
-        if let candidate = tokens.first(where: { !isPathLike($0) && !isNoise($0) }) {
+        if let candidate = tokens.first(where: { !Self.isPathLike($0) && !Self.isNoise($0) }) {
             return candidate
         }
-
         return tokens.first ?? "Terminal"
     }
 
     var sidebarSegmentTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != "Terminal" else { return projectPath }
-
         let tokens = trimmed.split(whereSeparator: \ .isWhitespace).map(String.init)
         guard let first = tokens.first else { return projectPath }
-
-        func isPathLike(_ token: String) -> Bool {
-            token.contains("/") || token.hasPrefix("~")
-        }
-
-        func isNoise(_ token: String) -> Bool {
-            token.allSatisfy { !$0.isLetter && !$0.isNumber }
-        }
-
-        if isPathLike(first) {
-            if let running = tokens.dropFirst().first(where: { !isPathLike($0) && !isNoise($0) }) {
+        if Self.isPathLike(first) {
+            if let running = tokens.dropFirst().first(where: { !Self.isPathLike($0) && !Self.isNoise($0) }) {
                 return running
             }
             return first
         }
-
         return processTitle
+    }
+
+    private static func isPathLike(_ token: String) -> Bool {
+        token.contains("/") || token.hasPrefix("~")
+    }
+
+    private static func isNoise(_ token: String) -> Bool {
+        token.allSatisfy { !$0.isLetter && !$0.isNumber }
     }
 
     init(projectPath: String) {
@@ -77,7 +63,7 @@ enum SplitNode: Identifiable {
     }
 }
 
-@Observable
+@MainActor @Observable
 final class SplitBranch: Identifiable {
     let id = UUID()
     var direction: SplitDirection
@@ -184,4 +170,33 @@ extension SplitNode {
             return b.first.paneFrames(in: r1).merging(b.second.paneFrames(in: r2)) { a, _ in a }
         }
     }
+
+    /// Find the nearest pane in a direction from the currently focused pane.
+    func nearestPane(from focusedID: UUID, direction: PaneFocusDirection) -> UUID? {
+        let frames = paneFrames()
+        guard let focusedFrame = frames[focusedID] else { return nil }
+        var bestID: UUID?
+        var bestDist: CGFloat = .greatestFiniteMagnitude
+        for (id, frame) in frames where id != focusedID {
+            let isCandidate: Bool = switch direction {
+            case .left: frame.midX < focusedFrame.midX && frame.maxY > focusedFrame.minY && frame.minY < focusedFrame.maxY
+            case .right: frame.midX > focusedFrame.midX && frame.maxY > focusedFrame.minY && frame.minY < focusedFrame.maxY
+            case .up: frame.midY < focusedFrame.midY && frame.maxX > focusedFrame.minX && frame.minX < focusedFrame.maxX
+            case .down: frame.midY > focusedFrame.midY && frame.maxX > focusedFrame.minX && frame.minX < focusedFrame.maxX
+            }
+            guard isCandidate else { continue }
+            let dist: CGFloat = switch direction {
+            case .left,
+                 .right: abs(focusedFrame.midX - frame.midX)
+            case .up,
+                 .down: abs(focusedFrame.midY - frame.midY)
+            }
+            if dist < bestDist { bestDist = dist
+                bestID = id
+            }
+        }
+        return bestID
+    }
 }
+
+enum PaneFocusDirection { case left, right, up, down }

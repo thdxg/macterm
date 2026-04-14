@@ -23,7 +23,6 @@ final class AppState {
     var isTabCycling: Bool { !tabCycleOrder.isEmpty }
 
     private let workspaceStore = WorkspaceStore()
-    private var viewCache: TerminalViewCache { TerminalViewCache.shared }
 
     // MARK: - Restore / Save
 
@@ -77,7 +76,7 @@ final class AppState {
     func removeProject(_ projectID: UUID) {
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-                viewCache.remove(for: pane.id)
+                TerminalViewCache.shared.remove(for: pane.id)
             }
         }
         workspaces.removeValue(forKey: projectID)
@@ -101,7 +100,7 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
         for pane in tab.splitRoot.allPanes() {
-            viewCache.remove(for: pane.id)
+            TerminalViewCache.shared.remove(for: pane.id)
         }
         ws.closeTab(tabID)
         saveWorkspaces()
@@ -142,23 +141,9 @@ final class AppState {
         saveWorkspaces()
     }
 
-    func selectNextGlobalTab(projects: [Project]) {
-        let allTabs = projects.flatMap { p in
-            (workspaces[p.id]?.tabs ?? []).map { (p, $0) }
-        }
-        guard !allTabs.isEmpty else { return }
+    enum GlobalTabDirection { case next, previous }
 
-        let currentTabID = activeProjectID.flatMap { pid in workspaces[pid]?.activeTabID }
-        let currentIndex = allTabs.firstIndex { $0.0.id == activeProjectID && $0.1.id == currentTabID } ?? -1
-        let nextIndex = (currentIndex + 1) % allTabs.count
-        let (nextProject, nextTab) = allTabs[nextIndex]
-
-        activeProjectID = nextProject.id
-        ensureWorkspace(projectID: nextProject.id, path: nextProject.path)
-        workspaces[nextProject.id]?.selectTab(nextTab.id)
-    }
-
-    func selectPreviousGlobalTab(projects: [Project]) {
+    func selectGlobalTab(_ direction: GlobalTabDirection, projects: [Project]) {
         let allTabs = projects.flatMap { p in
             (workspaces[p.id]?.tabs ?? []).map { (p, $0) }
         }
@@ -166,12 +151,15 @@ final class AppState {
 
         let currentTabID = activeProjectID.flatMap { pid in workspaces[pid]?.activeTabID }
         let currentIndex = allTabs.firstIndex { $0.0.id == activeProjectID && $0.1.id == currentTabID } ?? 0
-        let prevIndex = (currentIndex - 1 + allTabs.count) % allTabs.count
-        let (prevProject, prevTab) = allTabs[prevIndex]
+        let newIndex: Int = switch direction {
+        case .next: (currentIndex + 1) % allTabs.count
+        case .previous: (currentIndex - 1 + allTabs.count) % allTabs.count
+        }
+        let (project, tab) = allTabs[newIndex]
 
-        activeProjectID = prevProject.id
-        ensureWorkspace(projectID: prevProject.id, path: prevProject.path)
-        workspaces[prevProject.id]?.selectTab(prevTab.id)
+        activeProjectID = project.id
+        ensureWorkspace(projectID: project.id, path: project.path)
+        workspaces[project.id]?.selectTab(tab.id)
     }
 
     func selectTabByIndex(_ index: Int, projectID: UUID) {
@@ -199,7 +187,7 @@ final class AppState {
         guard let ws = workspaces[projectID] else { return }
         // Find the tab that actually contains this pane (not just the active tab)
         guard let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) else { return }
-        viewCache.remove(for: paneID)
+        TerminalViewCache.shared.remove(for: paneID)
         let panes = tab.splitRoot.allPanes()
         if panes.count <= 1 {
             closeTab(tab.id, projectID: projectID)
@@ -213,7 +201,7 @@ final class AppState {
     }
 
     func requestClosePane(_ paneID: UUID, projectID: UUID) {
-        if terminalViewCache.needsConfirmQuit(for: paneID) {
+        if TerminalViewCache.shared.needsConfirmQuit(for: paneID) {
             pendingClosePane = PendingClosePane(paneID: paneID, projectID: projectID)
             return
         }
@@ -244,39 +232,8 @@ final class AppState {
         guard let tab = workspaces[projectID]?.activeTab,
               let focusedID = tab.focusedPaneID
         else { return }
-        let frames = tab.splitRoot.paneFrames()
-        guard let focusedFrame = frames[focusedID] else { return }
-
-        var bestID: UUID?
-        var bestDist: CGFloat = .greatestFiniteMagnitude
-
-        for (id, frame) in frames where id != focusedID {
-            guard isCandidate(frame, from: focusedFrame, direction: direction) else { continue }
-            let dist = distance(from: focusedFrame, to: frame, direction: direction)
-            if dist < bestDist { bestDist = dist
-                bestID = id
-            }
-        }
-        if let bestID { tab.focusedPaneID = bestID }
-    }
-
-    enum PaneFocusDirection { case left, right, up, down }
-
-    private func isCandidate(_ c: CGRect, from f: CGRect, direction: PaneFocusDirection) -> Bool {
-        switch direction {
-        case .left: c.midX < f.midX && c.maxY > f.minY && c.minY < f.maxY
-        case .right: c.midX > f.midX && c.maxY > f.minY && c.minY < f.maxY
-        case .up: c.midY < f.midY && c.maxX > f.minX && c.minX < f.maxX
-        case .down: c.midY > f.midY && c.maxX > f.minX && c.minX < f.maxX
-        }
-    }
-
-    private func distance(from f: CGRect, to c: CGRect, direction: PaneFocusDirection) -> CGFloat {
-        switch direction {
-        case .left,
-             .right: abs(f.midX - c.midX)
-        case .up,
-             .down: abs(f.midY - c.midY)
+        if let bestID = tab.splitRoot.nearestPane(from: focusedID, direction: direction) {
+            tab.focusedPaneID = bestID
         }
     }
 
@@ -297,10 +254,6 @@ final class AppState {
         let project = projects[(i - 1 + projects.count) % projects.count]
         selectProject(project)
     }
-
-    // MARK: - View cache
-
-    var terminalViewCache: TerminalViewCache { viewCache }
 
     // MARK: - Private
 

@@ -181,6 +181,7 @@ final class QuickTerminalPanel: NSPanel {
 // MARK: - Views
 
 private struct QuickTerminalView: View {
+    static let projectID = UUID()
     @Bindable var state: QuickTerminalSplitState
     let viewCache: TerminalViewCache
 
@@ -189,7 +190,7 @@ private struct QuickTerminalView: View {
             node: state.splitRoot,
             focusedPaneID: state.focusedPaneID,
             isActiveProject: true,
-            projectID: UUID(),
+            projectID: Self.projectID,
             viewCache: viewCache,
             onFocusPane: { state.focusedPaneID = $0 },
             onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },

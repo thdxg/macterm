@@ -152,6 +152,17 @@ private struct AppearanceSettings: View {
         themes = result.filter { seen.insert($0.id).inserted }
     }
 
+    private static func colorFromHex(_ hex: String) -> NSColor? {
+        let cleaned = hex.replacingOccurrences(of: "#", with: "")
+        guard cleaned.count == 6, let val = UInt64(cleaned, radix: 16) else { return nil }
+        return NSColor(
+            srgbRed: CGFloat((val >> 16) & 0xFF) / 255,
+            green: CGFloat((val >> 8) & 0xFF) / 255,
+            blue: CGFloat(val & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+
     private func parseColor(from content: String, key: String) -> NSColor? {
         for line in content.components(separatedBy: .newlines) {
             let t = line.trimmingCharacters(in: .whitespaces)
@@ -159,14 +170,8 @@ private struct AppearanceSettings: View {
                   t.dropFirst(key.count).trimmingCharacters(in: .whitespaces).hasPrefix("="),
                   let eq = t.firstIndex(of: "=")
             else { continue }
-            let hex = t[t.index(after: eq)...].trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "")
-            guard hex.count == 6, let val = UInt64(hex, radix: 16) else { continue }
-            return NSColor(
-                srgbRed: CGFloat((val >> 16) & 0xFF) / 255,
-                green: CGFloat((val >> 8) & 0xFF) / 255,
-                blue: CGFloat(val & 0xFF) / 255,
-                alpha: 1
-            )
+            let hex = t[t.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            return Self.colorFromHex(hex)
         }
         return nil
     }
@@ -182,13 +187,8 @@ private struct AppearanceSettings: View {
             guard match.numberOfRanges == 3 else { continue }
             let iString = ns.substring(with: match.range(at: 1))
             let hex = ns.substring(with: match.range(at: 2))
-            guard let idx = Int(iString), let val = UInt64(hex, radix: 16) else { continue }
-            indexed[idx] = NSColor(
-                srgbRed: CGFloat((val >> 16) & 0xFF) / 255,
-                green: CGFloat((val >> 8) & 0xFF) / 255,
-                blue: CGFloat(val & 0xFF) / 255,
-                alpha: 1
-            )
+            guard let idx = Int(iString), let color = Self.colorFromHex(hex) else { continue }
+            indexed[idx] = color
         }
 
         return indexed.keys.sorted().compactMap { indexed[$0] }
@@ -376,34 +376,5 @@ private struct HotkeyCaptureView: NSViewRepresentable {
                 return nil
             }
         }
-    }
-}
-
-// MARK: - Config
-
-private struct ConfigSettings: View {
-    var body: some View {
-        Form {
-            Section("Configuration File") {
-                Text("Terminal settings (font, scrollbar, opacity, blur, etc.) are configured via ghostty.conf.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-
-                HStack {
-                    Button("Open Config File") {
-                        NSWorkspace.shared.open(MactermConfig.shared.ghosttyConfigURL)
-                    }
-                    Button("Reload Config") {
-                        GhosttyApp.shared.reloadConfig()
-                    }
-                }
-
-                Text(MactermConfig.shared.ghosttyConfigURL.path)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .textSelection(.enabled)
-            }
-        }
-        .formStyle(.grouped)
     }
 }
