@@ -22,6 +22,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case focusPaneDown = "focus_pane_down"
     case focusPaneUp = "focus_pane_up"
     case focusPaneRight = "focus_pane_right"
+    case closeWindow = "close_window"
     case openProject = "open_project"
 
     var id: String { rawValue }
@@ -42,6 +43,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .focusPaneDown: "Focus Pane Down"
         case .focusPaneUp: "Focus Pane Up"
         case .focusPaneRight: "Focus Pane Right"
+        case .closeWindow: "Close Window"
         case .openProject: "Open Project"
         }
     }
@@ -64,6 +66,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .focusPaneDown: "ctrl+j"
         case .focusPaneUp: "ctrl+k"
         case .focusPaneRight: "ctrl+l"
+        case .closeWindow: "cmd+shift+w"
         case .openProject: "cmd+o"
         }
     }

@@ -208,6 +208,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
+        if HotkeyRegistry.matches(event, action: .closeWindow) {
+            mainWindow?.orderOut(nil)
+            return true
+        }
+
         if HotkeyRegistry.matches(event, action: .openProject) {
             guard let projectStore else { return false }
             _ = appState.openProject(store: projectStore)
