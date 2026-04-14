@@ -79,6 +79,13 @@ final class TerminalPortalHost {
         entry.terminalView.removeFromSuperview()
     }
 
+    /// Hide all terminal views in the portal.
+    func hideAll() {
+        for (paneID, _) in entries {
+            setVisible(false, for: paneID)
+        }
+    }
+
     /// Reposition all visible terminal views to match their anchors.
     func layoutAll() {
         for paneID in entries.keys {

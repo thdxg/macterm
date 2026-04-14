@@ -96,7 +96,14 @@ struct WorkspaceView: View {
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) }
             )
             .id(tab.id)
+            .onChange(of: tab.id) { _, _ in hideInactivePortalViews() }
+            .onChange(of: project.id) { _, _ in hideInactivePortalViews() }
         }
+    }
+
+    private func hideInactivePortalViews() {
+        guard let window = NSApp.windows.first(where: { $0.canBecomeMain }) else { return }
+        TerminalPortal.host(for: window).hideAll()
     }
 }
 
