@@ -14,27 +14,22 @@ final class Pane: Identifiable {
 
     var processTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Terminal" }
+        guard !trimmed.isEmpty else { return Self.defaultShellName }
         let tokens = trimmed.split(whereSeparator: \ .isWhitespace).map(String.init)
-        guard !tokens.isEmpty else { return "Terminal" }
+        guard !tokens.isEmpty else { return Self.defaultShellName }
         if let candidate = tokens.first(where: { !Self.isPathLike($0) && !Self.isNoise($0) }) {
             return candidate
         }
-        return tokens.first ?? "Terminal"
+        return Self.defaultShellName
     }
 
+    private static let defaultShellName: String = {
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        return (shell as NSString).lastPathComponent
+    }()
+
     var sidebarSegmentTitle: String {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != "Terminal" else { return projectPath }
-        let tokens = trimmed.split(whereSeparator: \ .isWhitespace).map(String.init)
-        guard let first = tokens.first else { return projectPath }
-        if Self.isPathLike(first) {
-            if let running = tokens.dropFirst().first(where: { !Self.isPathLike($0) && !Self.isNoise($0) }) {
-                return running
-            }
-            return first
-        }
-        return processTitle
+        processTitle
     }
 
     private static func isPathLike(_ token: String) -> Bool {
