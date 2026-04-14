@@ -52,7 +52,7 @@ struct MainWindow: View {
               let tab = ws.activeTab,
               let pane = tab.focusedPane
         else { return "" }
-        return pane.title
+        return pane.processTitle
     }
 }
 
