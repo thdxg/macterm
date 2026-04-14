@@ -5,18 +5,19 @@
 </h1>
 
 <p align="center">
-  macterm is a modern terminal multiplexer for macOS, featuring a native sidebar for vertical project and tab management. Built with SwiftUI and powered by libghostty.
+  A modern terminal multiplexer for macOS built with SwiftUI and libghostty.
 </p>
 
 ![screenshot](./assets/screenshot.png)
 
 ## Features
 
-- **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
-- **Split Panes**: Unlimited horizontal and vertical splits.
-- **Persistence**: Workspaces are saved and restored automatically.
-- **Quick Terminal**: Global dropdown terminal accessible from anywhere.
-- **Highly Configurable**: Custom hotkeys, themes, and more.
+- [x] Unlimited multiplexing with persistence
+- [x] Native sidebar with dynamic tab titles
+- [x] Configurable theme, font, and keymap with hot-reloading
+- [x] Quick terminal
+- [ ] Support multiple, synced instances
+- [ ] CLI to interact with multiplexing (open, delete, and list projects)
 
 ## Install
 
