@@ -3,7 +3,7 @@ import Foundation
 import GhosttyKit
 import os
 
-private let logger = Logger(subsystem: "app.macterm", category: "GhosttyApp")
+private let logger = Logger(subsystem: "com.thdxg.macterm", category: "GhosttyApp")
 
 /// Manages the libghostty application lifecycle: init, config, tick loop, color queries.
 @MainActor @Observable

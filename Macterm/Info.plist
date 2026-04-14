@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.macterm.app</string>
+	<string>com.thdxg.macterm</string>
 	<key>CFBundleExecutable</key>
 	<string>Macterm</string>
 	<key>CFBundleName</key>

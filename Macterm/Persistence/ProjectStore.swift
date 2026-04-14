@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "app.macterm", category: "ProjectStore")
+private let logger = Logger(subsystem: "com.thdxg.macterm", category: "ProjectStore")
 
 @MainActor @Observable
 final class ProjectStore {
