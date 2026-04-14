@@ -150,6 +150,10 @@ private struct SidebarProjectRow: View {
         }
         .contextMenu {
             Button("New Tab", action: onNewTab)
+            Button("Copy Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(project.path, forType: .string)
+            }
             Divider()
             Button("Rename Project") {
                 renameText = project.name
