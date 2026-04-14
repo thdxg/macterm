@@ -38,7 +38,7 @@ struct SidebarContent: View {
                 } label: {
                     SidebarProjectRow(project: project) {
                         appState.selectProject(project)
-                        appState.createTab(projectID: project.id)
+                        appState.createTab(projectID: project.id, projectPath: project.path)
                         expandedProjects.insert(project.id)
                     } onRename: {
                         projectStore.rename(id: project.id, to: $0)

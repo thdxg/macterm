@@ -87,9 +87,11 @@ final class AppState {
 
     // MARK: - Tabs
 
-    func createTab(projectID: UUID) {
+    func createTab(projectID: UUID, projectPath: String? = nil) {
         guard let ws = workspaces[projectID] else { return }
-        let path = ws.activeTab?.splitRoot.allPanes().first?.projectPath ?? ""
+        let path = projectPath
+            ?? ws.activeTab?.splitRoot.allPanes().first?.projectPath
+            ?? ""
         ws.createTab(projectPath: path)
         saveWorkspaces()
     }
