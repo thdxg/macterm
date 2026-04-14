@@ -114,6 +114,7 @@ private struct WindowStyler: NSViewRepresentable {
             guard let window = view.window else { return }
             window.titlebarAppearsTransparent = true
             window.titlebarSeparatorStyle = .none
+            window.tabbingMode = .disallowed
             applyStyle(to: window)
             context.coordinator.observe(window: window)
             // Install the terminal portal overlay

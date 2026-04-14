@@ -36,6 +36,10 @@ struct MactermApp: App {
                 }
         }
         .defaultSize(width: 1200, height: 800)
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .toolbar) {}
+        }
 
         Settings {
             SettingsView()
@@ -147,6 +151,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if event.keyCode == 50, flags.contains(.control) {
             NotificationCenter.default.post(name: .toggleQuickTerminal, object: nil)
+            return true
+        }
+
+        // Block Cmd+N from opening a second window — focus the existing one instead
+        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
+            mainWindow?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
             return true
         }
 
