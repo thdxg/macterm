@@ -12,12 +12,12 @@
 
 ## Features
 
-- [x] Unlimited multiplexing with persistence
-- [x] Native sidebar with dynamic tab titles
-- [x] Configurable theme, font, and keymap with hot-reloading
-- [x] Quick terminal
-- [ ] Support multiple, synced instances
-- [ ] CLI to interact with multiplexing (open, delete, and list projects)
+- [x] **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
+- [x] **Split Panes**: Unlimited horizontal and vertical splits.
+- [x] **Persistence**: Projects, tabs, and panes are saved and restored automatically.
+- [x] **Quick terminal**: Global terminal accessible from anywhere.
+- [x] **Highly Configurable**: Configurable theme, font, and keymap with hot-reloading.
+- [ ] **Command Palette**: Versatile command palette to interact with multiplexing (open, delete, and search projects)
 
 ## Install
 
