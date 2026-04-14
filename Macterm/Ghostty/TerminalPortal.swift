@@ -114,10 +114,12 @@ final class TerminalOverlayView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // Only hit-test visible terminal subviews, pass through empty areas
+        // Only hit-test visible terminal subviews, pass through empty areas.
+        // hitTest expects the point in the receiver's superview coordinates,
+        // so we pass `point` (which is in our coordinate system) directly
+        // to subviews since we are their superview.
         for sub in subviews.reversed() where !sub.isHidden {
-            let local = sub.convert(point, from: self)
-            if let hit = sub.hitTest(local) { return hit }
+            if let hit = sub.hitTest(point) { return hit }
         }
         return nil
     }
