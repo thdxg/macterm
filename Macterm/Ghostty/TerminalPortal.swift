@@ -103,6 +103,8 @@ final class TerminalPortalHost {
 /// A transparent NSView that hosts all terminal views.
 /// Passes hit testing through to terminal subviews.
 final class TerminalOverlayView: NSView {
+    override var isFlipped: Bool { true }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = false
