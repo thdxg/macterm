@@ -314,7 +314,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let url = Bundle.appResources.url(forResource: "AppIcon", withExtension: "png"),
               let image = NSImage(contentsOf: url)
         else { return }
-        image.size = NSSize(width: 512, height: 512)
         NSApp.applicationIconImage = image
     }
 }
