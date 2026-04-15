@@ -154,6 +154,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
+        // Cmd+Shift+P — command palette (command mode)
+        let key = (event.charactersIgnoringModifiers ?? "").lowercased()
+        if flags == [.command, .shift], key == "p" {
+            appState.commandPaletteMode = .command
+            appState.isCommandPaletteVisible = true
+            return true
+        }
+
+        // Cmd+P — command palette (project mode)
+        if flags == .command, key == "p" {
+            appState.commandPaletteMode = .project
+            appState.isCommandPaletteVisible = true
+            return true
+        }
+
+        // Dismiss command palette on any other key when visible
+        if appState.isCommandPaletteVisible {
+            return false
+        }
+
         // Block Cmd+N from opening a second window — focus the existing one instead
         if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
             mainWindow?.makeKeyAndOrderFront(nil)

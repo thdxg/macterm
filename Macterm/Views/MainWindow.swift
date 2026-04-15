@@ -26,6 +26,7 @@ struct MainWindow: View {
             .navigationTitle(activeProject?.name ?? "Macterm")
             .navigationSubtitle(activeTabTitle)
         }
+        .overlay { CommandPaletteOverlay() }
         .background(WindowStyler())
         .task {
             guard !appState.hasRestoredSelection else { return }

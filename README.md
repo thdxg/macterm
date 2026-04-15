@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  A lightweight terminal multiplexer for macOS built with SwiftUI and libghostty.
+  A lightweight, native terminal for macOS built with SwiftUI and libghostty.
 </p>
 
 ![screenshot](./assets/screenshot.png)

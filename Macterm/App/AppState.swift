@@ -10,6 +10,8 @@ final class AppState {
     var workspaces: [UUID: Workspace] = [:]
     var sidebarVisible = true
     var pendingClosePane: PendingClosePane?
+    var isCommandPaletteVisible = false
+    var commandPaletteMode: CommandPaletteMode = .command
     private(set) var hasRestoredSelection = false
 
     struct PendingClosePane: Equatable {
