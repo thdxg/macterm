@@ -195,3 +195,34 @@ extension SplitNode {
 }
 
 enum PaneFocusDirection { case left, right, up, down }
+
+@MainActor
+extension SplitNode {
+    /// Adjust the ratio of the nearest ancestor split in the given direction by `delta`.
+    /// Returns the receiver if no matching split is found.
+    func resizing(paneID: UUID, direction: PaneFocusDirection, delta: CGFloat) -> SplitNode {
+        let axis: SplitDirection = (direction == .left || direction == .right) ? .horizontal : .vertical
+        let sign: CGFloat = (direction == .right || direction == .down) ? 1 : -1
+        _ = applyResize(paneID: paneID, axis: axis, delta: sign * delta)
+        return self
+    }
+
+    /// Walks the tree and applies the delta to the closest matching-axis ancestor
+    /// of the given pane. Returns true if the ratio was actually adjusted.
+    @discardableResult
+    private func applyResize(paneID: UUID, axis: SplitDirection, delta: CGFloat) -> Bool {
+        guard case let .split(branch) = self else { return false }
+        let firstHas = branch.first.contains(paneID: paneID)
+        let secondHas = branch.second.contains(paneID: paneID)
+        guard firstHas || secondHas else { return false }
+        // Recurse first — deeper (closer) ancestor wins.
+        let child: SplitNode = firstHas ? branch.first : branch.second
+        if child.applyResize(paneID: paneID, axis: axis, delta: delta) { return true }
+        // No deeper match; if this branch matches the axis, apply here.
+        if branch.direction == axis {
+            branch.ratio = min(max(branch.ratio + delta, 0.15), 0.85)
+            return true
+        }
+        return false
+    }
+}

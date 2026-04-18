@@ -6,13 +6,15 @@ import SwiftUI
 final class QuickTerminalService: NSObject {
     static let shared = QuickTerminalService()
 
-    private var panel: QuickTerminalPanel?
+    private(set) var panel: QuickTerminalPanel?
+    var panelRef: QuickTerminalPanel? { panel }
     private var hostingView: NSHostingView<QuickTerminalView>?
     private(set) var isVisible = false
     private var carbonHotKeyRef: EventHotKeyRef?
     private var carbonEventHandler: EventHandlerRef?
     let splitState = QuickTerminalSplitState()
     let viewCache = TerminalViewCache()
+    var suppressAutoHide = false
     private let enabledKey = "macterm.quickTerminal.enabled"
 
     private var isEnabled: Bool {
@@ -106,6 +108,20 @@ final class QuickTerminalService: NSObject {
         isVisible = true
     }
 
+    /// Refocus a pane after a close — retries briefly to wait for the new view.
+    func refocusPane(_ paneID: UUID, viewCache: TerminalViewCache, attempt: Int = 0) {
+        guard let panel, isVisible else { return }
+        if let view = viewCache.existingView(for: paneID), view.window === panel {
+            panel.makeFirstResponder(view)
+            view.notifySurfaceFocused()
+            return
+        }
+        guard attempt < 40 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.refocusPane(paneID, viewCache: viewCache, attempt: attempt + 1)
+        }
+    }
+
     private func hide() {
         panel?.orderOut(nil)
         hostingView?.removeFromSuperview()
@@ -133,6 +149,7 @@ final class QuickTerminalService: NSObject {
 final class QuickTerminalSplitState {
     var splitRoot: SplitNode
     var focusedPaneID: UUID?
+    var pendingClosePaneID: UUID?
 
     init() {
         let pane = Pane(projectPath: NSHomeDirectory())
@@ -140,12 +157,68 @@ final class QuickTerminalSplitState {
         focusedPaneID = pane.id
     }
 
-    func split(paneID: UUID, direction: SplitDirection) {
+    func requestClosePane(_ paneID: UUID, viewCache: TerminalViewCache) {
+        if viewCache.needsConfirmQuit(for: paneID) {
+            pendingClosePaneID = paneID
+            presentConfirmAlert(paneID: paneID, viewCache: viewCache)
+            return
+        }
+        closePane(paneID, viewCache: viewCache)
+    }
+
+    func confirmPendingClose(viewCache: TerminalViewCache) {
+        guard let id = pendingClosePaneID else { return }
+        pendingClosePaneID = nil
+        closePane(id, viewCache: viewCache)
+    }
+
+    func cancelPendingClose() {
+        pendingClosePaneID = nil
+    }
+
+    private func presentConfirmAlert(paneID _: UUID, viewCache: TerminalViewCache) {
+        QuickTerminalService.shared.suppressAutoHide = true
+        let alert = NSAlert()
+        alert.messageText = "Close running process?"
+        alert.informativeText = "A process is still running in this pane. Close it anyway?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Cancel")
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            confirmPendingClose(viewCache: viewCache)
+        } else {
+            cancelPendingClose()
+        }
+        // Restore focus to the quick terminal panel and re-enable auto-hide on the
+        // next runloop so any stray resignKey from the alert tear-down is ignored.
+        if let panel = QuickTerminalService.shared.panelRef {
+            panel.makeKeyAndOrderFront(nil)
+            if let focusedID = focusedPaneID,
+               let view = viewCache.existingView(for: focusedID)
+            {
+                panel.makeFirstResponder(view)
+            }
+        }
+        DispatchQueue.main.async {
+            QuickTerminalService.shared.suppressAutoHide = false
+        }
+    }
+
+    func split(paneID: UUID, direction: SplitDirection, viewCache: TerminalViewCache) {
+        let livePwd = viewCache.existingView(for: paneID)?.currentPwd
+        let fallback = splitRoot.findPane(id: paneID)?.projectPath ?? NSHomeDirectory()
+        let sourcePath = livePwd ?? fallback
         let (newRoot, newID) = splitRoot.splitting(
-            paneID: paneID, direction: direction, position: .second, projectPath: NSHomeDirectory()
+            paneID: paneID, direction: direction, position: .second, projectPath: sourcePath
         )
         splitRoot = newRoot
         if let newID { focusedPaneID = newID }
+    }
+
+    func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
+        guard let paneID = focusedPaneID else { return }
+        splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
     }
 
     func closePane(_ paneID: UUID, viewCache: TerminalViewCache) {
@@ -161,6 +234,10 @@ final class QuickTerminalSplitState {
             splitRoot = newRoot
             if focusedPaneID == paneID { focusedPaneID = newRoot.allPanes().first?.id }
         }
+        // Refocus the new focused pane once its view has been created.
+        if let newID = focusedPaneID {
+            QuickTerminalService.shared.refocusPane(newID, viewCache: viewCache)
+        }
     }
 }
 
@@ -172,6 +249,9 @@ final class QuickTerminalPanel: NSPanel {
 
     override func resignKey() {
         super.resignKey()
+        // Don't auto-hide while a confirmation alert is pending or is being torn down.
+        if QuickTerminalService.shared.suppressAutoHide { return }
+        if QuickTerminalService.shared.splitState.pendingClosePaneID != nil { return }
         if QuickTerminalService.shared.isVisible {
             QuickTerminalService.shared.toggle()
         }
@@ -193,7 +273,7 @@ private struct QuickTerminalView: View {
             projectID: Self.projectID,
             viewCache: viewCache,
             onFocusPane: { state.focusedPaneID = $0 },
-            onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
+            onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir, viewCache: viewCache) },
             onClosePane: { state.closePane($0, viewCache: viewCache) }
         )
         .background(Color(nsColor: GhosttyApp.shared.backgroundColor))

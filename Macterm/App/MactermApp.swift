@@ -154,18 +154,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        // Cmd+Shift+P — command palette (command mode)
+        // Cmd+Shift+P — command palette (command mode). Toggle if already in command mode.
         let key = (event.charactersIgnoringModifiers ?? "").lowercased()
         if flags == [.command, .shift], key == "p" {
-            appState.commandPaletteMode = .command
-            appState.isCommandPaletteVisible = true
+            if appState.isCommandPaletteVisible, appState.commandPaletteMode == .command {
+                appState.isCommandPaletteVisible = false
+            } else {
+                appState.commandPaletteMode = .command
+                appState.isCommandPaletteVisible = true
+            }
             return true
         }
 
-        // Cmd+P — command palette (project mode)
+        // Cmd+P — command palette (project mode). Toggle if already in project mode.
         if flags == .command, key == "p" {
-            appState.commandPaletteMode = .project
-            appState.isCommandPaletteVisible = true
+            if appState.isCommandPaletteVisible, appState.commandPaletteMode == .project {
+                appState.isCommandPaletteVisible = false
+            } else {
+                appState.commandPaletteMode = .project
+                appState.isCommandPaletteVisible = true
+            }
             return true
         }
 
@@ -242,6 +250,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
+        if let (_, dir) = Self.resizeActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
+            guard let projectID = appState.activeProjectID else { return false }
+            appState.resizePane(dir, projectID: projectID)
+            return true
+        }
+
         if HotkeyRegistry.matches(event, action: .closeWindow) {
             mainWindow?.orderOut(nil)
             return true
@@ -276,6 +290,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         (.focusPaneRight, .right),
     ]
 
+    private static let resizeActions: [(HotkeyAction, PaneFocusDirection)] = [
+        (.resizePaneLeft, .left),
+        (.resizePaneDown, .down),
+        (.resizePaneUp, .up),
+        (.resizePaneRight, .right),
+    ]
+
     private func handleQuickTerminalKeyEvent(_ event: NSEvent) -> Bool {
         let qt = QuickTerminalService.shared
         let state = qt.splitState
@@ -289,19 +310,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if HotkeyRegistry.matches(event, action: .splitRight) {
             guard let paneID = state.focusedPaneID else { return false }
-            state.split(paneID: paneID, direction: .horizontal)
+            state.split(paneID: paneID, direction: .horizontal, viewCache: qt.viewCache)
             return true
         }
 
         if HotkeyRegistry.matches(event, action: .splitDown) {
             guard let paneID = state.focusedPaneID else { return false }
-            state.split(paneID: paneID, direction: .vertical)
+            state.split(paneID: paneID, direction: .vertical, viewCache: qt.viewCache)
             return true
         }
 
         if HotkeyRegistry.matches(event, action: .closePane) {
             guard let paneID = state.focusedPaneID else { return false }
-            state.closePane(paneID, viewCache: qt.viewCache)
+            state.requestClosePane(paneID, viewCache: qt.viewCache)
             return true
         }
 
@@ -310,6 +331,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let bestID = state.splitRoot.nearestPane(from: focusedID, direction: dir) {
                 state.focusedPaneID = bestID
             }
+            return true
+        }
+
+        if let (_, dir) = Self.resizeActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
+            state.resize(dir)
             return true
         }
 

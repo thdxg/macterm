@@ -14,6 +14,7 @@ final class GhosttyTerminalNSView: NSView {
     var onSearchTotal: ((Int?) -> Void)?
     var onSearchSelected: ((Int?) -> Void)?
     var isFocused: Bool = false
+    var currentPwd: String?
 
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
     private var _selectedRange: NSRange = .init(location: NSNotFound, length: 0)

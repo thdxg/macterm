@@ -174,14 +174,24 @@ final class AppState {
         guard let tab = workspaces[projectID]?.activeTab,
               let pane = tab.focusedPane
         else { return }
+        let livePwd = TerminalViewCache.shared.existingView(for: pane.id)?.currentPwd
+        let sourcePath = livePwd ?? pane.projectPath
         let (newRoot, newPaneID) = tab.splitRoot.splitting(
             paneID: pane.id,
             direction: direction,
             position: .second,
-            projectPath: pane.projectPath
+            projectPath: sourcePath
         )
         tab.splitRoot = newRoot
         if let newPaneID { tab.focusedPaneID = newPaneID }
+        saveWorkspaces()
+    }
+
+    func resizePane(_ direction: PaneFocusDirection, projectID: UUID, delta: CGFloat = 0.03) {
+        guard let tab = workspaces[projectID]?.activeTab,
+              let paneID = tab.focusedPaneID
+        else { return }
+        tab.splitRoot = tab.splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
         saveWorkspaces()
     }
 

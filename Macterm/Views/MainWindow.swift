@@ -35,6 +35,13 @@ struct MainWindow: View {
         .onChange(of: appState.sidebarVisible) { _, visible in
             columnVisibility = visible ? .automatic : .detailOnly
         }
+        .onChange(of: appState.isCommandPaletteVisible) { _, visible in
+            for window in NSApp.windows where window.isVisible {
+                // Apply to every existing portal host so the palette can receive clicks
+                // regardless of which window has the key focus.
+                TerminalPortal.hostIfExists(for: window)?.isPaletteActive = visible
+            }
+        }
     }
 
     private var activeProject: Project? {
@@ -83,8 +90,10 @@ struct WorkspaceView: View {
                 projectID: project.id,
                 onFocusPane: { appState.focusPane($0, projectID: project.id) },
                 onSplit: { paneID, dir in
+                    let livePwd = TerminalViewCache.shared.existingView(for: paneID)?.currentPwd
+                    let sourcePath = livePwd ?? tab.splitRoot.findPane(id: paneID)?.projectPath ?? project.path
                     let (newRoot, newID) = tab.splitRoot.splitting(
-                        paneID: paneID, direction: dir, position: .second, projectPath: project.path
+                        paneID: paneID, direction: dir, position: .second, projectPath: sourcePath
                     )
                     tab.splitRoot = newRoot
                     if let newID { tab.focusedPaneID = newID }

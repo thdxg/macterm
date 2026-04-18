@@ -95,7 +95,7 @@ private struct CommandPalettePanel: View {
     private var isFieldFocused: Bool
 
     private var mode: CommandPaletteMode {
-        query.hasPrefix(">") ? .command : appState.commandPaletteMode
+        query.hasPrefix(">") ? .command : .project
     }
 
     private var searchQuery: String {
@@ -152,15 +152,17 @@ private struct CommandPalettePanel: View {
                             }
                             ForEach(section.items) { item in
                                 let idx = cachedItems.firstIndex(where: { $0.id == item.id }) ?? 0
-                                CommandPaletteRow(
-                                    item: item,
-                                    isSelected: idx == selectedIndex
-                                )
-                                .id(idx)
-                                .onTapGesture {
+                                Button {
                                     selectedIndex = idx
                                     execute()
+                                } label: {
+                                    CommandPaletteRow(
+                                        item: item,
+                                        isSelected: idx == selectedIndex
+                                    )
                                 }
+                                .buttonStyle(.plain)
+                                .id(idx)
                             }
                         }
                     }
@@ -179,18 +181,29 @@ private struct CommandPalettePanel: View {
         .onAppear {
             query = appState.commandPaletteMode == .command ? "> " : ""
             selectedIndex = 0
-            isFieldFocused = true
             refreshItems()
+            // Defer focus to the next runloop so the TextField has been created.
+            DispatchQueue.main.async { isFieldFocused = true }
         }
         .onChange(of: query) {
             selectedIndex = 0
             refreshItems()
         }
-        .onKeyPress(.upArrow) {
+        .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { _ in
             if selectedIndex > 0 { selectedIndex -= 1 }
             return .handled
         }
-        .onKeyPress(.downArrow) {
+        .onKeyPress(keys: [.downArrow], phases: [.down, .repeat]) { _ in
+            if selectedIndex < cachedItems.count - 1 { selectedIndex += 1 }
+            return .handled
+        }
+        .onKeyPress(characters: .init(charactersIn: "p"), phases: [.down, .repeat]) { press in
+            guard press.modifiers == .control else { return .ignored }
+            if selectedIndex > 0 { selectedIndex -= 1 }
+            return .handled
+        }
+        .onKeyPress(characters: .init(charactersIn: "n"), phases: [.down, .repeat]) { press in
+            guard press.modifiers == .control else { return .ignored }
             if selectedIndex < cachedItems.count - 1 { selectedIndex += 1 }
             return .handled
         }
@@ -323,6 +336,30 @@ private struct CommandPalettePanel: View {
                 category: "Panes",
                 keybind: shortcut(.focusPaneDown)
             ) { appState.focusPaneInDirection(.down, projectID: projectID) },
+            CommandPaletteItem(
+                title: "Resize Pane Left",
+                subtitle: nil,
+                category: "Panes",
+                keybind: shortcut(.resizePaneLeft)
+            ) { appState.resizePane(.left, projectID: projectID) },
+            CommandPaletteItem(
+                title: "Resize Pane Right",
+                subtitle: nil,
+                category: "Panes",
+                keybind: shortcut(.resizePaneRight)
+            ) { appState.resizePane(.right, projectID: projectID) },
+            CommandPaletteItem(
+                title: "Resize Pane Up",
+                subtitle: nil,
+                category: "Panes",
+                keybind: shortcut(.resizePaneUp)
+            ) { appState.resizePane(.up, projectID: projectID) },
+            CommandPaletteItem(
+                title: "Resize Pane Down",
+                subtitle: nil,
+                category: "Panes",
+                keybind: shortcut(.resizePaneDown)
+            ) { appState.resizePane(.down, projectID: projectID) },
         ]
     }
 

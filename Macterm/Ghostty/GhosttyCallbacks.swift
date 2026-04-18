@@ -35,6 +35,11 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let value = v >= 0 ? Int(v) : nil
             DispatchQueue.main.async { view.onSearchSelected?(value) }
             return true
+        case GHOSTTY_ACTION_PWD:
+            guard let view = surfaceView(from: target), let ptr = action.action.pwd.pwd else { return true }
+            let pwd = String(cString: ptr)
+            DispatchQueue.main.async { view.currentPwd = pwd }
+            return true
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
             return true
         default:

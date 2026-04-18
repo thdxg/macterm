@@ -22,6 +22,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case focusPaneDown = "focus_pane_down"
     case focusPaneUp = "focus_pane_up"
     case focusPaneRight = "focus_pane_right"
+    case resizePaneLeft = "resize_pane_left"
+    case resizePaneDown = "resize_pane_down"
+    case resizePaneUp = "resize_pane_up"
+    case resizePaneRight = "resize_pane_right"
     case closeWindow = "close_window"
     case openProject = "open_project"
 
@@ -43,6 +47,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .focusPaneDown: "Focus Pane Down"
         case .focusPaneUp: "Focus Pane Up"
         case .focusPaneRight: "Focus Pane Right"
+        case .resizePaneLeft: "Resize Pane Left"
+        case .resizePaneDown: "Resize Pane Down"
+        case .resizePaneUp: "Resize Pane Up"
+        case .resizePaneRight: "Resize Pane Right"
         case .closeWindow: "Close Window"
         case .openProject: "Open Project"
         }
@@ -66,6 +74,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .focusPaneDown: "cmd+ctrl+j"
         case .focusPaneUp: "cmd+ctrl+k"
         case .focusPaneRight: "cmd+ctrl+l"
+        case .resizePaneLeft: "cmd+shift+h"
+        case .resizePaneDown: "cmd+shift+j"
+        case .resizePaneUp: "cmd+shift+k"
+        case .resizePaneRight: "cmd+shift+l"
         case .closeWindow: "cmd+shift+w"
         case .openProject: "cmd+o"
         }
