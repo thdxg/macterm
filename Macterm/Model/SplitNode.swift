@@ -198,6 +198,36 @@ enum PaneFocusDirection { case left, right, up, down }
 
 @MainActor
 extension SplitNode {
+    /// Rebalance all ratios so sibling panes along each direction share space
+    /// evenly. Mutates in place; returns the receiver for chaining.
+    @discardableResult
+    func rebalanced() -> SplitNode {
+        if case let .split(branch) = self {
+            let leftUnits = branch.first.tileUnits(along: branch.direction)
+            let rightUnits = branch.second.tileUnits(along: branch.direction)
+            let total = leftUnits + rightUnits
+            if total > 0 {
+                branch.ratio = CGFloat(leftUnits) / CGFloat(total)
+            }
+            _ = branch.first.rebalanced()
+            _ = branch.second.rebalanced()
+        }
+        return self
+    }
+
+    /// Number of "cells" this subtree contributes when laid out along the given
+    /// direction. Same-direction descendants expand to their leaf count;
+    /// different-direction or leaf nodes count as a single cell.
+    private func tileUnits(along direction: SplitDirection) -> Int {
+        switch self {
+        case .pane: 1
+        case let .split(b):
+            b.direction == direction
+                ? b.first.tileUnits(along: direction) + b.second.tileUnits(along: direction)
+                : 1
+        }
+    }
+
     /// Adjust the ratio of the nearest ancestor split in the given direction by `delta`.
     /// Returns the receiver if no matching split is found.
     func resizing(paneID: UUID, direction: PaneFocusDirection, delta: CGFloat) -> SplitNode {

@@ -329,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let (_, dir) = Self.paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             guard let focusedID = state.focusedPaneID else { return false }
             if let bestID = state.splitRoot.nearestPane(from: focusedID, direction: dir) {
-                state.focusedPaneID = bestID
+                state.focusPane(bestID)
             }
             return true
         }

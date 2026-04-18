@@ -24,7 +24,19 @@ final class QuickTerminalService: NSObject {
     override private init() {
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(toggle), name: .toggleQuickTerminal, object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(autoTilingDidChange),
+            name: .autoTilingEnabledDidChange,
+            object: nil
+        )
         registerHotKey()
+    }
+
+    @objc
+    private func autoTilingDidChange() {
+        guard AutoTilePreference.isEnabled else { return }
+        splitState.splitRoot.rebalanced()
     }
 
     @objc
@@ -150,11 +162,31 @@ final class QuickTerminalSplitState {
     var splitRoot: SplitNode
     var focusedPaneID: UUID?
     var pendingClosePaneID: UUID?
+    @ObservationIgnored
+    var paneFocusHistory: [UUID] = []
 
     init() {
         let pane = Pane(projectPath: NSHomeDirectory())
         splitRoot = .pane(pane)
         focusedPaneID = pane.id
+    }
+
+    /// Record a focus change, pushing the previous pane onto history.
+    func focusPane(_ paneID: UUID) {
+        guard paneID != focusedPaneID else { return }
+        if let current = focusedPaneID { paneFocusHistory.append(current) }
+        paneFocusHistory.removeAll { $0 == paneID }
+        focusedPaneID = paneID
+    }
+
+    /// Pick the next focus target after a pane is removed.
+    private func nextFocusAfterClose() -> UUID? {
+        let valid = Set(splitRoot.allPanes().map(\.id))
+        paneFocusHistory.removeAll { !valid.contains($0) }
+        while let prev = paneFocusHistory.popLast() {
+            if valid.contains(prev) { return prev }
+        }
+        return splitRoot.allPanes().first?.id
     }
 
     func requestClosePane(_ paneID: UUID, viewCache: TerminalViewCache) {
@@ -213,7 +245,8 @@ final class QuickTerminalSplitState {
             paneID: paneID, direction: direction, position: .second, projectPath: sourcePath
         )
         splitRoot = newRoot
-        if let newID { focusedPaneID = newID }
+        if let newID { focusPane(newID) }
+        if AutoTilePreference.isEnabled { splitRoot.rebalanced() }
     }
 
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
@@ -230,9 +263,14 @@ final class QuickTerminalSplitState {
             let pane = Pane(projectPath: NSHomeDirectory())
             splitRoot = .pane(pane)
             focusedPaneID = pane.id
+            paneFocusHistory.removeAll()
         } else if let newRoot = splitRoot.removing(paneID: paneID) {
             splitRoot = newRoot
-            if focusedPaneID == paneID { focusedPaneID = newRoot.allPanes().first?.id }
+            paneFocusHistory.removeAll { $0 == paneID }
+            if focusedPaneID == paneID {
+                focusedPaneID = nextFocusAfterClose()
+            }
+            if AutoTilePreference.isEnabled { splitRoot.rebalanced() }
         }
         // Refocus the new focused pane once its view has been created.
         if let newID = focusedPaneID {
@@ -272,7 +310,7 @@ private struct QuickTerminalView: View {
             isActiveProject: true,
             projectID: Self.projectID,
             viewCache: viewCache,
-            onFocusPane: { state.focusedPaneID = $0 },
+            onFocusPane: { state.focusPane($0) },
             onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir, viewCache: viewCache) },
             onClosePane: { state.closePane($0, viewCache: viewCache) }
         )

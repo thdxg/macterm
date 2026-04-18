@@ -44,6 +44,8 @@ private struct AppearanceSettings: View {
     private var fontSize: Int = 12
     @State
     private var monoFonts: [String] = []
+    @AppStorage(AutoTilePreference.key)
+    private var autoTilingEnabled = false
     var body: some View {
         Form {
             Section("Font") {
@@ -121,6 +123,16 @@ private struct AppearanceSettings: View {
                         }
                     }
                 }
+            }
+
+            Section("Layout") {
+                Toggle("Auto-tile panes", isOn: $autoTilingEnabled)
+                    .onChange(of: autoTilingEnabled) { _, v in
+                        AutoTilePreference.set(v)
+                    }
+                Text("Distributes pane sizes evenly on split and close.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

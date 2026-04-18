@@ -25,6 +25,27 @@ final class AppState {
     var isTabCycling: Bool { !tabCycleOrder.isEmpty }
 
     private let workspaceStore = WorkspaceStore()
+    private var autoTileObserver: Any?
+
+    init() {
+        autoTileObserver = NotificationCenter.default.addObserver(
+            forName: .autoTilingEnabledDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.rebalanceAllWorkspacesIfEnabled() }
+        }
+    }
+
+    private func rebalanceAllWorkspacesIfEnabled() {
+        guard AutoTilePreference.isEnabled else { return }
+        for ws in workspaces.values {
+            for tab in ws.tabs {
+                tab.splitRoot.rebalanced()
+            }
+        }
+        saveWorkspaces()
+    }
 
     // MARK: - Restore / Save
 
@@ -183,7 +204,8 @@ final class AppState {
             projectPath: sourcePath
         )
         tab.splitRoot = newRoot
-        if let newPaneID { tab.focusedPaneID = newPaneID }
+        if let newPaneID { tab.focusPane(newPaneID) }
+        if AutoTilePreference.isEnabled { tab.splitRoot.rebalanced() }
         saveWorkspaces()
     }
 
@@ -206,7 +228,11 @@ final class AppState {
         } else {
             if let newRoot = tab.splitRoot.removing(paneID: paneID) {
                 tab.splitRoot = newRoot
-                if tab.focusedPaneID == paneID { tab.focusedPaneID = newRoot.allPanes().first?.id }
+                tab.paneFocusHistory.removeAll { $0 == paneID }
+                if tab.focusedPaneID == paneID {
+                    tab.focusedPaneID = tab.nextFocusAfterClose()
+                }
+                if AutoTilePreference.isEnabled { tab.splitRoot.rebalanced() }
             }
             saveWorkspaces()
         }
@@ -231,7 +257,7 @@ final class AppState {
     }
 
     func focusPane(_ paneID: UUID, projectID: UUID) {
-        workspaces[projectID]?.activeTab?.focusedPaneID = paneID
+        workspaces[projectID]?.activeTab?.focusPane(paneID)
     }
 
     func focusedPane(for projectID: UUID) -> Pane? {
@@ -245,7 +271,7 @@ final class AppState {
               let focusedID = tab.focusedPaneID
         else { return }
         if let bestID = tab.splitRoot.nearestPane(from: focusedID, direction: direction) {
-            tab.focusedPaneID = bestID
+            tab.focusPane(bestID)
         }
     }
 

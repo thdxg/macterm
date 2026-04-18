@@ -7,6 +7,31 @@ final class TerminalTab: Identifiable {
     var customTitle: String?
     var splitRoot: SplitNode
     var focusedPaneID: UUID?
+    /// Most-recent-last stack of previously focused pane IDs.
+    /// Excludes the currently focused pane.
+    @ObservationIgnored
+    var paneFocusHistory: [UUID] = []
+
+    /// Record a focus change, pushing the previous pane onto history.
+    func focusPane(_ paneID: UUID) {
+        guard paneID != focusedPaneID else { return }
+        if let current = focusedPaneID { paneFocusHistory.append(current) }
+        // Avoid unbounded growth and duplicates of the new focus.
+        paneFocusHistory.removeAll { $0 == paneID }
+        focusedPaneID = paneID
+    }
+
+    /// Pick the next focus target after a pane is removed from the tree.
+    /// Walks the history stack (skipping panes no longer in the tree), then
+    /// falls back to the first pane in tree order.
+    func nextFocusAfterClose() -> UUID? {
+        let valid = Set(splitRoot.allPanes().map(\.id))
+        paneFocusHistory.removeAll { !valid.contains($0) }
+        while let prev = paneFocusHistory.popLast() {
+            if valid.contains(prev) { return prev }
+        }
+        return splitRoot.allPanes().first?.id
+    }
 
     var title: String {
         if let customTitle { return customTitle }
