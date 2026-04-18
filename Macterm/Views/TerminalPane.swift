@@ -9,6 +9,8 @@ struct TerminalPane: View {
     let onProcessExit: () -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
 
+    private let searchBarHeight: CGFloat = 32
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             TerminalAnchor(
@@ -29,6 +31,11 @@ struct TerminalPane: View {
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+        }
+        .onChange(of: pane.searchState.isVisible) { _, isVisible in
+            guard let window = NSApp.keyWindow ?? NSApp.mainWindow else { return }
+            let host = TerminalPortal.host(for: window)
+            host.setSearchBarHeight(isVisible ? searchBarHeight : 0, for: pane.id)
         }
     }
 }
@@ -105,9 +112,20 @@ private struct TerminalAnchor: NSViewRepresentable {
     }
 
     func updateNSView(_ anchor: NSView, context: Context) {
-        guard let termView = context.coordinator.terminalView,
-              let host = context.coordinator.portalHost
-        else { return }
+        guard let host = context.coordinator.portalHost else { return }
+
+        // If SwiftUI recycled this anchor for a different pane, rebind to the new
+        // pane's terminal view instead of reusing the (now-destroyed) old one.
+        if context.coordinator.paneID != pane.id {
+            let newView = viewCache.view(for: pane.id, workingDirectory: pane.projectPath)
+            context.coordinator.paneID = pane.id
+            context.coordinator.terminalView = newView
+            context.coordinator.wasFocused = false
+            host.bind(paneID: pane.id, terminalView: newView, anchor: anchor, visible: true)
+            if newView.surface == nil { newView.createSurface() }
+        }
+
+        guard let termView = context.coordinator.terminalView else { return }
 
         configure(termView)
 

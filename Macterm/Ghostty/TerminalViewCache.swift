@@ -21,7 +21,15 @@ final class TerminalViewCache {
 
     func remove(for paneID: UUID) {
         guard let view = views.removeValue(forKey: paneID) else { return }
-        // Unbind from any portal host
+        // Clear callbacks first so any in-flight ghostty actions (including those
+        // fired from destroySurface) can't re-enter and trigger another close.
+        view.onProcessExit = nil
+        view.onTitleChange = nil
+        view.onSearchStart = nil
+        view.onSearchEnd = nil
+        view.onSearchTotal = nil
+        view.onSearchSelected = nil
+        // Unbind from the portal first (which hides + removes the view).
         if let window = view.window ?? view.superview?.window {
             TerminalPortal.host(for: window).unbind(paneID: paneID)
         }

@@ -19,6 +19,11 @@ final class TerminalPortal {
         return host
     }
 
+    /// Get an existing portal host for a window, or nil if none.
+    static func hostIfExists(for window: NSWindow) -> TerminalPortalHost? {
+        hosts[ObjectIdentifier(window)]
+    }
+
     static func removeHost(for window: NSWindow) {
         let key = ObjectIdentifier(window)
         hosts.removeValue(forKey: key)
@@ -32,11 +37,27 @@ final class TerminalPortalHost {
     let overlayView: TerminalOverlayView
     private weak var window: NSWindow?
     private var entries: [UUID: Entry] = [:]
+    var isPaletteActive: Bool {
+        get { overlayView.isPaletteActive }
+        set {
+            overlayView.isPaletteActive = newValue
+            // Move the overlay below SwiftUI content so clicks naturally fall through
+            // to the palette. When palette closes, put it back above.
+            if let contentView = overlayView.superview {
+                contentView.addSubview(
+                    overlayView,
+                    positioned: newValue ? .below : .above,
+                    relativeTo: nil
+                )
+            }
+        }
+    }
 
     struct Entry {
         let terminalView: GhosttyTerminalNSView
         weak var anchor: NSView?
         var isVisible: Bool
+        var searchBarHeight: CGFloat = 0
     }
 
     init(window: NSWindow) {
@@ -73,9 +94,20 @@ final class TerminalPortalHost {
         if visible { layoutEntry(paneID) }
     }
 
+    /// Set how many points at the top of the anchor are reserved by the search bar.
+    /// The terminal view frame is inset by this amount so the search bar can receive clicks.
+    func setSearchBarHeight(_ height: CGFloat, for paneID: UUID) {
+        guard var entry = entries[paneID] else { return }
+        entry.searchBarHeight = height
+        entries[paneID] = entry
+        layoutEntry(paneID)
+    }
+
     /// Remove a terminal view from the portal (pane closed).
     func unbind(paneID: UUID) {
         guard let entry = entries.removeValue(forKey: paneID) else { return }
+        // Hide before removing to prevent Metal layer from flashing stale content.
+        entry.terminalView.isHidden = true
         entry.terminalView.removeFromSuperview()
     }
 
@@ -100,7 +132,12 @@ final class TerminalPortalHost {
               anchor.window != nil
         else { return }
 
-        let anchorFrame = overlayView.convert(anchor.bounds, from: anchor)
+        var anchorFrame = overlayView.convert(anchor.bounds, from: anchor)
+        let barHeight = entry.searchBarHeight
+        if barHeight > 0 {
+            anchorFrame.origin.y += barHeight
+            anchorFrame.size.height = max(0, anchorFrame.size.height - barHeight)
+        }
         if entry.terminalView.frame != anchorFrame {
             entry.terminalView.frame = anchorFrame
         }
@@ -111,6 +148,7 @@ final class TerminalPortalHost {
 /// Passes hit testing through to terminal subviews.
 final class TerminalOverlayView: NSView {
     override var isFlipped: Bool { true }
+    var isPaletteActive = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -123,12 +161,15 @@ final class TerminalOverlayView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
+        // When the command palette is open, pass all clicks through to SwiftUI.
+        if isPaletteActive { return nil }
+        // Convert the incoming point (in superview coordinates) to our own coordinate system.
+        let localPoint = convert(point, from: superview)
         // Only hit-test visible terminal subviews, pass through empty areas.
-        // hitTest expects the point in the receiver's superview coordinates,
-        // so we pass `point` (which is in our coordinate system) directly
-        // to subviews since we are their superview.
         for sub in subviews.reversed() where !sub.isHidden {
-            if let hit = sub.hitTest(point) { return hit }
+            if sub.frame.contains(localPoint) {
+                if let hit = sub.hitTest(localPoint) { return hit }
+            }
         }
         return nil
     }
