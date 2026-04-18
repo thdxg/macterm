@@ -150,9 +150,12 @@ private struct TerminalAnchor: NSViewRepresentable {
         if let observer = coordinator.frameObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        // Hide the terminal view since its anchor is gone
+        // Only hide if the portal is still bound to *this* anchor. When SwiftUI
+        // reparents a pane (e.g. after closing a sibling shifts the tree), a
+        // new anchor may have already re-bound for the same pane with
+        // visible: true — don't hide it out from under the new binding.
         if let paneID = coordinator.paneID, let host = coordinator.portalHost {
-            host.setVisible(false, for: paneID)
+            host.hideIfAnchorMatches(anchor, paneID: paneID)
         }
     }
 

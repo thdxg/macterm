@@ -94,6 +94,14 @@ final class TerminalPortalHost {
         if visible { layoutEntry(paneID) }
     }
 
+    /// Hide the pane only if the currently-bound anchor matches. Used by the
+    /// anchor dismantle path so a stale dismantle (ordered after a newer bind)
+    /// doesn't hide a terminal that was just re-anchored.
+    func hideIfAnchorMatches(_ anchor: NSView, paneID: UUID) {
+        guard let entry = entries[paneID], entry.anchor === anchor else { return }
+        setVisible(false, for: paneID)
+    }
+
     /// Set how many points at the top of the anchor are reserved by the search bar.
     /// The terminal view frame is inset by this amount so the search bar can receive clicks.
     func setSearchBarHeight(_ height: CGFloat, for paneID: UUID) {
