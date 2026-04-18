@@ -108,6 +108,11 @@ private struct CommandPalettePanel: View {
     private func computeItems() -> [CommandPaletteItem] {
         switch mode {
         case .command:
+            // If the query looks like an absolute path, switch to directory
+            // completion mode so users can open a folder as a new project.
+            if looksLikePath(searchQuery) {
+                return directoryCompletions
+            }
             return commandItems.filter { fuzzyMatch(query: searchQuery, target: $0.title) }
         case .project:
             let existing = projectItems.filter {
@@ -118,6 +123,19 @@ private struct CommandPalettePanel: View {
         }
     }
 
+    private func looksLikePath(_ q: String) -> Bool {
+        q.hasPrefix("/") || q.hasPrefix("~")
+    }
+
+    private var placeholderText: String {
+        switch mode {
+        case .command:
+            looksLikePath(searchQuery) ? "Open directory as new project..." : "Type a command..."
+        case .project:
+            "Search projects..."
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Search field
@@ -125,7 +143,7 @@ private struct CommandPalettePanel: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14))
                     .foregroundStyle(MactermTheme.fgMuted)
-                TextField(mode == .command ? "Type a command..." : "Search projects...", text: $query)
+                TextField(placeholderText, text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundStyle(MactermTheme.fg)
@@ -183,7 +201,14 @@ private struct CommandPalettePanel: View {
             selectedIndex = 0
             refreshItems()
             // Defer focus to the next runloop so the TextField has been created.
-            DispatchQueue.main.async { isFieldFocused = true }
+            DispatchQueue.main.async {
+                isFieldFocused = true
+                // NSTextField auto-selects its content on first focus; collapse
+                // the selection so typing appends after the "> " prefix instead
+                // of replacing it. The field editor may not be first responder
+                // on the same runloop — retry briefly.
+                moveCursorToEnd(attempt: 0)
+            }
         }
         .onChange(of: query) {
             selectedIndex = 0
@@ -429,6 +454,7 @@ private struct CommandPalettePanel: View {
         let fm = FileManager.default
         let dir: String
         let prefix: String
+        let exactDir: String?
 
         if fm.fileExists(atPath: expanded, isDirectory: nil) {
             var isDir: ObjCBool = false
@@ -436,21 +462,34 @@ private struct CommandPalettePanel: View {
             if isDir.boolValue {
                 dir = expanded
                 prefix = ""
+                exactDir = expanded
             } else {
                 dir = (expanded as NSString).deletingLastPathComponent
                 prefix = (expanded as NSString).lastPathComponent
+                exactDir = nil
             }
         } else {
             dir = (expanded as NSString).deletingLastPathComponent
             prefix = (expanded as NSString).lastPathComponent
+            exactDir = nil
         }
 
         guard fm.fileExists(atPath: dir) else { return [] }
 
         let existingPaths = Set(projectStore.projects.map(\.path))
 
+        var items: [CommandPaletteItem] = []
+
+        // If the query fully matches an existing directory, surface it as the
+        // top result so the user can open it directly. Hidden for dirs already
+        // registered as projects.
+        if let exact = exactDir, !existingPaths.contains(exact) {
+            let name = (exact as NSString).lastPathComponent
+            items.append(openDirectoryItem(name: name, fullPath: exact))
+        }
+
         let entries = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
-        return entries
+        items += entries
             .filter { name in
                 let full = (dir as NSString).appendingPathComponent(name)
                 var isDir: ObjCBool = false
@@ -461,22 +500,46 @@ private struct CommandPalettePanel: View {
             }
             .prefix(10)
             .map { name in
-                let full = (dir as NSString).appendingPathComponent(name)
-                return CommandPaletteItem(
-                    title: name,
-                    subtitle: "Open as new project: \(full)",
-                    category: "Directories",
-                    keybind: nil
-                ) { [projectStore, appState] in
-                    let project = Project(
-                        name: name,
-                        path: full,
-                        sortOrder: projectStore.projects.count
-                    )
-                    projectStore.add(project)
-                    appState.selectProject(project)
-                }
+                openDirectoryItem(name: name, fullPath: (dir as NSString).appendingPathComponent(name))
             }
+
+        return items
+    }
+
+    private func openDirectoryItem(name: String, fullPath: String) -> CommandPaletteItem {
+        CommandPaletteItem(
+            title: name,
+            subtitle: "Open as new project: \(fullPath)",
+            category: "Directories",
+            keybind: nil
+        ) { [projectStore, appState] in
+            let project = Project(
+                name: name,
+                path: fullPath,
+                sortOrder: projectStore.projects.count
+            )
+            projectStore.add(project)
+            appState.selectProject(project)
+        }
+    }
+
+    /// Collapse the text field's selection to the end of its content.
+    /// NSTextField's field editor selects all text on first focus; we want the
+    /// cursor after the "> " prefix so typing appends instead of replacing.
+    /// Retries briefly because the field editor isn't always first responder
+    /// on the same runloop that sets `@FocusState`.
+    private func moveCursorToEnd(attempt: Int) {
+        for window in NSApp.windows {
+            if let editor = window.firstResponder as? NSTextView {
+                let end = (editor.string as NSString).length
+                editor.selectedRange = NSRange(location: end, length: 0)
+                return
+            }
+        }
+        guard attempt < 10 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+            moveCursorToEnd(attempt: attempt + 1)
+        }
     }
 
     private func shortcut(_ action: HotkeyAction) -> String? {

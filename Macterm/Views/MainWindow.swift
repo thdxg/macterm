@@ -17,8 +17,13 @@ struct MainWindow: View {
             ZStack {
                 MactermTheme.terminalBg
                 if let project = activeProjectWithWorkspace {
-                    WorkspaceView(project: project)
-                        .id(project.id)
+                    if projectHasAnyTab(project) {
+                        WorkspaceView(project: project)
+                            .id(project.id)
+                    } else {
+                        EmptyProjectView(project: project)
+                            .id(project.id)
+                    }
                 } else {
                     WelcomeView()
                 }
@@ -54,6 +59,10 @@ struct MainWindow: View {
         return project
     }
 
+    private func projectHasAnyTab(_ project: Project) -> Bool {
+        !(appState.workspaces[project.id]?.tabs.isEmpty ?? true)
+    }
+
     private var activeTabTitle: String {
         guard let project = activeProject else { return "" }
         return project.path
@@ -61,18 +70,92 @@ struct MainWindow: View {
 }
 
 struct WelcomeView: View {
+    private var shortcuts: [(HotkeyAction, String)] {
+        [
+            (.openProject, "Open a project"),
+            (.toggleSidebar, "Toggle sidebar"),
+        ]
+    }
+
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 20) {
             Spacer()
-            Text("No project selected")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-            Text("⌘O to open a project")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+
+            VStack(spacing: 6) {
+                Text("Macterm")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(MactermTheme.fg)
+                Text("No project selected")
+                    .font(.system(size: 12))
+                    .foregroundStyle(MactermTheme.fgMuted)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(shortcuts, id: \.0) { action, label in
+                    HStack(spacing: 10) {
+                        Text(label)
+                            .font(.system(size: 12))
+                            .foregroundStyle(MactermTheme.fgMuted)
+                            .frame(width: 160, alignment: .leading)
+                        Text(HotkeyRegistry.displayString(for: HotkeyRegistry.selectedShortcutString(for: action)))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(MactermTheme.fgDim)
+                    }
+                }
+            }
+            .padding(.top, 4)
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+    }
+}
+
+struct EmptyProjectView: View {
+    let project: Project
+
+    private var shortcuts: [(HotkeyAction, String)] {
+        [
+            (.newTab, "New tab"),
+            (.openProject, "Open another project"),
+            (.toggleSidebar, "Toggle sidebar"),
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            VStack(spacing: 6) {
+                Text(project.name)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(MactermTheme.fg)
+                Text(project.path)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(MactermTheme.fgMuted)
+                    .textSelection(.enabled)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(shortcuts, id: \.0) { action, label in
+                    HStack(spacing: 10) {
+                        Text(label)
+                            .font(.system(size: 12))
+                            .foregroundStyle(MactermTheme.fgMuted)
+                            .frame(width: 160, alignment: .leading)
+                        Text(HotkeyRegistry.displayString(for: HotkeyRegistry.selectedShortcutString(for: action)))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(MactermTheme.fgDim)
+                    }
+                }
+            }
+            .padding(.top, 4)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
     }
 }
 
@@ -96,7 +179,8 @@ struct WorkspaceView: View {
                         paneID: paneID, direction: dir, position: .second, projectPath: sourcePath
                     )
                     tab.splitRoot = newRoot
-                    if let newID { tab.focusedPaneID = newID }
+                    if let newID { tab.focusPane(newID) }
+                    if AutoTilePreference.isEnabled { tab.splitRoot.rebalanced() }
                     appState.saveWorkspaces()
                 },
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) }
