@@ -12,12 +12,12 @@
 
 ## Features
 
-- [x] **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
-- [x] **Split Panes**: Unlimited horizontal and vertical splits.
-- [x] **Persistence**: Projects, tabs, and panes are saved and restored automatically.
-- [x] **Quick terminal**: Global terminal accessible from anywhere.
-- [x] **Highly Configurable**: Configurable theme, font, and keymap with hot-reloading.
-- [ ] **Command Palette**: Versatile command palette to interact with multiplexing (open, delete, and search projects)
+- **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
+- **Split Panes**: Unlimited horizontal and vertical splits, with optional auto-tiling.
+- **Persistence**: Projects, tabs, and panes are saved and restored automatically.
+- **Quick terminal**: Global terminal accessible from anywhere.
+- **Highly Configurable**: Configurable theme, font, and keymap with hot-reloading.
+- **Command Palette**: Versatile command palette to interact with multiplexing (open, delete, and search projects)
 
 ## Install
 

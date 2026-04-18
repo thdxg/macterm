@@ -41,6 +41,8 @@ private struct AppearanceSettings: View {
     @State
     private var currentFont: String = ""
     @State
+    private var fontSize: Int = 12
+    @State
     private var monoFonts: [String] = []
     var body: some View {
         Form {
@@ -60,6 +62,20 @@ private struct AppearanceSettings: View {
                     } else {
                         MactermConfig.shared.updateValue("font-family", value: v)
                     }
+                    GhosttyApp.shared.reloadConfig()
+                }
+
+                Stepper(value: $fontSize, in: 8 ... 32) {
+                    HStack {
+                        Text("Font Size")
+                        Spacer()
+                        Text("\(fontSize)pt")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: fontSize) { _, v in
+                    MactermConfig.shared.updateValue("font-size", value: "\(v)")
                     GhosttyApp.shared.reloadConfig()
                 }
             }
@@ -118,6 +134,7 @@ private struct AppearanceSettings: View {
     private func loadCurrentValues() {
         currentTheme = MactermConfig.shared.value(for: "theme")?.replacingOccurrences(of: "\"", with: "") ?? ""
         currentFont = MactermConfig.shared.value(for: "font-family") ?? ""
+        fontSize = Int(MactermConfig.shared.value(for: "font-size") ?? "") ?? 12
     }
 
     private static func loadMonoFonts() -> [String] {
