@@ -46,6 +46,11 @@ struct MainWindow: View {
                 // regardless of which window has the key focus.
                 TerminalPortal.hostIfExists(for: window)?.isPaletteActive = visible
             }
+            // When the palette closes, hand first responder back to the focused
+            // terminal view so typing resumes without requiring a mouse click.
+            if !visible {
+                DispatchQueue.main.async { restoreFocusToActivePane() }
+            }
         }
     }
 
@@ -61,6 +66,16 @@ struct MainWindow: View {
 
     private func projectHasAnyTab(_ project: Project) -> Bool {
         !(appState.workspaces[project.id]?.tabs.isEmpty ?? true)
+    }
+
+    private func restoreFocusToActivePane() {
+        guard let projectID = appState.activeProjectID,
+              let paneID = appState.workspaces[projectID]?.activeTab?.focusedPaneID,
+              let view = TerminalViewCache.shared.existingView(for: paneID),
+              let window = view.window
+        else { return }
+        window.makeFirstResponder(view)
+        view.notifySurfaceFocused()
     }
 
     private var activeTabTitle: String {
