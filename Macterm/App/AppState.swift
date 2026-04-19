@@ -11,8 +11,11 @@ final class AppState {
     var sidebarVisible = true
     var pendingClosePane: PendingClosePane?
     var isCommandPaletteVisible = false
-    var commandPaletteMode: CommandPaletteMode = .command
     private(set) var hasRestoredSelection = false
+
+    /// Most-recent-first stack of project IDs.
+    private(set) var projectRecency: [UUID] = []
+    private let recencyKey = "macterm.projectRecency"
 
     struct PendingClosePane: Equatable {
         let paneID: UUID
@@ -35,6 +38,21 @@ final class AppState {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebalanceAllWorkspacesIfEnabled() }
         }
+        projectRecency = (UserDefaults.standard.stringArray(forKey: recencyKey) ?? [])
+            .compactMap { UUID(uuidString: $0) }
+    }
+
+    private func recordProjectVisit(_ projectID: UUID) {
+        projectRecency.removeAll { $0 == projectID }
+        projectRecency.insert(projectID, at: 0)
+        if projectRecency.count > 50 { projectRecency = Array(projectRecency.prefix(50)) }
+        UserDefaults.standard.set(projectRecency.map(\.uuidString), forKey: recencyKey)
+    }
+
+    /// Recently-visited projects, filtered to only those still present in the store.
+    func recentProjects(from projects: [Project], limit: Int = 5) -> [Project] {
+        let byID = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
+        return projectRecency.compactMap { byID[$0] }.prefix(limit).map(\.self)
     }
 
     private func rebalanceAllWorkspacesIfEnabled() {
@@ -61,6 +79,7 @@ final class AppState {
            projects.contains(where: { $0.id == id })
         {
             activeProjectID = id
+            recordProjectVisit(id)
             ensureWorkspace(projectID: id, projects: projects)
         }
     }
@@ -73,6 +92,7 @@ final class AppState {
 
     func selectProject(_ project: Project) {
         activeProjectID = project.id
+        recordProjectVisit(project.id)
         ensureWorkspace(projectID: project.id, path: project.path)
     }
 
