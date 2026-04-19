@@ -3,11 +3,6 @@ import SwiftUI
 
 // MARK: - Model
 
-enum CommandPaletteMode {
-    case command
-    case project
-}
-
 struct CommandPaletteItem: Identifiable {
     let id: String
     let title: String
@@ -73,7 +68,6 @@ struct CommandPaletteOverlay: View {
                 }
             }
             .transition(.opacity)
-            .id("palette-\(appState.commandPaletteMode)")
         }
     }
 }
@@ -94,33 +88,35 @@ private struct CommandPalettePanel: View {
     @FocusState
     private var isFieldFocused: Bool
 
-    private var mode: CommandPaletteMode {
-        query.hasPrefix(">") ? .command : .project
-    }
-
     private var searchQuery: String {
-        if query.hasPrefix(">") {
-            return String(query.dropFirst()).trimmingCharacters(in: .whitespaces)
-        }
-        return query.trimmingCharacters(in: .whitespaces)
+        query.trimmingCharacters(in: .whitespaces)
     }
 
     private func computeItems() -> [CommandPaletteItem] {
-        switch mode {
-        case .command:
-            // If the query looks like an absolute path, switch to directory
-            // completion mode so users can open a folder as a new project.
-            if looksLikePath(searchQuery) {
-                return directoryCompletions
-            }
-            return commandItems.filter { fuzzyMatch(query: searchQuery, target: $0.title) }
-        case .project:
-            let existing = projectItems.filter {
-                fuzzyMatch(query: searchQuery, target: $0.title) ||
-                    fuzzyMatch(query: searchQuery, target: $0.subtitle ?? "")
-            }
-            return existing + directoryCompletions
+        // Path-like queries are handled separately — only show matching
+        // directories so users can open them as projects.
+        if looksLikePath(searchQuery) {
+            return directoryCompletions
         }
+        if searchQuery.isEmpty {
+            return recentProjectItems + commandItems
+        }
+        // Rank projects slightly higher than commands. The ranking constant is
+        // additive to the fuzzy score so a strong command match can still beat
+        // a weak project match.
+        let projectMatches = projectItems
+            .compactMap { item -> (CommandPaletteItem, Int)? in
+                let titleScore = fuzzyScore(query: searchQuery, target: item.title)
+                let subtitleScore = item.subtitle.map { fuzzyScore(query: searchQuery, target: $0) } ?? 3
+                let best = min(titleScore, subtitleScore)
+                guard best < 3 else { return nil }
+                return (item, best)
+            }
+        let commandMatches = commandItems
+            .filter { fuzzyMatch(query: searchQuery, target: $0.title) }
+            .map { ($0, fuzzyScore(query: searchQuery, target: $0.title) + 1) }
+        let merged = (projectMatches + commandMatches).sorted { $0.1 < $1.1 }
+        return merged.map(\.0)
     }
 
     private func looksLikePath(_ q: String) -> Bool {
@@ -128,12 +124,8 @@ private struct CommandPalettePanel: View {
     }
 
     private var placeholderText: String {
-        switch mode {
-        case .command:
-            looksLikePath(searchQuery) ? "Open directory as new project..." : "Type a command..."
-        case .project:
-            "Search projects..."
-        }
+        if looksLikePath(searchQuery) { return "Open directory as new project..." }
+        return "Search projects or commands..."
     }
 
     var body: some View {
@@ -197,17 +189,12 @@ private struct CommandPalettePanel: View {
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(MactermTheme.border, lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
         .onAppear {
-            query = appState.commandPaletteMode == .command ? "> " : ""
+            query = ""
             selectedIndex = 0
             refreshItems()
             // Defer focus to the next runloop so the TextField has been created.
             DispatchQueue.main.async {
                 isFieldFocused = true
-                // NSTextField auto-selects its content on first focus; collapse
-                // the selection so typing appends after the "> " prefix instead
-                // of replacing it. The field editor may not be first responder
-                // on the same runloop — retry briefly.
-                moveCursorToEnd(attempt: 0)
             }
         }
         .onChange(of: query) {
@@ -257,15 +244,25 @@ private struct CommandPalettePanel: View {
     }
 
     private func computeSections(from list: [CommandPaletteItem]) -> [Section] {
-        if mode == .project {
-            let dirs = list.filter { $0.category == "Directories" }
-            let projects = list.filter { $0.category != "Directories" }
+        if looksLikePath(searchQuery) {
+            return [Section(category: "Directories", items: list)]
+        }
+        if searchQuery.isEmpty {
+            // Empty input: projects first (as a "Recent" section if any), then
+            // commands grouped by their original category.
+            let projects = list.filter { $0.category == "Recent" }
+            let commands = list.filter { $0.category != "Recent" }
             var sections: [Section] = []
-            if !projects.isEmpty { sections.append(Section(category: nil, items: projects)) }
-            if !dirs.isEmpty { sections.append(Section(category: "Directories", items: dirs)) }
+            if !projects.isEmpty { sections.append(Section(category: "Recent", items: projects)) }
+            sections += groupByCategory(commands)
             return sections
         }
-        // Preserve category order from commandItems
+        // Active search: preserve the merged ranking order as one flat list so
+        // the best match is always at the top regardless of origin.
+        return [Section(category: nil, items: list)]
+    }
+
+    private func groupByCategory(_ list: [CommandPaletteItem]) -> [Section] {
         var seen = Set<String>()
         var order: [String] = []
         var grouped: [String: [CommandPaletteItem]] = [:]
@@ -428,15 +425,29 @@ private struct CommandPalettePanel: View {
     // MARK: - Project items
 
     private var projectItems: [CommandPaletteItem] {
-        projectStore.projects.map { project in
-            CommandPaletteItem(
-                title: project.name,
-                subtitle: project.path,
-                category: nil,
-                keybind: nil
-            ) {
-                appState.selectProject(project)
-            }
+        projectStore.projects.map { projectItem($0, category: "Project") }
+    }
+
+    /// Top 5 most recently visited projects, excluding the currently active one
+    /// (no point offering to switch to where the user already is). Falls back
+    /// to the first projects in the store when there's no recency history yet.
+    private var recentProjectItems: [CommandPaletteItem] {
+        let recent = appState.recentProjects(from: projectStore.projects, limit: 10)
+            .filter { $0.id != appState.activeProjectID }
+        let pool = recent.isEmpty
+            ? projectStore.projects.filter { $0.id != appState.activeProjectID }
+            : recent
+        return pool.prefix(5).map { projectItem($0, category: "Recent") }
+    }
+
+    private func projectItem(_ project: Project, category: String) -> CommandPaletteItem {
+        CommandPaletteItem(
+            title: project.name,
+            subtitle: project.path,
+            category: category,
+            keybind: nil
+        ) {
+            appState.selectProject(project)
         }
     }
 
@@ -476,16 +487,15 @@ private struct CommandPalettePanel: View {
 
         guard fm.fileExists(atPath: dir) else { return [] }
 
-        let existingPaths = Set(projectStore.projects.map(\.path))
+        let existingByPath = Dictionary(uniqueKeysWithValues: projectStore.projects.map { ($0.path, $0) })
 
         var items: [CommandPaletteItem] = []
 
         // If the query fully matches an existing directory, surface it as the
-        // top result so the user can open it directly. Hidden for dirs already
-        // registered as projects.
-        if let exact = exactDir, !existingPaths.contains(exact) {
+        // top result so the user can open (or switch to) it directly.
+        if let exact = exactDir {
             let name = (exact as NSString).lastPathComponent
-            items.append(openDirectoryItem(name: name, fullPath: exact))
+            items.append(directoryItem(name: name, fullPath: exact, existing: existingByPath[exact]))
         }
 
         let entries = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
@@ -495,19 +505,31 @@ private struct CommandPalettePanel: View {
                 var isDir: ObjCBool = false
                 guard fm.fileExists(atPath: full, isDirectory: &isDir), isDir.boolValue else { return false }
                 guard !name.hasPrefix(".") else { return false }
-                guard !existingPaths.contains(full) else { return false }
                 return prefix.isEmpty || name.lowercased().hasPrefix(prefix.lowercased())
             }
             .prefix(10)
             .map { name in
-                openDirectoryItem(name: name, fullPath: (dir as NSString).appendingPathComponent(name))
+                let full = (dir as NSString).appendingPathComponent(name)
+                return directoryItem(name: name, fullPath: full, existing: existingByPath[full])
             }
 
         return items
     }
 
-    private func openDirectoryItem(name: String, fullPath: String) -> CommandPaletteItem {
-        CommandPaletteItem(
+    /// Returns an item that opens a directory as a new project, or switches to
+    /// the matching existing project when `existing` is provided.
+    private func directoryItem(name: String, fullPath: String, existing: Project?) -> CommandPaletteItem {
+        if let existing {
+            return CommandPaletteItem(
+                title: existing.name,
+                subtitle: "Switch to project: \(fullPath)",
+                category: "Directories",
+                keybind: nil
+            ) { [appState] in
+                appState.selectProject(existing)
+            }
+        }
+        return CommandPaletteItem(
             title: name,
             subtitle: "Open as new project: \(fullPath)",
             category: "Directories",
@@ -520,25 +542,6 @@ private struct CommandPalettePanel: View {
             )
             projectStore.add(project)
             appState.selectProject(project)
-        }
-    }
-
-    /// Collapse the text field's selection to the end of its content.
-    /// NSTextField's field editor selects all text on first focus; we want the
-    /// cursor after the "> " prefix so typing appends instead of replacing.
-    /// Retries briefly because the field editor isn't always first responder
-    /// on the same runloop that sets `@FocusState`.
-    private func moveCursorToEnd(attempt: Int) {
-        for window in NSApp.windows {
-            if let editor = window.firstResponder as? NSTextView {
-                let end = (editor.string as NSString).length
-                editor.selectedRange = NSRange(location: end, length: 0)
-                return
-            }
-        }
-        guard attempt < 10 else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-            moveCursorToEnd(attempt: attempt + 1)
         }
     }
 

@@ -154,26 +154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        // Cmd+Shift+P — command palette (command mode). Toggle if already in command mode.
+        // Cmd+P or Cmd+Shift+P — toggle the unified command palette.
         let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-        if flags == [.command, .shift], key == "p" {
-            if appState.isCommandPaletteVisible, appState.commandPaletteMode == .command {
-                appState.isCommandPaletteVisible = false
-            } else {
-                appState.commandPaletteMode = .command
-                appState.isCommandPaletteVisible = true
-            }
-            return true
-        }
-
-        // Cmd+P — command palette (project mode). Toggle if already in project mode.
-        if flags == .command, key == "p" {
-            if appState.isCommandPaletteVisible, appState.commandPaletteMode == .project {
-                appState.isCommandPaletteVisible = false
-            } else {
-                appState.commandPaletteMode = .project
-                appState.isCommandPaletteVisible = true
-            }
+        if flags == .command || flags == [.command, .shift], key == "p" {
+            appState.isCommandPaletteVisible.toggle()
             return true
         }
 
