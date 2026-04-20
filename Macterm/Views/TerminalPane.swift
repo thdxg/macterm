@@ -27,7 +27,13 @@ struct TerminalPane: View {
                     searchState: pane.searchState,
                     onNavigateNext: { viewCache.existingView(for: pane.id)?.navigateSearch(direction: .next) },
                     onNavigatePrevious: { viewCache.existingView(for: pane.id)?.navigateSearch(direction: .previous) },
-                    onClose: { viewCache.existingView(for: pane.id)?.endSearch() }
+                    onClose: {
+                        guard let view = viewCache.existingView(for: pane.id) else { return }
+                        view.endSearch()
+                        // Return focus to the terminal so typing resumes
+                        // without requiring a click.
+                        view.window?.makeFirstResponder(view)
+                    }
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
