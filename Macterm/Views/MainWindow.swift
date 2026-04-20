@@ -28,6 +28,7 @@ struct MainWindow: View {
                     WelcomeView()
                 }
             }
+            .ignoresSafeArea(.container, edges: .top)
             .navigationTitle(activeProject?.name ?? "Macterm")
             .navigationSubtitle(activeTabTitle)
         }

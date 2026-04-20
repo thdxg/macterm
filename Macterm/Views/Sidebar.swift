@@ -57,9 +57,6 @@ struct SidebarContent: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(MactermTheme.bg)
-        .safeAreaInset(edge: .top) {
-            Color.clear.frame(height: 14)
-        }
         .safeAreaInset(edge: .bottom) {
             Button {
                 openProject()
