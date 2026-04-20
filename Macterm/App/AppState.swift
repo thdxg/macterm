@@ -4,7 +4,7 @@ import Foundation
 @MainActor @Observable
 final class AppState {
     var activeProjectID: UUID? {
-        didSet { UserDefaults.standard.set(activeProjectID?.uuidString, forKey: "macterm.activeProjectID") }
+        didSet { Preferences.shared.activeProjectID = activeProjectID }
     }
 
     var workspaces: [UUID: Workspace] = [:]
@@ -57,7 +57,7 @@ final class AppState {
     }
 
     private func rebalanceAllWorkspacesIfEnabled() {
-        guard AutoTilePreference.isEnabled else { return }
+        guard Preferences.shared.autoTilingEnabled else { return }
         for ws in workspaces.values {
             for tab in ws.tabs {
                 tab.splitRoot.rebalanced()
@@ -75,8 +75,7 @@ final class AppState {
         for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid) {
             workspaces[ws.projectID] = ws
         }
-        if let idString = UserDefaults.standard.string(forKey: "macterm.activeProjectID"),
-           let id = UUID(uuidString: idString),
+        if let id = Preferences.shared.activeProjectID,
            projects.contains(where: { $0.id == id })
         {
             activeProjectID = id
@@ -226,7 +225,7 @@ final class AppState {
         )
         tab.splitRoot = newRoot
         if let newPaneID { tab.focusPane(newPaneID) }
-        if AutoTilePreference.isEnabled { tab.splitRoot.rebalanced() }
+        if Preferences.shared.autoTilingEnabled { tab.splitRoot.rebalanced() }
         saveWorkspaces()
     }
 
@@ -253,7 +252,7 @@ final class AppState {
                 if tab.focusedPaneID == paneID {
                     tab.focusedPaneID = tab.nextFocusAfterClose()
                 }
-                if AutoTilePreference.isEnabled { tab.splitRoot.rebalanced() }
+                if Preferences.shared.autoTilingEnabled { tab.splitRoot.rebalanced() }
             }
             saveWorkspaces()
         }
