@@ -195,7 +195,7 @@ struct WorkspaceView: View {
                     )
                     tab.splitRoot = newRoot
                     if let newID { tab.focusPane(newID) }
-                    if AutoTilePreference.isEnabled { tab.splitRoot.rebalanced() }
+                    if Preferences.shared.autoTilingEnabled { tab.splitRoot.rebalanced() }
                     appState.saveWorkspaces()
                 },
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) }

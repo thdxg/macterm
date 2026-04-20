@@ -44,7 +44,7 @@ private struct AppearanceSettings: View {
     private var fontSize: Int = 12
     @State
     private var monoFonts: [String] = []
-    @AppStorage(AutoTilePreference.key)
+    @AppStorage(Preferences.Keys.autoTiling)
     private var autoTilingEnabled = false
     var body: some View {
         Form {
@@ -128,7 +128,7 @@ private struct AppearanceSettings: View {
             Section("Layout") {
                 Toggle("Auto-tile panes", isOn: $autoTilingEnabled)
                     .onChange(of: autoTilingEnabled) { _, v in
-                        AutoTilePreference.set(v)
+                        Preferences.shared.autoTilingEnabled = v
                     }
                 Text("Distributes pane sizes evenly on split and close.")
                     .font(.system(size: 11))
@@ -235,12 +235,12 @@ private struct AppearanceSettings: View {
 // MARK: - Quick Terminal
 
 private struct QuickTerminalSettings: View {
-    @AppStorage("macterm.quickTerminal.enabled")
+    @AppStorage(Preferences.Keys.quickTerminalEnabled)
     private var enabled = true
     @State
-    private var qtWidth: Double = 0.6
+    private var qtWidth: Double = Preferences.shared.quickTerminalWidthFraction
     @State
-    private var qtHeight: Double = 0.5
+    private var qtHeight: Double = Preferences.shared.quickTerminalHeightFraction
 
     var body: some View {
         Form {
@@ -255,7 +255,7 @@ private struct QuickTerminalSettings: View {
                         .frame(width: 42, alignment: .trailing)
                 }
                 .onChange(of: qtWidth) { _, v in
-                    UserDefaults.standard.set(v, forKey: "macterm.quickTerminal.width")
+                    Preferences.shared.quickTerminalWidthFraction = v
                 }
                 .disabled(!enabled)
 
@@ -267,18 +267,12 @@ private struct QuickTerminalSettings: View {
                         .frame(width: 42, alignment: .trailing)
                 }
                 .onChange(of: qtHeight) { _, v in
-                    UserDefaults.standard.set(v, forKey: "macterm.quickTerminal.height")
+                    Preferences.shared.quickTerminalHeightFraction = v
                 }
                 .disabled(!enabled)
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            let w = UserDefaults.standard.double(forKey: "macterm.quickTerminal.width")
-            let h = UserDefaults.standard.double(forKey: "macterm.quickTerminal.height")
-            qtWidth = w > 0 ? w : 0.6
-            qtHeight = h > 0 ? h : 0.5
-        }
     }
 }
 

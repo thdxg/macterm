@@ -15,10 +15,8 @@ final class QuickTerminalService: NSObject {
     let splitState = QuickTerminalSplitState()
     let viewCache = TerminalViewCache()
     var suppressAutoHide = false
-    private let enabledKey = "macterm.quickTerminal.enabled"
-
     private var isEnabled: Bool {
-        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
+        Preferences.shared.quickTerminalEnabled
     }
 
     override private init() {
@@ -35,7 +33,7 @@ final class QuickTerminalService: NSObject {
 
     @objc
     private func autoTilingDidChange() {
-        guard AutoTilePreference.isEnabled else { return }
+        guard Preferences.shared.autoTilingEnabled else { return }
         splitState.splitRoot.rebalanced()
     }
 
@@ -93,8 +91,8 @@ final class QuickTerminalService: NSObject {
         self.panel = panel
         guard let screen = NSScreen.main else { return }
         let sf = screen.visibleFrame
-        let wFrac = max(0.2, min(1.0, UserDefaults.standard.double(forKey: "macterm.quickTerminal.width").nonZero ?? 0.6))
-        let hFrac = max(0.2, min(1.0, UserDefaults.standard.double(forKey: "macterm.quickTerminal.height").nonZero ?? 0.5))
+        let wFrac = Preferences.shared.quickTerminalWidthFraction
+        let hFrac = Preferences.shared.quickTerminalHeightFraction
         let w = sf.width * wFrac, h = sf.height * hFrac
         panel.setFrame(NSRect(x: sf.minX + (sf.width - w) / 2, y: sf.minY + (sf.height - h) / 2, width: w, height: h), display: false)
 
@@ -244,7 +242,7 @@ final class QuickTerminalSplitState {
         )
         splitRoot = newRoot
         if let newID { focusPane(newID) }
-        if AutoTilePreference.isEnabled { splitRoot.rebalanced() }
+        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
     }
 
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
@@ -268,7 +266,7 @@ final class QuickTerminalSplitState {
             if focusedPaneID == paneID {
                 focusedPaneID = nextFocusAfterClose()
             }
-            if AutoTilePreference.isEnabled { splitRoot.rebalanced() }
+            if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
         }
         // Refocus the new focused pane once its view has been created.
         if let newID = focusedPaneID {
@@ -314,8 +312,4 @@ private struct QuickTerminalView: View {
         )
         .background(Color(nsColor: GhosttyApp.shared.backgroundColor))
     }
-}
-
-private extension Double {
-    var nonZero: Double? { self == 0 ? nil : self }
 }
