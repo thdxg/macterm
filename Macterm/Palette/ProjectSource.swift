@@ -14,7 +14,7 @@ struct ProjectSource: PaletteSource {
         context.projectStore.projects.compactMap { project in
             let titleScore = fuzzyScore(query: query, target: project.name)
             let pathScore = fuzzyScore(query: query, target: project.path)
-            guard let best = [titleScore, pathScore].compactMap({ $0 }).min() else { return nil }
+            guard let best = [titleScore, pathScore].compactMap(\.self).min() else { return nil }
             return makeItem(project: project, category: "Project", score: best + projectBoost, context: context)
         }
     }

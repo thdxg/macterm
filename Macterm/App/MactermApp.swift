@@ -33,6 +33,7 @@ struct MactermApp: App {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore
                     appDelegate.onTerminate = { [appState] in appState.saveWorkspaces() }
+                    appDelegate.installResponders(appState: appState, projectStore: projectStore)
                 }
         }
         .defaultSize(width: 1200, height: 800)
@@ -53,9 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var appState: AppState?
     var projectStore: ProjectStore?
     var mainWindow: NSWindow?
-    private var keyMonitor: Any?
 
     private var windowObserver: Any?
+    private var mainAppResponder: MainAppResponder?
+    private var hasInstalledResponders = false
 
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -63,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setAppIcon()
         _ = GhosttyApp.shared
         _ = QuickTerminalService.shared
-        installKeyMonitor()
+        KeyRouter.shared.install()
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeMainNotification,
             object: nil,
@@ -71,8 +73,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] note in
             let window = note.object as? NSWindow
             MainActor.assumeIsolated {
-                guard self?.mainWindow == nil, let window else { return }
-                self?.mainWindow = window
+                guard let self, let window else { return }
+                if self.mainWindow == nil { self.mainWindow = window }
+                self.mainAppResponder?.mainWindow = window
+            }
+        }
+    }
+
+    /// Called from MactermApp.onAppear once the state objects exist. Registers
+    /// responders in priority order: palette first, quick terminal second,
+    /// main app last.
+    func installResponders(appState: AppState, projectStore: ProjectStore) {
+        guard !hasInstalledResponders else { return }
+        hasInstalledResponders = true
+        KeyRouter.shared.register(PaletteResponder(appState: appState))
+        KeyRouter.shared.register(QuickTerminalResponder())
+        let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
+        mainResponder.mainWindow = mainWindow
+        mainAppResponder = mainResponder
+        KeyRouter.shared.register(mainResponder)
+        // Tab-cycle commit on Ctrl-release.
+        KeyRouter.shared.registerFlagsHandler { [weak appState] event in
+            guard let appState, appState.isTabCycling else { return }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if !flags.contains(.control),
+               let projectID = appState.activeProjectID
+            {
+                appState.commitTabCycle(projectID: projectID)
             }
         }
     }
@@ -105,224 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate()
         }
-        return false
-    }
-
-    private var flagsMonitor: Any?
-
-    private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyEvent(event) == true ? nil : event
-        }
-        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.handleFlagsChanged(event)
-            return event
-        }
-    }
-
-    private func handleFlagsChanged(_ event: NSEvent) {
-        guard let appState, appState.isTabCycling else { return }
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if !flags.contains(.control) {
-            guard let projectID = appState.activeProjectID else { return }
-            appState.commitTabCycle(projectID: projectID)
-        }
-    }
-
-    private func handleKeyEvent(_ event: NSEvent) -> Bool {
-        guard let appState else { return false }
-
-        if HotkeyCaptureState.shared.isCapturing {
-            return false
-        }
-
-        // Handle quick terminal keybinds when it's visible
-        if QuickTerminalService.shared.isVisible {
-            return handleQuickTerminalKeyEvent(event)
-        }
-
-        if HotkeyRegistry.matches(event, action: .recentTab) {
-            guard let projectID = appState.activeProjectID else { return false }
-            appState.cycleRecentTab(projectID: projectID)
-            return true
-        }
-
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        if event.keyCode == 50, flags.contains(.control) {
-            NotificationCenter.default.post(name: .toggleQuickTerminal, object: nil)
-            return true
-        }
-
-        // Cmd+P or Cmd+Shift+P — toggle the unified command palette.
-        let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-        if flags == .command || flags == [.command, .shift], key == "p" {
-            appState.isCommandPaletteVisible.toggle()
-            return true
-        }
-
-        // Dismiss command palette on any other key when visible
-        if appState.isCommandPaletteVisible {
-            return false
-        }
-
-        // Block Cmd+N from opening a second window — focus the existing one instead
-        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
-            mainWindow?.makeKeyAndOrderFront(nil)
-            NSApp.activate()
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .newTab) {
-            guard let projectID = appState.activeProjectID else { return false }
-            appState.createTab(projectID: projectID)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .closePane) {
-            guard let projectID = appState.activeProjectID,
-                  let pane = appState.focusedPane(for: projectID)
-            else { return false }
-            appState.requestClosePane(pane.id, projectID: projectID)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .splitRight) {
-            guard let projectID = appState.activeProjectID else { return false }
-            appState.splitPane(direction: .horizontal, projectID: projectID)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .splitDown) {
-            guard let projectID = appState.activeProjectID else { return false }
-            appState.splitPane(direction: .vertical, projectID: projectID)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .toggleSidebar) {
-            appState.sidebarVisible.toggle()
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .nextProject) {
-            guard let projectStore else { return false }
-            appState.selectNextProject(projects: projectStore.projects)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .previousProject) {
-            guard let projectStore else { return false }
-            appState.selectPreviousProject(projects: projectStore.projects)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .nextGlobalTab) {
-            guard let projectStore else { return false }
-            appState.selectGlobalTab(.next, projects: projectStore.projects)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .previousGlobalTab) {
-            guard let projectStore else { return false }
-            appState.selectGlobalTab(.previous, projects: projectStore.projects)
-            return true
-        }
-
-        if let (_, dir) = Self.paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
-            guard let projectID = appState.activeProjectID else { return false }
-            appState.focusPaneInDirection(dir, projectID: projectID)
-            return true
-        }
-
-        if let (_, dir) = Self.resizeActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
-            guard let projectID = appState.activeProjectID else { return false }
-            appState.resizePane(dir, projectID: projectID)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .closeWindow) {
-            mainWindow?.orderOut(nil)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .openProject) {
-            guard let projectStore else { return false }
-            _ = appState.openProject(store: projectStore)
-            return true
-        }
-
-        guard flags.contains(.command) else { return false }
-
-        let hasOption = flags.contains(.option)
-        if !hasOption {
-            let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-            if let idx = Int(key), idx >= 1, idx <= 9,
-               let projectID = appState.activeProjectID
-            {
-                appState.selectTabByIndex(idx - 1, projectID: projectID)
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private static let paneActions: [(HotkeyAction, PaneFocusDirection)] = [
-        (.focusPaneLeft, .left),
-        (.focusPaneDown, .down),
-        (.focusPaneUp, .up),
-        (.focusPaneRight, .right),
-    ]
-
-    private static let resizeActions: [(HotkeyAction, PaneFocusDirection)] = [
-        (.resizePaneLeft, .left),
-        (.resizePaneDown, .down),
-        (.resizePaneUp, .up),
-        (.resizePaneRight, .right),
-    ]
-
-    private func handleQuickTerminalKeyEvent(_ event: NSEvent) -> Bool {
-        let qt = QuickTerminalService.shared
-        let state = qt.splitState
-
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        if event.keyCode == 50, flags.contains(.control) {
-            NotificationCenter.default.post(name: .toggleQuickTerminal, object: nil)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .splitRight) {
-            guard let paneID = state.focusedPaneID else { return false }
-            state.split(paneID: paneID, direction: .horizontal, viewCache: qt.viewCache)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .splitDown) {
-            guard let paneID = state.focusedPaneID else { return false }
-            state.split(paneID: paneID, direction: .vertical, viewCache: qt.viewCache)
-            return true
-        }
-
-        if HotkeyRegistry.matches(event, action: .closePane) {
-            guard let paneID = state.focusedPaneID else { return false }
-            state.requestClosePane(paneID, viewCache: qt.viewCache)
-            return true
-        }
-
-        if let (_, dir) = Self.paneActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
-            guard let focusedID = state.focusedPaneID else { return false }
-            if let bestID = state.splitRoot.nearestPane(from: focusedID, direction: dir) {
-                state.focusPane(bestID)
-            }
-            return true
-        }
-
-        if let (_, dir) = Self.resizeActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
-            state.resize(dir)
-            return true
-        }
-
         return false
     }
 

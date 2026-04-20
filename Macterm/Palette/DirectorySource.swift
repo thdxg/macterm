@@ -73,7 +73,9 @@ struct DirectorySource: PaletteSource {
         return items
     }
 
-    func emptyItems(context _: PaletteContext) -> [PaletteItem]? { nil }
+    func emptyItems(context _: PaletteContext) -> [PaletteItem]? {
+        nil
+    }
 
     private func directoryItem(
         name: String,
