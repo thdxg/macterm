@@ -7,17 +7,16 @@ final class TerminalTab: Identifiable {
     var customTitle: String?
     var splitRoot: SplitNode
     var focusedPaneID: UUID?
-    /// Most-recent-last stack of previously focused pane IDs.
-    /// Excludes the currently focused pane.
+    /// Most-recent-first stack of previously focused pane IDs
+    /// (excludes the currently focused pane).
     @ObservationIgnored
-    var paneFocusHistory: [UUID] = []
+    var paneFocusHistory = RecencyStack<UUID>(limit: 20)
 
     /// Record a focus change, pushing the previous pane onto history.
     func focusPane(_ paneID: UUID) {
         guard paneID != focusedPaneID else { return }
-        if let current = focusedPaneID { paneFocusHistory.append(current) }
-        // Avoid unbounded growth and duplicates of the new focus.
-        paneFocusHistory.removeAll { $0 == paneID }
+        if let current = focusedPaneID { paneFocusHistory.push(current) }
+        paneFocusHistory.remove(paneID)
         focusedPaneID = paneID
     }
 
@@ -26,10 +25,8 @@ final class TerminalTab: Identifiable {
     /// falls back to the first pane in tree order.
     func nextFocusAfterClose() -> UUID? {
         let valid = Set(splitRoot.allPanes().map(\.id))
-        paneFocusHistory.removeAll { !valid.contains($0) }
-        while let prev = paneFocusHistory.popLast() {
-            if valid.contains(prev) { return prev }
-        }
+        paneFocusHistory.prune(keeping: valid)
+        if let recent = paneFocusHistory.popValid(in: valid) { return recent }
         return splitRoot.allPanes().first?.id
     }
 
@@ -73,7 +70,8 @@ final class Workspace: Identifiable {
     let projectID: UUID
     var tabs: [TerminalTab] = []
     var activeTabID: UUID?
-    private var tabHistory: [UUID] = []
+    @ObservationIgnored
+    private var tabHistory = RecencyStack<UUID>(limit: 50)
 
     var activeTab: TerminalTab? {
         guard let activeTabID else { return nil }
@@ -97,7 +95,7 @@ final class Workspace: Identifiable {
     func createTab(projectPath: String) -> TerminalTab {
         let tab = TerminalTab(projectPath: projectPath)
         tabs.append(tab)
-        if let current = activeTabID { tabHistory.append(current) }
+        if let current = activeTabID { tabHistory.push(current) }
         activeTabID = tab.id
         return tab
     }
@@ -105,20 +103,19 @@ final class Workspace: Identifiable {
     func closeTab(_ tabID: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == tabID }) else { return }
         tabs.remove(at: index)
-        tabHistory.removeAll { $0 == tabID }
+        tabHistory.remove(tabID)
         guard activeTabID == tabID else { return }
         let valid = Set(tabs.map(\.id))
-        while let prev = tabHistory.popLast() {
-            if valid.contains(prev) { activeTabID = prev
-                return
-            }
+        if let prev = tabHistory.popValid(in: valid) {
+            activeTabID = prev
+        } else {
+            activeTabID = tabs.last?.id
         }
-        activeTabID = tabs.last?.id
     }
 
     func selectTab(_ tabID: UUID) {
         guard tabs.contains(where: { $0.id == tabID }) else { return }
-        if let current = activeTabID, current != tabID { tabHistory.append(current) }
+        if let current = activeTabID, current != tabID { tabHistory.push(current) }
         activeTabID = tabID
     }
 
@@ -145,7 +142,7 @@ final class Workspace: Identifiable {
             order.append(active)
             seen.insert(active)
         }
-        for id in tabHistory.reversed() where valid.contains(id) && seen.insert(id).inserted {
+        for id in tabHistory.items where valid.contains(id) && seen.insert(id).inserted {
             order.append(id)
         }
         // Append any tabs not in history

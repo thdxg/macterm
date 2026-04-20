@@ -13,8 +13,9 @@ final class AppState {
     var isCommandPaletteVisible = false
     private(set) var hasRestoredSelection = false
 
-    /// Most-recent-first stack of project IDs.
-    private(set) var projectRecency: [UUID] = []
+    /// Most-recent-first stack of project IDs. Persisted to UserDefaults.
+    @ObservationIgnored
+    private var projectRecency = RecencyStack<UUID>(limit: 50)
     private let recencyKey = "macterm.projectRecency"
 
     struct PendingClosePane: Equatable {
@@ -38,21 +39,21 @@ final class AppState {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebalanceAllWorkspacesIfEnabled() }
         }
-        projectRecency = (UserDefaults.standard.stringArray(forKey: recencyKey) ?? [])
+        let restored = (UserDefaults.standard.stringArray(forKey: recencyKey) ?? [])
             .compactMap { UUID(uuidString: $0) }
+        projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
     }
 
     private func recordProjectVisit(_ projectID: UUID) {
-        projectRecency.removeAll { $0 == projectID }
-        projectRecency.insert(projectID, at: 0)
-        if projectRecency.count > 50 { projectRecency = Array(projectRecency.prefix(50)) }
-        UserDefaults.standard.set(projectRecency.map(\.uuidString), forKey: recencyKey)
+        projectRecency.push(projectID)
+        UserDefaults.standard.set(projectRecency.items.map(\.uuidString), forKey: recencyKey)
     }
 
     /// Recently-visited projects, filtered to only those still present in the store.
     func recentProjects(from projects: [Project], limit: Int = 5) -> [Project] {
+        let valid = Set(projects.map(\.id))
         let byID = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
-        return projectRecency.compactMap { byID[$0] }.prefix(limit).map(\.self)
+        return projectRecency.top(limit, in: valid).compactMap { byID[$0] }
     }
 
     private func rebalanceAllWorkspacesIfEnabled() {
@@ -248,7 +249,7 @@ final class AppState {
         } else {
             if let newRoot = tab.splitRoot.removing(paneID: paneID) {
                 tab.splitRoot = newRoot
-                tab.paneFocusHistory.removeAll { $0 == paneID }
+                tab.paneFocusHistory.remove(paneID)
                 if tab.focusedPaneID == paneID {
                     tab.focusedPaneID = tab.nextFocusAfterClose()
                 }

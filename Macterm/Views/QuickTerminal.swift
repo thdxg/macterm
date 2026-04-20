@@ -163,7 +163,7 @@ final class QuickTerminalSplitState {
     var focusedPaneID: UUID?
     var pendingClosePaneID: UUID?
     @ObservationIgnored
-    var paneFocusHistory: [UUID] = []
+    var paneFocusHistory = RecencyStack<UUID>(limit: 20)
 
     init() {
         let pane = Pane(projectPath: NSHomeDirectory())
@@ -174,18 +174,16 @@ final class QuickTerminalSplitState {
     /// Record a focus change, pushing the previous pane onto history.
     func focusPane(_ paneID: UUID) {
         guard paneID != focusedPaneID else { return }
-        if let current = focusedPaneID { paneFocusHistory.append(current) }
-        paneFocusHistory.removeAll { $0 == paneID }
+        if let current = focusedPaneID { paneFocusHistory.push(current) }
+        paneFocusHistory.remove(paneID)
         focusedPaneID = paneID
     }
 
     /// Pick the next focus target after a pane is removed.
     private func nextFocusAfterClose() -> UUID? {
         let valid = Set(splitRoot.allPanes().map(\.id))
-        paneFocusHistory.removeAll { !valid.contains($0) }
-        while let prev = paneFocusHistory.popLast() {
-            if valid.contains(prev) { return prev }
-        }
+        paneFocusHistory.prune(keeping: valid)
+        if let recent = paneFocusHistory.popValid(in: valid) { return recent }
         return splitRoot.allPanes().first?.id
     }
 
@@ -266,7 +264,7 @@ final class QuickTerminalSplitState {
             paneFocusHistory.removeAll()
         } else if let newRoot = splitRoot.removing(paneID: paneID) {
             splitRoot = newRoot
-            paneFocusHistory.removeAll { $0 == paneID }
+            paneFocusHistory.remove(paneID)
             if focusedPaneID == paneID {
                 focusedPaneID = nextFocusAfterClose()
             }
