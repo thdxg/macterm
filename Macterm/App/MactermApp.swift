@@ -16,10 +16,13 @@ struct MactermApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .preferredColorScheme(MactermTheme.colorScheme)
-                .alert("Close running process?", isPresented: Binding(
-                    get: { appState.pendingClosePane != nil },
-                    set: { if !$0 { appState.cancelPendingClosePane() } }
-                )) {
+                .alert(
+                    "Close running process?",
+                    isPresented: Binding(
+                        get: { appState.pendingClosePane != nil },
+                        set: { if !$0 { appState.cancelPendingClosePane() } }
+                    )
+                ) {
                     Button("Cancel", role: .cancel) {
                         appState.cancelPendingClosePane()
                     }
@@ -97,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let appState, appState.isTabCycling else { return }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if !flags.contains(.control),
-               let projectID = appState.activeProjectID
+                let projectID = appState.activeProjectID
             {
                 appState.commitTabCycle(projectID: projectID)
             }
@@ -109,11 +112,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let mainHasRunning = appState?.workspaces.values.contains { ws in
-            ws.tabs.contains { tab in
-                tab.splitRoot.allPanes().contains { $0.nsView?.needsConfirmQuit() == true }
-            }
-        } ?? false
+        let mainHasRunning =
+            appState?.workspaces.values.contains { ws in
+                ws.tabs.contains { tab in
+                    tab.splitRoot.allPanes().contains { $0.nsView?.needsConfirmQuit() == true }
+                }
+            } ?? false
         let qtHasRunning = QuickTerminalService.shared.splitState.splitRoot
             .allPanes().contains { $0.nsView?.needsConfirmQuit() == true }
         let hasRunning = mainHasRunning || qtHasRunning
@@ -144,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func setAppIcon() {
         guard let url = Bundle.appResources.url(forResource: "AppIcon", withExtension: "png"),
-              let image = NSImage(contentsOf: url)
+            let image = NSImage(contentsOf: url)
         else { return }
         NSApp.applicationIconImage = image
     }
