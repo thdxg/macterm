@@ -9,6 +9,7 @@ VERSION="${VERSION:-0.0.0}"
 # so a new tag always wins — a raw commit count can stay equal across two
 # consecutive tags built from the same commit and trip "You're up to date".
 BUILD_NUMBER="$VERSION"
+GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 APP_BUNDLE="$BUILD_DIR/Macterm.app"
 DMG_NAME="Macterm-${VERSION}.dmg"
 
@@ -43,6 +44,7 @@ fi
 cp "$PROJECT_ROOT/Macterm/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP_BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :GitCommit $GIT_COMMIT" "$APP_BUNDLE/Contents/Info.plist"
 
 # Substitute the Sparkle EdDSA public key if CI provided it. Local dev builds
 # keep the placeholder — Sparkle refuses to install updates without a valid

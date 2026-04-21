@@ -18,6 +18,8 @@
 	<string>BUILD_NUMBER</string>
 	<key>CFBundleShortVersionString</key>
 	<string>VERSION_STRING</string>
+	<key>GitCommit</key>
+	<string>GIT_COMMIT_PLACEHOLDER</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>LSMinimumSystemVersion</key>

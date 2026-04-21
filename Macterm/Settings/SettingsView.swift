@@ -450,7 +450,10 @@ private struct UpdatesSettings: View {
 
     private static var bundleVersionString: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
-        return build.isEmpty ? short : "\(short) (\(build))"
+        let commit = Bundle.main.infoDictionary?["GitCommit"] as? String ?? ""
+        // Hide the placeholder — it only survives into dev builds that don't
+        // go through scripts/build.sh (swift run, Xcode previews, etc.).
+        let looksReal = !commit.isEmpty && commit != "GIT_COMMIT_PLACEHOLDER"
+        return looksReal ? "\(short) (\(commit))" : short
     }
 }
