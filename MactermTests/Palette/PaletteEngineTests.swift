@@ -1,38 +1,45 @@
+import Foundation
 @testable import Macterm
-import XCTest
+import Testing
 
 @MainActor
-final class PaletteEngineTests: XCTestCase {
+struct PaletteEngineTests {
     // MARK: - fuzzyScore
 
-    func test_fuzzy_empty_query_scores_zero() {
-        XCTAssertEqual(fuzzyScore(query: "", target: "anything"), 0)
+    @Test
+    func fuzzy_empty_query_scores_zero() {
+        #expect(fuzzyScore(query: "", target: "anything") == 0)
     }
 
-    func test_fuzzy_prefix_match_scores_zero() {
-        XCTAssertEqual(fuzzyScore(query: "git", target: "git status"), 0)
+    @Test
+    func fuzzy_prefix_match_scores_zero() {
+        #expect(fuzzyScore(query: "git", target: "git status") == 0)
     }
 
-    func test_fuzzy_substring_match_scores_above_five() throws {
+    @Test
+    func fuzzy_substring_match_scores_above_five() throws {
         let score = fuzzyScore(query: "stat", target: "git status")
-        XCTAssertNotNil(score)
-        XCTAssertGreaterThanOrEqual(try XCTUnwrap(score), 5)
+        #expect(score != nil)
+        #expect(try #require(score) >= 5)
     }
 
-    func test_fuzzy_subsequence_match_scores_high() throws {
+    @Test
+    func fuzzy_subsequence_match_scores_high() throws {
         let score = fuzzyScore(query: "gs", target: "git status")
-        XCTAssertNotNil(score)
-        XCTAssertGreaterThanOrEqual(try XCTUnwrap(score), 40)
+        #expect(score != nil)
+        #expect(try #require(score) >= 40)
     }
 
-    func test_fuzzy_no_match_returns_nil() {
-        XCTAssertNil(fuzzyScore(query: "xyz", target: "git status"))
+    @Test
+    func fuzzy_no_match_returns_nil() {
+        #expect(fuzzyScore(query: "xyz", target: "git status") == nil)
     }
 
-    func test_fuzzy_prefer_earlier_substring_hit() throws {
-        let early = try XCTUnwrap(fuzzyScore(query: "stat", target: "status bar"))
-        let late = try XCTUnwrap(fuzzyScore(query: "stat", target: "git status"))
-        XCTAssertLessThan(early, late)
+    @Test
+    func fuzzy_prefer_earlier_substring_hit() throws {
+        let early = try #require(fuzzyScore(query: "stat", target: "status bar"))
+        let late = try #require(fuzzyScore(query: "stat", target: "git status"))
+        #expect(early < late)
     }
 
     // MARK: - Engine + fake source
@@ -70,7 +77,8 @@ final class PaletteEngineTests: XCTestCase {
         return PaletteContext(appState: state, projectStore: ProjectStore())
     }
 
-    func test_empty_query_returns_source_empty_sections() {
+    @Test
+    func empty_query_returns_source_empty_sections() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [
@@ -80,12 +88,13 @@ final class PaletteEngineTests: XCTestCase {
             pathSource: nil
         )
         let result = engine.search("")
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].header, "Recent")
-        XCTAssertEqual(result[0].items.map(\.title), ["Alpha", "Beta"])
+        #expect(result.count == 1)
+        #expect(result[0].header == "Recent")
+        #expect(result[0].items.map(\.title) == ["Alpha", "Beta"])
     }
 
-    func test_empty_query_skips_sources_that_return_no_empty_items() {
+    @Test
+    func empty_query_skips_sources_that_return_no_empty_items() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [
@@ -96,11 +105,12 @@ final class PaletteEngineTests: XCTestCase {
             pathSource: nil
         )
         let result = engine.search("")
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].header, "B")
+        #expect(result.count == 1)
+        #expect(result[0].header == "B")
     }
 
-    func test_active_query_merges_sources_and_sorts_by_score() {
+    @Test
+    func active_query_merges_sources_and_sorts_by_score() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [
@@ -112,12 +122,13 @@ final class PaletteEngineTests: XCTestCase {
         )
         // Both are prefix matches ("git"), so both score 0. Sort must be stable by score.
         let result = engine.search("git")
-        XCTAssertEqual(result.count, 1)
-        XCTAssertNil(result[0].header) // merged section has no header
-        XCTAssertEqual(result[0].items.count, 2)
+        #expect(result.count == 1)
+        #expect(result[0].header == nil) // merged section has no header
+        #expect(result[0].items.count == 2)
     }
 
-    func test_active_query_ranks_prefix_above_substring() {
+    @Test
+    func active_query_ranks_prefix_above_substring() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [
@@ -127,10 +138,11 @@ final class PaletteEngineTests: XCTestCase {
             pathSource: nil
         )
         let result = engine.search("stat")
-        XCTAssertEqual(result[0].items.map(\.title), ["stat", "git status"])
+        #expect(result[0].items.map(\.title) == ["stat", "git status"])
     }
 
-    func test_path_query_uses_path_source_only() {
+    @Test
+    func path_query_uses_path_source_only() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [
@@ -140,11 +152,12 @@ final class PaletteEngineTests: XCTestCase {
             pathSource: FakeSource(titles: ["/Users/me/dev"], category: "Path", emptyStateTitles: nil)
         )
         let result = engine.search("/Users")
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].items.map(\.title), ["/Users/me/dev"])
+        #expect(result.count == 1)
+        #expect(result[0].items.map(\.title) == ["/Users/me/dev"])
     }
 
-    func test_tilde_query_uses_path_source() {
+    @Test
+    func tilde_query_uses_path_source() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [],
@@ -152,31 +165,34 @@ final class PaletteEngineTests: XCTestCase {
             pathSource: FakeSource(titles: ["~/dev"], category: nil, emptyStateTitles: nil)
         )
         let result = engine.search("~/dev")
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].items.map(\.title), ["~/dev"])
+        #expect(result.count == 1)
+        #expect(result[0].items.map(\.title) == ["~/dev"])
     }
 
-    func test_path_query_with_empty_path_source_returns_empty() {
+    @Test
+    func path_query_with_empty_path_source_returns_empty() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [FakeSource(titles: ["git"], category: nil, emptyStateTitles: nil)],
             context: ctx,
             pathSource: FakeSource(titles: [], category: nil, emptyStateTitles: nil)
         )
-        XCTAssertTrue(engine.search("/nope").isEmpty)
+        #expect(engine.search("/nope").isEmpty)
     }
 
-    func test_no_matches_returns_empty_sections() {
+    @Test
+    func no_matches_returns_empty_sections() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [FakeSource(titles: ["git"], category: "x", emptyStateTitles: nil)],
             context: ctx,
             pathSource: nil
         )
-        XCTAssertTrue(engine.search("zzz").isEmpty)
+        #expect(engine.search("zzz").isEmpty)
     }
 
-    func test_empty_state_groups_items_by_category() {
+    @Test
+    func empty_state_groups_items_by_category() {
         let ctx = makeContext()
         let engine = PaletteEngine(
             sources: [
@@ -187,10 +203,10 @@ final class PaletteEngineTests: XCTestCase {
             pathSource: nil
         )
         let result = engine.search("")
-        XCTAssertEqual(result.count, 2)
-        XCTAssertEqual(result[0].header, "A")
-        XCTAssertEqual(result[0].items.count, 2)
-        XCTAssertEqual(result[1].header, "B")
-        XCTAssertEqual(result[1].items.count, 1)
+        #expect(result.count == 2)
+        #expect(result[0].header == "A")
+        #expect(result[0].items.count == 2)
+        #expect(result[1].header == "B")
+        #expect(result[1].items.count == 1)
     }
 }

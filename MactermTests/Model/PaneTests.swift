@@ -1,72 +1,83 @@
+import Foundation
 @testable import Macterm
-import XCTest
+import Testing
 
 @MainActor
-final class PaneTests: XCTestCase {
+struct PaneTests {
     private func shellName() -> String {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         return (shell as NSString).lastPathComponent
     }
 
-    func test_processTitle_defaults_to_shell_name_when_title_blank() {
+    @Test
+    func processTitle_defaults_to_shell_name_when_title_blank() {
         let p = Pane(projectPath: "/")
         p.title = ""
-        XCTAssertEqual(p.processTitle, shellName())
+        #expect(p.processTitle == shellName())
     }
 
-    func test_processTitle_defaults_to_shell_name_when_title_whitespace() {
+    @Test
+    func processTitle_defaults_to_shell_name_when_title_whitespace() {
         let p = Pane(projectPath: "/")
         p.title = "   \t\n"
-        XCTAssertEqual(p.processTitle, shellName())
+        #expect(p.processTitle == shellName())
     }
 
-    func test_processTitle_picks_first_non_path_token() {
+    @Test
+    func processTitle_picks_first_non_path_token() {
         let p = Pane(projectPath: "/")
         p.title = "/Users/me vim file.swift"
-        XCTAssertEqual(p.processTitle, "vim")
+        #expect(p.processTitle == "vim")
     }
 
-    func test_processTitle_picks_first_meaningful_token() {
+    @Test
+    func processTitle_picks_first_meaningful_token() {
         let p = Pane(projectPath: "/")
         p.title = "git status"
-        XCTAssertEqual(p.processTitle, "git")
+        #expect(p.processTitle == "git")
     }
 
-    func test_processTitle_skips_noise_tokens() {
+    @Test
+    func processTitle_skips_noise_tokens() {
         let p = Pane(projectPath: "/")
         p.title = ">>> /Users/me node server.js"
         // ">>>", "/Users/me" are noise / path — should pick "node".
-        XCTAssertEqual(p.processTitle, "node")
+        #expect(p.processTitle == "node")
     }
 
-    func test_processTitle_falls_back_to_shell_when_all_paths() {
+    @Test
+    func processTitle_falls_back_to_shell_when_all_paths() {
         let p = Pane(projectPath: "/")
         p.title = "/usr/bin ~/dev"
-        XCTAssertEqual(p.processTitle, shellName())
+        #expect(p.processTitle == shellName())
     }
 
-    func test_processTitle_treats_tilde_prefix_as_path() {
+    @Test
+    func processTitle_treats_tilde_prefix_as_path() {
         let p = Pane(projectPath: "/")
         p.title = "~/dev cmd"
-        XCTAssertEqual(p.processTitle, "cmd")
+        #expect(p.processTitle == "cmd")
     }
 
-    func test_sidebarSegmentTitle_matches_processTitle() {
+    @Test
+    func sidebarSegmentTitle_matches_processTitle() {
         let p = Pane(projectPath: "/")
         p.title = "zsh"
-        XCTAssertEqual(p.sidebarSegmentTitle, p.processTitle)
+        #expect(p.sidebarSegmentTitle == p.processTitle)
     }
 
-    func test_init_stores_project_path() {
+    @Test
+    func init_stores_project_path() {
         let p = Pane(projectPath: "/tmp/foo")
-        XCTAssertEqual(p.projectPath, "/tmp/foo")
+        #expect(p.projectPath == "/tmp/foo")
     }
 
-    func test_destroySurface_is_safe_when_nsView_is_nil() {
+    @Test
+    func destroySurface_is_safe_when_nsView_is_nil() {
         let p = Pane(projectPath: "/")
-        XCTAssertNil(p.nsView)
+        #expect(p.nsView == nil)
         p.destroySurface() // must not crash
         p.destroySurface() // idempotent
-        XCTAssertNil(p.nsView)
+        #expect(p.nsView == nil)
     }
 }
