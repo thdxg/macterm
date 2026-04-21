@@ -31,13 +31,13 @@ Since the app isn't signed with an Apple Developer certificate, macOS will block
 
 You only need to do this once. (Or, from Terminal: `xattr -cr /Applications/Macterm.app`, then launch normally.)
 
-## Requirements
+## Development
+
+### Requirements
 
 - macOS 26.0+
 - Swift 6.0+
 - [mise](https://mise.jdx.dev/) (optional, but recommended)
-
-## Quick Start
 
 ```bash
 # Install necessary tools (swiftlint, gh, etc.)
@@ -55,10 +55,6 @@ mise run build
 # Run the test suite
 mise run test
 ```
-
-## Contributing
-
-Run `mise run check:fix` before committing — it formats, lints, and runs the test suite. CI runs the same checks on every push and pull request.
 
 ## License
 
