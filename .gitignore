@@ -18,3 +18,9 @@ AGENTS.md
 CLAUDE.md
 macterm_run.log
 output.log
+
+# Sparkle tooling — downloaded locally for key generation / appcast work.
+/bin
+private_key.txt
+sparkle.tar.xz
+sparkle/

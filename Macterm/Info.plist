@@ -57,7 +57,7 @@
 	<key>SUFeedURL</key>
 	<string>https://thdxg.github.io/macterm/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>SPARKLE_PUBLIC_ED_KEY</string>
+	<string>SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER</string>
 	<key>SUEnableInstallerLauncherService</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>

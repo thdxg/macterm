@@ -32,8 +32,8 @@ cp "$PROJECT_ROOT/Macterm/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 # Substitute the Sparkle EdDSA public key if CI provided it. Local dev builds
 # keep the placeholder — Sparkle refuses to install updates without a valid
 # public key, so that's a safe default.
-if [[ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
-  /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_ED_KEY" "$APP_BUNDLE/Contents/Info.plist"
+if [[ -n "${SPARKLE_ED_PUBLIC_KEY:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_ED_PUBLIC_KEY" "$APP_BUNDLE/Contents/Info.plist"
 fi
 
 # Bundle Sparkle.framework. SPM emits the right arch-slice next to the binary.

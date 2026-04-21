@@ -63,10 +63,10 @@ Run `mise run check:fix` before committing — it formats, lints, and runs the t
 Tag-pushed builds are released via `.github/workflows/release.yml`. The workflow needs these secrets configured on the repo:
 
 - `GH_PAT` — PAT with `contents:read` on `thdxg/ghostty` (used to download GhosttyKit).
-- `SPARKLE_PUBLIC_ED_KEY` — the EdDSA public key baked into `Info.plist`.
+- `SPARKLE_ED_PUBLIC_KEY` — the EdDSA public key baked into `Info.plist`.
 - `SPARKLE_ED_PRIVATE_KEY` — the matching private key, used to sign each release DMG.
 
-Generate the keypair once by downloading Sparkle and running `./bin/generate_keys`. Commit **only** the public key (via the `SPARKLE_PUBLIC_ED_KEY` secret); keep the private key in a password manager and mirror it into `SPARKLE_ED_PRIVATE_KEY`. Losing the private key means users cannot auto-update to any further release.
+Generate the keypair once by downloading Sparkle and running `./bin/generate_keys`. Store the public key in `SPARKLE_ED_PUBLIC_KEY` (it's not secret, but keeping it as a secret avoids committing it to the repo) and the private key in `SPARKLE_ED_PRIVATE_KEY`. Back the private key up in a password manager — losing it means users cannot auto-update to any further release.
 
 The workflow pushes a new `<item>` to `appcast.xml` on the `gh-pages` branch, which GitHub Pages serves at `https://thdxg.github.io/macterm/appcast.xml` — the feed URL baked into `Info.plist`.
 
