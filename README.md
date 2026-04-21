@@ -23,7 +23,13 @@
 
 Download the latest `.dmg` from [Releases](https://github.com/thdxg/macterm/releases), open it, and drag Macterm to Applications.
 
-Since the app isn't signed with an Apple Developer certificate, macOS will block it on first launch. To open it, **right-click Macterm → Open**, then confirm in the dialog. You only need to do this once.
+Since the app isn't signed with an Apple Developer certificate, macOS will block it on first launch with a "*Macterm.app Not Opened*" dialog. Dismiss the dialog, then:
+
+1. Open **System Settings → Privacy & Security**.
+2. Scroll to the **Security** section — you'll see *"Macterm.app was blocked…"* with an **Open Anyway** button. Click it.
+3. Launch Macterm again and confirm.
+
+You only need to do this once. (Or, from Terminal: `xattr -cr /Applications/Macterm.app`, then launch normally.)
 
 ## Updates
 
