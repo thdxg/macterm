@@ -3,6 +3,9 @@ gh = "latest"
 swiftformat = "latest"
 swiftlint = "latest"
 
+[settings]
+task.output = "quiet"
+
 # ─── Dev tasks (pretty spinners) ────────────────────────────────────────────
 # Each task wraps a raw script via scripts/_lib.sh's run_step helper, which
 # hides logs while running and prints stderr only on failure. Use these
@@ -45,11 +48,11 @@ run = "bash -c 'source scripts/_lib.sh && run_step \"Testing...\" scripts/test.s
 
 [tasks.check]
 description = "Format-check, lint, and test"
-depends = ["format:check", "lint", "test"]
+run = [{ tasks = ["format:check", "lint", "test"] }]
 
 [tasks."check:fix"]
 description = "Auto-fix format + lint, then test"
-depends = ["format", "lint", "test"]
+run = [{ tasks = ["format", "lint", "test"] }]
 
 [tasks.clean]
 description = "Clean build artifacts"
