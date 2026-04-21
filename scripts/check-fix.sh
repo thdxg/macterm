@@ -8,3 +8,5 @@ if command -v swiftlint &>/dev/null; then
   run_step "Auto-fixing lint issues..." bash -c 'swiftlint lint --fix --quiet || true'
   run_step "Linting..." swiftlint lint --strict --quiet
 fi
+
+run_step "Testing..." swift test --quiet

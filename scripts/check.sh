@@ -7,3 +7,5 @@ run_step "Checking formatting..." swiftformat --lint .
 if command -v swiftlint &>/dev/null; then
   run_step "Linting..." swiftlint lint --strict --quiet
 fi
+
+run_step "Testing..." swift test --quiet

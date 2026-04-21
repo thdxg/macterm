@@ -36,5 +36,10 @@ let package = Package(
                 .linkedLibrary("c++"),
             ]
         ),
+        .testTarget(
+            name: "MactermTests",
+            dependencies: ["Macterm"],
+            path: "MactermTests"
+        ),
     ]
 )

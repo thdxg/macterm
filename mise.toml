@@ -26,6 +26,10 @@ run = "scripts/check.sh"
 description = "Auto-fix formatting and lint issues, then build"
 run = "scripts/check-fix.sh"
 
+[tasks.test]
+description = "Run the test suite"
+run = "swift test"
+
 [tasks.format]
 description = "Run swiftformat"
 run = "swiftformat ."

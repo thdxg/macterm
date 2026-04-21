@@ -28,10 +28,11 @@ final class AppState {
     private var tabCycleIndex: Int = 0
     var isTabCycling: Bool { !tabCycleOrder.isEmpty }
 
-    private let workspaceStore = WorkspaceStore()
+    private let workspaceStore: WorkspaceStore
     private var autoTileObserver: Any?
 
-    init() {
+    init(workspaceStore: WorkspaceStore = WorkspaceStore()) {
+        self.workspaceStore = workspaceStore
         autoTileObserver = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,
             object: nil,
