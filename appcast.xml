@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Macterm</title>
+    <link>https://thdxg.github.io/macterm/appcast.xml</link>
+    <description>Updates for Macterm.</description>
+    <language>en</language>
+    <item>
+      <title>Macterm 1.8.0</title>
+      <pubDate>Tue, 21 Apr 2026 18:27:28 +0000</pubDate>
+      <sparkle:version>1.8.0</sparkle:version>
+      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.0</link>
+      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.0/Macterm-1.8.0-arm64.dmg" type="application/octet-stream" sparkle:edSignature="+f/LuLQXn/T2xvVC/dpUAt9gMg8DTHASBWVw/ziHF8fLlZn2z43nLs4xBLdByktQ7wKfqCJzcE+G0baqtMgRAA==" length="10579087" />
+    </item>
+    <item>
+      <title>Macterm 1.8.0</title>
+      <pubDate>Tue, 21 Apr 2026 18:27:28 +0000</pubDate>
+      <sparkle:version>1.8.0</sparkle:version>
+      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.0</link>
+      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.0/Macterm-1.8.0-x86_64.dmg" type="application/octet-stream" sparkle:edSignature="Yfx8W/lFHiZmaClfbl9Hf4t7LOv4Eb1lIEIqDx2Xd6B1Q/ippssxtiwkyGW6PxTC2M4eUyjhz4C24gP2DZBdAw==" length="11104140" />
+    </item>
+  </channel>
+</rss>
