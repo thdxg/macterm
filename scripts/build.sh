@@ -4,7 +4,11 @@ set -euo pipefail
 PROJECT_ROOT="$PWD"
 BUILD_DIR="$PROJECT_ROOT/build"
 VERSION="${VERSION:-0.0.0}"
-BUILD_NUMBER=$(git -C "$PROJECT_ROOT" rev-list --count HEAD)
+# Sparkle compares `CFBundleVersion` against the appcast's `sparkle:version`
+# when deciding whether an update is newer. Use the release string for both
+# so a new tag always wins — a raw commit count can stay equal across two
+# consecutive tags built from the same commit and trip "You're up to date".
+BUILD_NUMBER="$VERSION"
 APP_BUNDLE="$BUILD_DIR/Macterm.app"
 DMG_NAME="Macterm-${VERSION}.dmg"
 
