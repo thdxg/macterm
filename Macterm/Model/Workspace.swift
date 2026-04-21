@@ -145,7 +145,15 @@ final class Workspace: Identifiable {
     init(projectID: UUID, tabs: [TerminalTab], activeTabID: UUID?) {
         self.projectID = projectID
         self.tabs = tabs
-        self.activeTabID = activeTabID ?? tabs.first?.id
+        // Validate the supplied activeTabID against the tabs list. A stale id
+        // (e.g. from a corrupt persistence snapshot) falls back to the first
+        // tab so we never end up with an "active tab" that doesn't exist.
+        let validIDs = Set(tabs.map(\.id))
+        if let activeTabID, validIDs.contains(activeTabID) {
+            self.activeTabID = activeTabID
+        } else {
+            self.activeTabID = tabs.first?.id
+        }
     }
 
     @discardableResult
