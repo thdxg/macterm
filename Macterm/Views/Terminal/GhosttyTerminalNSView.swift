@@ -3,6 +3,13 @@ import GhosttyKit
 import QuartzCore
 
 final class GhosttyTerminalNSView: NSView {
+    /// Weak registry of every live instance so global operations (e.g. config
+    /// reload) can iterate without a central cache.
+    @MainActor private static let liveViews = NSHashTable<GhosttyTerminalNSView>.weakObjects()
+    @MainActor static func allLiveViews() -> [GhosttyTerminalNSView] {
+        liveViews.allObjects
+    }
+
     nonisolated(unsafe) private(set) var surface: ghostty_surface_t?
     private let workingDirectory: String
     var onTitleChange: ((String) -> Void)?
@@ -26,6 +33,7 @@ final class GhosttyTerminalNSView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         setupTrackingArea()
+        Self.liveViews.add(self)
     }
 
     @available(*, unavailable)

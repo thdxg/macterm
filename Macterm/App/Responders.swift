@@ -64,17 +64,17 @@ final class QuickTerminalResponder: KeyResponder {
 
         if HotkeyRegistry.matches(event, action: .splitRight) {
             guard let paneID = state.focusedPaneID else { return .passThrough }
-            state.split(paneID: paneID, direction: .horizontal, viewCache: qt.viewCache)
+            state.split(paneID: paneID, direction: .horizontal)
             return .handled
         }
         if HotkeyRegistry.matches(event, action: .splitDown) {
             guard let paneID = state.focusedPaneID else { return .passThrough }
-            state.split(paneID: paneID, direction: .vertical, viewCache: qt.viewCache)
+            state.split(paneID: paneID, direction: .vertical)
             return .handled
         }
         if HotkeyRegistry.matches(event, action: .closePane) {
             guard let paneID = state.focusedPaneID else { return .passThrough }
-            state.requestClosePane(paneID, viewCache: qt.viewCache)
+            state.requestClosePane(paneID)
             return .handled
         }
         if let (_, dir) = Self.focusActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {

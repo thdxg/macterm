@@ -119,7 +119,7 @@ final class AppState {
     func removeProject(_ projectID: UUID) {
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-                TerminalViewCache.shared.remove(for: pane.id)
+                pane.destroySurface()
             }
         }
         workspaces.removeValue(forKey: projectID)
@@ -143,7 +143,7 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
         for pane in tab.splitRoot.allPanes() {
-            TerminalViewCache.shared.remove(for: pane.id)
+            pane.destroySurface()
         }
         ws.closeTab(tabID)
         saveWorkspaces()
@@ -215,7 +215,7 @@ final class AppState {
         guard let tab = workspaces[projectID]?.activeTab,
               let pane = tab.focusedPane
         else { return }
-        let livePwd = TerminalViewCache.shared.existingView(for: pane.id)?.currentPwd
+        let livePwd = pane.nsView?.currentPwd
         let sourcePath = livePwd ?? pane.projectPath
         let (newRoot, newPaneID) = tab.splitRoot.splitting(
             paneID: pane.id,
@@ -241,7 +241,7 @@ final class AppState {
         guard let ws = workspaces[projectID] else { return }
         // Find the tab that actually contains this pane (not just the active tab)
         guard let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) else { return }
-        TerminalViewCache.shared.remove(for: paneID)
+        tab.splitRoot.findPane(id: paneID)?.destroySurface()
         let panes = tab.splitRoot.allPanes()
         if panes.count <= 1 {
             closeTab(tab.id, projectID: projectID)
@@ -259,7 +259,10 @@ final class AppState {
     }
 
     func requestClosePane(_ paneID: UUID, projectID: UUID) {
-        if TerminalViewCache.shared.needsConfirmQuit(for: paneID) {
+        let pane = workspaces[projectID]?.tabs
+            .compactMap { $0.splitRoot.findPane(id: paneID) }
+            .first
+        if pane?.nsView?.needsConfirmQuit() == true {
             pendingClosePane = PendingClosePane(paneID: paneID, projectID: projectID)
             return
         }
