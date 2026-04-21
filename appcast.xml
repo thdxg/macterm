@@ -6,60 +6,6 @@
     <description>Updates for Macterm.</description>
     <language>en</language>
     <item>
-      <title>Macterm 1.8.0</title>
-      <pubDate>Tue, 21 Apr 2026 18:27:28 +0000</pubDate>
-      <sparkle:version>1.8.0</sparkle:version>
-      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.0</link>
-      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.0/Macterm-1.8.0-arm64.dmg" type="application/octet-stream" sparkle:edSignature="+f/LuLQXn/T2xvVC/dpUAt9gMg8DTHASBWVw/ziHF8fLlZn2z43nLs4xBLdByktQ7wKfqCJzcE+G0baqtMgRAA==" length="10579087" />
-    </item>
-    <item>
-      <title>Macterm 1.8.0</title>
-      <pubDate>Tue, 21 Apr 2026 18:27:28 +0000</pubDate>
-      <sparkle:version>1.8.0</sparkle:version>
-      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.0</link>
-      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.0/Macterm-1.8.0-x86_64.dmg" type="application/octet-stream" sparkle:edSignature="Yfx8W/lFHiZmaClfbl9Hf4t7LOv4Eb1lIEIqDx2Xd6B1Q/ippssxtiwkyGW6PxTC2M4eUyjhz4C24gP2DZBdAw==" length="11104140" />
-    </item>
-    <item>
-      <title>Macterm 1.8.0</title>
-      <pubDate>Tue, 21 Apr 2026 18:30:01 +0000</pubDate>
-      <sparkle:version>1.8.0</sparkle:version>
-      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.0</link>
-      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.0/Macterm-1.8.0-arm64.dmg" type="application/octet-stream" sparkle:edSignature="xN5jrheckUFoEwtoW21rzg5oNv+N3faR4ZKjtKgws1nwKuocj/f2LJj91j67Njtzt9AwKegThfguX/L+VsnMDQ==" length="10579099" />
-    </item>
-    <item>
-      <title>Macterm 1.8.0</title>
-      <pubDate>Tue, 21 Apr 2026 18:30:01 +0000</pubDate>
-      <sparkle:version>1.8.0</sparkle:version>
-      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.0</link>
-      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.0/Macterm-1.8.0-x86_64.dmg" type="application/octet-stream" sparkle:edSignature="eBrQc/cx3r4tPKR9/h2KbVsRn+f2J+/MnnAy7rSG32Ccu7zMVri6Cp3+Gioi3m9k6Y+HFCh0fiKk3qBd9x8XAA==" length="11103996" />
-    </item>
-    <item>
-      <title>Macterm 1.8.1</title>
-      <pubDate>Tue, 21 Apr 2026 18:47:02 +0000</pubDate>
-      <sparkle:version>1.8.1</sparkle:version>
-      <sparkle:shortVersionString>1.8.1</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.1</link>
-      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.1/Macterm-1.8.1-arm64.dmg" type="application/octet-stream" sparkle:edSignature="gZyJtQC0GcaBOJZDxRZcjsUxdZTVlv3hAIGAE7zsecvLiDeFjy7Tkj+d6yTr1fv8fkasfEJxmnTpT5u3y1mkDg==" length="10590516" />
-    </item>
-    <item>
-      <title>Macterm 1.8.1</title>
-      <pubDate>Tue, 21 Apr 2026 18:47:02 +0000</pubDate>
-      <sparkle:version>1.8.1</sparkle:version>
-      <sparkle:shortVersionString>1.8.1</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.1</link>
-      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.1/Macterm-1.8.1-x86_64.dmg" type="application/octet-stream" sparkle:edSignature="Lwbk0Er3EfRWV/QlaCeRGnHBoJvHJnocwwpIEIWPxhPLUzDVA1u6inet3DopJPhz2St2XfGzhyasPYsYgX8bBg==" length="11113955" />
-    </item>
-    <item>
       <title>Macterm 1.8.2</title>
       <pubDate>Tue, 21 Apr 2026 18:53:49 +0000</pubDate>
       <sparkle:version>1.8.2</sparkle:version>
