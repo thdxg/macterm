@@ -23,10 +23,10 @@
 
 Download the latest `.dmg` from [Releases](https://github.com/thdxg/macterm/releases), open it, and drag Macterm to Applications.
 
-Since the app isn't signed with an Apple Developer certificate, macOS will block it on first launch with a "*Macterm.app Not Opened*" dialog. Dismiss the dialog, then:
+Since the app isn't signed with an Apple Developer certificate, macOS will block it on first launch with a "_Macterm.app Not Opened_" dialog. Dismiss the dialog, then:
 
 1. Open **System Settings → Privacy & Security**.
-2. Scroll to the **Security** section — you'll see *"Macterm.app was blocked…"* with an **Open Anyway** button. Click it.
+2. Scroll to the **Security** section — you'll see _"Macterm.app was blocked…"_ with an **Open Anyway** button. Click it.
 3. Launch Macterm again and confirm.
 
 You only need to do this once. (Or, from Terminal: `xattr -cr /Applications/Macterm.app`, then launch normally.)
@@ -63,18 +63,6 @@ mise run test
 ## Contributing
 
 Run `mise run check:fix` before committing — it formats, lints, and runs the test suite. CI runs the same checks on every push and pull request.
-
-## Releasing
-
-Tag-pushed builds are released via `.github/workflows/release.yml`. The workflow needs these secrets configured on the repo:
-
-- `GH_PAT` — PAT with `contents:read` on `thdxg/ghostty` (used to download GhosttyKit).
-- `SPARKLE_ED_PUBLIC_KEY` — the EdDSA public key baked into `Info.plist`.
-- `SPARKLE_ED_PRIVATE_KEY` — the matching private key, used to sign each release DMG.
-
-Generate the keypair once by downloading Sparkle and running `./bin/generate_keys`. Store the public key in `SPARKLE_ED_PUBLIC_KEY` (it's not secret, but keeping it as a secret avoids committing it to the repo) and the private key in `SPARKLE_ED_PRIVATE_KEY`. Back the private key up in a password manager — losing it means users cannot auto-update to any further release.
-
-The workflow pushes a new `<item>` to `appcast.xml` on the `gh-pages` branch, which GitHub Pages serves at `https://thdxg.github.io/macterm/appcast.xml` — the feed URL baked into `Info.plist`.
 
 ## License
 

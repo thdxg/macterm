@@ -30,6 +30,11 @@ struct MainWindow: View {
             }
             .navigationTitle(activeProject?.name ?? "Macterm")
             .navigationSubtitle(activeTabTitle)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    UpdateAvailableToolbarButton()
+                }
+            }
         }
         .background(WindowStyler())
         .overlay {
