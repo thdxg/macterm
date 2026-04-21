@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let appState, appState.isTabCycling else { return }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if !flags.contains(.control),
-                let projectID = appState.activeProjectID
+               let projectID = appState.activeProjectID
             {
                 appState.commitTabCycle(projectID: projectID)
             }
@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func setAppIcon() {
         guard let url = Bundle.appResources.url(forResource: "AppIcon", withExtension: "png"),
-            let image = NSImage(contentsOf: url)
+              let image = NSImage(contentsOf: url)
         else { return }
         NSApp.applicationIconImage = image
     }
