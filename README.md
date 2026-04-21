@@ -31,10 +31,6 @@ Since the app isn't signed with an Apple Developer certificate, macOS will block
 
 You only need to do this once. (Or, from Terminal: `xattr -cr /Applications/Macterm.app`, then launch normally.)
 
-## Updates
-
-Macterm ships with automatic updates via [Sparkle](https://sparkle-project.org/). A version check runs daily in the background and can be triggered manually from **Macterm → Check for Updates…** or in **Settings → Updates**. Updates are verified with an EdDSA signature baked into the app, so later versions install without any `xattr` workaround. No telemetry is collected.
-
 ## Requirements
 
 - macOS 26.0+
