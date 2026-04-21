@@ -31,8 +31,12 @@ description = "Run the test suite"
 run = "swift test"
 
 [tasks.format]
-description = "Run swiftformat"
+description = "Run swiftformat (writes changes in place)"
 run = "swiftformat ."
+
+[tasks."format:check"]
+description = "Check formatting without writing changes"
+run = "swiftformat --lint ."
 
 [tasks.lint]
 description = "Run swiftlint"

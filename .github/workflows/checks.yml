@@ -21,5 +21,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
 
-      - name: Check (format + lint + test)
-        run: mise run check
+      - name: Format
+        run: mise run format:check
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Test
+        run: mise run test
