@@ -49,7 +49,14 @@ mise run run
 
 # Build release bundle
 mise run build
+
+# Run the test suite
+mise run test
 ```
+
+## Contributing
+
+Run `mise run check:fix` before committing — it formats, lints, and runs the test suite. CI runs the same checks on every push and pull request.
 
 ## License
 
