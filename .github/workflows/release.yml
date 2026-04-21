@@ -7,9 +7,6 @@ on:
 jobs:
   build:
     runs-on: macos-26
-    strategy:
-      matrix:
-        arch: [arm64, x86_64]
     permissions:
       contents: write
     env:
@@ -26,7 +23,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
 
-      - name: Build release artifact
+      - name: Build universal release artifact
         env:
           SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
         run: |
@@ -34,12 +31,12 @@ jobs:
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="0.0.0"
           fi
-          ARCH=${{ matrix.arch }} VERSION="$VERSION" mise run ci:build
+          VERSION="$VERSION" mise run ci:build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: dmg-${{ matrix.arch }}
+          name: dmg
           path: build/*.dmg
 
   release:

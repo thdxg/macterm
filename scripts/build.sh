@@ -3,26 +3,37 @@ set -euo pipefail
 
 PROJECT_ROOT="$PWD"
 BUILD_DIR="$PROJECT_ROOT/build"
-ARCH="${ARCH:-arm64}"
 VERSION="${VERSION:-0.0.0}"
-TRIPLE="${ARCH}-apple-macosx26.0"
 BUILD_NUMBER=$(git -C "$PROJECT_ROOT" rev-list --count HEAD)
 APP_BUNDLE="$BUILD_DIR/Macterm.app"
-DMG_NAME="Macterm-${VERSION}-${ARCH}.dmg"
+DMG_NAME="Macterm-${VERSION}.dmg"
 
 rm -rf "$APP_BUNDLE"
 
-# Build release binary.
-swift build -c release --triple "$TRIPLE"
-SPM_BUILD_DIR=$(swift build -c release --triple "$TRIPLE" --show-bin-path)
+# Build release binaries for both architectures so we can ship a single
+# universal DMG. Shipping arch-specific DMGs as separate <item> entries in
+# the appcast confuses Sparkle's candidate picker (it tests the first item's
+# enclosure against the host and gives up with "up to date" if it doesn't
+# match), so one universal artifact is the safer path.
+ARM_TRIPLE="arm64-apple-macosx26.0"
+X86_TRIPLE="x86_64-apple-macosx26.0"
+
+swift build -c release --triple "$ARM_TRIPLE"
+swift build -c release --triple "$X86_TRIPLE"
+
+ARM_BIN_DIR=$(swift build -c release --triple "$ARM_TRIPLE" --show-bin-path)
+X86_BIN_DIR=$(swift build -c release --triple "$X86_TRIPLE" --show-bin-path)
 
 # Assemble .app bundle.
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
-cp "$SPM_BUILD_DIR/Macterm" "$APP_BUNDLE/Contents/MacOS/Macterm"
+lipo -create \
+  "$ARM_BIN_DIR/Macterm" \
+  "$X86_BIN_DIR/Macterm" \
+  -output "$APP_BUNDLE/Contents/MacOS/Macterm"
 install_name_tool -add_rpath @executable_path/../Frameworks "$APP_BUNDLE/Contents/MacOS/Macterm"
 
-if [[ -d "$SPM_BUILD_DIR/Macterm_Macterm.bundle" ]]; then
-  cp -R "$SPM_BUILD_DIR/Macterm_Macterm.bundle" "$APP_BUNDLE/Contents/Resources/Macterm_Macterm.bundle"
+if [[ -d "$ARM_BIN_DIR/Macterm_Macterm.bundle" ]]; then
+  cp -R "$ARM_BIN_DIR/Macterm_Macterm.bundle" "$APP_BUNDLE/Contents/Resources/Macterm_Macterm.bundle"
 fi
 
 cp "$PROJECT_ROOT/Macterm/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
@@ -36,8 +47,9 @@ if [[ -n "${SPARKLE_ED_PUBLIC_KEY:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_ED_PUBLIC_KEY" "$APP_BUNDLE/Contents/Info.plist"
 fi
 
-# Bundle Sparkle.framework. SPM emits the right arch-slice next to the binary.
-SPARKLE_FRAMEWORK="$SPM_BUILD_DIR/Sparkle.framework"
+# Bundle Sparkle.framework. SPM ships a universal slice, so either arch's
+# build dir works — pick arm64.
+SPARKLE_FRAMEWORK="$ARM_BIN_DIR/Sparkle.framework"
 if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
   mkdir -p "$APP_BUNDLE/Contents/Frameworks"
   cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
