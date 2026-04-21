@@ -1,133 +1,39 @@
 import AppKit
 import SwiftUI
 
-// MARK: - NSPanel host
+// MARK: - Overlay
 
-/// An NSViewRepresentable that owns the command palette NSPanel.
-/// Place this in a .background() so it gets a window reference without affecting layout.
-struct CommandPaletteHost: NSViewRepresentable {
+/// A SwiftUI overlay hosting the command palette. Mounts only when visible,
+/// dims the background with a click-to-dismiss scrim, and positions the palette
+/// ~15% from the top of the available area.
+struct CommandPaletteOverlay: View {
     @Environment(AppState.self)
     private var appState
-    @Environment(ProjectStore.self)
-    private var projectStore
 
-    func makeCoordinator() -> CommandPaletteController {
-        CommandPaletteController()
-    }
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .top) {
+                // Click-outside scrim. Transparent but hit-testable.
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        appState.isCommandPaletteVisible = false
+                    }
 
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            context.coordinator.attach(to: window, appState: appState, projectStore: projectStore)
-        }
-        return view
-    }
-
-    func updateNSView(_: NSView, context: Context) {
-        context.coordinator.setVisible(appState.isCommandPaletteVisible)
-    }
-}
-
-/// Borderless floating panel that can still become key so SwiftUI receives
-/// keyboard events (Esc, arrow keys) and text-field focus.
-private final class KeyablePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-}
-
-@MainActor
-final class CommandPaletteController: NSObject {
-    private var panel: KeyablePanel?
-    private weak var parentWindow: NSWindow?
-    private weak var appState: AppState?
-    private var clickMonitor: Any?
-
-    func attach(to window: NSWindow, appState: AppState, projectStore: ProjectStore) {
-        self.parentWindow = window
-        self.appState = appState
-
-        let panel = KeyablePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 460),
-            styleMask: [.borderless, .fullSizeContentView],
-            backing: .buffered,
-            defer: true
-        )
-        panel.isFloatingPanel = true
-        panel.hidesOnDeactivate = false
-        // Panel itself is transparent — the rounded opaque fill comes from the
-        // layer-backed hosting view. This lets the corners clip cleanly.
-        let bgNSColor = GhosttyApp.shared.backgroundColor
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        let content = CommandPalettePanel()
-            .environment(appState)
-            .environment(projectStore)
-        let hosting = NSHostingView(rootView: content)
-        hosting.wantsLayer = true
-        hosting.layer?.backgroundColor = bgNSColor.cgColor
-        hosting.layer?.cornerRadius = 12
-        hosting.layer?.masksToBounds = true
-        panel.contentView = hosting
-
-        self.panel = panel
-        // Do NOT addChildWindow here — that would order it on screen immediately.
-        // We add it (and remove it) in setVisible so the panel only appears
-        // when the palette is explicitly opened.
-    }
-
-    func setVisible(_ visible: Bool) {
-        guard let panel, let parent = parentWindow else { return }
-        if visible {
-            positionPanel(panel, in: parent)
-            if panel.parent == nil {
-                parent.addChildWindow(panel, ordered: .above)
+                CommandPalettePanel()
+                    .frame(width: 500)
+                    .background(MactermTheme.bg)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(MactermTheme.border, lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 8)
+                    .padding(.top, geo.size.height * 0.15)
             }
-            panel.makeKeyAndOrderFront(nil)
-            installClickMonitor()
-        } else {
-            if panel.parent != nil {
-                parent.removeChildWindow(panel)
-            }
-            panel.orderOut(nil)
-            // Hand focus back to the parent window so the terminal receives keys.
-            parent.makeKey()
-            removeClickMonitor()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    private func positionPanel(_ panel: KeyablePanel, in parent: NSWindow) {
-        let parentFrame = parent.frame
-        let panelWidth: CGFloat = 500
-        // Size the panel to the SwiftUI content's intrinsic height so there's
-        // no empty band above or below the search field.
-        let fittingSize = panel.contentView?.fittingSize ?? NSSize(width: panelWidth, height: 460)
-        let panelHeight = max(fittingSize.height, 80)
-        let x = parentFrame.midX - panelWidth / 2
-        let titlebarH = parent.frame.height - (parent.contentView?.frame.height ?? 0)
-        let contentTop = parentFrame.maxY - titlebarH
-        // Position ~15% from the top of the window's content area (matches
-        // ghostty's own command palette which sits a bit below the top edge).
-        let topOffset = (parent.contentView?.frame.height ?? parentFrame.height) * 0.15
-        let y = contentTop - topOffset - panelHeight
-        panel.setFrame(NSRect(x: x, y: y, width: panelWidth, height: panelHeight), display: false)
-    }
-
-    private func installClickMonitor() {
-        guard clickMonitor == nil else { return }
-        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.appState?.isCommandPaletteVisible = false
-            }
-        }
-    }
-
-    private func removeClickMonitor() {
-        if let m = clickMonitor { NSEvent.removeMonitor(m) }
-        clickMonitor = nil
+        .transition(.opacity)
     }
 }
 
@@ -219,10 +125,6 @@ struct CommandPalettePanel: View {
                 }
             }
         }
-        .background(MactermTheme.bg)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12).strokeBorder(MactermTheme.border, lineWidth: 1)
-        )
         .onAppear {
             query = ""
             selectedIndex = 0

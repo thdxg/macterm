@@ -32,7 +32,11 @@ struct MainWindow: View {
             .navigationSubtitle(activeTabTitle)
         }
         .background(WindowStyler())
-        .background(CommandPaletteHost())
+        .overlay {
+            if appState.isCommandPaletteVisible {
+                CommandPaletteOverlay()
+            }
+        }
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
