@@ -14,37 +14,61 @@ task.output = "quiet"
 [tasks.run]
 description = "Run the app"
 depends = ["check:fix"]
-run = "bash -c 'source scripts/_lib.sh && run_step \"Building...\" swift build && exec swift run Macterm'"
+run = """
+  source scripts/_lib.sh
+  run_step "Running..." ./scripts/run.sh
+"""
 
 [tasks.build]
 description = "Build release app and DMG"
 depends = ["check:fix"]
-run = "bash -c 'source scripts/_lib.sh && run_step \"Building release + DMG...\" scripts/build.sh'"
+run = """
+  source scripts/_lib.sh
+  run_step "Building..." ./scripts/build.sh
+"""
 
 [tasks.install]
 description = "Install built app to /Applications"
 depends = ["build"]
-run = "bash -c 'source scripts/_lib.sh && run_step \"Installing to /Applications...\" scripts/install.sh'"
+run = """
+  source scripts/_lib.sh
+  run_step "Installing to /Applications..." ./scripts/install.sh
+"""
 
 [tasks.setup]
 description = "Download GhosttyKit framework"
-run = "bash -c 'source scripts/_lib.sh && run_step \"Fetching GhosttyKit...\" scripts/setup.sh'"
+run = """
+  source scripts/_lib.sh
+  run_step "Setting up GhosttyKit..." ./scripts/setup.sh
+"""
 
 [tasks.format]
-description = "Auto-fix formatting and lint issues"
-run = "bash -c 'source scripts/_lib.sh && run_step \"Formatting...\" scripts/format.sh'"
+description = "Auto-fix formatting issues"
+run = """
+  source scripts/_lib.sh
+  run_step "Formatting..." ./scripts/format.sh
+"""
 
 [tasks."format:check"]
 description = "Check formatting without writing changes"
-run = "bash -c 'source scripts/_lib.sh && run_step \"Checking formatting...\" scripts/format-check.sh'"
+run = """
+  source scripts/_lib.sh
+  run_step "Checking formatting..." ./scripts/format-check.sh
+"""
 
 [tasks.lint]
 description = "Run swiftlint"
-run = "bash -c 'source scripts/_lib.sh && run_step \"Linting...\" scripts/lint.sh'"
+run = """
+  source scripts/_lib.sh
+  run_step "Linting..." ./scripts/lint.sh
+"""
 
 [tasks.test]
 description = "Run the test suite"
-run = "bash -c 'source scripts/_lib.sh && run_step \"Testing...\" scripts/test.sh'"
+run = """
+  source scripts/_lib.sh
+  run_step "Testing..." ./scripts/test.sh
+"""
 
 [tasks.check]
 description = "Format-check, lint, and test"
@@ -56,7 +80,10 @@ run = [{ tasks = ["format", "lint", "test"] }]
 
 [tasks.clean]
 description = "Clean build artifacts"
-run = "swift package clean && rm -rf .build build"
+run = """
+  swift package clean
+  rm -rf .build build
+"""
 
 # ─── CI tasks (raw logs, no spinner) ────────────────────────────────────────
 # CI uses these so failures show full output inline. Each one is a thin
