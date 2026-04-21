@@ -198,7 +198,7 @@ struct WorkspaceView: View {
                 },
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) }
             )
-            .id(tab.id)
+            .id(tab.splitRoot.id)
         }
     }
 }

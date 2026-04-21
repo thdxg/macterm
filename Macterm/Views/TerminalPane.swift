@@ -52,7 +52,9 @@ private struct TerminalSurface: NSViewRepresentable {
         var wasFocused = false
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeNSView(context: Context) -> GhosttyTerminalNSView {
         let view = pane.ensureNSView()

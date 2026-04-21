@@ -46,6 +46,12 @@ final class Pane: Identifiable {
         view.onSplitRequest = nil
         view.destroySurface()
         _nsView = nil
+        // Keep the NSView alive for a runloop tick so any in-flight ghostty
+        // callback (which holds an unretained pointer to the view) can drain
+        // before the view is deallocated. Without this, SwiftUI can remove
+        // the view from its superview the same turn we destroy the surface,
+        // deallocating the NSView before ghostty has finished unwinding.
+        DispatchQueue.main.async { _ = view }
     }
 
     var processTitle: String {
