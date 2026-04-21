@@ -70,13 +70,13 @@ struct MainWindow: View {
     private func restoreFocusToActivePane() {
         guard let projectID = appState.activeProjectID,
               let tab = appState.workspaces[projectID]?.activeTab,
-              let paneID = tab.focusedPaneID,
-              let pane = tab.splitRoot.findPane(id: paneID),
-              let view = pane.nsView,
-              let window = view.window
+              let paneID = tab.focusedPaneID
         else { return }
-        window.makeFirstResponder(view)
-        view.notifySurfaceFocused()
+        FocusRestoration.restoreFocus(
+            to: paneID,
+            in: tab.splitRoot,
+            window: NSApp.keyWindow ?? NSApp.mainWindow
+        )
     }
 
     private var activeTabTitle: String {

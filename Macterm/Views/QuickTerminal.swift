@@ -104,31 +104,16 @@ final class QuickTerminalService: NSObject {
 
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            if let focusedID = self.splitState.focusedPaneID,
-               let pane = self.splitState.splitRoot.findPane(id: focusedID),
-               let view = pane.nsView
-            {
-                view.window?.makeFirstResponder(view)
-            }
+        if let focusedID = splitState.focusedPaneID {
+            FocusRestoration.restoreFocus(to: focusedID, in: splitState.splitRoot, window: panel)
         }
         isVisible = true
     }
 
     /// Refocus a pane after a close — retries briefly to wait for the new view.
-    func refocusPane(_ paneID: UUID, attempt: Int = 0) {
+    func refocusPane(_ paneID: UUID) {
         guard let panel, isVisible else { return }
-        if let pane = splitState.splitRoot.findPane(id: paneID),
-           let view = pane.nsView, view.window === panel
-        {
-            panel.makeFirstResponder(view)
-            view.notifySurfaceFocused()
-            return
-        }
-        guard attempt < 40 else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.refocusPane(paneID, attempt: attempt + 1)
-        }
+        FocusRestoration.restoreFocus(to: paneID, in: splitState.splitRoot, window: panel)
     }
 
     private func hide() {
@@ -154,38 +139,34 @@ final class QuickTerminalService: NSObject {
 
 // MARK: - Split state
 
+/// Thin wrapper around a single `TerminalTab` that the quick terminal uses as
+/// its split tree. Delegates split/resize/close to `TerminalTab` so the main
+/// window and quick terminal share the same mutation logic.
 @MainActor @Observable
 final class QuickTerminalSplitState {
-    var splitRoot: SplitNode
-    var focusedPaneID: UUID?
+    var tab: TerminalTab
     var pendingClosePaneID: UUID?
-    @ObservationIgnored
-    var paneFocusHistory = RecencyStack<UUID>(limit: 20)
+
+    var splitRoot: SplitNode {
+        get { tab.splitRoot }
+        set { tab.splitRoot = newValue }
+    }
+
+    var focusedPaneID: UUID? {
+        get { tab.focusedPaneID }
+        set { tab.focusedPaneID = newValue }
+    }
 
     init() {
-        let pane = Pane(projectPath: NSHomeDirectory())
-        splitRoot = .pane(pane)
-        focusedPaneID = pane.id
+        tab = TerminalTab(projectPath: NSHomeDirectory())
     }
 
-    /// Record a focus change, pushing the previous pane onto history.
     func focusPane(_ paneID: UUID) {
-        guard paneID != focusedPaneID else { return }
-        if let current = focusedPaneID { paneFocusHistory.push(current) }
-        paneFocusHistory.remove(paneID)
-        focusedPaneID = paneID
-    }
-
-    /// Pick the next focus target after a pane is removed.
-    private func nextFocusAfterClose() -> UUID? {
-        let valid = Set(splitRoot.allPanes().map(\.id))
-        paneFocusHistory.prune(keeping: valid)
-        if let recent = paneFocusHistory.popValid(in: valid) { return recent }
-        return splitRoot.allPanes().first?.id
+        tab.focusPane(paneID)
     }
 
     func requestClosePane(_ paneID: UUID) {
-        let needs = splitRoot.findPane(id: paneID)?.nsView?.needsConfirmQuit() ?? false
+        let needs = tab.splitRoot.findPane(id: paneID)?.nsView?.needsConfirmQuit() ?? false
         if needs {
             pendingClosePaneID = paneID
             presentConfirmAlert()
