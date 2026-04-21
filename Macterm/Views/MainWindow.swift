@@ -31,8 +31,8 @@ struct MainWindow: View {
             .navigationTitle(activeProject?.name ?? "Macterm")
             .navigationSubtitle(activeTabTitle)
         }
-        .overlay { CommandPaletteOverlay() }
         .background(WindowStyler())
+        .background(CommandPaletteHost())
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
@@ -41,11 +41,6 @@ struct MainWindow: View {
             columnVisibility = visible ? .automatic : .detailOnly
         }
         .onChange(of: appState.isCommandPaletteVisible) { _, visible in
-            for window in NSApp.windows where window.isVisible {
-                // Apply to every existing portal host so the palette can receive clicks
-                // regardless of which window has the key focus.
-                TerminalPortal.hostIfExists(for: window)?.isPaletteActive = visible
-            }
             // When the palette closes, hand first responder back to the focused
             // terminal view so typing resumes without requiring a mouse click.
             if !visible {

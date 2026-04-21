@@ -37,22 +37,6 @@ final class TerminalPortalHost {
     let overlayView: TerminalOverlayView
     private weak var window: NSWindow?
     private var entries: [UUID: Entry] = [:]
-    var isPaletteActive: Bool {
-        get { overlayView.isPaletteActive }
-        set {
-            overlayView.isPaletteActive = newValue
-            // Move the overlay below SwiftUI content so clicks naturally fall through
-            // to the palette. When palette closes, put it back above.
-            if let contentView = overlayView.superview {
-                contentView.addSubview(
-                    overlayView,
-                    positioned: newValue ? .below : .above,
-                    relativeTo: nil
-                )
-            }
-        }
-    }
-
     struct Entry {
         let terminalView: GhosttyTerminalNSView
         weak var anchor: NSView?
@@ -156,7 +140,6 @@ final class TerminalPortalHost {
 /// Passes hit testing through to terminal subviews.
 final class TerminalOverlayView: NSView {
     override var isFlipped: Bool { true }
-    var isPaletteActive = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -169,8 +152,6 @@ final class TerminalOverlayView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // When the command palette is open, pass all clicks through to SwiftUI.
-        if isPaletteActive { return nil }
         // Convert the incoming point (in superview coordinates) to our own coordinate system.
         let localPoint = convert(point, from: superview)
         // Only hit-test visible terminal subviews, pass through empty areas.

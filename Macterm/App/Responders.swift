@@ -18,7 +18,7 @@ final class PaletteResponder: KeyResponder {
     func handle(_ event: NSEvent) -> KeyDisposition {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-        if flags == .command || flags == [.command, .shift], key == "p" {
+        if flags == .command, key == "p" {
             appState.isCommandPaletteVisible.toggle()
             return .handled
         }
