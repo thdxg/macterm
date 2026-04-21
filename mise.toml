@@ -3,49 +3,78 @@ gh = "latest"
 swiftformat = "latest"
 swiftlint = "latest"
 
+# ─── Dev tasks (pretty spinners) ────────────────────────────────────────────
+# Each task wraps a raw script via scripts/_lib.sh's run_step helper, which
+# hides logs while running and prints stderr only on failure. Use these
+# locally. CI uses the ci:* tasks below, which run the scripts directly.
+
 [tasks.run]
 description = "Run the app"
 depends = ["check:fix"]
-run = "scripts/run.sh"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Building...\" swift build && exec swift run Macterm'"
 
 [tasks.build]
 description = "Build release app and DMG"
 depends = ["check:fix"]
-run = "scripts/build.sh"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Building release + DMG...\" scripts/build.sh'"
 
 [tasks.install]
 description = "Install built app to /Applications"
 depends = ["build"]
-run = "scripts/install.sh"
-
-[tasks.check]
-description = "Format, lint, and build"
-run = "scripts/check.sh"
-
-[tasks."check:fix"]
-description = "Auto-fix formatting and lint issues, then build"
-run = "scripts/check-fix.sh"
-
-[tasks.test]
-description = "Run the test suite"
-run = "swift test"
-
-[tasks.format]
-description = "Run swiftformat (writes changes in place)"
-run = "swiftformat ."
-
-[tasks."format:check"]
-description = "Check formatting without writing changes"
-run = "swiftformat --lint ."
-
-[tasks.lint]
-description = "Run swiftlint"
-run = "swiftlint lint --strict --quiet"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Installing to /Applications...\" scripts/install.sh'"
 
 [tasks.setup]
 description = "Download GhosttyKit framework"
-run = "scripts/setup.sh"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Fetching GhosttyKit...\" scripts/setup.sh'"
+
+[tasks.format]
+description = "Auto-fix formatting and lint issues"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Formatting...\" scripts/format.sh'"
+
+[tasks."format:check"]
+description = "Check formatting without writing changes"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Checking formatting...\" scripts/format-check.sh'"
+
+[tasks.lint]
+description = "Run swiftlint"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Linting...\" scripts/lint.sh'"
+
+[tasks.test]
+description = "Run the test suite"
+run = "bash -c 'source scripts/_lib.sh && run_step \"Testing...\" scripts/test.sh'"
+
+[tasks.check]
+description = "Format-check, lint, and test"
+depends = ["format:check", "lint", "test"]
+
+[tasks."check:fix"]
+description = "Auto-fix format + lint, then test"
+depends = ["format", "lint", "test"]
 
 [tasks.clean]
 description = "Clean build artifacts"
 run = "swift package clean && rm -rf .build build"
+
+# ─── CI tasks (raw logs, no spinner) ────────────────────────────────────────
+# CI uses these so failures show full output inline. Each one is a thin
+# wrapper that calls the same underlying script directly.
+
+[tasks."ci:setup"]
+description = "CI: download GhosttyKit"
+run = "scripts/setup.sh"
+
+[tasks."ci:format"]
+description = "CI: check formatting"
+run = "scripts/format-check.sh"
+
+[tasks."ci:lint"]
+description = "CI: run swiftlint"
+run = "scripts/lint.sh"
+
+[tasks."ci:test"]
+description = "CI: run test suite"
+run = "scripts/test.sh"
+
+[tasks."ci:build"]
+description = "CI: release build + DMG"
+run = "scripts/build.sh"

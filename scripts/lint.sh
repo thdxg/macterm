@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-swift build
-exec swift run Macterm
+swiftlint lint --strict --quiet

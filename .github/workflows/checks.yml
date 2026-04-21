@@ -17,15 +17,15 @@ jobs:
       - uses: jdx/mise-action@v4
 
       - name: Setup GhosttyKit
-        run: mise run setup
+        run: mise run ci:setup
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
 
       - name: Format
-        run: mise run format:check
+        run: mise run ci:format
 
       - name: Lint
-        run: mise run lint
+        run: mise run ci:lint
 
       - name: Test
-        run: mise run test
+        run: mise run ci:test
