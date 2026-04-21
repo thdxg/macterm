@@ -12,6 +12,42 @@ final class Pane: Identifiable {
     var title: String = "Terminal"
     let searchState = TerminalSearchState()
 
+    /// The live terminal NSView for this pane. Created lazily the first time
+    /// it's requested, destroyed explicitly when the pane is removed from the
+    /// tree. Owning the view on the model (instead of in a separate cache or
+    /// inside SwiftUI) keeps the underlying ghostty surface alive across any
+    /// SwiftUI view churn: tab switches, split tree reshapes, window hide/show.
+    /// Not observed — SwiftUI should never re-render just because this changes.
+    @ObservationIgnored
+    private var _nsView: GhosttyTerminalNSView?
+
+    func ensureNSView() -> GhosttyTerminalNSView {
+        if let existing = _nsView { return existing }
+        let view = GhosttyTerminalNSView(workingDirectory: projectPath)
+        _nsView = view
+        return view
+    }
+
+    var nsView: GhosttyTerminalNSView? { _nsView }
+
+    /// Tear down the ghostty surface and null out callbacks. Call when the
+    /// pane is removed from the tree. Safe to call multiple times.
+    func destroySurface() {
+        guard let view = _nsView else { return }
+        // Null callbacks before destroy so any in-flight ghostty events
+        // triggered by destroySurface() itself can't re-enter.
+        view.onProcessExit = nil
+        view.onTitleChange = nil
+        view.onSearchStart = nil
+        view.onSearchEnd = nil
+        view.onSearchTotal = nil
+        view.onSearchSelected = nil
+        view.onFocus = nil
+        view.onSplitRequest = nil
+        view.destroySurface()
+        _nsView = nil
+    }
+
     var processTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return Self.defaultShellName }

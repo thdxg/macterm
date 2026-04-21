@@ -65,8 +65,10 @@ struct MainWindow: View {
 
     private func restoreFocusToActivePane() {
         guard let projectID = appState.activeProjectID,
-              let paneID = appState.workspaces[projectID]?.activeTab?.focusedPaneID,
-              let view = TerminalViewCache.shared.existingView(for: paneID),
+              let tab = appState.workspaces[projectID]?.activeTab,
+              let paneID = tab.focusedPaneID,
+              let pane = tab.splitRoot.findPane(id: paneID),
+              let view = pane.nsView,
               let window = view.window
         else { return }
         window.makeFirstResponder(view)
@@ -183,8 +185,9 @@ struct WorkspaceView: View {
                 projectID: project.id,
                 onFocusPane: { appState.focusPane($0, projectID: project.id) },
                 onSplit: { paneID, dir in
-                    let livePwd = TerminalViewCache.shared.existingView(for: paneID)?.currentPwd
-                    let sourcePath = livePwd ?? tab.splitRoot.findPane(id: paneID)?.projectPath ?? project.path
+                    let pane = tab.splitRoot.findPane(id: paneID)
+                    let livePwd = pane?.nsView?.currentPwd
+                    let sourcePath = livePwd ?? pane?.projectPath ?? project.path
                     let (newRoot, newID) = tab.splitRoot.splitting(
                         paneID: paneID, direction: dir, position: .second, projectPath: sourcePath
                     )
@@ -196,14 +199,7 @@ struct WorkspaceView: View {
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) }
             )
             .id(tab.id)
-            .onChange(of: tab.id) { _, _ in hideInactivePortalViews() }
-            .onChange(of: project.id) { _, _ in hideInactivePortalViews() }
         }
-    }
-
-    private func hideInactivePortalViews() {
-        guard let window = NSApp.windows.first(where: { $0.canBecomeMain }) else { return }
-        TerminalPortal.host(for: window).hideAll()
     }
 }
 
@@ -221,8 +217,6 @@ private struct WindowStyler: NSViewRepresentable {
             window.tabbingMode = .disallowed
             applyStyle(to: window)
             context.coordinator.observe(window: window)
-            // Install the terminal portal overlay
-            TerminalPortal.host(for: window).install()
             // Intercept the close button to hide instead of close,
             // preserving terminal surfaces and running processes.
             context.coordinator.interceptClose(window: window)

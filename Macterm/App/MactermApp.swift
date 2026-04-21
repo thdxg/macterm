@@ -109,8 +109,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let hasRunning = TerminalViewCache.shared.anyNeedsConfirmQuit()
-            || QuickTerminalService.shared.viewCache.anyNeedsConfirmQuit()
+        let mainHasRunning = appState?.workspaces.values.contains { ws in
+            ws.tabs.contains { tab in
+                tab.splitRoot.allPanes().contains { $0.nsView?.needsConfirmQuit() == true }
+            }
+        } ?? false
+        let qtHasRunning = QuickTerminalService.shared.splitState.splitRoot
+            .allPanes().contains { $0.nsView?.needsConfirmQuit() == true }
+        let hasRunning = mainHasRunning || qtHasRunning
         guard hasRunning else { return .terminateNow }
 
         let alert = NSAlert()

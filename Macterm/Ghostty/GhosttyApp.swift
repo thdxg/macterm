@@ -68,7 +68,7 @@ final class GhosttyApp {
         guard let app, let newConfig = loadConfig() else { return }
         ghostty_app_update_config(app, newConfig)
         // Also update each existing surface so changes take effect immediately
-        for view in TerminalViewCache.shared.allViews() {
+        for view in GhosttyTerminalNSView.allLiveViews() {
             if let surface = view.surface {
                 ghostty_surface_update_config(surface, newConfig)
             }

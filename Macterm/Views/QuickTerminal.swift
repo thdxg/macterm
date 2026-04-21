@@ -13,7 +13,6 @@ final class QuickTerminalService: NSObject {
     private var carbonHotKeyRef: EventHotKeyRef?
     private var carbonEventHandler: EventHandlerRef?
     let splitState = QuickTerminalSplitState()
-    let viewCache = TerminalViewCache()
     var suppressAutoHide = false
     private var isEnabled: Bool {
         Preferences.shared.quickTerminalEnabled
@@ -96,39 +95,39 @@ final class QuickTerminalService: NSObject {
         let w = sf.width * wFrac, h = sf.height * hFrac
         panel.setFrame(NSRect(x: sf.minX + (sf.width - w) / 2, y: sf.minY + (sf.height - h) / 2, width: w, height: h), display: false)
 
-        let view = QuickTerminalView(state: splitState, viewCache: viewCache)
+        let view = QuickTerminalView(state: splitState)
         let hosting = NSHostingView(rootView: view)
         hosting.frame = panel.contentView?.bounds ?? .zero
         hosting.autoresizingMask = [.width, .height]
         panel.contentView?.addSubview(hosting)
         hostingView = hosting
 
-        // Install portal overlay for this panel
-        TerminalPortal.host(for: panel).install()
-
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            if let focusedID = self.splitState.focusedPaneID {
-                self.viewCache.existingView(for: focusedID)?.window?.makeFirstResponder(
-                    self.viewCache.existingView(for: focusedID)
-                )
+            if let focusedID = self.splitState.focusedPaneID,
+               let pane = self.splitState.splitRoot.findPane(id: focusedID),
+               let view = pane.nsView
+            {
+                view.window?.makeFirstResponder(view)
             }
         }
         isVisible = true
     }
 
     /// Refocus a pane after a close — retries briefly to wait for the new view.
-    func refocusPane(_ paneID: UUID, viewCache: TerminalViewCache, attempt: Int = 0) {
+    func refocusPane(_ paneID: UUID, attempt: Int = 0) {
         guard let panel, isVisible else { return }
-        if let view = viewCache.existingView(for: paneID), view.window === panel {
+        if let pane = splitState.splitRoot.findPane(id: paneID),
+           let view = pane.nsView, view.window === panel
+        {
             panel.makeFirstResponder(view)
             view.notifySurfaceFocused()
             return
         }
         guard attempt < 40 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.refocusPane(paneID, viewCache: viewCache, attempt: attempt + 1)
+            self?.refocusPane(paneID, attempt: attempt + 1)
         }
     }
 
@@ -185,26 +184,27 @@ final class QuickTerminalSplitState {
         return splitRoot.allPanes().first?.id
     }
 
-    func requestClosePane(_ paneID: UUID, viewCache: TerminalViewCache) {
-        if viewCache.needsConfirmQuit(for: paneID) {
+    func requestClosePane(_ paneID: UUID) {
+        let needs = splitRoot.findPane(id: paneID)?.nsView?.needsConfirmQuit() ?? false
+        if needs {
             pendingClosePaneID = paneID
-            presentConfirmAlert(paneID: paneID, viewCache: viewCache)
+            presentConfirmAlert()
             return
         }
-        closePane(paneID, viewCache: viewCache)
+        closePane(paneID)
     }
 
-    func confirmPendingClose(viewCache: TerminalViewCache) {
+    func confirmPendingClose() {
         guard let id = pendingClosePaneID else { return }
         pendingClosePaneID = nil
-        closePane(id, viewCache: viewCache)
+        closePane(id)
     }
 
     func cancelPendingClose() {
         pendingClosePaneID = nil
     }
 
-    private func presentConfirmAlert(paneID _: UUID, viewCache: TerminalViewCache) {
+    private func presentConfirmAlert() {
         QuickTerminalService.shared.suppressAutoHide = true
         let alert = NSAlert()
         alert.messageText = "Close running process?"
@@ -214,16 +214,14 @@ final class QuickTerminalSplitState {
         alert.addButton(withTitle: "Cancel")
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
-            confirmPendingClose(viewCache: viewCache)
+            confirmPendingClose()
         } else {
             cancelPendingClose()
         }
-        // Restore focus to the quick terminal panel and re-enable auto-hide on the
-        // next runloop so any stray resignKey from the alert tear-down is ignored.
         if let panel = QuickTerminalService.shared.panelRef {
             panel.makeKeyAndOrderFront(nil)
             if let focusedID = focusedPaneID,
-               let view = viewCache.existingView(for: focusedID)
+               let view = splitRoot.findPane(id: focusedID)?.nsView
             {
                 panel.makeFirstResponder(view)
             }
@@ -233,10 +231,10 @@ final class QuickTerminalSplitState {
         }
     }
 
-    func split(paneID: UUID, direction: SplitDirection, viewCache: TerminalViewCache) {
-        let livePwd = viewCache.existingView(for: paneID)?.currentPwd
-        let fallback = splitRoot.findPane(id: paneID)?.projectPath ?? NSHomeDirectory()
-        let sourcePath = livePwd ?? fallback
+    func split(paneID: UUID, direction: SplitDirection) {
+        let pane = splitRoot.findPane(id: paneID)
+        let livePwd = pane?.nsView?.currentPwd
+        let sourcePath = livePwd ?? pane?.projectPath ?? NSHomeDirectory()
         let (newRoot, newID) = splitRoot.splitting(
             paneID: paneID, direction: direction, position: .second, projectPath: sourcePath
         )
@@ -250,12 +248,11 @@ final class QuickTerminalSplitState {
         splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
     }
 
-    func closePane(_ paneID: UUID, viewCache: TerminalViewCache) {
-        guard splitRoot.findPane(id: paneID) != nil else { return }
-        viewCache.remove(for: paneID)
+    func closePane(_ paneID: UUID) {
+        guard let pane = splitRoot.findPane(id: paneID) else { return }
+        pane.destroySurface()
         let panes = splitRoot.allPanes()
         if panes.count <= 1 {
-            // Last pane — reset to a fresh pane instead of closing
             let pane = Pane(projectPath: NSHomeDirectory())
             splitRoot = .pane(pane)
             focusedPaneID = pane.id
@@ -268,9 +265,8 @@ final class QuickTerminalSplitState {
             }
             if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
         }
-        // Refocus the new focused pane once its view has been created.
         if let newID = focusedPaneID {
-            QuickTerminalService.shared.refocusPane(newID, viewCache: viewCache)
+            QuickTerminalService.shared.refocusPane(newID)
         }
     }
 }
@@ -297,7 +293,6 @@ final class QuickTerminalPanel: NSPanel {
 private struct QuickTerminalView: View {
     static let projectID = UUID()
     @Bindable var state: QuickTerminalSplitState
-    let viewCache: TerminalViewCache
 
     var body: some View {
         SplitTreeView(
@@ -305,10 +300,9 @@ private struct QuickTerminalView: View {
             focusedPaneID: state.focusedPaneID,
             isActiveProject: true,
             projectID: Self.projectID,
-            viewCache: viewCache,
             onFocusPane: { state.focusPane($0) },
-            onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir, viewCache: viewCache) },
-            onClosePane: { state.closePane($0, viewCache: viewCache) }
+            onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
+            onClosePane: { state.closePane($0) }
         )
         .background(Color(nsColor: GhosttyApp.shared.backgroundColor))
     }
