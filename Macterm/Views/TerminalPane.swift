@@ -61,14 +61,12 @@ private struct TerminalSurface: NSViewRepresentable {
         configure(view)
         // Defer surface creation until the view is actually in a window — the
         // Metal layer needs a non-zero size to initialize.
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [pane] in
             if view.surface == nil, view.window != nil {
                 view.createSurface()
             }
             if focused {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    view.window?.makeFirstResponder(view)
-                }
+                FocusRestoration.restoreFocus(to: pane.id, finder: { pane }, in: view.window)
             }
         }
         context.coordinator.wasFocused = focused
@@ -89,7 +87,7 @@ private struct TerminalSurface: NSViewRepresentable {
         view.isFocused = focused
         if focused, !wasFocused {
             view.notifySurfaceFocused()
-            DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+            FocusRestoration.restoreFocus(to: pane.id, finder: { [pane] in pane }, in: view.window)
         } else if !focused, wasFocused {
             view.notifySurfaceUnfocused()
         }
