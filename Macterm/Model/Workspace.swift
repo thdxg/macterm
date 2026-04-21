@@ -62,6 +62,63 @@ final class TerminalTab: Identifiable {
         self.focusedPaneID = focusedPaneID
         self.customTitle = customTitle
     }
+
+    // MARK: - Split/resize/close operations
+
+    //
+    // These live on TerminalTab so both the main-window workspace flow and the
+    // quick terminal can share the same split-tree mutation logic. Callers that
+    // need persistence (AppState) handle saveWorkspaces themselves after calling
+    // these; the quick terminal doesn't persist.
+
+    /// Split the focused pane (or a specific pane) in `direction`, placing the
+    /// new pane in the `.second` position. Returns the new pane ID if created.
+    @discardableResult
+    func split(paneID: UUID, direction: SplitDirection) -> UUID? {
+        let pane = splitRoot.findPane(id: paneID)
+        let livePwd = pane?.nsView?.currentPwd
+        let sourcePath = livePwd ?? pane?.projectPath ?? NSHomeDirectory()
+        let (newRoot, newID) = splitRoot.splitting(
+            paneID: paneID, direction: direction, position: .second, projectPath: sourcePath
+        )
+        splitRoot = newRoot
+        if let newID { focusPane(newID) }
+        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
+        return newID
+    }
+
+    /// Adjust the nearest matching-axis split ratio around the focused pane.
+    func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
+        guard let paneID = focusedPaneID else { return }
+        splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
+    }
+
+    /// Remove a pane from the tree. Returns `.onlyPaneLeft` if the caller should
+    /// close the whole tab (the pane was the last one), otherwise `.removed`.
+    /// The pane's surface is destroyed in both cases.
+    @discardableResult
+    func removePane(_ paneID: UUID) -> PaneRemovalResult {
+        guard let pane = splitRoot.findPane(id: paneID) else { return .notFound }
+        pane.destroySurface()
+        let panes = splitRoot.allPanes()
+        if panes.count <= 1 {
+            return .onlyPaneLeft
+        }
+        guard let newRoot = splitRoot.removing(paneID: paneID) else { return .notFound }
+        splitRoot = newRoot
+        paneFocusHistory.remove(paneID)
+        if focusedPaneID == paneID {
+            focusedPaneID = nextFocusAfterClose()
+        }
+        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
+        return .removed
+    }
+}
+
+enum PaneRemovalResult {
+    case removed
+    case onlyPaneLeft
+    case notFound
 }
 
 /// All tabs for one project.
