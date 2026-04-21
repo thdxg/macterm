@@ -87,78 +87,9 @@ jobs:
           mkdir -p sparkle && tar -xf sparkle.tar.xz -C sparkle
           echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
 
-      - name: Sign DMGs and build appcast entry
-        id: appcast
-        env:
-          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.release.outputs.version }}"
-          TAG="${{ steps.release.outputs.tag }}"
-          PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
-
-          ITEMS=""
-          for dmg in dmgs/*.dmg; do
-            NAME=$(basename "$dmg")
-            URL="https://github.com/thdxg/macterm/releases/download/${TAG}/${NAME}"
-            SIG_OUTPUT=$(sign_update -f <(echo "$SPARKLE_ED_PRIVATE_KEY") "$dmg")
-            # sign_update prints attributes like:
-            #   sparkle:edSignature="..." length="..."
-            ITEMS+="
-    <item>
-      <title>Macterm ${VERSION}</title>
-      <pubDate>${PUB_DATE}</pubDate>
-      <sparkle:version>${VERSION}</sparkle:version>
-      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/thdxg/macterm/releases/tag/${TAG}</link>
-      <enclosure url=\"${URL}\" type=\"application/octet-stream\" ${SIG_OUTPUT} />
-    </item>"
-          done
-          {
-            echo "items<<EOF"
-            echo "$ITEMS"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Publish appcast to gh-pages
         env:
-          APPCAST_ITEMS: ${{ steps.appcast.outputs.items }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          WORKDIR=$(mktemp -d)
-          git clone --depth=1 --branch gh-pages "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$WORKDIR" 2>/dev/null || {
-            git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$WORKDIR"
-            cd "$WORKDIR"
-            git checkout --orphan gh-pages
-            git rm -rf . >/dev/null 2>&1 || true
-            cd -
-          }
-
-          cd "$WORKDIR"
-          if [[ ! -f appcast.xml ]]; then
-            cat > appcast.xml <<'HEADER'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-            <channel>
-              <title>Macterm</title>
-              <link>https://thdxg.github.io/macterm/appcast.xml</link>
-              <description>Updates for Macterm.</description>
-              <language>en</language>
-            </channel>
-          </rss>
-          HEADER
-          fi
-
-          # Insert the new item(s) before </channel>.
-          awk -v items="$APPCAST_ITEMS" '
-            /<\/channel>/ { print items; print; next }
-            { print }
-          ' appcast.xml > appcast.xml.new && mv appcast.xml.new appcast.xml
-
-          git add appcast.xml
-          git commit -m "Publish appcast for ${{ steps.release.outputs.tag }}"
-          git push origin gh-pages
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: scripts/publish-appcast.sh dmgs
