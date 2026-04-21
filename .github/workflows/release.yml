@@ -72,6 +72,8 @@ jobs:
           TAG="v${VERSION}"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Macterm $TAG" --generate-notes
           gh release upload "$TAG" dmgs/*.dmg --clobber
+          # Ensure the release is published (not left as draft).
+          gh release edit "$TAG" --draft=false
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
