@@ -43,6 +43,9 @@ struct MactermApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .toolbar) {}
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesMenuItem()
+            }
         }
 
         Settings {

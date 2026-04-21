@@ -54,5 +54,17 @@
 	<string>A process running in Macterm's terminal would like to use speech recognition.</string>
 	<key>NSSystemAdministrationUsageDescription</key>
 	<string>A process running in Macterm's terminal requires elevated privileges.</string>
+	<key>SUFeedURL</key>
+	<string>https://thdxg.github.io/macterm/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>SPARKLE_PUBLIC_ED_KEY</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
 </dict>
 </plist>

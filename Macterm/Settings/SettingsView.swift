@@ -11,6 +11,8 @@ struct SettingsView: View {
                 .tabItem { Label("Quick Terminal", systemImage: "rectangle.bottomthird.inset.filled") }
             KeymapSettings()
                 .tabItem { Label("Keymaps", systemImage: "keyboard") }
+            UpdatesSettings()
+                .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
         }
         .frame(width: 520, height: 540)
     }
@@ -399,5 +401,56 @@ private struct HotkeyCaptureView: NSViewRepresentable {
                 return nil
             }
         }
+    }
+}
+
+// MARK: - Updates
+
+private struct UpdatesSettings: View {
+    @ObservedObject
+    private var updater: Updater = .shared
+    @State
+    private var automaticallyChecks: Bool = Updater.shared.automaticallyChecksForUpdates
+    @State
+    private var automaticallyDownloads: Bool = Updater.shared.automaticallyDownloadsUpdates
+
+    var body: some View {
+        Form {
+            Section("Automatic Updates") {
+                Toggle("Check for updates automatically", isOn: $automaticallyChecks)
+                    .onChange(of: automaticallyChecks) { _, v in
+                        updater.automaticallyChecksForUpdates = v
+                    }
+
+                Toggle("Download updates in the background", isOn: $automaticallyDownloads)
+                    .disabled(!automaticallyChecks)
+                    .onChange(of: automaticallyDownloads) { _, v in
+                        updater.automaticallyDownloadsUpdates = v
+                    }
+
+                HStack {
+                    Spacer()
+                    Button("Check for Updates Now") {
+                        updater.checkForUpdates()
+                    }
+                    .disabled(!updater.canCheckForUpdates)
+                }
+
+                Text("Updates are verified with an EdDSA signature. Macterm does not collect analytics.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Version") {
+                LabeledContent("Current version", value: Self.bundleVersionString)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private static var bundleVersionString: String {
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        return build.isEmpty ? short : "\(short) (\(build))"
     }
 }

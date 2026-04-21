@@ -29,6 +29,20 @@ cp "$PROJECT_ROOT/Macterm/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP_BUNDLE/Contents/Info.plist"
 
+# Substitute the Sparkle EdDSA public key if CI provided it. Local dev builds
+# keep the placeholder — Sparkle refuses to install updates without a valid
+# public key, so that's a safe default.
+if [[ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_ED_KEY" "$APP_BUNDLE/Contents/Info.plist"
+fi
+
+# Bundle Sparkle.framework. SPM emits the right arch-slice next to the binary.
+SPARKLE_FRAMEWORK="$SPM_BUILD_DIR/Sparkle.framework"
+if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
+  mkdir -p "$APP_BUNDLE/Contents/Frameworks"
+  cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+fi
+
 # Generate the .icns from the asset catalog PNGs.
 ICON_SOURCE="$PROJECT_ROOT/Macterm/Resources/Assets.xcassets/AppIcon.appiconset"
 ICONSET_DIR=$(mktemp -d)/AppIcon.iconset
@@ -46,7 +60,19 @@ cp "$ICON_SOURCE/icon_512@2x.png" "$ICONSET_DIR/icon_512x512@2x.png"
 iconutil -c icns "$ICONSET_DIR" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 rm -rf "$(dirname "$ICONSET_DIR")"
 
-# Ad-hoc sign.
+# Ad-hoc sign. Sparkle's internal XPC services must be signed individually
+# (docs explicitly warn against `--deep`). Sign innermost components first,
+# then the framework, then the app.
+SPARKLE_VER_B="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework/Versions/B"
+if [[ -d "$SPARKLE_VER_B" ]]; then
+  for xpc in "$SPARKLE_VER_B/XPCServices/"*.xpc; do
+    [[ -e "$xpc" ]] || continue
+    codesign --force --sign - -o runtime "$xpc"
+  done
+  [[ -e "$SPARKLE_VER_B/Autoupdate" ]] && codesign --force --sign - -o runtime "$SPARKLE_VER_B/Autoupdate"
+  [[ -e "$SPARKLE_VER_B/Updater.app" ]] && codesign --force --sign - -o runtime "$SPARKLE_VER_B/Updater.app"
+  codesign --force --sign - "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+fi
 codesign --force --sign - "$APP_BUNDLE"
 
 # Package into DMG.

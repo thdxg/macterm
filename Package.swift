@@ -7,7 +7,9 @@ let package = Package(
     platforms: [
         .macOS("26.0"),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    ],
     targets: [
         .binaryTarget(
             name: "GhosttyKit",
@@ -17,6 +19,7 @@ let package = Package(
             name: "Macterm",
             dependencies: [
                 "GhosttyKit",
+                .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Macterm",
             exclude: ["Info.plist", "Macterm.entitlements"],
