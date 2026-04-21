@@ -1,4 +1,4 @@
-name: Checks
+name: Test
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  checks:
-    name: Checks
+  test:
+    name: Test
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -20,12 +20,6 @@ jobs:
         run: mise run ci:setup
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-
-      - name: Format
-        run: mise run ci:format
-
-      - name: Lint
-        run: mise run ci:lint
 
       - name: Test
         run: mise run ci:test
