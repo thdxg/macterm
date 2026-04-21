@@ -13,7 +13,7 @@ task.output = "quiet"
 
 [tasks.run]
 description = "Run the app"
-depends = ["check:fix"]
+depends = ["format", "lint"]
 run = """
   source scripts/_lib.sh
   run_step "Running..." ./scripts/run.sh
@@ -21,7 +21,7 @@ run = """
 
 [tasks.build]
 description = "Build release app and DMG"
-depends = ["check:fix"]
+depends = ["format", "lint", "test"]
 run = """
   source scripts/_lib.sh
   run_step "Building..." ./scripts/build.sh
@@ -49,13 +49,6 @@ run = """
   run_step "Formatting..." ./scripts/format.sh
 """
 
-[tasks."format:check"]
-description = "Check formatting without writing changes"
-run = """
-  source scripts/_lib.sh
-  run_step "Checking formatting..." ./scripts/format-check.sh
-"""
-
 [tasks.lint]
 description = "Run swiftlint"
 run = """
@@ -69,14 +62,6 @@ run = """
   source scripts/_lib.sh
   run_step "Testing..." ./scripts/test.sh
 """
-
-[tasks.check]
-description = "Format-check, lint, and test"
-run = [{ tasks = ["format:check", "lint", "test"] }]
-
-[tasks."check:fix"]
-description = "Auto-fix format + lint, then test"
-run = [{ tasks = ["format", "lint", "test"] }]
 
 [tasks.clean]
 description = "Clean build artifacts"
