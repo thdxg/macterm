@@ -39,6 +39,8 @@ You only need to do this once. (Or, from Terminal: `xattr -cr /Applications/Mact
 - Swift 6.0+
 - [mise](https://mise.jdx.dev/) (optional, but recommended)
 
+### Quick Start
+
 ```bash
 # Install necessary tools (swiftlint, gh, etc.)
 mise install
