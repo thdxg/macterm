@@ -62,6 +62,7 @@ struct SplitTreeView: View {
                     onSplit: onSplit,
                     onClosePane: onClosePane
                 )
+                .id(branch.first.id)
             } second: {
                 SplitTreeView(
                     node: branch.second,
@@ -73,6 +74,7 @@ struct SplitTreeView: View {
                     onSplit: onSplit,
                     onClosePane: onClosePane
                 )
+                .id(branch.second.id)
             }
         }
     }

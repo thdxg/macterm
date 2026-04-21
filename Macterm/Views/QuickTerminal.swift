@@ -304,6 +304,7 @@ private struct QuickTerminalView: View {
             onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
             onClosePane: { state.closePane($0) }
         )
+        .id(state.splitRoot.id)
         .background(Color(nsColor: GhosttyApp.shared.backgroundColor))
     }
 }

@@ -6,7 +6,8 @@ final class GhosttyTerminalNSView: NSView {
     /// Weak registry of every live instance so global operations (e.g. config
     /// reload) can iterate without a central cache.
     @MainActor private static let liveViews = NSHashTable<GhosttyTerminalNSView>.weakObjects()
-    @MainActor static func allLiveViews() -> [GhosttyTerminalNSView] {
+    @MainActor
+    static func allLiveViews() -> [GhosttyTerminalNSView] {
         liveViews.allObjects
     }
 
@@ -58,7 +59,13 @@ final class GhosttyTerminalNSView: NSView {
 
     private var pendingSurfaceCreation = false
 
+    /// Once destroySurface() has been called this view is "retired": it should
+    /// never spontaneously recreate a surface (e.g. from viewDidMoveToWindow or
+    /// from a stray updateNSView during SwiftUI teardown).
+    private var isDestroyed = false
+
     func createSurface() {
+        guard !isDestroyed else { return }
         guard surface == nil, let app = GhosttyApp.shared.app else { return }
         let backingSize = convertToBacking(bounds).size
         guard backingSize.width > 0, backingSize.height > 0 else {
@@ -96,6 +103,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     func destroySurface() {
+        isDestroyed = true
         if let surface { ghostty_surface_free(surface) }
         surface = nil
     }
@@ -193,7 +201,7 @@ final class GhosttyTerminalNSView: NSView {
 
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
-        if result {
+        if result, let surface {
             ghostty_surface_set_focus(surface, true)
             onFocus?()
         }
@@ -202,7 +210,7 @@ final class GhosttyTerminalNSView: NSView {
 
     override func resignFirstResponder() -> Bool {
         let result = super.resignFirstResponder()
-        if result { ghostty_surface_set_focus(surface, false) }
+        if result, let surface { ghostty_surface_set_focus(surface, false) }
         return result
     }
 
