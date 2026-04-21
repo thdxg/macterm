@@ -221,7 +221,7 @@ final class QuickTerminalSplitState {
         if let panel = QuickTerminalService.shared.panelRef {
             panel.makeKeyAndOrderFront(nil)
             if let focusedID = focusedPaneID,
-               let view = splitRoot.findPane(id: focusedID)?.nsView
+               let view = tab.splitRoot.findPane(id: focusedID)?.nsView
             {
                 panel.makeFirstResponder(view)
             }
@@ -232,38 +232,23 @@ final class QuickTerminalSplitState {
     }
 
     func split(paneID: UUID, direction: SplitDirection) {
-        let pane = splitRoot.findPane(id: paneID)
-        let livePwd = pane?.nsView?.currentPwd
-        let sourcePath = livePwd ?? pane?.projectPath ?? NSHomeDirectory()
-        let (newRoot, newID) = splitRoot.splitting(
-            paneID: paneID, direction: direction, position: .second, projectPath: sourcePath
-        )
-        splitRoot = newRoot
-        if let newID { focusPane(newID) }
-        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
+        tab.split(paneID: paneID, direction: direction)
     }
 
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
-        guard let paneID = focusedPaneID else { return }
-        splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
+        tab.resize(direction, delta: delta)
     }
 
     func closePane(_ paneID: UUID) {
-        guard let pane = splitRoot.findPane(id: paneID) else { return }
-        pane.destroySurface()
-        let panes = splitRoot.allPanes()
-        if panes.count <= 1 {
-            let pane = Pane(projectPath: NSHomeDirectory())
-            splitRoot = .pane(pane)
-            focusedPaneID = pane.id
-            paneFocusHistory.removeAll()
-        } else if let newRoot = splitRoot.removing(paneID: paneID) {
-            splitRoot = newRoot
-            paneFocusHistory.remove(paneID)
-            if focusedPaneID == paneID {
-                focusedPaneID = nextFocusAfterClose()
-            }
-            if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
+        switch tab.removePane(paneID) {
+        case .onlyPaneLeft:
+            // Replace the whole tab with a fresh one — the quick terminal should
+            // always have at least one pane, but we fully reset so the prior
+            // pane's surface is torn down (removePane already destroyed it).
+            tab = TerminalTab(projectPath: NSHomeDirectory())
+        case .removed,
+             .notFound:
+            break
         }
         if let newID = focusedPaneID {
             QuickTerminalService.shared.refocusPane(newID)

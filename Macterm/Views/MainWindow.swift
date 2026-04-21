@@ -189,15 +189,7 @@ struct WorkspaceView: View {
                 projectID: project.id,
                 onFocusPane: { appState.focusPane($0, projectID: project.id) },
                 onSplit: { paneID, dir in
-                    let pane = tab.splitRoot.findPane(id: paneID)
-                    let livePwd = pane?.nsView?.currentPwd
-                    let sourcePath = livePwd ?? pane?.projectPath ?? project.path
-                    let (newRoot, newID) = tab.splitRoot.splitting(
-                        paneID: paneID, direction: dir, position: .second, projectPath: sourcePath
-                    )
-                    tab.splitRoot = newRoot
-                    if let newID { tab.focusPane(newID) }
-                    if Preferences.shared.autoTilingEnabled { tab.splitRoot.rebalanced() }
+                    tab.split(paneID: paneID, direction: dir)
                     appState.saveWorkspaces()
                 },
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) }

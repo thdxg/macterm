@@ -131,9 +131,10 @@ final class AppState {
 
     func createTab(projectID: UUID, projectPath: String? = nil) {
         guard let ws = workspaces[projectID] else { return }
-        let path = projectPath
-            ?? ws.activeTab?.splitRoot.allPanes().first?.projectPath
-            ?? ""
+        let path =
+            projectPath
+                ?? ws.activeTab?.splitRoot.allPanes().first?.projectPath
+                ?? ""
         ws.createTab(projectPath: path)
         saveWorkspaces()
     }
@@ -193,11 +194,13 @@ final class AppState {
         guard !allTabs.isEmpty else { return }
 
         let currentTabID = activeProjectID.flatMap { pid in workspaces[pid]?.activeTabID }
-        let currentIndex = allTabs.firstIndex { $0.0.id == activeProjectID && $0.1.id == currentTabID } ?? 0
-        let newIndex: Int = switch direction {
-        case .next: (currentIndex + 1) % allTabs.count
-        case .previous: (currentIndex - 1 + allTabs.count) % allTabs.count
-        }
+        let currentIndex =
+            allTabs.firstIndex { $0.0.id == activeProjectID && $0.1.id == currentTabID } ?? 0
+        let newIndex: Int =
+            switch direction {
+            case .next: (currentIndex + 1) % allTabs.count
+            case .previous: (currentIndex - 1 + allTabs.count) % allTabs.count
+            }
         let (project, tab) = allTabs[newIndex]
 
         activeProjectID = project.id
@@ -213,48 +216,30 @@ final class AppState {
 
     func splitPane(direction: SplitDirection, projectID: UUID) {
         guard let tab = workspaces[projectID]?.activeTab,
-              let pane = tab.focusedPane
+              let paneID = tab.focusedPaneID
         else { return }
-        let livePwd = pane.nsView?.currentPwd
-        let sourcePath = livePwd ?? pane.projectPath
-        let (newRoot, newPaneID) = tab.splitRoot.splitting(
-            paneID: pane.id,
-            direction: direction,
-            position: .second,
-            projectPath: sourcePath
-        )
-        tab.splitRoot = newRoot
-        if let newPaneID { tab.focusPane(newPaneID) }
-        if Preferences.shared.autoTilingEnabled { tab.splitRoot.rebalanced() }
+        tab.split(paneID: paneID, direction: direction)
         saveWorkspaces()
     }
 
     func resizePane(_ direction: PaneFocusDirection, projectID: UUID, delta: CGFloat = 0.03) {
-        guard let tab = workspaces[projectID]?.activeTab,
-              let paneID = tab.focusedPaneID
-        else { return }
-        tab.splitRoot = tab.splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
+        workspaces[projectID]?.activeTab?.resize(direction, delta: delta)
         saveWorkspaces()
     }
 
     func closePane(_ paneID: UUID, projectID: UUID) {
         guard let ws = workspaces[projectID] else { return }
         // Find the tab that actually contains this pane (not just the active tab)
-        guard let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) else { return }
-        tab.splitRoot.findPane(id: paneID)?.destroySurface()
-        let panes = tab.splitRoot.allPanes()
-        if panes.count <= 1 {
+        guard let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) else {
+            return
+        }
+        switch tab.removePane(paneID) {
+        case .onlyPaneLeft:
             closeTab(tab.id, projectID: projectID)
-        } else {
-            if let newRoot = tab.splitRoot.removing(paneID: paneID) {
-                tab.splitRoot = newRoot
-                tab.paneFocusHistory.remove(paneID)
-                if tab.focusedPaneID == paneID {
-                    tab.focusedPaneID = tab.nextFocusAfterClose()
-                }
-                if Preferences.shared.autoTilingEnabled { tab.splitRoot.rebalanced() }
-            }
+        case .removed:
             saveWorkspaces()
+        case .notFound:
+            break
         }
     }
 
