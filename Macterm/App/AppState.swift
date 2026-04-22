@@ -130,14 +130,18 @@ final class AppState {
 
     // MARK: - Tabs
 
-    func createTab(projectID: UUID, projectPath: String? = nil) {
+    func createTab(projectID: UUID, projectPath: String) {
         guard let ws = workspaces[projectID] else { return }
-        let path =
-            projectPath
-                ?? ws.activeTab?.splitRoot.allPanes().first?.projectPath
-                ?? ""
-        ws.createTab(projectPath: path)
+        ws.createTab(projectPath: projectPath)
         saveWorkspaces()
+    }
+
+    /// Convenience overload: look up the project's canonical path from the
+    /// given projects list so new tabs always land in the project directory,
+    /// not whatever cwd the last pane drifted to.
+    func createTab(projectID: UUID, projects: [Project]) {
+        guard let project = projects.first(where: { $0.id == projectID }) else { return }
+        createTab(projectID: projectID, projectPath: project.path)
     }
 
     func closeTab(_ tabID: UUID, projectID: UUID) {

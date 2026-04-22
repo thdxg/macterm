@@ -41,7 +41,7 @@ struct CommandSource: PaletteSource {
     private func tabCommands(projectID: UUID, ctx: PaletteContext) -> [PaletteItem] {
         [
             command("New Tab", category: "Tabs", action: .newTab) {
-                ctx.appState.createTab(projectID: projectID)
+                ctx.appState.createTab(projectID: projectID, projects: ctx.projectStore.projects)
             },
             command("Close Pane", category: "Tabs", action: .closePane) {
                 if let pane = ctx.appState.focusedPane(for: projectID) {

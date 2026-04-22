@@ -153,7 +153,7 @@ final class MainAppResponder: KeyResponder {
 
         if HotkeyRegistry.matches(event, action: .newTab) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.createTab(projectID: projectID)
+            appState.createTab(projectID: projectID, projects: projectStore.projects)
             return .handled
         }
 
