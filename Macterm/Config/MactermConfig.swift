@@ -10,6 +10,11 @@ final class MactermConfig {
         let dir = FileStorage.appSupportDirectory()
         ghosttyConfigURL = dir.appendingPathComponent("ghostty.conf")
         seedIfNeeded()
+        // Ensure option-as-alt is set for pre-existing installs that were
+        // seeded before this default became part of Macterm.
+        if value(for: "macos-option-as-alt") == nil {
+            updateValue("macos-option-as-alt", value: "true")
+        }
     }
 
     var ghosttyConfigPath: String { ghosttyConfigURL.path }
@@ -70,6 +75,12 @@ final class MactermConfig {
             content = sysContent
         } else {
             content = "scrollbar = system\n"
+        }
+        // Option-as-Alt defaults on so shells/editors receive the Alt
+        // modifier for word navigation etc. Users can opt out in
+        // Settings → Appearance → Input or by editing the config.
+        if !content.contains("macos-option-as-alt") {
+            content += (content.hasSuffix("\n") ? "" : "\n") + "macos-option-as-alt = true\n"
         }
 
         try? Data(content.utf8).write(to: ghosttyConfigURL, options: .atomic)

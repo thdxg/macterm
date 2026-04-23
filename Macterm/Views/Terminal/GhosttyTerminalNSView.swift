@@ -269,11 +269,23 @@ final class GhosttyTerminalNSView: NSView {
         let hadMarkedText = hasMarkedText()
         currentKeyEvent = event
         keyTextAccumulator = []
-        interpretKeyEvents([event])
+        // Ask libghostty which modifier flags to use for *translation* — when
+        // macos-option-as-alt is on, it returns flags with Option stripped.
+        // We then build a synthetic NSEvent whose `characters` come from
+        // `characters(byApplyingModifiers:)` with those flags, so Option+b
+        // yields "b" instead of "∫" when routed through interpretKeyEvents.
+        let translationEvent = translatedEvent(for: event)
+        interpretKeyEvents([translationEvent])
         currentKeyEvent = nil
 
         var ke = buildKeyEvent(from: event, action: action)
-        ke.consumed_mods = consumedMods(flags)
+        // consumed_mods tells libghostty which modifiers were "used up" to
+        // produce the translated text. We use the translation event's flags
+        // (Alt stripped when option-as-alt is on), minus ctrl/command which
+        // never contribute to text translation. This matches Ghostty's own
+        // app: with option-as-alt on, Alt is *not* consumed, so libghostty
+        // encodes ESC+b for Option+b, letting editors like Helix see it.
+        ke.consumed_mods = consumedMods(translationEvent.modifierFlags)
         ke.composing = hasMarkedText() || hadMarkedText
 
         if !keyTextAccumulator.isEmpty, !ke.composing {
@@ -485,9 +497,12 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     private func consumedMods(_ flags: NSEvent.ModifierFlags) -> ghostty_input_mods_e {
+        // ctrl/command never contribute to text translation; assume everything
+        // else did. Matches Ghostty's own app behavior.
         var m = GHOSTTY_MODS_NONE.rawValue
         if flags.contains(.shift) { m |= GHOSTTY_MODS_SHIFT.rawValue }
         if flags.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
+        if flags.contains(.capsLock) { m |= GHOSTTY_MODS_CAPS.rawValue }
         return ghostty_input_mods_e(rawValue: m)
     }
 
@@ -523,6 +538,40 @@ final class GhosttyTerminalNSView: NSView {
         let v = scalar.value
         if v < 0x20 || (0xF700 ... 0xF8FF).contains(v) { return "" }
         return text
+    }
+
+    /// Builds a synthetic NSEvent whose modifier flags reflect libghostty's
+    /// translation policy — with macos-option-as-alt on, Option is stripped so
+    /// `characters(byApplyingModifiers:)` returns the unshifted char ("b")
+    /// instead of the macOS special char ("∫"). Falls back to the original
+    /// event if no rewrite is needed or if NSEvent.keyEvent fails.
+    private func translatedEvent(for event: NSEvent) -> NSEvent {
+        guard let surface else { return event }
+        let originalMods = mods(event)
+        let translationModsRaw = ghostty_surface_key_translation_mods(surface, originalMods).rawValue
+        var translationFlags = event.modifierFlags
+        for (bit, flag) in [
+            (GHOSTTY_MODS_SHIFT.rawValue, NSEvent.ModifierFlags.shift),
+            (GHOSTTY_MODS_CTRL.rawValue, NSEvent.ModifierFlags.control),
+            (GHOSTTY_MODS_ALT.rawValue, NSEvent.ModifierFlags.option),
+            (GHOSTTY_MODS_SUPER.rawValue, NSEvent.ModifierFlags.command),
+        ] {
+            if translationModsRaw & bit != 0 { translationFlags.insert(flag) } else { translationFlags.remove(flag) }
+        }
+        if translationFlags == event.modifierFlags { return event }
+        let translatedChars = event.characters(byApplyingModifiers: translationFlags) ?? ""
+        return NSEvent.keyEvent(
+            with: event.type,
+            location: event.locationInWindow,
+            modifierFlags: translationFlags,
+            timestamp: event.timestamp,
+            windowNumber: event.windowNumber,
+            context: nil,
+            characters: translatedChars,
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+            isARepeat: event.isARepeat,
+            keyCode: event.keyCode
+        ) ?? event
     }
 
     private func unshiftedCodepoint(from event: NSEvent) -> UInt32 {
