@@ -2,7 +2,20 @@
   "fill-specializations" : [
     {
       "value" : {
-        "solid" : "display-p3:0.09804,0.09020,0.14118,1.00000"
+        "linear-gradient" : [
+          "display-p3:0.14902,0.13725,0.22745,1.00000",
+          "display-p3:0.09804,0.09020,0.14118,1.00000"
+        ],
+        "orientation" : {
+          "start" : {
+            "x" : 0.5,
+            "y" : 0
+          },
+          "stop" : {
+            "x" : 0.5,
+            "y" : 0.7
+          }
+        }
       }
     },
     {
@@ -15,33 +28,21 @@
   "groups" : [
     {
       "layers" : [
-
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "layers" : [
         {
           "blend-mode" : "normal",
           "fill" : {
-            "solid" : "srgb:0.87843,0.87059,0.95686,1.00000"
+            "solid" : "display-p3:0.87843,0.87059,0.95686,1.00000"
           },
           "glass" : true,
           "hidden" : false,
-          "image-name" : "icon_512@2x.png",
-          "name" : "icon_512@2x",
+          "image-name" : "glyph.svg",
+          "name" : "glyph",
+          "opacity" : 1,
           "position" : {
-            "scale" : 0.78,
+            "scale" : 1.59,
             "translation-in-points" : [
-              -171.578125,
-              -168.3984375
+              0.5215200000000095,
+              0
             ]
           }
         }

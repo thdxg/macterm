@@ -1,7 +1,7 @@
 <h1 align="center">
   <img src="./assets/icon.png" width="128" />
   <br />
-  ▞▚ macterm ▞▚
+  Macterm
 </h1>
 
 <p align="center">
