@@ -1,37 +1,27 @@
 {
-  "fill-specializations" : [
-    {
-      "value" : {
-        "linear-gradient" : [
-          "display-p3:0.14902,0.13725,0.22745,1.00000",
-          "display-p3:0.09804,0.09020,0.14118,1.00000"
-        ],
-        "orientation" : {
-          "start" : {
-            "x" : 0.5,
-            "y" : 0
-          },
-          "stop" : {
-            "x" : 0.5,
-            "y" : 0.7
-          }
-        }
-      }
-    },
-    {
-      "appearance" : "dark",
-      "value" : {
-        "solid" : "display-p3:0.09804,0.09020,0.14118,1.00000"
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.12157,0.11373,0.18039,1.00000",
+      "display-p3:0.09804,0.09020,0.14118,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
       }
     }
-  ],
+  },
   "groups" : [
     {
       "layers" : [
         {
           "blend-mode" : "normal",
           "fill" : {
-            "solid" : "display-p3:0.87843,0.87059,0.95686,1.00000"
+            "solid" : "display-p3:0.79058,0.78211,0.87528,1.00000"
           },
           "glass" : true,
           "hidden" : false,
@@ -39,9 +29,9 @@
           "name" : "glyph",
           "opacity" : 1,
           "position" : {
-            "scale" : 1.59,
+            "scale" : 1.74,
             "translation-in-points" : [
-              0.5215200000000095,
+              0,
               0
             ]
           }
