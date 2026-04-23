@@ -63,6 +63,13 @@ run = """
   run_step "Testing..." ./scripts/test.sh
 """
 
+[tasks.icons]
+description = "Regenerate bundled app icons from assets/icon.png"
+run = """
+  source scripts/_lib.sh
+  run_step "Regenerating icons..." ./scripts/regen-icons.sh
+"""
+
 [tasks.clean]
 description = "Clean build artifacts"
 run = """
