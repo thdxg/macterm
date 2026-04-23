@@ -3,8 +3,26 @@ name: Checks
 on:
   push:
     branches: [main]
+    paths:
+      - '**/*.swift'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'mise.toml'
+      - 'scripts/**'
+      - '.swiftformat'
+      - '.swiftlint.yml'
+      - '.github/workflows/checks.yml'
   pull_request:
     branches: [main]
+    paths:
+      - '**/*.swift'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'mise.toml'
+      - 'scripts/**'
+      - '.swiftformat'
+      - '.swiftlint.yml'
+      - '.github/workflows/checks.yml'
 
 jobs:
   format:
