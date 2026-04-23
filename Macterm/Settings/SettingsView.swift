@@ -46,8 +46,6 @@ private struct AppearanceSettings: View {
     private var fontSize: Int = 12
     @State
     private var monoFonts: [String] = []
-    @State
-    private var optionAsAlt: Bool = true
     @AppStorage(Preferences.Keys.autoTiling)
     private var autoTilingEnabled = false
     var body: some View {
@@ -129,26 +127,6 @@ private struct AppearanceSettings: View {
                 }
             }
 
-            Section("Input") {
-                Toggle("Use Option as Alt", isOn: $optionAsAlt)
-                    .onChange(of: optionAsAlt) { _, v in
-                        if v {
-                            MactermConfig.shared.updateValue("macos-option-as-alt", value: "true")
-                        } else {
-                            MactermConfig.shared.removeValue("macos-option-as-alt")
-                        }
-                        GhosttyApp.shared.reloadConfig()
-                    }
-                Text(
-                    """
-                    Lets terminal programs receive Option as an Alt modifier (for word-wise cursor \
-                    motion, emacs bindings, etc.). Disable to get macOS special characters like ∫ and ≈.
-                    """
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            }
-
             Section("Layout") {
                 Toggle("Auto-tile panes", isOn: $autoTilingEnabled)
                     .onChange(of: autoTilingEnabled) { _, v in
@@ -171,8 +149,6 @@ private struct AppearanceSettings: View {
         currentTheme = MactermConfig.shared.value(for: "theme")?.replacingOccurrences(of: "\"", with: "") ?? ""
         currentFont = MactermConfig.shared.value(for: "font-family") ?? ""
         fontSize = Int(MactermConfig.shared.value(for: "font-size") ?? "") ?? 12
-        let raw = (MactermConfig.shared.value(for: "macos-option-as-alt") ?? "true").lowercased()
-        optionAsAlt = raw == "true" || raw == "left" || raw == "right"
     }
 
     private static func loadMonoFonts() -> [String] {
@@ -311,9 +287,31 @@ private struct KeymapSettings: View {
     private var capturingActionID: String?
     @State
     private var invalidActions: Set<String> = []
+    @State
+    private var optionAsAlt: Bool = true
 
     var body: some View {
         Form {
+            Section("Input") {
+                Toggle("Use Option as Alt", isOn: $optionAsAlt)
+                    .onChange(of: optionAsAlt) { _, v in
+                        if v {
+                            MactermConfig.shared.updateValue("macos-option-as-alt", value: "true")
+                        } else {
+                            MactermConfig.shared.removeValue("macos-option-as-alt")
+                        }
+                        GhosttyApp.shared.reloadConfig()
+                    }
+                Text(
+                    """
+                    Lets terminal programs receive Option as an Alt modifier (for word-wise cursor \
+                    motion, emacs bindings, etc.). Disable to get macOS special characters like ∫ and ≈.
+                    """
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            }
+
             Section("Keyboard Shortcuts") {
                 ForEach(HotkeyAction.allCases) { action in
                     HStack {
@@ -368,6 +366,8 @@ private struct KeymapSettings: View {
                 map[action.id] = HotkeyRegistry.selectedShortcutString(for: action)
             }
             values = map
+            let raw = (MactermConfig.shared.value(for: "macos-option-as-alt") ?? "true").lowercased()
+            optionAsAlt = raw == "true" || raw == "left" || raw == "right"
         }
         .onDisappear {
             capturingActionID = nil
