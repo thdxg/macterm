@@ -86,5 +86,14 @@
       <link>https://github.com/thdxg/macterm/releases/tag/v1.8.10</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.10/Macterm-1.8.10.dmg" type="application/octet-stream" sparkle:edSignature="G5SAUhwt4nzIqwEQjXGbE9cbV6xEY4WEzzxtUs8DalLxgJFdmBQBNRY9GH6UMb4FtpoZrQ6ijML14dAtZTnYCw==" length="20643961" />
     </item>
+    <item>
+      <title>Macterm 1.8.11</title>
+      <pubDate>Thu, 23 Apr 2026 19:27:54 +0000</pubDate>
+      <sparkle:version>1.8.11</sparkle:version>
+      <sparkle:shortVersionString>1.8.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/thdxg/macterm/releases/tag/v1.8.11</link>
+      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.8.11/Macterm-1.8.11.dmg" type="application/octet-stream" sparkle:edSignature="EhxgkgNFFcD6OwEMxPzhQi6SlNoCrfRvOGZGlHc73UwY6gWXzKIcgqfsAgw7LvUnYrgwlMnVOOL7PcGSblKCAA==" length="20654191" />
+    </item>
   </channel>
 </rss>
