@@ -80,7 +80,7 @@ run = "scripts/setup.sh"
 
 [tasks."ci:format"]
 description = "CI: check formatting"
-run = "scripts/format-check.sh"
+run = "scripts/format.sh --check"
 
 [tasks."ci:lint"]
 description = "CI: run swiftlint"
