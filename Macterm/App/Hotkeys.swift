@@ -31,30 +31,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .newTab: "New Tab"
-        case .closePane: "Close Pane"
-        case .splitRight: "Split Right"
-        case .splitDown: "Split Down"
-        case .toggleSidebar: "Toggle Sidebar"
-        case .recentTab: "Recent Tab"
-        case .nextProject: "Next Project"
-        case .previousProject: "Previous Project"
-        case .nextGlobalTab: "Next Tab (All Projects)"
-        case .previousGlobalTab: "Previous Tab (All Projects)"
-        case .focusPaneLeft: "Focus Pane Left"
-        case .focusPaneDown: "Focus Pane Down"
-        case .focusPaneUp: "Focus Pane Up"
-        case .focusPaneRight: "Focus Pane Right"
-        case .resizePaneLeft: "Resize Pane Left"
-        case .resizePaneDown: "Resize Pane Down"
-        case .resizePaneUp: "Resize Pane Up"
-        case .resizePaneRight: "Resize Pane Right"
-        case .closeWindow: "Close Window"
-        case .openProject: "Open Project"
-        }
-    }
+    /// User-facing name. Sourced from `AppCommand` so the palette and
+    /// Settings don't drift apart.
+    var title: String { appCommand.title }
 
     var defaultsKey: String { "macterm.hotkey.\(rawValue)" }
 
