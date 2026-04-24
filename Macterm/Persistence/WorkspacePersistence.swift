@@ -161,9 +161,14 @@ enum WorkspaceSerializer {
     static func snapshotNode(_ node: SplitNode) -> SplitNodeSnapshot {
         switch node {
         case let .pane(p):
-            .pane(PaneSnapshot(id: p.id, projectPath: p.projectPath, title: p.title))
+            // Prefer the shell's live cwd over the pane's original project
+            // path so reopening the app lands each pane back in the directory
+            // the user had navigated to. Falls back to projectPath when the
+            // surface hasn't reported a pwd yet.
+            let path = p.nsView?.currentPwd ?? p.projectPath
+            return .pane(PaneSnapshot(id: p.id, projectPath: path, title: p.title))
         case let .split(b):
-            .split(SplitBranchSnapshot(
+            return .split(SplitBranchSnapshot(
                 direction: b.direction,
                 ratio: Double(b.ratio),
                 first: snapshotNode(b.first),
