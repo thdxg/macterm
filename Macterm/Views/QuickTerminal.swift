@@ -12,6 +12,10 @@ final class QuickTerminalService: NSObject {
     private(set) var isVisible = false
     private var carbonHotKeyRef: EventHotKeyRef?
     private var carbonEventHandler: EventHandlerRef?
+    /// Snapshot of `isEnabled` after the most recent reconcile. Used to detect
+    /// flips when `UserDefaults.didChangeNotification` fires, since that
+    /// notification doesn't tell us which key changed.
+    private var lastKnownEnabled: Bool = Preferences.shared.quickTerminalEnabled
     /// The app that was frontmost just before we showed the quick terminal.
     /// Captured so we can re-activate it on hide if Macterm somehow took over —
     /// without this, dismissing the panel would leave focus on Macterm even
@@ -20,7 +24,13 @@ final class QuickTerminalService: NSObject {
     let splitState = QuickTerminalSplitState()
     var suppressAutoHide = false
     private var isEnabled: Bool {
-        Preferences.shared.quickTerminalEnabled
+        // Read directly from UserDefaults instead of Preferences.shared.
+        // Preferences caches the value in a stored property that's only set on
+        // init and via its own setter — Settings writes through @AppStorage,
+        // which bypasses Preferences entirely. Reading defaults here keeps the
+        // service in sync with whatever the toggle's current persisted value
+        // actually is.
+        UserDefaults.standard.object(forKey: Preferences.Keys.quickTerminalEnabled) as? Bool ?? true
     }
 
     override private init() {
@@ -32,18 +42,26 @@ final class QuickTerminalService: NSObject {
             name: .autoTilingEnabledDidChange,
             object: nil
         )
+        // Observe UserDefaults broadly so we hot-reload no matter who flips the
+        // toggle. Settings uses @AppStorage which writes through UserDefaults
+        // without going through Preferences.shared, so observing the
+        // Preferences object would miss those writes. didChangeNotification
+        // fires on any key change; we filter by snapshotting the value.
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(quickTerminalEnabledDidChange),
-            name: .quickTerminalEnabledDidChange,
+            selector: #selector(userDefaultsDidChange),
+            name: UserDefaults.didChangeNotification,
             object: nil
         )
         if isEnabled { registerHotKey() }
     }
 
     @objc
-    private func quickTerminalEnabledDidChange() {
-        if isEnabled {
+    private func userDefaultsDidChange() {
+        let now = isEnabled
+        guard now != lastKnownEnabled else { return }
+        lastKnownEnabled = now
+        if now {
             registerHotKey()
         } else {
             if isVisible { hide() }
