@@ -12,6 +12,11 @@ final class QuickTerminalService: NSObject {
     private(set) var isVisible = false
     private var carbonHotKeyRef: EventHotKeyRef?
     private var carbonEventHandler: EventHandlerRef?
+    /// The app that was frontmost just before we showed the quick terminal.
+    /// Captured so we can re-activate it on hide if Macterm somehow took over —
+    /// without this, dismissing the panel would leave focus on Macterm even
+    /// though the user expected to return to whatever they were doing.
+    private var previousFrontmostApp: NSRunningApplication?
     let splitState = QuickTerminalSplitState()
     var suppressAutoHide = false
     private var isEnabled: Bool {
@@ -127,8 +132,18 @@ final class QuickTerminalService: NSObject {
         panel.contentView?.addSubview(hosting)
         hostingView = hosting
 
+        // Capture the currently-frontmost app *before* showing so we can put
+        // focus back on it when the panel hides. The `.nonactivatingPanel`
+        // styleMask plus `canBecomeKey` lets the panel receive keyboard input
+        // without activating Macterm — the same trick Spotlight and Ghostty's
+        // own quick terminal use. We deliberately do NOT call NSApp.activate()
+        // here; doing so would steal focus from whatever the user was just
+        // working in.
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
+            previousFrontmostApp = frontmost
+        }
         panel.makeKeyAndOrderFront(nil)
-        NSApp.activate()
         if let focusedID = splitState.focusedPaneID {
             FocusRestoration.restoreFocus(to: focusedID, in: splitState.splitRoot, window: panel)
         }
@@ -147,6 +162,18 @@ final class QuickTerminalService: NSObject {
         hostingView = nil
         panel = nil
         isVisible = false
+        // Belt-and-suspenders: if Macterm somehow ended up frontmost while the
+        // panel was visible (e.g. the user clicked the dock icon, or another
+        // code path called NSApp.activate), bounce focus back to whoever was
+        // active before. Skips when Macterm wasn't frontmost to begin with —
+        // i.e. the common case where .nonactivatingPanel kept us in the
+        // background and there's nothing to restore.
+        if let prev = previousFrontmostApp,
+           NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
+        {
+            prev.activate()
+        }
+        previousFrontmostApp = nil
     }
 
     private func makePanel() -> QuickTerminalPanel {
