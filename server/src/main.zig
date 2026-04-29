@@ -1809,17 +1809,7 @@ fn attach(daemon: *Daemon) !void {
             _ = cross.c.tcsetattr(posix.STDIN_FILENO, cross.c.TCSAFLUSH, &orig_termios);
         }
         // Reset terminal modes on detach:
-        // - Mouse: 1000=basic, 1002=button-event, 1003=any-event, 1006=SGR extended
-        // - 2004=bracketed paste, 1004=focus events, 1049=alt screen
-        // - 25h=show cursor
-        // NOTE: We intentionally do NOT clear screen or home cursor here because we dont
-        // want to corrupt any programs that rely on it including ghostty's session restore.
-        const restore_seq = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l" ++
-            "\x1b[?2004l\x1b[?1004l\x1b[?1049l" ++
-            // Restore pre-attach Kitty keyboard protocol mode so Ctrl combos
-            // return to legacy encoding in the user's outer shell.
-            "\x1b[<u" ++
-            "\x1b[?25h";
+        const restore_seq = "\x1bc";
         _ = posix.write(posix.STDOUT_FILENO, restore_seq) catch {};
     }
 
