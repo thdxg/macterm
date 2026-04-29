@@ -31,7 +31,13 @@ final class Preferences {
     // MARK: - Quick terminal
 
     var quickTerminalEnabled: Bool {
-        didSet { defaults.set(quickTerminalEnabled, forKey: Keys.quickTerminalEnabled) }
+        didSet {
+            defaults.set(quickTerminalEnabled, forKey: Keys.quickTerminalEnabled)
+            guard quickTerminalEnabled != oldValue else { return }
+            // Legacy notification — QuickTerminalService observes this to
+            // (un)register its global Carbon hot key at runtime.
+            NotificationCenter.default.post(name: .quickTerminalEnabledDidChange, object: nil)
+        }
     }
 
     /// Fraction of screen width (0–1).

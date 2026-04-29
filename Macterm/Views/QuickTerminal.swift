@@ -27,7 +27,23 @@ final class QuickTerminalService: NSObject {
             name: .autoTilingEnabledDidChange,
             object: nil
         )
-        registerHotKey()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(quickTerminalEnabledDidChange),
+            name: .quickTerminalEnabledDidChange,
+            object: nil
+        )
+        if isEnabled { registerHotKey() }
+    }
+
+    @objc
+    private func quickTerminalEnabledDidChange() {
+        if isEnabled {
+            registerHotKey()
+        } else {
+            if isVisible { hide() }
+            unregisterHotKey()
+        }
     }
 
     @objc
@@ -48,6 +64,10 @@ final class QuickTerminalService: NSObject {
     // MARK: - Hot key
 
     private func registerHotKey() {
+        // Idempotent: skip if already registered. Without this, toggling the
+        // preference repeatedly would leak event handlers and double-fire.
+        guard carbonHotKeyRef == nil else { return }
+
         var hotKeyID = EventHotKeyID()
         hotKeyID.signature = OSType(0x4D55_5859)
         hotKeyID.id = 1
@@ -68,19 +88,24 @@ final class QuickTerminalService: NSObject {
             )
             if id.id == 1 {
                 let svc = Unmanaged<QuickTerminalService>.fromOpaque(userData).takeUnretainedValue()
-                DispatchQueue.main.async {
-                    guard svc.isEnabled else {
-                        if svc.isVisible { svc.hide() }
-                        return
-                    }
-                    svc.toggle()
-                }
+                DispatchQueue.main.async { svc.toggle() }
             }
             return noErr
         }, 1, &spec, selfPtr, &carbonEventHandler)
 
         // Ctrl+` (key code 50)
         RegisterEventHotKey(50, UInt32(controlKey), hotKeyID, GetApplicationEventTarget(), 0, &carbonHotKeyRef)
+    }
+
+    private func unregisterHotKey() {
+        if let ref = carbonHotKeyRef {
+            UnregisterEventHotKey(ref)
+            carbonHotKeyRef = nil
+        }
+        if let handler = carbonEventHandler {
+            RemoveEventHandler(handler)
+            carbonEventHandler = nil
+        }
     }
 
     // MARK: - Show / Hide
