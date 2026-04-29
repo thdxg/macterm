@@ -15,6 +15,7 @@ Use spec: https://common-changelog.org/
 - An idle daemon (no clients, no PTY traffic) used to ignore SIGTERM indefinitely.
 - An idle attached client used to ignore SIGWINCH until the next keystroke or daemon output.
 - Don't kill all sessions when `.Info` ipc event changed
+- Reset terminal emulator to default state on detach
 
 ## v0.5.0 - 2026-04-16
 

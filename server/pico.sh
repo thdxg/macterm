@@ -6,12 +6,11 @@ set -xeo pipefail
 export ZMX_SESSION_PREFIX="ci-"
 
 zmx run build podman build -t zig .
-zmx wait
 
-zmx run fmt podman run --rm -it -v "$(pwd)":/app zig zig fmt --check .
-zmx run test podman run --rm -it -v "$(pwd)":/app zig zig build test --summary all
-zmx wait
+zmx run fmt -d podman run --rm -it -v "$(pwd)":/app zig zig fmt --check .
+zmx run test -d podman run --rm -it -v "$(pwd)":/app zig zig build test --summary all
+zmx run integration -d podman run --rm -it -v "$(pwd)":/app zig zig build test-integration
+zmx wait "*"
 
-zmx kill
-
+zmx kill "*"
 echo "success!"
