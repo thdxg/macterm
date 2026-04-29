@@ -2,6 +2,8 @@
 gh = "latest"
 swiftformat = "latest"
 swiftlint = "latest"
+xcodegen = "latest"
+xcbeautify = "latest"
 
 [settings]
 task.output = "quiet"
@@ -63,19 +65,9 @@ run = """
   run_step "Testing..." ./scripts/test.sh
 """
 
-[tasks.icons]
-description = "Regenerate bundled app icons from assets/icon.png"
-run = """
-  source scripts/_lib.sh
-  run_step "Regenerating icons..." ./scripts/regen-icons.sh
-"""
-
 [tasks.clean]
 description = "Clean build artifacts"
-run = """
-  swift package clean
-  rm -rf .build build
-"""
+run = "rm -rf .build build Macterm.xcodeproj"
 
 # ─── CI tasks (raw logs, no spinner) ────────────────────────────────────────
 # CI uses these so failures show full output inline. Each one is a thin

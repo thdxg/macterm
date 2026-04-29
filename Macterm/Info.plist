@@ -15,15 +15,15 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleVersion</key>
-	<string>BUILD_NUMBER</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>VERSION_STRING</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>GitCommit</key>
-	<string>GIT_COMMIT_PLACEHOLDER</string>
+	<string>$(GIT_COMMIT)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
+	<string>26.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>
@@ -59,7 +59,7 @@
 	<key>SUFeedURL</key>
 	<string>https://thdxg.github.io/macterm/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER</string>
+	<string>$(SPARKLE_ED_PUBLIC_KEY)</string>
 	<key>SUEnableInstallerLauncherService</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>

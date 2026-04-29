@@ -1,0 +1,133 @@
+name: Macterm
+options:
+  bundleIdPrefix: com.thdxg
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  defaultConfig: Release
+  generateEmptyDirectories: true
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SDKROOT: macosx
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    ARCHS: "$(ARCHS_STANDARD)"
+    ONLY_ACTIVE_ARCH: NO
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    CLANG_CXX_LANGUAGE_STANDARD: "c++17"
+    CLANG_CXX_LIBRARY: "libc++"
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
+    Release:
+      ONLY_ACTIVE_ARCH: NO
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+targets:
+  Macterm:
+    type: application
+    platform: macOS
+    sources:
+      - path: Macterm
+        excludes:
+          - "Info.plist"
+          - "Macterm.entitlements"
+          - "Resources/themes"
+          - "AppIcon.icon"
+      # Bundle the themes/ directory verbatim as a folder reference. Treating
+      # it as a "group" (the default) made Xcode skip files with no extension.
+      - path: Macterm/Resources/themes
+        type: folder
+        buildPhase: resources
+      # Icon Composer file. Xcode 26 prefers this over an Assets.xcassets
+      # AppIcon.appiconset when ASSETCATALOG_COMPILER_APPICON_NAME matches the
+      # filename — actool generates .icns + alternate appearances (light, dark,
+      # tinted, clear) automatically from the layered .icon source.
+      - path: Macterm/AppIcon.icon
+        type: file
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm
+        PRODUCT_NAME: Macterm
+        INFOPLIST_FILE: Macterm/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Macterm/Macterm.entitlements
+        # Tells actool to render Macterm/AppIcon.icon (Icon Composer source)
+        # for the app icon. Matches the filename without the .icon extension.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Marketing version & build number are written by the release script
+        # via xcodebuild -override; defaults below apply for local dev builds.
+        MARKETING_VERSION: "0.0.0"
+        CURRENT_PROJECT_VERSION: "0.0.0"
+        # Public Sparkle key is overridden in CI release builds; placeholder
+        # is fine for local development since Sparkle never invokes itself.
+        SPARKLE_ED_PUBLIC_KEY: SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER
+        GIT_COMMIT: GIT_COMMIT_PLACEHOLDER
+        # Bundle identifier of the in-bundle frameworks (Sparkle).
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_LDFLAGS:
+          - "-lc++"
+    dependencies:
+      - framework: GhosttyKit.xcframework
+        embed: false
+      - package: Sparkle
+        product: Sparkle
+      - sdk: AppKit.framework
+      - sdk: Carbon.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreText.framework
+      - sdk: Foundation.framework
+      - sdk: IOKit.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+
+  MactermTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - MactermTests
+    dependencies:
+      - target: Macterm
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Hosted test bundle: loads into Macterm.app at runtime so
+        # @testable import Macterm sees the module symbols. The app's
+        # AppDelegate detects xctest via XCTestConfigurationFilePath and
+        # skips the heavy launch path (libghostty init, hotkey install,
+        # etc.) so the test runner doesn't time out.
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Macterm.app/Contents/MacOS/Macterm"
+
+schemes:
+  Macterm:
+    build:
+      targets:
+        Macterm: all
+        MactermTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MactermTests
+    archive:
+      config: Release

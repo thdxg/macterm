@@ -5,24 +5,26 @@ on:
     branches: [main]
     paths:
       - '**/*.swift'
-      - 'Package.swift'
-      - 'Package.resolved'
+      - 'project.yml'
       - 'mise.toml'
       - 'scripts/**'
       - '.swiftformat'
       - '.swiftlint.yml'
       - '.github/workflows/checks.yml'
+      - 'Macterm/Info.plist'
+      - 'Macterm/Macterm.entitlements'
   pull_request:
     branches: [main]
     paths:
       - '**/*.swift'
-      - 'Package.swift'
-      - 'Package.resolved'
+      - 'project.yml'
       - 'mise.toml'
       - 'scripts/**'
       - '.swiftformat'
       - '.swiftlint.yml'
       - '.github/workflows/checks.yml'
+      - 'Macterm/Info.plist'
+      - 'Macterm/Macterm.entitlements'
 
 jobs:
   format:
