@@ -66,9 +66,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hasInstalledResponders = false
 
     func applicationDidFinishLaunching(_: Notification) {
+        // Skip the heavy launch path when the app is hosting unit tests.
+        // Without this, libghostty boots, the key router installs, etc. —
+        // which times out the xctest runner that just wants to load our
+        // module symbols. ProcessInfo.environment is the standard way to
+        // detect xctest hosting (Xcode sets this env var).
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
-        setAppIcon()
         _ = GhosttyApp.shared
         _ = QuickTerminalService.shared
         KeyRouter.shared.install()
@@ -146,13 +153,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate()
         }
         return false
-    }
-
-    @MainActor
-    private func setAppIcon() {
-        guard let url = Bundle.appResources.url(forResource: "AppIcon", withExtension: "png"),
-              let image = NSImage(contentsOf: url)
-        else { return }
-        NSApp.applicationIconImage = image
     }
 }
