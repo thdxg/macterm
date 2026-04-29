@@ -1477,11 +1477,12 @@ fn wait(cfg: *Cfg, matchers: std.ArrayList(SessionMatch)) !void {
     var max_seen: i32 = 0;
     var zero_match_iters: u32 = 0;
 
+    var agg_exit_code: u8 = 0;
     while (true) {
+        agg_exit_code = 0;
         var sessions = try util.get_session_entries(alloc, cfg.socket_dir);
         var total: i32 = 0;
         var done: i32 = 0;
-        var agg_exit_code: u8 = 0;
 
         for (sessions.items) |session| {
             var found = false;
@@ -1502,8 +1503,8 @@ fn wait(cfg: *Cfg, matchers: std.ArrayList(SessionMatch)) !void {
                 // persist as task_ended_at==0 forever → infinite "still
                 // waiting". Count it as done+failed so wait terminates.
                 try stderr.print(
-                    "task unreachable: {s} ({s})\n",
-                    .{ session.name, session.error_name orelse "unknown" },
+                    "[{d}] task unreachable: {s} ({s})\n",
+                    .{ std.time.timestamp(), session.name, session.error_name orelse "unknown" },
                 );
                 try stderr.flush();
                 agg_exit_code = 1;
@@ -1511,11 +1512,17 @@ fn wait(cfg: *Cfg, matchers: std.ArrayList(SessionMatch)) !void {
                 continue;
             }
             if (session.task_ended_at == 0) {
-                try stdout.print("waiting task={s}\n", .{session.name});
+                try stdout.print(
+                    "[{d}] waiting task={s}\n",
+                    .{ std.time.timestamp(), session.name },
+                );
                 try stdout.flush();
                 continue;
             }
-            try stdout.print("completed task={s} exit_code={d}\n", .{ session.name, session.task_exit_code.? });
+            try stdout.print(
+                "[{d}] completed task={s} exit_code={d}\n",
+                .{ session.task_ended_at.?, session.name, session.task_exit_code.? },
+            );
             try stdout.flush();
             if (session.task_exit_code != 0) {
                 agg_exit_code = session.task_exit_code orelse 0;
@@ -1543,14 +1550,7 @@ fn wait(cfg: *Cfg, matchers: std.ArrayList(SessionMatch)) !void {
         max_seen = total;
 
         if (total > 0 and total == done) {
-            if (agg_exit_code == 0) {
-                try stdout.print("task(s) completed!\n", .{});
-            } else {
-                try stdout.print("task(s) failed!\n", .{});
-            }
-            try stdout.flush();
-            std.process.exit(agg_exit_code);
-            return;
+            break;
         }
 
         if (max_seen == 0) {
@@ -1569,6 +1569,39 @@ fn wait(cfg: *Cfg, matchers: std.ArrayList(SessionMatch)) !void {
 
         std.Thread.sleep(1000 * std.time.ns_per_ms);
     }
+
+    if (agg_exit_code == 0) {
+        try stdout.print("task(s) completed!\n", .{});
+    } else {
+        try stdout.print("task(s) failed!\n", .{});
+    }
+    try stdout.flush();
+
+    const sessions = try util.get_session_entries(alloc, cfg.socket_dir);
+    for (sessions.items) |session| {
+        var found = false;
+        for (matchers.items) |m| {
+            if (m.matches(session.name)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            continue;
+        }
+        if (session.task_exit_code.? > 0) {
+            try stdout.print("---\n", .{});
+            try stdout.print("[{d}] failed task={s} exit_status={d}\n\n", .{
+                session.task_ended_at.?,
+                session.name,
+                session.task_exit_code.?,
+            });
+            try stdout.print("See the logs:\nzmx history {s}\nzmx attach {s}\n", .{ session.name, session.name });
+            try stdout.flush();
+        }
+    }
+
+    std.process.exit(agg_exit_code);
 }
 
 fn list(cfg: *Cfg, short: bool) !void {
