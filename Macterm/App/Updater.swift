@@ -29,8 +29,19 @@ final class Updater: ObservableObject {
 
     private init() {
         let delegate = delegate
+        // In debug builds Sparkle can't verify the unsigned dev binary against
+        // the production EdDSA key, so it pops an "Unable to Check For
+        // Updates" dialog on every launch. Start the controller without
+        // kicking off update checks; release builds still auto-check.
+        let startUpdater: Bool = {
+            #if DEBUG
+            return false
+            #else
+            return true
+            #endif
+        }()
         controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: startUpdater,
             updaterDelegate: delegate,
             userDriverDelegate: nil
         )
