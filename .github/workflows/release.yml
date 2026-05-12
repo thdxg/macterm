@@ -116,7 +116,7 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_PAT }}
           path: tap
 
-      - name: Open PR bumping cask
+      - name: Bump cask
         working-directory: tap
         run: |
           sed -i '' -E "s/^( *version )\".*\"/\1\"${VERSION}\"/" Casks/macterm.rb
@@ -127,14 +127,6 @@ jobs:
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          BRANCH="bump-macterm-${VERSION}"
-          git checkout -b "$BRANCH"
           git add Casks/macterm.rb
           git commit -m "macterm ${VERSION}"
-          git push -u origin "$BRANCH"
-          gh pr create \
-            --repo thdxg/homebrew-tap \
-            --title "macterm ${VERSION}" \
-            --body  "Automated bump from [thdxg/macterm](https://github.com/thdxg/macterm) release v${VERSION}." \
-            --head  "$BRANCH" \
-            --base  main
+          git push origin HEAD:main
