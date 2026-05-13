@@ -187,9 +187,16 @@ struct WorkspaceView: View {
 
     var body: some View {
         if let ws = appState.workspaces[project.id], let tab = ws.activeTab {
+            let renderedNode: SplitNode = {
+                if let zoomID = tab.zoomedPaneID, let pane = tab.splitRoot.findPane(id: zoomID) {
+                    return .pane(pane)
+                }
+                return tab.splitRoot
+            }()
             SplitTreeView(
-                node: tab.splitRoot,
+                node: renderedNode,
                 focusedPaneID: tab.focusedPaneID,
+                zoomedPaneID: tab.zoomedPaneID,
                 isActiveProject: true,
                 projectID: project.id,
                 onFocusPane: { appState.focusPane($0, projectID: project.id) },
@@ -197,10 +204,48 @@ struct WorkspaceView: View {
                     tab.split(paneID: paneID, direction: dir)
                     appState.saveWorkspaces()
                 },
-                onClosePane: { appState.requestClosePane($0, projectID: project.id) }
+                onClosePane: { appState.requestClosePane($0, projectID: project.id) },
+                onToggleZoom: { tab.toggleZoom(paneID: $0) }
             )
-            .id(tab.splitRoot.id)
+            .id(renderedNode.id)
+            .overlay(alignment: .topTrailing) {
+                if tab.zoomedPaneID != nil {
+                    ZoomIndicator(onExit: { appState.toggleZoom(projectID: project.id) })
+                        .padding(8)
+                        .transition(.opacity)
+                }
+            }
         }
+    }
+}
+
+/// Small badge shown in the corner of a tab while one of its panes is zoomed.
+/// Clicking it exits zoom and restores the full split layout.
+struct ZoomIndicator: View {
+    let onExit: () -> Void
+
+    var body: some View {
+        Button(action: onExit) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
+                Text("Zoomed")
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(MactermTheme.fg)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(MactermTheme.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(MactermTheme.border, lineWidth: 1)
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Exit zoom")
     }
 }
 

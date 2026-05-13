@@ -232,6 +232,13 @@ final class AppState {
         saveWorkspaces()
     }
 
+    func toggleZoom(projectID: UUID) {
+        guard let tab = workspaces[projectID]?.activeTab,
+              let paneID = tab.focusedPaneID
+        else { return }
+        tab.toggleZoom(paneID: paneID)
+    }
+
     func closePane(_ paneID: UUID, projectID: UUID) {
         guard let ws = workspaces[projectID] else { return }
         // Find the tab that actually contains this pane (not just the active tab)

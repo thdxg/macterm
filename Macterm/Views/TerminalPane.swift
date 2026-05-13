@@ -4,9 +4,11 @@ import SwiftUI
 struct TerminalPane: View {
     let pane: Pane
     let focused: Bool
+    let isZoomed: Bool
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
+    let onZoomRequest: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,9 +31,11 @@ struct TerminalPane: View {
             TerminalSurface(
                 pane: pane,
                 focused: focused,
+                isZoomed: isZoomed,
                 onFocus: onFocus,
                 onProcessExit: onProcessExit,
-                onSplitRequest: onSplitRequest
+                onSplitRequest: onSplitRequest,
+                onZoomRequest: onZoomRequest
             )
         }
     }
@@ -44,9 +48,11 @@ struct TerminalPane: View {
 private struct TerminalSurface: NSViewRepresentable {
     let pane: Pane
     let focused: Bool
+    let isZoomed: Bool
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
+    let onZoomRequest: () -> Void
 
     final class Coordinator {
         var wasFocused = false
@@ -106,6 +112,8 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onFocus = onFocus
         view.onProcessExit = onProcessExit
         view.onSplitRequest = onSplitRequest
+        view.onZoomRequest = onZoomRequest
+        view.isZoomed = isZoomed
         view.onTitleChange = { [weak pane] title in pane?.title = title }
         view.isFocused = focused
 

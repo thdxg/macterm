@@ -5,31 +5,37 @@ import SwiftUI
 struct SplitTreeView: View {
     let node: SplitNode
     let focusedPaneID: UUID?
+    let zoomedPaneID: UUID?
     let isActiveProject: Bool
     let projectID: UUID
     let isSplit: Bool
     let onFocusPane: (UUID) -> Void
     let onSplit: (UUID, SplitDirection) -> Void
     let onClosePane: (UUID) -> Void
+    let onToggleZoom: (UUID) -> Void
 
     init(
         node: SplitNode,
         focusedPaneID: UUID?,
+        zoomedPaneID: UUID? = nil,
         isActiveProject: Bool,
         projectID: UUID,
         isSplit: Bool = false,
         onFocusPane: @escaping (UUID) -> Void,
         onSplit: @escaping (UUID, SplitDirection) -> Void,
-        onClosePane: @escaping (UUID) -> Void
+        onClosePane: @escaping (UUID) -> Void,
+        onToggleZoom: @escaping (UUID) -> Void = { _ in }
     ) {
         self.node = node
         self.focusedPaneID = focusedPaneID
+        self.zoomedPaneID = zoomedPaneID
         self.isActiveProject = isActiveProject
         self.projectID = projectID
         self.isSplit = isSplit
         self.onFocusPane = onFocusPane
         self.onSplit = onSplit
         self.onClosePane = onClosePane
+        self.onToggleZoom = onToggleZoom
     }
 
     var body: some View {
@@ -39,9 +45,11 @@ struct SplitTreeView: View {
             TerminalPane(
                 pane: pane,
                 focused: isFocused,
+                isZoomed: zoomedPaneID == pane.id,
                 onFocus: { onFocusPane(pane.id) },
                 onProcessExit: { onClosePane(pane.id) },
-                onSplitRequest: { dir, _ in onSplit(pane.id, dir) }
+                onSplitRequest: { dir, _ in onSplit(pane.id, dir) },
+                onZoomRequest: { onToggleZoom(pane.id) }
             )
             .overlay {
                 if !isFocused, isSplit {
@@ -55,24 +63,28 @@ struct SplitTreeView: View {
                 SplitTreeView(
                     node: branch.first,
                     focusedPaneID: focusedPaneID,
+                    zoomedPaneID: zoomedPaneID,
                     isActiveProject: isActiveProject,
                     projectID: projectID,
                     isSplit: true,
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
-                    onClosePane: onClosePane
+                    onClosePane: onClosePane,
+                    onToggleZoom: onToggleZoom
                 )
                 .id(branch.first.id)
             } second: {
                 SplitTreeView(
                     node: branch.second,
                     focusedPaneID: focusedPaneID,
+                    zoomedPaneID: zoomedPaneID,
                     isActiveProject: isActiveProject,
                     projectID: projectID,
                     isSplit: true,
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
-                    onClosePane: onClosePane
+                    onClosePane: onClosePane,
+                    onToggleZoom: onToggleZoom
                 )
                 .id(branch.second.id)
             }

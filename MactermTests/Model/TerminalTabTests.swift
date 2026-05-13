@@ -136,6 +136,54 @@ struct TerminalTabTests {
         #expect(tab.splitRoot.allPanes().count == 2)
     }
 
+    // MARK: - toggleZoom
+
+    @Test
+    func toggleZoom_sets_and_clears_zoomedPaneID() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let aID = try #require(ids["a"])
+        tab.toggleZoom(paneID: aID)
+        #expect(tab.zoomedPaneID == aID)
+        tab.toggleZoom(paneID: aID)
+        #expect(tab.zoomedPaneID == nil)
+    }
+
+    @Test
+    func toggleZoom_switches_focus_to_zoomed_pane() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let bID = try #require(ids["b"])
+        tab.toggleZoom(paneID: bID)
+        #expect(tab.zoomedPaneID == bID)
+        #expect(tab.focusedPaneID == bID)
+    }
+
+    @Test
+    func toggleZoom_unknown_pane_is_noop() {
+        let (tab, _) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        tab.toggleZoom(paneID: UUID())
+        #expect(tab.zoomedPaneID == nil)
+    }
+
+    @Test
+    func split_while_zoomed_clears_zoom() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let aID = try #require(ids["a"])
+        tab.toggleZoom(paneID: aID)
+        #expect(tab.zoomedPaneID == aID)
+        _ = tab.split(paneID: aID, direction: .horizontal)
+        #expect(tab.zoomedPaneID == nil)
+    }
+
+    @Test
+    func removing_zoomed_pane_clears_zoom() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let bID = try #require(ids["b"])
+        tab.toggleZoom(paneID: bID)
+        #expect(tab.zoomedPaneID == bID)
+        #expect(try tab.removePane(bID) == .removed)
+        #expect(tab.zoomedPaneID == nil)
+    }
+
     @Test
     func removePane_prunes_history() throws {
         let (tab, ids) = makeTab(H(pane("a"), H(pane("b"), pane("c"))), focused: "a")

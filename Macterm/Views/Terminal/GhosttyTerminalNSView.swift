@@ -17,6 +17,8 @@ final class GhosttyTerminalNSView: NSView {
     var onFocus: (() -> Void)?
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
+    var onZoomRequest: (() -> Void)?
+    var isZoomed: Bool = false
     var onSearchStart: ((String?) -> Void)?
     var onSearchEnd: (() -> Void)?
     var onSearchTotal: ((Int?) -> Void)?
@@ -455,7 +457,22 @@ final class GhosttyTerminalNSView: NSView {
         addSplitItem(menu, "Split Left", .horizontal, .first)
         addSplitItem(menu, "Split Down", .vertical, .second)
         addSplitItem(menu, "Split Up", .vertical, .first)
+        if onZoomRequest != nil {
+            menu.addItem(.separator())
+            let zoom = NSMenuItem(
+                title: isZoomed ? "Restore Pane" : "Zoom Pane",
+                action: #selector(handleZoom),
+                keyEquivalent: ""
+            )
+            zoom.target = self
+            menu.addItem(zoom)
+        }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc
+    private func handleZoom() {
+        onZoomRequest?()
     }
 
     private func addSplitItem(_ menu: NSMenu, _ title: String, _ dir: SplitDirection, _ pos: SplitPosition) {

@@ -7,6 +7,10 @@ final class TerminalTab: Identifiable {
     var customTitle: String?
     var splitRoot: SplitNode
     var focusedPaneID: UUID?
+    /// When set, the split tree renders only this pane (zoom). The tree
+    /// itself is untouched — clearing this restores the full layout.
+    /// Transient: not persisted across launches.
+    var zoomedPaneID: UUID?
     /// Most-recent-first stack of previously focused pane IDs
     /// (excludes the currently focused pane).
     @ObservationIgnored
@@ -71,6 +75,18 @@ final class TerminalTab: Identifiable {
     // need persistence (AppState) handle saveWorkspaces themselves after calling
     // these; the quick terminal doesn't persist.
 
+    /// Toggle zoom for `paneID`. While zoomed, the tab renders only that pane;
+    /// toggling off (or zooming a different pane) restores the full split view.
+    func toggleZoom(paneID: UUID) {
+        guard splitRoot.findPane(id: paneID) != nil else { return }
+        if zoomedPaneID == paneID {
+            zoomedPaneID = nil
+        } else {
+            zoomedPaneID = paneID
+            focusPane(paneID)
+        }
+    }
+
     /// Split the focused pane (or a specific pane) in `direction`, placing the
     /// new pane in the `.second` position. Returns the new pane ID if created.
     @discardableResult
@@ -82,6 +98,8 @@ final class TerminalTab: Identifiable {
             paneID: paneID, direction: direction, position: .second, projectPath: sourcePath
         )
         splitRoot = newRoot
+        // Splitting reveals a new pane — exit zoom so it's visible.
+        zoomedPaneID = nil
         if let newID { focusPane(newID) }
         if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
         return newID
@@ -106,6 +124,7 @@ final class TerminalTab: Identifiable {
         }
         guard let newRoot = splitRoot.removing(paneID: paneID) else { return .notFound }
         splitRoot = newRoot
+        if zoomedPaneID == paneID { zoomedPaneID = nil }
         paneFocusHistory.remove(paneID)
         if focusedPaneID == paneID {
             focusedPaneID = nextFocusAfterClose()
