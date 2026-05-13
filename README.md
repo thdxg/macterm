@@ -41,6 +41,8 @@ xattr -cr /Applications/Macterm.app
 
 ## Demo
 
+Macterm is very keyboard-oriented, so you can perform the majority of actions without lifting your hand.
+
 ![demo](./assets/demo.gif)
 
 ## Contributing
