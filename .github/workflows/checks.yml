@@ -4,27 +4,27 @@ on:
   push:
     branches: [main]
     paths:
-      - '**/*.swift'
-      - 'project.yml'
-      - 'mise.toml'
-      - 'scripts/**'
-      - '.swiftformat'
-      - '.swiftlint.yml'
-      - '.github/workflows/checks.yml'
-      - 'Macterm/Info.plist'
-      - 'Macterm/Macterm.entitlements'
+      - "**/*.swift"
+      - "project.yml"
+      - "mise.toml"
+      - "scripts/**"
+      - ".swiftformat"
+      - ".swiftlint.yml"
+      - ".github/workflows/checks.yml"
+      - "Macterm/Info.plist"
+      - "Macterm/Macterm.entitlements"
   pull_request:
     branches: [main]
     paths:
-      - '**/*.swift'
-      - 'project.yml'
-      - 'mise.toml'
-      - 'scripts/**'
-      - '.swiftformat'
-      - '.swiftlint.yml'
-      - '.github/workflows/checks.yml'
-      - 'Macterm/Info.plist'
-      - 'Macterm/Macterm.entitlements'
+      - "**/*.swift"
+      - "project.yml"
+      - "mise.toml"
+      - "scripts/**"
+      - ".swiftformat"
+      - ".swiftlint.yml"
+      - ".github/workflows/checks.yml"
+      - "Macterm/Info.plist"
+      - "Macterm/Macterm.entitlements"
 
 jobs:
   format:
@@ -63,7 +63,7 @@ jobs:
       - name: Setup GhosttyKit
         run: mise run ci:setup
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test
         run: mise run ci:test

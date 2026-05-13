@@ -280,6 +280,29 @@ private struct QuickTerminalSettings: View {
 
 // MARK: - Keymaps
 
+private enum OptionAsAlt: String, CaseIterable, Identifiable {
+    case off = "false"
+    case both = "true"
+    case left
+    case right
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off: "Off (compose æ, ø, å, etc.)"
+        case .both: "Both Option keys"
+        case .left: "Left Option only"
+        case .right: "Right Option only"
+        }
+    }
+
+    static func from(_ raw: String?) -> OptionAsAlt {
+        guard let raw else { return .both }
+        return OptionAsAlt(rawValue: raw.lowercased()) ?? .both
+    }
+}
+
 private struct KeymapSettings: View {
     @State
     private var values: [String: String] = [:]
@@ -287,9 +310,29 @@ private struct KeymapSettings: View {
     private var capturingActionID: String?
     @State
     private var invalidActions: Set<String> = []
+    @State
+    private var optionAsAlt: OptionAsAlt = .from(MactermConfig.shared.value(for: "macos-option-as-alt"))
 
     var body: some View {
         Form {
+            Section("Input") {
+                Picker("Option as Alt", selection: $optionAsAlt) {
+                    ForEach(OptionAsAlt.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .onChange(of: optionAsAlt) { _, v in
+                    MactermConfig.shared.updateValue("macos-option-as-alt", value: v.rawValue)
+                    GhosttyApp.shared.reloadConfig()
+                }
+                Text(
+                    "Pick \"Left\" or \"Right\" to keep one Option key for typing macOS special characters "
+                        + "(æ, ø, å, …) while the other still sends Alt to terminal programs."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            }
+
             Section("Keyboard Shortcuts") {
                 ForEach(HotkeyAction.allCases) { action in
                     HStack {

@@ -77,6 +77,11 @@ final class QuickTerminalResponder: KeyResponder {
             state.requestClosePane(paneID)
             return .handled
         }
+        if HotkeyRegistry.matches(event, action: .zoomPane) {
+            guard let paneID = state.focusedPaneID else { return .passThrough }
+            state.tab.toggleZoom(paneID: paneID)
+            return .handled
+        }
         if let (_, dir) = Self.focusActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             guard let focusedID = state.focusedPaneID else { return .passThrough }
             if let bestID = state.splitRoot.nearestPane(from: focusedID, direction: dir) {
@@ -174,6 +179,12 @@ final class MainAppResponder: KeyResponder {
         if HotkeyRegistry.matches(event, action: .splitDown) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
             appState.splitPane(direction: .vertical, projectID: projectID)
+            return .handled
+        }
+
+        if HotkeyRegistry.matches(event, action: .zoomPane) {
+            guard let projectID = appState.activeProjectID else { return .passThrough }
+            appState.toggleZoom(projectID: projectID)
             return .handled
         }
 

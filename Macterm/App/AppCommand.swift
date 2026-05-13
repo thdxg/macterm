@@ -17,6 +17,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     // Panes
     case splitRight
     case splitDown
+    case zoomPane
     case focusLeft
     case focusRight
     case focusUp
@@ -47,6 +48,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .recentTab: "Recent tab"
         case .splitRight: "Split right"
         case .splitDown: "Split down"
+        case .zoomPane: "Zoom pane"
         case .focusLeft: "Focus left"
         case .focusRight: "Focus right"
         case .focusUp: "Focus up"
@@ -75,6 +77,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .recentTab: .tabs
         case .splitRight,
              .splitDown,
+             .zoomPane,
              .focusLeft,
              .focusRight,
              .focusUp,
@@ -104,6 +107,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .recentTab: .recentTab
         case .splitRight: .splitRight
         case .splitDown: .splitDown
+        case .zoomPane: .zoomPane
         case .focusLeft: .focusPaneLeft
         case .focusRight: .focusPaneRight
         case .focusUp: .focusPaneUp

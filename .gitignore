@@ -11,8 +11,6 @@ GhosttyKit/ghostty.h
 .claude/
 *.dmg
 appcast*.xml
-AGENTS.md
-CLAUDE.md
 macterm_run.log
 output.log
 

@@ -75,6 +75,9 @@ struct CommandSource: PaletteSource {
         case .splitDown:
             guard let projectID else { return nil }
             action = { ctx.appState.splitPane(direction: .vertical, projectID: projectID) }
+        case .zoomPane:
+            guard let projectID else { return nil }
+            action = { ctx.appState.toggleZoom(projectID: projectID) }
         case .focusLeft:
             guard let projectID else { return nil }
             action = { ctx.appState.focusPaneInDirection(.left, projectID: projectID) }
