@@ -33,40 +33,15 @@ The cask strips the Gatekeeper quarantine xattr on install, so the app launches 
 
 Download the latest `.dmg` from [Releases](https://github.com/thdxg/macterm/releases), open it, and drag Macterm to Applications.
 
-Since the app isn't signed with an Apple Developer certificate, macOS will block it on first launch with a "_Macterm.app Not Opened_" dialog. Dismiss the dialog, then:
-
-1. Open **System Settings → Privacy & Security**.
-2. Scroll to the **Security** section — you'll see _"Macterm.app was blocked…"_ with an **Open Anyway** button. Click it.
-3. Launch Macterm again and confirm.
-
-You only need to do this once. (Or, from Terminal: `xattr -cr /Applications/Macterm.app`, then launch normally.)
-
-## Development
-
-### Requirements
-
-- macOS 26.0+
-- Swift 6.0+
-- [mise](https://mise.jdx.dev/) (optional, but recommended)
-
-### Quick Start
+Since the app isn't signed with an Apple Developer certificate, macOS will block it on first launch. To allow the app to launch, run this command in another terminal (you only need to do this once):
 
 ```bash
-# Install necessary tools (swiftlint, gh, etc.)
-mise install
-
-# Setup dependencies
-mise run setup
-
-# Run in debug mode
-mise run run
-
-# Build release bundle
-mise run build
-
-# Run the test suite
-mise run test
+xattr -cr /Applications/Macterm.app
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build, and PR guidelines.
 
 ## License
 
