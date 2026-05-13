@@ -204,7 +204,7 @@ private struct SidebarTabRow: View {
     var body: some View {
         Label {
             if isRenaming {
-                TextField(tab.sidebarTitle, text: $renameText)
+                TextField(tab.autoTitle, text: $renameText)
                     .textFieldStyle(.plain)
                     .focused($focused)
                     .onSubmit { commit() }
