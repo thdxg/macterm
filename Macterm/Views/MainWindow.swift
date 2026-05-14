@@ -50,10 +50,14 @@ struct MainWindow: View {
             columnVisibility = visible ? .automatic : .detailOnly
         }
         .onChange(of: appState.isCommandPaletteVisible) { _, visible in
-            // When the palette closes, hand first responder back to the focused
-            // terminal view so typing resumes without requiring a mouse click.
-            if !visible {
-                DispatchQueue.main.async { restoreFocusToActivePane() }
+            guard !visible else { return }
+            // Run a post-dismiss action if one was registered, otherwise return
+            // focus to the active terminal pane so typing resumes immediately.
+            if let action = appState.postPaletteAction {
+                appState.postPaletteAction = nil
+                DispatchQueue.main.async { action() }
+            } else {
+                DispatchQueue.main.async { appState.restoreFocusToActivePane() }
             }
         }
     }
@@ -70,18 +74,6 @@ struct MainWindow: View {
 
     private func projectHasAnyTab(_ project: Project) -> Bool {
         !(appState.workspaces[project.id]?.tabs.isEmpty ?? true)
-    }
-
-    private func restoreFocusToActivePane() {
-        guard let projectID = appState.activeProjectID,
-              let tab = appState.workspaces[projectID]?.activeTab,
-              let paneID = tab.focusedPaneID
-        else { return }
-        FocusRestoration.restoreFocus(
-            to: paneID,
-            in: tab.splitRoot,
-            window: NSApp.keyWindow ?? NSApp.mainWindow
-        )
     }
 
     private var activeTabTitle: String {

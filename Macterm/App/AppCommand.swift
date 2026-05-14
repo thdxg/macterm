@@ -10,6 +10,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     // Tabs
     case newTab
     case closePane
+    case renameTab
     case nextTab
     case previousTab
     case recentTab
@@ -41,6 +42,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .newTab: "New tab"
         case .closePane: "Close pane"
+        case .renameTab: "Rename current tab"
         case .nextTab: "Next tab"
         case .previousTab: "Previous tab"
         case .recentTab: "Recent tab"
@@ -69,6 +71,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .newTab,
              .closePane,
+             .renameTab,
              .nextTab,
              .previousTab,
              .recentTab: .tabs
@@ -118,7 +121,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .previousProject: .previousProject
         case .toggleSidebar: .toggleSidebar
         case .closeWindow: .closeWindow
-        case .renameProject,
+        case .renameTab,
+             .renameProject,
              .removeProject: nil
         }
     }

@@ -11,6 +11,9 @@ final class AppState {
     var sidebarVisible = true
     var pendingClosePane: PendingClosePane?
     var isCommandPaletteVisible = false
+    var postPaletteAction: (() -> Void)?
+    var renamingTabID: UUID?
+    var renamingProjectID: UUID?
     private(set) var hasRestoredSelection = false
 
     /// Most-recent-first stack of project IDs. Persisted to UserDefaults.
@@ -311,6 +314,20 @@ final class AppState {
         else { return }
         let project = projects[(i - 1 + projects.count) % projects.count]
         selectProject(project)
+    }
+
+    // MARK: - Focus
+
+    func restoreFocusToActivePane() {
+        guard let projectID = activeProjectID,
+              let tab = workspaces[projectID]?.activeTab,
+              let paneID = tab.focusedPaneID
+        else { return }
+        FocusRestoration.restoreFocus(
+            to: paneID,
+            in: tab.splitRoot,
+            window: NSApp.keyWindow ?? NSApp.mainWindow
+        )
     }
 
     // MARK: - Private

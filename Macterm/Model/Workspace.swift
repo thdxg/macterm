@@ -41,12 +41,13 @@ final class TerminalTab: Identifiable {
         return panes.map(\.title).joined(separator: " | ")
     }
 
-    var sidebarTitle: String {
-        if let customTitle { return customTitle }
+    var autoTitle: String {
         let panes = splitRoot.allPanes()
         if panes.isEmpty { return "Terminal" }
         return panes.map(\.sidebarSegmentTitle).joined(separator: " | ")
     }
+
+    var sidebarTitle: String { customTitle ?? autoTitle }
 
     var focusedPane: Pane? {
         guard let focusedPaneID else { return nil }

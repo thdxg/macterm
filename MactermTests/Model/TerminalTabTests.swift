@@ -193,6 +193,49 @@ struct TerminalTabTests {
         #expect(try !tab.paneFocusHistory.items.contains(#require(ids["b"])))
     }
 
+    // MARK: - autoTitle / sidebarTitle / customTitle
+
+    @Test
+    func sidebarTitle_returns_customTitle_when_set() {
+        let (tab, _) = makeTab(pane("a"))
+        tab.customTitle = "My Tab"
+        #expect(tab.sidebarTitle == "My Tab")
+    }
+
+    @Test
+    func sidebarTitle_falls_back_to_autoTitle_when_customTitle_nil() {
+        let (tab, _) = makeTab(pane("a"))
+        tab.customTitle = nil
+        #expect(tab.sidebarTitle == tab.autoTitle)
+    }
+
+    @Test
+    func autoTitle_is_unaffected_by_customTitle() {
+        let (tab, _) = makeTab(pane("a"))
+        let autoBeforeSet = tab.autoTitle
+        tab.customTitle = "My Tab"
+        #expect(tab.autoTitle == autoBeforeSet)
+    }
+
+    @Test
+    func clearing_customTitle_restores_autoTitle_in_sidebarTitle() {
+        let (tab, _) = makeTab(pane("a"))
+        let auto = tab.autoTitle
+        tab.customTitle = "My Tab"
+        #expect(tab.sidebarTitle == "My Tab")
+        tab.customTitle = nil
+        #expect(tab.sidebarTitle == auto)
+    }
+
+    @Test
+    func autoTitle_joins_multiple_pane_titles_with_separator() {
+        let (tab, _) = makeTab(H(pane("a"), pane("b")))
+        // Both panes have the same processTitle in a test environment, so we
+        // just verify the separator is present and autoTitle has two segments.
+        let parts = tab.autoTitle.components(separatedBy: " | ")
+        #expect(parts.count == 2)
+    }
+
     /// Regression: `H(l1, V(r1, r2))`, close `l1` → must become `V(r1, r2)`
     /// with the original panes intact.
     @Test

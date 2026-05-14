@@ -58,6 +58,17 @@ struct CommandSource: PaletteSource {
         case .recentTab:
             guard let projectID else { return nil }
             action = { ctx.appState.cycleRecentTab(projectID: projectID) }
+        case .renameTab:
+            guard let projectID,
+                  let tab = ctx.appState.workspaces[projectID]?.activeTab
+            else { return nil }
+            let tabID = tab.id
+            action = {
+                ctx.appState.postPaletteAction = {
+                    ctx.appState.sidebarVisible = true
+                    ctx.appState.renamingTabID = tabID
+                }
+            }
         case .splitRight:
             guard let projectID else { return nil }
             action = { ctx.appState.splitPane(direction: .horizontal, projectID: projectID) }
@@ -96,7 +107,13 @@ struct CommandSource: PaletteSource {
             action = { _ = ctx.appState.openProject(store: ctx.projectStore) }
         case .renameProject:
             guard let current else { return nil }
-            action = { promptRename(project: current, store: ctx.projectStore) }
+            let projectID = current.id
+            action = {
+                ctx.appState.postPaletteAction = {
+                    ctx.appState.sidebarVisible = true
+                    ctx.appState.renamingProjectID = projectID
+                }
+            }
         case .removeProject:
             guard let projectID else { return nil }
             action = {
@@ -128,27 +145,5 @@ struct CommandSource: PaletteSource {
         let raw = HotkeyRegistry.selectedShortcutString(for: action)
         let display = HotkeyRegistry.displayString(for: raw)
         return display == "Disabled" ? nil : display
-    }
-
-    /// Shows a simple NSAlert with a text field prompting for a new project
-    /// name. Commits only if the user confirms and the trimmed value is
-    /// non-empty and different from the current name.
-    private func promptRename(project: Project, store: ProjectStore) {
-        let alert = NSAlert()
-        alert.messageText = "Rename project"
-        alert.informativeText = "Enter a new name for \"\(project.name)\"."
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        field.stringValue = project.name
-        field.selectText(nil)
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let newName = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != project.name else { return }
-        store.rename(id: project.id, to: newName)
     }
 }

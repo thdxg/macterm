@@ -159,6 +159,58 @@ struct AppStateTests {
         #expect(state.activeProjectID == p2.id)
     }
 
+    // MARK: - Rename state
+
+    @Test
+    func renamingTabID_defaults_to_nil() {
+        let state = makeAppState()
+        #expect(state.renamingTabID == nil)
+    }
+
+    @Test
+    func renamingTabID_can_be_set_and_cleared() {
+        let state = makeAppState()
+        let id = UUID()
+        state.renamingTabID = id
+        #expect(state.renamingTabID == id)
+        state.renamingTabID = nil
+        #expect(state.renamingTabID == nil)
+    }
+
+    @Test
+    func renamingProjectID_defaults_to_nil() {
+        let state = makeAppState()
+        #expect(state.renamingProjectID == nil)
+    }
+
+    @Test
+    func renamingProjectID_can_be_set_and_cleared() {
+        let state = makeAppState()
+        let id = UUID()
+        state.renamingProjectID = id
+        #expect(state.renamingProjectID == id)
+        state.renamingProjectID = nil
+        #expect(state.renamingProjectID == nil)
+    }
+
+    @Test
+    func postPaletteAction_defaults_to_nil() {
+        let state = makeAppState()
+        #expect(state.postPaletteAction == nil)
+    }
+
+    @Test
+    func postPaletteAction_is_invoked_and_consumed() {
+        let state = makeAppState()
+        var invoked = false
+        state.postPaletteAction = { invoked = true }
+        #expect(state.postPaletteAction != nil)
+        state.postPaletteAction?()
+        state.postPaletteAction = nil
+        #expect(invoked)
+        #expect(state.postPaletteAction == nil)
+    }
+
     // MARK: - requestClosePane / pendingClosePane
 
     @Test

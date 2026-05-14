@@ -28,6 +28,9 @@ struct SidebarContent: View {
                     ForEach(tabs) { tab in
                         SidebarTabRow(tab: tab) {
                             appState.closeTab(tab.id, projectID: project.id)
+                        } onRename: { newName in
+                            tab.customTitle = newName.isEmpty ? nil : newName
+                            appState.saveWorkspaces()
                         }
                         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
                     }
@@ -123,6 +126,8 @@ private struct SidebarProjectRow: View {
     let onNewTab: () -> Void
     let onRename: (String) -> Void
     let onRemove: () -> Void
+    @Environment(AppState.self)
+    private var appState
     @State
     private var isRenaming = false
     @State
@@ -137,7 +142,8 @@ private struct SidebarProjectRow: View {
                     .textFieldStyle(.plain)
                     .focused($focused)
                     .onSubmit { commit() }
-                    .onExitCommand { isRenaming = false }
+                    .onExitCommand { cancelRename() }
+                    .onAppear { focused = true }
             } else {
                 Text(project.name)
                     .lineLimit(1)
@@ -152,36 +158,94 @@ private struct SidebarProjectRow: View {
                 NSPasteboard.general.setString(project.path, forType: .string)
             }
             Divider()
-            Button("Rename Project") {
-                renameText = project.name
-                isRenaming = true
-                focused = true
-            }
+            Button("Rename Project") { beginRename() }
             Divider()
             Button("Remove Project", role: .destructive, action: onRemove)
         }
+        .onChange(of: appState.renamingProjectID) { _, id in
+            if id == project.id { beginRename() }
+        }
+    }
+
+    private func beginRename() {
+        appState.renamingProjectID = nil
+        renameText = project.name
+        isRenaming = true
     }
 
     private func commit() {
         let text = renameText.trimmingCharacters(in: .whitespaces)
         if !text.isEmpty { onRename(text) }
         isRenaming = false
+        appState.restoreFocusToActivePane()
+    }
+
+    private func cancelRename() {
+        isRenaming = false
+        appState.restoreFocusToActivePane()
     }
 }
 
 private struct SidebarTabRow: View {
     let tab: TerminalTab
     let onClose: () -> Void
+    let onRename: (String) -> Void
+    @Environment(AppState.self)
+    private var appState
+    @State
+    private var isRenaming = false
+    @State
+    private var renameText = ""
+    @State
+    private var preEditCustomTitle: String?
+    @FocusState
+    private var focused: Bool
 
     var body: some View {
         Label {
-            Text(tab.sidebarTitle)
-                .lineLimit(1)
+            if isRenaming {
+                TextField(tab.autoTitle, text: $renameText)
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit { commit() }
+                    .onExitCommand { cancelRename() }
+                    .onAppear { focused = true }
+            } else {
+                Text(tab.sidebarTitle)
+                    .lineLimit(1)
+            }
         } icon: {
             Image(systemName: "terminal")
         }
         .contextMenu {
+            Button("Rename Tab") { beginRename() }
+            Divider()
             Button("Close Tab", action: onClose)
         }
+        .onChange(of: appState.renamingTabID) { _, id in
+            if id == tab.id { beginRename() }
+        }
+    }
+
+    private func beginRename() {
+        appState.renamingTabID = nil
+        preEditCustomTitle = tab.customTitle
+        renameText = tab.customTitle ?? ""
+        isRenaming = true
+    }
+
+    private func commit() {
+        let text = renameText.trimmingCharacters(in: .whitespaces)
+        let newCustomTitle: String? = text.isEmpty ? nil : text
+        if newCustomTitle != preEditCustomTitle {
+            onRename(text)
+        }
+        isRenaming = false
+        appState.restoreFocusToActivePane()
+    }
+
+    private func cancelRename() {
+        isRenaming = false
+        appState.restoreFocusToActivePane()
     }
 }
