@@ -5,7 +5,7 @@ A macOS terminal emulator built with SwiftUI and libghostty. Single-window app w
 ## Build & Run
 
 ```bash
-mise install          # Install tools (gh, swiftformat, swiftlint)
+mise install          # Install tools (gh, swiftformat, swiftlint, xcodegen, xcbeautify)
 mise run setup        # Download pre-built GhosttyKit.xcframework
 mise run run          # Build and launch (debug)
 mise run format       # Auto-fix formatting with swiftformat
@@ -68,7 +68,7 @@ This exists because ghostty surfaces are tightly coupled to their `NSView` + `CA
 
 ### Single Window Enforcement
 
-The app blocks additional windows. `Cmd+N` focuses the existing window. `WindowGroup` menu items for new windows and tab bar are removed. The window close button hides (`orderOut`) instead of closing, preserving all terminal surfaces. Dock icon click reopens the hidden window.
+The app blocks additional windows. `WindowGroup`'s `.newItem` command is replaced with a custom "Show Window" item (Cmd+N) that calls `makeKeyAndOrderFront` on the existing window. The close button hides (`orderOut`) instead of closing, preserving all terminal surfaces. Dock icon click reopens via an `NSWorkspace.didActivateApplicationNotification` observer in `AppDelegate.reopenIfNeeded()` — `applicationShouldHandleReopen` alone isn't reliable through SwiftUI's `@NSApplicationDelegateAdaptor`, and AppKit reports `canBecomeMain = false` on ordered-out windows so the filter walks `NSApp.windows` for any hidden non-panel window.
 
 ### Hotkey System
 
@@ -104,6 +104,7 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 | File                                   | Purpose                                                                                                 |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `MainWindow.swift`                     | Main window layout, `WorkspaceView`, `WindowStyler`                                                     |
+| `WindowAppearance.swift`               | Window opacity/blur — sets `NSWindow.backgroundColor`, dives into private titlebar view tree, calls CGS blur SPI |
 | `Sidebar.swift`                        | Project/tab list with native `List(selection:)`                                                         |
 | `SplitTreeView.swift`                  | Recursive split rendering with draggable dividers                                                       |
 | `TerminalPane.swift`                   | `TerminalPane` + `TerminalSurface` (`NSViewRepresentable` borrowing `pane.nsView`) + search bar overlay |
@@ -133,7 +134,7 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 | File                 | Purpose                                                 |
 | -------------------- | ------------------------------------------------------- |
-| `SettingsView.swift` | Preferences window — font, theme, hotkeys, misc toggles |
+| `SettingsView.swift` | Preferences window — font, theme, window opacity/blur, hotkeys, misc toggles |
 
 ### Model (`Macterm/Model/`)
 
@@ -154,9 +155,11 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 ### Config (`Macterm/Config/`)
 
-| File                  | Purpose                                    |
-| --------------------- | ------------------------------------------ |
-| `MactermConfig.swift` | Reads/writes `ghostty.conf` in App Support |
+| File                  | Purpose                                                                       |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `MactermConfig.swift` | Generates a private `ghostty.conf` in App Support from `Preferences` values   |
+
+Macterm owns its ghostty config end-to-end — users never edit a config file. The Settings UI writes to `Preferences` (UserDefaults), each setter triggers `MactermConfig.regenerate()` + `GhosttyApp.reloadConfig()`, and libghostty reads the regenerated file. `background-opacity` is hardcoded to 0 so ghostty's renderer draws only text; `WindowAppearance` composites window translucency at the AppKit level. This avoids the double-tint that would happen with two tinted layers.
 
 ### Tests (`MactermTests/`)
 
@@ -215,7 +218,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 - Workspaces saved to `~/Library/Application Support/Macterm/workspaces_v3.json`
 - Projects saved to `projects.json` in the same directory
-- Ghostty config at `~/.config/Macterm/ghostty.conf` (seeded from `~/.config/ghostty/config` on first launch)
+- Ghostty config at `~/Library/Application Support/Macterm/ghostty.conf` — regenerated from `Preferences` on launch and on every settings change. Not user-editable; the file is a transport between Macterm and libghostty, not a config surface.
 - `Pane` IDs are not preserved across restarts — `restoreNode` creates new `Pane` instances with fresh UUIDs
 
 ### Adding a New Action
@@ -228,10 +231,12 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 ### Adding a New Setting
 
-1. Add UI to `SettingsView.swift` in the appropriate `Section`
-2. Use `MactermConfig.shared.updateValue/removeValue` for ghostty config keys
-3. Call `GhosttyApp.shared.reloadConfig()` after changes
-4. For app-level settings, add a property to `Preferences` (don't read `UserDefaults.standard` directly from views)
+All settings flow through `Preferences` (UserDefaults). There is no user-editable config file.
+
+1. Add a property to `Preferences` with a `didSet` that writes to UserDefaults. If the setting maps to a ghostty config key, also call `notifyConfigChanged()` from `didSet` so `MactermConfig.regenerate()` and `GhosttyApp.reloadConfig()` run.
+2. If the setting maps to ghostty config, add the corresponding line to `MactermConfig.regenerate()`.
+3. Add UI to `SettingsView.swift` in the appropriate `Section`, binding to `Preferences.shared.x`.
+4. For Macterm-side state that doesn't touch ghostty (e.g. quick terminal frame fractions), skip step 2 — just observe `Preferences` directly.
 
 ## Known Limitations
 
