@@ -39,11 +39,15 @@ Since the app isn't signed with an Apple Developer certificate, macOS will block
 xattr -cr /Applications/Macterm.app
 ```
 
-## Demo
+## Demos
+
+### Keybinds
 
 Macterm is very keyboard-oriented, so you can perform the majority of actions without lifting your hand.
 
-![demo](./assets/demo.gif)
+### Window Opacity & Blur
+
+Macterm's appearance is highly customizable and hot-reloaded.
 
 ## Contributing
 
