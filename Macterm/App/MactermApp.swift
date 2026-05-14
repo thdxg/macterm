@@ -41,7 +41,21 @@ struct MactermApp: App {
         }
         .defaultSize(width: 1200, height: 800)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                // Replace SwiftUI's "New Window" with "Show Window", which
+                // unhides the single Macterm window after the user clicked
+                // the red close button. Without this, hiding the window
+                // leaves no menu/keyboard way to bring it back — only the
+                // dock icon — and even that depends on AppKit reopen
+                // delegation routing back through SwiftUI's WindowGroup.
+                Button("Show Window") {
+                    if let window = appDelegate.mainWindow {
+                        window.makeKeyAndOrderFront(nil)
+                        NSApp.activate()
+                    }
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
             CommandGroup(replacing: .toolbar) {}
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesMenuItem()
@@ -62,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var mainWindow: NSWindow?
 
     private var windowObserver: Any?
+    private var activateObserver: Any?
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
 
@@ -79,6 +94,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = GhosttyApp.shared
         _ = QuickTerminalService.shared
         KeyRouter.shared.install()
+        // Dock-icon click on a hidden window: SwiftUI's
+        // @NSApplicationDelegateAdaptor swallows applicationShouldHandleReopen,
+        // and `didBecomeActiveNotification` doesn't always fire (e.g. when
+        // the user clicks the dock icon while the app is already considered
+        // active by AppKit). The NSWorkspace activation notification fires
+        // reliably on every dock-click, filtered to our own bundle ID so
+        // we don't react to other apps.
+        activateObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let bundleID = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
+            MainActor.assumeIsolated {
+                guard let self, bundleID == Bundle.main.bundleIdentifier else { return }
+                self.reopenIfNeeded()
+            }
+        }
+
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeMainNotification,
             object: nil,
@@ -153,6 +187,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         false
+    }
+
+    /// Bring our (possibly ordered-out) main window back. Robust to cases
+    /// where `self.mainWindow` got stale: walks NSApp.windows for the first
+    /// terminal-bearing window, falling back to the cached pointer.
+    /// Bring our (possibly ordered-out) main window back. Robust to cases
+    /// where `self.mainWindow` got stale: walks NSApp.windows for the first
+    /// terminal-bearing window, falling back to the cached pointer.
+    func reopenIfNeeded() {
+        // If a non-panel window is already visible, nothing to do.
+        if NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
+            return
+        }
+
+        // Find the hidden main window. Don't filter on `canBecomeMain` — AppKit
+        // reports that as false for ordered-out SwiftUI windows (which is
+        // exactly the case we're handling). Filter on class instead: skip
+        // panels (quick terminal, settings).
+        let target = NSApp.windows.first { window in
+            !window.isVisible && !(window is NSPanel)
+        } ?? mainWindow
+
+        guard let target else { return }
+        target.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        if mainWindow !== target {
+            mainWindow = target
+            mainAppResponder?.mainWindow = target
+        }
     }
 
     func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
