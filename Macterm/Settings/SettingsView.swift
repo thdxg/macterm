@@ -42,13 +42,6 @@ private struct AppearanceSettings: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { commitPath() }
                     Button("Browse…") { browse() }
-                    Button("Reset") {
-                        ghosttyConfigPath = "~/.config/ghostty/config"
-                        commitPath()
-                    }
-                }
-                HStack {
-                    Spacer()
                     Button("Reload") {
                         commitPath()
                         reloadAndReport()
@@ -57,7 +50,7 @@ private struct AppearanceSettings: View {
                 }
                 Text(
                     "Your Ghostty config controls theme, font, palette, keybinds, and most other terminal settings. "
-                        + "Macterm provides defaults; anything in your ghostty.conf overrides them. "
+                        + "Macterm provides defaults; anything in your Ghostty config overrides them. "
                         + "Macterm does not auto-detect external edits — click Reload after saving."
                 )
                 .font(.system(size: 11))
