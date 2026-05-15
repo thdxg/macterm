@@ -161,10 +161,10 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 Macterm reads the user's `~/.config/ghostty/config` (path configurable in Settings → Appearance → Ghostty Config). The user is the source of truth for every ghostty setting — themes, fonts, palettes, keybinds, etc. `MactermConfig.regenerate()` writes two private files in App Support:
 
-- **`macterm-defaults.conf`** — first-launch tasteful defaults (Rose Pine, 16pt, padding, `macos-option-as-alt = true`). User's ghostty.conf overrides each line.
+- **`macterm-defaults.conf`** — first-launch tasteful defaults (Rose Pine, 16pt, padding, `macos-option-as-alt = true`). User's Ghostty config overrides each line.
 - **`macterm-overrides.conf`** — keys Macterm absolutely needs to lock. Currently just `background-opacity = 0` and `background-blur = 0` so ghostty renders fully transparent and `WindowAppearance` can composite translucency itself without double-tinting.
 
-`GhosttyApp.loadConfig` loads them in order: `defaults → user's ghostty.conf → overrides`. libghostty does last-wins merge, so the user's config overrides our defaults and our overrides override the user. See the README's "For Ghostty Users" section for the user-facing version of what's overridden vs honored.
+`GhosttyApp.loadConfig` loads them in order: `defaults → user's Ghostty config → overrides`. libghostty does last-wins merge, so the user's config overrides our defaults and our overrides override the user. See the README's "For Ghostty Users" section for the user-facing version of what's overridden vs honored.
 
 Macterm-specific UI state (window opacity/blur, quick terminal, hotkeys, auto-tile) lives in `Preferences` and never touches the ghostty config pipeline.
 
@@ -239,7 +239,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 ### Adding a New Setting
 
-Macterm-side settings (window opacity, quick terminal frame, auto-tile, etc.) flow through `Preferences` (UserDefaults). Ghostty-shaped settings (theme, font, palette, etc.) belong in the user's ghostty.conf — don't add UI for them.
+Macterm-side settings (window opacity, quick terminal frame, auto-tile, etc.) flow through `Preferences` (UserDefaults). Ghostty-shaped settings (theme, font, palette, etc.) belong in the user's Ghostty config — don't add UI for them.
 
 For Macterm-side settings:
 

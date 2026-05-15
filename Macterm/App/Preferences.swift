@@ -6,7 +6,7 @@ import Observation
 ///
 /// Macterm only stores app-shaped state here (window opacity/blur, quick
 /// terminal, hotkeys, etc.). Anything that's a ghostty config setting lives
-/// in the user's ghostty.conf instead — see `MactermConfig` for the wrapper
+/// in the user's Ghostty config instead — see `MactermConfig` for the wrapper
 /// files Macterm generates around it.
 @MainActor @Observable
 final class Preferences {
@@ -46,7 +46,7 @@ final class Preferences {
 
     // MARK: - Ghostty config
 
-    /// Path to the user's ghostty.conf. Empty string = don't load any user
+    /// Path to the user's Ghostty config. Empty string = don't load any user
     /// config (Macterm-defaults only). Tilde-expand via
     /// `expandedUserGhosttyConfigPath` at use sites.
     ///
@@ -120,7 +120,7 @@ final class Preferences {
     }
 
     /// Pre-v2 builds stored theme/font/option-as-alt in UserDefaults. Those
-    /// settings now live entirely in the user's ghostty.conf, so the keys
+    /// settings now live entirely in the user's Ghostty config, so the keys
     /// are dead. Drop them so `defaults read com.thdxg.macterm` is clean
     /// and there's no risk of resurrecting the old values if someone wires
     /// them back up later.

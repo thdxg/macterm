@@ -53,7 +53,7 @@ final class QuickTerminalService: NSObject {
             name: UserDefaults.didChangeNotification,
             object: nil
         )
-        // Re-apply the blur radius when ghostty.conf changes so the visible
+        // Re-apply the blur radius when Ghostty config changes so the visible
         // panel picks up Settings adjustments without needing to be re-shown.
         NotificationCenter.default.addObserver(
             self,

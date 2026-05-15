@@ -122,21 +122,21 @@ final class GhosttyApp {
 
         // Three-layer ghostty config:
         //   1. Macterm defaults — tasteful first-launch values.
-        //   2. User's ghostty.conf — overrides any default. Source of truth
+        //   2. User's Ghostty config — overrides any default. Source of truth
         //      for all ghostty-shaped settings (theme, font, palette, keybinds,
         //      shell integration, etc.).
         //   3. Macterm overrides — keys Macterm absolutely needs to control,
         //      currently just background-opacity/blur for the window-level
         //      translucency contract. Loaded last so it overrides the user.
         // libghostty merges last-wins, so this ordering produces:
-        //   Macterm defaults < user's ghostty.conf < Macterm overrides
+        //   Macterm defaults < user's Ghostty config < Macterm overrides
         MactermConfig.shared.defaultsPath.withCString { ghostty_config_load_file(cfg, $0) }
         let userPath = Preferences.shared.expandedUserGhosttyConfigPath
         if !userPath.isEmpty {
             if FileManager.default.fileExists(atPath: userPath) {
                 userPath.withCString { ghostty_config_load_file(cfg, $0) }
             } else {
-                logger.info("user ghostty.conf not found at \(userPath, privacy: .public); skipping")
+                logger.info("user Ghostty config not found at \(userPath, privacy: .public); skipping")
                 result.missingUserConfigPath = userPath
             }
         }

@@ -127,7 +127,7 @@ private struct AppearanceSettings: View {
         alert.messageText =
             result.missingUserConfigPath != nil
                 ? "Ghostty config not found"
-                : "Issues in your ghostty.conf"
+                : "Issues in your Ghostty config"
         alert.informativeText = lines.joined(separator: "\n\n")
         alert.alertStyle = result.missingUserConfigPath != nil ? .warning : .informational
         alert.addButton(withTitle: "OK")

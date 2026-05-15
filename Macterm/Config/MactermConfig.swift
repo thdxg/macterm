@@ -1,18 +1,18 @@
 import Foundation
 
 /// Generates the two ghostty config files Macterm wraps around the user's
-/// own ghostty.conf. The user is the source of truth for every ghostty
+/// own Ghostty config. The user is the source of truth for every Ghostty
 /// setting; Macterm provides first-launch defaults that the user overrides,
 /// and a minimal must-win overrides file for keys Macterm can't let the
 /// renderer control (currently: background-opacity, background-blur — both
 /// required for the window-level translucency in `WindowAppearance`).
 ///
 /// `GhosttyApp.loadConfig` loads them in this order:
-///   defaults → user's ghostty.conf → overrides
+///   defaults → user's Ghostty config → overrides
 /// libghostty does last-wins merge, so the user wins over our defaults and
 /// our overrides win over the user.
 ///
-/// See the README for the full list of ghostty.conf settings Macterm honors
+/// See the README for the full list of Ghostty config settings Macterm honors
 /// and the small set it ignores or overrides.
 @MainActor @Observable
 final class MactermConfig {
@@ -36,7 +36,7 @@ final class MactermConfig {
     /// either file.
     func regenerate() {
         let defaults = [
-            // First-launch tasteful UX. User's ghostty.conf overrides any of
+            // First-launch tasteful UX. User's Ghostty config overrides any of
             // these without needing to know they exist. Anything we'd set to
             // ghostty's own default (e.g. scrollbar=system) isn't listed —
             // libghostty already does the right thing.
