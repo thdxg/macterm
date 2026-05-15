@@ -322,10 +322,19 @@ final class GhosttyTerminalNSView: NSView {
         ke.consumed_mods = consumedMods(translationEvent.modifierFlags)
         ke.composing = hasMarkedText() || hadMarkedText
 
-        if !keyTextAccumulator.isEmpty, !ke.composing {
+        // Accumulator content is text the IME *committed* via `insertText`
+        // during interpretKeyEvents. Send it regardless of `composing` state:
+        // committing happens precisely when the IME finishes a syllable, which
+        // may overlap with a new composition starting (so `composing == true`
+        // here even though this specific text is finalized). Without this,
+        // Korean / Japanese / Chinese input drops every committed character.
+        // The text itself carries no composing flag since it's already final.
+        if !keyTextAccumulator.isEmpty {
+            var commitKE = ke
+            commitKE.composing = false
             for text in keyTextAccumulator {
-                text.withCString { ke.text = $0
-                    _ = ghostty_surface_key(surface, ke)
+                text.withCString { commitKE.text = $0
+                    _ = ghostty_surface_key(surface, commitKE)
                 }
             }
         } else if !hasMarkedText() {
