@@ -155,11 +155,18 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 ### Config (`Macterm/Config/`)
 
-| File                  | Purpose                                                                       |
-| --------------------- | ----------------------------------------------------------------------------- |
-| `MactermConfig.swift` | Generates a private `ghostty.conf` in App Support from `Preferences` values   |
+| File                  | Purpose                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| `MactermConfig.swift` | Generates the two wrapper ghostty config files Macterm sandwiches around the user's |
 
-Macterm owns its ghostty config end-to-end — users never edit a config file. The Settings UI writes to `Preferences` (UserDefaults), each setter triggers `MactermConfig.regenerate()` + `GhosttyApp.reloadConfig()`, and libghostty reads the regenerated file. `background-opacity` is hardcoded to 0 so ghostty's renderer draws only text; `WindowAppearance` composites window translucency at the AppKit level. This avoids the double-tint that would happen with two tinted layers.
+Macterm reads the user's `~/.config/ghostty/config` (path configurable in Settings → Appearance → Ghostty Config). The user is the source of truth for every ghostty setting — themes, fonts, palettes, keybinds, etc. `MactermConfig.regenerate()` writes two private files in App Support:
+
+- **`macterm-defaults.conf`** — first-launch tasteful defaults (Rose Pine, 16pt, padding, `macos-option-as-alt = true`). User's ghostty.conf overrides each line.
+- **`macterm-overrides.conf`** — keys Macterm absolutely needs to lock. Currently just `background-opacity = 0` and `background-blur = 0` so ghostty renders fully transparent and `WindowAppearance` can composite translucency itself without double-tinting.
+
+`GhosttyApp.loadConfig` loads them in order: `defaults → user's ghostty.conf → overrides`. libghostty does last-wins merge, so the user's config overrides our defaults and our overrides override the user. See the README's "For Ghostty Users" section for the user-facing version of what's overridden vs honored.
+
+Macterm-specific UI state (window opacity/blur, quick terminal, hotkeys, auto-tile) lives in `Preferences` and never touches the ghostty config pipeline.
 
 ### Tests (`MactermTests/`)
 
@@ -218,7 +225,8 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 - Workspaces saved to `~/Library/Application Support/Macterm/workspaces_v3.json`
 - Projects saved to `projects.json` in the same directory
-- Ghostty config at `~/Library/Application Support/Macterm/ghostty.conf` — regenerated from `Preferences` on launch and on every settings change. Not user-editable; the file is a transport between Macterm and libghostty, not a config surface.
+- User's ghostty config read from `~/.config/ghostty/config` by default (path configurable in Settings)
+- Macterm's wrapper config files written to `~/Library/Application Support/Macterm/macterm-defaults.conf` and `macterm-overrides.conf` on launch. Not user-editable; they're transport between Macterm and libghostty around the user's real config.
 - `Pane` IDs are not preserved across restarts — `restoreNode` creates new `Pane` instances with fresh UUIDs
 
 ### Adding a New Action
@@ -231,12 +239,13 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 ### Adding a New Setting
 
-All settings flow through `Preferences` (UserDefaults). There is no user-editable config file.
+Macterm-side settings (window opacity, quick terminal frame, auto-tile, etc.) flow through `Preferences` (UserDefaults). Ghostty-shaped settings (theme, font, palette, etc.) belong in the user's ghostty.conf — don't add UI for them.
 
-1. Add a property to `Preferences` with a `didSet` that writes to UserDefaults. If the setting maps to a ghostty config key, also call `notifyConfigChanged()` from `didSet` so `MactermConfig.regenerate()` and `GhosttyApp.reloadConfig()` run.
-2. If the setting maps to ghostty config, add the corresponding line to `MactermConfig.regenerate()`.
+For Macterm-side settings:
+
+1. Add a property to `Preferences` with a `didSet` that writes to UserDefaults.
+2. If the setting affects libghostty (e.g. it's something we'd want to force-write into `macterm-overrides.conf` because it conflicts with a user value), call `notifyConfigChanged()` from `didSet` and add the corresponding line to `MactermConfig.regenerate()`'s overrides file. The bar here is "Macterm breaks without it" — most settings don't need this.
 3. Add UI to `SettingsView.swift` in the appropriate `Section`, binding to `Preferences.shared.x`.
-4. For Macterm-side state that doesn't touch ghostty (e.g. quick terminal frame fractions), skip step 2 — just observe `Preferences` directly.
 
 ## Known Limitations
 
