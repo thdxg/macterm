@@ -64,6 +64,8 @@ struct MactermApp: App {
 
         Settings {
             SettingsView()
+                .environment(appState)
+                .environment(projectStore)
         }
     }
 }

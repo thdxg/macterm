@@ -1,70 +1,62 @@
 import Foundation
 
-/// Generates the ghostty config file that libghostty loads. Macterm owns this
-/// config entirely — users do not edit it. All user-facing settings live in
-/// `Preferences` (UserDefaults); `regenerate()` reads them and writes a fresh
-/// ghostty.conf to App Support, which `GhosttyApp.loadConfig` then loads.
+/// Generates the two ghostty config files Macterm wraps around the user's
+/// own ghostty.conf. The user is the source of truth for every ghostty
+/// setting; Macterm provides first-launch defaults that the user overrides,
+/// and a minimal must-win overrides file for keys Macterm can't let the
+/// renderer control (currently: background-opacity, background-blur — both
+/// required for the window-level translucency in `WindowAppearance`).
 ///
-/// We force `background-opacity = 1` and `background-blur = 0` so ghostty's
-/// renderer draws fully opaque terminal content. Window translucency is
-/// composited at the window level by Macterm (see `WindowAppearance`),
-/// avoiding the double-paint that happens when both ghostty and Macterm
-/// tint the same pixels.
+/// `GhosttyApp.loadConfig` loads them in this order:
+///   defaults → user's ghostty.conf → overrides
+/// libghostty does last-wins merge, so the user wins over our defaults and
+/// our overrides win over the user.
+///
+/// See the README for the full list of ghostty.conf settings Macterm honors
+/// and the small set it ignores or overrides.
 @MainActor @Observable
 final class MactermConfig {
     static let shared = MactermConfig()
 
-    let ghosttyConfigURL: URL
+    let defaultsURL: URL
+    let overridesURL: URL
 
     private init() {
         let dir = FileStorage.appSupportDirectory()
-        ghosttyConfigURL = dir.appendingPathComponent("ghostty.conf")
-        // Write a fresh config on every launch so the file always reflects
-        // the current Preferences state — no stale lines from previous runs.
+        defaultsURL = dir.appendingPathComponent("macterm-defaults.conf")
+        overridesURL = dir.appendingPathComponent("macterm-overrides.conf")
         regenerate()
     }
 
-    var ghosttyConfigPath: String { ghosttyConfigURL.path }
+    var defaultsPath: String { defaultsURL.path }
+    var overridesPath: String { overridesURL.path }
 
-    /// Rebuild the ghostty.conf file from current `Preferences` values.
-    /// Called on launch and whenever a relevant preference changes.
+    /// Rewrite both wrapper config files. Cheap and idempotent; safe to call
+    /// on launch and whenever Macterm-side state changes that's reflected in
+    /// either file.
     func regenerate() {
-        let prefs = Preferences.shared
-        var lines: [String] = []
+        let defaults = [
+            // First-launch tasteful UX. User's ghostty.conf overrides any of
+            // these without needing to know they exist. Anything we'd set to
+            // ghostty's own default (e.g. scrollbar=system) isn't listed —
+            // libghostty already does the right thing.
+            "theme = \"Rose Pine\"",
+            "font-size = 16",
+            "macos-option-as-alt = true",
+            "window-padding-x = 16",
+            "window-padding-y = 16",
+        ].joined(separator: "\n") + "\n"
+        try? Data(defaults.utf8).write(to: defaultsURL, options: .atomic)
 
-        // --- Macterm-managed window appearance ---
-        // Ghostty's terminal surface is fully transparent — it draws only the
-        // text and cursor. The colored fill behind the text comes from the
-        // window's `NSWindow.backgroundColor` (set in `WindowAppearance.sync`
-        // to the terminal color tinted by `Preferences.windowOpacity`), which
-        // is the single source of window translucency. Keeping all tinting on
-        // one layer avoids the double-paint that happens when both ghostty's
-        // renderer and SwiftUI/AppKit tint the same pixels.
-        lines.append("background-opacity = 0")
-        // Blur is driven by our own CGS SPI call, not ghostty's wrapper.
-        lines.append("background-blur = 0")
-
-        // --- User-configurable via Settings UI ---
-        if !prefs.theme.isEmpty {
-            lines.append("theme = \"\(prefs.theme)\"")
-        }
-        if !prefs.fontFamily.isEmpty {
-            lines.append("font-family = \(prefs.fontFamily)")
-        }
-        lines.append("font-size = \(prefs.fontSize)")
-        lines.append("macos-option-as-alt = \(prefs.optionAsAlt)")
-
-        // --- Sensible defaults the user can't currently override ---
-        // Keep this list minimal; expose to Settings UI as needed instead of
-        // documenting "edit this file." Anything here should be a default that
-        // virtually all users will want.
-        lines.append("scrollbar = system")
-        lines.append("mouse-hide-while-typing = true")
-        lines.append("clipboard-trim-trailing-spaces = true")
-        lines.append("window-padding-x = 16")
-        lines.append("window-padding-y = 16")
-
-        let content = lines.joined(separator: "\n") + "\n"
-        try? Data(content.utf8).write(to: ghosttyConfigURL, options: .atomic)
+        let overrides = [
+            // Macterm composites window translucency at the AppKit level —
+            // ghostty must draw a fully transparent terminal or we'd double-
+            // tint. See WindowAppearance.swift.
+            "background-opacity = 0",
+            // We call CGSSetWindowBackgroundBlurRadius ourselves; ghostty's
+            // own blur would compose on top of it.
+            "background-blur = 0",
+        ].joined(separator: "\n") + "\n"
+        try? Data(overrides.utf8).write(to: overridesURL, options: .atomic)
     }
 }

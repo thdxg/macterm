@@ -54,9 +54,9 @@ final class TerminalTab: Identifiable {
         return splitRoot.findPane(id: focusedPaneID)
     }
 
-    init(projectPath: String) {
+    init(projectPath: String, initialCommand: String? = nil) {
         id = UUID()
-        let pane = Pane(projectPath: projectPath)
+        let pane = Pane(projectPath: projectPath, initialCommand: initialCommand)
         splitRoot = .pane(pane)
         focusedPaneID = pane.id
     }
@@ -177,8 +177,8 @@ final class Workspace: Identifiable {
     }
 
     @discardableResult
-    func createTab(projectPath: String) -> TerminalTab {
-        let tab = TerminalTab(projectPath: projectPath)
+    func createTab(projectPath: String, initialCommand: String? = nil) -> TerminalTab {
+        let tab = TerminalTab(projectPath: projectPath, initialCommand: initialCommand)
         tabs.append(tab)
         if let current = activeTabID { tabHistory.push(current) }
         activeTabID = tab.id

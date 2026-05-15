@@ -120,6 +120,46 @@ final class AppState {
         return project
     }
 
+    /// Open the user's ghostty.conf in `$EDITOR` (default `vi`) inside a new
+    /// Macterm tab. Used by the "Edit" button in Settings → Appearance →
+    /// Ghostty Config. The tab lands in the currently active project; if no
+    /// project is active, we lazily create a "Home" project rooted at `$HOME`
+    /// so the tab belongs to a real project like every other tab.
+    func openGhosttyConfigEditor(projectStore: ProjectStore) {
+        let path = Preferences.shared.expandedUserGhosttyConfigPath
+        guard !path.isEmpty else { return }
+        let editor = ProcessInfo.processInfo.environment["EDITOR"] ?? "vi"
+        // Single-quote with embedded-quote escape so paths with spaces or
+        // apostrophes survive the shell that ghostty wraps the command in.
+        let escapedPath = path.replacingOccurrences(of: "'", with: "'\\''")
+        let cmd = "\(editor) '\(escapedPath)'"
+
+        let project: Project
+        if let activeID = activeProjectID,
+           let active = projectStore.projects.first(where: { $0.id == activeID })
+        {
+            project = active
+        } else {
+            project = ensureHomeProject(projectStore: projectStore)
+            selectProject(project)
+        }
+        createTab(projectID: project.id, projectPath: project.path, initialCommand: cmd)
+    }
+
+    /// Find or create the "Home" project pointing at `$HOME`. We match on path
+    /// rather than name so a user who already has a project at their home
+    /// directory under a different name doesn't get a duplicate.
+    private func ensureHomeProject(projectStore: ProjectStore) -> Project {
+        let homePath = NSHomeDirectory()
+        if let existing = projectStore.projects.first(where: { $0.path == homePath }) {
+            return existing
+        }
+        let project = Project(name: "Home", path: homePath, sortOrder: projectStore.projects.count)
+        projectStore.add(project)
+        ensureWorkspace(projectID: project.id, path: project.path)
+        return project
+    }
+
     func removeProject(_ projectID: UUID) {
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
@@ -133,9 +173,9 @@ final class AppState {
 
     // MARK: - Tabs
 
-    func createTab(projectID: UUID, projectPath: String) {
+    func createTab(projectID: UUID, projectPath: String, initialCommand: String? = nil) {
         guard let ws = workspaces[projectID] else { return }
-        ws.createTab(projectPath: projectPath)
+        ws.createTab(projectPath: projectPath, initialCommand: initialCommand)
         saveWorkspaces()
     }
 

@@ -20,106 +20,53 @@ struct SettingsView: View {
 
 // MARK: - Appearance
 
-private struct ThemePreview: Identifiable, Hashable {
-    let id: String
-    let background: NSColor
-    let foreground: NSColor
-    let palette: [NSColor]
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-
-    static func == (lhs: ThemePreview, rhs: ThemePreview) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
 private struct AppearanceSettings: View {
-    @State
-    private var themes: [ThemePreview] = []
-    @State
-    private var currentTheme: String = Preferences.shared.theme
-    @State
-    private var currentFont: String = Preferences.shared.fontFamily
-    @State
-    private var fontSize: Int = Preferences.shared.fontSize
-    @State
-    private var monoFonts: [String] = []
+    @Environment(AppState.self)
+    private var appState
+    @Environment(ProjectStore.self)
+    private var projectStore
     @AppStorage(Preferences.Keys.autoTiling)
     private var autoTilingEnabled = false
+    @State
+    private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
     @State
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
     @State
     private var backgroundBlurRadius: Double = .init(Preferences.shared.windowBlurRadius)
+
     var body: some View {
         Form {
-            Section("Font") {
-                Picker("Font Family", selection: $currentFont) {
-                    Text("Default").tag("")
-                    Divider()
-                    ForEach(monoFonts, id: \.self) { family in
-                        Text(family)
-                            .font(.custom(family, size: 13))
-                            .tag(family)
+            Section("Ghostty Config") {
+                HStack {
+                    TextField("Path", text: $ghosttyConfigPath, prompt: Text("~/.config/ghostty/config"))
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { commitPath() }
+                    Button("Browse…") { browse() }
+                    Button("Reset") {
+                        ghosttyConfigPath = "~/.config/ghostty/config"
+                        commitPath()
                     }
                 }
-                .onChange(of: currentFont) { _, v in
-                    Preferences.shared.fontFamily = v
-                }
-
-                Stepper(value: $fontSize, in: 8 ... 32) {
-                    HStack {
-                        Text("Font Size")
-                        Spacer()
-                        Text("\(fontSize)pt")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    Button("Reload") {
+                        commitPath()
+                        reloadAndReport()
                     }
-                }
-                .onChange(of: fontSize) { _, v in
-                    Preferences.shared.fontSize = v
-                }
-            }
-
-            Section("Theme") {
-                Picker("Select Theme", selection: $currentTheme) {
-                    ForEach(themes) { theme in
-                        Text(theme.id).tag(theme.id)
+                    .help("Re-read your ghostty.conf. Click after saving external edits.")
+                    Button("Edit Ghostty Config") {
+                        commitPath()
+                        appState.openGhosttyConfigEditor(projectStore: projectStore)
                     }
+                    .disabled(ghosttyConfigPath.isEmpty)
                 }
-                .onChange(of: currentTheme) { _, v in
-                    Preferences.shared.theme = v
-                }
-
-                if let theme = themes.first(where: { $0.id == currentTheme }) {
-                    HStack(alignment: .top, spacing: 16) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("BG / FG")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                            HStack(spacing: 6) {
-                                colorChip(theme.background)
-                                colorChip(theme.foreground)
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Palette")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                            LazyVGrid(
-                                columns: Array(repeating: GridItem(.fixed(16), spacing: 4, alignment: .leading), count: 8),
-                                alignment: .leading,
-                                spacing: 4
-                            ) {
-                                ForEach(Array(theme.palette.enumerated()), id: \.offset) { _, color in
-                                    colorChip(color)
-                                }
-                            }
-                        }
-                    }
-                }
+                Text(
+                    "Your ghostty.conf controls theme, font, palette, keybinds, and most other terminal settings. "
+                        + "Macterm provides defaults; anything in your ghostty.conf overrides them. "
+                        + "Macterm does not auto-detect external edits — click Reload after saving."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
             }
 
             Section("Window") {
@@ -162,92 +109,57 @@ private struct AppearanceSettings: View {
             }
         }
         .formStyle(.grouped)
-        .task { await loadThemes() }
-        .onAppear {
-            monoFonts = Self.loadMonoFonts()
+    }
+
+    /// Push the text-field's current value into Preferences and reload. We
+    /// don't bind directly because that would reload on every keystroke;
+    /// debouncing on submit/blur matches how the path is typically edited.
+    /// If the new path produces errors, the alert surfaces via the same
+    /// `reloadAndReport` path the Reload button uses.
+    private func commitPath() {
+        guard ghosttyConfigPath != Preferences.shared.userGhosttyConfigPath else { return }
+        Preferences.shared.userGhosttyConfigPath = ghosttyConfigPath
+        reloadAndReport()
+    }
+
+    /// Trigger a libghostty config reload and surface any user-visible errors
+    /// (missing file, parse errors) as a modal alert. Silent on success.
+    private func reloadAndReport() {
+        let result = GhosttyApp.shared.reloadConfig()
+        var lines: [String] = []
+        if let missing = result.missingUserConfigPath {
+            lines.append("File not found: \(missing)")
         }
-    }
-
-    private static func loadMonoFonts() -> [String] {
-        NSFontManager.shared
-            .availableFontFamilies
-            .filter { family in
-                guard let font = NSFont(name: family, size: 13) else { return false }
-                return font.isFixedPitch || font.fontDescriptor.symbolicTraits.contains(.monoSpace)
-            }
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
-    private func loadThemes() async {
-        let paths = [
-            "/Applications/Ghostty.app/Contents/Resources/ghostty/themes",
-            NSHomeDirectory() + "/Applications/Ghostty.app/Contents/Resources/ghostty/themes",
-            NSHomeDirectory() + "/.config/ghostty/themes",
-        ]
-        var result: [ThemePreview] = []
-        for dir in paths {
-            guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
-            for file in files.sorted() {
-                let path = (dir as NSString).appendingPathComponent(file)
-                guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
-                let bg = parseColor(from: content, key: "background") ?? NSColor(srgbRed: 0.1, green: 0.1, blue: 0.1, alpha: 1)
-                let fg = parseColor(from: content, key: "foreground") ?? .white
-                let palette = parsePalette(from: content)
-                result.append(ThemePreview(id: file, background: bg, foreground: fg, palette: palette))
-            }
+        if !result.diagnostics.isEmpty {
+            lines.append(contentsOf: result.diagnostics)
         }
-        var seen = Set<String>()
-        themes = result.filter { seen.insert($0.id).inserted }
+        guard !lines.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = result.missingUserConfigPath != nil
+            ? "Ghostty config not found"
+            : "Issues in your ghostty.conf"
+        alert.informativeText = lines.joined(separator: "\n\n")
+        alert.alertStyle = result.missingUserConfigPath != nil ? .warning : .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
-    private static func colorFromHex(_ hex: String) -> NSColor? {
-        let cleaned = hex.replacingOccurrences(of: "#", with: "")
-        guard cleaned.count == 6, let val = UInt64(cleaned, radix: 16) else { return nil }
-        return NSColor(
-            srgbRed: CGFloat((val >> 16) & 0xFF) / 255,
-            green: CGFloat((val >> 8) & 0xFF) / 255,
-            blue: CGFloat(val & 0xFF) / 255,
-            alpha: 1
-        )
-    }
-
-    private func parseColor(from content: String, key: String) -> NSColor? {
-        for line in content.components(separatedBy: .newlines) {
-            let t = line.trimmingCharacters(in: .whitespaces)
-            guard t.hasPrefix(key),
-                  t.dropFirst(key.count).trimmingCharacters(in: .whitespaces).hasPrefix("="),
-                  let eq = t.firstIndex(of: "=")
-            else { continue }
-            let hex = t[t.index(after: eq)...].trimmingCharacters(in: .whitespaces)
-            return Self.colorFromHex(hex)
+    private func browse() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        // Default the panel to the user's currently configured path's
+        // directory so they don't always start from ~.
+        let current = Preferences.shared.expandedUserGhosttyConfigPath
+        if !current.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
         }
-        return nil
-    }
-
-    private func parsePalette(from content: String) -> [NSColor] {
-        let pattern = #"([0-9]{1,2})\s*=\s*#([0-9a-fA-F]{6})"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-        let ns = content as NSString
-        let matches = regex.matches(in: content, range: NSRange(location: 0, length: ns.length))
-
-        var indexed: [Int: NSColor] = [:]
-        for match in matches {
-            guard match.numberOfRanges == 3 else { continue }
-            let iString = ns.substring(with: match.range(at: 1))
-            let hex = ns.substring(with: match.range(at: 2))
-            guard let idx = Int(iString), let color = Self.colorFromHex(hex) else { continue }
-            indexed[idx] = color
-        }
-
-        return indexed.keys.sorted().compactMap { indexed[$0] }
-    }
-
-    private func colorChip(_ color: NSColor) -> some View {
-        Rectangle()
-            .fill(Color(nsColor: color))
-            .frame(width: 16, height: 16)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.quaternary))
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        ghosttyConfigPath = url.path(percentEncoded: false)
+        commitPath()
     }
 }
 
@@ -297,29 +209,6 @@ private struct QuickTerminalSettings: View {
 
 // MARK: - Keymaps
 
-private enum OptionAsAlt: String, CaseIterable, Identifiable {
-    case off = "false"
-    case both = "true"
-    case left
-    case right
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .off: "Off (compose æ, ø, å, etc.)"
-        case .both: "Both Option keys"
-        case .left: "Left Option only"
-        case .right: "Right Option only"
-        }
-    }
-
-    static func from(_ raw: String?) -> OptionAsAlt {
-        guard let raw else { return .both }
-        return OptionAsAlt(rawValue: raw.lowercased()) ?? .both
-    }
-}
-
 private struct KeymapSettings: View {
     @State
     private var values: [String: String] = [:]
@@ -327,28 +216,9 @@ private struct KeymapSettings: View {
     private var capturingActionID: String?
     @State
     private var invalidActions: Set<String> = []
-    @State
-    private var optionAsAlt: OptionAsAlt = .from(Preferences.shared.optionAsAlt)
 
     var body: some View {
         Form {
-            Section("Input") {
-                Picker("Option as Alt", selection: $optionAsAlt) {
-                    ForEach(OptionAsAlt.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .onChange(of: optionAsAlt) { _, v in
-                    Preferences.shared.optionAsAlt = v.rawValue
-                }
-                Text(
-                    "Pick \"Left\" or \"Right\" to keep one Option key for typing macOS special characters "
-                        + "(æ, ø, å, …) while the other still sends Alt to terminal programs."
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            }
-
             Section("Keyboard Shortcuts") {
                 ForEach(HotkeyAction.allCases) { action in
                     HStack {

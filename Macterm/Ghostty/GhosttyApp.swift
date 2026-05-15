@@ -25,7 +25,8 @@ final class GhosttyApp {
             logger.error("ghostty_init failed")
             return
         }
-        guard let cfg = loadConfig() else {
+        let (cfgOpt, _) = loadConfig()
+        guard let cfg = cfgOpt else {
             logger.error("ghostty_config_new failed")
             return
         }
@@ -64,8 +65,21 @@ final class GhosttyApp {
 
     // MARK: - Config
 
-    func reloadConfig() {
-        guard let app, let newConfig = loadConfig() else { return }
+    /// Result of a config (re)load. `missingUserConfigPath` is populated when
+    /// the user pointed to a path that doesn't exist on disk — useful to
+    /// surface from the Settings reload button. `diagnostics` are libghostty's
+    /// parse warnings/errors (unknown keys, bad values, etc.). Both are
+    /// empty/nil on a clean reload.
+    struct ReloadResult {
+        var missingUserConfigPath: String?
+        var diagnostics: [String]
+    }
+
+    @discardableResult
+    func reloadConfig() -> ReloadResult {
+        guard let app else { return ReloadResult(diagnostics: []) }
+        let (newConfig, result) = loadConfig()
+        guard let newConfig else { return result }
         ghostty_app_update_config(app, newConfig)
         // Also update each existing surface so changes take effect immediately
         for view in GhosttyTerminalNSView.allLiveViews() {
@@ -77,6 +91,7 @@ final class GhosttyApp {
         config = newConfig
         configVersion += 1
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
+        return result
     }
 
     var backgroundColor: NSColor { configColor("background") ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1) }
@@ -101,22 +116,48 @@ final class GhosttyApp {
         return NSColor(srgbRed: CGFloat(color.r) / 255, green: CGFloat(color.g) / 255, blue: CGFloat(color.b) / 255, alpha: 1)
     }
 
-    private func loadConfig() -> ghostty_config_t? {
-        guard let cfg = ghostty_config_new() else { return nil }
-        MactermConfig.shared.ghosttyConfigPath.withCString { ghostty_config_load_file(cfg, $0) }
+    private func loadConfig() -> (ghostty_config_t?, ReloadResult) {
+        var result = ReloadResult(diagnostics: [])
+        guard let cfg = ghostty_config_new() else { return (nil, result) }
+
+        // Three-layer ghostty config:
+        //   1. Macterm defaults — tasteful first-launch values.
+        //   2. User's ghostty.conf — overrides any default. Source of truth
+        //      for all ghostty-shaped settings (theme, font, palette, keybinds,
+        //      shell integration, etc.).
+        //   3. Macterm overrides — keys Macterm absolutely needs to control,
+        //      currently just background-opacity/blur for the window-level
+        //      translucency contract. Loaded last so it overrides the user.
+        // libghostty merges last-wins, so this ordering produces:
+        //   Macterm defaults < user's ghostty.conf < Macterm overrides
+        MactermConfig.shared.defaultsPath.withCString { ghostty_config_load_file(cfg, $0) }
+        let userPath = Preferences.shared.expandedUserGhosttyConfigPath
+        if !userPath.isEmpty {
+            if FileManager.default.fileExists(atPath: userPath) {
+                userPath.withCString { ghostty_config_load_file(cfg, $0) }
+            } else {
+                logger.info("user ghostty.conf not found at \(userPath, privacy: .public); skipping")
+                result.missingUserConfigPath = userPath
+            }
+        }
+        MactermConfig.shared.overridesPath.withCString { ghostty_config_load_file(cfg, $0) }
         ghostty_config_load_recursive_files(cfg)
         ghostty_config_finalize(cfg)
 
-        // Log config diagnostics as warnings
+        // Collect ghostty's diagnostics (parse errors, unknown keys, bad
+        // values). Log them and surface to the caller so the Settings reload
+        // button can show them in an alert.
         let diagCount = ghostty_config_diagnostics_count(cfg)
         for i in 0 ..< diagCount {
             let diag = ghostty_config_get_diagnostic(cfg, i)
             if let msg = diag.message {
-                logger.warning("config: \(String(cString: msg))")
+                let s = String(cString: msg)
+                logger.warning("config: \(s, privacy: .public)")
+                result.diagnostics.append(s)
             }
         }
 
-        return cfg
+        return (cfg, result)
     }
 
     private static let resourcePaths = [

@@ -13,6 +13,7 @@ final class GhosttyTerminalNSView: NSView {
 
     nonisolated(unsafe) private(set) var surface: ghostty_surface_t?
     private let workingDirectory: String
+    private let initialCommand: String?
     var onTitleChange: ((String) -> Void)?
     var onFocus: (() -> Void)?
     var onProcessExit: (() -> Void)?
@@ -31,8 +32,9 @@ final class GhosttyTerminalNSView: NSView {
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
-    init(workingDirectory: String) {
+    init(workingDirectory: String, initialCommand: String? = nil) {
         self.workingDirectory = workingDirectory
+        self.initialCommand = initialCommand
         super.init(frame: .zero)
         wantsLayer = true
         setupTrackingArea()
@@ -83,9 +85,23 @@ final class GhosttyTerminalNSView: NSView {
         config.scale_factor = Double(window?.backingScaleFactor ?? 2.0)
         config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 
+        // Nest withCString so both pointers stay valid through
+        // ghostty_surface_new. libghostty copies the strings before the call
+        // returns, so the nesting only matters during the call itself.
         workingDirectory.withCString { cwd in
             config.working_directory = cwd
-            surface = ghostty_surface_new(app, &config)
+            if let cmd = initialCommand {
+                // Wait for user input before closing the surface when the
+                // command exits — otherwise the tab vanishes the instant the
+                // editor quits, which is jarring.
+                config.wait_after_command = true
+                cmd.withCString { cmdPtr in
+                    config.command = cmdPtr
+                    surface = ghostty_surface_new(app, &config)
+                }
+            } else {
+                surface = ghostty_surface_new(app, &config)
+            }
         }
         guard let surface else { return }
 
@@ -322,10 +338,19 @@ final class GhosttyTerminalNSView: NSView {
         ke.consumed_mods = consumedMods(translationEvent.modifierFlags)
         ke.composing = hasMarkedText() || hadMarkedText
 
-        if !keyTextAccumulator.isEmpty, !ke.composing {
+        // Accumulator content is text the IME *committed* via `insertText`
+        // during interpretKeyEvents. Send it regardless of `composing` state:
+        // committing happens precisely when the IME finishes a syllable, which
+        // may overlap with a new composition starting (so `composing == true`
+        // here even though this specific text is finalized). Without this,
+        // Korean / Japanese / Chinese input drops every committed character.
+        // The text itself carries no composing flag since it's already final.
+        if !keyTextAccumulator.isEmpty {
+            var commitKE = ke
+            commitKE.composing = false
             for text in keyTextAccumulator {
-                text.withCString { ke.text = $0
-                    _ = ghostty_surface_key(surface, ke)
+                text.withCString { commitKE.text = $0
+                    _ = ghostty_surface_key(surface, commitKE)
                 }
             }
         } else if !hasMarkedText() {
