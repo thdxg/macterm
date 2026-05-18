@@ -34,7 +34,6 @@ final class GhosttyTerminalNSView: NSView {
     init(workingDirectory: String) {
         self.workingDirectory = workingDirectory
         super.init(frame: .zero)
-        wantsLayer = true
         setupTrackingArea()
         Self.liveViews.add(self)
     }
@@ -43,19 +42,6 @@ final class GhosttyTerminalNSView: NSView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
     }
-
-    override func makeBackingLayer() -> CALayer {
-        let layer = CAMetalLayer()
-        layer.pixelFormat = .bgra8Unorm
-        layer.isOpaque = false
-        layer.framebufferOnly = false
-        layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        layer.needsDisplayOnBoundsChange = true
-        layer.presentsWithTransaction = false
-        return layer
-    }
-
-    override var wantsUpdateLayer: Bool { true }
 
     // MARK: - Surface lifecycle
 
@@ -80,7 +66,7 @@ final class GhosttyTerminalNSView: NSView {
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
         config.platform = ghostty_platform_u(macos: ghostty_platform_macos_s(nsview: Unmanaged.passUnretained(self).toOpaque()))
         config.userdata = Unmanaged.passUnretained(self).toOpaque()
-        config.scale_factor = Double(window?.backingScaleFactor ?? 2.0)
+        config.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2.0)
         config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 
         workingDirectory.withCString { cwd in
@@ -88,10 +74,6 @@ final class GhosttyTerminalNSView: NSView {
             surface = ghostty_surface_new(app, &config)
         }
         guard let surface else { return }
-
-        let scale = Double(window?.backingScaleFactor ?? 2.0)
-        ghostty_surface_set_content_scale(surface, scale, scale)
-        ghostty_surface_set_size(surface, UInt32(backingSize.width), UInt32(backingSize.height))
 
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
@@ -187,10 +169,10 @@ final class GhosttyTerminalNSView: NSView {
         let scaledSize = convertToBacking(bounds).size
         guard scaledSize.width > 0, scaledSize.height > 0 else { return }
         let scale = Double(window?.backingScaleFactor ?? 2.0)
-        if let metalLayer = layer as? CAMetalLayer {
+        if let liveLayer = layer {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            metalLayer.contentsScale = CGFloat(scale)
+            liveLayer.contentsScale = CGFloat(scale)
             CATransaction.commit()
         }
         ghostty_surface_set_content_scale(surface, scale, scale)
