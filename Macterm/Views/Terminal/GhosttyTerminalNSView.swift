@@ -572,6 +572,22 @@ final class GhosttyTerminalNSView: NSView {
         if f.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
         if f.contains(.command) { m |= GHOSTTY_MODS_SUPER.rawValue }
         if f.contains(.capsLock) { m |= GHOSTTY_MODS_CAPS.rawValue }
+        // Side bits: NSEvent's modifierFlags include device-dependent bits
+        // (NX_DEVICE{L,R}*KEYMASK) that tell us which physical modifier key was
+        // pressed. libghostty needs the side bit to honor macos-option-as-alt =
+        // left/right (and the equivalent shift/ctrl/super distinctions). The
+        // SIDE bit is "1 = right" and is only meaningful when the base mod is
+        // set, so we mark it whenever the right key is down and the left is
+        // not — matching how Ghostty's own macOS app reports sides.
+        let raw = f.rawValue
+        let leftShift: UInt = 0x02, rightShift: UInt = 0x04
+        let leftCtrl: UInt = 0x01, rightCtrl: UInt = 0x2000
+        let leftAlt: UInt = 0x20, rightAlt: UInt = 0x40
+        let leftCmd: UInt = 0x08, rightCmd: UInt = 0x10
+        if raw & rightShift != 0, raw & leftShift == 0 { m |= GHOSTTY_MODS_SHIFT_RIGHT.rawValue }
+        if raw & rightCtrl != 0, raw & leftCtrl == 0 { m |= GHOSTTY_MODS_CTRL_RIGHT.rawValue }
+        if raw & rightAlt != 0, raw & leftAlt == 0 { m |= GHOSTTY_MODS_ALT_RIGHT.rawValue }
+        if raw & rightCmd != 0, raw & leftCmd == 0 { m |= GHOSTTY_MODS_SUPER_RIGHT.rawValue }
         return ghostty_input_mods_e(rawValue: m)
     }
 
