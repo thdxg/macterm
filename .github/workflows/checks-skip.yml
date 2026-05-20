@@ -1,0 +1,41 @@
+name: Checks
+
+# Stand-in workflow that runs when the real Checks workflow's paths filter
+# excludes the PR (e.g. docs- or workflow-only changes). It registers the same
+# required check names (Format / Lint / Test) and immediately succeeds, so
+# branch protection's "Expected — Waiting for status to be reported" doesn't
+# block the merge forever.
+#
+# Triggered on the inverse path set of checks.yml. Both workflows share the
+# same `name:` so GitHub merges their check runs under one required context.
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.swift"
+      - "project.yml"
+      - "mise.toml"
+      - "scripts/**"
+      - ".swiftformat"
+      - ".swiftlint.yml"
+      - ".github/workflows/checks.yml"
+      - "Macterm/Info.plist"
+      - "Macterm/Macterm.entitlements"
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Swift changes — skipping format."
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Swift changes — skipping lint."
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Swift changes — skipping tests."
