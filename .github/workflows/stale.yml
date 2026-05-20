@@ -13,7 +13,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@v10
         with:
           # Issues: 60 days idle -> stale, 14 more -> closed.
           days-before-issue-stale: 60
