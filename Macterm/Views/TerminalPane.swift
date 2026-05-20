@@ -144,7 +144,7 @@ private struct TerminalSurface: NSViewRepresentable {
             content.userInfo = [
                 "paneID": pane.id.uuidString,
                 "projectID": pane.projectID.uuidString,
-                "isQuickTerminal": pane.projectID == QuickTerminalService.projectID,
+                "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
             ]
             let request = UNNotificationRequest(
                 identifier: "macterm-\(pane.id.uuidString)-\(UUID().uuidString)",
@@ -168,7 +168,7 @@ private struct TerminalSurface: NSViewRepresentable {
             content.userInfo = [
                 "paneID": pane.id.uuidString,
                 "projectID": pane.projectID.uuidString,
-                "isQuickTerminal": pane.projectID == QuickTerminalService.projectID,
+                "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
             ]
             let request = UNNotificationRequest(
                 identifier: "macterm-\(pane.id.uuidString)-\(UUID().uuidString)",
@@ -183,12 +183,14 @@ private struct TerminalSurface: NSViewRepresentable {
         if seconds < 60 {
             return String(format: "%.1fs", seconds)
         } else if seconds < 3600 {
-            let mins = Int(seconds) / 60
-            let secs = Int(seconds) % 60
+            let rounded = Int(seconds.rounded())
+            let mins = rounded / 60
+            let secs = rounded % 60
             return String(format: "%dm %ds", mins, secs)
         } else {
-            let hours = Int(seconds) / 3600
-            let mins = (Int(seconds) % 3600) / 60
+            let rounded = Int(seconds.rounded())
+            let hours = rounded / 3600
+            let mins = (rounded % 3600) / 60
             return String(format: "%dh %dm", hours, mins)
         }
     }

@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor
 final class QuickTerminalService: NSObject {
     static let shared = QuickTerminalService()
-    static let projectID = UUID()
+    static let ephemeralProjectID = UUID()
 
     private(set) var panel: QuickTerminalPanel?
     var panelRef: QuickTerminalPanel? { panel }
@@ -297,7 +297,7 @@ final class QuickTerminalSplitState {
     }
 
     init() {
-        tab = TerminalTab(projectPath: NSHomeDirectory(), projectID: QuickTerminalService.projectID)
+        tab = TerminalTab(projectPath: NSHomeDirectory(), projectID: QuickTerminalService.ephemeralProjectID)
     }
 
     func focusPane(_ paneID: UUID) {
@@ -365,7 +365,7 @@ final class QuickTerminalSplitState {
             // Replace the whole tab with a fresh one — the quick terminal should
             // always have at least one pane, but we fully reset so the prior
             // pane's surface is torn down (removePane already destroyed it).
-            tab = TerminalTab(projectPath: NSHomeDirectory(), projectID: QuickTerminalService.projectID)
+            tab = TerminalTab(projectPath: NSHomeDirectory(), projectID: QuickTerminalService.ephemeralProjectID)
         case .removed,
              .notFound:
             break
@@ -410,7 +410,7 @@ private struct QuickTerminalView: View {
             focusedPaneID: state.focusedPaneID,
             zoomedPaneID: state.tab.zoomedPaneID,
             isActiveProject: true,
-            projectID: QuickTerminalService.projectID,
+            projectID: QuickTerminalService.ephemeralProjectID,
             onFocusPane: { state.focusPane($0) },
             onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
             onClosePane: { state.closePane($0) },
