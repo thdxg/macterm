@@ -1,0 +1,62 @@
+# PR auto-labels by file paths touched.
+# See https://github.com/actions/labeler
+
+"area:ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Macterm/Views/**"
+          - "Macterm/Settings/**"
+
+"area:terminal":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Macterm/Views/Terminal/**"
+          - "Macterm/Ghostty/**"
+
+"area:palette":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Macterm/Palette/**"
+
+"area:state":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Macterm/App/AppState.swift"
+          - "Macterm/Model/**"
+          - "Macterm/Persistence/**"
+
+"area:hotkeys":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Macterm/App/Hotkeys.swift"
+          - "Macterm/App/KeyRouter.swift"
+          - "Macterm/App/Responders.swift"
+
+"area:config":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Macterm/Config/**"
+
+"area:tests":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "MactermTests/**"
+
+"area:ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - "mise.toml"
+          - "scripts/**"
+
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+"area:release":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/release.yml"
+          - "Macterm/Info.plist"
