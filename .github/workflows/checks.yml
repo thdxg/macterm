@@ -1,34 +1,46 @@
 name: Checks
 
+# The workflow itself runs on every push/PR to main (no on-level paths filter).
+# A `changes` job inspects which files changed and downstream jobs gate on its
+# output with `if:`. A job whose `if:` evaluates false is reported to required
+# status checks as success, so PRs that only touch docs/workflows aren't stuck
+# on "Expected — Waiting for status to be reported".
+#
+# See: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+
 on:
   push:
     branches: [main]
-    paths:
-      - "**/*.swift"
-      - "project.yml"
-      - "mise.toml"
-      - "scripts/**"
-      - ".swiftformat"
-      - ".swiftlint.yml"
-      - ".github/workflows/checks.yml"
-      - "Macterm/Info.plist"
-      - "Macterm/Macterm.entitlements"
   pull_request:
     branches: [main]
-    paths:
-      - "**/*.swift"
-      - "project.yml"
-      - "mise.toml"
-      - "scripts/**"
-      - ".swiftformat"
-      - ".swiftlint.yml"
-      - ".github/workflows/checks.yml"
-      - "Macterm/Info.plist"
-      - "Macterm/Macterm.entitlements"
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.filter.outputs.swift }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            swift:
+              - "**/*.swift"
+              - "project.yml"
+              - "mise.toml"
+              - "scripts/**"
+              - ".swiftformat"
+              - ".swiftlint.yml"
+              - ".github/workflows/checks.yml"
+              - "Macterm/Info.plist"
+              - "Macterm/Macterm.entitlements"
+
   format:
     name: Format
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -41,6 +53,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -53,6 +67,8 @@ jobs:
 
   test:
     name: Test
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout
