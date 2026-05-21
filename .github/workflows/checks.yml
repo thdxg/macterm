@@ -1,13 +1,5 @@
 name: Checks
 
-# The workflow itself runs on every push/PR to main (no on-level paths filter).
-# A `changes` job inspects which files changed and downstream jobs gate on its
-# output with `if:`. A job whose `if:` evaluates false is reported to required
-# status checks as success, so PRs that only touch docs/workflows aren't stuck
-# on "Expected — Waiting for status to be reported".
-#
-# See: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks#handling-skipped-but-required-checks
-
 on:
   push:
     branches: [main]
