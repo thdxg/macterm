@@ -3,32 +3,36 @@ name: Checks
 on:
   push:
     branches: [main]
-    paths:
-      - "**/*.swift"
-      - "project.yml"
-      - "mise.toml"
-      - "scripts/**"
-      - ".swiftformat"
-      - ".swiftlint.yml"
-      - ".github/workflows/checks.yml"
-      - "Macterm/Info.plist"
-      - "Macterm/Macterm.entitlements"
   pull_request:
     branches: [main]
-    paths:
-      - "**/*.swift"
-      - "project.yml"
-      - "mise.toml"
-      - "scripts/**"
-      - ".swiftformat"
-      - ".swiftlint.yml"
-      - ".github/workflows/checks.yml"
-      - "Macterm/Info.plist"
-      - "Macterm/Macterm.entitlements"
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.filter.outputs.swift }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            swift:
+              - "**/*.swift"
+              - "project.yml"
+              - "mise.toml"
+              - "scripts/**"
+              - ".swiftformat"
+              - ".swiftlint.yml"
+              - ".github/workflows/checks.yml"
+              - "Macterm/Info.plist"
+              - "Macterm/Macterm.entitlements"
+
   format:
     name: Format
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -41,6 +45,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -53,6 +59,8 @@ jobs:
 
   test:
     name: Test
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout
