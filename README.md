@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  A beautiful, native macOS terminal with vertical tabs
+  A native macOS terminal with vertical tabs and persistent multiplexing, built on libghostty
 </p>
 
 ![screenshot](./assets/screenshot.png)
