@@ -73,11 +73,16 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
 
 struct HotkeyShortcut: Identifiable {
     let id: String
-    let keyCode: UInt16
+    let keyCode: UInt16 // Hardware keyCode for Carbon global hotkey registration.
+    let keyToken: String // Logical key token used for local NSEvent matching.
     let modifiers: NSEvent.ModifierFlags
 
+    /// Match by logical character, not hardware keyCode.
     func matches(_ event: NSEvent) -> Bool {
-        event.keyCode == keyCode && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == modifiers
+        guard let token = HotkeyRegistry.eventToken(event),
+              token == keyToken
+        else { return false }
+        return event.modifierFlags.intersection(.deviceIndependentFlagsMask) == modifiers
     }
 }
 
@@ -94,16 +99,84 @@ enum HotkeyRegistry {
         "'": 39, "k": 40, ";": 41, "\\": 42,
         ",": 43, "/": 44, "n": 45, "m": 46, ".": 47,
         "tab": 48, "space": 49, "`": 50,
+        "escape": 53,
+        "left": 123, "right": 124, "down": 125, "up": 126,
     ]
+
+    /// Reverse mapping: hardware keyCode → base key token.
+    /// Used as a fallback when `charactersIgnoringModifiers` yields a shifted
+    /// symbol (e.g. `<` from `shift+,`) that is not itself a valid key token.
+    /// Populated from one representative per keyCode (lowercase for letters,
+    /// unshifted for symbols).
+    private static let keyCodeToBaseToken: [UInt16: String] = {
+        var result: [UInt16: String] = [:]
+        // Letters → lowercase
+        for letter in "abcdefghijklmnopqrstuvwxyz" {
+            if let code = keyCodes[String(letter)] { result[code] = String(letter) }
+        }
+        // Digits → digit
+        for digit in "0123456789" {
+            if let code = keyCodes[String(digit)] { result[code] = String(digit) }
+        }
+        // Symbols and special keys — pick the unshifted/base form per keyCode.
+        let baseEntries: [String: UInt16] = [
+            "=": 24, "-": 27, "]": 30, "[": 33,
+            "'": 39, ";": 41, "\\": 42, ",": 43, "/": 44, ".": 47,
+            "tab": 48, "space": 49, "`": 50,
+            "return": 36, "escape": 53,
+            "left": 123, "right": 124, "down": 125, "up": 126,
+        ]
+        for (token, code) in baseEntries {
+            result[code] = token
+        }
+        return result
+    }()
+
     private static let modifierOnlyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62]
 
-    private static let keyTokensByCode: [UInt16: String] = {
-        var map: [UInt16: String] = [:]
-        for (token, code) in keyCodes where map[code] == nil {
-            map[code] = token
+    /// Characters produced by special keys → their named token form.
+    private static let specialCharsToToken: [String: String] = [
+        "\t": "tab",
+        "\r": "return",
+        " ": "space",
+        "\u{1b}": "escape",
+    ]
+
+    /// Normalize an NSEvent's key to a token string.
+    ///
+    /// Priority:
+    /// 1. Special chars (tab, return, space, escape)
+    /// 2. Single printable ASCII that is itself a known key token → use as-is
+    ///    (handles letters, digits, unshifted symbols — correct for Colemak/AZERTY)
+    /// 3. Printable but NOT a known key token (e.g. `<`, `?`, `!` from shifted
+    ///    symbols) → fall back to `keyCodeToBaseToken` to recover the base key
+    /// 4. Empty chars → arrow/non-character keys by keyCode
+    static func eventToken(_ event: NSEvent) -> String? {
+        guard let chars = event.charactersIgnoringModifiers else {
+            return Self.keyCodeToBaseToken[event.keyCode]
         }
-        return map
-    }()
+
+        // Special named keys
+        if let token = specialCharsToToken[chars] { return token }
+
+        // Single printable ASCII
+        if chars.count == 1, let scalar = chars.unicodeScalars.first,
+           scalar.value >= 0x20, scalar.value < 0x7F
+        {
+            let lower = chars.lowercased()
+            // If the char itself is a known key token, use it directly.
+            // This is the correct path for letters (layout-independent),
+            // digits, and unshifted symbols.
+            if keyCodes[lower] != nil { return lower }
+            // Printable but not a known token (e.g. "<" from shift+, "?")
+            // → fall back to the keyCode → base-token mapping.
+            if let token = Self.keyCodeToBaseToken[event.keyCode] { return token }
+            return nil
+        }
+
+        // Empty or multi-char → try named non-character keys by position
+        return Self.keyCodeToBaseToken[event.keyCode]
+    }
 
     static func parseShortcut(_ raw: String) -> HotkeyShortcut? {
         let cleaned = raw.lowercased().replacingOccurrences(of: " ", with: "")
@@ -135,7 +208,7 @@ enum HotkeyRegistry {
             }
         }
 
-        return HotkeyShortcut(id: cleaned, keyCode: keyCode, modifiers: modifiers)
+        return HotkeyShortcut(id: cleaned, keyCode: keyCode, keyToken: keyToken, modifiers: modifiers)
     }
 
     static func shortcutString(from event: NSEvent) -> String? {
@@ -149,7 +222,8 @@ enum HotkeyRegistry {
         if flags.contains(.option) { parts.append("opt") }
         guard !parts.isEmpty else { return nil }
 
-        guard let keyToken = keyTokensByCode[event.keyCode] else { return nil }
+        guard let keyToken = eventToken(event) else { return nil }
+        guard keyCodes[keyToken] != nil else { return nil }
         parts.append(keyToken)
         return parts.joined(separator: "+")
     }
@@ -184,6 +258,11 @@ enum HotkeyRegistry {
         case "space": "Space"
         case "return",
              "enter": "↩"
+        case "escape": "Esc"
+        case "left": "←"
+        case "right": "→"
+        case "up": "↑"
+        case "down": "↓"
         default: key.uppercased()
         }
         return out + keyLabel
