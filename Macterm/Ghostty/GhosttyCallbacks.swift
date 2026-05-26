@@ -65,27 +65,15 @@ final class GhosttyCallbacks: @unchecked Sendable {
 
     // MARK: - Pasteboard text resolution (shared with GhosttyTerminalNSView)
 
-    /// Mirrors Ghostty's ShellEscapeWriter for file paths pasted into the shell.
+    /// Characters to escape when pasting paths into the shell.
+    private static let escapeCharacters = "\\ ()[]{}<>\"'`!#$&;|*?\t"
+
+    /// Escape shell-sensitive characters in a string by prefixing each with a
+    /// backslash. Suitable for inserting paths/URLs into a live terminal buffer.
     private static func shellEscape(_ s: String) -> String {
-        var result = ""
-        result.reserveCapacity(s.utf8.count)
-        for ch in s {
-            switch ch {
-            case "\\",
-                 "\"",
-                 "'",
-                 "$",
-                 "`",
-                 "*",
-                 "?",
-                 " ",
-                 "|",
-                 "(",
-                 ")":
-                result.append("\\" + String(ch))
-            default:
-                result.append(ch)
-            }
+        var result = s
+        for char in escapeCharacters {
+            result = result.replacingOccurrences(of: String(char), with: "\\\(char)")
         }
         return result
     }
@@ -99,28 +87,10 @@ final class GhosttyCallbacks: @unchecked Sendable {
         // Finder copies files as NSURL data, not strings.
         if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL] {
             let paths = urls
-                .filter(\.isFileURL)
-                .map { Self.shellEscape($0.path(percentEncoded: false)) }
-                .filter { !$0.isEmpty }
-            if !paths.isEmpty {
-                return paths.joined(separator: " ")
-            }
-        }
-
-        if let items = pb.pasteboardItems {
-            let paths = items.compactMap { item -> String? in
-                guard let urlStr = item.string(forType: .fileURL), !urlStr.isEmpty
-                else { return nil }
-                let url: URL
-                if urlStr.hasPrefix("file://") {
-                    guard let parsed = URL(string: urlStr) else { return nil }
-                    url = parsed
-                } else {
-                    url = URL(filePath: urlStr)
+                .map { url in
+                    url.isFileURL ? Self.shellEscape(url.path(percentEncoded: false)) : url.absoluteString
                 }
-                let resolved = Self.shellEscape(url.path(percentEncoded: false))
-                return resolved.isEmpty ? nil : resolved
-            }
+                .filter { !$0.isEmpty }
             if !paths.isEmpty {
                 return paths.joined(separator: " ")
             }
