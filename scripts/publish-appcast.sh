@@ -38,7 +38,7 @@ fi
 # Render Markdown → HTML using GitHub's renderer (same one that produces the
 # release page). Wrap in a minimal document so Sparkle's WebView gets readable
 # typography without inheriting any GitHub chrome.
-RENDERED_HTML=$(gh api -X POST /markdown -f mode=gfm -f "text=@${NOTES_BODY_FILE}")
+RENDERED_HTML=$(gh api -X POST /markdown -f mode=gfm -F "text=@${NOTES_BODY_FILE}")
 cat > "$NOTES_HTML_FILE" <<HTML
 <!DOCTYPE html>
 <html lang="en">
