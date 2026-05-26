@@ -16,10 +16,57 @@ set -euo pipefail
 DMG_DIR="${1:-dmgs}"
 PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
 REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+PAGES_URL="https://thdxg.github.io/macterm"
+NOTES_REL_PATH="notes/${TAG}.html"
+NOTES_URL="${PAGES_URL}/${NOTES_REL_PATH}"
+
+# Fetch the GitHub Release body (Markdown) and render to HTML via the GitHub
+# API's Markdown endpoint. Sparkle's update dialog loads this URL into a
+# WebView, so we wrap the rendered body in a tiny standalone document with
+# system-matching typography. Empty release notes are tolerated — we still
+# write a placeholder so the link resolves.
+NOTES_BODY_FILE=$(mktemp)
+NOTES_HTML_FILE=$(mktemp)
+ITEMS_FILE=""
+trap 'rm -f "$NOTES_BODY_FILE" "$NOTES_HTML_FILE" ${ITEMS_FILE:+"$ITEMS_FILE"}' EXIT
+
+gh release view "$TAG" --json body --jq .body > "$NOTES_BODY_FILE"
+if [[ ! -s "$NOTES_BODY_FILE" ]]; then
+  echo "_No release notes provided._" > "$NOTES_BODY_FILE"
+fi
+
+# Render Markdown → HTML using GitHub's renderer (same one that produces the
+# release page). Wrap in a minimal document so Sparkle's WebView gets readable
+# typography without inheriting any GitHub chrome.
+RENDERED_HTML=$(gh api -X POST /markdown -f mode=gfm -f "text=@${NOTES_BODY_FILE}")
+cat > "$NOTES_HTML_FILE" <<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm ${VERSION} release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+${RENDERED_HTML}
+</body>
+</html>
+HTML
 
 # Write the per-DMG <item> blocks into a temp file.
 ITEMS_FILE=$(mktemp)
-trap 'rm -f "$ITEMS_FILE"' EXIT
 
 for dmg in "$DMG_DIR"/*.dmg; do
   name=$(basename "$dmg")
@@ -32,6 +79,7 @@ for dmg in "$DMG_DIR"/*.dmg; do
       <sparkle:version>${VERSION}</sparkle:version>
       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>${NOTES_URL}</sparkle:releaseNotesLink>
       <link>${REPO_URL}/releases/tag/${TAG}</link>
       <enclosure url="${url}" type="application/octet-stream" ${sig} />
     </item>
@@ -77,7 +125,10 @@ awk -v items_file="$ITEMS_FILE" '
 ' appcast.xml > appcast.xml.new
 mv appcast.xml.new appcast.xml
 
-git add appcast.xml
+mkdir -p notes
+cp "$NOTES_HTML_FILE" "$NOTES_REL_PATH"
+
+git add appcast.xml "$NOTES_REL_PATH"
 git commit -m "Publish appcast for ${TAG}"
 git push origin gh-pages
 

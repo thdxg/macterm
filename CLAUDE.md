@@ -30,7 +30,7 @@ Tag-pushed builds are released via `.github/workflows/release.yml`. The workflow
 
 Generate the keypair once by downloading Sparkle and running `./bin/generate_keys`. Store the public key in `SPARKLE_ED_PUBLIC_KEY` (it's not secret, but keeping it as a secret avoids committing it to the repo) and the private key in `SPARKLE_ED_PRIVATE_KEY`. Back the private key up in a password manager — losing it means users cannot auto-update to any further release.
 
-The workflow pushes a new `<item>` to `appcast.xml` on the `gh-pages` branch, which GitHub Pages serves at `https://thdxg.github.io/macterm/appcast.xml` — the feed URL baked into `Info.plist`.
+The workflow pushes a new `<item>` to `appcast.xml` on the `gh-pages` branch, which GitHub Pages serves at `https://thdxg.github.io/macterm/appcast.xml` — the feed URL baked into `Info.plist`. The item also includes a `<sparkle:releaseNotesLink>` to a per-version notes page (`notes/v<version>.html`) also published on `gh-pages`; Sparkle's update dialog loads that into its WebView. Notes are sourced from the GitHub Release body (`--generate-notes` produces them) and rendered to HTML via the GitHub API's `/markdown` endpoint in `publish-appcast.sh`.
 
 ## Architecture Overview
 
