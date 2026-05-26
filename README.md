@@ -21,11 +21,11 @@
 ## Features
 
 - **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
-- **Split Panes**: Unlimited horizontal and vertical splits, with optional auto-tiling.
-- **Persistence**: Projects, tabs, and panes are saved and restored automatically.
-- **Quick terminal**: Global terminal accessible from anywhere.
-- **Configurable via Ghostty config**: Macterm reads your existing `~/.config/ghostty/config`. Theme, font, palette, keybinds — all of it just works.
+- **Persistent Multiplexing**: Projects, tabs, and panes are saved and restored automatically on relaunch.
+- **Ghostty Config Compatibility**: Macterm reads your existing `~/.config/ghostty/config`. Theme, font, palette, keybinds — all of it just works.
+- **Keyboard-first Navigation**: Customizable keybinds for navigating projects, tabs, and panes.
 - **Command Palette**: Versatile command palette to interact with multiplexing (open, delete, and search projects)
+- **Quick terminal**: Global terminal accessible from anywhere with a hotkey.
 
 ## Install
 
