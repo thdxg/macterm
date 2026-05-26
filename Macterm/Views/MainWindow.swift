@@ -38,6 +38,9 @@ struct MainWindow: View {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    TabSwitcherToolbarItem()
+                }
             }
         }
         .background(WindowStyler())

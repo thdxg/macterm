@@ -2,6 +2,23 @@ import AppKit
 import Foundation
 import Observation
 
+/// When the numbered tab switcher in the title bar is shown.
+enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
+    case always
+    case whenMultiple = "when_multiple"
+    case hidden
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .always: "Always"
+        case .whenMultiple: "When multiple tabs"
+        case .hidden: "Hidden"
+        }
+    }
+}
+
 /// Single observable source of truth for UserDefaults-backed preferences.
 ///
 /// Macterm only stores app-shaped state here (window opacity/blur, quick
@@ -34,6 +51,12 @@ final class Preferences {
 
     var showNewProjectButton: Bool {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
+    }
+
+    // MARK: - Toolbar
+
+    var tabSwitcherVisibility: TabSwitcherVisibility {
+        didSet { defaults.set(tabSwitcherVisibility.rawValue, forKey: Keys.tabSwitcherVisibility) }
     }
 
     /// Sentinel for "no icon" — sidebar rows skip the leading glyph when set.
@@ -176,6 +199,8 @@ final class Preferences {
         projectIconSymbol = defaults.string(forKey: Keys.projectIconSymbol) ?? "folder"
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
+        tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
+            .flatMap(TabSwitcherVisibility.init(rawValue:)) ?? .whenMultiple
         Self.runOneTimeMigrations(defaults: defaults)
     }
 
@@ -219,6 +244,7 @@ final class Preferences {
         static let projectIconSymbol = "macterm.sidebar.projectIcon"
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
+        static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
     }
 }

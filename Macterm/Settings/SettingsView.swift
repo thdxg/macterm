@@ -7,6 +7,8 @@ struct SettingsView: View {
         TabView {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            AppearanceSettings()
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }
             QuickTerminalSettings()
                 .tabItem {
                     Label("Quick Terminal", systemImage: "rectangle.bottomthird.inset.filled")
@@ -25,18 +27,8 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     @AppStorage(Preferences.Keys.autoTiling)
     private var autoTilingEnabled = false
-    @AppStorage(Preferences.Keys.projectIconSymbol)
-    private var projectIconSymbol = "folder"
-    @AppStorage(Preferences.Keys.tabIconSymbol)
-    private var tabIconSymbol = "terminal"
-    @AppStorage(Preferences.Keys.showNewProjectButton)
-    private var showNewProjectButton = true
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
-    @State
-    private var backgroundOpacity: Double = Preferences.shared.windowOpacity
-    @State
-    private var backgroundBlurRadius: Double = .init(Preferences.shared.windowBlurRadius)
 
     var body: some View {
         Form {
@@ -63,6 +55,65 @@ private struct GeneralSettings: View {
                 .foregroundStyle(.secondary)
             }
 
+            Section("Layout") {
+                Toggle("Auto-tile panes", isOn: $autoTilingEnabled)
+                    .onChange(of: autoTilingEnabled) { _, v in
+                        Preferences.shared.autoTilingEnabled = v
+                    }
+                Text("Distributes pane sizes evenly on split and close.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Push the text-field's current value into Preferences and reload. We
+    /// don't bind directly because that would reload on every keystroke;
+    /// debouncing on submit/blur matches how the path is typically edited.
+    /// If the new path produces errors, the alert surfaces via `reloadAndReport`.
+    private func commitPath() {
+        guard ghosttyConfigPath != Preferences.shared.userGhosttyConfigPath else { return }
+        Preferences.shared.userGhosttyConfigPath = ghosttyConfigPath
+        GhosttyApp.shared.reloadAndReport()
+    }
+
+    private func browse() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        // Default the panel to the user's currently configured path's
+        // directory so they don't always start from ~.
+        let current = Preferences.shared.expandedUserGhosttyConfigPath
+        if !current.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        ghosttyConfigPath = url.path(percentEncoded: false)
+        commitPath()
+    }
+}
+
+// MARK: - Appearance
+
+private struct AppearanceSettings: View {
+    @AppStorage(Preferences.Keys.projectIconSymbol)
+    private var projectIconSymbol = "folder"
+    @AppStorage(Preferences.Keys.tabIconSymbol)
+    private var tabIconSymbol = "terminal"
+    @AppStorage(Preferences.Keys.showNewProjectButton)
+    private var showNewProjectButton = true
+    @AppStorage(Preferences.Keys.tabSwitcherVisibility)
+    private var tabSwitcherVisibility = TabSwitcherVisibility.whenMultiple.rawValue
+    @State
+    private var backgroundOpacity: Double = Preferences.shared.windowOpacity
+    @State
+    private var backgroundBlurRadius: Double = .init(Preferences.shared.windowBlurRadius)
+
+    var body: some View {
+        Form {
             Section("Window") {
                 HStack {
                     Text("Background Opacity")
@@ -92,16 +143,6 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Layout") {
-                Toggle("Auto-tile panes", isOn: $autoTilingEnabled)
-                    .onChange(of: autoTilingEnabled) { _, v in
-                        Preferences.shared.autoTilingEnabled = v
-                    }
-                Text("Distributes pane sizes evenly on split and close.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-
             Section("Sidebar") {
                 Picker("Project icon", selection: $projectIconSymbol) {
                     ForEach(Preferences.projectIconChoices, id: \.self) { name in
@@ -120,6 +161,20 @@ private struct GeneralSettings: View {
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
                 Text("When hidden, create projects via the command palette or context menu.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Toolbar") {
+                Picker("Tab switcher", selection: $tabSwitcherVisibility) {
+                    ForEach(TabSwitcherVisibility.allCases) { option in
+                        Text(option.displayName).tag(option.rawValue)
+                    }
+                }
+                .onChange(of: tabSwitcherVisibility) { _, v in
+                    Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
+                }
+                Text("Numbered control in the title bar for switching tabs by index.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -145,33 +200,6 @@ private struct GeneralSettings: View {
         default:
             Label(name, systemImage: name)
         }
-    }
-
-    /// Push the text-field's current value into Preferences and reload. We
-    /// don't bind directly because that would reload on every keystroke;
-    /// debouncing on submit/blur matches how the path is typically edited.
-    /// If the new path produces errors, the alert surfaces via `reloadAndReport`.
-    private func commitPath() {
-        guard ghosttyConfigPath != Preferences.shared.userGhosttyConfigPath else { return }
-        Preferences.shared.userGhosttyConfigPath = ghosttyConfigPath
-        GhosttyApp.shared.reloadAndReport()
-    }
-
-    private func browse() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        // Default the panel to the user's currently configured path's
-        // directory so they don't always start from ~.
-        let current = Preferences.shared.expandedUserGhosttyConfigPath
-        if !current.isEmpty {
-            panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
-        }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        ghosttyConfigPath = url.path(percentEncoded: false)
-        commitPath()
     }
 }
 
