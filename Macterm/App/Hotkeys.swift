@@ -273,7 +273,7 @@ enum HotkeyRegistry {
     }
 
     static func selectedShortcut(for action: HotkeyAction) -> HotkeyShortcut? {
-        parseShortcut(selectedShortcutString(for: action)) ?? parseShortcut(action.defaultShortcut)
+        parseShortcut(selectedShortcutString(for: action))
     }
 
     static func setShortcutString(_ shortcut: String, for action: HotkeyAction) {
