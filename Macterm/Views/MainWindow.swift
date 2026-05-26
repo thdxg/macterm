@@ -51,7 +51,9 @@ struct MainWindow: View {
             appState.restoreSelection(projects: projectStore.projects)
         }
         .onChange(of: appState.sidebarVisible) { _, visible in
-            columnVisibility = visible ? .automatic : .detailOnly
+            withAnimation {
+                columnVisibility = visible ? .automatic : .detailOnly
+            }
         }
         .onChange(of: appState.isCommandPaletteVisible) { _, visible in
             guard !visible else { return }
