@@ -8,12 +8,10 @@ GhosttyKit/ghostty.h
 /ghostty
 
 # Ghostty resources (themes + shell-integration) downloaded by setup.sh from
-# the thdxg/ghostty release. The two committed custom themes are kept; every
-# other theme and the whole shell-integration tree are fetched, not committed.
+# the thdxg/ghostty release. Macterm ships the upstream ghostty themes verbatim
+# so users configure them via their Ghostty config — none are committed here.
 /Macterm/Resources/shell-integration/
-/Macterm/Resources/themes/*
-!/Macterm/Resources/themes/Macterm
-!/Macterm/Resources/themes/Macterm Light
+/Macterm/Resources/themes/
 /build
 .agents/
 .claude/
