@@ -19,7 +19,7 @@ jobs:
       - uses: jdx/mise-action@v4
 
       - name: Setup GhosttyKit
-        run: mise run ci:setup
+        run: mise run setup --verbose
 
       - name: Build universal release artifact
         env:
@@ -29,7 +29,11 @@ jobs:
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="0.0.0"
           fi
-          VERSION="$VERSION" mise run ci:build
+          # Release builds invoke the build script directly to skip the
+          # format/lint/test deps on `mise run build` — main is already
+          # format/lint/test-gated by checks.yml before a tag is cut, so a
+          # release just needs the build itself. Equivalent to the old ci:build.
+          VERSION="$VERSION" ./scripts/build.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
