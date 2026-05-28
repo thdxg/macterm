@@ -40,7 +40,7 @@ final class MactermConfig {
             // these without needing to know they exist. Anything we'd set to
             // ghostty's own default (e.g. scrollbar=system) isn't listed —
             // libghostty already does the right thing.
-            "theme = \"Rose Pine\"",
+            "theme = \"Macterm\"",
             "font-size = 16",
             "macos-option-as-alt = true",
             "window-padding-x = 16",

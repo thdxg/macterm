@@ -47,10 +47,19 @@ targets:
           - "Info.plist"
           - "Macterm.entitlements"
           - "Resources/themes"
+          - "Resources/shell-integration"
           - "AppIcon.icon"
       # Bundle the themes/ directory verbatim as a folder reference. Treating
       # it as a "group" (the default) made Xcode skip files with no extension.
+      # Lands at Contents/Resources/themes — GHOSTTY_RESOURCES_DIR points at
+      # Contents/Resources so libghostty resolves named themes from here.
       - path: Macterm/Resources/themes
+        type: folder
+        buildPhase: resources
+      # Ghostty shell-integration scripts (bash/zsh/fish/...), downloaded by
+      # setup.sh. Folder reference for the same reason as themes — extensionless
+      # files. Lands at Contents/Resources/shell-integration.
+      - path: Macterm/Resources/shell-integration
         type: folder
         buildPhase: resources
       # Icon Composer file. Xcode 26 prefers this over an Assets.xcassets

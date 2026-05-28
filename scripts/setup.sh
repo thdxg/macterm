@@ -3,9 +3,18 @@ set -euo pipefail
 
 FORK_REPO="thdxg/ghostty"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
+# Marker for the downloaded upstream resources. The two committed custom themes
+# (Macterm, Macterm Light) live in Resources/themes/ alongside them, so we can't
+# key off the themes dir existing — shell-integration ships only in the tarball.
+RESOURCES_MARKER="Macterm/Resources/shell-integration"
 
-if [[ -d "$XCFRAMEWORK_DIR" ]]; then
-  echo "GhosttyKit already present"
+need_xcframework=true
+need_resources=true
+[[ -d "$XCFRAMEWORK_DIR" ]] && need_xcframework=false
+[[ -d "$RESOURCES_MARKER" ]] && need_resources=false
+
+if ! $need_xcframework && ! $need_resources; then
+  echo "GhosttyKit and resources already present"
   exit 0
 fi
 
@@ -15,7 +24,20 @@ if [[ -z "$LATEST_TAG" ]]; then
   exit 1
 fi
 
-gh release download "$LATEST_TAG" --pattern "GhosttyKit.xcframework.tar.gz" --repo "$FORK_REPO"
+if $need_xcframework; then
+  gh release download "$LATEST_TAG" --pattern "GhosttyKit.xcframework.tar.gz" --repo "$FORK_REPO"
+  tar xzf GhosttyKit.xcframework.tar.gz
+  rm GhosttyKit.xcframework.tar.gz
+fi
 
-tar xzf GhosttyKit.xcframework.tar.gz
-rm GhosttyKit.xcframework.tar.gz
+if $need_resources; then
+  # Bundled themes + shell-integration so named themes (Rose Pine, etc.) and
+  # shell integration resolve without a separate Ghostty.app install. The
+  # tarball contains top-level themes/ and shell-integration/ dirs; extract
+  # them into Macterm/Resources/. The committed custom themes are preserved
+  # because tar only writes the files it carries.
+  gh release download "$LATEST_TAG" --pattern "ghostty-resources.tar.gz" --repo "$FORK_REPO"
+  mkdir -p Macterm/Resources
+  tar xzf ghostty-resources.tar.gz -C Macterm/Resources
+  rm ghostty-resources.tar.gz
+fi

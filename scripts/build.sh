@@ -16,6 +16,11 @@ DERIVED_DATA="$BUILD_DIR/DerivedData"
 ARCHIVE_PATH="$BUILD_DIR/Macterm.xcarchive"
 EXPORT_PATH="$BUILD_DIR/export"
 
+# Ensure GhosttyKit + bundled resources (themes, shell-integration) are present
+# before xcodegen resolves the folder references. Idempotent; no-op in CI where
+# ci:setup already ran.
+"$PROJECT_ROOT/scripts/setup.sh"
+
 # Regenerate the Xcode project so any project.yml edits land in CI builds
 # without requiring a developer to commit the generated .xcodeproj.
 xcodegen generate --spec "$PROJECT_ROOT/project.yml" >/dev/null

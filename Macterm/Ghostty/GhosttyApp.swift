@@ -185,19 +185,31 @@ final class GhosttyApp {
         return (cfg, result)
     }
 
-    private static let resourcePaths = [
-        "/Applications/Ghostty.app/Contents/Resources/ghostty",
-        NSHomeDirectory() + "/Applications/Ghostty.app/Contents/Resources/ghostty",
-    ]
+    /// Candidate ghostty resource dirs, highest priority first. Macterm ships
+    /// themes + shell-integration in its own bundle (downloaded by setup.sh),
+    /// so named themes and shell integration resolve with no Ghostty.app
+    /// install. The installed Ghostty.app dirs remain as fallbacks for the rare
+    /// case the bundle is missing them (e.g. an unprepared dev checkout).
+    private static let resourcePaths: [String] = {
+        var paths: [String] = []
+        if let bundle = Bundle.main.resourceURL?.path {
+            paths.append(bundle)
+        }
+        paths.append("/Applications/Ghostty.app/Contents/Resources/ghostty")
+        paths.append(NSHomeDirectory() + "/Applications/Ghostty.app/Contents/Resources/ghostty")
+        return paths
+    }()
 
     private func resolveResources() {
-        if let existing = getenv("GHOSTTY_RESOURCES_DIR").map({ String(cString: $0) }) {
-            guard Self.resourcePaths.contains(where: { existing.hasPrefix($0) }) else {
-                unsetenv("GHOSTTY_RESOURCES_DIR")
-                return
-            }
+        // Honor an explicit GHOSTTY_RESOURCES_DIR only if it points at a dir we
+        // recognize; otherwise drop it so a stale/foreign value can't shadow
+        // our bundle. A bare value is replaced below.
+        if let existing = getenv("GHOSTTY_RESOURCES_DIR").map({ String(cString: $0) }),
+           Self.resourcePaths.contains(where: { existing.hasPrefix($0) })
+        {
             return
         }
+        unsetenv("GHOSTTY_RESOURCES_DIR")
         for path in Self.resourcePaths where FileManager.default.fileExists(atPath: path + "/shell-integration") {
             setenv("GHOSTTY_RESOURCES_DIR", path, 1)
             return
