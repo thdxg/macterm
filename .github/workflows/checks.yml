@@ -41,7 +41,7 @@ jobs:
       - uses: jdx/mise-action@v4
 
       - name: Format
-        run: mise run ci:format
+        run: mise run format --check --verbose
 
   lint:
     name: Lint
@@ -55,7 +55,7 @@ jobs:
       - uses: jdx/mise-action@v4
 
       - name: Lint
-        run: mise run ci:lint
+        run: mise run lint --verbose
 
   test:
     name: Test
@@ -69,9 +69,9 @@ jobs:
       - uses: jdx/mise-action@v4
 
       - name: Setup GhosttyKit
-        run: mise run ci:setup
+        run: mise run setup --verbose
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test
-        run: mise run ci:test
+        run: mise run test --verbose

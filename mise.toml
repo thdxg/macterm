@@ -8,61 +8,107 @@ xcbeautify = "latest"
 [settings]
 task.output = "quiet"
 
-# ─── Dev tasks (pretty spinners) ────────────────────────────────────────────
-# Each task wraps a raw script via scripts/_lib.sh's run_step helper, which
-# hides logs while running and prints stderr only on failure. Use these
-# locally. CI uses the ci:* tasks below, which run the scripts directly.
+# ─── Tasks ──────────────────────────────────────────────────────────────────
+# Every task takes a -v/--verbose flag. Without it (local dev) the task runs
+# behind scripts/_lib.sh's run_step spinner, which hides logs while running and
+# prints them only on failure. With --verbose (used by CI) the script runs
+# directly so all output streams inline. This replaces the old parallel ci:*
+# tasks — CI now calls e.g. `mise run setup --verbose`.
 
 [tasks.run]
 description = "Run the app"
 depends = ["format", "lint"]
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
 run = """
   source scripts/_lib.sh
-  run_step "Running..." ./scripts/run.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/run.sh
+  else
+    run_step "Running..." ./scripts/run.sh
+  fi
 """
 
 [tasks.build]
 description = "Build release app and DMG"
 depends = ["format", "lint", "test"]
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
 run = """
   source scripts/_lib.sh
-  run_step "Building..." ./scripts/build.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/build.sh
+  else
+    run_step "Building..." ./scripts/build.sh
+  fi
 """
 
 [tasks.install]
 description = "Install built app to /Applications"
 depends = ["build"]
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
 run = """
   source scripts/_lib.sh
-  run_step "Installing to /Applications..." ./scripts/install.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/install.sh
+  else
+    run_step "Installing to /Applications..." ./scripts/install.sh
+  fi
 """
 
 [tasks.setup]
-description = "Download GhosttyKit framework"
+description = "Download GhosttyKit framework and resources"
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
 run = """
   source scripts/_lib.sh
-  run_step "Setting up GhosttyKit..." ./scripts/setup.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/setup.sh
+  else
+    run_step "Setting up GhosttyKit..." ./scripts/setup.sh
+  fi
 """
 
 [tasks.format]
-description = "Auto-fix formatting issues"
+description = "Format Swift code (use --check to verify only)"
+usage = '''
+flag "-v --verbose" help="Stream raw output instead of the spinner"
+flag "--check" help="Verify formatting without modifying files (CI mode)"
+'''
 run = """
   source scripts/_lib.sh
-  run_step "Formatting..." ./scripts/format.sh
+  args=()
+  msg="Formatting..."
+  if [[ "$usage_check" == "true" ]]; then
+    args+=(--check)
+    msg="Checking formatting..."
+  fi
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/format.sh "${args[@]}"
+  else
+    run_step "$msg" ./scripts/format.sh "${args[@]}"
+  fi
 """
 
 [tasks.lint]
 description = "Run swiftlint"
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
 run = """
   source scripts/_lib.sh
-  run_step "Linting..." ./scripts/lint.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/lint.sh
+  else
+    run_step "Linting..." ./scripts/lint.sh
+  fi
 """
 
 [tasks.test]
 description = "Run the test suite"
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
 run = """
   source scripts/_lib.sh
-  run_step "Testing..." ./scripts/test.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/test.sh
+  else
+    run_step "Testing..." ./scripts/test.sh
+  fi
 """
 
 [tasks.clean]
@@ -72,27 +118,3 @@ run = "rm -rf .build build Macterm.xcodeproj"
 [tasks.stats]
 description = "Show download statistics"
 run = "scripts/stats.sh"
-
-# ─── CI tasks (raw logs, no spinner) ────────────────────────────────────────
-# CI uses these so failures show full output inline. Each one is a thin
-# wrapper that calls the same underlying script directly.
-
-[tasks."ci:setup"]
-description = "CI: download GhosttyKit"
-run = "scripts/setup.sh"
-
-[tasks."ci:format"]
-description = "CI: check formatting"
-run = "scripts/format.sh --check"
-
-[tasks."ci:lint"]
-description = "CI: run swiftlint"
-run = "scripts/lint.sh"
-
-[tasks."ci:test"]
-description = "CI: run test suite"
-run = "scripts/test.sh"
-
-[tasks."ci:build"]
-description = "CI: release build + DMG"
-run = "scripts/build.sh"
