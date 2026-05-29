@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/github/v/release/thdxg/macterm?label=version&color=blue" alt="Latest version" />
   </a>
   <a href="https://github.com/thdxg/macterm/releases">
-    <img src="https://img.shields.io/github/downloads/thdxg/macterm/total?label=downloads&color=green" alt="Total downloads" />
+    <img src="https://img.shields.io/github/downloads/thdxg/macterm/total" alt="Total downloads" />
   </a>
   <a href="https://github.com/thdxg/macterm/actions/workflows/checks.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/thdxg/macterm/checks.yml?branch=main&label=checks" alt="CI status" />
