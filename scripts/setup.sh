@@ -3,10 +3,11 @@ set -euo pipefail
 
 FORK_REPO="thdxg/ghostty"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
-# Marker for the downloaded upstream resources (themes + shell-integration).
-# Both dirs come entirely from the tarball — nothing is committed — so the
-# presence of either signals the download already ran.
-RESOURCES_MARKER="Macterm/Resources/shell-integration"
+# Marker for the downloaded upstream resources (terminfo + themes +
+# shell-integration). All come entirely from the tarball — nothing is
+# committed — so its presence signals the download already ran. Keyed on
+# terminfo/ so checkouts predating the terminfo bundling re-download it.
+RESOURCES_MARKER="Macterm/Resources/terminfo"
 
 need_xcframework=true
 need_resources=true
@@ -31,11 +32,12 @@ if $need_xcframework; then
 fi
 
 if $need_resources; then
-  # Bundled themes + shell-integration so named themes (Rose Pine, etc.) and
-  # shell integration resolve without a separate Ghostty.app install. The
-  # tarball contains top-level themes/ and shell-integration/ dirs; extract
-  # them into Macterm/Resources/ (both are gitignored — Macterm ships the
-  # upstream ghostty themes verbatim, none are committed).
+  # Bundled terminfo + themes + shell-integration so TERM=xterm-ghostty,
+  # named themes (Rose Pine, etc.), and shell integration all resolve without
+  # a separate Ghostty.app install. The tarball contains top-level terminfo/,
+  # themes/, and shell-integration/ dirs; extract them into Macterm/Resources/
+  # (all gitignored — Macterm ships the upstream resources verbatim, none are
+  # committed).
   gh release download "$LATEST_TAG" --pattern "ghostty-resources.tar.gz" --repo "$FORK_REPO"
   mkdir -p Macterm/Resources
   tar xzf ghostty-resources.tar.gz -C Macterm/Resources

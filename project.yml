@@ -46,9 +46,17 @@ targets:
         excludes:
           - "Info.plist"
           - "Macterm.entitlements"
+          - "Resources/terminfo"
           - "Resources/themes"
           - "Resources/shell-integration"
           - "AppIcon.icon"
+      # Compiled terminfo DB (downloaded by setup.sh) so TERM=xterm-ghostty
+      # resolves without a Ghostty.app install. Folder reference to preserve the
+      # hashed macOS layout (terminfo/78/xterm-ghostty) and extensionless files.
+      # Lands at Contents/Resources/terminfo — GhosttyApp points TERMINFO here.
+      - path: Macterm/Resources/terminfo
+        type: folder
+        buildPhase: resources
       # Bundle the themes/ directory verbatim as a folder reference. Treating
       # it as a "group" (the default) made Xcode skip files with no extension.
       # Lands at Contents/Resources/themes — GHOSTTY_RESOURCES_DIR points at

@@ -186,10 +186,11 @@ final class GhosttyApp {
     }
 
     /// Candidate ghostty resource dirs, highest priority first. Macterm ships
-    /// themes + shell-integration in its own bundle (downloaded by setup.sh),
-    /// so named themes and shell integration resolve with no Ghostty.app
-    /// install. The installed Ghostty.app dirs remain as fallbacks for the rare
-    /// case the bundle is missing them (e.g. an unprepared dev checkout).
+    /// terminfo + themes + shell-integration in its own bundle (downloaded by
+    /// setup.sh), so TERM=xterm-ghostty, named themes, and shell integration
+    /// resolve with no Ghostty.app install. The installed Ghostty.app dirs
+    /// remain as fallbacks for the rare case the bundle is missing them (e.g.
+    /// an unprepared dev checkout).
     private static let resourcePaths: [String] = {
         var paths: [String] = []
         if let bundle = Bundle.main.resourceURL?.path {
@@ -209,10 +210,23 @@ final class GhosttyApp {
         {
             return
         }
-        unsetenv("GHOSTTY_RESOURCES_DIR")
-        for path in Self.resourcePaths where FileManager.default.fileExists(atPath: path + "/shell-integration") {
-            setenv("GHOSTTY_RESOURCES_DIR", path, 1)
+
+        let resolver = GhosttyResourceResolver(
+            candidates: Self.resourcePaths,
+            bundleResourcesDir: Bundle.main.resourceURL?.path,
+            fileExists: { FileManager.default.fileExists(atPath: $0) }
+        )
+        guard let resolution = resolver.resolve() else {
+            unsetenv("GHOSTTY_RESOURCES_DIR")
             return
+        }
+        setenv("GHOSTTY_RESOURCES_DIR", resolution.resourcesDir, 1)
+        // TERMINFO is set explicitly (rather than relying on libghostty's
+        // dirname(resourcesDir)/terminfo derivation) because Macterm's
+        // GHOSTTY_RESOURCES_DIR is the bundle's Contents/Resources, so that
+        // derivation would point at Contents/terminfo — outside Resources.
+        if let terminfo = resolution.terminfoDir {
+            setenv("TERMINFO", terminfo, 1)
         }
     }
 }
