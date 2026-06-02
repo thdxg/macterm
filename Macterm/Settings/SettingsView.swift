@@ -109,11 +109,9 @@ private struct GeneralSettings: View {
 /// binary, so without it some features are disabled — the README link spells
 /// out which. Embedded directly in a `Form`, so it renders as its own section.
 private struct MissingGhosttyCLIBanner: View {
-    private static let detailsURL = "https://github.com/thdxg/macterm#whats-different-from-ghosttyapp"
-
-    // Typed as LocalizedStringKey (not String) so Text parses the markdown link.
-    private static let detail: LocalizedStringKey =
-        "Ghostty.app isn't installed, so a few shell-integration features can't run. [Learn more](\(detailsURL))"
+    private static let detailsURL = URL(
+        string: "https://github.com/thdxg/macterm#whats-different-from-ghosttyapp"
+    )
 
     var body: some View {
         Section {
@@ -121,9 +119,13 @@ private struct MissingGhosttyCLIBanner: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Some features are disabled")
                         .font(.system(size: 13, weight: .semibold))
-                    Text(Self.detail)
+                    Text("Ghostty.app isn't installed, so a few shell-integration features can't run.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                    if let url = Self.detailsURL {
+                        Link("Learn more", destination: url)
+                            .font(.system(size: 11))
+                    }
                 }
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")
