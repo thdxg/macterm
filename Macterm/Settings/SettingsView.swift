@@ -106,39 +106,29 @@ private struct GeneralSettings: View {
 
 /// Shown in General settings when the standalone ghostty CLI (shipped in
 /// Ghostty.app) isn't installed. A few shell-integration wrappers exec that
-/// binary, so without it the features in `GhosttyCLI.gatedFeatures` are
-/// disabled. Embedded directly in a `Form`, so it renders as its own section.
+/// binary, so without it some features are disabled — the README link spells
+/// out which. Embedded directly in a `Form`, so it renders as its own section.
 private struct MissingGhosttyCLIBanner: View {
+    private static let detailsURL = URL(
+        string: "https://github.com/thdxg/macterm#whats-different-from-ghosttyapp"
+    )!
+
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Label {
-                    Text("Some features need the Ghostty app")
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Some features are disabled")
                         .font(.system(size: 13, weight: .semibold))
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
+                    Text(
+                        "Ghostty.app isn't installed, so a few shell-integration "
+                            + "features can't run. [Learn more](\(Self.detailsURL.absoluteString))"
+                    )
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 }
-
-                Text(
-                    "Macterm couldn't find the ghostty command-line tool. It ships inside "
-                        + "Ghostty.app — install it to /Applications and reopen Macterm to "
-                        + "enable these features:"
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(GhosttyCLI.gatedFeatures, id: \.name) { feature in
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(feature.name)
-                                .font(.system(size: 11, weight: .medium))
-                            Text(feature.detail)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
             }
             .padding(.vertical, 2)
         }

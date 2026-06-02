@@ -6,7 +6,7 @@ import Foundation
 /// wrappers exec the standalone `ghostty` CLI at runtime. Macterm ships no such
 /// binary, so those wrappers only work when the user also has Ghostty.app
 /// installed. When it's missing, `MactermConfig` disables the dependent
-/// features (see `GhosttyCLI.gatedFeatures`) and Settings surfaces a banner.
+/// shell-integration features and Settings surfaces a banner.
 ///
 /// Selection logic only — the candidate paths and a filesystem probe are
 /// injected so the detection is unit-testable without touching disk.
@@ -23,28 +23,6 @@ struct GhosttyCLI {
     }
 
     var isInstalled: Bool { resolveBinDir() != nil }
-
-    /// Features that silently stop working without the external CLI, matching
-    /// the `shell-integration-features` Macterm disables in `MactermConfig`.
-    struct GatedFeature {
-        let name: String
-        let detail: String
-    }
-
-    static let gatedFeatures: [GatedFeature] = [
-        GatedFeature(
-            name: "SSH terminfo",
-            detail: "Installs the xterm-ghostty terminfo on remote hosts so keys and colors work over SSH."
-        ),
-        GatedFeature(
-            name: "SSH environment",
-            detail: "Propagates TERM and shell-integration variables to SSH sessions."
-        ),
-        GatedFeature(
-            name: "Shell PATH integration",
-            detail: "Adds the ghostty CLI to PATH inside spawned shells."
-        ),
-    ]
 }
 
 extension GhosttyCLI {

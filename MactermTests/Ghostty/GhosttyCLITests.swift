@@ -35,9 +35,4 @@ struct GhosttyCLITests {
         #expect(c.resolveBinDir() == nil)
         #expect(!c.isInstalled)
     }
-
-    @Test
-    func gated_features_are_nonempty() {
-        #expect(!GhosttyCLI.gatedFeatures.isEmpty)
-    }
 }
