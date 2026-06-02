@@ -109,9 +109,7 @@ private struct GeneralSettings: View {
 /// binary, so without it some features are disabled — the README link spells
 /// out which. Embedded directly in a `Form`, so it renders as its own section.
 private struct MissingGhosttyCLIBanner: View {
-    private static let detailsURL = URL(
-        string: "https://github.com/thdxg/macterm#whats-different-from-ghosttyapp"
-    )!
+    private static let detailsURL = "https://github.com/thdxg/macterm#whats-different-from-ghosttyapp"
 
     var body: some View {
         Section {
@@ -121,7 +119,7 @@ private struct MissingGhosttyCLIBanner: View {
                         .font(.system(size: 13, weight: .semibold))
                     Text(
                         "Ghostty.app isn't installed, so a few shell-integration "
-                            + "features can't run. [Learn more](\(Self.detailsURL.absoluteString))"
+                            + "features can't run. [Learn more](\(Self.detailsURL))"
                     )
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
