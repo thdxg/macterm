@@ -202,15 +202,11 @@ final class GhosttyApp {
     }()
 
     private func resolveResources() {
-        // Honor an explicit GHOSTTY_RESOURCES_DIR only if it points at a dir we
-        // recognize; otherwise drop it so a stale/foreign value can't shadow
-        // our bundle. A bare value is replaced below.
-        if let existing = getenv("GHOSTTY_RESOURCES_DIR").map({ String(cString: $0) }),
-           Self.resourcePaths.contains(where: { existing.hasPrefix($0) })
-        {
-            return
-        }
-
+        // Always resolve from our own candidates (bundle first), ignoring any
+        // inherited GHOSTTY_RESOURCES_DIR. A stale value — e.g. pointing at an
+        // installed Ghostty.app/Macterm.app that lacks terminfo — would
+        // otherwise shadow our complete bundle and leave libghostty deriving a
+        // broken TERMINFO (Contents/terminfo), reintroducing #39/#40.
         let resolver = GhosttyResourceResolver(
             candidates: Self.resourcePaths,
             bundleResourcesDir: Bundle.main.resourceURL?.path,
