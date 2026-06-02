@@ -91,7 +91,9 @@ A handful of settings either don't apply or are overridden, because Macterm rend
 
 Macterm-specific settings (window opacity/blur, quick terminal dimensions, hotkeys, auto-tile) live in **Macterm → Settings**. Everything else belongs in your Ghostty config.
 
-The `ssh-env`, `ssh-terminfo`, and `path` shell-integration features need the `ghostty` CLI to do anything useful, and Macterm doesn't ship one. If Ghostty.app is installed alongside in `/Applications`, Macterm points the wrappers at its binary and they work normally. Otherwise these features are disabled — `ssh` and `sudo` still work, they just skip Ghostty's TERMINFO/forwarding tricks. Install Ghostty.app if you want them.
+Macterm bundles Ghostty's terminfo, shell-integration scripts, and themes, so `TERM=xterm-ghostty`, named themes, and shell integration all work standalone — no Ghostty.app install required.
+
+The one exception is the `ssh-env`, `ssh-terminfo`, and `path` shell-integration features, which need the `ghostty` CLI to do anything useful, and Macterm doesn't ship one. If Ghostty.app is installed alongside in `/Applications`, Macterm points the wrappers at its binary and they work normally. Otherwise these features are disabled — `ssh` and `sudo` still work, they just skip Ghostty's terminfo-forwarding tricks for remote hosts. Install Ghostty.app if you want them.
 
 ### Keybinds
 
