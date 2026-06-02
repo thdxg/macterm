@@ -30,8 +30,14 @@ private struct GeneralSettings: View {
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
+    private let ghosttyCLI = GhosttyCLI.standard
+
     var body: some View {
         Form {
+            if !ghosttyCLI.isInstalled {
+                MissingGhosttyCLIBanner()
+            }
+
             Section("Ghostty Config") {
                 HStack {
                     TextField(
@@ -93,6 +99,49 @@ private struct GeneralSettings: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         ghosttyConfigPath = url.path(percentEncoded: false)
         commitPath()
+    }
+}
+
+// MARK: - Missing CLI banner
+
+/// Shown in General settings when the standalone ghostty CLI (shipped in
+/// Ghostty.app) isn't installed. A few shell-integration wrappers exec that
+/// binary, so without it the features in `GhosttyCLI.gatedFeatures` are
+/// disabled. Embedded directly in a `Form`, so it renders as its own section.
+private struct MissingGhosttyCLIBanner: View {
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                Label {
+                    Text("Some features need the Ghostty app")
+                        .font(.system(size: 13, weight: .semibold))
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                }
+
+                Text(
+                    "Macterm couldn't find the ghostty command-line tool. It ships inside "
+                        + "Ghostty.app — install it to /Applications and reopen Macterm to "
+                        + "enable these features:"
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(GhosttyCLI.gatedFeatures, id: \.name) { feature in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(feature.name)
+                                .font(.system(size: 11, weight: .medium))
+                            Text(feature.detail)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
     }
 }
 

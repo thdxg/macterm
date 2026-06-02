@@ -122,6 +122,7 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 | ------------------------ | ---------------------------------------------------------------------------------- |
 | `GhosttyApp.swift`       | libghostty init, config, tick loop, color queries; resolves `GHOSTTY_RESOURCES_DIR` |
 | `GhosttyResources.swift` | Pure `GhosttyResourceResolver` — picks the resources dir (testable selection logic) |
+| `GhosttyCLI.swift`       | Detects the external `ghostty` CLI (Ghostty.app); lists the shell-integration features gated on it  |
 | `GhosttyCallbacks.swift` | Routes libghostty callbacks to terminal views                                      |
 | `Theme.swift`            | All UI colors derived from ghostty config                                          |
 
@@ -200,6 +201,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `Palette/CommandSourceTests.swift`                                                                                          | `CommandSource` palette-item generation from `AppCommand.allCases`                  |
 | `Ghostty/GhosttyResourceResolverTests.swift`                                                                                | Resource dir selection (`GhosttyResourceResolver`)                                   |
 | `Ghostty/BundledResourcesTests.swift`                                                                                       | Bundle layout: terminfo is a sibling of `ghostty/`, has `78/xterm-ghostty`, shells, themes (#39/#40 guard) |
+| `Ghostty/GhosttyCLITests.swift`                                                                                             | External `ghostty` CLI detection + bin-dir priority (`GhosttyCLI`)                    |
 | `Persistence/WorkspaceSerializerTests.swift`                                                                                | Snapshot/restore round-trip + on-disk via `WorkspaceStore`                          |
 | `Support/TreeBuilder.swift`                                                                                                 | DSL: `H(pane("a"), V(pane("b"), pane("c")))` → `(SplitNode, [name: UUID])`          |
 | `Support/TreeRenderer.swift`                                                                                                | Inverse DSL for readable assertions                                                 |

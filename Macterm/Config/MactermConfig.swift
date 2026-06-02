@@ -66,7 +66,7 @@ final class MactermConfig {
         // otherwise disable the wrappers that need the binary so they fall
         // through to plain `ssh`. The `path` feature also relies on this dir
         // being useful — turn it off when we have nothing to add.
-        if let binDir = resolveGhosttyBinDir() {
+        if let binDir = GhosttyCLI.standard.resolveBinDir() {
             overrides.append("env = GHOSTTY_BIN_DIR=\(binDir)")
         } else {
             overrides.append("shell-integration-features = no-ssh-env,no-ssh-terminfo,no-path")
@@ -74,13 +74,5 @@ final class MactermConfig {
 
         let body = overrides.joined(separator: "\n") + "\n"
         try? Data(body.utf8).write(to: overridesURL, options: .atomic)
-    }
-
-    private func resolveGhosttyBinDir() -> String? {
-        let candidates = [
-            "/Applications/Ghostty.app/Contents/MacOS",
-            NSHomeDirectory() + "/Applications/Ghostty.app/Contents/MacOS",
-        ]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0 + "/ghostty") }
     }
 }
