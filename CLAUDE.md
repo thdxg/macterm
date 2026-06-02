@@ -120,13 +120,13 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 ### Ghostty Integration (`Macterm/Ghostty/`)
 
-| File                     | Purpose                                                                            |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `GhosttyApp.swift`       | libghostty init, config, tick loop, color queries; resolves `GHOSTTY_RESOURCES_DIR` |
-| `GhosttyResources.swift` | Pure `GhosttyResourceResolver` — picks the resources dir (testable selection logic) |
-| `GhosttyCLI.swift`       | Detects the external `ghostty` CLI (Ghostty.app); lists the shell-integration features gated on it  |
-| `GhosttyCallbacks.swift` | Routes libghostty callbacks to terminal views                                      |
-| `Theme.swift`            | All UI colors derived from ghostty config                                          |
+| File                     | Purpose                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `GhosttyApp.swift`       | libghostty init, config, tick loop, color queries; resolves `GHOSTTY_RESOURCES_DIR`                |
+| `GhosttyCLI.swift`       | Detects the external `ghostty` CLI (Ghostty.app); lists the shell-integration features gated on it |
+| `GhosttyResources.swift` | Pure `GhosttyResourceResolver` — picks the resources dir (testable selection logic)                |
+| `GhosttyCallbacks.swift` | Routes libghostty callbacks to terminal views                                                      |
+| `Theme.swift`            | All UI colors derived from ghostty config                                                          |
 
 ### Palette (`Macterm/Palette/`)
 
@@ -183,30 +183,30 @@ libghostty reads two things at runtime via `GHOSTTY_RESOURCES_DIR`: `shell-integ
 
 Two non-obvious terminfo facts (the regression behind issues #39/#40, where 1.13.3 pointed `GHOSTTY_RESOURCES_DIR` at a bundle shipping no terminfo, breaking `TERM=xterm-ghostty` and key input):
 
-- **TERMINFO must NOT be set by us — the bundle layout makes libghostty derive it correctly.** At shell spawn libghostty *unconditionally overwrites* `TERMINFO` with `dirname(GHOSTTY_RESOURCES_DIR)/terminfo` (`src/termio/Exec.zig`), so any `setenv` we do is clobbered. Because our resources dir is `.../Resources/ghostty`, that derivation lands on the sibling `.../Resources/terminfo` — exactly the dir we ship. This is why terminfo MUST be a sibling of `ghostty/`, never inside it (a flat layout reintroduces #39/#40). `BundledResourcesTests` asserts this invariant.
+- **TERMINFO must NOT be set by us — the bundle layout makes libghostty derive it correctly.** At shell spawn libghostty _unconditionally overwrites_ `TERMINFO` with `dirname(GHOSTTY_RESOURCES_DIR)/terminfo` (`src/termio/Exec.zig`), so any `setenv` we do is clobbered. Because our resources dir is `.../Resources/ghostty`, that derivation lands on the sibling `.../Resources/terminfo` — exactly the dir we ship. This is why terminfo MUST be a sibling of `ghostty/`, never inside it (a flat layout reintroduces #39/#40). `BundledResourcesTests` asserts this invariant.
 - **The terminfo tree uses the macOS hashed layout.** The compiled `xterm-ghostty` entry lives at `terminfo/78/xterm-ghostty` (`x` = 0x78), not `terminfo/x/...`. It's a `tic -x` compiled tree, shipped verbatim from the ghostty build.
 
 ### Tests (`MactermTests/`)
 
 Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on test classes. `mise run test` runs the suite locally and on every CI push.
 
-| Path                                                                                                                        | Covers                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `Model/SplitNodeTests.swift`, `SplitNodeResizeTests.swift`, `SplitNodeGeometryTests.swift`, `SplitNodeRebalanceTests.swift` | Tree ops, resize, geometry (`paneFrames`, `nearestPane`), rebalance                 |
-| `Model/TerminalTabTests.swift`                                                                                              | Focus history, split/resize/removePane, HV-close regression                         |
-| `Model/WorkspaceTests.swift`                                                                                                | Tab lifecycle, recency, reorder                                                     |
-| `Model/PaneTests.swift`                                                                                                     | `processTitle` heuristics, `destroySurface` idempotency                             |
-| `App/AppStateTests.swift`                                                                                                   | Integration: splitPane/closePane/focusPaneInDirection via injected `WorkspaceStore` |
-| `App/RecencyStackTests.swift`                                                                                               | Generic stack helper                                                                |
-| `App/HotkeysTests.swift`                                                                                                    | `parseShortcut`, `displayString`, `HotkeyAction` sanity                             |
-| `Palette/PaletteEngineTests.swift`                                                                                          | `fuzzyScore`, engine sections/sort/path-mode                                        |
-| `Palette/CommandSourceTests.swift`                                                                                          | `CommandSource` palette-item generation from `AppCommand.allCases`                  |
-| `Ghostty/GhosttyResourceResolverTests.swift`                                                                                | Resource dir selection (`GhosttyResourceResolver`)                                   |
+| Path                                                                                                                        | Covers                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `Model/SplitNodeTests.swift`, `SplitNodeResizeTests.swift`, `SplitNodeGeometryTests.swift`, `SplitNodeRebalanceTests.swift` | Tree ops, resize, geometry (`paneFrames`, `nearestPane`), rebalance                                        |
+| `Model/TerminalTabTests.swift`                                                                                              | Focus history, split/resize/removePane, HV-close regression                                                |
+| `Model/WorkspaceTests.swift`                                                                                                | Tab lifecycle, recency, reorder                                                                            |
+| `Model/PaneTests.swift`                                                                                                     | `processTitle` heuristics, `destroySurface` idempotency                                                    |
+| `App/AppStateTests.swift`                                                                                                   | Integration: splitPane/closePane/focusPaneInDirection via injected `WorkspaceStore`                        |
+| `App/RecencyStackTests.swift`                                                                                               | Generic stack helper                                                                                       |
+| `App/HotkeysTests.swift`                                                                                                    | `parseShortcut`, `displayString`, `HotkeyAction` sanity                                                    |
+| `Palette/PaletteEngineTests.swift`                                                                                          | `fuzzyScore`, engine sections/sort/path-mode                                                               |
+| `Palette/CommandSourceTests.swift`                                                                                          | `CommandSource` palette-item generation from `AppCommand.allCases`                                         |
+| `Ghostty/GhosttyCLITests.swift`                                                                                             | External `ghostty` CLI detection + bin-dir priority (`GhosttyCLI`)                                         |
+| `Ghostty/GhosttyResourceResolverTests.swift`                                                                                | Resource dir selection (`GhosttyResourceResolver`)                                                         |
 | `Ghostty/BundledResourcesTests.swift`                                                                                       | Bundle layout: terminfo is a sibling of `ghostty/`, has `78/xterm-ghostty`, shells, themes (#39/#40 guard) |
-| `Ghostty/GhosttyCLITests.swift`                                                                                             | External `ghostty` CLI detection + bin-dir priority (`GhosttyCLI`)                    |
-| `Persistence/WorkspaceSerializerTests.swift`                                                                                | Snapshot/restore round-trip + on-disk via `WorkspaceStore`                          |
-| `Support/TreeBuilder.swift`                                                                                                 | DSL: `H(pane("a"), V(pane("b"), pane("c")))` → `(SplitNode, [name: UUID])`          |
-| `Support/TreeRenderer.swift`                                                                                                | Inverse DSL for readable assertions                                                 |
+| `Persistence/WorkspaceSerializerTests.swift`                                                                                | Snapshot/restore round-trip + on-disk via `WorkspaceStore`                                                 |
+| `Support/TreeBuilder.swift`                                                                                                 | DSL: `H(pane("a"), V(pane("b"), pane("c")))` → `(SplitNode, [name: UUID])`                                 |
+| `Support/TreeRenderer.swift`                                                                                                | Inverse DSL for readable assertions                                                                        |
 
 **Testing conventions:**
 
