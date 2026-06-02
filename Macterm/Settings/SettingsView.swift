@@ -111,18 +111,19 @@ private struct GeneralSettings: View {
 private struct MissingGhosttyCLIBanner: View {
     private static let detailsURL = "https://github.com/thdxg/macterm#whats-different-from-ghosttyapp"
 
+    // Typed as LocalizedStringKey (not String) so Text parses the markdown link.
+    private static let detail: LocalizedStringKey =
+        "Ghostty.app isn't installed, so a few shell-integration features can't run. [Learn more](\(detailsURL))"
+
     var body: some View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Some features are disabled")
                         .font(.system(size: 13, weight: .semibold))
-                    Text(
-                        "Ghostty.app isn't installed, so a few shell-integration "
-                            + "features can't run. [Learn more](\(Self.detailsURL))"
-                    )
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    Text(Self.detail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")
