@@ -110,7 +110,7 @@ private struct GeneralSettings: View {
 /// out which. Embedded directly in a `Form`, so it renders as its own section.
 private struct MissingGhosttyCLIBanner: View {
     private static let detailsURL = URL(
-        string: "https://github.com/thdxg/macterm#whats-different-from-ghosttyapp"
+        string: "https://github.com/thdxg/macterm#shell-integration"
     )
 
     var body: some View {
