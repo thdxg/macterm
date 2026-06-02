@@ -3,10 +3,11 @@ set -euo pipefail
 
 FORK_REPO="thdxg/ghostty"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
-# Marker for the downloaded upstream resources (terminfo + themes +
-# shell-integration). All come entirely from the tarball — nothing is
-# committed — so its presence signals the download already ran. Keyed on
-# terminfo/ so checkouts predating the terminfo bundling re-download it.
+# Marker for the downloaded upstream resources. The tarball mirrors a real
+# Ghostty.app Resources layout: ghostty/{themes,shell-integration} plus a
+# sibling terminfo/. All come from the tarball — nothing is committed — so its
+# presence signals the download ran. Keyed on terminfo/ so checkouts predating
+# the terminfo bundling (or the flat-layout interim) re-download it.
 RESOURCES_MARKER="Macterm/Resources/terminfo"
 
 need_xcframework=true
@@ -32,13 +33,17 @@ if $need_xcframework; then
 fi
 
 if $need_resources; then
-  # Bundled terminfo + themes + shell-integration so TERM=xterm-ghostty,
-  # named themes (Rose Pine, etc.), and shell integration all resolve without
-  # a separate Ghostty.app install. The tarball contains top-level terminfo/,
-  # themes/, and shell-integration/ dirs; extract them into Macterm/Resources/
-  # (all gitignored — Macterm ships the upstream resources verbatim, none are
-  # committed).
+  # Bundled ghostty resources so TERM=xterm-ghostty, named themes (Rose Pine,
+  # etc.), and shell integration all resolve without a separate Ghostty.app
+  # install. The tarball mirrors a real Ghostty.app Resources layout:
+  # ghostty/{themes,shell-integration} plus a SIBLING terminfo/. libghostty
+  # derives TERMINFO as dirname(GHOSTTY_RESOURCES_DIR)/terminfo, so terminfo
+  # must sit beside the ghostty/ dir, not inside it. Extracted into
+  # Macterm/Resources/ (all gitignored — none committed). Clear any prior
+  # extraction first so a stale flat layout can't linger beside the new one.
   gh release download "$LATEST_TAG" --pattern "ghostty-resources.tar.gz" --repo "$FORK_REPO"
+  rm -rf Macterm/Resources/ghostty Macterm/Resources/terminfo \
+    Macterm/Resources/themes Macterm/Resources/shell-integration
   mkdir -p Macterm/Resources
   tar xzf ghostty-resources.tar.gz -C Macterm/Resources
   rm ghostty-resources.tar.gz

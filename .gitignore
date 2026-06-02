@@ -7,9 +7,12 @@ GhosttyKit.xcframework
 GhosttyKit/ghostty.h
 /ghostty
 
-# Ghostty resources (terminfo + themes + shell-integration) downloaded by
-# setup.sh from the thdxg/ghostty release. Macterm ships them verbatim so users
-# configure themes via their Ghostty config — none are committed here.
+# Ghostty resources downloaded by setup.sh from the thdxg/ghostty release,
+# mirroring a real Ghostty.app layout: ghostty/{themes,shell-integration} plus
+# a sibling terminfo/. Macterm ships them verbatim so users configure themes
+# via their Ghostty config — none are committed here. (The bare themes/ and
+# shell-integration/ lines cover the older flat layout in case it lingers.)
+/Macterm/Resources/ghostty/
 /Macterm/Resources/terminfo/
 /Macterm/Resources/shell-integration/
 /Macterm/Resources/themes/

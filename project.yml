@@ -46,28 +46,24 @@ targets:
         excludes:
           - "Info.plist"
           - "Macterm.entitlements"
+          - "Resources/ghostty"
           - "Resources/terminfo"
-          - "Resources/themes"
-          - "Resources/shell-integration"
           - "AppIcon.icon"
+      # Ghostty resources (themes + shell-integration), downloaded by setup.sh.
+      # Folder reference (not the default "group") because the contents are
+      # extensionless files Xcode would otherwise skip. Lands at
+      # Contents/Resources/ghostty — GHOSTTY_RESOURCES_DIR points here, matching
+      # a real Ghostty.app so libghostty resolves themes/shell-integration and
+      # derives TERMINFO as ../terminfo (the sibling dir below).
+      - path: Macterm/Resources/ghostty
+        type: folder
+        buildPhase: resources
       # Compiled terminfo DB (downloaded by setup.sh) so TERM=xterm-ghostty
-      # resolves without a Ghostty.app install. Folder reference to preserve the
+      # resolves without a Ghostty.app install. Folder reference preserves the
       # hashed macOS layout (terminfo/78/xterm-ghostty) and extensionless files.
-      # Lands at Contents/Resources/terminfo — GhosttyApp points TERMINFO here.
+      # MUST land at Contents/Resources/terminfo — a SIBLING of ghostty/ — so
+      # libghostty's dirname(GHOSTTY_RESOURCES_DIR)/terminfo derivation hits it.
       - path: Macterm/Resources/terminfo
-        type: folder
-        buildPhase: resources
-      # Bundle the themes/ directory verbatim as a folder reference. Treating
-      # it as a "group" (the default) made Xcode skip files with no extension.
-      # Lands at Contents/Resources/themes — GHOSTTY_RESOURCES_DIR points at
-      # Contents/Resources so libghostty resolves named themes from here.
-      - path: Macterm/Resources/themes
-        type: folder
-        buildPhase: resources
-      # Ghostty shell-integration scripts (bash/zsh/fish/...), downloaded by
-      # setup.sh. Folder reference for the same reason as themes — extensionless
-      # files. Lands at Contents/Resources/shell-integration.
-      - path: Macterm/Resources/shell-integration
         type: folder
         buildPhase: resources
       # Icon Composer file. Xcode 26 prefers this over an Assets.xcassets

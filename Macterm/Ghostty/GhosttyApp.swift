@@ -186,15 +186,17 @@ final class GhosttyApp {
     }
 
     /// Candidate ghostty resource dirs, highest priority first. Macterm ships
-    /// terminfo + themes + shell-integration in its own bundle (downloaded by
-    /// setup.sh), so TERM=xterm-ghostty, named themes, and shell integration
-    /// resolve with no Ghostty.app install. The installed Ghostty.app dirs
-    /// remain as fallbacks for the rare case the bundle is missing them (e.g.
-    /// an unprepared dev checkout).
+    /// the ghostty resources in its own bundle (downloaded by setup.sh) under
+    /// `Contents/Resources/ghostty`, mirroring a real Ghostty.app, with the
+    /// compiled terminfo DB at the sibling `Contents/Resources/terminfo`. So
+    /// TERM=xterm-ghostty, named themes, and shell integration resolve with no
+    /// Ghostty.app install. The installed Ghostty.app dirs remain as fallbacks
+    /// for the rare case the bundle is missing them (e.g. an unprepared dev
+    /// checkout).
     private static let resourcePaths: [String] = {
         var paths: [String] = []
-        if let bundle = Bundle.main.resourceURL?.path {
-            paths.append(bundle)
+        if let resources = Bundle.main.resourceURL?.path {
+            paths.append(resources + "/ghostty")
         }
         paths.append("/Applications/Ghostty.app/Contents/Resources/ghostty")
         paths.append(NSHomeDirectory() + "/Applications/Ghostty.app/Contents/Resources/ghostty")
@@ -206,23 +208,22 @@ final class GhosttyApp {
         // inherited GHOSTTY_RESOURCES_DIR. A stale value — e.g. pointing at an
         // installed Ghostty.app/Macterm.app that lacks terminfo — would
         // otherwise shadow our complete bundle and leave libghostty deriving a
-        // broken TERMINFO (Contents/terminfo), reintroducing #39/#40.
+        // broken TERMINFO, reintroducing #39/#40.
+        //
+        // We only set GHOSTTY_RESOURCES_DIR. TERMINFO is NOT set here on
+        // purpose: libghostty unconditionally overwrites it at shell spawn with
+        // dirname(GHOSTTY_RESOURCES_DIR)/terminfo (src/termio/Exec.zig), so any
+        // setenv here would be clobbered. Because our resources dir is
+        // .../Resources/ghostty, that derivation lands on .../Resources/terminfo
+        // — the sibling dir we ship — which is exactly what we want.
         let resolver = GhosttyResourceResolver(
             candidates: Self.resourcePaths,
-            bundleResourcesDir: Bundle.main.resourceURL?.path,
             fileExists: { FileManager.default.fileExists(atPath: $0) }
         )
-        guard let resolution = resolver.resolve() else {
+        guard let resourcesDir = resolver.resolve() else {
             unsetenv("GHOSTTY_RESOURCES_DIR")
             return
         }
-        setenv("GHOSTTY_RESOURCES_DIR", resolution.resourcesDir, 1)
-        // TERMINFO is set explicitly (rather than relying on libghostty's
-        // dirname(resourcesDir)/terminfo derivation) because Macterm's
-        // GHOSTTY_RESOURCES_DIR is the bundle's Contents/Resources, so that
-        // derivation would point at Contents/terminfo — outside Resources.
-        if let terminfo = resolution.terminfoDir {
-            setenv("TERMINFO", terminfo, 1)
-        }
+        setenv("GHOSTTY_RESOURCES_DIR", resourcesDir, 1)
     }
 }
