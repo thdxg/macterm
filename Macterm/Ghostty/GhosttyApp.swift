@@ -124,6 +124,31 @@ final class GhosttyApp {
         return result
     }
 
+    /// Re-apply the *current* config object to the app and every live surface,
+    /// without re-reading any file from disk.
+    ///
+    /// libghostty emits a soft `GHOSTTY_ACTION_RELOAD_CONFIG` whenever a
+    /// surface's conditional state changes — most importantly when we call
+    /// `ghostty_surface_set_color_scheme`, which flips the `theme =
+    /// light:X,dark:Y` split's resolved side. The surface mutates its
+    /// conditional state but defers re-deriving its colors until the apprt
+    /// hands the config back. If we ignore the action, the surface keeps
+    /// rendering the side it resolved at creation (libghostty defaults a new
+    /// surface's conditional state to `.light`), so a new dark-mode pane shows
+    /// light-side foreground until something else reloads the config. Feeding
+    /// the existing config back here re-derives the colors against the updated
+    /// conditional state. (Companion to issue #38, which fixes the same split
+    /// for Macterm's own chrome.)
+    func softReloadConfig() {
+        guard let app, let config else { return }
+        ghostty_app_update_config(app, config)
+        for view in GhosttyTerminalNSView.allLiveViews() {
+            if let surface = view.surface {
+                ghostty_surface_update_config(surface, config)
+            }
+        }
+    }
+
     /// Reload and surface any user-visible errors (missing file, parse errors)
     /// as a modal alert. Silent on success. Used by both the Settings reload
     /// button and the rebindable "Reload Ghostty config" hotkey.
