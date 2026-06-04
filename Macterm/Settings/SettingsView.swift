@@ -236,7 +236,7 @@ private struct AppearanceSettings: View {
         case Preferences.numberIconSquare:
             Label("Number — square", systemImage: "1.square")
         case Preferences.numberIconPlain:
-            Text("Number")
+            Label("Number", systemImage: "number")
         default:
             Label(name, systemImage: name)
         }
