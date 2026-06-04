@@ -25,6 +25,11 @@ final class GhosttyTerminalNSView: NSView {
     var onSearchSelected: ((Int?) -> Void)?
     var onDesktopNotification: ((String, String) -> Void)?
     var onCommandFinished: ((Int16, UInt64) -> Void)?
+    /// libghostty pushes scrollback geometry (all values in rows) whenever the
+    /// viewport, scrollback size, or visible row count changes.
+    /// `(total, offset, len)`: total rows including scrollback, the first
+    /// visible row (0 = top of history), and the visible row count.
+    var onScrollbarUpdate: ((UInt64, UInt64, UInt64) -> Void)?
     var isFocused: Bool = false
     var currentPwd: String?
 
@@ -201,6 +206,18 @@ final class GhosttyTerminalNSView: NSView {
     func needsConfirmQuit() -> Bool {
         guard let surface else { return false }
         return ghostty_surface_needs_confirm_quit(surface)
+    }
+
+    /// Cell height in points (not backing pixels). libghostty reports cell
+    /// dimensions in backing pixels; divide by the backing scale so callers
+    /// working in AppKit's point space (e.g. the scroll view's document view)
+    /// get the right value. Returns 0 if the surface isn't ready.
+    var cellHeightPoints: CGFloat {
+        guard let surface else { return 0 }
+        let size = ghostty_surface_size(surface)
+        guard size.cell_height_px > 0 else { return 0 }
+        let scale = window?.backingScaleFactor ?? 2.0
+        return CGFloat(size.cell_height_px) / scale
     }
 
     func notifySurfaceFocused() {

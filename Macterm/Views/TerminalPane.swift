@@ -63,8 +63,11 @@ private struct TerminalSurface: NSViewRepresentable {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> GhosttyTerminalNSView {
-        let view = pane.ensureNSView()
+    func makeNSView(context: Context) -> SurfaceScrollView {
+        // SwiftUI hosts the scroll view; the surface lives inside it. Both are
+        // owned by `Pane` so they survive tab switches / split reshapes.
+        let scroll = pane.ensureScrollView()
+        let view = scroll.surfaceView
         configure(view)
         // Defer surface creation until the view is actually in a window — the
         // Metal layer needs a non-zero size to initialize.
@@ -77,10 +80,11 @@ private struct TerminalSurface: NSViewRepresentable {
             }
         }
         context.coordinator.wasFocused = focused
-        return view
+        return scroll
     }
 
-    func updateNSView(_ view: GhosttyTerminalNSView, context: Context) {
+    func updateNSView(_ scroll: SurfaceScrollView, context: Context) {
+        let view = scroll.surfaceView
         configure(view)
 
         // Create the surface now if it's still pending (e.g. the view was
@@ -100,13 +104,13 @@ private struct TerminalSurface: NSViewRepresentable {
         }
     }
 
-    static func dismantleNSView(_ view: GhosttyTerminalNSView, coordinator _: Coordinator) {
-        // Intentionally empty. The NSView is owned by `Pane`; SwiftUI just
-        // borrows it. When the pane is removed from the tree, AppState calls
-        // pane.destroySurface() explicitly.
+    static func dismantleNSView(_ scroll: SurfaceScrollView, coordinator _: Coordinator) {
+        // Intentionally empty. The scroll view and its surface are owned by
+        // `Pane`; SwiftUI just borrows them. When the pane is removed from the
+        // tree, AppState calls pane.destroySurface() explicitly.
         // SwiftUI will have already removed the view from its superview by
         // the time this runs, so we don't need to do anything here.
-        _ = view
+        _ = scroll
     }
 
     private func configure(_ view: GhosttyTerminalNSView) {
