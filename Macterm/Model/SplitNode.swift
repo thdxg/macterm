@@ -31,6 +31,20 @@ final class Pane: Identifiable {
 
     var nsView: GhosttyTerminalNSView? { _nsView }
 
+    /// The `NSScrollView` that hosts this pane's surface and renders the native
+    /// overlay scrollbar. Owned here (not by SwiftUI) for the same reason as
+    /// `_nsView`: it must survive tab switches and split reshapes, and it
+    /// sidesteps Ghostty's #9444 bug where the scroll wrapper isn't persisted.
+    @ObservationIgnored
+    private var _scrollView: SurfaceScrollView?
+
+    func ensureScrollView() -> SurfaceScrollView {
+        if let existing = _scrollView { return existing }
+        let scroll = SurfaceScrollView(surfaceView: ensureNSView())
+        _scrollView = scroll
+        return scroll
+    }
+
     /// Tear down the ghostty surface and null out callbacks. Call when the
     /// pane is removed from the tree. Safe to call multiple times.
     func destroySurface() {
@@ -47,14 +61,21 @@ final class Pane: Identifiable {
         view.onSplitRequest = nil
         view.onDesktopNotification = nil
         view.onCommandFinished = nil
+        view.onScrollbarUpdate = nil
         view.destroySurface()
+        let scroll = _scrollView
+        _scrollView = nil
         _nsView = nil
-        // Keep the NSView alive for a runloop tick so any in-flight ghostty
-        // callback (which holds an unretained pointer to the view) can drain
-        // before the view is deallocated. Without this, SwiftUI can remove
-        // the view from its superview the same turn we destroy the surface,
-        // deallocating the NSView before ghostty has finished unwinding.
-        DispatchQueue.main.async { _ = view }
+        // Keep the NSView (and its scroll-view host) alive for a runloop tick so
+        // any in-flight ghostty callback (which holds an unretained pointer to
+        // the view) can drain before the view is deallocated. Without this,
+        // SwiftUI can remove the view from its superview the same turn we
+        // destroy the surface, deallocating the NSView before ghostty has
+        // finished unwinding.
+        DispatchQueue.main.async {
+            _ = view
+            _ = scroll
+        }
     }
 
     var processTitle: String {

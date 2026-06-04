@@ -52,6 +52,11 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let duration = action.action.command_finished.duration
             DispatchQueue.main.async { view.onCommandFinished?(exitCode, duration) }
             return true
+        case GHOSTTY_ACTION_SCROLLBAR:
+            guard let view = surfaceView(from: target) else { return true }
+            let s = action.action.scrollbar
+            DispatchQueue.main.async { view.onScrollbarUpdate?(s.total, s.offset, s.len) }
+            return true
         default:
             return false
         }
