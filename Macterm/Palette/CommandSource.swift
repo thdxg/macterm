@@ -15,6 +15,7 @@ struct CommandSource: PaletteSource {
                 subtitle: item.subtitle,
                 category: item.category,
                 keybind: item.keybind,
+                keybindSymbols: item.keybindSymbols,
                 score: score,
                 action: item.action
             )
@@ -56,6 +57,7 @@ struct CommandSource: PaletteSource {
             title: command.title,
             category: command.category.rawValue,
             keybind: command.hotkeyAction.flatMap(keybindDisplay),
+            keybindSymbols: command.hotkeyAction.flatMap(keybindSymbols),
             score: 0,
             action: action
         )
@@ -65,5 +67,11 @@ struct CommandSource: PaletteSource {
         let raw = HotkeyRegistry.selectedShortcutString(for: action)
         let display = HotkeyRegistry.displayString(for: raw)
         return display == "Disabled" ? nil : display
+    }
+
+    private func keybindSymbols(_ action: HotkeyAction) -> [String]? {
+        let raw = HotkeyRegistry.selectedShortcutString(for: action)
+        let symbols = HotkeyRegistry.displaySymbols(for: raw)
+        return symbols.isEmpty ? nil : symbols
     }
 }

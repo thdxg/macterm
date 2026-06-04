@@ -10,6 +10,10 @@ struct CommandPaletteOverlay: View {
     @Environment(AppState.self)
     private var appState
 
+    /// Matches the macOS Tahoe window corner radius so the palette reads as a
+    /// native floating surface.
+    private static let cornerRadius: CGFloat = 16
+
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
@@ -22,10 +26,9 @@ struct CommandPaletteOverlay: View {
 
                 CommandPalettePanel()
                     .frame(width: 500)
-                    .background(MactermTheme.bg)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .glassEffect(in: .rect(cornerRadius: Self.cornerRadius))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                             .strokeBorder(MactermTheme.border, lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 8)
@@ -51,8 +54,24 @@ struct CommandPalettePanel: View {
     private var selectedIndex = 0
     @State
     private var sections: [PaletteSection] = []
+    /// Set when the last `selectedIndex` change came from mouse hover, so the
+    /// auto-scroll-to-center (keyboard nav) can skip it.
+    @State
+    private var selectionFromHover = false
+    /// Each row's vertical extent in the `rowSpace` coordinate space (relative
+    /// to the scroll viewport), keyed by flat index. Drives hover-to-select and
+    /// edge-only keyboard scrolling.
+    @State
+    private var rowFrames: [Int: ClosedRange<CGFloat>] = [:]
+    /// Height of the results scroll viewport, for deciding when a row is
+    /// off-screen and needs scrolling into view.
+    @State
+    private var viewportHeight: CGFloat = 0
     @FocusState
     private var isFieldFocused: Bool
+
+    /// Coordinate space the results scroll view and row frames share.
+    private let rowSpace = "paletteRows"
 
     /// Sources are stateless structs, so rebuilding the engine per render is fine.
     private var engine: PaletteEngine {
@@ -114,14 +133,52 @@ struct CommandPalettePanel: View {
                                 }
                                 .buttonStyle(.plain)
                                 .id(idx)
+                                // Publish each row's Y-extent so a single hover
+                                // region on the ScrollView can map the pointer to
+                                // a row. Per-row tracking areas (`.onHover` /
+                                // `.onContinuousHover`) lag on fast pointer motion;
+                                // one region with geometry mapping does not.
+                                .background(
+                                    GeometryReader { geo in
+                                        let frame = geo.frame(in: .named(rowSpace))
+                                        Color.clear.preference(
+                                            key: RowFramesKey.self,
+                                            value: [idx: frame.minY ... frame.maxY]
+                                        )
+                                    }
+                                )
                             }
                         }
                     }
                     .padding(.vertical, 4)
                 }
                 .frame(maxHeight: 340)
+                .coordinateSpace(name: rowSpace)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .onAppear { viewportHeight = geo.size.height }
+                            .onChange(of: geo.size.height) { _, h in viewportHeight = h }
+                    }
+                )
+                .onPreferenceChange(RowFramesKey.self) { rowFrames = $0 }
+                .onContinuousHover(coordinateSpace: .named(rowSpace)) { phase in
+                    guard case let .active(point) = phase,
+                          let idx = rowFrames.first(where: { $0.value.contains(point.y) })?.key,
+                          selectedIndex != idx
+                    else { return }
+                    // Mouse drives selection; suppress the keyboard-nav auto-scroll
+                    // below so the list doesn't move under the cursor.
+                    selectionFromHover = true
+                    selectedIndex = idx
+                }
                 .onChange(of: selectedIndex) { _, idx in
-                    proxy.scrollTo(idx, anchor: .center)
+                    // Only follow keyboard navigation; hovering shouldn't scroll.
+                    if selectionFromHover {
+                        selectionFromHover = false
+                    } else {
+                        scrollSelectionIntoView(idx, proxy: proxy)
+                    }
                 }
             }
         }
@@ -164,11 +221,48 @@ struct CommandPalettePanel: View {
         sections = engine.search(query)
     }
 
+    /// Leading/trailing breathing room kept between the selected row and the
+    /// viewport edge when keyboard navigation scrolls it into view.
+    private static let scrollPadding: CGFloat = 8
+
+    /// Scroll just enough to reveal `idx` when it sits within `scrollPadding` of
+    /// an edge, anchoring it that far in from whichever edge it ran toward. A
+    /// row already comfortably inside the viewport is left untouched, so keyboard
+    /// navigation nudges the list instead of re-centering on every move. Falls
+    /// back to a plain `scrollTo` until the row's geometry is known.
+    private func scrollSelectionIntoView(_ idx: Int, proxy: ScrollViewProxy) {
+        guard let range = rowFrames[idx], viewportHeight > 0 else {
+            proxy.scrollTo(idx)
+            return
+        }
+        let pad = Self.scrollPadding
+        // `scrollTo` aligns the row's anchor fraction to the same fraction of the
+        // viewport, so anchoring `pad` in from an edge leaves that gap.
+        if range.lowerBound < pad {
+            proxy.scrollTo(idx, anchor: UnitPoint(x: 0, y: pad / viewportHeight))
+        } else if range.upperBound > viewportHeight - pad {
+            proxy.scrollTo(idx, anchor: UnitPoint(x: 0, y: 1 - pad / viewportHeight))
+        }
+        // Otherwise the row is already comfortably visible — leave it alone.
+    }
+
     private func execute() {
         guard selectedIndex >= 0, selectedIndex < flatItems.count else { return }
         let item = flatItems[selectedIndex]
         appState.isCommandPaletteVisible = false
         item.action()
+    }
+}
+
+// MARK: - Hover geometry
+
+/// Collects each result row's vertical extent (keyed by flat index) so a single
+/// hover region can map the pointer to a row, avoiding per-row tracking areas
+/// that lag on fast pointer motion.
+private struct RowFramesKey: PreferenceKey {
+    static let defaultValue: [Int: ClosedRange<CGFloat>] = [:]
+    static func reduce(value: inout [Int: ClosedRange<CGFloat>], nextValue: () -> [Int: ClosedRange<CGFloat>]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 
@@ -192,16 +286,48 @@ private struct CommandPaletteRow: View {
                 }
             }
             Spacer()
-            if let keybind = item.keybind {
-                Text(keybind)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(MactermTheme.fgDim)
-            }
+            keybindView
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(isSelected ? MactermTheme.surface : .clear)
+        .padding(.vertical, 8)
+        .background(isSelected ? MactermTheme.fg.opacity(0.12) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .padding(.horizontal, 6)
+    }
+
+    @ViewBuilder
+    private var keybindView: some View {
+        if let symbols = item.keybindSymbols {
+            HStack(spacing: 4) {
+                ForEach(Array(symbols.enumerated()), id: \.offset) { _, sym in
+                    KeyCap(symbol: sym)
+                }
+            }
+        } else if let keybind = item.keybind {
+            // Defensive fallback: an item with a joined keybind but no split
+            // symbols (command items always supply symbols).
+            Text(keybind)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(MactermTheme.fgDim)
+        }
+    }
+}
+
+/// A single rounded key-cap, e.g. `⌘` or `Tab`, rendered Raycast-style.
+private struct KeyCap: View {
+    let symbol: String
+
+    var body: some View {
+        Text(symbol)
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(MactermTheme.fgMuted)
+            .frame(minWidth: 16)
+            .padding(.vertical, 2)
+            .padding(.horizontal, 4)
+            .background(MactermTheme.surface, in: .rect(cornerRadius: 5))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(MactermTheme.border, lineWidth: 1)
+            )
     }
 }
