@@ -84,6 +84,12 @@ final class MactermGlassView: NSView {
     private let tintOverlay = NSView()
     private var topConstraint: NSLayoutConstraint!
 
+    /// The window opacity the glass is currently configured for. The inactive
+    /// tint is scaled by this so an unfocused window never reads as more opaque
+    /// than the user asked for — at 30% opacity the desaturation overlay is far
+    /// subtler than at 100%.
+    private var backgroundOpacity: CGFloat = 1
+
     init(topOffset: CGFloat) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -127,6 +133,7 @@ final class MactermGlassView: NSView {
         glassEffectView.style = style
         glassEffectView.tintColor = backgroundColor.withAlphaComponent(backgroundOpacity)
         glassEffectView.cornerRadius = cornerRadius ?? 0
+        self.backgroundOpacity = CGFloat(backgroundOpacity)
         updateKeyStatus(isKeyWindow, backgroundColor: backgroundColor)
     }
 
@@ -137,7 +144,10 @@ final class MactermGlassView: NSView {
     func updateKeyStatus(_ isKeyWindow: Bool, backgroundColor: NSColor) {
         let tint = tintProperties(for: backgroundColor)
         tintOverlay.layer?.backgroundColor = tint.color.cgColor
-        tintOverlay.alphaValue = isKeyWindow ? 0 : tint.opacity
+        // Scale by the window opacity so the inactive tint stays within the
+        // translucency the user chose — otherwise an unfocused window reads as
+        // near-opaque regardless of the opacity slider.
+        tintOverlay.alphaValue = isKeyWindow ? 0 : tint.opacity * backgroundOpacity
     }
 
     /// A saturation-boosted tint + opacity for the inactive overlay, lifted
