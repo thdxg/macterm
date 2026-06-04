@@ -229,25 +229,34 @@ enum HotkeyRegistry {
     }
 
     static func displayString(for shortcut: String) -> String {
+        let symbols = displaySymbols(for: shortcut)
+        return symbols.isEmpty ? "Disabled" : symbols.joined()
+    }
+
+    /// The shortcut's modifier glyphs and key label as separate elements, in
+    /// Apple order — e.g. `["⇧", "⌘", "A"]`, `["⌘", "Tab"]`. Returns `[]` for a
+    /// disabled/empty shortcut. Used to render each key as its own cap; the
+    /// joined form is `displayString`.
+    static func displaySymbols(for shortcut: String) -> [String] {
         let cleaned = shortcut.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if cleaned.isEmpty || cleaned == "disabled" || cleaned == "none" {
-            return "Disabled"
+            return []
         }
 
         let tokens = cleaned.split(separator: "+").map(String.init)
-        guard !tokens.isEmpty else { return "Disabled" }
+        guard !tokens.isEmpty else { return [] }
 
-        var out = ""
+        var symbols: [String] = []
         for token in tokens.dropLast() {
             switch token {
             case "cmd",
-                 "command": out += "⌘"
+                 "command": symbols.append("⌘")
             case "ctrl",
-                 "control": out += "⌃"
-            case "shift": out += "⇧"
+                 "control": symbols.append("⌃")
+            case "shift": symbols.append("⇧")
             case "opt",
                  "option",
-                 "alt": out += "⌥"
+                 "alt": symbols.append("⌥")
             default: break
             }
         }
@@ -265,7 +274,8 @@ enum HotkeyRegistry {
         case "down": "↓"
         default: key.uppercased()
         }
-        return out + keyLabel
+        symbols.append(keyLabel)
+        return symbols
     }
 
     static func selectedShortcutString(for action: HotkeyAction) -> String {

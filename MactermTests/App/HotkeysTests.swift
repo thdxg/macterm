@@ -92,6 +92,30 @@ struct HotkeysTests {
         #expect(HotkeyRegistry.displayString(for: "disabled") == "Disabled")
     }
 
+    // MARK: - displaySymbols
+
+    @Test
+    func displaySymbols_splits_modifiers_and_key() {
+        // Glyphs follow the order tokens appear in the shortcut string, matching
+        // displayString (which joins these same symbols).
+        #expect(HotkeyRegistry.displaySymbols(for: "cmd+shift+a") == ["⌘", "⇧", "A"])
+        #expect(HotkeyRegistry.displaySymbols(for: "cmd+ctrl+shift+opt+k") == ["⌘", "⌃", "⇧", "⌥", "K"])
+    }
+
+    @Test
+    func displaySymbols_keeps_multichar_key_labels_whole() {
+        #expect(HotkeyRegistry.displaySymbols(for: "cmd+tab") == ["⌘", "Tab"])
+        #expect(HotkeyRegistry.displaySymbols(for: "cmd+space") == ["⌘", "Space"])
+        #expect(HotkeyRegistry.displaySymbols(for: "cmd+escape") == ["⌘", "Esc"])
+    }
+
+    @Test
+    func displaySymbols_empty_or_disabled() {
+        #expect(HotkeyRegistry.displaySymbols(for: "").isEmpty)
+        #expect(HotkeyRegistry.displaySymbols(for: "none").isEmpty)
+        #expect(HotkeyRegistry.displaySymbols(for: "disabled").isEmpty)
+    }
+
     // MARK: - isValidShortcutString
 
     @Test
