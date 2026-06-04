@@ -231,6 +231,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 - **Never add a `Co-Authored-By: Claude` trailer or any AI sign-off** to commits. Commits are authored by the human committer only.
 - Subject line focuses on the "why" in 1–2 sentences. Split logically independent changes into separate commits.
+- **PRs merge via squash only** — merge-commit and rebase merging are disabled on the repo. The whole branch lands as one commit on `main`, so per-commit history within a PR is discarded; make the PR title a good squash subject. When a PR conflicts, resolve it by merging `main` into the branch (squash flattens the merge commit away anyway); never rebase the branch onto `main` (the "Rebase and merge" button is intentionally unavailable).
 
 ### UI Principles
 
