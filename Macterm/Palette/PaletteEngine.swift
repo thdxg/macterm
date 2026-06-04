@@ -17,6 +17,10 @@ struct PaletteItem: Identifiable {
     let subtitle: String?
     let category: String?
     let keybind: String?
+    /// The keybind split into individual glyphs (e.g. `["⇧", "⌘", "A"]`) so the
+    /// row can render each as its own key-cap. `nil` when the item has no
+    /// keybind. Mirrors `keybind`, which keeps the joined form.
+    let keybindSymbols: [String]?
     /// Lower is better. 0 = exact prefix match, ~5 = substring, ~40 = subsequence.
     let score: Int
     let action: () -> Void
@@ -27,6 +31,7 @@ struct PaletteItem: Identifiable {
         subtitle: String? = nil,
         category: String? = nil,
         keybind: String? = nil,
+        keybindSymbols: [String]? = nil,
         score: Int = 1,
         action: @escaping () -> Void
     ) {
@@ -35,6 +40,7 @@ struct PaletteItem: Identifiable {
         self.subtitle = subtitle
         self.category = category
         self.keybind = keybind
+        self.keybindSymbols = keybindSymbols
         self.score = score
         self.action = action
     }
