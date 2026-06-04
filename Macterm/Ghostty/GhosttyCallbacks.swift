@@ -57,6 +57,24 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let s = action.action.scrollbar
             DispatchQueue.main.async { view.onScrollbarUpdate?(s.total, s.offset, s.len) }
             return true
+        case GHOSTTY_ACTION_RELOAD_CONFIG:
+            // libghostty fires this (with soft = true) when a surface's
+            // conditional state changes — notably on set_color_scheme, which
+            // re-resolves a `theme = light:X,dark:Y` split. The surface won't
+            // re-derive its colors until we hand the config back, so a soft
+            // reload re-applies the current config. A hard reload re-reads the
+            // user's config from disk. Without this, new dark-mode panes render
+            // the light-side foreground until a manual reload. See
+            // GhosttyApp.softReloadConfig.
+            let soft = action.action.reload_config.soft
+            DispatchQueue.main.async {
+                if soft {
+                    GhosttyApp.shared.softReloadConfig()
+                } else {
+                    GhosttyApp.shared.reloadConfig()
+                }
+            }
+            return true
         default:
             return false
         }
