@@ -151,13 +151,17 @@ private struct AppearanceSettings: View {
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
     @State
     private var backgroundBlurRadius: Double = .init(Preferences.shared.windowBlurRadius)
+    @State
+    private var liquidGlass: Bool = Preferences.shared.windowGlassEnabled
+    @State
+    private var liquidGlassStyle: WindowGlassStyle = Preferences.shared.windowGlassStyle
 
     var body: some View {
         Form {
             Section("Window") {
                 HStack {
                     Text("Background Opacity")
-                    Slider(value: $backgroundOpacity, in: 0.3 ... 1.0)
+                    Slider(value: $backgroundOpacity, in: 0.0 ... 1.0)
                     Text("\(Int((backgroundOpacity * 100).rounded()))%")
                         .monospacedDigit()
                         .frame(width: 42, alignment: .trailing)
@@ -165,6 +169,22 @@ private struct AppearanceSettings: View {
                 .onChange(of: backgroundOpacity) { _, v in
                     Preferences.shared.windowOpacity = v
                 }
+
+                Toggle("Liquid Glass", isOn: $liquidGlass)
+                    .onChange(of: liquidGlass) { _, v in
+                        Preferences.shared.windowGlassEnabled = v
+                    }
+                    .disabled(backgroundOpacity >= 0.999)
+
+                Picker("Glass Style", selection: $liquidGlassStyle) {
+                    ForEach(WindowGlassStyle.allCases) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+                .onChange(of: liquidGlassStyle) { _, v in
+                    Preferences.shared.windowGlassStyle = v
+                }
+                .disabled(backgroundOpacity >= 0.999 || !liquidGlass)
 
                 HStack {
                     Text("Background Blur")
@@ -176,9 +196,9 @@ private struct AppearanceSettings: View {
                 .onChange(of: backgroundBlurRadius) { _, v in
                     Preferences.shared.windowBlurRadius = Int(v.rounded())
                 }
-                .disabled(backgroundOpacity >= 0.999)
+                .disabled(backgroundOpacity >= 0.999 || liquidGlass)
 
-                Text("Blur only takes effect when opacity is below 100%. Set to 0 to disable.")
+                Text(blurFootnote)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -220,6 +240,16 @@ private struct AppearanceSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var blurFootnote: String {
+        if backgroundOpacity >= 0.999 {
+            return "Blur and Liquid Glass only take effect when opacity is below 100%."
+        }
+        if liquidGlass {
+            return "Liquid Glass uses the macOS material (blur slider ignored). Regular is frostier; Clear is more transparent."
+        }
+        return "Set blur to 0 to disable."
     }
 
     @ViewBuilder

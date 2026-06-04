@@ -65,7 +65,10 @@ https://github.com/user-attachments/assets/42b2dce8-1d6d-41d6-a4c8-2e0c1339810b
 
 ### Window Opacity & Blur
 
-Macterm's window appearance is highly customizable and hot-reloaded.
+Macterm's window appearance is highly customizable and hot-reloaded. Drop the
+opacity below 100% and choose between a classic Gaussian **Background Blur** or
+the macOS 26 **Liquid Glass** material — in two styles, frostier **Regular** or
+more transparent **Clear** — all in **Settings → General → Window**.
 
 https://github.com/user-attachments/assets/1486ed55-e653-43ce-98aa-232a61d234a7
 

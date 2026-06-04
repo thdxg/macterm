@@ -109,7 +109,7 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 | File                                   | Purpose                                                                                                          |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `MainWindow.swift`                     | Main window layout, `WorkspaceView`, `WindowStyler`                                                              |
-| `WindowAppearance.swift`               | Window opacity/blur — sets `NSWindow.backgroundColor`, dives into private titlebar view tree, calls CGS blur SPI |
+| `WindowAppearance.swift`               | Window opacity/blur/liquid glass — sets `NSWindow.backgroundColor`, dives into private titlebar view tree, calls CGS blur SPI, or installs a macOS 26 `NSGlassEffectView` (`MactermGlassView`) below the content view |
 | `Sidebar.swift`                        | Project/tab list with native `List(selection:)`                                                                  |
 | `SplitTreeView.swift`                  | Recursive split rendering with draggable dividers                                                                |
 | `TerminalPane.swift`                   | `TerminalPane` + `TerminalSurface` (`NSViewRepresentable` borrowing `pane.nsView`) + search bar overlay          |

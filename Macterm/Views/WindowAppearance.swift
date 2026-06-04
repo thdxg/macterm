@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 extension NSView {
     /// Recursively finds the first descendant view whose class name (as a string)
@@ -15,6 +16,29 @@ extension NSView {
             }
         }
         return nil
+    }
+}
+
+// MARK: - Color helpers (for the inactive-glass tint)
+
+extension NSColor {
+    /// Perceptual luminance in 0...1, computed in sRGB. Returns 0 for colors
+    /// that can't be converted to an RGB space (e.g. pattern colors).
+    var luminance: CGFloat {
+        guard let rgb = usingColorSpace(.sRGB) else { return 0 }
+        return 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+    }
+
+    var isLightColor: Bool { luminance > 0.5 }
+
+    /// Returns a copy with its HSB saturation multiplied by `factor` (clamped
+    /// to 0...1). Used to make the inactive-window overlay read as a desaturated
+    /// version of the terminal background, matching Ghostty.
+    func adjustingSaturation(by factor: CGFloat) -> NSColor {
+        guard let hsb = usingColorSpace(.sRGB) else { return self }
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        hsb.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        return NSColor(hue: h, saturation: min(max(s * factor, 0), 1), brightness: b, alpha: a)
     }
 }
 
@@ -43,6 +67,87 @@ private let cgsSetBlurFnPtr: @convention(c) (Int32, Int, Int32) -> Int32 = {
 @MainActor
 func setWindowBackgroundBlur(_ window: NSWindow, radius: Int) {
     _ = cgsSetBlurFnPtr(cgsConnectionFnPtr(), window.windowNumber, Int32(radius))
+}
+
+// MARK: - Liquid glass background
+
+/// A container that hosts a macOS 26 `NSGlassEffectView` (the real liquid
+/// glass material) plus an inactive-window tint overlay. Mirrors Ghostty's
+/// `TerminalGlassView` (`TerminalViewContainer.swift`). Macterm inserts this
+/// below the window's content view, filling the whole window — including the
+/// region under the titlebar (via a negative top inset equal to the content
+/// view's top safe-area inset) — so the glass reads as one continuous surface
+/// behind the sidebar, titlebar, and terminal.
+@available(macOS 26.0, *)
+final class MactermGlassView: NSView {
+    private let glassEffectView = NSGlassEffectView()
+    private let tintOverlay = NSView()
+    private var topConstraint: NSLayoutConstraint!
+
+    init(topOffset: CGFloat) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        glassEffectView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glassEffectView)
+        topConstraint = glassEffectView.topAnchor.constraint(equalTo: topAnchor, constant: topOffset)
+        NSLayoutConstraint.activate([
+            topConstraint,
+            glassEffectView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassEffectView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            glassEffectView.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+
+        // The inactive tint sits above the glass and fades in when the window
+        // resigns key, matching how the system desaturates inactive glass.
+        tintOverlay.translatesAutoresizingMaskIntoConstraints = false
+        tintOverlay.wantsLayer = true
+        tintOverlay.alphaValue = 0
+        addSubview(tintOverlay, positioned: .above, relativeTo: glassEffectView)
+        NSLayoutConstraint.activate([
+            tintOverlay.topAnchor.constraint(equalTo: glassEffectView.topAnchor),
+            tintOverlay.leadingAnchor.constraint(equalTo: glassEffectView.leadingAnchor),
+            tintOverlay.bottomAnchor.constraint(equalTo: glassEffectView.bottomAnchor),
+            tintOverlay.trailingAnchor.constraint(equalTo: glassEffectView.trailingAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(
+        style: NSGlassEffectView.Style,
+        backgroundColor: NSColor,
+        backgroundOpacity: Double,
+        cornerRadius: CGFloat?,
+        isKeyWindow: Bool
+    ) {
+        glassEffectView.style = style
+        glassEffectView.tintColor = backgroundColor.withAlphaComponent(backgroundOpacity)
+        glassEffectView.cornerRadius = cornerRadius ?? 0
+        updateKeyStatus(isKeyWindow, backgroundColor: backgroundColor)
+    }
+
+    func updateTopInset(_ offset: CGFloat) {
+        topConstraint.constant = offset
+    }
+
+    func updateKeyStatus(_ isKeyWindow: Bool, backgroundColor: NSColor) {
+        let tint = tintProperties(for: backgroundColor)
+        tintOverlay.layer?.backgroundColor = tint.color.cgColor
+        tintOverlay.alphaValue = isKeyWindow ? 0 : tint.opacity
+    }
+
+    /// A saturation-boosted tint + opacity for the inactive overlay, lifted
+    /// from Ghostty's `tintProperties`.
+    private func tintProperties(for color: NSColor) -> (color: NSColor, opacity: CGFloat) {
+        let isLight = color.isLightColor
+        let vibrant = color.adjustingSaturation(by: 1.2)
+        let overlayOpacity: CGFloat = isLight ? 0.35 : 0.85
+        return (vibrant, overlayOpacity)
+    }
 }
 
 // MARK: - Window styling
@@ -75,21 +180,37 @@ enum WindowAppearance {
         let forceOpaque = window.styleMask.contains(.fullScreen)
         let effectiveTransparent = isTransparent && !forceOpaque
 
+        // Liquid glass replaces the CGS blur when enabled. It only makes sense
+        // while the window is translucent; at full opacity there's nothing to
+        // see behind, so we fall back to the plain solid-background path.
+        let useGlass = glassSupported && Preferences.shared.windowGlassEnabled && effectiveTransparent
+
         if effectiveTransparent {
             window.isOpaque = false
-            // The window's backgroundColor is the *only* tinted layer.
-            // Ghostty renders fully transparent, the detail ZStack and
-            // sidebar paint nothing, so the whole interior — including the
-            // strip around the system glass sidebar — reads as one
-            // continuous translucent surface backed by this color.
-            window.backgroundColor = bg.withAlphaComponent(opacity)
-            // Apply blur unconditionally; passing 0 clears any previous blur.
-            setWindowBackgroundBlur(window, radius: blurRadius)
+            if useGlass {
+                // The NSGlassEffectView is the tinted layer. Keep the window
+                // background itself clear so we don't double-tint over the
+                // glass material.
+                window.backgroundColor = .clear
+                setWindowBackgroundBlur(window, radius: 0)
+                syncGlass(window: window, backgroundColor: bg, opacity: opacity)
+            } else {
+                // The window's backgroundColor is the *only* tinted layer.
+                // Ghostty renders fully transparent, the detail ZStack and
+                // sidebar paint nothing, so the whole interior — including the
+                // strip around the system glass sidebar — reads as one
+                // continuous translucent surface backed by this color.
+                window.backgroundColor = bg.withAlphaComponent(opacity)
+                // Apply blur unconditionally; passing 0 clears any previous blur.
+                setWindowBackgroundBlur(window, radius: blurRadius)
+                removeGlass(window: window)
+            }
         } else {
             window.isOpaque = true
             window.backgroundColor = bg
             // Make sure a previous blur is cleared when going opaque.
             setWindowBackgroundBlur(window, radius: 0)
+            removeGlass(window: window)
         }
 
         // Override the titlebar's private background layer so its color
@@ -97,6 +218,83 @@ enum WindowAppearance {
         // window is). Without this the titlebar paints its own material
         // and you get a visible seam at y=titlebarHeight.
         syncTitlebar(window: window, isTransparent: effectiveTransparent)
+    }
+
+    /// Update the inactive-glass tint when the window gains/loses key status.
+    /// Cheap no-op unless the glass view is currently installed.
+    static func syncKeyStatus(window: NSWindow) {
+        guard glassSupported else { return }
+        if #available(macOS 26.0, *) {
+            guard let glass = existingGlass(in: window) else { return }
+            glass.updateKeyStatus(window.isKeyWindow, backgroundColor: GhosttyApp.shared.backgroundColor)
+        }
+    }
+
+    private static var glassSupported: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
+    // MARK: Liquid glass
+
+    /// Install (if needed) and configure the liquid-glass background view so it
+    /// fills the window behind SwiftUI's content, including the area under the
+    /// titlebar. Follows Ghostty's `updateGlassEffectIfNeeded` pattern.
+    private static func syncGlass(window: NSWindow, backgroundColor: NSColor, opacity: Double) {
+        guard #available(macOS 26.0, *) else { return }
+        guard let contentView = window.contentView, let themeFrame = contentView.superview else { return }
+
+        let glass = existingGlass(in: window) ?? {
+            let view = MactermGlassView(topOffset: -contentView.safeAreaInsets.top)
+            // Below the content view so SwiftUI (sidebar, terminal, toolbar)
+            // composites on top of the glass.
+            themeFrame.addSubview(view, positioned: .below, relativeTo: contentView)
+            NSLayoutConstraint.activate([
+                view.topAnchor.constraint(equalTo: themeFrame.topAnchor),
+                view.leadingAnchor.constraint(equalTo: themeFrame.leadingAnchor),
+                view.bottomAnchor.constraint(equalTo: themeFrame.bottomAnchor),
+                view.trailingAnchor.constraint(equalTo: themeFrame.trailingAnchor),
+            ])
+            return view
+        }()
+
+        glass.updateTopInset(-contentView.safeAreaInsets.top)
+        glass.configure(
+            style: officialGlassStyle(Preferences.shared.windowGlassStyle),
+            backgroundColor: backgroundColor,
+            backgroundOpacity: opacity,
+            cornerRadius: windowCornerRadius(window),
+            isKeyWindow: window.isKeyWindow
+        )
+    }
+
+    @available(macOS 26.0, *)
+    private static func officialGlassStyle(_ style: WindowGlassStyle) -> NSGlassEffectView.Style {
+        switch style {
+        case .regular: .regular
+        case .clear: .clear
+        }
+    }
+
+    private static func removeGlass(window: NSWindow) {
+        guard glassSupported else { return }
+        if #available(macOS 26.0, *) {
+            existingGlass(in: window)?.removeFromSuperview()
+        }
+    }
+
+    @available(macOS 26.0, *)
+    private static func existingGlass(in window: NSWindow) -> MactermGlassView? {
+        guard let themeFrame = window.contentView?.superview else { return nil }
+        return themeFrame.subviews.compactMap { $0 as? MactermGlassView }.first
+    }
+
+    /// The window's private corner radius, so the glass clips to the same
+    /// rounded corners as the window. Falls back to nil (square) if the SPI
+    /// is unavailable.
+    private static func windowCornerRadius(_ window: NSWindow) -> CGFloat? {
+        guard window.responds(to: Selector(("_cornerRadius"))) else { return nil }
+        return window.value(forKey: "_cornerRadius") as? CGFloat
     }
 
     private static func syncTitlebar(window: NSWindow, isTransparent: Bool) {

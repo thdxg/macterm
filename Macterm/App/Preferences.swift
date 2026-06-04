@@ -19,6 +19,22 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which `NSGlassEffectView.Style` the liquid-glass window background uses.
+/// Maps to AppKit's `.regular` / `.clear` (see `WindowAppearance`).
+enum WindowGlassStyle: String, CaseIterable, Identifiable {
+    case regular
+    case clear
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .regular: "Regular"
+        case .clear: "Clear"
+        }
+    }
+}
+
 /// Single observable source of truth for UserDefaults-backed preferences.
 ///
 /// Macterm only stores app-shaped state here (window opacity/blur, quick
@@ -129,6 +145,29 @@ final class Preferences {
         }
     }
 
+    /// Use the macOS 26 liquid-glass material (`NSGlassEffectView`) for the
+    /// translucent window background instead of the legacy CGS Gaussian blur.
+    /// Only has any effect when `windowOpacity < 1` — at full opacity the
+    /// window is solid and neither blur nor glass is visible. When enabled the
+    /// `windowBlurRadius` slider is ignored; the glass material defines its own
+    /// look.
+    var windowGlassEnabled: Bool {
+        didSet {
+            defaults.set(windowGlassEnabled, forKey: Keys.windowGlassEnabled)
+            notifyConfigChanged()
+        }
+    }
+
+    /// Which liquid-glass material to use when `windowGlassEnabled` is on.
+    /// `.regular` is frostier/more tinted; `.clear` is more transparent. No
+    /// effect unless glass is enabled.
+    var windowGlassStyle: WindowGlassStyle {
+        didSet {
+            defaults.set(windowGlassStyle.rawValue, forKey: Keys.windowGlassStyle)
+            notifyConfigChanged()
+        }
+    }
+
     // MARK: - Ghostty config
 
     /// Path to the user's Ghostty config. Empty string = don't load any user
@@ -191,6 +230,9 @@ final class Preferences {
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
         windowBlurRadius = defaults.integer(forKey: Keys.windowBlurRadius)
+        windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
+        windowGlassStyle = (defaults.string(forKey: Keys.windowGlassStyle))
+            .flatMap(WindowGlassStyle.init(rawValue:)) ?? .regular
         userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
         quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
@@ -236,6 +278,8 @@ final class Preferences {
         static let autoTiling = "macterm.autoTiling.enabled"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"
+        static let windowGlassEnabled = "macterm.window.glassEnabled"
+        static let windowGlassStyle = "macterm.window.glassStyle"
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let quickTerminalEnabled = "macterm.quickTerminal.enabled"
         static let quickTerminalWidth = "macterm.quickTerminal.width"

@@ -308,6 +308,20 @@ private struct WindowStyler: NSViewRepresentable {
             swiftuiDelegate?.windowDidBecomeMain?(notification)
         }
 
+        func windowDidBecomeKey(_ notification: Notification) {
+            if let window = notification.object as? NSWindow {
+                WindowAppearance.syncKeyStatus(window: window)
+            }
+            swiftuiDelegate?.windowDidBecomeKey?(notification)
+        }
+
+        func windowDidResignKey(_ notification: Notification) {
+            if let window = notification.object as? NSWindow {
+                WindowAppearance.syncKeyStatus(window: window)
+            }
+            swiftuiDelegate?.windowDidResignKey?(notification)
+        }
+
         func windowDidEnterFullScreen(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
             WindowAppearance.sync(window: window)
