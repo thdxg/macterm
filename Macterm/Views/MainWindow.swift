@@ -288,7 +288,10 @@ private struct WindowStyler: NSViewRepresentable {
         func observe(window: NSWindow) {
             // Re-apply on config change. AppKit also rebuilds the titlebar
             // subviews on becomeMain / fullscreen transitions, so we resync
-            // there too via the delegate hooks below.
+            // there too via the delegate hooks below. A system light/dark
+            // switch also lands here: GhosttyApp's appearance observer posts
+            // .mactermConfigDidChange so the window tint follows the resolved
+            // theme (issue #38).
             observer = NotificationCenter.default.addObserver(
                 forName: .mactermConfigDidChange,
                 object: nil,

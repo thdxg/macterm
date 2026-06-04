@@ -16,7 +16,7 @@ struct MactermApp: App {
             MainWindow()
                 .environment(appState)
                 .environment(projectStore)
-                .preferredColorScheme(MactermTheme.colorScheme)
+                .modifier(AppColorScheme())
                 .alert(
                     "Close running process?",
                     isPresented: Binding(
@@ -126,6 +126,25 @@ struct MactermApp: App {
         Settings {
             SettingsView()
         }
+    }
+}
+
+/// Applies the app-wide light/dark scheme derived from the ghostty theme.
+///
+/// Reading `GhosttyApp.shared.configVersion` (an `@Observable` property bumped
+/// on config reload and on system appearance changes) registers a SwiftUI
+/// dependency, so `.preferredColorScheme` — and every `MactermTheme` color read
+/// downstream — re-evaluates when the resolved theme changes. Without this the
+/// chrome would freeze at its launch appearance, since `MactermTheme.colorScheme`
+/// reads `NSApp`/theme files rather than observable state (issue #38).
+private struct AppColorScheme: ViewModifier {
+    @State private var ghostty = GhosttyApp.shared
+
+    func body(content: Content) -> some View {
+        // Touch configVersion so SwiftUI tracks it as a dependency and
+        // re-evaluates the color scheme when the resolved theme changes.
+        _ = ghostty.configVersion
+        return content.preferredColorScheme(MactermTheme.colorScheme)
     }
 }
 

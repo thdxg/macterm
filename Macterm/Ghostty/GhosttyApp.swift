@@ -18,6 +18,10 @@ final class GhosttyApp {
     private var tickTimer: Timer?
     @ObservationIgnored
     private let callbacks = GhosttyCallbacks()
+    @ObservationIgnored
+    private var resourcesDir: String?
+    @ObservationIgnored
+    private var appearanceObserver: NSKeyValueObservation?
 
     private init() {
         resolveResources()
@@ -56,6 +60,32 @@ final class GhosttyApp {
         }
         RunLoop.main.add(timer, forMode: .common)
         tickTimer = timer
+
+        // React to system light/dark switches. The chrome colors derive from
+        // the appearance-resolved `theme = light:X,dark:Y` side (issue #38), so
+        // they change with the OS appearance — but they read `NSApp` and theme
+        // files, not observable state, so SwiftUI won't recompute on its own.
+        // On each change we bump `configVersion` (observed by the root view) and
+        // post `.mactermConfigDidChange` so the chrome re-reads MactermTheme.
+        // Terminal surfaces handle their own switch via
+        // viewDidChangeEffectiveAppearance.
+        //
+        // Deferred off the init stack: observing `NSApp.effectiveAppearance`
+        // (or the first callback it may fire) can re-enter `GhosttyApp.shared`
+        // while this `static let` is still initializing, deadlocking its
+        // dispatch_once.
+        DispatchQueue.main.async { [weak self] in
+            self?.appearanceObserver = NSApp.observe(\.effectiveAppearance, options: [.new]) { _, _ in
+                MainActor.assumeIsolated { GhosttyApp.shared.appearanceDidChange() }
+            }
+        }
+    }
+
+    /// Bump the observable version so SwiftUI re-reads appearance-derived theme
+    /// colors, and notify AppKit chrome (window tint) to re-sync.
+    private func appearanceDidChange() {
+        configVersion += 1
+        NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
     }
 
     func tick() {
@@ -119,12 +149,25 @@ final class GhosttyApp {
         alert.runModal()
     }
 
-    var backgroundColor: NSColor { configColor("background") ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1) }
-    var foregroundColor: NSColor { configColor("foreground") ?? .white }
+    /// Color accessors prefer the appearance-resolved theme file when the user's
+    /// `theme` is a `light:X,dark:Y` split (issue #38); otherwise they read
+    /// libghostty's config getters, which are correct for a plain theme.
+    var backgroundColor: NSColor {
+        if let hex = resolvedThemeColors()?.background, let c = nsColor(fromHex: hex) { return c }
+        return configColor("background") ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1)
+    }
+
+    var foregroundColor: NSColor {
+        if let hex = resolvedThemeColors()?.foreground, let c = nsColor(fromHex: hex) { return c }
+        return configColor("foreground") ?? .white
+    }
+
     var accentColor: NSColor { paletteColor(at: 4) ?? foregroundColor }
 
     func paletteColor(at index: Int) -> NSColor? {
-        guard let config, (0 ..< 256).contains(index) else { return nil }
+        guard (0 ..< 256).contains(index) else { return nil }
+        if let hex = resolvedThemeColors()?.palette[index], let c = nsColor(fromHex: hex) { return c }
+        guard let config else { return nil }
         var palette = ghostty_config_palette_s()
         let key = "palette"
         guard ghostty_config_get(config, &palette, key, UInt(key.utf8.count)) else { return nil }
@@ -224,6 +267,47 @@ final class GhosttyApp {
             unsetenv("GHOSTTY_RESOURCES_DIR")
             return
         }
+        self.resourcesDir = resourcesDir
         setenv("GHOSTTY_RESOURCES_DIR", resourcesDir, 1)
+    }
+
+    // MARK: - Theme split resolution (issue #38)
+
+    /// When the effective `theme` is a `light:X,dark:Y` split, the colors of the
+    /// side matching the current OS appearance — read straight from the theme
+    /// file, since libghostty's config getters always resolve a split to the
+    /// light side. Nil for a plain theme (the getters handle those correctly).
+    private func resolvedThemeColors() -> ThemeResolver.Colors? {
+        guard let resourcesDir else { return nil }
+        // Reconstruct the effective `theme` from the layers we control, matching
+        // libghostty's last-wins merge: our defaults, then the user's config.
+        var configText = (try? String(contentsOfFile: MactermConfig.shared.defaultsPath, encoding: .utf8)) ?? ""
+        let userPath = Preferences.shared.expandedUserGhosttyConfigPath
+        if !userPath.isEmpty, let userText = try? String(contentsOfFile: userPath, encoding: .utf8) {
+            configText += "\n" + userText
+        }
+        guard let themeValue = ThemeResolver.themeValue(inConfigText: configText),
+              let side = ThemeResolver.resolve(themeValue: themeValue, scheme: currentScheme)
+        else { return nil }
+
+        let themeFile = resourcesDir + "/themes/" + side
+        guard let themeText = try? String(contentsOfFile: themeFile, encoding: .utf8) else { return nil }
+        return ThemeResolver.colors(inThemeFile: themeText)
+    }
+
+    private var currentScheme: ThemeResolver.Scheme {
+        NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    }
+
+    private func nsColor(fromHex hex: String) -> NSColor? {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        return NSColor(
+            srgbRed: CGFloat((v >> 16) & 0xFF) / 255,
+            green: CGFloat((v >> 8) & 0xFF) / 255,
+            blue: CGFloat(v & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
