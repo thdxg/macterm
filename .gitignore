@@ -9,10 +9,11 @@ GhosttyKit/ghostty.h
 
 # Ghostty resources downloaded by setup.sh from the thdxg/ghostty release,
 # mirroring a real Ghostty.app layout (ghostty/{themes,shell-integration} plus a
-# sibling terminfo/). Macterm ships them verbatim; nothing here is committed, so
-# the whole directory is ignored. (No trailing slash so it also matches a
-# symlink at this path, as dev worktrees may use.)
-/Macterm/Resources
+# sibling terminfo/). The directory is committed (via .gitkeep) so it exists on
+# clone, but its downloaded contents are never committed — ignore everything
+# inside except the .gitkeep.
+/Macterm/Resources/*
+!/Macterm/Resources/.gitkeep
 /build
 .agents/
 .claude/

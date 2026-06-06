@@ -1,0 +1,12 @@
+This directory is populated locally — its contents are not committed.
+
+`mise run setup` (scripts/setup.sh) downloads the ghostty resources from the
+thdxg/ghostty release and extracts them here, mirroring a real Ghostty.app
+layout:
+
+    Macterm/Resources/
+      ghostty/{themes,shell-integration}   ← GHOSTTY_RESOURCES_DIR points at ghostty/
+      terminfo/                            ← sibling of ghostty/ (libghostty derives TERMINFO from it)
+
+Everything but this .gitkeep is gitignored. If the app can't find its terminfo
+or shell integration, run `mise run setup` to (re)populate this directory.
