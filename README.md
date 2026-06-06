@@ -97,7 +97,7 @@ Shell integration works standalone — no Ghostty.app needed. The one exception 
 
 ## Project Layouts
 
-You can declare a project's tabs, split layout, and the process each pane runs in a committable `.macterm/layout.yaml` at the project root. Open the command palette and run **Save layout** to write your current workspace out, or **Apply layout** to load the file back.
+You can declare a project's tabs, split layout, and the process each pane runs in a committable `.macterm/layout.yaml` at the project root. When you first open a project this session and it has a layout file (with no restored session), Macterm applies it automatically. You can also run **Save layout** from the command palette to write your current workspace out, or **Apply layout** to load the file back on demand.
 
 ```yaml
 name: "MyApp" # the project this layout is for (optional)

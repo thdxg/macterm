@@ -245,6 +245,51 @@ struct AppStateTests {
     }
 
     @Test
+    func selecting_project_with_layout_file_auto_applies_on_first_open() throws {
+        let state = makeAppState()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-autoapply-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Layout exists *before* the project is first opened.
+        writeLayout("""
+        tabs:
+          - name: "Dev"
+            layout:
+              split: horizontal
+              first:  { run: "npm run dev" }
+              second: {}
+        """, at: dir.path)
+
+        let project = Project(name: "auto", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+
+        // Workspace built from the layout (one tab, two panes), not the default
+        // single-pane workspace. Non-destructive on first open → no prompt.
+        let ws = try #require(state.workspaces[project.id])
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs[0].customTitle == "Dev")
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(state.pendingLayoutApply == nil)
+    }
+
+    @Test
+    func selecting_project_without_layout_file_uses_default_workspace() {
+        let state = makeAppState()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-nolayout-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let project = Project(name: "plain", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+
+        // No layout file → default single-pane workspace.
+        #expect(state.workspaces[project.id]?.tabs.count == 1)
+        #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+    }
+
+    @Test
     func applyLayout_malformed_file_returns_error_and_does_not_apply() throws {
         let state = makeAppState()
         let (p, root) = seedProjectWithDir(state)

@@ -110,11 +110,15 @@ final class AppState {
             workspaces[ws.projectID] = ws
         }
         if let id = Preferences.shared.activeProjectID,
-           projects.contains(where: { $0.id == id })
+           let project = projects.first(where: { $0.id == id })
         {
             activeProjectID = id
             recordProjectVisit(id)
-            ensureWorkspace(projectID: id, projects: projects)
+            // A restored snapshot above already populated `workspaces[id]`; only
+            // a project with no prior session state falls through to its layout
+            // file (else the default workspace).
+            autoApplyLayoutOnFirstOpen(project)
+            ensureWorkspace(projectID: id, path: project.path)
         }
     }
 
@@ -127,7 +131,21 @@ final class AppState {
     func selectProject(_ project: Project) {
         activeProjectID = project.id
         recordProjectVisit(project.id)
+        autoApplyLayoutOnFirstOpen(project)
         ensureWorkspace(projectID: project.id, path: project.path)
+    }
+
+    /// On a project's first open this session (no live/restored workspace yet),
+    /// build its workspace from `.macterm/layout.yaml` if present. Because there
+    /// are no live panes, the apply is pure-spawn — never destructive, never
+    /// prompts. A restored snapshot already populates `workspaces`, so it takes
+    /// precedence; if there's no layout file this no-ops and `ensureWorkspace`
+    /// creates the default single-pane workspace.
+    private func autoApplyLayoutOnFirstOpen(_ project: Project) {
+        guard workspaces[project.id] == nil,
+              LayoutFile.exists(atProjectRoot: project.path)
+        else { return }
+        applyLayout(projectID: project.id, projectName: project.name, projectRoot: project.path)
     }
 
     /// Shows an open panel, adds the selected directory as a project, and selects it.
@@ -532,10 +550,5 @@ final class AppState {
         if workspaces[projectID] == nil {
             workspaces[projectID] = Workspace(projectID: projectID, projectPath: path)
         }
-    }
-
-    private func ensureWorkspace(projectID: UUID, projects: [Project]) {
-        guard let project = projects.first(where: { $0.id == projectID }) else { return }
-        ensureWorkspace(projectID: projectID, path: project.path)
     }
 }

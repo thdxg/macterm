@@ -177,6 +177,11 @@ extension LayoutFile {
         URL(fileURLWithPath: root).appendingPathComponent(relativePath)
     }
 
+    /// Whether a project has a layout file on disk.
+    static func exists(atProjectRoot root: String) -> Bool {
+        FileManager.default.fileExists(atPath: url(forProjectRoot: root).path)
+    }
+
     /// Decode a layout from YAML text.
     static func parse(yaml: String) throws -> LayoutFile {
         do {
