@@ -8,14 +8,11 @@ GhosttyKit/ghostty.h
 /ghostty
 
 # Ghostty resources downloaded by setup.sh from the thdxg/ghostty release,
-# mirroring a real Ghostty.app layout: ghostty/{themes,shell-integration} plus
-# a sibling terminfo/. Macterm ships them verbatim so users configure themes
-# via their Ghostty config — none are committed here. (The bare themes/ and
-# shell-integration/ lines cover the older flat layout in case it lingers.)
-/Macterm/Resources/ghostty/
-/Macterm/Resources/terminfo/
-/Macterm/Resources/shell-integration/
-/Macterm/Resources/themes/
+# mirroring a real Ghostty.app layout (ghostty/{themes,shell-integration} plus a
+# sibling terminfo/). Macterm ships them verbatim; nothing here is committed, so
+# the whole directory is ignored. (No trailing slash so it also matches a
+# symlink at this path, as dev worktrees may use.)
+/Macterm/Resources
 /build
 .agents/
 .claude/
