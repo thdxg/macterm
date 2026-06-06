@@ -27,6 +27,9 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     @AppStorage(Preferences.Keys.autoTiling)
     private var autoTilingEnabled = false
+
+    @AppStorage(Preferences.Keys.eagerlyStartProjectTabs)
+    private var eagerlyStartProjectTabs = true
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
@@ -67,6 +70,14 @@ private struct GeneralSettings: View {
                         Preferences.shared.autoTilingEnabled = v
                     }
                 Text("Distributes pane sizes evenly on split and close.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                Toggle("Start all tabs of the focused project", isOn: $eagerlyStartProjectTabs)
+                    .onChange(of: eagerlyStartProjectTabs) { _, v in
+                        Preferences.shared.eagerlyStartProjectTabs = v
+                    }
+                Text("Runs every tab's processes when a project opens, not just the active tab. Other projects still load when focused.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

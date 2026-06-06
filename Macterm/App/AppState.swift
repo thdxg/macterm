@@ -126,6 +126,7 @@ final class AppState {
             // and `ensureWorkspace` only creates a default when neither exists.
             autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: id, path: project.path)
+            warmFocusedProject()
         }
     }
 
@@ -140,6 +141,31 @@ final class AppState {
         recordProjectVisit(project.id)
         autoApplyLayoutOnFirstOpen(project)
         ensureWorkspace(projectID: project.id, path: project.path)
+        warmFocusedProject()
+    }
+
+    /// Start the shells for every tab of the focused project, not just the
+    /// active one — so a multi-tab project (e.g. from a declarative layout) has
+    /// all its processes running on open. Other projects stay lazy. The active
+    /// tab is created by SwiftUI as usual; the rest are warmed off-screen via
+    /// `SurfaceIncubator`. No-op when the toggle is off.
+    func warmFocusedProject() {
+        guard Preferences.shared.eagerlyStartProjectTabs,
+              let projectID = activeProjectID,
+              let ws = workspaces[projectID]
+        else { return }
+        for pane in Self.panesToWarm(in: ws) {
+            SurfaceIncubator.shared.warm(pane)
+        }
+    }
+
+    /// Panes whose shells should be eagerly started: every pane in every tab
+    /// except the active tab (SwiftUI starts the active tab's panes when it
+    /// renders them). Pure, so it's unit-testable without surfaces.
+    static func panesToWarm(in workspace: Workspace) -> [Pane] {
+        workspace.tabs
+            .filter { $0.id != workspace.activeTabID }
+            .flatMap { $0.splitRoot.allPanes() }
     }
 
     /// On a project's first open this session (no live/restored workspace yet),
@@ -472,6 +498,10 @@ final class AppState {
                 window: NSApp.keyWindow ?? NSApp.mainWindow
             )
         }
+
+        // Start the non-active tabs' processes too, so an applied multi-tab
+        // layout runs everything it declares, not just the active tab.
+        warmFocusedProject()
     }
 
     func focusPane(_ paneID: UUID, projectID: UUID) {
