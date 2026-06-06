@@ -401,5 +401,15 @@
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.8</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.8/Macterm-1.13.8.dmg" type="application/octet-stream" sparkle:edSignature="n4y9G2zHPKTTVUsR8XyRZ4/jNQiazlsbdj3nYcQpLzLQip9xR2d9MaUXAhLy14xosov2SDxyqnSbOTjeS+qgCg==" length="15509440" />
     </item>
+    <item>
+      <title>Macterm 1.14.0</title>
+      <pubDate>Sat, 06 Jun 2026 07:08:02 +0000</pubDate>
+      <sparkle:version>1.14.0</sparkle:version>
+      <sparkle:shortVersionString>1.14.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.14.0.html</sparkle:releaseNotesLink>
+      <link>https://github.com/thdxg/macterm/releases/tag/v1.14.0</link>
+      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.14.0/Macterm-1.14.0.dmg" type="application/octet-stream" sparkle:edSignature="z0GfdD2SXWtR0bV71+N29jUrMoeVka41+AxqpmReCDftQGVsByql7ndOv+tErRT5KrrlSMMW9V23955QUhPWCg==" length="15133881" />
+    </item>
   </channel>
 </rss>
