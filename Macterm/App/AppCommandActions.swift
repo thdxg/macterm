@@ -104,6 +104,20 @@ extension AppCommand {
                   current?.path != pwd
             else { return nil }
             return { ctx.appState.replaceProjectPathWithCurrentDir(projectStore: ctx.projectStore) }
+        case .applyLayout:
+            guard let projectID, let current else { return nil }
+            return {
+                if let error = ctx.appState.applyLayout(projectID: projectID, projectName: current.name, projectRoot: current.path) {
+                    presentLayoutError(error, verb: "apply")
+                }
+            }
+        case .saveLayout:
+            guard let projectID, let current else { return nil }
+            return {
+                if let error = ctx.appState.saveLayout(projectID: projectID, projectName: current.name, projectRoot: current.path) {
+                    presentLayoutError(error, verb: "save")
+                }
+            }
         case .nextProject:
             return { ctx.appState.selectNextProject(projects: ctx.projectStore.projects) }
         case .previousProject:
@@ -120,4 +134,15 @@ extension AppCommand {
             return { QuickTerminalService.shared.toggle() }
         }
     }
+}
+
+/// Surface a layout apply/save failure (most commonly a missing or unparseable
+/// `.macterm/layout.yaml`) as a simple modal alert.
+@MainActor
+private func presentLayoutError(_ error: Error, verb: String) {
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Couldn't \(verb) layout"
+    alert.informativeText = error.localizedDescription
+    alert.runModal()
 }

@@ -33,6 +33,24 @@ struct MactermApp: App {
                 } message: {
                     Text("A process is still running in this pane. Close it anyway?")
                 }
+                .alert(
+                    "Apply layout?",
+                    isPresented: Binding(
+                        get: { appState.pendingLayoutApply != nil },
+                        set: { if !$0 { appState.cancelPendingLayoutApply() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingLayoutApply()
+                    }
+                    Button("Apply", role: .destructive) {
+                        appState.confirmPendingLayoutApply()
+                    }
+                } message: {
+                    if let pending = appState.pendingLayoutApply {
+                        Text(pending.confirmationMessage)
+                    }
+                }
                 .onAppear {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore

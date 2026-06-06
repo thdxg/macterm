@@ -13,6 +13,20 @@ final class GhosttyTerminalNSView: NSView {
 
     nonisolated(unsafe) private(set) var surface: ghostty_surface_t?
     private let workingDirectory: String
+    /// Command to type into the shell once the surface is created (the pane's
+    /// declared `run`). nil → no injected input.
+    private let command: String?
+    /// Shell binary to launch as the surface's program. nil → libghostty's
+    /// default (resolved from the ghostty config / login shell).
+    private let shell: String?
+    /// Extra environment variables for the spawned shell.
+    private let env: [String: String]?
+
+    /// Heap buffers backing the `const char*` fields of the surface config —
+    /// notably `initial_input`, which libghostty writes to the pty
+    /// asynchronously after the child spawns, so the buffer must outlive
+    /// `ghostty_surface_new`. Retained here and freed in `destroySurface`.
+    nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
     var onTitleChange: ((String) -> Void)?
     var onFocus: (() -> Void)?
     var onProcessExit: (() -> Void)?
@@ -38,8 +52,11 @@ final class GhosttyTerminalNSView: NSView {
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
-    init(workingDirectory: String) {
+    init(workingDirectory: String, command: String? = nil, shell: String? = nil, env: [String: String]? = nil) {
         self.workingDirectory = workingDirectory
+        self.command = command
+        self.shell = shell
+        self.env = env
         super.init(frame: .zero)
         setupTrackingArea()
         Self.liveViews.add(self)
@@ -76,9 +93,55 @@ final class GhosttyTerminalNSView: NSView {
         config.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2.0)
         config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 
-        workingDirectory.withCString { cwd in
-            config.working_directory = cwd
+        // Every `const char*` field and the env-var array must stay valid for
+        // libghostty. `working_directory`/`command` are consumed during spawn,
+        // but `initial_input` is written to the pty asynchronously (on a later
+        // surface tick, after the child process is up — see the Ghostty config
+        // reference: "written to the pty before any other input"). So these
+        // buffers must outlive `ghostty_surface_new`, not just the call itself.
+        // We `strdup` into heap buffers whose addresses are stable (unlike
+        // pointers into a Swift Array, which move when the array grows) and
+        // retain them on the instance until `destroySurface` frees them.
+        configCStrings.forEach { free($0) }
+        configCStrings = []
+        func cString(_ s: String) -> UnsafePointer<CChar>? {
+            guard let p = strdup(s) else { return nil }
+            configCStrings.append(p)
+            return UnsafePointer(p)
+        }
+
+        config.working_directory = cString(workingDirectory)
+
+        // Shell binary → the surface's program. nil falls back to libghostty's
+        // own resolution (which honors the user's ghostty config / login shell).
+        if let resolvedShell = shell ?? GhosttyApp.shared.configuredShell {
+            config.command = cString(resolvedShell)
+        }
+
+        // Declared `run` is typed into the shell verbatim, as if the user had
+        // entered it at the prompt. No shell-syntax handling: cwd is set above,
+        // not via an injected `cd`.
+        if let command, !command.isEmpty {
+            config.initial_input = cString(command + "\n")
+        }
+
+        // Extra environment variables. The array of key/value structs points at
+        // buffers owned above; hold it in a local that outlives the call.
+        var envVars: [ghostty_env_var_s] = []
+        if let env, !env.isEmpty {
+            for (key, value) in env {
+                envVars.append(ghostty_env_var_s(key: cString(key), value: cString(value)))
+            }
+        }
+
+        if envVars.isEmpty {
             surface = ghostty_surface_new(app, &config)
+        } else {
+            envVars.withUnsafeMutableBufferPointer { buf in
+                config.env_vars = buf.baseAddress
+                config.env_var_count = buf.count
+                surface = ghostty_surface_new(app, &config)
+            }
         }
         guard let surface else { return }
 
@@ -97,10 +160,24 @@ final class GhosttyTerminalNSView: NSView {
         isDestroyed = true
         if let surface { ghostty_surface_free(surface) }
         surface = nil
+        configCStrings.forEach { free($0) }
+        configCStrings = []
+    }
+
+    /// PID of the foreground process running in this surface's pty (libghostty's
+    /// `tcgetpgrp` on the pty master), or nil if there's no surface. When the
+    /// user is idle at a shell prompt this is the shell itself; while a command
+    /// runs it's that command. Used by `ProcessInspector` to capture a pane's
+    /// running command for `saveLayout`.
+    var foregroundPID: pid_t? {
+        guard let surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(surface)
+        return pid != 0 ? pid_t(pid) : nil
     }
 
     deinit {
         if let surface { ghostty_surface_free(surface) }
+        configCStrings.forEach { free($0) }
         for token in windowObservers {
             NotificationCenter.default.removeObserver(token)
         }

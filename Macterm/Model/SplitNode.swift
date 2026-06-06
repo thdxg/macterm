@@ -10,6 +10,17 @@ final class Pane: Identifiable {
     let id = UUID()
     let projectPath: String
     let projectID: UUID
+    /// Process the pane launches on first surface creation, injected into the
+    /// shell as `command + "\n"`. Set from a declarative layout; nil for an
+    /// interactively-created pane (plain shell). Recorded here so a layout
+    /// `apply` can match a live pane by its declared command even after the
+    /// process has exited (see LayoutReconciler).
+    let command: String?
+    /// Shell binary to launch as the pane's program. nil → resolved from the
+    /// ghostty config / login shell at surface-creation time.
+    let shell: String?
+    /// Extra environment variables for the spawned shell. nil/empty → none.
+    let env: [String: String]?
     var title: String = "Terminal"
     let searchState = TerminalSearchState()
 
@@ -24,7 +35,7 @@ final class Pane: Identifiable {
 
     func ensureNSView() -> GhosttyTerminalNSView {
         if let existing = _nsView { return existing }
-        let view = GhosttyTerminalNSView(workingDirectory: projectPath)
+        let view = GhosttyTerminalNSView(workingDirectory: projectPath, command: command, shell: shell, env: env)
         _nsView = view
         return view
     }
@@ -106,9 +117,18 @@ final class Pane: Identifiable {
         token.allSatisfy { !$0.isLetter && !$0.isNumber }
     }
 
-    init(projectPath: String, projectID: UUID) {
+    init(
+        projectPath: String,
+        projectID: UUID,
+        command: String? = nil,
+        shell: String? = nil,
+        env: [String: String]? = nil
+    ) {
         self.projectPath = projectPath
         self.projectID = projectID
+        self.command = command
+        self.shell = shell
+        self.env = env
     }
 }
 

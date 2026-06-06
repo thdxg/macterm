@@ -157,9 +157,19 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 | File                         | Purpose                                                 |
 | ---------------------------- | ------------------------------------------------------- |
-| `WorkspacePersistence.swift` | Snapshot types, `WorkspaceStore`, `WorkspaceSerializer` |
-| `ProjectStore.swift`         | `ProjectStore` — project CRUD + JSON persistence        |
-| `FileStorage.swift`          | App Support directory helpers                           |
+| `WorkspacePersistence.swift` | Snapshot types, `WorkspaceStore`, `WorkspaceSerializer`                                          |
+| `ProjectStore.swift`         | `ProjectStore` — project CRUD + JSON persistence                                                |
+| `FileStorage.swift`          | App Support directory helpers                                                                   |
+| `LayoutFile.swift`           | Declarative layout file format + YAML (Yams) parse/encode: `LayoutFile`/`LayoutTab`/`LayoutNode`/`LayoutPane`/`LayoutBranch` |
+| `LayoutBuilder.swift`        | `LayoutNode` → `SplitNode` tree builder (resolves cwd/shell per leaf)                           |
+| `LayoutSerializer.swift`     | Live workspace → layout file (the `save` direction)                                             |
+| `LayoutReconciler.swift`     | Minimal-destruction `apply`: matches live panes to declared by `(run, cwd)`, reuses or destroys |
+
+### System (`Macterm/System/`)
+
+| File                     | Purpose                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `ProcessInspector.swift` | Resolves a pid (from `GhosttyTerminalNSView.foregroundPID`) to its command via `KERN_PROCARGS2`; used by `saveLayout` to capture a pane's running command |
 
 ### Config (`Macterm/Config/`)
 
@@ -207,6 +217,9 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `Ghostty/BundledResourcesTests.swift`                                                                                       | Bundle layout: terminfo is a sibling of `ghostty/`, has `78/xterm-ghostty`, shells, themes (#39/#40 guard) |
 | `Ghostty/ThemeResolverTests.swift`                                                                                          | `theme = light:X,dark:Y` split parsing + side selection (`ThemeResolver`, #38)                             |
 | `Persistence/WorkspaceSerializerTests.swift`                                                                                | Snapshot/restore round-trip + on-disk via `WorkspaceStore`                                                 |
+| `Persistence/LayoutFileTests.swift`                                                                                         | YAML parse/encode round-trip, flat split-node format, cwd resolution                                       |
+| `Persistence/LayoutSerializerTests.swift`                                                                                   | Live workspace → layout file (topology, project-relative cwd, `run`)                                       |
+| `Persistence/LayoutReconcilerTests.swift`                                                                                   | Minimal-destruction apply: keep/resize/respawn/kill by `(run, cwd)` identity, plain-shell positional match |
 | `Support/TreeBuilder.swift`                                                                                                 | DSL: `H(pane("a"), V(pane("b"), pane("c")))` → `(SplitNode, [name: UUID])`                                 |
 | `Support/TreeRenderer.swift`                                                                                                | Inverse DSL for readable assertions                                                                        |
 
@@ -243,7 +256,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 - `GhosttyTerminalNSView` is owned by `Pane`, not SwiftUI. `TerminalSurface.dismantleNSView` is a no-op — never tear down the NSView from a SwiftUI path.
 - `pane.destroySurface()` kills the shell process. Only call it when a pane is permanently closed (AppState handles this after the pane leaves the tree).
-- `createSurface()` needs a non-zero frame and a window. `TerminalSurface` defers creation via `DispatchQueue.main.async` until the view is attached to a window.
+- `createSurface()` needs a non-zero frame and a window. `TerminalSurface` defers creation via `DispatchQueue.main.async` until the view is attached to a window. When the `Pane` carries a `command`/`shell`/`env` (from a declarative layout), they're passed to libghostty's surface config as `initial_input` (the `run` command typed into the shell), `command` (the shell binary), and `env_vars`.
 - The `closeSurface` callback from ghostty fires asynchronously. Guard against double-close.
 - First-responder handoff after tree reshapes/tab switches must go through `FocusRestoration.restoreFocus(...)` — not a bare `makeFirstResponder`, which races the NSView's window attachment.
 
@@ -251,6 +264,9 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 - Workspaces saved to `~/Library/Application Support/Macterm/workspaces_v3.json`
 - Projects saved to `projects.json` in the same directory
+- Declarative layouts are an *authorable* file at `.macterm/layout.yaml` in the project root — distinct from the machine-written workspace snapshot. Applied/saved on demand via the `applyLayout` / `saveLayout` commands; `apply` reconciles with minimal destruction (`LayoutReconciler`), and an unparseable file is surfaced via `LayoutFileError` and never applied
+  - `save` records each pane's `run` as the command it's currently running: `Pane.command` if it was layout-spawned, else the live foreground command. That command comes from `ghostty_surface_foreground_pid` (libghostty hands us the pane's foreground pid directly; requires a GhosttyKit build from ~2026-04+), resolved to an argv string by `ProcessInspector` via `KERN_PROCARGS2`. An idle shell prompt yields no `run`. `save` never records `shell:` — the user authors that
+  - The file's top-level `name:` is the project it was saved for. On `apply`, if `name` is present and differs from the active project, `applyLayout` stages a `pendingLayoutApply` with `mismatchedProjectName` set so the confirmation dialog warns before proceeding (a missing/matching `name` applies silently). Tab `name:` is separate — it's the tab's title, matched to live tabs during reconcile
 - User's ghostty config read from `~/.config/ghostty/config` by default (path configurable in Settings)
 - Macterm's wrapper config files written to `~/Library/Application Support/Macterm/macterm-defaults.conf` and `macterm-overrides.conf` on launch. Not user-editable; they're transport between Macterm and libghostty around the user's real config.
 - `Pane` IDs are not preserved across restarts — `restoreNode` creates new `Pane` instances with fresh UUIDs

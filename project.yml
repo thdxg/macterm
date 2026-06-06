@@ -36,6 +36,9 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: "2.6.0"
+  Yams:
+    url: https://github.com/jpsim/Yams
+    from: "5.0.0"
 
 targets:
   Macterm:
@@ -107,6 +110,8 @@ targets:
         embed: false
       - package: Sparkle
         product: Sparkle
+      - package: Yams
+        product: Yams
       - sdk: AppKit.framework
       - sdk: Carbon.framework
       - sdk: CoreGraphics.framework

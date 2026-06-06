@@ -209,6 +209,24 @@ final class GhosttyApp {
         return NSColor(srgbRed: CGFloat(color.r) / 255, green: CGFloat(color.g) / 255, blue: CGFloat(color.b) / 255, alpha: 1)
     }
 
+    /// The shell to launch as a pane's program, used as the fallback when a
+    /// layout pane doesn't name its own `shell`. Prefers a `command` set in the
+    /// user's ghostty config; otherwise falls back to `$SHELL` (the login
+    /// shell). Returns nil only if neither is available, in which case the
+    /// caller leaves libghostty to resolve its own default.
+    var configuredShell: String? {
+        if let command = configString("command"), !command.isEmpty { return command }
+        let shell = ProcessInfo.processInfo.environment["SHELL"]
+        return (shell?.isEmpty == false) ? shell : nil
+    }
+
+    private func configString(_ key: String) -> String? {
+        guard let config else { return nil }
+        var str = ghostty_string_s()
+        guard ghostty_config_get(config, &str, key, UInt(key.utf8.count)), let ptr = str.ptr else { return nil }
+        return String(bytes: UnsafeRawBufferPointer(start: ptr, count: Int(str.len)), encoding: .utf8)
+    }
+
     private func loadConfig() -> (ghostty_config_t?, ReloadResult) {
         var result = ReloadResult(diagnostics: [])
         guard let cfg = ghostty_config_new() else { return (nil, result) }

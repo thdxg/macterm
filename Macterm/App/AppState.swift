@@ -10,6 +10,10 @@ final class AppState {
     var workspaces: [UUID: Workspace] = [:]
     var sidebarVisible = true
     var pendingClosePane: PendingClosePane?
+    /// A computed layout-apply plan awaiting user confirmation because applying
+    /// it would terminate one or more live panes/tabs. nil when no apply is
+    /// pending (or the pending apply is non-destructive and already ran).
+    var pendingLayoutApply: PendingLayoutApply?
     var isCommandPaletteVisible = false
     var postPaletteAction: (() -> Void)?
     var renamingTabID: UUID?
@@ -24,6 +28,32 @@ final class AppState {
     struct PendingClosePane: Equatable {
         let paneID: UUID
         let projectID: UUID
+    }
+
+    /// A reconcile plan staged for confirmation — because applying it would
+    /// close panes / end their processes, and/or the file names a different
+    /// project than the active one.
+    struct PendingLayoutApply {
+        let projectID: UUID
+        let plan: LayoutReconciler.Plan
+        /// The project name the file was saved for, when it differs from the
+        /// active project; nil when names match (or the file omits one).
+        let mismatchedProjectName: String?
+        /// The active project's name, for the mismatch message.
+        let currentProjectName: String
+
+        /// The confirmation dialog body, combining the reasons this apply needs
+        /// confirming (project-name mismatch and/or pane destruction).
+        var confirmationMessage: String {
+            var parts: [String] = []
+            if let saved = mismatchedProjectName {
+                parts.append("This layout was saved for “\(saved)”, but you're applying it to “\(currentProjectName)”.")
+            }
+            if plan.isDestructive {
+                parts.append("Applying it will close some panes and end the processes running in them.")
+            }
+            return parts.joined(separator: "\n\n")
+        }
     }
 
     // Tab cycling state (Ctrl+Tab)
@@ -305,6 +335,118 @@ final class AppState {
 
     func cancelPendingClosePane() {
         pendingClosePane = nil
+    }
+
+    // MARK: - Layout files
+
+    /// Apply a project's declarative layout to its live workspace, reconciling
+    /// with minimal destruction (see `LayoutReconciler`). A non-destructive
+    /// reconcile (only spawns + resizes) runs immediately; one that would
+    /// terminate panes/tabs is staged in `pendingLayoutApply` for confirmation.
+    /// Returns an error to surface if the file is missing or unparseable.
+    @discardableResult
+    func applyLayout(projectID: UUID, projectName: String, projectRoot: String) -> Error? {
+        let file: LayoutFile
+        do {
+            file = try LayoutFile.load(fromProjectRoot: projectRoot)
+        } catch {
+            return error
+        }
+        let plan = LayoutReconciler.plan(
+            layout: file,
+            workspace: workspaces[projectID],
+            projectRoot: projectRoot,
+            projectID: projectID
+        )
+        // The file names a different project than the one we're applying to.
+        // Optional in the format, so only flag when present and mismatched.
+        let mismatchedName: String? = {
+            guard let saved = file.name, saved != projectName else { return nil }
+            return saved
+        }()
+        // Confirm if applying would destroy panes OR the project name mismatches.
+        if plan.isDestructive || mismatchedName != nil {
+            pendingLayoutApply = PendingLayoutApply(
+                projectID: projectID,
+                plan: plan,
+                mismatchedProjectName: mismatchedName,
+                currentProjectName: projectName
+            )
+        } else {
+            executeLayoutPlan(plan, projectID: projectID)
+        }
+        return nil
+    }
+
+    func confirmPendingLayoutApply() {
+        guard let pending = pendingLayoutApply else { return }
+        pendingLayoutApply = nil
+        executeLayoutPlan(pending.plan, projectID: pending.projectID)
+    }
+
+    func cancelPendingLayoutApply() {
+        pendingLayoutApply = nil
+    }
+
+    /// Save the active project's live workspace to its `.macterm/layout.yaml`.
+    @discardableResult
+    func saveLayout(projectID: UUID, projectName: String, projectRoot: String) -> Error? {
+        guard let ws = workspaces[projectID] else { return nil }
+        do {
+            try LayoutSerializer.write(ws, projectName: projectName, projectRoot: projectRoot)
+            return nil
+        } catch {
+            return error
+        }
+    }
+
+    /// Swap each tab's tree to the reconciled shape, reusing the live `Pane`
+    /// objects the plan kept (surfaces preserved) and destroying the rest.
+    private func executeLayoutPlan(_ plan: LayoutReconciler.Plan, projectID: UUID) {
+        let existing = workspaces[projectID]?.tabs ?? []
+        let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
+
+        var newTabs: [TerminalTab] = []
+        for planned in plan.tabs {
+            if let id = planned.existingTabID, let tab = byID[id] {
+                // Reuse the tab object (preserves its id/history); swap the tree.
+                tab.splitRoot = planned.root
+                tab.focusedPaneID = planned.focusedPaneID
+                tab.customTitle = planned.title
+                newTabs.append(tab)
+            } else {
+                newTabs.append(TerminalTab(
+                    id: UUID(),
+                    splitRoot: planned.root,
+                    focusedPaneID: planned.focusedPaneID,
+                    customTitle: planned.title
+                ))
+            }
+        }
+
+        // Destroy surfaces only AFTER the new trees no longer reference them.
+        for pane in plan.panesToDestroy {
+            pane.destroySurface()
+        }
+
+        let activeTabID = newTabs.first?.id
+        if let ws = workspaces[projectID] {
+            ws.tabs = newTabs
+            ws.activeTabID = activeTabID
+        } else {
+            workspaces[projectID] = Workspace(projectID: projectID, tabs: newTabs, activeTabID: activeTabID)
+        }
+        activeProjectID = projectID
+        saveWorkspaces()
+
+        // Focus the declared/active pane once its surface attaches to a window.
+        if let tab = newTabs.first, let paneID = tab.focusedPaneID {
+            FocusRestoration.restoreFocus(
+                to: paneID,
+                in: tab.splitRoot,
+                window: NSApp.keyWindow ?? NSApp.mainWindow
+            )
+        }
     }
 
     func focusPane(_ paneID: UUID, projectID: UUID) {
