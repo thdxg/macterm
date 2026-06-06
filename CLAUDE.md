@@ -18,6 +18,8 @@ mise run build        # Release build + DMG
 
 Requires macOS 26+, Swift 6.0+. GhosttyKit is a pre-built xcframework from `thdxg/ghostty` (a fork that adds CI builds). No zig toolchain needed for development.
 
+`GhosttyKit.xcframework` and the `Macterm/Resources/{ghostty,terminfo,…}` contents are gitignored build artifacts downloaded by `mise run setup` — they don't exist on a fresh clone. **A new checkout, including a git worktree, must run `mise run setup` to populate them** before it can build. Don't symlink them in from another checkout: `setup.sh` only re-downloads when the artifact is absent (it's a presence check, not a version check), so a symlinked-in copy can silently go stale, and a whole-directory `Resources` symlink also shows up as untracked. (To refresh a stale artifact, delete it and re-run `mise run setup`.)
+
 ## Updates
 
 Macterm ships with automatic updates via [Sparkle](https://sparkle-project.org/). A version check runs daily in the background and can be triggered manually from **Macterm → Check for Updates…** or in **Settings → Updates**. Updates are verified with an EdDSA signature baked into the app, so later versions install without any `xattr` workaround. No telemetry is collected.
