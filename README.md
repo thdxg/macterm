@@ -72,45 +72,27 @@ more transparent **Clear** — all in **Settings → General → Window**.
 
 https://github.com/user-attachments/assets/1486ed55-e653-43ce-98aa-232a61d234a7
 
-## For Ghostty Users
+## Configuration
 
-Macterm uses libghostty as its terminal engine and reads your existing `~/.config/ghostty/config` on launch. Themes, fonts, palettes, keybinds, scrollback, cursor style, shell integration, mouse behavior — everything Ghostty supports works the same in Macterm.
+Macterm reads your `~/.config/ghostty/config` on launch — themes, fonts, palettes, keybinds, and everything else Ghostty supports works the same here. See the [Ghostty option reference](https://ghostty.org/docs/config/reference) for the full list of available settings. If your config is elsewhere, set the path in **Settings → General → Ghostty Config**.
 
-If your config lives somewhere else, point Macterm at it in **Settings → General → Ghostty Config**. Click **Reload** there after saving external edits — Macterm doesn't auto-detect them.
+Macterm ships a thin defaults layer on top of Ghostty's own defaults. These are the values that differ:
 
-### What's different from Ghostty.app
+| Option                                                                                 | Macterm default | Ghostty default |
+| -------------------------------------------------------------------------------------- | --------------- | --------------- |
+| [`theme`](https://ghostty.org/docs/config/reference#theme)                             | `Rose Pine`     | _(none)_        |
+| [`font-size`](https://ghostty.org/docs/config/reference#font-size)                     | `16`            | `12`            |
+| [`window-padding-x`](https://ghostty.org/docs/config/reference#window-padding-x)       | `16`            | `2`             |
+| [`window-padding-y`](https://ghostty.org/docs/config/reference#window-padding-y)       | `16`            | `2`             |
+| [`macos-option-as-alt`](https://ghostty.org/docs/config/reference#macos-option-as-alt) | `true`          | `false`         |
 
-A handful of settings either don't apply or are overridden, because Macterm renders some of the chrome itself instead of letting Ghostty do it. If you have these in your Ghostty config, they'll be parsed without errors but won't change anything in Macterm:
+Add any of these to your Ghostty config to override them. Macterm-specific settings (window opacity, blur style, quick terminal size, hotkeys) live in **Macterm → Settings**.
 
-| Setting                                                         | Status          | Why                                                                                                                           |
-| --------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `background-opacity`                                            | Overridden to 0 | Macterm composites window translucency at the AppKit level. Use **Settings → General → Window → Background Opacity** instead. |
-| `background-blur`                                               | Overridden to 0 | Same reason. Use the **Background Blur** slider in Settings.                                                                  |
-| `unfocused-split-opacity`                                       | Ignored         | Macterm draws its own dim overlay on unfocused panes.                                                                         |
-| `split-divider-color`                                           | Ignored         | Divider color comes from the theme's foreground.                                                                              |
-| `window-padding-color`                                          | Ignored         | Padding follows the SwiftUI background stack.                                                                                 |
-| `macos-titlebar-*`, `macos-window-buttons`, `window-decoration` | Ignored         | Macterm has its own titlebar implementation.                                                                                  |
-| `quick-terminal-*` family                                       | Ignored         | Macterm has its own quick terminal. Size lives in **Settings → Quick Terminal**.                                              |
+A few settings are overridden because Macterm handles that chrome itself: `background-opacity` and `background-blur` are forced to `0` (use **Settings → General → Window** instead), and titlebar, window decoration, split-divider, and quick-terminal settings are ignored.
 
-Macterm-specific settings (window opacity/blur, quick terminal dimensions, hotkeys, auto-tile) live in **Macterm → Settings**. Everything else belongs in your Ghostty config.
+Ghostty keybinds work normally unless they conflict with a Macterm shortcut — on conflict, Macterm wins. Every Macterm shortcut is rebindable in **Settings → Keymaps**. Note that Ghostty app-level actions (`new_split`, `new_tab`, etc.) do nothing in Macterm; use Macterm's own keybinds for those.
 
-Macterm bundles Ghostty's terminfo, shell-integration scripts, and themes, so `TERM=xterm-ghostty`, named themes, and shell integration all work standalone — no Ghostty.app install required.
-
-### Shell integration
-
-The one exception is the `ssh-env`, `ssh-terminfo`, and `path` shell-integration features, which need the `ghostty` CLI to do anything useful, and Macterm doesn't ship one. If Ghostty.app is installed alongside in `/Applications`, Macterm points the wrappers at its binary and they work normally. Otherwise these features are disabled — `ssh` and `sudo` still work, they just skip Ghostty's terminfo-forwarding tricks for remote hosts. Install Ghostty.app if you want them. When the CLI is missing, **Settings → General** shows a banner that links here.
-
-### Keybinds
-
-Most of your `keybind = ...` lines in Ghostty config work the same as in Ghostty.app. The one rule to know: **on conflict, Macterm wins.** If a keystroke matches one of Macterm's app-level shortcuts (new tab, splits, focus moves, command palette, etc.), Macterm handles it and Ghostty never sees the event. If it doesn't conflict, the keystroke flows through to libghostty and your Ghostty `keybind` fires normally.
-
-Every conflicting combo is rebindable in **Settings → Keymaps**, so if you'd rather a particular shortcut belong to your Ghostty config, clear or remap it there.
-
-One caveat: Ghostty keybinds that drive _app-level_ actions (`new_split`, `new_tab`, `goto_tab`, `goto_split`, etc.) currently do nothing in Macterm — Macterm only triggers those actions through its own keybinds in **Settings → Keymaps**. Terminal-level Ghostty bindings (copy/paste, scroll, font size, etc.) work normally.
-
-### First-launch defaults
-
-If you don't have a `~/.config/ghostty/config`, Macterm starts with the Rose Pine theme at 16pt, 16px window padding, and `macos-option-as-alt = true` (so Option+letter sends Alt to your shell instead of typing special characters). Everything else falls through to Ghostty's own defaults. Any of these can be overridden by adding the corresponding line to your Ghostty config.
+Shell integration works standalone — no Ghostty.app needed. The one exception is `ssh-env`, `ssh-terminfo`, and `path` features, which require the `ghostty` CLI; install Ghostty.app to enable them.
 
 ## Contributing
 
