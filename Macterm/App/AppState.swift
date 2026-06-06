@@ -106,7 +106,14 @@ final class AppState {
         hasRestoredSelection = true
         let snapshots = workspaceStore.load()
         let valid = Set(projects.map(\.id))
-        for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid) {
+        // A committed layout file is the source of truth: skip restoring the
+        // session snapshot for any project that has one, leaving its workspace
+        // nil so it rebuilds from `.macterm/layout.yaml` on open (below / on
+        // first select). Projects with no layout file restore their snapshot.
+        let pathByID = Dictionary(projects.map { ($0.id, $0.path) }, uniquingKeysWith: { a, _ in a })
+        for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid)
+            where !LayoutFile.exists(atProjectRoot: pathByID[ws.projectID] ?? "")
+        {
             workspaces[ws.projectID] = ws
         }
         if let id = Preferences.shared.activeProjectID,
@@ -114,9 +121,9 @@ final class AppState {
         {
             activeProjectID = id
             recordProjectVisit(id)
-            // A restored snapshot above already populated `workspaces[id]`; only
-            // a project with no prior session state falls through to its layout
-            // file (else the default workspace).
+            // Build the active project from its layout file if it has one (its
+            // snapshot was skipped above); otherwise the restored snapshot stands
+            // and `ensureWorkspace` only creates a default when neither exists.
             autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: id, path: project.path)
         }

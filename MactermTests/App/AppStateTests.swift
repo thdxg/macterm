@@ -8,10 +8,10 @@ struct AppStateTests {
 
     /// Build an AppState with a temp-file workspace store so tests don't
     /// touch the user's real App Support data.
-    private func makeAppState() -> AppState {
+    private func makeAppState(store: WorkspaceStore? = nil) -> AppState {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
-        return AppState(workspaceStore: WorkspaceStore(fileURL: tmp))
+        return AppState(workspaceStore: store ?? WorkspaceStore(fileURL: tmp))
     }
 
     /// Create a project + workspace inside `state` and return the project.
@@ -287,6 +287,46 @@ struct AppStateTests {
         // No layout file → default single-pane workspace.
         #expect(state.workspaces[project.id]?.tabs.count == 1)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+    }
+
+    @Test
+    func layout_file_wins_over_restored_snapshot() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-layoutwins-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let project = Project(name: "winner", path: dir.path, sortOrder: 0)
+
+        // Pre-seed a saved snapshot for the project: a single-pane workspace.
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let store = WorkspaceStore(fileURL: storeURL)
+        let snapshotWS = Workspace(projectID: project.id, projectPath: dir.path)
+        store.save(WorkspaceSerializer.snapshot([project.id: snapshotWS]))
+
+        // And a layout file declaring a two-pane split.
+        writeLayout("""
+        tabs:
+          - name: "Dev"
+            layout:
+              split: horizontal
+              first:  { run: "npm run dev" }
+              second: {}
+        """, at: dir.path)
+
+        // Make it the active project so restore reopens it.
+        let priorActive = Preferences.shared.activeProjectID
+        Preferences.shared.activeProjectID = project.id
+        defer { Preferences.shared.activeProjectID = priorActive }
+
+        // Restore: the layout file must win — the project's snapshot is skipped
+        // and its workspace is rebuilt from the layout (two panes, not one).
+        let state = makeAppState(store: store)
+        state.restoreSelection(projects: [project])
+
+        let ws = try #require(state.workspaces[project.id])
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs[0].customTitle == "Dev")
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
     }
 
     @Test
