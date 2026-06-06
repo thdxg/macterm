@@ -48,7 +48,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .closePane: "cmd+w"
         case .splitRight: "cmd+d"
         case .splitDown: "cmd+shift+d"
-        case .splitAuto: "cmd+ctrl+d"
+        case .splitAuto: "none"
         case .toggleSidebar: "cmd+\\"
         case .recentTab: "ctrl+tab"
         case .nextProject: "cmd+]"

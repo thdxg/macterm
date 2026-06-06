@@ -300,11 +300,14 @@ struct HotkeysTests {
     }
 
     @Test
-    func all_actions_have_parseable_defaults() {
+    func all_actions_have_valid_defaults() {
+        // Every default must be a valid shortcut string — either a parseable
+        // binding or the explicit "none"/disabled sentinel (some actions ship
+        // unbound and are opt-in via Settings → Keymaps).
         for action in HotkeyAction.allCases {
             #expect(
-                HotkeyRegistry.parseShortcut(action.defaultShortcut) != nil,
-                "default shortcut for \(action.rawValue) fails to parse: \(action.defaultShortcut)"
+                HotkeyRegistry.isValidShortcutString(action.defaultShortcut),
+                "default shortcut for \(action.rawValue) is invalid: \(action.defaultShortcut)"
             )
         }
     }
