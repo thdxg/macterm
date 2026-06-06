@@ -93,7 +93,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
 
     /// Escape shell-sensitive characters in a string by prefixing each with a
     /// backslash. Suitable for inserting paths/URLs into a live terminal buffer.
-    private static func shellEscape(_ s: String) -> String {
+    static func shellEscape(_ s: String) -> String {
         var result = s
         for char in escapeCharacters {
             result = result.replacingOccurrences(of: String(char), with: "\\\(char)")

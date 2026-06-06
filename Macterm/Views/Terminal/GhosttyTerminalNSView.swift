@@ -42,6 +42,7 @@ final class GhosttyTerminalNSView: NSView {
         self.workingDirectory = workingDirectory
         super.init(frame: .zero)
         setupTrackingArea()
+        registerForDraggedTypes(Array(Self.dropTypes))
         Self.liveViews.add(self)
     }
 
@@ -654,6 +655,46 @@ final class GhosttyTerminalNSView: NSView {
               let scalar = chars.unicodeScalars.first
         else { return 0 }
         return scalar.value
+    }
+
+    // MARK: - Drag & drop
+
+    /// Pasteboard types we accept when something is dragged onto the surface.
+    private static let dropTypes: Set<NSPasteboard.PasteboardType> = [.string, .fileURL, .URL]
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard let types = sender.draggingPasteboard.types, !Set(types).isDisjoint(with: Self.dropTypes) else {
+            return []
+        }
+        // .copy gives the drop the familiar green "+" cursor.
+        return .copy
+    }
+
+    /// Drops insert the escaped file path(s) / URL at the cursor. File URLs are
+    /// shell-escaped individually and space-joined; plain strings are inserted
+    /// verbatim (they may be a command the user means to run).
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let pb = sender.draggingPasteboard
+
+        let content: String? = if let url = pb.string(forType: .URL) {
+            GhosttyCallbacks.shellEscape(url)
+        } else if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
+            urls
+                .map { GhosttyCallbacks.shellEscape($0.path(percentEncoded: false)) }
+                .joined(separator: " ")
+        } else if let str = pb.string(forType: .string) {
+            str
+        } else {
+            nil
+        }
+
+        guard let content else { return false }
+        // Defer the insert (as Ghostty does) so the drag session fully unwinds
+        // before we mutate the terminal buffer.
+        DispatchQueue.main.async {
+            self.insertText(content, replacementRange: NSRange(location: 0, length: 0))
+        }
+        return true
     }
 }
 
