@@ -81,6 +81,29 @@ struct TerminalTabTests {
         #expect(tab.focusedPaneID == originalFocus)
     }
 
+    // MARK: - autoSplit
+
+    @Test
+    func autoSplit_creates_and_focuses_new_pane() throws {
+        let (tab, ids) = makeTab(pane("a"), focused: "a")
+        let newID = try tab.autoSplit(paneID: #require(ids["a"]))
+        #expect(newID != nil)
+        #expect(tab.focusedPaneID == newID)
+    }
+
+    @Test
+    func autoSplit_falls_back_to_horizontal_without_measurable_bounds() throws {
+        // In headless tests the pane has no attached NSView, so bounds are zero
+        // and the longer-axis heuristic resolves to a horizontal (left/right) split.
+        let (tab, ids) = makeTab(pane("a"), focused: "a")
+        _ = try tab.autoSplit(paneID: #require(ids["a"]))
+        guard case let .split(branch) = tab.splitRoot else {
+            Issue.record("expected a split at the root")
+            return
+        }
+        #expect(branch.direction == .horizontal)
+    }
+
     // MARK: - resize
 
     @Test

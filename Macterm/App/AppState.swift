@@ -248,6 +248,16 @@ final class AppState {
         saveWorkspaces()
     }
 
+    /// Split the focused pane along its longer on-screen axis (Ghostty's
+    /// `new_split` / BSP behavior). Direction is decided by `TerminalTab.autoSplit`.
+    func autoSplitPane(projectID: UUID) {
+        guard let tab = workspaces[projectID]?.activeTab,
+              let paneID = tab.focusedPaneID
+        else { return }
+        tab.autoSplit(paneID: paneID)
+        saveWorkspaces()
+    }
+
     func resizePane(_ direction: PaneFocusDirection, projectID: UUID, delta: CGFloat = 0.03) {
         workspaces[projectID]?.activeTab?.resize(direction, delta: delta)
         saveWorkspaces()

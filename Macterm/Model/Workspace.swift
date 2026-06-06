@@ -107,6 +107,17 @@ final class TerminalTab: Identifiable {
         return newID
     }
 
+    /// Split the focused pane along its longer on-screen axis (Ghostty's
+    /// `new_split` / BSP behavior): a wide pane splits left/right, a tall pane
+    /// splits top/bottom. Falls back to a horizontal split when the focused
+    /// pane's NSView isn't attached yet and has no measurable bounds.
+    @discardableResult
+    func autoSplit(paneID: UUID) -> UUID? {
+        let bounds = splitRoot.findPane(id: paneID)?.nsView?.bounds.size ?? .zero
+        let direction: SplitDirection = bounds.height > bounds.width ? .vertical : .horizontal
+        return split(paneID: paneID, direction: direction)
+    }
+
     /// Adjust the nearest matching-axis split ratio around the focused pane.
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
         guard let paneID = focusedPaneID else { return }

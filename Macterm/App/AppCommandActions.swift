@@ -52,6 +52,9 @@ extension AppCommand {
         case .splitDown:
             guard let projectID else { return nil }
             return { ctx.appState.splitPane(direction: .vertical, projectID: projectID) }
+        case .splitAuto:
+            guard let projectID else { return nil }
+            return { ctx.appState.autoSplitPane(projectID: projectID) }
         case .zoomPane:
             guard let projectID else { return nil }
             return { ctx.appState.toggleZoom(projectID: projectID) }

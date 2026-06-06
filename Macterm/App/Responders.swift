@@ -68,6 +68,11 @@ final class QuickTerminalResponder: KeyResponder {
             state.split(paneID: paneID, direction: .vertical)
             return .handled
         }
+        if HotkeyRegistry.matches(event, action: .splitAuto) {
+            guard let paneID = state.focusedPaneID else { return .passThrough }
+            state.autoSplit(paneID: paneID)
+            return .handled
+        }
         if HotkeyRegistry.matches(event, action: .closePane) {
             guard let paneID = state.focusedPaneID else { return .passThrough }
             state.requestClosePane(paneID)
@@ -178,6 +183,12 @@ final class MainAppResponder: KeyResponder {
         if HotkeyRegistry.matches(event, action: .splitDown) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
             appState.splitPane(direction: .vertical, projectID: projectID)
+            return .handled
+        }
+
+        if HotkeyRegistry.matches(event, action: .splitAuto) {
+            guard let projectID = appState.activeProjectID else { return .passThrough }
+            appState.autoSplitPane(projectID: projectID)
             return .handled
         }
 

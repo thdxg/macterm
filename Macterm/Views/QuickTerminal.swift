@@ -355,6 +355,10 @@ final class QuickTerminalSplitState {
         tab.split(paneID: paneID, direction: direction)
     }
 
+    func autoSplit(paneID: UUID) {
+        tab.autoSplit(paneID: paneID)
+    }
+
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
         tab.resize(direction, delta: delta)
     }
