@@ -230,7 +230,7 @@ enum HotkeyRegistry {
 
     static func displayString(for shortcut: String) -> String {
         let symbols = displaySymbols(for: shortcut)
-        return symbols.isEmpty ? "Disabled" : symbols.joined()
+        return symbols.isEmpty ? "None" : symbols.joined()
     }
 
     /// The shortcut's modifier glyphs and key label as separate elements, in
@@ -301,5 +301,29 @@ enum HotkeyRegistry {
     static func matches(_ event: NSEvent, action: HotkeyAction) -> Bool {
         guard let shortcut = selectedShortcut(for: action), shortcut.id != "none" else { return false }
         return shortcut.matches(event)
+    }
+
+    /// Canonical identity for a parsed shortcut — key token plus sorted
+    /// modifier flags — so `cmd+shift+d` and `shift+cmd+d` compare equal.
+    /// Returns `nil` for unparseable/disabled shortcuts (which never conflict).
+    static func conflictKey(for shortcut: String) -> String? {
+        guard let parsed = parseShortcut(shortcut) else { return nil }
+        return "\(parsed.modifiers.rawValue):\(parsed.keyToken)"
+    }
+
+    /// Given the current shortcut string for each action, returns the set of
+    /// action IDs that share a binding with at least one other action.
+    /// Disabled/invalid bindings never conflict.
+    static func conflictingActionIDs(in shortcuts: [String: String]) -> Set<String> {
+        var idsByKey: [String: [String]] = [:]
+        for (actionID, shortcut) in shortcuts {
+            guard let key = conflictKey(for: shortcut) else { continue }
+            idsByKey[key, default: []].append(actionID)
+        }
+        var conflicting: Set<String> = []
+        for (_, ids) in idsByKey where ids.count > 1 {
+            conflicting.formUnion(ids)
+        }
+        return conflicting
     }
 }

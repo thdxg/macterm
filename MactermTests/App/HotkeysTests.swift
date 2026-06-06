@@ -87,9 +87,9 @@ struct HotkeysTests {
 
     @Test
     func displayString_empty_or_disabled() {
-        #expect(HotkeyRegistry.displayString(for: "") == "Disabled")
-        #expect(HotkeyRegistry.displayString(for: "none") == "Disabled")
-        #expect(HotkeyRegistry.displayString(for: "disabled") == "Disabled")
+        #expect(HotkeyRegistry.displayString(for: "") == "None")
+        #expect(HotkeyRegistry.displayString(for: "none") == "None")
+        #expect(HotkeyRegistry.displayString(for: "disabled") == "None")
     }
 
     // MARK: - displaySymbols
@@ -604,5 +604,49 @@ struct HotkeysTests {
         ))
         let str = try #require(HotkeyRegistry.shortcutString(from: event))
         #expect(str == "cmd+q") // Should be "q", not "a"
+    }
+
+    // MARK: - Conflict detection
+
+    @Test
+    func conflictKey_ignores_modifier_order() {
+        #expect(HotkeyRegistry.conflictKey(for: "cmd+shift+d")
+            == HotkeyRegistry.conflictKey(for: "shift+cmd+d"))
+    }
+
+    @Test
+    func conflictKey_distinguishes_modifiers_and_keys() {
+        #expect(HotkeyRegistry.conflictKey(for: "cmd+d")
+            != HotkeyRegistry.conflictKey(for: "cmd+shift+d"))
+        #expect(HotkeyRegistry.conflictKey(for: "cmd+d")
+            != HotkeyRegistry.conflictKey(for: "cmd+t"))
+    }
+
+    @Test
+    func conflictKey_is_nil_for_disabled_or_invalid() {
+        #expect(HotkeyRegistry.conflictKey(for: "disabled") == nil)
+        #expect(HotkeyRegistry.conflictKey(for: "") == nil)
+        #expect(HotkeyRegistry.conflictKey(for: "cmd+") == nil)
+    }
+
+    @Test
+    func conflictingActionIDs_flags_shared_bindings() {
+        let conflicts = HotkeyRegistry.conflictingActionIDs(in: [
+            "a": "cmd+t",
+            "b": "shift+cmd+t", // distinct
+            "c": "cmd+t", // collides with a
+            "d": "cmd+w",
+        ])
+        #expect(conflicts == ["a", "c"])
+    }
+
+    @Test
+    func conflictingActionIDs_ignores_disabled_duplicates() {
+        let conflicts = HotkeyRegistry.conflictingActionIDs(in: [
+            "a": "disabled",
+            "b": "disabled",
+            "c": "cmd+t",
+        ])
+        #expect(conflicts.isEmpty)
     }
 }

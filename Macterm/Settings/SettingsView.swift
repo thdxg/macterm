@@ -337,41 +337,70 @@ private struct KeymapSettings: View {
     @State
     private var invalidActions: Set<String> = []
 
+    /// Action IDs whose current binding collides with another action's.
+    private var conflictingActions: Set<String> {
+        HotkeyRegistry.conflictingActionIDs(in: values)
+    }
+
+    /// Titles of the *other* actions that share `action`'s binding, for the
+    /// inline conflict message.
+    private func conflictPartners(for action: HotkeyAction) -> [String] {
+        guard let key = HotkeyRegistry.conflictKey(for: values[action.id] ?? "disabled") else {
+            return []
+        }
+        return HotkeyAction.allCases
+            .filter { $0.id != action.id && HotkeyRegistry.conflictKey(for: values[$0.id] ?? "disabled") == key }
+            .map(\.title)
+    }
+
     var body: some View {
         Form {
             Section("Keyboard Shortcuts") {
                 ForEach(HotkeyAction.allCases) { action in
-                    HStack {
-                        Text(action.title)
-                        Spacer()
-                        Button {
-                            HotkeyCaptureState.shared.isCapturing = true
-                            capturingActionID = action.id
-                        } label: {
-                            Text(
-                                capturingActionID == action.id
-                                    ? "Press keys..."
-                                    : HotkeyRegistry
-                                    .displayString(for: values[action.id] ?? "disabled")
-                            )
-                            .font(.system(size: 12, design: .monospaced))
-                            .frame(width: 140, alignment: .leading)
-                        }
-                        .buttonStyle(.bordered)
+                    let partners = conflictPartners(for: action)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(action.title)
+                            Spacer()
+                            Button {
+                                HotkeyCaptureState.shared.isCapturing = true
+                                capturingActionID = action.id
+                            } label: {
+                                let isCapturing = capturingActionID == action.id
+                                let isUnmapped = HotkeyRegistry
+                                    .displaySymbols(for: values[action.id] ?? "disabled").isEmpty
+                                Text(
+                                    isCapturing
+                                        ? "Press keys..."
+                                        : HotkeyRegistry
+                                        .displayString(for: values[action.id] ?? "disabled")
+                                )
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                                .frame(width: 140, alignment: .leading)
+                            }
+                            .buttonStyle(.bordered)
 
-                        Button("Clear") {
-                            values[action.id] = "disabled"
-                            HotkeyRegistry.setShortcutString("disabled", for: action)
-                            invalidActions.remove(action.id)
-                            if capturingActionID == action.id {
-                                capturingActionID = nil
-                                HotkeyCaptureState.shared.isCapturing = false
+                            Button("Clear") {
+                                values[action.id] = "disabled"
+                                HotkeyRegistry.setShortcutString("disabled", for: action)
+                                invalidActions.remove(action.id)
+                                if capturingActionID == action.id {
+                                    capturingActionID = nil
+                                    HotkeyCaptureState.shared.isCapturing = false
+                                }
+                            }
+                            .buttonStyle(.borderless)
+
+                            if invalidActions.contains(action.id) || !partners.isEmpty {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.yellow)
                             }
                         }
-                        .buttonStyle(.borderless)
 
-                        if invalidActions.contains(action.id) {
-                            Image(systemName: "exclamationmark.triangle.fill")
+                        if !partners.isEmpty {
+                            Text("Conflicts with \(partners.joined(separator: ", "))")
+                                .font(.system(size: 11))
                                 .foregroundStyle(.yellow)
                         }
                     }
