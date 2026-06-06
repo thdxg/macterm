@@ -88,7 +88,7 @@ struct AppStateTests {
         // Replace splitRoot with a known HV shape.
         let (tree, ids) = build(H(pane("l1"), V(pane("r1"), pane("r2"))))
         tab.splitRoot = tree
-        tab.focusedPaneID = try #require(ids["l1"])
+        tab.focusedPaneID = ids["l1"]
 
         try state.closePane(#require(ids["l1"]), projectID: p.id)
 
@@ -122,7 +122,7 @@ struct AppStateTests {
         let tab = try #require(state.workspaces[p.id]?.activeTab)
         let (tree, ids) = build(H(pane("a"), pane("b")))
         tab.splitRoot = tree
-        tab.focusedPaneID = try #require(ids["a"])
+        tab.focusedPaneID = ids["a"]
         state.focusPaneInDirection(.right, projectID: p.id)
         #expect(tab.focusedPaneID == ids["b"])
     }

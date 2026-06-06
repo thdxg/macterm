@@ -203,7 +203,7 @@ struct TerminalTabTests {
         let bID = try #require(ids["b"])
         tab.toggleZoom(paneID: bID)
         #expect(tab.zoomedPaneID == bID)
-        #expect(try tab.removePane(bID) == .removed)
+        #expect(tab.removePane(bID) == .removed)
         #expect(tab.zoomedPaneID == nil)
     }
 

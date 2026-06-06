@@ -2,21 +2,23 @@ import CoreGraphics
 import Foundation
 
 /// Reconciles a live workspace toward a declared `LayoutFile` with *minimal
-/// destruction*: panes that already match the declaration (by command + cwd)
-/// are kept — their surfaces re-parented into the declared tree shape rather
-/// than torn down — so changing only a ratio resizes in place, and a moved-but-
-/// unchanged pane survives a structural edit. Only panes that genuinely deviate
-/// (changed `run`, or live panes the file no longer mentions) are destroyed.
+/// destruction*: panes that already match the declaration (by live command +
+/// cwd) are kept — their surfaces re-parented into the declared tree shape
+/// rather than torn down — so changing only a ratio resizes in place, and a
+/// moved-but-unchanged pane survives a structural edit. Only panes that
+/// genuinely deviate (running a different/no command, or live panes the file no
+/// longer mentions) are destroyed.
 ///
 /// The plan is computed as a pure function (`plan(...)`) so the matching logic
 /// is unit-testable without touching real surfaces; `AppState` executes the
 /// resulting plan, destroying surfaces and swapping in the new trees.
 @MainActor
 enum LayoutReconciler {
-    /// A live pane's identity for matching, captured from its declared spawn
-    /// parameters (NOT the live process, which is always the shell and may have
-    /// exited). `command == nil` panes (plain shells) have no command identity
-    /// and are matched positionally instead.
+    /// A live pane's identity for matching: its *current* foreground command
+    /// (what's actually running now, via `liveCommand`) plus its cwd — NOT the
+    /// command it was spawned with, so a pane that has since exited its command
+    /// no longer matches a declaration that expects it. `command == nil` (a pane
+    /// idle at a prompt) has no command identity and is matched positionally.
     struct Identity: Hashable {
         let command: String?
         let cwd: String
@@ -34,8 +36,10 @@ enum LayoutReconciler {
 
     struct Plan {
         let tabs: [PlannedTab]
-        /// Live panes that will be destroyed (unmatched, or replaced because
-        /// their `run` changed). Empty → a fully non-destructive apply.
+        /// Live panes that will be destroyed: those not matched by any
+        /// declaration (running a different command than declared, idle where a
+        /// command is declared, or in a tab the file no longer mentions). Empty
+        /// → a fully non-destructive apply.
         let panesToDestroy: [Pane]
         /// Live tab ids that no longer appear in the layout and will be closed.
         let tabsToClose: [UUID]

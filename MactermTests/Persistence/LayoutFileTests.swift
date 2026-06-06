@@ -89,10 +89,11 @@ struct LayoutFileTests {
               second: { }
         """
         let file = try LayoutFile.parse(yaml: yaml)
-        let projectID = UUID()
-        let tabs = LayoutBuilder.buildTabs(file, projectRoot: "/proj", projectID: projectID)
-        #expect(tabs.count == 1)
-        let panes = tabs[0].splitRoot.allPanes()
+        // Build via the reconciler (the live apply path) against no workspace,
+        // so every leaf is freshly spawned from the declaration.
+        let plan = LayoutReconciler.plan(layout: file, workspace: nil, projectRoot: "/proj", projectID: UUID())
+        #expect(plan.tabs.count == 1)
+        let panes = plan.tabs[0].root.allPanes()
         #expect(panes.count == 2)
         #expect(panes[0].command == "npm run dev")
         #expect(panes[0].projectPath == "/proj/api")
@@ -118,8 +119,8 @@ struct LayoutFileTests {
               second: { }
         """
         let file = try LayoutFile.parse(yaml: yaml)
-        let tabs = LayoutBuilder.buildTabs(file, projectRoot: "/proj", projectID: UUID())
-        #expect(tabs[0].focusedPaneID == tabs[0].splitRoot.allPanes().first?.id)
+        let plan = LayoutReconciler.plan(layout: file, workspace: nil, projectRoot: "/proj", projectID: UUID())
+        #expect(plan.tabs[0].focusedPaneID == plan.tabs[0].root.allPanes().first?.id)
     }
 
     @Test
