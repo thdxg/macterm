@@ -19,20 +19,24 @@ struct LayoutReconcilerTests {
     /// live surface, so by default we model each pane's *live* command as the
     /// one it was constructed with (`Pane.command`) — i.e. "the pane is
     /// currently running what it was spawned with." Tests exercising idle /
-    /// exited processes pass their own `liveCommand`.
+    /// exited processes pass their own `liveCommand`. `liveShellName` models the
+    /// basename of the shell an idle pane is running (default: the pane's
+    /// declared `shell`, else nil); tests swapping shells inject their own.
     private func plan(
         _ file: LayoutFile,
         workspace: Workspace?,
         projectRoot: String,
         projectID: UUID,
-        liveCommand: @escaping (Pane) -> String? = { $0.command }
+        liveCommand: @escaping (Pane) -> String? = { $0.command },
+        liveShellName: @escaping (Pane) -> String? = { $0.shell.map { ($0 as NSString).lastPathComponent } }
     ) -> LayoutReconciler.Plan {
         LayoutReconciler.plan(
             layout: file,
             workspace: workspace,
             projectRoot: projectRoot,
             projectID: projectID,
-            liveCommand: liveCommand
+            liveCommand: liveCommand,
+            liveShellName: liveShellName
         )
     }
 
@@ -48,8 +52,8 @@ struct LayoutReconcilerTests {
 
         let file = layout("""
         tabs:
-          - layout:
-              split: horizontal
+          - split:
+              direction: horizontal
               ratio: 0.6
               first:  { cwd: "./api", run: "npm run dev" }
               second: {}
@@ -75,8 +79,8 @@ struct LayoutReconcilerTests {
 
         let file = layout("""
         tabs:
-          - layout:
-              split: horizontal
+          - split:
+              direction: horizontal
               ratio: 0.8
               first:  { run: "npm run dev" }
               second: {}
@@ -105,8 +109,8 @@ struct LayoutReconcilerTests {
         // dev unchanged, test's command changed.
         let file = layout("""
         tabs:
-          - layout:
-              split: vertical
+          - split:
+              direction: vertical
               first:  { run: "npm run dev" }
               second: { run: "npm start" }
         """)
@@ -133,8 +137,8 @@ struct LayoutReconcilerTests {
 
         let file = layout("""
         tabs:
-          - layout:
-              split: vertical
+          - split:
+              direction: vertical
               first:  {}
               second: { cwd: "./api", run: "npm run dev" }
         """)
@@ -158,7 +162,7 @@ struct LayoutReconcilerTests {
         // Layout only declares dev.
         let file = layout("""
         tabs:
-          - layout: { run: "npm run dev" }
+          - { run: "npm run dev" }
         """)
 
         let plan = plan(file, workspace: ws, projectRoot: "/proj", projectID: pid)
@@ -179,8 +183,8 @@ struct LayoutReconcilerTests {
         // Two declared plain shells → reuse the two live shells positionally.
         let file = layout("""
         tabs:
-          - layout:
-              split: horizontal
+          - split:
+              direction: horizontal
               first:  {}
               second: {}
         """)
@@ -191,12 +195,62 @@ struct LayoutReconcilerTests {
     }
 
     @Test
+    func declared_shell_mismatch_respawns_the_pane() {
+        // A pane idle in `nu` against a declared `shell: /bin/zsh` is out of sync
+        // — it must be destroyed and respawned, not reused.
+        let pid = UUID()
+        let live = Pane(projectPath: "/proj", projectID: pid)
+        let ws = workspace(projectID: pid, root: .pane(live))
+
+        let file = layout("""
+        tabs:
+          - shell: /bin/zsh
+        """)
+
+        let plan = plan(
+            file,
+            workspace: ws,
+            projectRoot: "/proj",
+            projectID: pid,
+            liveCommand: { _ in nil }, // idle at a prompt
+            liveShellName: { _ in "nu" } // …but running nu, not zsh
+        )
+        #expect(plan.panesToDestroy.map(\.id) == [live.id])
+        #expect(plan.isDestructive)
+        #expect(!plan.tabs[0].root.allPanes().map(\.id).contains(live.id))
+    }
+
+    @Test
+    func declared_shell_match_reuses_the_pane() {
+        // A pane idle in the declared shell is reused, not respawned.
+        let pid = UUID()
+        let live = Pane(projectPath: "/proj", projectID: pid)
+        let ws = workspace(projectID: pid, root: .pane(live))
+
+        let file = layout("""
+        tabs:
+          - shell: /bin/zsh
+        """)
+
+        let plan = plan(
+            file,
+            workspace: ws,
+            projectRoot: "/proj",
+            projectID: pid,
+            liveCommand: { _ in nil },
+            liveShellName: { _ in "zsh" }
+        )
+        #expect(plan.panesToDestroy.isEmpty)
+        #expect(plan.tabs[0].root.allPanes().map(\.id) == [live.id])
+    }
+
+    @Test
     func no_live_workspace_spawns_everything_non_destructively() {
         let pid = UUID()
         let file = layout("""
         tabs:
-          - layout:
-              split: horizontal
+          - split:
+              direction: horizontal
               first:  { run: "npm run dev" }
               second: {}
         """)
@@ -220,7 +274,7 @@ struct LayoutReconcilerTests {
         let file = layout("""
         tabs:
           - name: "Dev"
-            layout: { run: "npm run dev" }
+            run: "npm run dev"
         """)
 
         let plan = plan(file, workspace: ws, projectRoot: "/proj", projectID: pid)
@@ -244,7 +298,7 @@ struct LayoutReconcilerTests {
 
         let file = layout("""
         tabs:
-          - layout: { run: "btop" }
+          - { run: "btop" }
         """)
 
         // Live command is nil (idle) even though it was spawned with btop.
@@ -268,7 +322,7 @@ struct LayoutReconcilerTests {
 
         let file = layout("""
         tabs:
-          - layout: { run: "btop" }
+          - { run: "btop" }
         """)
 
         // Live command equals the declared run.

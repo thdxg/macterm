@@ -10,9 +10,11 @@ final class GhosttyCallbacks: @unchecked Sendable {
     func action(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
         switch action.tag {
         case GHOSTTY_ACTION_SET_TITLE:
-            guard let view = surfaceView(from: target), let ptr = action.action.set_title.title else { return true }
-            let title = String(cString: ptr)
-            DispatchQueue.main.async { view.onTitleChange?(title) }
+            // The title string is unused — tab names come from the foreground
+            // process, not the OSC title. We only need the signal that a title
+            // fired (a command boundary) to refresh the process name.
+            guard let view = surfaceView(from: target) else { return true }
+            DispatchQueue.main.async { view.surfaceDidReportTitle() }
             return true
         case GHOSTTY_ACTION_START_SEARCH:
             guard let view = surfaceView(from: target) else { return true }

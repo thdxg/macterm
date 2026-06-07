@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json",
+  "title": "Macterm layout",
+  "description": "Declarative pane layout for a Macterm project. Lives at .macterm/layout.yaml in the project root; describes the tabs, split tree, and the process each pane runs. Apply/save it from the command palette.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tabs"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The project this layout was authored for. On apply, a mismatch against the active project prompts a confirmation. Optional — a file without it applies to any project without warning."
+    },
+    "tabs": {
+      "type": "array",
+      "description": "The tabs to create, in order.",
+      "items": { "$ref": "#/$defs/tab" }
+    }
+  },
+  "$defs": {
+    "tab": {
+      "description": "A tab: a layout node (a leaf pane or a split) with an optional `name`. There's no `layout:` wrapper — the node's fields sit at the tab level.",
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/$defs/paneTab" },
+        { "$ref": "#/$defs/splitTab" }
+      ]
+    },
+    "node": {
+      "description": "A node in the split tree. Either a leaf pane (cwd/run/shell) or a split (a `split` mapping). A bare {} is a plain-shell pane.",
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/$defs/pane" },
+        { "$ref": "#/$defs/split" }
+      ]
+    },
+    "name": {
+      "type": "string",
+      "description": "Tab title. On apply, matched against live tabs by this name."
+    },
+    "paneProperties": {
+      "cwd": {
+        "type": "string",
+        "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through."
+      },
+      "run": {
+        "type": "string",
+        "description": "Command typed into the pane's shell on launch (e.g. \"npm run dev\"). Omit for a plain shell. The command runs inside the shell, so the prompt survives when it exits."
+      },
+      "shell": {
+        "type": "string",
+        "description": "Shell binary to launch for this pane (e.g. \"/bin/zsh\"). Omit to use the shell from your Ghostty config (else your login shell)."
+      }
+    },
+    "pane": {
+      "title": "Pane (leaf)",
+      "description": "A terminal pane. With no fields ({}) it's a plain shell.",
+      "type": "object",
+      "additionalProperties": false,
+      "not": { "required": ["split"] },
+      "properties": {
+        "cwd": { "$ref": "#/$defs/paneProperties/cwd" },
+        "run": { "$ref": "#/$defs/paneProperties/run" },
+        "shell": { "$ref": "#/$defs/paneProperties/shell" }
+      }
+    },
+    "paneTab": {
+      "title": "Pane tab (leaf)",
+      "description": "A single-pane tab. With no pane fields it's a plain shell.",
+      "type": "object",
+      "additionalProperties": false,
+      "not": { "required": ["split"] },
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "cwd": { "$ref": "#/$defs/paneProperties/cwd" },
+        "run": { "$ref": "#/$defs/paneProperties/run" },
+        "shell": { "$ref": "#/$defs/paneProperties/shell" }
+      }
+    },
+    "splitBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction", "first", "second"],
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": ["horizontal", "vertical"],
+          "description": "Split direction. 'horizontal' = side by side (first | second); 'vertical' = stacked (first / second)."
+        },
+        "ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Divider position, 0–1. Defaults to 0.5 (an even split)."
+        },
+        "first": {
+          "$ref": "#/$defs/node",
+          "description": "The left (horizontal) or top (vertical) child."
+        },
+        "second": {
+          "$ref": "#/$defs/node",
+          "description": "The right (horizontal) or bottom (vertical) child."
+        }
+      }
+    },
+    "split": {
+      "title": "Split",
+      "description": "Splits the area into two child nodes via a nested `split` mapping.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split"],
+      "properties": {
+        "split": { "$ref": "#/$defs/splitBody" }
+      }
+    },
+    "splitTab": {
+      "title": "Split tab",
+      "description": "A tab split into two child nodes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "split": { "$ref": "#/$defs/splitBody" }
+      }
+    }
+  }
+}

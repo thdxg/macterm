@@ -2,12 +2,15 @@ import CoreGraphics
 import Foundation
 
 /// Reconciles a live workspace toward a declared `LayoutFile` with *minimal
-/// destruction*: panes that already match the declaration (by live command +
-/// cwd) are kept — their surfaces re-parented into the declared tree shape
-/// rather than torn down — so changing only a ratio resizes in place, and a
-/// moved-but-unchanged pane survives a structural edit. Only panes that
-/// genuinely deviate (running a different/no command, or live panes the file no
-/// longer mentions) are destroyed.
+/// destruction*: panes that already match the declaration are kept — their
+/// surfaces re-parented into the declared tree shape rather than torn down — so
+/// changing only a ratio resizes in place, and a moved-but-unchanged pane
+/// survives a structural edit. A command leaf matches by live command + cwd; a
+/// plain-shell leaf matches an idle pane (positionally), but a leaf declaring a
+/// specific `shell:` only matches an idle pane running that shell — so swapping
+/// a pane's `shell:` respawns it. Only panes that genuinely deviate (a
+/// different/no command, a different shell, or live panes the file no longer
+/// mentions) are destroyed.
 ///
 /// The plan is computed as a pure function (`plan(...)`) so the matching logic
 /// is unit-testable without touching real surfaces; `AppState` executes the
@@ -59,7 +62,8 @@ enum LayoutReconciler {
         workspace: Workspace?,
         projectRoot: String,
         projectID: UUID,
-        liveCommand: @escaping (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) }
+        liveCommand: @escaping (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
+        liveShellName: @escaping (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) }
     ) -> Plan {
         let liveTabs = workspace?.tabs ?? []
         var consumedTabIDs = Set<UUID>()
@@ -75,9 +79,13 @@ enum LayoutReconciler {
             // Pool of live panes available to reuse for this tab, indexed by
             // identity. Order within an identity bucket is the tab's pane order
             // (stable, depth-first) so duplicate (run,cwd) pairs pair stably.
-            var pool = PanePool(panes: liveTab?.splitRoot.allPanes() ?? [], liveCommand: liveCommand)
+            var pool = PanePool(
+                panes: liveTab?.splitRoot.allPanes() ?? [],
+                liveCommand: liveCommand,
+                liveShellName: liveShellName
+            )
 
-            let ctx = BuildContext(projectRoot: projectRoot, projectID: projectID, defaultShell: file.shell)
+            let ctx = BuildContext(projectRoot: projectRoot, projectID: projectID)
             let root = buildTree(declaredTab.layout, ctx: ctx, pool: &pool, reused: &reusedPaneIDs)
             plannedTabs.append(PlannedTab(
                 existingTabID: liveTab?.id,
@@ -136,30 +144,40 @@ enum LayoutReconciler {
     @MainActor
     private struct PanePool {
         private var byIdentity: [Identity: [Pane]]
-        /// Panes with no live command (idle at a prompt), in tree order, for
-        /// positional reuse by declared plain-shell leaves.
-        private var idlePanes: [Pane]
+        /// Panes with no live command (idle at a prompt), in tree order, paired
+        /// with the basename of the shell each is actually running. Used for
+        /// positional reuse by declared plain-shell leaves — but a leaf that
+        /// declares a specific `shell:` only reuses an idle pane running *that*
+        /// shell, so applying a layout that swaps a pane's shell respawns it.
+        private var idlePanes: [(pane: Pane, shell: String?)]
 
-        init(panes: [Pane], liveCommand: (Pane) -> String?) {
+        init(panes: [Pane], liveCommand: (Pane) -> String?, liveShellName: (Pane) -> String?) {
             var buckets: [Identity: [Pane]] = [:]
-            var idle: [Pane] = []
+            var idle: [(Pane, String?)] = []
             for pane in panes {
                 if let live = liveCommand(pane) {
                     buckets[Identity(command: live, cwd: pane.projectPath), default: []].append(pane)
                 } else {
-                    idle.append(pane)
+                    idle.append((pane, liveShellName(pane)))
                 }
             }
             byIdentity = buckets
             idlePanes = idle
         }
 
-        /// Take the next live pane matching this declared identity, if any.
-        /// `command == nil` (a declared plain shell) consumes an idle pane;
-        /// a declared command matches only a pane running that exact command.
-        mutating func take(command: String?, cwd: String) -> Pane? {
+        /// Take the next live pane matching this declared leaf, if any.
+        /// A declared command matches only a pane running that exact command.
+        /// A declared plain shell (`command == nil`) consumes an idle pane: if
+        /// `shell` is declared, only an idle pane running that shell (compared
+        /// by basename); otherwise any idle pane (positional).
+        mutating func take(command: String?, cwd: String, shell: String?) -> Pane? {
             if command == nil {
-                return idlePanes.isEmpty ? nil : idlePanes.removeFirst()
+                let wanted = shell.map { ($0 as NSString).lastPathComponent }
+                guard let index = idlePanes.firstIndex(where: { entry in
+                    wanted == nil || entry.shell == wanted
+                })
+                else { return nil }
+                return idlePanes.remove(at: index).pane
             }
             let id = Identity(command: command, cwd: cwd)
             guard var bucket = byIdentity[id], !bucket.isEmpty else { return nil }
@@ -173,7 +191,6 @@ enum LayoutReconciler {
     private struct BuildContext {
         let projectRoot: String
         let projectID: UUID
-        let defaultShell: String?
     }
 
     private static func buildTree(
@@ -186,13 +203,14 @@ enum LayoutReconciler {
         case let .pane(p):
             let cwd = LayoutBuilder.resolveCwd(p.cwd, projectRoot: ctx.projectRoot)
             let command = (p.run?.isEmpty == false) ? p.run : nil
-            if let existing = pool.take(command: command, cwd: cwd) {
+            let shell = (p.shell?.isEmpty == false) ? p.shell : nil
+            if let existing = pool.take(command: command, cwd: cwd, shell: shell) {
                 // Reuse the live pane: same identity, surface preserved.
                 reused.insert(existing.id)
                 return .pane(existing)
             }
             // No match → fresh pane (spawn / respawn).
-            return .pane(LayoutBuilder.makePane(p, projectRoot: ctx.projectRoot, projectID: ctx.projectID, defaultShell: ctx.defaultShell))
+            return .pane(LayoutBuilder.makePane(p, projectRoot: ctx.projectRoot, projectID: ctx.projectID))
         case let .split(b):
             return .split(SplitBranch(
                 direction: b.direction,

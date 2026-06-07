@@ -5,64 +5,42 @@ import Testing
 @MainActor
 struct PaneTests {
     private func shellName() -> String {
-        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        // Mirror Pane.defaultShellName: the login shell from the password
+        // database, not $SHELL (which is the app-launcher's shell).
+        let loginShell = getpwuid(getuid())?.pointee.pw_shell.map { String(cString: $0) }
+        let shell = (loginShell?.isEmpty == false ? loginShell : nil)
+            ?? ProcessInfo.processInfo.environment["SHELL"]
+            ?? "/bin/zsh"
         return (shell as NSString).lastPathComponent
     }
 
     @Test
-    func processTitle_defaults_to_shell_name_when_title_blank() {
+    func processTitle_uses_foreground_process_when_running() {
         let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = ""
+        p.foregroundProcessName = "btop"
+        #expect(p.processTitle == "btop")
+    }
+
+    @Test
+    func processTitle_defaults_to_shell_name_when_idle() {
+        // No foreground process (idle at a prompt) → the shell name. The OSC
+        // title is never consulted.
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.foregroundProcessName = nil
         #expect(p.processTitle == shellName())
     }
 
     @Test
-    func processTitle_defaults_to_shell_name_when_title_whitespace() {
+    func processTitle_treats_empty_foreground_name_as_idle() {
         let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = "   \t\n"
+        p.foregroundProcessName = ""
         #expect(p.processTitle == shellName())
-    }
-
-    @Test
-    func processTitle_picks_first_non_path_token() {
-        let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = "/Users/me vim file.swift"
-        #expect(p.processTitle == "vim")
-    }
-
-    @Test
-    func processTitle_picks_first_meaningful_token() {
-        let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = "git status"
-        #expect(p.processTitle == "git")
-    }
-
-    @Test
-    func processTitle_skips_noise_tokens() {
-        let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = ">>> /Users/me node server.js"
-        // ">>>", "/Users/me" are noise / path — should pick "node".
-        #expect(p.processTitle == "node")
-    }
-
-    @Test
-    func processTitle_falls_back_to_shell_when_all_paths() {
-        let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = "/usr/bin ~/dev"
-        #expect(p.processTitle == shellName())
-    }
-
-    @Test
-    func processTitle_treats_tilde_prefix_as_path() {
-        let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = "~/dev cmd"
-        #expect(p.processTitle == "cmd")
     }
 
     @Test
     func sidebarSegmentTitle_matches_processTitle() {
         let p = Pane(projectPath: "/", projectID: UUID())
-        p.title = "zsh"
+        p.foregroundProcessName = "nvim"
         #expect(p.sidebarSegmentTitle == p.processTitle)
     }
 

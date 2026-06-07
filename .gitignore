@@ -4,8 +4,6 @@ xcuserdata/
 DerivedData/
 .netrc
 GhosttyKit.xcframework
-GhosttyKit/ghostty.h
-/ghostty
 
 # Ghostty resources downloaded by setup.sh from the thdxg/ghostty release,
 # mirroring a real Ghostty.app layout (ghostty/{themes,shell-integration} plus a
@@ -17,6 +15,7 @@ GhosttyKit/ghostty.h
 /build
 .agents/
 .claude/
+.codegraph/
 *.dmg
 appcast*.xml
 macterm_run.log

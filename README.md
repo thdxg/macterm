@@ -35,6 +35,7 @@
 - **Command Palette**: Versatile command palette to interact with multiplexing and manage projects
 - **Quick terminal**: Global terminal accessible from anywhere with a hotkey.
 - **Declarative Layouts**: Commit a `.macterm/layout.yaml` describing each project's tabs, splits, and the process every pane runs; apply or save it from the command palette.
+- **Smart Tab Naming**: Tabs name themselves after the program running in the pane, making them easily identifiable in the sidebar.
 
 ## Install
 
@@ -95,32 +96,42 @@ Ghostty keybinds work normally unless they conflict with a Macterm shortcut — 
 
 Shell integration works standalone — no Ghostty.app needed. The one exception is the `ssh-env`, `ssh-terminfo`, and `path` features, which require the `ghostty` CLI; install Ghostty.app to enable them. The `ssh` features additionally need a Ghostty new enough to provide the `+ssh` action (Ghostty 1.4.0 / tip); against an older install they stay disabled and `ssh` runs normally.
 
-## Project Layouts
+## Declarative Project Layouts
 
-You can declare a project's tabs, split layout, and the process each pane runs in a committable `.macterm/layout.yaml` at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout is the source of truth, taking precedence over any restored session for that project. You can also run **Save layout** from the command palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
+You can declare a project's tabs, split layout, and the process each pane runs in a `.macterm/layout.yaml` file at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout takes precedence over any restored session for that project. You can also run **Save layout** from the command palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
 
 ```yaml
 name: "MyApp" # the project this layout is for (optional)
-shell: /bin/zsh # optional default shell for every pane
 tabs:
+  # A single-pane tab is just a pane (no wrapper).
+  - run: "npm run dev"
+  # A tab can carry a `name`, and splits nest under `split:`.
   - name: "Dev"
-    layout:
-      split: horizontal # horizontal | vertical
+    split:
+      direction: horizontal # horizontal | vertical
       ratio: 0.6 # divider position, 0–1 (defaults to 0.5)
       first:
         cwd: "./api" # project-relative working directory
         run: "npm run dev" # typed into the pane's shell on launch
+        shell: /bin/zsh # optional per-pane shell
       second:
-        split: vertical
-        first: { cwd: "./api", run: "npm test -- --watch" }
-        second: {} # plain shell, no command
+        split:
+          direction: vertical
+          first: { cwd: "./api", run: "npm test -- --watch" }
+          second: {} # plain shell, no command
 ```
 
-A pane's `run` is typed into a normal shell (so you keep the prompt and history, and the pane survives when the command exits). The shell is the per-pane `shell`, else the file-level `shell`, else the one from your Ghostty config.
+A pane's `run` is typed into a normal shell (so you keep the prompt and history, and the pane survives when the command exits). The shell is the pane's `shell` if set, else the one from your Ghostty config.
 
-**Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (its foreground process — so a pane running `npm run dev` is saved with that `run:`, a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. Save does not record `shell:` — set that yourself if a pane needs a specific shell. If you apply a layout whose `name:` doesn't match the current project, Macterm asks you to confirm first.
+**Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (its foreground process — so a pane running `npm run dev` is saved with that `run:`, a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. If a pane is sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`), Save records it as `shell:`; a pane in your default shell records none, so the layout stays portable. If you apply a layout whose `name:` doesn't match the current project, Macterm asks you to confirm first.
 
 **Apply** reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks for confirmation first. An invalid layout file is reported and never applied.
+
+**Editor support.** A [JSON schema](schemas/layout.schema.json) describes the format, giving completion and validation in editors that use the YAML Language Server (VS Code, Neovim, Zed, …). Saved files include the modeline that wires it up automatically; for a hand-authored file, add it to the top yourself:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
+```
 
 ## Contributing
 

@@ -7,22 +7,22 @@ struct LayoutFileTests {
     @Test
     func parses_nested_layout_with_processes() throws {
         let yaml = """
-        shell: /bin/zsh
         tabs:
           - name: "Dev"
-            layout:
-              split: horizontal
+            split:
+              direction: horizontal
               ratio: 0.6
               first:
                 cwd: "./api"
                 run: "npm run dev"
+                shell: /bin/zsh
               second:
-                split: vertical
-                first:  { cwd: "./api", run: "npm test" }
-                second: { }
+                split:
+                  direction: vertical
+                  first:  { cwd: "./api", run: "npm test" }
+                  second: { }
         """
         let file = try LayoutFile.parse(yaml: yaml)
-        #expect(file.shell == "/bin/zsh")
         #expect(file.tabs.count == 1)
 
         guard case let .split(outer) = file.tabs[0].layout else {
@@ -38,6 +38,7 @@ struct LayoutFileTests {
         }
         #expect(first.cwd == "./api")
         #expect(first.run == "npm run dev")
+        #expect(first.shell == "/bin/zsh")
 
         guard case let .split(inner) = outer.second, case let .pane(shell) = inner.second else {
             Issue.record("expected inner split with plain shell")
@@ -51,8 +52,8 @@ struct LayoutFileTests {
     func ratio_defaults_to_even_split_when_omitted() throws {
         let yaml = """
         tabs:
-          - layout:
-              split: vertical
+          - split:
+              direction: vertical
               first: { }
               second: { }
         """
@@ -66,14 +67,14 @@ struct LayoutFileTests {
     }
 
     @Test
-    func first_second_without_split_is_rejected() {
-        // `first`/`second` only mean something on a split node; a leaf carrying
-        // them (no `split` direction) is malformed.
+    func split_missing_a_child_is_rejected() {
+        // A `split:` mapping must carry both `first` and `second`; one missing
+        // is malformed.
         let yaml = """
         tabs:
-          - layout:
-              first: { }
-              second: { }
+          - split:
+              direction: horizontal
+              first: { run: "npm run dev" }
         """
         #expect(throws: (any Error).self) { try LayoutFile.parse(yaml: yaml) }
     }
@@ -83,8 +84,8 @@ struct LayoutFileTests {
         let yaml = """
         tabs:
           - name: "T"
-            layout:
-              split: horizontal
+            split:
+              direction: horizontal
               first:  { cwd: "api", run: "npm run dev" }
               second: { }
         """
@@ -113,8 +114,8 @@ struct LayoutFileTests {
     func built_tab_focuses_its_first_pane() throws {
         let yaml = """
         tabs:
-          - layout:
-              split: horizontal
+          - split:
+              direction: horizontal
               first:  { run: "npm run dev" }
               second: { }
         """
@@ -127,15 +128,17 @@ struct LayoutFileTests {
     func yaml_round_trips_through_encode_decode() throws {
         let original = LayoutFile(
             name: "MyApp",
-            shell: "/bin/zsh",
             tabs: [LayoutTab(name: "Dev", layout: .split(LayoutBranch(
                 direction: .horizontal,
                 ratio: 0.6,
-                first: .pane(LayoutPane(cwd: "./api", run: "npm run dev", shell: nil)),
+                first: .pane(LayoutPane(cwd: "./api", run: "npm run dev", shell: "/bin/zsh")),
                 second: .pane(LayoutPane(cwd: nil, run: nil, shell: nil))
             )))]
         )
-        let decoded = try LayoutFile.parse(yaml: original.yaml())
-        #expect(decoded == original)
+        let yaml = try original.yaml()
+        // Saved files carry the schema modeline for editor support; it's a YAML
+        // comment, so it must not affect the round-trip.
+        #expect(yaml.hasPrefix("# yaml-language-server: $schema="))
+        #expect(try LayoutFile.parse(yaml: yaml) == original)
     }
 }

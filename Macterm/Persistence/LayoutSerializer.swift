@@ -8,19 +8,23 @@ import Foundation
 @MainActor
 enum LayoutSerializer {
     /// Build a `LayoutFile` from a workspace's tabs. `liveCommand` returns a
-    /// pane's current foreground command (saved as its `run`); defaults to
-    /// `ProcessInspector.runningCommand`, injected by tests.
+    /// pane's current foreground command (saved as its `run`); `liveShell`
+    /// returns the pane's foreground shell when it's sitting in one (saved as
+    /// `shell:`). Both default to `ProcessInspector`, injected by tests.
     static func layout(
         for workspace: Workspace,
         projectName: String,
         projectRoot: String,
-        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) }
+        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
+        liveShell: (Pane) -> String? = { ProcessInspector.runningShell(forPane: $0) }
     ) -> LayoutFile {
         LayoutFile(
             name: projectName,
-            shell: nil,
             tabs: workspace.tabs.map { tab in
-                LayoutTab(name: tab.customTitle, layout: node(tab.splitRoot, projectRoot: projectRoot, liveCommand: liveCommand))
+                LayoutTab(
+                    name: tab.customTitle,
+                    layout: node(tab.splitRoot, projectRoot: projectRoot, liveCommand: liveCommand, liveShell: liveShell)
+                )
             }
         )
     }
@@ -31,9 +35,16 @@ enum LayoutSerializer {
         _ workspace: Workspace,
         projectName: String,
         projectRoot: String,
-        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) }
+        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
+        liveShell: (Pane) -> String? = { ProcessInspector.runningShell(forPane: $0) }
     ) throws {
-        let file = layout(for: workspace, projectName: projectName, projectRoot: projectRoot, liveCommand: liveCommand)
+        let file = layout(
+            for: workspace,
+            projectName: projectName,
+            projectRoot: projectRoot,
+            liveCommand: liveCommand,
+            liveShell: liveShell
+        )
         let url = LayoutFile.url(forProjectRoot: projectRoot)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -44,7 +55,12 @@ enum LayoutSerializer {
 
     // MARK: - Tree walk
 
-    private static func node(_ node: SplitNode, projectRoot: String, liveCommand: (Pane) -> String?) -> LayoutNode {
+    private static func node(
+        _ node: SplitNode,
+        projectRoot: String,
+        liveCommand: (Pane) -> String?,
+        liveShell: (Pane) -> String?
+    ) -> LayoutNode {
         switch node {
         case let .pane(p):
             // Prefer the shell's live cwd over the pane's original path, same as
@@ -56,20 +72,21 @@ enum LayoutSerializer {
             // launched with `btop` that the user has since quit is idle and
             // should save no `run`. nil → idle / nothing to record.
             //
-            // `shell` is deliberately NOT persisted by save — the user
-            // hand-authors `shell:` when they want a specific shell. Saving it
-            // would bake in whatever shell happened to be active.
+            // `shell`: when the pane is sitting in a shell, save that shell's
+            // path — so a pane the user dropped into a different shell (e.g.
+            // `zsh` launched from `nu`) reopens in it. `run` and `shell` are
+            // mutually exclusive: the foreground is either a shell or a command.
             return .pane(LayoutPane(
                 cwd: relativePath(livePath, to: projectRoot),
                 run: liveCommand(p),
-                shell: nil
+                shell: liveShell(p)
             ))
         case let .split(b):
             return .split(LayoutBranch(
                 direction: b.direction,
                 ratio: Double(b.ratio),
-                first: self.node(b.first, projectRoot: projectRoot, liveCommand: liveCommand),
-                second: self.node(b.second, projectRoot: projectRoot, liveCommand: liveCommand)
+                first: self.node(b.first, projectRoot: projectRoot, liveCommand: liveCommand, liveShell: liveShell),
+                second: self.node(b.second, projectRoot: projectRoot, liveCommand: liveCommand, liveShell: liveShell)
             ))
         }
     }

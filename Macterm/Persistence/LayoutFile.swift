@@ -6,26 +6,38 @@ import Yams
 /// machine-written restore state): a layout file is an *input* the user writes
 /// and commits, applied on demand to produce a live workspace.
 ///
-/// Lives at `.macterm/layout.yaml` relative to the project root. Each `layout`
-/// block is a binary split tree of nodes: a leaf carries the pane fields
-/// (`cwd`/`run`/`shell`) directly, and a split carries `{ split: <direction>,
-/// ratio: <0..1>, first: <node>, second: <node> }`. See `LayoutNode` for the
-/// wire form and an example.
+/// Lives at `.macterm/layout.yaml` relative to the project root. Each tab is
+/// itself a node (no `layout:` wrapper) with an optional `name:`: a leaf carries
+/// the pane fields (`cwd`/`run`/`shell`) directly, and a split carries
+/// `{ split: { direction: <dir>, ratio: <0..1>, first: <node>, second: <node> } }`.
+/// See `LayoutNode` for the node wire form and an example.
 struct LayoutFile: Codable, Equatable {
     /// Name of the project this layout was authored for. Written by `save`;
     /// on `apply`, a mismatch against the active project prompts a confirmation.
     /// Optional — a file without it applies to any project without warning.
     var name: String?
-    /// File-level default shell, applied to any pane that doesn't set its own.
-    var shell: String?
     var tabs: [LayoutTab]
 }
 
-struct LayoutTab: Codable, Equatable {
-    /// Tab name (its custom title in the UI). Matched against live tabs on
-    /// `apply`.
+/// A tab: a layout node plus an optional `name:` (the tab's title, matched
+/// against live tabs on `apply`). The node fields live at the same level as
+/// `name` — there's no `layout:` wrapper. `name` is tab-level only; inner split
+/// children are plain nodes.
+struct LayoutTab: Equatable {
     var name: String?
     var layout: LayoutNode
+}
+
+extension LayoutTab: Codable {
+    init(from decoder: Decoder) throws {
+        let dto = try LayoutNodeDTO(from: decoder)
+        name = dto.name
+        layout = try LayoutNode(fromDTO: dto, codingPath: decoder.codingPath)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try layout.dto(name: name).encode(to: encoder)
+    }
 }
 
 /// A node in the split tree, exposed as an enum to the rest of the app. Its
@@ -36,13 +48,13 @@ struct LayoutTab: Codable, Equatable {
 /// keyed container nested inside another custom-decoded value (the recursive
 /// split case). Letting Yams drive synthesized decoding of the DTO sidesteps it.
 ///
-/// Wire form (flat): a node is a *split* when it has a `split: <dir>` key (with
-/// `first`/`second` and an optional `ratio`); otherwise it's a *leaf*, and the
-/// pane fields (`cwd`/`run`/`shell`) apply directly — no `pane:` wrapper. A
-/// bare `{}` is a plain-shell leaf.
+/// Wire form: a node is a *split* when it has a `split:` mapping (`direction`,
+/// optional `ratio`, and `first`/`second` children); otherwise it's a *leaf*,
+/// and the pane fields (`cwd`/`run`/`shell`) apply directly — no `pane:`
+/// wrapper. A bare `{}` is a plain-shell leaf.
 ///
-///     layout:
-///       split: horizontal
+///     split:
+///       direction: horizontal
 ///       ratio: 0.6
 ///       first:  { run: "npm run dev" }
 ///       second: { }
@@ -51,21 +63,27 @@ indirect enum LayoutNode: Equatable {
     case split(LayoutBranch)
 }
 
-/// Synthesized-Codable flat wire form of a `LayoutNode`. A node is a *split*
-/// when it has a `split` (direction) key — then `first`/`second` (+ optional
-/// `ratio`) apply. Otherwise it's a *leaf*, and the pane fields (`cwd`/`run`/
-/// `shell`) apply directly at this level — no `pane:` wrapper. A bare `{}` is a
-/// plain-shell leaf.
+/// The nested `split:` mapping of a split node.
+struct LayoutSplitDTO: Codable, Equatable {
+    var direction: SplitDirection
+    var ratio: Double?
+    var first: LayoutNodeBox?
+    var second: LayoutNodeBox?
+}
+
+/// Synthesized-Codable wire form of a tab/node. A node is a *split* when it has
+/// a `split:` mapping; otherwise it's a *leaf*, and the pane fields
+/// (`cwd`/`run`/`shell`) apply directly at this level — no `pane:` wrapper. A
+/// bare `{}` is a plain-shell leaf. `name` is only meaningful at the tab level.
 struct LayoutNodeDTO: Codable, Equatable {
+    /// Tab-level only.
+    var name: String?
     // Leaf fields (flattened — see LayoutPane).
     var cwd: String?
     var run: String?
     var shell: String?
-    // Split fields.
-    var split: SplitDirection?
-    var ratio: Double?
-    var first: LayoutNodeBox?
-    var second: LayoutNodeBox?
+    /// Split field (nested mapping).
+    var split: LayoutSplitDTO?
 }
 
 /// Indirection box so the synthesized `Codable` DTO can hold child nodes
@@ -92,36 +110,40 @@ final class LayoutNodeBox: Codable, Equatable {
 extension LayoutNode: Codable {
     init(from decoder: Decoder) throws {
         let dto = try decoder.singleValueContainer().decode(LayoutNodeDTO.self)
-        if let direction = dto.split {
+        try self.init(fromDTO: dto, codingPath: decoder.codingPath)
+    }
+
+    /// Build a node from an already-decoded DTO. Shared by `LayoutNode` and
+    /// `LayoutTab` (a tab is a node with a `name`).
+    init(fromDTO dto: LayoutNodeDTO, codingPath: [CodingKey]) throws {
+        if let split = dto.split {
             // Split node: requires both children.
-            guard let first = dto.first?.node, let second = dto.second?.node else {
+            guard let first = split.first?.node, let second = split.second?.node else {
                 throw DecodingError.dataCorrupted(.init(
-                    codingPath: decoder.codingPath,
+                    codingPath: codingPath,
                     debugDescription: "A `split` node requires both `first` and `second`."
                 ))
             }
-            self = .split(LayoutBranch(direction: direction, ratio: dto.ratio, first: first, second: second))
+            self = .split(LayoutBranch(direction: split.direction, ratio: split.ratio, first: first, second: second))
         } else {
             // Leaf node: the pane fields apply directly (a bare `{}` is a plain
-            // shell). `first`/`second`/`ratio` without `split` are meaningless.
-            guard dto.first == nil, dto.second == nil else {
-                throw DecodingError.dataCorrupted(.init(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "`first`/`second` require a `split` direction."
-                ))
-            }
+            // shell).
             self = .pane(LayoutPane(cwd: dto.cwd, run: dto.run, shell: dto.shell))
         }
     }
 
     func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
+        try dto(name: nil).encode(to: encoder)
+    }
+
+    /// The DTO wire form, optionally carrying a tab-level `name`.
+    func dto(name: String?) -> LayoutNodeDTO {
         switch self {
         case let .pane(p):
-            try c.encode(LayoutNodeDTO(cwd: p.cwd, run: p.run, shell: p.shell))
+            LayoutNodeDTO(name: name, cwd: p.cwd, run: p.run, shell: p.shell)
         case let .split(b):
-            try c.encode(LayoutNodeDTO(
-                split: b.direction,
+            LayoutNodeDTO(name: name, split: LayoutSplitDTO(
+                direction: b.direction,
                 ratio: b.ratio,
                 first: LayoutNodeBox(b.first),
                 second: LayoutNodeBox(b.second)
@@ -201,10 +223,16 @@ extension LayoutFile {
         return try parse(yaml: text)
     }
 
-    /// Serialize to YAML text.
+    /// Modeline the YAML Language Server reads to attach our JSON schema, so a
+    /// saved `.macterm/layout.yaml` gets completion/validation in editors with
+    /// no per-user setup. Hand-authored files can add the same line.
+    static let schemaModeline =
+        "# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json"
+
+    /// Serialize to YAML text, prefixed with the schema modeline.
     func yaml() throws -> String {
         let encoder = YAMLEncoder()
         encoder.options.sortKeys = false
-        return try encoder.encode(self)
+        return try "\(Self.schemaModeline)\n\(encoder.encode(self))"
     }
 }

@@ -84,6 +84,12 @@ Hotkey defaults are in `Hotkeys.swift`. User overrides are stored in UserDefault
 
 A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` model as the main window — no separate cache needed because `Pane` owns its NSView. Activated via `Ctrl+\`` (Carbon hot key for global capture).
 
+### Tab naming
+
+A tab's auto-title (`Workspace.autoTitle` → each pane's `Pane.processTitle`) is the name of the pane's live **foreground process** (`hx`, `btop`) — never the terminal's OSC title — falling back to the shell name when idle, and overridden by a user-set `customTitle`. This mirrors tmux's `automatic-rename` on macOS: `ProcessInspector.runningProcessName` reads the foreground pid's short kernel `comm` (`proc_pidinfo` `PROC_PIDT_SHORTBSDINFO`), a path-free basename; idle panes use `Pane.defaultShellName` (the login shell from `getpwuid`, not `$SHELL`).
+
+`AppState` polls every live pane on a timer (`refreshAllForegroundProcesses`, ~250ms, republishing only on change); an OSC title arriving (`onTitleChange`) is an extra command-boundary signal that triggers the same refresh, but its string is unused. The OSC title is deliberately ignored for naming: ghostty's `SET_TITLE` carries no provenance, so a shell that titles itself from its prompt (nushell, Starship, ghostty shell-integration — emitting `~/dir`, `host:~/dir`) is indistinguishable from a program setting its own title, and honoring it makes the tab show the cwd instead of the command. Pane titles aren't persisted — they're derived live from the running process.
+
 ## File Map
 
 ### App Layer (`Macterm/App/`)
@@ -108,9 +114,9 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 ### Views (`Macterm/Views/`)
 
-| File                                   | Purpose                                                                                                          |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `MainWindow.swift`                     | Main window layout, `WorkspaceView`, `WindowStyler`                                                              |
+| File                                   | Purpose                                                                                                                                                                                                               |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MainWindow.swift`                     | Main window layout, `WorkspaceView`, `WindowStyler`                                                                                                                                                                   |
 | `WindowAppearance.swift`               | Window opacity/blur/liquid glass — sets `NSWindow.backgroundColor`, dives into private titlebar view tree, calls CGS blur SPI, or installs a macOS 26 `NSGlassEffectView` (`MactermGlassView`) below the content view |
 | `Sidebar.swift`                        | Project/tab list with native `List(selection:)`                                                                  |
 | `SplitTreeView.swift`                  | Recursive split rendering with draggable dividers                                                                |
@@ -160,21 +166,21 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 
 ### Persistence (`Macterm/Persistence/`)
 
-| File                         | Purpose                                                 |
-| ---------------------------- | ------------------------------------------------------- |
-| `WorkspacePersistence.swift` | Snapshot types, `WorkspaceStore`, `WorkspaceSerializer`                                          |
-| `ProjectStore.swift`         | `ProjectStore` — project CRUD + JSON persistence                                                |
-| `FileStorage.swift`          | App Support directory helpers                                                                   |
+| File                         | Purpose                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `WorkspacePersistence.swift` | Snapshot types, `WorkspaceStore`, `WorkspaceSerializer`                                                                      |
+| `ProjectStore.swift`         | `ProjectStore` — project CRUD + JSON persistence                                                                             |
+| `FileStorage.swift`          | App Support directory helpers                                                                                                |
 | `LayoutFile.swift`           | Declarative layout file format + YAML (Yams) parse/encode: `LayoutFile`/`LayoutTab`/`LayoutNode`/`LayoutPane`/`LayoutBranch` |
-| `LayoutBuilder.swift`        | `LayoutNode` → `SplitNode` tree builder (resolves cwd/shell per leaf)                           |
-| `LayoutSerializer.swift`     | Live workspace → layout file (the `save` direction)                                             |
-| `LayoutReconciler.swift`     | Minimal-destruction `apply`: matches live panes to declared by `(run, cwd)`, reuses or destroys |
+| `LayoutBuilder.swift`        | `LayoutNode` → `SplitNode` tree builder (resolves cwd/shell per leaf)                                                        |
+| `LayoutSerializer.swift`     | Live workspace → layout file (the `save` direction)                                                                          |
+| `LayoutReconciler.swift`     | Minimal-destruction `apply`: matches live panes to declared by `(run, cwd)`, reuses or destroys                              |
 
 ### System (`Macterm/System/`)
 
-| File                     | Purpose                                                                                                  |
-| ------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `ProcessInspector.swift` | Resolves a pid (from `GhosttyTerminalNSView.foregroundPID`) to its command via `KERN_PROCARGS2`; used by `saveLayout` to capture a pane's running command |
+| File                     | Purpose                                                                                                                                                                                                                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ProcessInspector.swift` | Resolves a pane's foreground pid (`GhosttyTerminalNSView.foregroundPID`) three ways: `runningCommand` reads the full argv via `KERN_PROCARGS2` (`saveLayout` → a pane's `run:`); `runningShell` reads the shell's `exec_path` when the foreground is a non-default shell (`saveLayout` → `shell:`, and reconcile shell-match); `runningProcessName` reads the short kernel `comm` via `proc_pidinfo` (the tab name — see "Tab naming") |
 
 ### Config (`Macterm/Config/`)
 
@@ -211,7 +217,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `Model/SplitNodeTests.swift`, `SplitNodeResizeTests.swift`, `SplitNodeGeometryTests.swift`, `SplitNodeRebalanceTests.swift` | Tree ops, resize, geometry (`paneFrames`, `nearestPane`), rebalance                                        |
 | `Model/TerminalTabTests.swift`                                                                                              | Focus history, split/resize/removePane, HV-close regression                                                |
 | `Model/WorkspaceTests.swift`                                                                                                | Tab lifecycle, recency, reorder                                                                            |
-| `Model/PaneTests.swift`                                                                                                     | `processTitle` heuristics, `destroySurface` idempotency                                                    |
+| `Model/PaneTests.swift`                                                                                                     | `processTitle` (foreground-process name vs shell fallback), `destroySurface` idempotency                   |
 | `App/AppStateTests.swift`                                                                                                   | Integration: splitPane/closePane/focusPaneInDirection via injected `WorkspaceStore`                        |
 | `App/RecencyStackTests.swift`                                                                                               | Generic stack helper                                                                                       |
 | `App/HotkeysTests.swift`                                                                                                    | `parseShortcut`, `displayString`, `HotkeyAction` sanity                                                    |
@@ -222,9 +228,9 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `Ghostty/BundledResourcesTests.swift`                                                                                       | Bundle layout: terminfo is a sibling of `ghostty/`, has `78/xterm-ghostty`, shells, themes (#39/#40 guard) |
 | `Ghostty/ThemeResolverTests.swift`                                                                                          | `theme = light:X,dark:Y` split parsing + side selection (`ThemeResolver`, #38)                             |
 | `Persistence/WorkspaceSerializerTests.swift`                                                                                | Snapshot/restore round-trip + on-disk via `WorkspaceStore`                                                 |
-| `Persistence/LayoutFileTests.swift`                                                                                         | YAML parse/encode round-trip, flat split-node format, cwd resolution                                       |
-| `Persistence/LayoutSerializerTests.swift`                                                                                   | Live workspace → layout file (topology, project-relative cwd, `run`)                                       |
-| `Persistence/LayoutReconcilerTests.swift`                                                                                   | Minimal-destruction apply: keep/resize/respawn/kill by `(run, cwd)` identity, plain-shell positional match |
+| `Persistence/LayoutFileTests.swift`                                                                                         | YAML parse/encode round-trip, tab-is-a-node + nested `split:` format, cwd resolution                       |
+| `Persistence/LayoutSerializerTests.swift`                                                                                   | Live workspace → layout file (topology, project-relative cwd, `run`, non-default `shell:`)                 |
+| `Persistence/LayoutReconcilerTests.swift`                                                                                   | Minimal-destruction apply: keep/resize/respawn/kill by `(run, cwd)` identity, plain-shell positional match, `shell:`-mismatch respawn |
 | `System/ProcessInspectorTests.swift`                                                                                        | `ProcessInspector.argv` syscall parsing against real spawned subprocesses                                  |
 | `Views/SurfaceScrollGeometryTests.swift`                                                                                    | Pure row↔pixel scrollback geometry conversion (Y-down rows ↔ Y-up points) for `SurfaceScrollView`          |
 | `Support/TreeBuilder.swift`                                                                                                 | DSL: `H(pane("a"), V(pane("b"), pane("c")))` → `(SplitNode, [name: UUID])`                                 |
@@ -271,11 +277,11 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 - Workspaces saved to `~/Library/Application Support/Macterm/workspaces_v3.json`
 - Projects saved to `projects.json` in the same directory
-- Declarative layouts are an *authorable* file at `.macterm/layout.yaml` in the project root — distinct from the machine-written workspace snapshot. Applied/saved on demand via the `applyLayout` / `saveLayout` commands; `apply` reconciles with minimal destruction (`LayoutReconciler`), and an unparseable file is surfaced via `LayoutFileError` and never applied
-  - A committed layout file is the source of truth: on relaunch, `restoreSelection` *skips* restoring the workspace snapshot for any project that has a `.macterm/layout.yaml`, so it rebuilds from the layout instead. Projects with no layout file restore their snapshot as before
+- Declarative layouts are an _authorable_ file at `.macterm/layout.yaml` in the project root — distinct from the machine-written workspace snapshot. Applied/saved on demand via the `applyLayout` / `saveLayout` commands; `apply` reconciles with minimal destruction (`LayoutReconciler`), and an unparseable file is surfaced via `LayoutFileError` and never applied. The format has a JSON schema at `schemas/layout.schema.json`; `LayoutFile.yaml()` prepends a `yaml-language-server` modeline pointing at it so saved files get editor completion/validation. Keep the schema in sync when the layout types change
+  - A committed layout file is the source of truth: on relaunch, `restoreSelection` _skips_ restoring the workspace snapshot for any project that has a `.macterm/layout.yaml`, so it rebuilds from the layout instead. Projects with no layout file restore their snapshot as before
   - On a project's first open with no live workspace, `selectProject` → `autoApplyLayoutOnFirstOpen` applies the layout file if present. With no live panes the reconcile is pure-spawn (never destructive, never prompts)
-  - `save` records each pane's `run` as the command it's *currently* running (its live foreground command), not the command it was spawned with — so a pane that has quit its command saves no `run`. The command comes from `ghostty_surface_foreground_pid` (libghostty hands us the pane's foreground pid directly; requires a GhosttyKit build from ~2026-04+), resolved to an argv string by `ProcessInspector` via `KERN_PROCARGS2`. An idle shell prompt yields no `run`. `save` never records `shell:` — the user authors that
-  - `apply` (`LayoutReconciler`) matches a live pane to a declared one by that same *live* foreground command (+ cwd), so a pane that quit its declared command is treated as out of sync and respawned. The live-command lookup is an injected closure on both `LayoutReconciler.plan` and `LayoutSerializer`, defaulting to `ProcessInspector`, so the logic is unit-testable without a live surface
+  - `save` records each pane's `run` as the command it's _currently_ running (its live foreground command), not the command it was spawned with — so a pane that has quit its command saves no `run`. The command comes from `ghostty_surface_foreground_pid` (libghostty hands us the pane's foreground pid directly; requires a GhosttyKit build from ~2026-04+), resolved to an argv string by `ProcessInspector` via `KERN_PROCARGS2`. An idle shell prompt yields no `run`. `save` records `shell:` only when the pane is sitting in a *non-default* shell (one the user dropped into, e.g. `zsh` launched from `nu` — `ProcessInspector.runningShell`); a pane idle in the login shell records no `shell:` so the layout stays portable. `run` and `shell` are mutually exclusive on a leaf (the foreground is either a command or a shell)
+  - `apply` (`LayoutReconciler`) matches a live pane to a declared one by that same _live_ foreground command (+ cwd), so a pane that quit its declared command is treated as out of sync and respawned. A declared plain-shell leaf (no `run:`) matches an idle pane positionally — but if it declares a specific `shell:`, it only reuses an idle pane *running that shell* (compared by basename via `liveShellName`), so applying a layout that swaps a pane's shell respawns it. The live-command / live-shell lookups are injected closures on both `LayoutReconciler.plan` and `LayoutSerializer`, defaulting to `ProcessInspector`, so the logic is unit-testable without a live surface
   - The file's top-level `name:` is the project it was saved for. On `apply`, if `name` is present and differs from the active project, `applyLayout` stages a `pendingLayoutApply` with `mismatchedProjectName` set so the confirmation dialog warns before proceeding (a missing/matching `name` applies silently). Tab `name:` is separate — it's the tab's title, matched to live tabs during reconcile
 - User's ghostty config read from `~/.config/ghostty/config` by default (path configurable in Settings)
 - Macterm's wrapper config files written to `~/Library/Application Support/Macterm/macterm-defaults.conf` and `macterm-overrides.conf` on launch. Not user-editable; they're transport between Macterm and libghostty around the user's real config.

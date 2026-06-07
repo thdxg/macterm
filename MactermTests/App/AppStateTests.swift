@@ -255,8 +255,8 @@ struct AppStateTests {
         writeLayout("""
         tabs:
           - name: "Dev"
-            layout:
-              split: horizontal
+            split:
+              direction: horizontal
               first:  { run: "npm run dev" }
               second: {}
         """, at: dir.path)
@@ -307,8 +307,8 @@ struct AppStateTests {
         writeLayout("""
         tabs:
           - name: "Dev"
-            layout:
-              split: horizontal
+            split:
+              direction: horizontal
               first:  { run: "npm run dev" }
               second: {}
         """, at: dir.path)
@@ -335,8 +335,8 @@ struct AppStateTests {
         let (p, root) = seedProjectWithDir(state)
         let beforeTabIDs = try #require(state.workspaces[p.id]).tabs.map(\.id)
 
-        // Invalid: a node with `first`/`second` but no `split` direction.
-        writeLayout("tabs:\n  - layout: { first: {}, second: {} }\n", at: root)
+        // Invalid: a `split` mapping missing its `second` child.
+        writeLayout("tabs:\n  - split: { direction: horizontal, first: {} }\n", at: root)
         let error = state.applyLayout(projectID: p.id, projectName: "proj", projectRoot: root)
 
         #expect(error != nil)
@@ -365,7 +365,7 @@ struct AppStateTests {
 
         // Non-destructive layout (matches the single live pane) but saved for a
         // different project → should stage a confirmation rather than apply.
-        writeLayout("name: OtherApp\ntabs:\n  - layout: {}\n", at: root)
+        writeLayout("name: OtherApp\ntabs:\n  - {}\n", at: root)
         let error = state.applyLayout(projectID: p.id, projectName: "proj", projectRoot: root)
 
         #expect(error == nil)
@@ -379,7 +379,7 @@ struct AppStateTests {
         let (p, root) = seedProjectWithDir(state) // project name "proj"
 
         // Same project name + non-destructive → applies silently.
-        writeLayout("name: proj\ntabs:\n  - layout: {}\n", at: root)
+        writeLayout("name: proj\ntabs:\n  - {}\n", at: root)
         let error = state.applyLayout(projectID: p.id, projectName: "proj", projectRoot: root)
 
         #expect(error == nil)
