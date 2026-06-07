@@ -103,18 +103,22 @@ You can declare a project's tabs, split layout, and the process each pane runs i
 ```yaml
 name: "MyApp" # the project this layout is for (optional)
 tabs:
+  # A single-pane tab is just a pane (no wrapper).
+  - run: "npm run dev"
+  # A tab can carry a `name`, and splits nest under `split:`.
   - name: "Dev"
-    layout:
-      split: horizontal # horizontal | vertical
+    split:
+      direction: horizontal # horizontal | vertical
       ratio: 0.6 # divider position, 0–1 (defaults to 0.5)
       first:
         cwd: "./api" # project-relative working directory
         run: "npm run dev" # typed into the pane's shell on launch
         shell: /bin/zsh # optional per-pane shell
       second:
-        split: vertical
-        first: { cwd: "./api", run: "npm test -- --watch" }
-        second: {} # plain shell, no command
+        split:
+          direction: vertical
+          first: { cwd: "./api", run: "npm test -- --watch" }
+          second: {} # plain shell, no command
 ```
 
 A pane's `run` is typed into a normal shell (so you keep the prompt and history, and the pane survives when the command exits). The shell is the pane's `shell` if set, else the one from your Ghostty config.

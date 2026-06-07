@@ -19,27 +19,38 @@
   },
   "$defs": {
     "tab": {
+      "description": "A tab: a layout node (a leaf pane or a split) with an optional `name`. There's no `layout:` wrapper — the node's fields sit at the tab level.",
       "type": "object",
-      "additionalProperties": false,
-      "required": ["layout"],
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "Tab title. On apply, matched against live tabs by this name."
-        },
-        "layout": {
-          "$ref": "#/$defs/node",
-          "description": "The tab's split tree: a single leaf pane, or a split of two child nodes."
-        }
-      }
+      "oneOf": [
+        { "$ref": "#/$defs/paneTab" },
+        { "$ref": "#/$defs/splitTab" }
+      ]
     },
     "node": {
-      "description": "A node in the split tree. Either a leaf pane (cwd/run/shell) or a split (split/ratio/first/second). A bare {} is a plain-shell pane.",
+      "description": "A node in the split tree. Either a leaf pane (cwd/run/shell) or a split (a `split` mapping). A bare {} is a plain-shell pane.",
       "type": "object",
       "oneOf": [
         { "$ref": "#/$defs/pane" },
         { "$ref": "#/$defs/split" }
       ]
+    },
+    "name": {
+      "type": "string",
+      "description": "Tab title. On apply, matched against live tabs by this name."
+    },
+    "paneProperties": {
+      "cwd": {
+        "type": "string",
+        "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through."
+      },
+      "run": {
+        "type": "string",
+        "description": "Command typed into the pane's shell on launch (e.g. \"npm run dev\"). Omit for a plain shell. The command runs inside the shell, so the prompt survives when it exits."
+      },
+      "shell": {
+        "type": "string",
+        "description": "Shell binary to launch for this pane (e.g. \"/bin/zsh\"). Omit to use the shell from your Ghostty config (else your login shell)."
+      }
     },
     "pane": {
       "title": "Pane (leaf)",
@@ -48,28 +59,30 @@
       "additionalProperties": false,
       "not": { "required": ["split"] },
       "properties": {
-        "cwd": {
-          "type": "string",
-          "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through."
-        },
-        "run": {
-          "type": "string",
-          "description": "Command typed into the pane's shell on launch (e.g. \"npm run dev\"). Omit for a plain shell. The command runs inside the shell, so the prompt survives when it exits."
-        },
-        "shell": {
-          "type": "string",
-          "description": "Shell binary to launch for this pane (e.g. \"/bin/zsh\"). Omit to use the shell from your Ghostty config (else your login shell)."
-        }
+        "cwd": { "$ref": "#/$defs/paneProperties/cwd" },
+        "run": { "$ref": "#/$defs/paneProperties/run" },
+        "shell": { "$ref": "#/$defs/paneProperties/shell" }
       }
     },
-    "split": {
-      "title": "Split",
-      "description": "Splits the area into two child nodes.",
+    "paneTab": {
+      "title": "Pane tab (leaf)",
+      "description": "A single-pane tab. With no pane fields it's a plain shell.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["split", "first", "second"],
+      "not": { "required": ["split"] },
       "properties": {
-        "split": {
+        "name": { "$ref": "#/$defs/name" },
+        "cwd": { "$ref": "#/$defs/paneProperties/cwd" },
+        "run": { "$ref": "#/$defs/paneProperties/run" },
+        "shell": { "$ref": "#/$defs/paneProperties/shell" }
+      }
+    },
+    "splitBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction", "first", "second"],
+      "properties": {
+        "direction": {
           "type": "string",
           "enum": ["horizontal", "vertical"],
           "description": "Split direction. 'horizontal' = side by side (first | second); 'vertical' = stacked (first / second)."
@@ -88,6 +101,27 @@
           "$ref": "#/$defs/node",
           "description": "The right (horizontal) or bottom (vertical) child."
         }
+      }
+    },
+    "split": {
+      "title": "Split",
+      "description": "Splits the area into two child nodes via a nested `split` mapping.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split"],
+      "properties": {
+        "split": { "$ref": "#/$defs/splitBody" }
+      }
+    },
+    "splitTab": {
+      "title": "Split tab",
+      "description": "A tab split into two child nodes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "split": { "$ref": "#/$defs/splitBody" }
       }
     }
   }
