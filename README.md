@@ -101,7 +101,7 @@ Define a project's tabs, split layout, and the process each pane runs in a `.mac
 ```yaml
 # .../myapp/.macterm/layout.yaml
 
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/layout.schema.json
 name: "MyApp" # the project name (optional; defaults to directory name)
 tabs:
   # A single-pane tab
