@@ -102,11 +102,14 @@ To open a directory as a project, just start typing a path (anything beginning w
 Declare a project's tabs, split layout, and the process each pane runs in a committable `.macterm/layout.yaml` at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout is the source of truth, taking precedence over any restored session for that project. Run **Save layout** from the palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
 
 ```yaml
-name: "MyApp" # the project name (optional; default to directory name)
+# .../myapp/.macterm/layout.yaml
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
+name: "MyApp" # the project name (optional; defaults to directory name)
 tabs:
-  # A single-pane tab is just a pane (no wrapper).
+  # A single-pane tab
   - run: "npm run dev"
-  # A tab can carry a `name`, and splits nest under `split:`.
+  # A tab with custom name and splits
   - name: "Dev"
     split:
       direction: horizontal # horizontal | vertical
@@ -114,25 +117,19 @@ tabs:
       first:
         cwd: "./api" # project-relative working directory
         run: "npm run dev" # typed into the pane's shell on launch
-        shell: /bin/zsh # optional per-pane shell
+        shell: /bin/zsh # shell (optional; defaults to login shell)
       second:
         split:
           direction: vertical
           first: { cwd: "./api", run: "npm test -- --watch" }
-          second: {} # plain shell, no command
+          second: {} # plain shell pane
 ```
 
 A pane's `run` is typed into a normal shell, so you keep the prompt and history and the pane survives when the command exits. The shell is the pane's `shell` if set, else your login shell.
 
-**Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. A pane sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`) is saved with that `shell:`; a pane in your default shell records none, so the layout stays portable. Applying a layout whose `name:` doesn't match the current project prompts for confirmation first.
+**Save layout** command records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. A pane sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`) is saved with that `shell:`; a pane in your default shell records none, so the layout stays portable. Applying a layout whose `name:` doesn't match the current project prompts for confirmation first.
 
-**Apply** reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks first. An invalid layout file is reported and never applied.
-
-**Editor support.** A [JSON schema](schemas/layout.schema.json) describes the format, giving completion and validation in editors that use the YAML Language Server (VS Code, Neovim, Zed, …). Saved files include the modeline that wires it up automatically; for a hand-authored file, add it to the top yourself:
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
-```
+**Apply layout** command reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks first. An invalid layout file is reported and not applied.
 
 ## Contributing
 
