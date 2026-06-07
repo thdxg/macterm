@@ -78,13 +78,13 @@ https://github.com/user-attachments/assets/1486ed55-e653-43ce-98aa-232a61d234a7
 
 Macterm reads your `~/.config/ghostty/config` on launch — themes, fonts, palettes, keybinds, and everything else Ghostty supports works the same here. See the [Ghostty option reference](https://ghostty.org/docs/config/reference) for the full list of available settings. If your config is elsewhere, set the path in **Settings → General → Ghostty Config**.
 
-Macterm ships a thin layer of [first-launch defaults](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift#L43-L47) (Rose Pine, a 16pt font, some padding) on top of Ghostty's own — add any of those keys to your Ghostty config to override them. Macterm-specific settings (window opacity, blur style, quick terminal size, hotkeys) live in **Macterm → Settings**.
+Macterm ships a thin layer of [first-launch defaults](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift#L43-L47) on top of Ghostty's own — add any of those keys to your Ghostty config to override them. Macterm-specific settings (window opacity, blur style, quick terminal size, hotkeys) live in **Macterm → Settings**.
 
 A few settings are overridden because Macterm handles that chrome itself: `background-opacity` and `background-blur` are forced to `0` (use **Settings → General → Window** instead), and titlebar, window decoration, split-divider, and quick-terminal settings are ignored.
 
 Ghostty keybinds work normally unless they conflict with a Macterm shortcut — on conflict, Macterm wins. Every Macterm shortcut is rebindable in **Settings → Keymaps**. Note that Ghostty app-level actions (`new_split`, `new_tab`, etc.) do nothing in Macterm; use Macterm's own keybinds for those.
 
-Shell integration works standalone — no Ghostty.app needed. The one exception is the `ssh-env`, `ssh-terminfo`, and `path` features, which require the `ghostty` CLI; install Ghostty.app to enable them. The `ssh` features additionally need a Ghostty new enough to provide the `+ssh` action (Ghostty 1.4.0 / tip); against an older install they stay disabled and `ssh` runs normally.
+The `ssh-env`, `ssh-terminfo`, and `path` features require the `ghostty` CLI; install Ghostty.app to enable them. The `ssh` features additionally need a Ghostty new enough to provide the `+ssh` action (Ghostty 1.4.0 / tip); against an older install they stay disabled and `ssh` runs normally.
 
 ## Usage
 
@@ -103,7 +103,6 @@ Declare a project's tabs, split layout, and the process each pane runs in a comm
 
 ```yaml
 name: "MyApp" # the project name (optional; default to directory name)
-shell: /bin/zsh # optional default shell for every pane
 tabs:
   # A single-pane tab is just a pane (no wrapper).
   - run: "npm run dev"
@@ -123,7 +122,7 @@ tabs:
           second: {} # plain shell, no command
 ```
 
-A pane's `run` is typed into a normal shell, so you keep the prompt and history and the pane survives when the command exits. The shell is the per-pane `shell`, else the file-level `shell`, else the one from your Ghostty config.
+A pane's `run` is typed into a normal shell, so you keep the prompt and history and the pane survives when the command exits. The shell is the pane's `shell` if set, else your login shell.
 
 **Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. A pane sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`) is saved with that `shell:`; a pane in your default shell records none, so the layout stays portable. Applying a layout whose `name:` doesn't match the current project prompts for confirmation first.
 
