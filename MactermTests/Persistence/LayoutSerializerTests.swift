@@ -59,6 +59,49 @@ struct LayoutSerializerTests {
     }
 
     @Test
+    func records_live_shell_when_pane_sits_in_one() {
+        // A pane the user dropped into a non-default shell (e.g. `zsh` from `nu`)
+        // saves that shell as `shell:`.
+        let ws = Workspace(projectID: UUID(), projectPath: "/proj")
+        ws.tabs[0].splitRoot = .pane(Pane(projectPath: "/proj", projectID: ws.projectID))
+
+        let file = LayoutSerializer.layout(
+            for: ws,
+            projectName: "proj",
+            projectRoot: "/proj",
+            liveCommand: { _ in nil },
+            liveShell: { _ in "/bin/zsh" }
+        )
+        guard case let .pane(p) = file.tabs[0].layout else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(p.shell == "/bin/zsh")
+        #expect(p.run == nil)
+    }
+
+    @Test
+    func omits_shell_when_pane_is_in_default_shell() {
+        // Idle in the default login shell → no shell recorded (liveShell returns
+        // nil for the default), so the layout stays portable.
+        let ws = Workspace(projectID: UUID(), projectPath: "/proj")
+        ws.tabs[0].splitRoot = .pane(Pane(projectPath: "/proj", projectID: ws.projectID))
+
+        let file = LayoutSerializer.layout(
+            for: ws,
+            projectName: "proj",
+            projectRoot: "/proj",
+            liveCommand: { _ in nil },
+            liveShell: { _ in nil }
+        )
+        guard case let .pane(p) = file.tabs[0].layout else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(p.shell == nil)
+    }
+
+    @Test
     func save_then_load_round_trips_topology() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("layout-test-\(UUID().uuidString)")
