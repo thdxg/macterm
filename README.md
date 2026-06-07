@@ -78,34 +78,38 @@ https://github.com/user-attachments/assets/1486ed55-e653-43ce-98aa-232a61d234a7
 
 Macterm reads your `~/.config/ghostty/config` on launch — themes, fonts, palettes, keybinds, and everything else Ghostty supports works the same here. See the [Ghostty option reference](https://ghostty.org/docs/config/reference) for the full list of available settings. If your config is elsewhere, set the path in **Settings → General → Ghostty Config**.
 
-Macterm ships a thin defaults layer on top of Ghostty's own defaults. These are the values that differ:
-
-| Option                                                                                 | Macterm default | Ghostty default |
-| -------------------------------------------------------------------------------------- | --------------- | --------------- |
-| [`theme`](https://ghostty.org/docs/config/reference#theme)                             | `Rose Pine`     | _(none)_        |
-| [`font-size`](https://ghostty.org/docs/config/reference#font-size)                     | `16`            | `12`            |
-| [`window-padding-x`](https://ghostty.org/docs/config/reference#window-padding-x)       | `16`            | `2`             |
-| [`window-padding-y`](https://ghostty.org/docs/config/reference#window-padding-y)       | `16`            | `2`             |
-| [`macos-option-as-alt`](https://ghostty.org/docs/config/reference#macos-option-as-alt) | `true`          | `false`         |
-
-Add any of these to your Ghostty config to override them. Macterm-specific settings (window opacity, blur style, quick terminal size, hotkeys) live in **Macterm → Settings**.
+Macterm ships a thin layer of [first-launch defaults](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift#L43-L47) on top of Ghostty's own — add any of those keys to your Ghostty config to override them. Macterm-specific settings (window opacity, blur style, quick terminal size, hotkeys) live in **Macterm → Settings**.
 
 A few settings are overridden because Macterm handles that chrome itself: `background-opacity` and `background-blur` are forced to `0` (use **Settings → General → Window** instead), and titlebar, window decoration, split-divider, and quick-terminal settings are ignored.
 
 Ghostty keybinds work normally unless they conflict with a Macterm shortcut — on conflict, Macterm wins. Every Macterm shortcut is rebindable in **Settings → Keymaps**. Note that Ghostty app-level actions (`new_split`, `new_tab`, etc.) do nothing in Macterm; use Macterm's own keybinds for those.
 
-Shell integration works standalone — no Ghostty.app needed. The one exception is the `ssh-env`, `ssh-terminfo`, and `path` features, which require the `ghostty` CLI; install Ghostty.app to enable them. The `ssh` features additionally need a Ghostty new enough to provide the `+ssh` action (Ghostty 1.4.0 / tip); against an older install they stay disabled and `ssh` runs normally.
+The `ssh-env`, `ssh-terminfo`, and `path` features require the `ghostty` CLI; install Ghostty.app to enable them. The `ssh` features additionally need a Ghostty new enough to provide the `+ssh` action (Ghostty 1.4.0 / tip); against an older install they stay disabled and `ssh` runs normally.
 
-## Declarative Project Layouts
+## Usage
 
-You can declare a project's tabs, split layout, and the process each pane runs in a `.macterm/layout.yaml` file at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout takes precedence over any restored session for that project. You can also run **Save layout** from the command palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
+### Command Palette
+
+Press `⌘P` to open the command palette — the fastest way to drive Macterm without leaving the keyboard. It searches across everything in one list:
+
+- **Commands** — split, close, and focus panes; create, rename, and reorder tabs; toggle window chrome; and more. Each row shows its current keybind.
+- **Projects** — jump to any open project, or rename and remove them.
+
+To open a directory as a project, just start typing a path (anything beginning with `/` or `~`). The palette switches to path mode and autocompletes directories as you go; press return on a match to open it (or switch to it, if it's already a project).
+
+### Project Layouts
+
+Declare a project's tabs, split layout, and the process each pane runs in a committable `.macterm/layout.yaml` at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout is the source of truth, taking precedence over any restored session for that project. Run **Save layout** from the palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
 
 ```yaml
-name: "MyApp" # the project this layout is for (optional)
+# .../myapp/.macterm/layout.yaml
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
+name: "MyApp" # the project name (optional; defaults to directory name)
 tabs:
-  # A single-pane tab is just a pane (no wrapper).
+  # A single-pane tab
   - run: "npm run dev"
-  # A tab can carry a `name`, and splits nest under `split:`.
+  # A tab with custom name and splits
   - name: "Dev"
     split:
       direction: horizontal # horizontal | vertical
@@ -113,25 +117,19 @@ tabs:
       first:
         cwd: "./api" # project-relative working directory
         run: "npm run dev" # typed into the pane's shell on launch
-        shell: /bin/zsh # optional per-pane shell
+        shell: /bin/zsh # shell (optional; defaults to login shell)
       second:
         split:
           direction: vertical
           first: { cwd: "./api", run: "npm test -- --watch" }
-          second: {} # plain shell, no command
+          second: {} # plain shell pane
 ```
 
-A pane's `run` is typed into a normal shell (so you keep the prompt and history, and the pane survives when the command exits). The shell is the pane's `shell` if set, else the one from your Ghostty config.
+A pane's `run` is typed into a normal shell, so you keep the prompt and history and the pane survives when the command exits. The shell is the pane's `shell` if set, else your login shell.
 
-**Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (its foreground process — so a pane running `npm run dev` is saved with that `run:`, a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. If a pane is sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`), Save records it as `shell:`; a pane in your default shell records none, so the layout stays portable. If you apply a layout whose `name:` doesn't match the current project, Macterm asks you to confirm first.
+**Save layout** command records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. A pane sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`) is saved with that `shell:`; a pane in your default shell records none, so the layout stays portable. Applying a layout whose `name:` doesn't match the current project prompts for confirmation first.
 
-**Apply** reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks for confirmation first. An invalid layout file is reported and never applied.
-
-**Editor support.** A [JSON schema](schemas/layout.schema.json) describes the format, giving completion and validation in editors that use the YAML Language Server (VS Code, Neovim, Zed, …). Saved files include the modeline that wires it up automatically; for a hand-authored file, add it to the top yourself:
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
-```
+**Apply layout** command reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks first. An invalid layout file is reported and not applied.
 
 ## Contributing
 
