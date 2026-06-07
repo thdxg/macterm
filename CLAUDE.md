@@ -14,7 +14,7 @@ mise run test         # Run the test suite
 mise run build        # Release build + DMG
 ```
 
-`format`, `lint`, and `test` show a spinner and print output only on failure. Pass `--verbose` (e.g. `mise run test --verbose`) to stream the raw output instead — useful when a run fails and you need the full log.
+`format`, `lint`, and `test` show a spinner and print output only on failure. **Always pass `--verbose`** (e.g. `mise run test --verbose`) to stream the raw output — a spinner-only run hides the logs you need to confirm what happened, even on success.
 
 Requires macOS 26+, Swift 6.0+. GhosttyKit is a pre-built xcframework from `thdxg/ghostty` (a fork that adds CI builds). No zig toolchain needed for development.
 

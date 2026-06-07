@@ -66,7 +66,7 @@ struct CommandSource: PaletteSource {
     private func keybindDisplay(_ action: HotkeyAction) -> String? {
         let raw = HotkeyRegistry.selectedShortcutString(for: action)
         let display = HotkeyRegistry.displayString(for: raw)
-        return display == "Disabled" ? nil : display
+        return (display == "Disabled" || display == "None") ? nil : display
     }
 
     private func keybindSymbols(_ action: HotkeyAction) -> [String]? {
