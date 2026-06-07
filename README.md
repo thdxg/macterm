@@ -96,9 +96,9 @@ Ghostty keybinds work normally unless they conflict with a Macterm shortcut — 
 
 Shell integration works standalone — no Ghostty.app needed. The one exception is `ssh-env`, `ssh-terminfo`, and `path` features, which require the `ghostty` CLI; install Ghostty.app to enable them.
 
-## Project Layouts
+## Declarative Project Layouts
 
-You can declare a project's tabs, split layout, and the process each pane runs in a committable `.macterm/layout.yaml` at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout is the source of truth, taking precedence over any restored session for that project. You can also run **Save layout** from the command palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
+You can declare a project's tabs, split layout, and the process each pane runs in a `.macterm/layout.yaml` file at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout takes precedence over any restored session for that project. You can also run **Save layout** from the command palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
 
 ```yaml
 name: "MyApp" # the project this layout is for (optional)

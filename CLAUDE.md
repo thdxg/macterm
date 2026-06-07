@@ -177,7 +177,7 @@ A tab's auto-title (`Workspace.autoTitle` → each pane's `Pane.processTitle`) i
 
 | File                     | Purpose                                                                                                                                                                                                                                                                                                                     |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ProcessInspector.swift` | Resolves a pane's foreground pid (`GhosttyTerminalNSView.foregroundPID`) two ways: `runningCommand` reads the full argv via `KERN_PROCARGS2` (used by `saveLayout` to capture a pane's `run:`); `runningProcessName` reads the short kernel `comm` name via `proc_pidinfo` (used for the tab name — see "Tab naming" below) |
+| `ProcessInspector.swift` | Resolves a pane's foreground pid (`GhosttyTerminalNSView.foregroundPID`) three ways: `runningCommand` reads the full argv via `KERN_PROCARGS2` (`saveLayout` → a pane's `run:`); `runningShell` reads the shell's `exec_path` when the foreground is a non-default shell (`saveLayout` → `shell:`, and reconcile shell-match); `runningProcessName` reads the short kernel `comm` via `proc_pidinfo` (the tab name — see "Tab naming") |
 
 ### Config (`Macterm/Config/`)
 
@@ -226,8 +226,8 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `Ghostty/ThemeResolverTests.swift`                                                                                          | `theme = light:X,dark:Y` split parsing + side selection (`ThemeResolver`, #38)                             |
 | `Persistence/WorkspaceSerializerTests.swift`                                                                                | Snapshot/restore round-trip + on-disk via `WorkspaceStore`                                                 |
 | `Persistence/LayoutFileTests.swift`                                                                                         | YAML parse/encode round-trip, tab-is-a-node + nested `split:` format, cwd resolution                       |
-| `Persistence/LayoutSerializerTests.swift`                                                                                   | Live workspace → layout file (topology, project-relative cwd, `run`)                                       |
-| `Persistence/LayoutReconcilerTests.swift`                                                                                   | Minimal-destruction apply: keep/resize/respawn/kill by `(run, cwd)` identity, plain-shell positional match |
+| `Persistence/LayoutSerializerTests.swift`                                                                                   | Live workspace → layout file (topology, project-relative cwd, `run`, non-default `shell:`)                 |
+| `Persistence/LayoutReconcilerTests.swift`                                                                                   | Minimal-destruction apply: keep/resize/respawn/kill by `(run, cwd)` identity, plain-shell positional match, `shell:`-mismatch respawn |
 | `Support/TreeBuilder.swift`                                                                                                 | DSL: `H(pane("a"), V(pane("b"), pane("c")))` → `(SplitNode, [name: UUID])`                                 |
 | `Support/TreeRenderer.swift`                                                                                                | Inverse DSL for readable assertions                                                                        |
 

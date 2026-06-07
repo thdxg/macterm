@@ -45,9 +45,10 @@ final class GhosttyTerminalNSView: NSView {
         }
     }
 
-    /// Record a title from libghostty. Called by `GhosttyCallbacks`. The string
-    /// is ignored; only the signal matters (see `onTitleChange`).
-    func receiveTitle(_: String) {
+    /// Note that libghostty reported a title (OSC 2 / `SET_TITLE`). The title
+    /// string itself is irrelevant — only the signal matters (see
+    /// `onTitleChange`). Called by `GhosttyCallbacks`.
+    func surfaceDidReportTitle() {
         didReportTitle = true
         onTitleChange?()
     }
