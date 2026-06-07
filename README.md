@@ -35,6 +35,7 @@
 - **Command Palette**: Versatile command palette to interact with multiplexing and manage projects
 - **Quick terminal**: Global terminal accessible from anywhere with a hotkey.
 - **Declarative Layouts**: Commit a `.macterm/layout.yaml` describing each project's tabs, splits, and the process every pane runs; apply or save it from the command palette.
+- **Smart Tab Naming**: Tabs name themselves after the program running in the pane, making them easily identifiable in the sidebar.
 
 ## Install
 
@@ -118,7 +119,7 @@ tabs:
 
 A pane's `run` is typed into a normal shell (so you keep the prompt and history, and the pane survives when the command exits). The shell is the pane's `shell` if set, else the one from your Ghostty config.
 
-**Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (its foreground process — so a pane running `npm run dev` is saved with that `run:`, a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. Save does not record `shell:` — set that yourself if a pane needs a specific shell. If you apply a layout whose `name:` doesn't match the current project, Macterm asks you to confirm first.
+**Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (its foreground process — so a pane running `npm run dev` is saved with that `run:`, a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. If a pane is sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`), Save records it as `shell:`; a pane in your default shell records none, so the layout stays portable. If you apply a layout whose `name:` doesn't match the current project, Macterm asks you to confirm first.
 
 **Apply** reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks for confirmation first. An invalid layout file is reported and never applied.
 

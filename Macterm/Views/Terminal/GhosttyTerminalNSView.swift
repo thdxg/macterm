@@ -28,24 +28,28 @@ final class GhosttyTerminalNSView: NSView {
     /// `ghostty_surface_new`. Retained here and freed in `destroySurface`.
     nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
 
-    /// The most recent title libghostty reported (OSC 2 / `SET_TITLE`), cached so
-    /// it survives a `nil` `onTitleChange`. The surface can emit its title before
-    /// a callback is wired (e.g. a layout-spawned pane runs its `run` command and
-    /// the program sets a title before SwiftUI's `configure` runs), and the
-    /// `SET_TITLE` action is one-shot with no replay. Caching + replaying on
-    /// assignment means the latest title is never dropped.
-    private var lastTitle: String?
+    /// Whether the surface has ever reported a title (OSC 2 / `SET_TITLE`). The
+    /// title *string* is unused (the tab name comes from the foreground process,
+    /// not the OSC title), but its arrival is a command-boundary signal that
+    /// drives a foreground-process refresh. We remember that at least one fired
+    /// so re-wiring `onTitleChange` (when SwiftUI's `configure` adopts a warmed
+    /// surface) replays the signal once — the surface may have reported its
+    /// title before the callback was wired.
+    private var didReportTitle = false
 
-    var onTitleChange: ((String) -> Void)? {
+    /// Fires on each OSC title (a command boundary). Carries no value — the
+    /// title string isn't used for naming.
+    var onTitleChange: (() -> Void)? {
         didSet {
-            if let lastTitle { onTitleChange?(lastTitle) }
+            if didReportTitle { onTitleChange?() }
         }
     }
 
-    /// Record and forward a title from libghostty. Called by `GhosttyCallbacks`.
-    func receiveTitle(_ title: String) {
-        lastTitle = title
-        onTitleChange?(title)
+    /// Record a title from libghostty. Called by `GhosttyCallbacks`. The string
+    /// is ignored; only the signal matters (see `onTitleChange`).
+    func receiveTitle(_: String) {
+        didReportTitle = true
+        onTitleChange?()
     }
 
     var onFocus: (() -> Void)?

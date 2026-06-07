@@ -34,13 +34,6 @@ final class TerminalTab: Identifiable {
         return splitRoot.allPanes().first?.id
     }
 
-    var title: String {
-        if let customTitle { return customTitle }
-        let panes = splitRoot.allPanes()
-        if panes.isEmpty { return "Terminal" }
-        return panes.map(\.title).joined(separator: " | ")
-    }
-
     var autoTitle: String {
         let panes = splitRoot.allPanes()
         if panes.isEmpty { return "Terminal" }

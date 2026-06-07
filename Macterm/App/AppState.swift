@@ -64,6 +64,23 @@ final class AppState {
     private let workspaceStore: WorkspaceStore
     private var autoTileObserver: Any?
 
+    /// Periodically re-reads each pane's foreground process so tab names track
+    /// the running command (`hx`, `btop`, …). This polls like tmux's
+    /// `automatic-rename`, rather than relying on terminal title escapes: with
+    /// shell integration (Starship/ghostty) the OSC title is prompt/cwd churn,
+    /// not the command, and a program may never emit a usable title at all (a
+    /// layout-spawned or eager-warmed pane, a process that sets no title). A
+    /// poll catches every case — manual launches, layout restores, quits —
+    /// within one interval, regardless of titles.
+    ///
+    /// The interval (250ms) is a responsiveness choice, not a cost one: it's a
+    /// run-loop timer (the thread parks between ticks, no busy-loop), and each
+    /// tick is one `proc_pidinfo` per pane — ~0.24µs/call, so even 20 panes
+    /// 4×/sec is ~0.002% of a core. A pane only republishes (→ re-render) when
+    /// its name actually changes, so idle panes are free.
+    @ObservationIgnored
+    private var processNameTimer: Timer?
+
     init(workspaceStore: WorkspaceStore = WorkspaceStore()) {
         self.workspaceStore = workspaceStore
         autoTileObserver = NotificationCenter.default.addObserver(
@@ -76,6 +93,23 @@ final class AppState {
         let restored = (UserDefaults.standard.stringArray(forKey: recencyKey) ?? [])
             .compactMap { UUID(uuidString: $0) }
         projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
+
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshAllForegroundProcesses() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        processNameTimer = timer
+    }
+
+    /// Re-read the foreground process name of every live pane across all
+    /// workspaces. Each pane only republishes (and triggers a tab re-render)
+    /// when its name actually changes, so this is cheap when nothing's moving.
+    func refreshAllForegroundProcesses() {
+        for ws in workspaces.values {
+            for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+                pane.refreshForegroundProcess()
+            }
+        }
     }
 
     private func recordProjectVisit(_ projectID: UUID) {
