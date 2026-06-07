@@ -12,7 +12,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
         case GHOSTTY_ACTION_SET_TITLE:
             guard let view = surfaceView(from: target), let ptr = action.action.set_title.title else { return true }
             let title = String(cString: ptr)
-            DispatchQueue.main.async { view.onTitleChange?(title) }
+            DispatchQueue.main.async { view.receiveTitle(title) }
             return true
         case GHOSTTY_ACTION_START_SEARCH:
             guard let view = surfaceView(from: target) else { return true }

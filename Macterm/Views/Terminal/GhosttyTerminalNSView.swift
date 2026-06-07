@@ -27,7 +27,27 @@ final class GhosttyTerminalNSView: NSView {
     /// asynchronously after the child spawns, so the buffer must outlive
     /// `ghostty_surface_new`. Retained here and freed in `destroySurface`.
     nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
-    var onTitleChange: ((String) -> Void)?
+
+    /// The most recent title libghostty reported (OSC 2 / `SET_TITLE`), cached so
+    /// it survives a `nil` `onTitleChange`. The surface can emit its title before
+    /// a callback is wired (e.g. a layout-spawned pane runs its `run` command and
+    /// the program sets a title before SwiftUI's `configure` runs), and the
+    /// `SET_TITLE` action is one-shot with no replay. Caching + replaying on
+    /// assignment means the latest title is never dropped.
+    private var lastTitle: String?
+
+    var onTitleChange: ((String) -> Void)? {
+        didSet {
+            if let lastTitle { onTitleChange?(lastTitle) }
+        }
+    }
+
+    /// Record and forward a title from libghostty. Called by `GhosttyCallbacks`.
+    func receiveTitle(_ title: String) {
+        lastTitle = title
+        onTitleChange?(title)
+    }
+
     var onFocus: (() -> Void)?
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
