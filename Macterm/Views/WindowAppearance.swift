@@ -226,8 +226,10 @@ enum WindowAppearance {
         // Override the titlebar's private background layer so its color
         // matches the terminal background (or stays transparent when the
         // window is). Without this the titlebar paints its own material
-        // and you get a visible seam at y=titlebarHeight.
-        syncTitlebar(window: window, isTransparent: effectiveTransparent)
+        // and you get a visible seam at y=titlebarHeight. Native fullscreen
+        // gets forced opaque above, but its separate titlebar window still
+        // needs the background hidden or it draws a top-edge bar.
+        syncTitlebar(window: window, hideBackground: effectiveTransparent || forceOpaque)
     }
 
     /// Update the inactive-glass tint when the window gains/loses key status.
@@ -307,9 +309,13 @@ enum WindowAppearance {
         return window.value(forKey: "_cornerRadius") as? CGFloat
     }
 
-    private static func syncTitlebar(window: NSWindow, isTransparent: Bool) {
-        guard let container = titlebarContainer(in: window) else { return }
+    private static func syncTitlebar(window: NSWindow, hideBackground: Bool) {
+        for container in titlebarContainers(for: window) {
+            syncTitlebarContainer(container, hideBackground: hideBackground)
+        }
+    }
 
+    private static func syncTitlebarContainer(_ container: NSView, hideBackground: Bool) {
         if let titlebarView = container.firstDescendant(withClassName: "NSTitlebarView") {
             titlebarView.wantsLayer = true
             // On Tahoe, the NavigationSplitView's sidebar is a liquid-glass
@@ -322,16 +328,75 @@ enum WindowAppearance {
         }
 
         // NSTitlebarBackgroundView has subviews that force their own background
-        // colors; hide it only when transparent, so the default opaque-mode
-        // chrome stays intact.
-        container.firstDescendant(withClassName: "NSTitlebarBackgroundView")?.isHidden = isTransparent
+        // colors; hide it when transparent or when native fullscreen's
+        // companion titlebar window would otherwise paint a top-edge band.
+        container.firstDescendant(withClassName: "NSTitlebarBackgroundView")?.isHidden = hideBackground
+    }
+
+    private static func titlebarContainers(for window: NSWindow) -> [NSView] {
+        var containers: [NSView] = []
+        appendTitlebarContainer(in: window, to: &containers)
+
+        guard window.styleMask.contains(.fullScreen) else { return containers }
+
+        for fullscreenWindow in fullscreenTitlebarWindows(for: window) {
+            appendTitlebarContainer(in: fullscreenWindow, to: &containers)
+        }
+        return containers
+    }
+
+    private static func appendTitlebarContainer(in window: NSWindow, to containers: inout [NSView]) {
+        guard let container = titlebarContainer(in: window) else { return }
+        guard !containers.contains(where: { $0 === container }) else { return }
+        containers.append(container)
+    }
+
+    private static func fullscreenTitlebarWindows(for window: NSWindow) -> [NSWindow] {
+        var windows: [NSWindow] = []
+
+        for childWindow in window.childWindows ?? [] {
+            appendWindow(childWindow, to: &windows)
+        }
+        for accessory in window.titlebarAccessoryViewControllers {
+            guard let accessoryWindow = accessory.view.window else { continue }
+            appendWindow(accessoryWindow, to: &windows)
+        }
+        for appWindow in NSApplication.shared.windows {
+            appendWindow(appWindow, to: &windows)
+        }
+
+        return windows.filter { candidate in
+            guard candidate !== window else { return false }
+            guard String(describing: type(of: candidate)) == "NSToolbarFullScreenWindow" else { return false }
+            guard titlebarContainer(in: candidate) != nil else { return false }
+            return fullscreenTitlebarWindow(candidate, belongsTo: window)
+        }
+    }
+
+    private static func appendWindow(_ candidate: NSWindow, to windows: inout [NSWindow]) {
+        guard !windows.contains(where: { $0 === candidate }) else { return }
+        windows.append(candidate)
+    }
+
+    private static func fullscreenTitlebarWindow(_ candidate: NSWindow, belongsTo window: NSWindow) -> Bool {
+        if window.childWindows?.contains(where: { $0 === candidate }) == true { return true }
+        if let screen = window.screen, let candidateScreen = candidate.screen {
+            return screen === candidateScreen
+        }
+        if let screen = window.screen {
+            return candidate.frame.intersects(screen.frame)
+        }
+        if let candidateScreen = candidate.screen {
+            return window.frame.intersects(candidateScreen.frame)
+        }
+        return candidate.frame.intersects(window.frame)
     }
 
     private static func titlebarContainer(in window: NSWindow) -> NSView? {
-        // The titlebar container lives on the window's content view's root in
-        // normal mode, and on a separate NSToolbarFullScreenWindow in native
-        // fullscreen. We don't support native fullscreen tab bars, so the
-        // first path suffices for Macterm.
+        // The titlebar container lives on the window's content view's root.
+        // In native fullscreen AppKit hosts another copy on a private
+        // NSToolbarFullScreenWindow; callers discover that companion window
+        // separately and run this same guarded lookup against it.
         guard let contentView = window.contentView else { return nil }
         var root: NSView = contentView
         while let s = root.superview {
