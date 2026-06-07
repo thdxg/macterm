@@ -116,16 +116,19 @@ A floating `NSPanel` that reuses the same `TerminalTab` / `SplitNode` / `Pane` m
 | `SplitTreeView.swift`                  | Recursive split rendering with draggable dividers                                                                |
 | `TerminalPane.swift`                   | `TerminalPane` + `TerminalSurface` (`NSViewRepresentable` borrowing `pane.nsView`) + search bar overlay          |
 | `Terminal/GhosttyTerminalNSView.swift` | Core terminal NSView — surface, keyboard, mouse, IME                                                             |
+| `Terminal/SurfaceScrollView.swift`     | Native overlay scrollbar: nests the Metal surface in an `NSScrollView` with a blank spacer document view sized to scrollback (Ghostty 1.3.0+ approach) |
 | `SearchBar.swift`                      | Terminal search UI                                                                                               |
 | `QuickTerminal.swift`                  | Quick terminal `NSPanel`, Carbon global hotkey                                                                   |
 | `CommandPalette.swift`                 | `Cmd+Shift+P` / `Cmd+P` command palette                                                                          |
+| `QuitConfirmation.swift`               | Native `Table`-based confirmation shown when quitting with panes still running foreground processes              |
+| `TabSwitcherToolbarItem.swift`         | Numbered segmented control in the title bar mirroring a 5-tab sliding window of the active project's tabs        |
 
 ### Ghostty Integration (`Macterm/Ghostty/`)
 
 | File                     | Purpose                                                                                            |
 | ------------------------ | -------------------------------------------------------------------------------------------------- |
 | `GhosttyApp.swift`       | libghostty init, config, tick loop, color queries; resolves `GHOSTTY_RESOURCES_DIR`                |
-| `GhosttyCLI.swift`       | Detects the external `ghostty` CLI (Ghostty.app); lists the shell-integration features gated on it |
+| `GhosttyCLI.swift`       | Detects the external `ghostty` CLI (Ghostty.app) and probes whether it supports the `+ssh` action; lists the shell-integration features gated on it |
 | `GhosttyResources.swift` | Pure `GhosttyResourceResolver` — picks the resources dir (testable selection logic)                |
 | `GhosttyCallbacks.swift` | Routes libghostty callbacks to terminal views                                                      |
 | `ThemeResolver.swift`    | Pure resolver for `theme = light:X,dark:Y` splits — libghostty's config getters can't (issue #38)  |
@@ -214,7 +217,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `App/HotkeysTests.swift`                                                                                                    | `parseShortcut`, `displayString`, `HotkeyAction` sanity                                                    |
 | `Palette/PaletteEngineTests.swift`                                                                                          | `fuzzyScore`, engine sections/sort/path-mode                                                               |
 | `Palette/CommandSourceTests.swift`                                                                                          | `CommandSource` palette-item generation from `AppCommand.allCases`                                         |
-| `Ghostty/GhosttyCLITests.swift`                                                                                             | External `ghostty` CLI detection + bin-dir priority (`GhosttyCLI`)                                         |
+| `Ghostty/GhosttyCLITests.swift`                                                                                             | External `ghostty` CLI detection, bin-dir priority, `+ssh`-support gating (`GhosttyCLI`)                   |
 | `Ghostty/GhosttyResourceResolverTests.swift`                                                                                | Resource dir selection (`GhosttyResourceResolver`)                                                         |
 | `Ghostty/BundledResourcesTests.swift`                                                                                       | Bundle layout: terminfo is a sibling of `ghostty/`, has `78/xterm-ghostty`, shells, themes (#39/#40 guard) |
 | `Ghostty/ThemeResolverTests.swift`                                                                                          | `theme = light:X,dark:Y` split parsing + side selection (`ThemeResolver`, #38)                             |
@@ -222,6 +225,8 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `Persistence/LayoutFileTests.swift`                                                                                         | YAML parse/encode round-trip, flat split-node format, cwd resolution                                       |
 | `Persistence/LayoutSerializerTests.swift`                                                                                   | Live workspace → layout file (topology, project-relative cwd, `run`)                                       |
 | `Persistence/LayoutReconcilerTests.swift`                                                                                   | Minimal-destruction apply: keep/resize/respawn/kill by `(run, cwd)` identity, plain-shell positional match |
+| `System/ProcessInspectorTests.swift`                                                                                        | `ProcessInspector.argv` syscall parsing against real spawned subprocesses                                  |
+| `Views/SurfaceScrollGeometryTests.swift`                                                                                    | Pure row↔pixel scrollback geometry conversion (Y-down rows ↔ Y-up points) for `SurfaceScrollView`          |
 | `Support/TreeBuilder.swift`                                                                                                 | DSL: `H(pane("a"), V(pane("b"), pane("c")))` → `(SplitNode, [name: UUID])`                                 |
 | `Support/TreeRenderer.swift`                                                                                                | Inverse DSL for readable assertions                                                                        |
 

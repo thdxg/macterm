@@ -93,7 +93,7 @@ A few settings are overridden because Macterm handles that chrome itself: `backg
 
 Ghostty keybinds work normally unless they conflict with a Macterm shortcut — on conflict, Macterm wins. Every Macterm shortcut is rebindable in **Settings → Keymaps**. Note that Ghostty app-level actions (`new_split`, `new_tab`, etc.) do nothing in Macterm; use Macterm's own keybinds for those.
 
-Shell integration works standalone — no Ghostty.app needed. The one exception is `ssh-env`, `ssh-terminfo`, and `path` features, which require the `ghostty` CLI; install Ghostty.app to enable them.
+Shell integration works standalone — no Ghostty.app needed. The one exception is the `ssh-env`, `ssh-terminfo`, and `path` features, which require the `ghostty` CLI; install Ghostty.app to enable them. The `ssh` features additionally need a Ghostty new enough to provide the `+ssh` action (Ghostty 1.4.0 / tip); against an older install they stay disabled and `ssh` runs normally.
 
 ## Project Layouts
 
