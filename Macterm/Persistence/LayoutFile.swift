@@ -199,10 +199,16 @@ extension LayoutFile {
         return try parse(yaml: text)
     }
 
-    /// Serialize to YAML text.
+    /// Modeline the YAML Language Server reads to attach our JSON schema, so a
+    /// saved `.macterm/layout.yaml` gets completion/validation in editors with
+    /// no per-user setup. Hand-authored files can add the same line.
+    static let schemaModeline =
+        "# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json"
+
+    /// Serialize to YAML text, prefixed with the schema modeline.
     func yaml() throws -> String {
         let encoder = YAMLEncoder()
         encoder.options.sortKeys = false
-        return try encoder.encode(self)
+        return try "\(Self.schemaModeline)\n\(encoder.encode(self))"
     }
 }

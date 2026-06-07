@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json",
+  "title": "Macterm layout",
+  "description": "Declarative pane layout for a Macterm project. Lives at .macterm/layout.yaml in the project root; describes the tabs, split tree, and the process each pane runs. Apply/save it from the command palette.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tabs"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The project this layout was authored for. On apply, a mismatch against the active project prompts a confirmation. Optional — a file without it applies to any project without warning."
+    },
+    "tabs": {
+      "type": "array",
+      "description": "The tabs to create, in order.",
+      "items": { "$ref": "#/$defs/tab" }
+    }
+  },
+  "$defs": {
+    "tab": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Tab title. On apply, matched against live tabs by this name."
+        },
+        "layout": {
+          "$ref": "#/$defs/node",
+          "description": "The tab's split tree: a single leaf pane, or a split of two child nodes."
+        }
+      }
+    },
+    "node": {
+      "description": "A node in the split tree. Either a leaf pane (cwd/run/shell) or a split (split/ratio/first/second). A bare {} is a plain-shell pane.",
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/$defs/pane" },
+        { "$ref": "#/$defs/split" }
+      ]
+    },
+    "pane": {
+      "title": "Pane (leaf)",
+      "description": "A terminal pane. With no fields ({}) it's a plain shell.",
+      "type": "object",
+      "additionalProperties": false,
+      "not": { "required": ["split"] },
+      "properties": {
+        "cwd": {
+          "type": "string",
+          "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through."
+        },
+        "run": {
+          "type": "string",
+          "description": "Command typed into the pane's shell on launch (e.g. \"npm run dev\"). Omit for a plain shell. The command runs inside the shell, so the prompt survives when it exits."
+        },
+        "shell": {
+          "type": "string",
+          "description": "Shell binary to launch for this pane (e.g. \"/bin/zsh\"). Omit to use the shell from your Ghostty config (else your login shell)."
+        }
+      }
+    },
+    "split": {
+      "title": "Split",
+      "description": "Splits the area into two child nodes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split", "first", "second"],
+      "properties": {
+        "split": {
+          "type": "string",
+          "enum": ["horizontal", "vertical"],
+          "description": "Split direction. 'horizontal' = side by side (first | second); 'vertical' = stacked (first / second)."
+        },
+        "ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Divider position, 0–1. Defaults to 0.5 (an even split)."
+        },
+        "first": {
+          "$ref": "#/$defs/node",
+          "description": "The left (horizontal) or top (vertical) child."
+        },
+        "second": {
+          "$ref": "#/$defs/node",
+          "description": "The right (horizontal) or bottom (vertical) child."
+        }
+      }
+    }
+  }
+}

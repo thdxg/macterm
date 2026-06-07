@@ -134,7 +134,10 @@ struct LayoutFileTests {
                 second: .pane(LayoutPane(cwd: nil, run: nil, shell: nil))
             )))]
         )
-        let decoded = try LayoutFile.parse(yaml: original.yaml())
-        #expect(decoded == original)
+        let yaml = try original.yaml()
+        // Saved files carry the schema modeline for editor support; it's a YAML
+        // comment, so it must not affect the round-trip.
+        #expect(yaml.hasPrefix("# yaml-language-server: $schema="))
+        #expect(try LayoutFile.parse(yaml: yaml) == original)
     }
 }

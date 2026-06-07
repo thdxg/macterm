@@ -122,6 +122,12 @@ A pane's `run` is typed into a normal shell (so you keep the prompt and history,
 
 **Apply** reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks for confirmation first. An invalid layout file is reported and never applied.
 
+**Editor support.** A [JSON schema](schemas/layout.schema.json) describes the format, giving completion and validation in editors that use the YAML Language Server (VS Code, Neovim, Zed, …). Saved files include the modeline that wires it up automatically; for a hand-authored file, add it to the top yourself:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build, and PR guidelines.
