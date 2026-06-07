@@ -385,4 +385,34 @@ struct AppStateTests {
         #expect(error == nil)
         #expect(state.pendingLayoutApply == nil)
     }
+
+    // MARK: - panesToWarm (eager process start for focused project)
+
+    @Test
+    func panesToWarm_excludes_active_tab_includes_the_rest() {
+        let pid = UUID()
+        // Tab A (active): 1 pane. Tab B: 2-pane split. Tab C: 1 pane.
+        let a = Pane(projectPath: "/p", projectID: pid)
+        let (bTree, bIDs) = build(H(pane("b1"), pane("b2")))
+        let c = Pane(projectPath: "/p", projectID: pid)
+        let tabA = TerminalTab(id: UUID(), splitRoot: .pane(a), focusedPaneID: a.id)
+        let tabB = TerminalTab(id: UUID(), splitRoot: bTree, focusedPaneID: nil)
+        let tabC = TerminalTab(id: UUID(), splitRoot: .pane(c), focusedPaneID: c.id)
+        let ws = Workspace(projectID: pid, tabs: [tabA, tabB, tabC], activeTabID: tabA.id)
+
+        let warm = Set(AppState.panesToWarm(in: ws).map(\.id))
+        // Active tab A's pane is NOT warmed (SwiftUI starts it); B's two + C are.
+        #expect(!warm.contains(a.id))
+        #expect(warm == Set([bIDs["b1"], bIDs["b2"], c.id].compactMap(\.self)))
+        #expect(warm.count == 3)
+    }
+
+    @Test
+    func panesToWarm_single_tab_workspace_warms_nothing() {
+        let pid = UUID()
+        let only = Pane(projectPath: "/p", projectID: pid)
+        let tab = TerminalTab(id: UUID(), splitRoot: .pane(only), focusedPaneID: only.id)
+        let ws = Workspace(projectID: pid, tabs: [tab], activeTabID: tab.id)
+        #expect(AppState.panesToWarm(in: ws).isEmpty)
+    }
 }

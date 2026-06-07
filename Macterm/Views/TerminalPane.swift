@@ -67,6 +67,11 @@ private struct TerminalSurface: NSViewRepresentable {
         // SwiftUI hosts the scroll view; the surface lives inside it. Both are
         // owned by `Pane` so they survive tab switches / split reshapes.
         let scroll = pane.ensureScrollView()
+        // The pane may have been warmed off-screen by `SurfaceIncubator` (its
+        // shell already running). Detach it from the incubator window before
+        // SwiftUI inserts it — a view can't live in two superviews. This does
+        // not tear down the surface (only `pane.destroySurface()` does).
+        scroll.removeFromSuperview()
         let view = scroll.surfaceView
         configure(view)
         // Defer surface creation until the view is actually in a window — the

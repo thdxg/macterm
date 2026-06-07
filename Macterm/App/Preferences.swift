@@ -55,6 +55,12 @@ final class Preferences {
         }
     }
 
+    /// Start every tab of the focused project immediately (off-screen) rather
+    /// than only the active tab. Defaults to on.
+    var eagerlyStartProjectTabs: Bool {
+        didSet { defaults.set(eagerlyStartProjectTabs, forKey: Keys.eagerlyStartProjectTabs) }
+    }
+
     // MARK: - Sidebar icons
 
     var projectIconSymbol: String {
@@ -228,6 +234,7 @@ final class Preferences {
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
+        eagerlyStartProjectTabs = (defaults.object(forKey: Keys.eagerlyStartProjectTabs) as? Bool) ?? true
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
         windowBlurRadius = defaults.integer(forKey: Keys.windowBlurRadius)
         windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
@@ -276,6 +283,7 @@ final class Preferences {
 
     enum Keys {
         static let autoTiling = "macterm.autoTiling.enabled"
+        static let eagerlyStartProjectTabs = "macterm.eagerlyStartProjectTabs.enabled"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"
         static let windowGlassEnabled = "macterm.window.glassEnabled"
