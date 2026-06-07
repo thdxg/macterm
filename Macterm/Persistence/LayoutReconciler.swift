@@ -77,7 +77,7 @@ enum LayoutReconciler {
             // (stable, depth-first) so duplicate (run,cwd) pairs pair stably.
             var pool = PanePool(panes: liveTab?.splitRoot.allPanes() ?? [], liveCommand: liveCommand)
 
-            let ctx = BuildContext(projectRoot: projectRoot, projectID: projectID, defaultShell: file.shell)
+            let ctx = BuildContext(projectRoot: projectRoot, projectID: projectID)
             let root = buildTree(declaredTab.layout, ctx: ctx, pool: &pool, reused: &reusedPaneIDs)
             plannedTabs.append(PlannedTab(
                 existingTabID: liveTab?.id,
@@ -173,7 +173,6 @@ enum LayoutReconciler {
     private struct BuildContext {
         let projectRoot: String
         let projectID: UUID
-        let defaultShell: String?
     }
 
     private static func buildTree(
@@ -192,7 +191,7 @@ enum LayoutReconciler {
                 return .pane(existing)
             }
             // No match → fresh pane (spawn / respawn).
-            return .pane(LayoutBuilder.makePane(p, projectRoot: ctx.projectRoot, projectID: ctx.projectID, defaultShell: ctx.defaultShell))
+            return .pane(LayoutBuilder.makePane(p, projectRoot: ctx.projectRoot, projectID: ctx.projectID))
         case let .split(b):
             return .split(SplitBranch(
                 direction: b.direction,

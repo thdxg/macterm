@@ -18,20 +18,19 @@ enum LayoutBuilder {
             .standardizedFileURL.path
     }
 
-    /// Construct a `Pane` for a declared leaf, resolving cwd and shell.
-    /// Shell precedence: per-pane `shell` → file-level `defaultShell` → nil
-    /// (leaving `Pane`/libghostty to resolve the ghostty-config / login shell).
+    /// Construct a `Pane` for a declared leaf, resolving cwd. The pane's `shell`
+    /// is used as-is; when nil, `Pane`/libghostty resolves the ghostty-config /
+    /// login shell.
     static func makePane(
         _ pane: LayoutPane,
         projectRoot: String,
-        projectID: UUID,
-        defaultShell: String?
+        projectID: UUID
     ) -> Pane {
         Pane(
             projectPath: resolveCwd(pane.cwd, projectRoot: projectRoot),
             projectID: projectID,
             command: (pane.run?.isEmpty == false) ? pane.run : nil,
-            shell: pane.shell ?? defaultShell
+            shell: pane.shell
         )
     }
 }

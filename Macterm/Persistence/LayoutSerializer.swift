@@ -18,7 +18,6 @@ enum LayoutSerializer {
     ) -> LayoutFile {
         LayoutFile(
             name: projectName,
-            shell: nil,
             tabs: workspace.tabs.map { tab in
                 LayoutTab(name: tab.customTitle, layout: node(tab.splitRoot, projectRoot: projectRoot, liveCommand: liveCommand))
             }

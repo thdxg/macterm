@@ -7,7 +7,6 @@ struct LayoutFileTests {
     @Test
     func parses_nested_layout_with_processes() throws {
         let yaml = """
-        shell: /bin/zsh
         tabs:
           - name: "Dev"
             layout:
@@ -16,13 +15,13 @@ struct LayoutFileTests {
               first:
                 cwd: "./api"
                 run: "npm run dev"
+                shell: /bin/zsh
               second:
                 split: vertical
                 first:  { cwd: "./api", run: "npm test" }
                 second: { }
         """
         let file = try LayoutFile.parse(yaml: yaml)
-        #expect(file.shell == "/bin/zsh")
         #expect(file.tabs.count == 1)
 
         guard case let .split(outer) = file.tabs[0].layout else {
@@ -38,6 +37,7 @@ struct LayoutFileTests {
         }
         #expect(first.cwd == "./api")
         #expect(first.run == "npm run dev")
+        #expect(first.shell == "/bin/zsh")
 
         guard case let .split(inner) = outer.second, case let .pane(shell) = inner.second else {
             Issue.record("expected inner split with plain shell")
@@ -127,11 +127,10 @@ struct LayoutFileTests {
     func yaml_round_trips_through_encode_decode() throws {
         let original = LayoutFile(
             name: "MyApp",
-            shell: "/bin/zsh",
             tabs: [LayoutTab(name: "Dev", layout: .split(LayoutBranch(
                 direction: .horizontal,
                 ratio: 0.6,
-                first: .pane(LayoutPane(cwd: "./api", run: "npm run dev", shell: nil)),
+                first: .pane(LayoutPane(cwd: "./api", run: "npm run dev", shell: "/bin/zsh")),
                 second: .pane(LayoutPane(cwd: nil, run: nil, shell: nil))
             )))]
         )

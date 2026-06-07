@@ -16,8 +16,6 @@ struct LayoutFile: Codable, Equatable {
     /// on `apply`, a mismatch against the active project prompts a confirmation.
     /// Optional — a file without it applies to any project without warning.
     var name: String?
-    /// File-level default shell, applied to any pane that doesn't set its own.
-    var shell: String?
     var tabs: [LayoutTab]
 }
 

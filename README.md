@@ -101,7 +101,6 @@ You can declare a project's tabs, split layout, and the process each pane runs i
 
 ```yaml
 name: "MyApp" # the project this layout is for (optional)
-shell: /bin/zsh # optional default shell for every pane
 tabs:
   - name: "Dev"
     layout:
@@ -110,13 +109,14 @@ tabs:
       first:
         cwd: "./api" # project-relative working directory
         run: "npm run dev" # typed into the pane's shell on launch
+        shell: /bin/zsh # optional per-pane shell
       second:
         split: vertical
         first: { cwd: "./api", run: "npm test -- --watch" }
         second: {} # plain shell, no command
 ```
 
-A pane's `run` is typed into a normal shell (so you keep the prompt and history, and the pane survives when the command exits). The shell is the per-pane `shell`, else the file-level `shell`, else the one from your Ghostty config.
+A pane's `run` is typed into a normal shell (so you keep the prompt and history, and the pane survives when the command exits). The shell is the pane's `shell` if set, else the one from your Ghostty config.
 
 **Save** records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (its foreground process — so a pane running `npm run dev` is saved with that `run:`, a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. Save does not record `shell:` — set that yourself if a pane needs a specific shell. If you apply a layout whose `name:` doesn't match the current project, Macterm asks you to confirm first.
 
