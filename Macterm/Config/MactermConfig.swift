@@ -62,14 +62,28 @@ final class MactermConfig {
         // the host executable's directory — for us that's Macterm's bundle,
         // which ships no `ghostty` CLI. The shell-integration `ssh` wrapper
         // then tries to exec a non-existent `Macterm.app/Contents/MacOS/ghostty`
-        // and dies. If the real Ghostty.app is installed, point at its CLI;
-        // otherwise disable the wrappers that need the binary so they fall
-        // through to plain `ssh`. The `path` feature also relies on this dir
-        // being useful — turn it off when we have nothing to add.
-        if let binDir = GhosttyCLI.standard.resolveBinDir() {
+        // and dies. If the real Ghostty.app is installed, point at its CLI so
+        // the `path` feature works; otherwise disable the wrappers that need
+        // the binary so they fall through to plain `ssh`.
+        //
+        // The ssh wrappers additionally need a *new enough* CLI: the bundled
+        // shell integration calls `ghostty +ssh`, an action older builds (e.g.
+        // 1.3.1) lack. A present-but-too-old CLI makes the wrapper fail with
+        // "Ghostty failed to initialize!" — worse than plain `ssh`. So we gate
+        // the ssh features on `+ssh` support specifically, independent of
+        // whether the binary exists for the `path` feature.
+        let cli = GhosttyCLI.standard
+        var disabledFeatures: [String] = []
+        if let binDir = cli.resolveBinDir() {
             overrides.append("env = GHOSTTY_BIN_DIR=\(binDir)")
         } else {
-            overrides.append("shell-integration-features = no-ssh-env,no-ssh-terminfo,no-path")
+            disabledFeatures.append("no-path")
+        }
+        if cli.resolveSSHWrapperBinDir() == nil {
+            disabledFeatures.append(contentsOf: ["no-ssh-env", "no-ssh-terminfo"])
+        }
+        if !disabledFeatures.isEmpty {
+            overrides.append("shell-integration-features = \(disabledFeatures.joined(separator: ","))")
         }
 
         let body = overrides.joined(separator: "\n") + "\n"

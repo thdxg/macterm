@@ -38,7 +38,9 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             if !ghosttyCLI.isInstalled {
-                MissingGhosttyCLIBanner()
+                GhosttyCLIBanner(reason: .notInstalled)
+            } else if ghosttyCLI.resolveSSHWrapperBinDir() == nil {
+                GhosttyCLIBanner(reason: .tooOldForSSH)
             }
 
             Section("Ghostty Config") {
@@ -116,10 +118,29 @@ private struct GeneralSettings: View {
 // MARK: - Missing CLI banner
 
 /// Shown in General settings when the standalone ghostty CLI (shipped in
-/// Ghostty.app) isn't installed. A few shell-integration wrappers exec that
-/// binary, so without it some features are disabled — the README link spells
-/// out which. Embedded directly in a `Form`, so it renders as its own section.
-private struct MissingGhosttyCLIBanner: View {
+/// Ghostty.app) is missing or too old to drive the shell-integration wrappers.
+/// A few wrappers exec that binary (the `ssh` wrapper calls `ghostty +ssh`), so
+/// without a compatible CLI those features are disabled and fall through to the
+/// plain command — the README link spells out which. Embedded directly in a
+/// `Form`, so it renders as its own section.
+private struct GhosttyCLIBanner: View {
+    enum Reason {
+        case notInstalled
+        case tooOldForSSH
+
+        var message: String {
+            switch self {
+            case .notInstalled:
+                "Ghostty.app isn't installed, so a few shell-integration features can't run."
+            case .tooOldForSSH:
+                "Your installed Ghostty.app is too old for the ssh shell integration. "
+                    + "Update Ghostty.app to forward terminfo over ssh; until then, ssh runs normally."
+            }
+        }
+    }
+
+    let reason: Reason
+
     private static let detailsURL = URL(
         string: "https://github.com/thdxg/macterm#shell-integration"
     )
@@ -130,7 +151,7 @@ private struct MissingGhosttyCLIBanner: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Some features are disabled")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("Ghostty.app isn't installed, so a few shell-integration features can't run.")
+                    Text(reason.message)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     if let url = Self.detailsURL {
