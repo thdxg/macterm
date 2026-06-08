@@ -247,6 +247,22 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
+        if HotkeyRegistry.matches(event, action: .renameTab) {
+            guard let projectID = appState.activeProjectID,
+                  let tab = appState.workspaces[projectID]?.activeTab
+            else { return .passThrough }
+            appState.sidebarVisible = true
+            appState.renamingTabID = tab.id
+            return .handled
+        }
+
+        if HotkeyRegistry.matches(event, action: .renameProject) {
+            guard let projectID = appState.activeProjectID else { return .passThrough }
+            appState.sidebarVisible = true
+            appState.renamingProjectID = projectID
+            return .handled
+        }
+
         // Cmd+1-9 tab selection. Must check after the configurable hotkeys
         // so user bindings take precedence over digits.
         if flags == .command {

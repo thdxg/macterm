@@ -33,6 +33,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case toggleCommandPalette = "toggle_command_palette"
     case reloadGhosttyConfig = "reload_ghostty_config"
     case toggleQuickTerminal = "toggle_quick_terminal"
+    case renameTab = "rename_tab"
+    case renameProject = "rename_project"
 
     var id: String { rawValue }
 
@@ -69,6 +71,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .toggleCommandPalette: "cmd+p"
         case .reloadGhosttyConfig: "cmd+shift+,"
         case .toggleQuickTerminal: "ctrl+`"
+        case .renameTab: "cmd+r"
+        case .renameProject: "none"
         }
     }
 }
