@@ -19,6 +19,7 @@ final class TerminalTab: Identifiable {
     /// Record a focus change, pushing the previous pane onto history.
     func focusPane(_ paneID: UUID) {
         guard paneID != focusedPaneID else { return }
+        if zoomedPaneID != nil, zoomedPaneID != paneID { zoomedPaneID = nil }
         if let current = focusedPaneID { paneFocusHistory.push(current) }
         paneFocusHistory.remove(paneID)
         focusedPaneID = paneID
