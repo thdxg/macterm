@@ -158,7 +158,9 @@ struct CommandPalettePanel: View {
                             }
                         }
                     }
-                    .padding(.vertical, 4)
+                    // Match the rows' 6pt horizontal inset so the gap above
+                    // the first row and below the last equals the side spacing.
+                    .padding(.vertical, 6)
                 }
                 .frame(maxHeight: 340)
                 .coordinateSpace(name: rowSpace)
@@ -352,7 +354,9 @@ private struct CommandPaletteRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(isSelected ? MactermTheme.fg.opacity(0.12) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        // Radius is concentric with the palette container (16) minus the 6pt
+        // inset below, so the highlight's curve aligns with the palette's edge.
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .padding(.horizontal, 6)
     }
 
