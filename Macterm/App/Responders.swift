@@ -247,19 +247,17 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        if HotkeyRegistry.matches(event, action: .renameTab) {
-            guard let projectID = appState.activeProjectID,
-                  let tab = appState.workspaces[projectID]?.activeTab
-            else { return .passThrough }
-            appState.sidebarVisible = true
-            appState.renamingTabID = tab.id
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .renameProject) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.sidebarVisible = true
-            appState.renamingProjectID = projectID
+        // Rename routes through AppCommand.action(in:) — the single source of
+        // truth shared with the palette and menu bar — so the three paths can't
+        // drift. The action defers begin-editing a tick (see AppCommandActions)
+        // so the sidebar row's TextField exists before it takes first responder.
+        for action in [HotkeyAction.renameTab, .renameProject] {
+            guard HotkeyRegistry.matches(event, action: action),
+                  let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
+            else { continue }
+            let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
+            guard let run = command.action(in: ctx) else { return .passThrough }
+            run()
             return .handled
         }
 

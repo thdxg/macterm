@@ -44,7 +44,11 @@ extension AppCommand {
             let tabID = tab.id
             return {
                 ctx.appState.sidebarVisible = true
-                ctx.appState.renamingTabID = tabID
+                // Defer a tick so the sidebar (and its row's TextField) is in
+                // the hierarchy before we ask it to begin editing — otherwise,
+                // when the sidebar was collapsed, the field can't take first
+                // responder. Applies to every caller (palette, menu, hotkey).
+                DispatchQueue.main.async { ctx.appState.renamingTabID = tabID }
             }
         case .splitRight:
             guard let projectID else { return nil }
@@ -89,7 +93,8 @@ extension AppCommand {
             let projectID = current.id
             return {
                 ctx.appState.sidebarVisible = true
-                ctx.appState.renamingProjectID = projectID
+                // See .renameTab: defer so the sidebar row exists first.
+                DispatchQueue.main.async { ctx.appState.renamingProjectID = projectID }
             }
         case .removeProject:
             guard let projectID else { return nil }
