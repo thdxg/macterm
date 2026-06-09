@@ -1,8 +1,6 @@
 .DS_Store
-/.vscode
 xcuserdata/
 DerivedData/
-.netrc
 GhosttyKit.xcframework
 GhosttyKit/ghostty.h
 /ghostty
