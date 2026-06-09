@@ -8,6 +8,7 @@ A macOS terminal emulator built with SwiftUI and libghostty. Single-window app w
 mise install          # Install tools (gh, swiftformat, swiftlint, xcodegen, xcbeautify)
 mise run setup        # Download pre-built GhosttyKit.xcframework
 mise run run          # Build and launch (debug)
+mise run logs         # Stream live logs from the debug app (--release for release app)
 mise run format       # Auto-fix formatting with swiftformat
 mise run lint         # swiftlint
 mise run test         # Run the test suite
@@ -294,6 +295,28 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 3. Add a handler in the appropriate `KeyResponder` in `Responders.swift` (or extend an existing one).
 4. The terminal's `isAppShortcut` automatically picks it up via `HotkeyAction.allCases`.
 5. Add a test case to `HotkeysTests.swift` if the action introduces new parse/display behavior.
+
+### Logging
+
+Use `os.Logger` for all diagnostic output — never `print()` or `NSLog()`. Logs flow through the unified logging system and are viewable with `mise run logs`.
+
+```swift
+import os
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "MyComponent")
+
+logger.debug("...")   // verbose, dev-only; stripped in release unless enabled
+logger.info("...")    // lifecycle events, state transitions
+logger.warning("...") // unexpected but recoverable
+logger.error("...")   // failures
+```
+
+Always mark interpolated values `.public` — the default is `.private`, which redacts them in the log stream:
+
+```swift
+logger.info("selectProject: \(project.name, privacy: .public)")
+```
+
+Every file that emits logs gets its own `private let logger` at the top with a `category` matching the type name. The subsystem is always `Bundle.main.bundleIdentifier!` (safe to force-unwrap — `CFBundleIdentifier` is required for a macOS app to build). Debug builds log to `com.thdxg.macterm.debug`; release to `com.thdxg.macterm`.
 
 ### Adding a New Setting
 

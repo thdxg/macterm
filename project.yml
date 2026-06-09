@@ -79,6 +79,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm
         PRODUCT_NAME: Macterm
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.debug
+          PRODUCT_NAME: Macterm Debug
         INFOPLIST_FILE: Macterm/Info.plist
         CODE_SIGN_ENTITLEMENTS: Macterm/Macterm.entitlements
         # Tells actool to render Macterm/AppIcon.icon (Icon Composer source)

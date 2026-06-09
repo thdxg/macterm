@@ -41,6 +41,19 @@ run = """
   fi
 """
 
+[tasks.logs]
+description = "Stream live logs from the debug app"
+usage = '''
+flag "--release" help="Tail the release app instead of the debug app"
+flag "--last <duration>" help="Show past logs for a duration (e.g. 1h, 30m) instead of streaming live"
+'''
+run = """
+  args=()
+  [[ "$usage_release" == "true" ]] && args+=(--release)
+  [[ -n "${usage_last:-}" ]] && args+=(--last "$usage_last")
+  ./scripts/logs.sh "${args[@]}"
+"""
+
 [tasks.install]
 description = "Install built app to /Applications"
 depends = ["build"]

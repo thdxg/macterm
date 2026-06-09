@@ -9,7 +9,7 @@ final class NotificationHandler: NSObject, @preconcurrency UNUserNotificationCen
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
             if !granted {
-                Logger().notice("Macterm notification authorization denied")
+                Logger(subsystem: Bundle.main.bundleIdentifier!, category: "NotificationHandler").notice("Macterm notification authorization denied")
             }
         }
     }

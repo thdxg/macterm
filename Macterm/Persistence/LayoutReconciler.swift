@@ -1,5 +1,8 @@
 import CoreGraphics
 import Foundation
+import os
+
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LayoutReconciler")
 
 /// Reconciles a live workspace toward a declared `LayoutFile` with *minimal
 /// destruction*: panes that already match the declaration are kept — their
@@ -110,7 +113,9 @@ enum LayoutReconciler {
             }
         }
 
-        return Plan(tabs: plannedTabs, panesToDestroy: panesToDestroy, tabsToClose: tabsToClose)
+        let plan = Plan(tabs: plannedTabs, panesToDestroy: panesToDestroy, tabsToClose: tabsToClose)
+        logger.info("plan: \(plannedTabs.count, privacy: .public) tabs, \(panesToDestroy.count, privacy: .public) destroy, \(tabsToClose.count, privacy: .public) closeTabs, destructive=\(plan.isDestructive, privacy: .public)")
+        return plan
     }
 
     // MARK: - Tab matching

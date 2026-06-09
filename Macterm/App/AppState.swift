@@ -1,5 +1,8 @@
 import AppKit
 import Foundation
+import os
+
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "AppState")
 
 @MainActor @Observable
 final class AppState {
@@ -141,6 +144,7 @@ final class AppState {
     // MARK: - Restore / Save
 
     func restoreSelection(projects: [Project]) {
+        logger.info("restoreSelection: \(projects.count, privacy: .public) projects")
         hasRestoredSelection = true
         let snapshots = workspaceStore.load()
         let valid = Set(projects.map(\.id))
@@ -175,6 +179,7 @@ final class AppState {
     // MARK: - Project
 
     func selectProject(_ project: Project) {
+        logger.debug("selectProject: \(project.name, privacy: .public)")
         activeProjectID = project.id
         recordProjectVisit(project.id)
         autoApplyLayoutOnFirstOpen(project)
@@ -258,6 +263,7 @@ final class AppState {
     }
 
     func removeProject(_ projectID: UUID) {
+        logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
                 pane.destroySurface()
@@ -273,6 +279,7 @@ final class AppState {
     func createTab(projectID: UUID, projectPath: String) {
         guard let ws = workspaces[projectID] else { return }
         ws.createTab(projectPath: projectPath)
+        logger.debug("createTab: project=\(projectID, privacy: .public) tabs=\(ws.tabs.count, privacy: .public)")
         saveWorkspaces()
     }
 
@@ -288,6 +295,7 @@ final class AppState {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
+        logger.debug("closeTab: \(tabID, privacy: .public) project=\(projectID, privacy: .public)")
         for pane in tab.splitRoot.allPanes() {
             pane.destroySurface()
         }
@@ -363,6 +371,7 @@ final class AppState {
         guard let tab = workspaces[projectID]?.activeTab,
               let paneID = tab.focusedPaneID
         else { return }
+        logger.debug("splitPane: \(String(describing: direction), privacy: .public) pane=\(paneID, privacy: .public)")
         tab.split(paneID: paneID, direction: direction)
         saveWorkspaces()
     }
@@ -395,6 +404,7 @@ final class AppState {
         guard let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) else {
             return
         }
+        logger.debug("closePane: \(paneID, privacy: .public) project=\(projectID, privacy: .public)")
         switch tab.removePane(paneID) {
         case .onlyPaneLeft:
             closeTab(tab.id, projectID: projectID)
@@ -435,10 +445,12 @@ final class AppState {
     /// Returns an error to surface if the file is missing or unparseable.
     @discardableResult
     func applyLayout(projectID: UUID, projectName: String, projectRoot: String) -> Error? {
+        logger.info("applyLayout: project=\(projectName, privacy: .public)")
         let file: LayoutFile
         do {
             file = try LayoutFile.load(fromProjectRoot: projectRoot)
         } catch {
+            logger.error("applyLayout failed to load: \(error, privacy: .public)")
             return error
         }
         let plan = LayoutReconciler.plan(
@@ -447,6 +459,7 @@ final class AppState {
             projectRoot: projectRoot,
             projectID: projectID
         )
+        logger.info("applyLayout plan: tabs=\(plan.tabs.count, privacy: .public) destroy=\(plan.panesToDestroy.count, privacy: .public) closeTabs=\(plan.tabsToClose.count, privacy: .public)")
         // The file names a different project than the one we're applying to.
         // Optional in the format, so only flag when present and mismatched.
         let mismatchedName: String? = {
@@ -455,6 +468,7 @@ final class AppState {
         }()
         // Confirm if applying would destroy panes OR the project name mismatches.
         if plan.isDestructive || mismatchedName != nil {
+            logger.info("applyLayout staged for confirmation: destructive=\(plan.isDestructive, privacy: .public) mismatch=\(mismatchedName ?? "none", privacy: .public)")
             pendingLayoutApply = PendingLayoutApply(
                 projectID: projectID,
                 plan: plan,
@@ -480,11 +494,14 @@ final class AppState {
     /// Save the active project's live workspace to its `.macterm/layout.yaml`.
     @discardableResult
     func saveLayout(projectID: UUID, projectName: String, projectRoot: String) -> Error? {
+        logger.info("saveLayout: project=\(projectName, privacy: .public)")
         guard let ws = workspaces[projectID] else { return nil }
         do {
             try LayoutSerializer.write(ws, projectName: projectName, projectRoot: projectRoot)
+            logger.info("saveLayout succeeded: tabs=\(ws.tabs.count, privacy: .public)")
             return nil
         } catch {
+            logger.error("saveLayout failed: \(error, privacy: .public)")
             return error
         }
     }
@@ -492,6 +509,7 @@ final class AppState {
     /// Swap each tab's tree to the reconciled shape, reusing the live `Pane`
     /// objects the plan kept (surfaces preserved) and destroying the rest.
     private func executeLayoutPlan(_ plan: LayoutReconciler.Plan, projectID: UUID) {
+        logger.info("executeLayoutPlan: project=\(projectID, privacy: .public) tabs=\(plan.tabs.count, privacy: .public) destroying=\(plan.panesToDestroy.count, privacy: .public) panes")
         let existing = workspaces[projectID]?.tabs ?? []
         let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
 

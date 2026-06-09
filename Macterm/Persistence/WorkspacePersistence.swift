@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.thdxg.macterm", category: "WorkspacePersistence")
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "WorkspacePersistence")
 
 // MARK: - File envelope
 
