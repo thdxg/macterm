@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import os
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LayoutReconciler")
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.thdxg.macterm", category: "LayoutReconciler")
 
 /// Reconciles a live workspace toward a declared `LayoutFile` with *minimal
 /// destruction*: panes that already match the declaration are kept — their
@@ -114,7 +114,8 @@ enum LayoutReconciler {
         }
 
         let plan = Plan(tabs: plannedTabs, panesToDestroy: panesToDestroy, tabsToClose: tabsToClose)
-        logger.info("plan: \(plannedTabs.count, privacy: .public) tabs, \(panesToDestroy.count, privacy: .public) destroy, \(tabsToClose.count, privacy: .public) closeTabs, destructive=\(plan.isDestructive, privacy: .public)")
+        let summary = "tabs=\(plannedTabs.count) destroy=\(panesToDestroy.count) close=\(tabsToClose.count)"
+        logger.info("plan: \(summary, privacy: .public) destructive=\(plan.isDestructive, privacy: .public)")
         return plan
     }
 

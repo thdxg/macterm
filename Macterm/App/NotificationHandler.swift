@@ -1,6 +1,8 @@
 import os
 import UserNotifications
 
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.thdxg.macterm", category: "NotificationHandler")
+
 @MainActor
 final class NotificationHandler: NSObject, @preconcurrency UNUserNotificationCenterDelegate {
     static let shared = NotificationHandler()
@@ -9,7 +11,7 @@ final class NotificationHandler: NSObject, @preconcurrency UNUserNotificationCen
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
             if !granted {
-                Logger(subsystem: Bundle.main.bundleIdentifier!, category: "NotificationHandler").notice("Macterm notification authorization denied")
+                logger.notice("Macterm notification authorization denied")
             }
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "ProjectStore")
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.thdxg.macterm", category: "ProjectStore")
 
 @MainActor @Observable
 final class ProjectStore {

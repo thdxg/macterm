@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "AppState")
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.thdxg.macterm", category: "AppState")
 
 @MainActor @Observable
 final class AppState {
@@ -459,7 +459,8 @@ final class AppState {
             projectRoot: projectRoot,
             projectID: projectID
         )
-        logger.info("applyLayout plan: tabs=\(plan.tabs.count, privacy: .public) destroy=\(plan.panesToDestroy.count, privacy: .public) closeTabs=\(plan.tabsToClose.count, privacy: .public)")
+        let planDesc = "tabs=\(plan.tabs.count) destroy=\(plan.panesToDestroy.count) closeTabs=\(plan.tabsToClose.count)"
+        logger.info("applyLayout plan: \(planDesc, privacy: .public)")
         // The file names a different project than the one we're applying to.
         // Optional in the format, so only flag when present and mismatched.
         let mismatchedName: String? = {
@@ -468,7 +469,7 @@ final class AppState {
         }()
         // Confirm if applying would destroy panes OR the project name mismatches.
         if plan.isDestructive || mismatchedName != nil {
-            logger.info("applyLayout staged for confirmation: destructive=\(plan.isDestructive, privacy: .public) mismatch=\(mismatchedName ?? "none", privacy: .public)")
+            logger.info("applyLayout: staged for confirmation, mismatch=\(mismatchedName ?? "none", privacy: .public)")
             pendingLayoutApply = PendingLayoutApply(
                 projectID: projectID,
                 plan: plan,
@@ -509,7 +510,8 @@ final class AppState {
     /// Swap each tab's tree to the reconciled shape, reusing the live `Pane`
     /// objects the plan kept (surfaces preserved) and destroying the rest.
     private func executeLayoutPlan(_ plan: LayoutReconciler.Plan, projectID: UUID) {
-        logger.info("executeLayoutPlan: project=\(projectID, privacy: .public) tabs=\(plan.tabs.count, privacy: .public) destroying=\(plan.panesToDestroy.count, privacy: .public) panes")
+        logger
+            .info("executeLayoutPlan: tabs=\(plan.tabs.count, privacy: .public) destroying=\(plan.panesToDestroy.count, privacy: .public)")
         let existing = workspaces[projectID]?.tabs ?? []
         let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
 
