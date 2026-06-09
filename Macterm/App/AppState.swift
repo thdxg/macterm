@@ -15,6 +15,10 @@ final class AppState {
     /// pending (or the pending apply is non-destructive and already ran).
     var pendingLayoutApply: PendingLayoutApply?
     var isCommandPaletteVisible = false
+    /// The command palette's search text, kept on `AppState` so it survives the
+    /// panel's view lifecycle — closing and reopening the palette preserves what
+    /// was typed.
+    var commandPaletteQuery = ""
     var postPaletteAction: (() -> Void)?
     var renamingTabID: UUID?
     var renamingProjectID: UUID?

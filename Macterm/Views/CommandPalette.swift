@@ -36,7 +36,6 @@ struct CommandPaletteOverlay: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .transition(.opacity)
     }
 }
 
@@ -48,8 +47,6 @@ struct CommandPalettePanel: View {
     @Environment(ProjectStore.self)
     private var projectStore
 
-    @State
-    private var query = ""
     @State
     private var selectedIndex = 0
     @State
@@ -72,6 +69,17 @@ struct CommandPalettePanel: View {
 
     /// Coordinate space the results scroll view and row frames share.
     private let rowSpace = "paletteRows"
+
+    /// The search text, stored on `AppState` so it persists across the palette
+    /// being closed and reopened. The panel binds to it directly.
+    private var query: String {
+        get { appState.commandPaletteQuery }
+        nonmutating set { appState.commandPaletteQuery = newValue }
+    }
+
+    private var queryBinding: Binding<String> {
+        Binding(get: { appState.commandPaletteQuery }, set: { appState.commandPaletteQuery = $0 })
+    }
 
     /// Sources are stateless structs, so rebuilding the engine per render is fine.
     private var engine: PaletteEngine {
@@ -98,7 +106,7 @@ struct CommandPalettePanel: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14))
                     .foregroundStyle(MactermTheme.fgMuted)
-                TextField(placeholderText, text: $query)
+                TextField(placeholderText, text: queryBinding)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundStyle(MactermTheme.fg)
@@ -183,11 +191,17 @@ struct CommandPalettePanel: View {
             }
         }
         .onAppear {
-            query = ""
+            // Don't clear `query` — it lives on AppState and is deliberately
+            // preserved across close/reopen.
             selectedIndex = 0
             refresh()
             // Defer focus to the next runloop so the TextField has been created.
-            DispatchQueue.main.async { isFieldFocused = true }
+            DispatchQueue.main.async {
+                isFieldFocused = true
+                // Select the preserved text so a fresh keystroke replaces it
+                // while arrows/edits still work — Spotlight/Raycast behavior.
+                selectFieldText()
+            }
         }
         .onChange(of: query) {
             selectedIndex = 0
@@ -211,6 +225,9 @@ struct CommandPalettePanel: View {
             if selectedIndex < flatItems.count - 1 { selectedIndex += 1 }
             return .handled
         }
+        .onKeyPress(.tab) {
+            completeQuery()
+        }
         .onKeyPress(.escape) {
             appState.isCommandPaletteVisible = false
             return .handled
@@ -219,6 +236,50 @@ struct CommandPalettePanel: View {
 
     private func refresh() {
         sections = engine.search(query)
+    }
+
+    /// Select all text in the focused search field via the window's field
+    /// editor, so reopening the palette with a preserved query highlights it.
+    private func selectFieldText() {
+        guard !query.isEmpty,
+              let window = NSApp.keyWindow,
+              let editor = window.fieldEditor(false, for: nil)
+        else { return }
+        editor.selectAll(nil)
+    }
+
+    /// Tab autocompletes the input with the top result. Commands and projects
+    /// complete to their title; in path mode the directory item completes to its
+    /// full path (with a trailing slash) so a second Tab descends into it. Does
+    /// nothing when the query is empty or the completion wouldn't change the
+    /// input — letting the keypress fall through (`.ignored`) to default focus
+    /// traversal in that case.
+    private func completeQuery() -> KeyPress.Result {
+        guard !flatItems.isEmpty else { return .ignored }
+        let top = flatItems[0]
+        let completion: String = if let path = directoryPath(for: top) {
+            // Re-expand a `~` query to keep the displayed prefix the user typed.
+            query.hasPrefix("~") ? abbreviateTilde(path) : path
+        } else {
+            top.title
+        }
+        guard completion != query else { return .ignored }
+        query = completion
+        return .handled
+    }
+
+    /// Full path a directory item points at, parsed from its id
+    /// (`dir-open:/abs/path` or `dir-switch:/abs/path`). `nil` for non-path items.
+    private func directoryPath(for item: PaletteItem) -> String? {
+        for prefix in ["dir-open:", "dir-switch:"] where item.id.hasPrefix(prefix) {
+            let path = String(item.id.dropFirst(prefix.count))
+            return path.hasSuffix("/") ? path : path + "/"
+        }
+        return nil
+    }
+
+    private func abbreviateTilde(_ path: String) -> String {
+        (path as NSString).abbreviatingWithTildeInPath
     }
 
     /// Leading/trailing breathing room kept between the selected row and the
