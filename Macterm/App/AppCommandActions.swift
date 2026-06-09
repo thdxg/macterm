@@ -137,6 +137,13 @@ extension AppCommand {
             return { GhosttyApp.shared.reloadAndReport() }
         case .toggleQuickTerminal:
             return { QuickTerminalService.shared.toggle() }
+        case .checkForUpdate:
+            // Always present in the palette; the guard only no-ops when a check
+            // is already in flight (canCheckForUpdates flips false during one).
+            return {
+                guard Updater.shared.canCheckForUpdates else { return }
+                Updater.shared.checkForUpdates()
+            }
         }
     }
 }
