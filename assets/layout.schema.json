@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/layout.schema.json",
   "title": "Macterm layout",
   "description": "Declarative pane layout for a Macterm project. Lives at .macterm/layout.yaml in the project root; describes the tabs, split tree, and the process each pane runs. Apply/save it from the command palette.",
   "type": "object",

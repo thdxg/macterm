@@ -18,9 +18,6 @@
   <a href="https://github.com/thdxg/macterm/actions/workflows/checks.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/thdxg/macterm/checks.yml?branch=main&label=checks" alt="CI status" />
   </a>
-  <a href="https://github.com/thdxg/macterm/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/thdxg/macterm?color=lightgrey" alt="License" />
-  </a>
   <img src="https://img.shields.io/badge/macOS-26%2B-black?logo=apple" alt="macOS 26+" />
 </p>
 
@@ -30,12 +27,12 @@
 
 - **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
 - **Persistent Multiplexing**: Projects, tabs, and panes are saved and restored automatically on relaunch.
-- **Ghostty Config Compatibility**: Macterm reads your existing `~/.config/ghostty/config`. Theme, font, palette, keybinds — all of it just works.
-- **Keyboard-first Navigation**: Customizable keybinds for navigating projects, tabs, and panes.
+- **Declarative Layouts**: Define a `.macterm/layout.yaml` describing each project's tabs, splits, and the process every pane runs; apply or save it from the command palette.
+- **Ghostty Config Compatibility**: Macterm reads your existing Ghostty config. Theme, font, notification, keybinds — all of it just works.
 - **Command Palette**: Versatile command palette to interact with multiplexing and manage projects
-- **Quick terminal**: Global terminal accessible from anywhere with a hotkey.
-- **Declarative Layouts**: Commit a `.macterm/layout.yaml` describing each project's tabs, splits, and the process every pane runs; apply or save it from the command palette.
+- **Quick Terminal**: Global terminal accessible from anywhere with a hotkey.
 - **Smart Tab Naming**: Tabs name themselves after the program running in the pane, making them easily identifiable in the sidebar.
+- **Keyboard-driven Control**: Customizable keybinds for many actions including navigating projects, tabs, and panes.
 
 ## Install
 
@@ -45,7 +42,7 @@
 brew install --cask thdxg/tap/macterm
 ```
 
-The cask strips the Gatekeeper quarantine xattr on install, so the app launches without any extra prompts. Updates are delivered via Sparkle inside the app.
+> The cask strips the Gatekeeper quarantine xattr on install, so the app launches without any extra prompts.
 
 ### From Releases
 
@@ -97,14 +94,14 @@ Press `⌘P` to open the command palette — the fastest way to drive Macterm wi
 
 To open a directory as a project, just start typing a path (anything beginning with `/` or `~`). The palette switches to path mode and autocompletes directories as you go; press return on a match to open it (or switch to it, if it's already a project).
 
-### Project Layouts
+### Declarative Project Layout
 
-Declare a project's tabs, split layout, and the process each pane runs in a committable `.macterm/layout.yaml` at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout is the source of truth, taking precedence over any restored session for that project. Run **Save layout** from the palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
+Define a project's tabs, split layout, and the process each pane runs in a `.macterm/layout.yaml` file at the project root. When a project has a layout file, Macterm builds its workspace from it on open — the committed layout is the source of truth, taking precedence over any restored session for that project. Run **Save layout** from the palette to write your current workspace out, or **Apply layout** to re-apply the file on demand.
 
 ```yaml
 # .../myapp/.macterm/layout.yaml
 
-# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/schemas/layout.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/layout.schema.json
 name: "MyApp" # the project name (optional; defaults to directory name)
 tabs:
   # A single-pane tab
@@ -127,9 +124,11 @@ tabs:
 
 A pane's `run` is typed into a normal shell, so you keep the prompt and history and the pane survives when the command exits. The shell is the pane's `shell` if set, else your login shell.
 
-**Save layout** command records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. A pane sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`) is saved with that `shell:`; a pane in your default shell records none, so the layout stays portable. Applying a layout whose `name:` doesn't match the current project prompts for confirmation first.
+Related commands:
 
-**Apply layout** command reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks first. An invalid layout file is reported and not applied.
+- **Save layout**: Records the project `name:`, each tab's split layout, every pane's working directory, and the command each pane is currently running (a pane idle at a prompt gets none). The captured command is the resolved process invocation (e.g. `node …/npm-cli.js run dev`), which you can tidy by hand. A pane sitting in a non-default shell (one you launched yourself, like `zsh` from your usual `nu`) is saved with that `shell:`; a pane in your default shell records none, so the layout stays portable. Applying a layout whose `name:` doesn't match the current project prompts for confirmation first.
+
+- **Apply layout**: Reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks first. An invalid layout file is reported and not applied.
 
 ## Contributing
 
