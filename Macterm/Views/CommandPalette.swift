@@ -310,6 +310,9 @@ struct CommandPalettePanel: View {
     private func execute() {
         guard selectedIndex >= 0, selectedIndex < flatItems.count else { return }
         let item = flatItems[selectedIndex]
+        // Executing a command finishes the task, so the next open should start
+        // fresh — only a dismissal (Escape / click-outside) preserves the query.
+        query = ""
         appState.isCommandPaletteVisible = false
         item.action()
     }
