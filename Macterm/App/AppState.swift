@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.thdxg.macterm", category: "AppState")
+private let logger = Logger(subsystem: appBundleID, category: "AppState")
 
 @MainActor @Observable
 final class AppState {

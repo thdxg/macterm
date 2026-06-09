@@ -105,10 +105,17 @@ targets:
         OTHER_SWIFT_FLAGS:
           - "-Xcc"
           - "-Wno-incomplete-umbrella"
+        # Display name (Dock / menu bar / Finder) — wired into Info.plist's
+        # CFBundleDisplayName. The bundle *name* (PRODUCT_NAME) stays "Macterm"
+        # in every config so TEST_HOST and on-disk layout don't shift.
+        PRODUCT_DISPLAY_NAME: Macterm
       configs:
         Debug:
+          # Distinct bundle ID + display name so the debug app coexists with a
+          # running release app (open won't conflate them) and logs filter
+          # cleanly by subsystem (scripts/logs.sh).
           PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.debug
-          PRODUCT_NAME: Macterm Debug
+          PRODUCT_DISPLAY_NAME: Macterm Debug
     dependencies:
       - framework: GhosttyKit.xcframework
         embed: false

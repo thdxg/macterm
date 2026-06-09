@@ -1,7 +1,7 @@
 import os
 import UserNotifications
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.thdxg.macterm", category: "NotificationHandler")
+private let logger = Logger(subsystem: appBundleID, category: "NotificationHandler")
 
 @MainActor
 final class NotificationHandler: NSObject, @preconcurrency UNUserNotificationCenterDelegate {

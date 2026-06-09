@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import os
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.thdxg.macterm", category: "LayoutReconciler")
+private let logger = Logger(subsystem: appBundleID, category: "LayoutReconciler")
 
 /// Reconciles a live workspace toward a declared `LayoutFile` with *minimal
 /// destruction*: panes that already match the declaration are kept — their

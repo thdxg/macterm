@@ -302,7 +302,7 @@ Use `os.Logger` for all diagnostic output — never `print()` or `NSLog()`. Logs
 
 ```swift
 import os
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "MyComponent")
+private let logger = Logger(subsystem: appBundleID, category: "MyComponent")
 
 logger.debug("...")   // verbose, dev-only; stripped in release unless enabled
 logger.info("...")    // lifecycle events, state transitions
@@ -316,7 +316,7 @@ Always mark interpolated values `.public` — the default is `.private`, which r
 logger.info("selectProject: \(project.name, privacy: .public)")
 ```
 
-Every file that emits logs gets its own `private let logger` at the top with a `category` matching the type name. The subsystem is always `Bundle.main.bundleIdentifier!` (safe to force-unwrap — `CFBundleIdentifier` is required for a macOS app to build). Debug builds log to `com.thdxg.macterm.debug`; release to `com.thdxg.macterm`.
+Every file that emits logs gets its own `private let logger` at the top with a `category` matching the type name. The subsystem is the shared `appBundleID` constant (`App/AppInfo.swift`), which is `Bundle.main.bundleIdentifier` so debug builds log to `com.thdxg.macterm.debug` and release to `com.thdxg.macterm`.
 
 ### Adding a New Setting
 
