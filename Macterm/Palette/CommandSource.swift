@@ -2,7 +2,7 @@ import AppKit
 
 /// Palette source for action commands. Iterates `AppCommand.allCases` so the
 /// palette, Settings, and keyboard bindings all read from the same list.
-/// Titles come from `AppCommand.title` (sentence case); keybind overlays
+/// Titles come from `AppCommand.title` (Title Case); keybind overlays
 /// come from the associated `HotkeyAction` when the command is bindable.
 @MainActor
 struct CommandSource: PaletteSource {

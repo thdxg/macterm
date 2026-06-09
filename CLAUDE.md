@@ -289,7 +289,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 
 ### Adding a New Action
 
-1. Add a case to `AppCommand` in `AppCommand.swift` with its title, category, and (if rebindable) linked `HotkeyAction`. The palette picks it up automatically via `AppCommand.allCases`.
+1. Add a case to `AppCommand` in `AppCommand.swift` with its title, category, and (if rebindable) linked `HotkeyAction`. The palette picks it up automatically via `AppCommand.allCases`. **All action titles must be Title Case** (the macOS menu convention) — capitalize principal words, leave minor words (`for`, `with`, `to`, `the`, etc.) lowercase unless first/last, e.g. "Check for Update", "Replace Project Path with Current Directory".
 2. If the command is keyboard-bindable, add the corresponding `HotkeyAction` case to `Hotkeys.swift` with its default shortcut.
 3. Add a handler in the appropriate `KeyResponder` in `Responders.swift` (or extend an existing one).
 4. The terminal's `isAppShortcut` automatically picks it up via `HotkeyAction.allCases`.

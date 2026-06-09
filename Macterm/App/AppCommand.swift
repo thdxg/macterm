@@ -1,8 +1,8 @@
 import Foundation
 
 /// Single source of truth for every user-invokable action — both palette
-/// commands and keyboard-bindable ones. Exposes a sentence-cased `title` and
-/// a `category` so the palette and Settings can render the same list without
+/// commands and keyboard-bindable ones. Exposes a title-cased `title` (macOS
+/// menu convention) and a `category` so the palette and Settings can render the same list without
 /// duplicated strings. The optional `hotkeyAction` link says whether a
 /// command is rebindable; palette-only commands (like renaming the current
 /// project) return nil.
@@ -48,38 +48,38 @@ enum AppCommand: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .newTab: "New tab"
-        case .closePane: "Close pane"
-        case .renameTab: "Rename current tab"
-        case .nextTab: "Next tab"
-        case .previousTab: "Previous tab"
-        case .recentTab: "Recent tab"
-        case .splitRight: "Split right"
-        case .splitDown: "Split down"
-        case .splitAuto: "Split automatically"
-        case .zoomPane: "Zoom pane"
-        case .focusLeft: "Focus left"
-        case .focusRight: "Focus right"
-        case .focusUp: "Focus up"
-        case .focusDown: "Focus down"
-        case .resizeLeft: "Resize pane left"
-        case .resizeRight: "Resize pane right"
-        case .resizeUp: "Resize pane up"
-        case .resizeDown: "Resize pane down"
-        case .openProject: "Open project"
-        case .renameProject: "Rename current project"
-        case .removeProject: "Remove current project"
-        case .replaceProjectPathWithCurrentDir: "Replace project path with current directory"
-        case .applyLayout: "Apply layout"
-        case .saveLayout: "Save layout"
-        case .nextProject: "Next project"
-        case .previousProject: "Previous project"
-        case .toggleSidebar: "Toggle sidebar"
-        case .closeWindow: "Close window"
-        case .toggleCommandPalette: "Command palette"
-        case .reloadGhosttyConfig: "Reload Ghostty config"
-        case .toggleQuickTerminal: "Toggle quick terminal"
-        case .checkForUpdate: "Check for update"
+        case .newTab: "New Tab"
+        case .closePane: "Close Pane"
+        case .renameTab: "Rename Current Tab"
+        case .nextTab: "Next Tab"
+        case .previousTab: "Previous Tab"
+        case .recentTab: "Recent Tab"
+        case .splitRight: "Split Right"
+        case .splitDown: "Split Down"
+        case .splitAuto: "Split Automatically"
+        case .zoomPane: "Zoom Pane"
+        case .focusLeft: "Focus Left"
+        case .focusRight: "Focus Right"
+        case .focusUp: "Focus Up"
+        case .focusDown: "Focus Down"
+        case .resizeLeft: "Resize Pane Left"
+        case .resizeRight: "Resize Pane Right"
+        case .resizeUp: "Resize Pane Up"
+        case .resizeDown: "Resize Pane Down"
+        case .openProject: "Open Project"
+        case .renameProject: "Rename Current Project"
+        case .removeProject: "Remove Current Project"
+        case .replaceProjectPathWithCurrentDir: "Replace Project Path with Current Directory"
+        case .applyLayout: "Apply Layout"
+        case .saveLayout: "Save Layout"
+        case .nextProject: "Next Project"
+        case .previousProject: "Previous Project"
+        case .toggleSidebar: "Toggle Sidebar"
+        case .closeWindow: "Close Window"
+        case .toggleCommandPalette: "Command Palette"
+        case .reloadGhosttyConfig: "Reload Ghostty Config"
+        case .toggleQuickTerminal: "Toggle Quick Terminal"
+        case .checkForUpdate: "Check for Update"
         }
     }
 
