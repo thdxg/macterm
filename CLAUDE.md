@@ -112,6 +112,7 @@ A tab's auto-title (`Workspace.autoTitle` → each pane's `Pane.processTitle`) i
 | `NotificationHandler.swift` | `UNUserNotificationCenterDelegate` for OS-level user notifications                                            |
 | `AppTerminationState.swift` | `isTerminating` flag so `windowShouldClose` can distinguish user-close (hide) from quit (let close)           |
 | `Updater.swift`             | Sparkle wrapper (`Updater.shared`) + `CheckForUpdatesMenuItem` view                                           |
+| `AppInfo.swift`             | `appBundleID` constant (the running app's bundle ID) — used as the os.Logger subsystem (see "Logging")        |
 
 ### Views (`Macterm/Views/`)
 
@@ -126,6 +127,7 @@ A tab's auto-title (`Workspace.autoTitle` → each pane's `Pane.processTitle`) i
 | `Terminal/SurfaceScrollView.swift`     | Native overlay scrollbar: nests the Metal surface in an `NSScrollView` with a blank spacer document view sized to scrollback (Ghostty 1.3.0+ approach) |
 | `SearchBar.swift`                      | Terminal search UI                                                                                               |
 | `QuickTerminal.swift`                  | Quick terminal `NSPanel`, Carbon global hotkey                                                                   |
+| `SurfaceIncubator.swift`               | Never-shown `NSWindow` (`SurfaceIncubator.shared`) that starts off-screen tabs' shells by giving their panes a sized window so `createSurface()` succeeds before the tab is viewed |
 | `CommandPalette.swift`                 | `Cmd+Shift+P` / `Cmd+P` command palette                                                                          |
 | `QuitConfirmation.swift`               | Native `Table`-based confirmation shown when quitting with panes still running foreground processes              |
 | `TabSwitcherToolbarItem.swift`         | Numbered segmented control in the title bar mirroring a 5-tab sliding window of the active project's tabs        |
