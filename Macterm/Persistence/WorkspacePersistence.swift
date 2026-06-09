@@ -64,7 +64,9 @@ indirect enum SplitNodeSnapshot: Codable {
 struct PaneSnapshot: Codable {
     let id: UUID
     let projectPath: String
-    let title: String
+    // No `title`: the tab name is derived live from the pane's foreground
+    // process, so there's nothing per-pane to persist. (An older snapshot's
+    // `title` key is harmlessly ignored on decode.)
 }
 
 struct SplitBranchSnapshot: Codable {
@@ -166,7 +168,7 @@ enum WorkspaceSerializer {
             // the user had navigated to. Falls back to projectPath when the
             // surface hasn't reported a pwd yet.
             let path = p.nsView?.currentPwd ?? p.projectPath
-            return .pane(PaneSnapshot(id: p.id, projectPath: path, title: p.title))
+            return .pane(PaneSnapshot(id: p.id, projectPath: path))
         case let .split(b):
             return .split(SplitBranchSnapshot(
                 direction: b.direction,
@@ -181,7 +183,6 @@ enum WorkspaceSerializer {
         switch snap {
         case let .pane(p):
             let pane = Pane(projectPath: p.projectPath, projectID: projectID)
-            pane.title = p.title
             return .pane(pane)
         case let .split(b):
             return .split(SplitBranch(

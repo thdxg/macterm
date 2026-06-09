@@ -13,7 +13,46 @@ final class GhosttyTerminalNSView: NSView {
 
     nonisolated(unsafe) private(set) var surface: ghostty_surface_t?
     private let workingDirectory: String
-    var onTitleChange: ((String) -> Void)?
+    /// Command to type into the shell once the surface is created (the pane's
+    /// declared `run`). nil → no injected input.
+    private let command: String?
+    /// Shell binary to launch as the surface's program. nil → libghostty's
+    /// default (resolved from the ghostty config / login shell).
+    private let shell: String?
+    /// Extra environment variables for the spawned shell.
+    private let env: [String: String]?
+
+    /// Heap buffers backing the `const char*` fields of the surface config —
+    /// notably `initial_input`, which libghostty writes to the pty
+    /// asynchronously after the child spawns, so the buffer must outlive
+    /// `ghostty_surface_new`. Retained here and freed in `destroySurface`.
+    nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
+
+    /// Whether the surface has ever reported a title (OSC 2 / `SET_TITLE`). The
+    /// title *string* is unused (the tab name comes from the foreground process,
+    /// not the OSC title), but its arrival is a command-boundary signal that
+    /// drives a foreground-process refresh. We remember that at least one fired
+    /// so re-wiring `onTitleChange` (when SwiftUI's `configure` adopts a warmed
+    /// surface) replays the signal once — the surface may have reported its
+    /// title before the callback was wired.
+    private var didReportTitle = false
+
+    /// Fires on each OSC title (a command boundary). Carries no value — the
+    /// title string isn't used for naming.
+    var onTitleChange: (() -> Void)? {
+        didSet {
+            if didReportTitle { onTitleChange?() }
+        }
+    }
+
+    /// Note that libghostty reported a title (OSC 2 / `SET_TITLE`). The title
+    /// string itself is irrelevant — only the signal matters (see
+    /// `onTitleChange`). Called by `GhosttyCallbacks`.
+    func surfaceDidReportTitle() {
+        didReportTitle = true
+        onTitleChange?()
+    }
+
     var onFocus: (() -> Void)?
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
@@ -38,10 +77,14 @@ final class GhosttyTerminalNSView: NSView {
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
-    init(workingDirectory: String) {
+    init(workingDirectory: String, command: String? = nil, shell: String? = nil, env: [String: String]? = nil) {
         self.workingDirectory = workingDirectory
+        self.command = command
+        self.shell = shell
+        self.env = env
         super.init(frame: .zero)
         setupTrackingArea()
+        registerForDraggedTypes(Array(Self.dropTypes))
         Self.liveViews.add(self)
     }
 
@@ -76,9 +119,55 @@ final class GhosttyTerminalNSView: NSView {
         config.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2.0)
         config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 
-        workingDirectory.withCString { cwd in
-            config.working_directory = cwd
+        // Every `const char*` field and the env-var array must stay valid for
+        // libghostty. `working_directory`/`command` are consumed during spawn,
+        // but `initial_input` is written to the pty asynchronously (on a later
+        // surface tick, after the child process is up — see the Ghostty config
+        // reference: "written to the pty before any other input"). So these
+        // buffers must outlive `ghostty_surface_new`, not just the call itself.
+        // We `strdup` into heap buffers whose addresses are stable (unlike
+        // pointers into a Swift Array, which move when the array grows) and
+        // retain them on the instance until `destroySurface` frees them.
+        configCStrings.forEach { free($0) }
+        configCStrings = []
+        func cString(_ s: String) -> UnsafePointer<CChar>? {
+            guard let p = strdup(s) else { return nil }
+            configCStrings.append(p)
+            return UnsafePointer(p)
+        }
+
+        config.working_directory = cString(workingDirectory)
+
+        // Shell binary → the surface's program. nil falls back to libghostty's
+        // own resolution (which honors the user's ghostty config / login shell).
+        if let resolvedShell = shell ?? GhosttyApp.shared.configuredShell {
+            config.command = cString(resolvedShell)
+        }
+
+        // Declared `run` is typed into the shell verbatim, as if the user had
+        // entered it at the prompt. No shell-syntax handling: cwd is set above,
+        // not via an injected `cd`.
+        if let command, !command.isEmpty {
+            config.initial_input = cString(command + "\n")
+        }
+
+        // Extra environment variables. The array of key/value structs points at
+        // buffers owned above; hold it in a local that outlives the call.
+        var envVars: [ghostty_env_var_s] = []
+        if let env, !env.isEmpty {
+            for (key, value) in env {
+                envVars.append(ghostty_env_var_s(key: cString(key), value: cString(value)))
+            }
+        }
+
+        if envVars.isEmpty {
             surface = ghostty_surface_new(app, &config)
+        } else {
+            envVars.withUnsafeMutableBufferPointer { buf in
+                config.env_vars = buf.baseAddress
+                config.env_var_count = buf.count
+                surface = ghostty_surface_new(app, &config)
+            }
         }
         guard let surface else { return }
 
@@ -97,10 +186,24 @@ final class GhosttyTerminalNSView: NSView {
         isDestroyed = true
         if let surface { ghostty_surface_free(surface) }
         surface = nil
+        configCStrings.forEach { free($0) }
+        configCStrings = []
+    }
+
+    /// PID of the foreground process running in this surface's pty (libghostty's
+    /// `tcgetpgrp` on the pty master), or nil if there's no surface. When the
+    /// user is idle at a shell prompt this is the shell itself; while a command
+    /// runs it's that command. Used by `ProcessInspector` to capture a pane's
+    /// running command for `saveLayout`.
+    var foregroundPID: pid_t? {
+        guard let surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(surface)
+        return pid != 0 ? pid_t(pid) : nil
     }
 
     deinit {
         if let surface { ghostty_surface_free(surface) }
+        configCStrings.forEach { free($0) }
         for token in windowObservers {
             NotificationCenter.default.removeObserver(token)
         }
@@ -654,6 +757,46 @@ final class GhosttyTerminalNSView: NSView {
               let scalar = chars.unicodeScalars.first
         else { return 0 }
         return scalar.value
+    }
+
+    // MARK: - Drag & drop
+
+    /// Pasteboard types we accept when something is dragged onto the surface.
+    private static let dropTypes: Set<NSPasteboard.PasteboardType> = [.string, .fileURL, .URL]
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard let types = sender.draggingPasteboard.types, !Set(types).isDisjoint(with: Self.dropTypes) else {
+            return []
+        }
+        // .copy gives the drop the familiar green "+" cursor.
+        return .copy
+    }
+
+    /// Drops insert the escaped file path(s) / URL at the cursor. File URLs are
+    /// shell-escaped individually and space-joined; plain strings are inserted
+    /// verbatim (they may be a command the user means to run).
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let pb = sender.draggingPasteboard
+
+        let content: String? = if let url = pb.string(forType: .URL) {
+            GhosttyCallbacks.shellEscape(url)
+        } else if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
+            urls
+                .map { GhosttyCallbacks.shellEscape($0.path(percentEncoded: false)) }
+                .joined(separator: " ")
+        } else if let str = pb.string(forType: .string) {
+            str
+        } else {
+            nil
+        }
+
+        guard let content else { return false }
+        // Defer the insert (as Ghostty does) so the drag session fully unwinds
+        // before we mutate the terminal buffer.
+        DispatchQueue.main.async {
+            self.insertText(content, replacementRange: NSRange(location: 0, length: 0))
+        }
+        return true
     }
 }
 

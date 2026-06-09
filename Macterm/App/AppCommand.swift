@@ -32,6 +32,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case renameProject
     case removeProject
     case replaceProjectPathWithCurrentDir
+    case applyLayout
+    case saveLayout
     case nextProject
     case previousProject
     // Window
@@ -67,6 +69,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .renameProject: "Rename current project"
         case .removeProject: "Remove current project"
         case .replaceProjectPathWithCurrentDir: "Replace project path with current directory"
+        case .applyLayout: "Apply layout"
+        case .saveLayout: "Save layout"
         case .nextProject: "Next project"
         case .previousProject: "Previous project"
         case .toggleSidebar: "Toggle sidebar"
@@ -101,6 +105,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .renameProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
+             .applyLayout,
+             .saveLayout,
              .nextProject,
              .previousProject: .projects
         case .toggleSidebar,
@@ -143,7 +149,9 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .renameTab: .renameTab
         case .renameProject: .renameProject
         case .removeProject,
-             .replaceProjectPathWithCurrentDir: nil
+             .replaceProjectPathWithCurrentDir,
+             .applyLayout,
+             .saveLayout: nil
         }
     }
 

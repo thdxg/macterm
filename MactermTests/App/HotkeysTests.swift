@@ -8,10 +8,9 @@ struct HotkeysTests {
 
     @Test
     func parseShortcut_basic_cmd_key() throws {
-        let s = HotkeyRegistry.parseShortcut("cmd+t")
-        #expect(s != nil)
-        #expect(try #require(s?.modifiers.contains(.command)))
-        #expect(s?.keyCode == 17) // t
+        let s = try #require(HotkeyRegistry.parseShortcut("cmd+t"))
+        #expect(s.modifiers.contains(.command))
+        #expect(s.keyCode == 17) // t
     }
 
     @Test

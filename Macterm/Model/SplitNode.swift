@@ -10,8 +10,38 @@ final class Pane: Identifiable {
     let id = UUID()
     let projectPath: String
     let projectID: UUID
-    var title: String = "Terminal"
+    /// Process the pane launches on first surface creation, injected into the
+    /// shell as `command + "\n"`. Set from a declarative layout; nil for an
+    /// interactively-created pane (plain shell). Recorded here so a layout
+    /// `apply` can match a live pane by its declared command even after the
+    /// process has exited (see LayoutReconciler).
+    let command: String?
+    /// Shell binary to launch as the pane's program. nil → resolved from the
+    /// ghostty config / login shell at surface-creation time.
+    let shell: String?
+    /// Extra environment variables for the spawned shell. nil/empty → none.
+    let env: [String: String]?
+    /// The basename of the pane's live foreground process — a running command
+    /// (`hx`, `btop`), or the pane's shell when idle at a prompt (so a nested
+    /// `zsh` launched inside `nu` shows `zsh`). nil only before the surface
+    /// exists. This is the tab name's source of truth: it's read from the
+    /// process table (`ProcessInspector`), so it's immune to the shell's
+    /// prompt-title churn. We deliberately do NOT use the OSC title: ghostty's
+    /// `SET_TITLE` carries no provenance, so a shell that sets its title from
+    /// its prompt (nushell, Starship, ghostty shell-integration — emitting
+    /// `~/dir`, `host:~/dir`) is indistinguishable from a program setting its
+    /// own, and respecting OSC titles makes the tab show the cwd instead of the
+    /// command. Refreshed by `refreshForegroundProcess()`.
+    var foregroundProcessName: String?
     let searchState = TerminalSearchState()
+
+    /// Re-read the foreground process name from the process table and publish it
+    /// only when it changed (so a steady poll doesn't churn `@Observable` and
+    /// re-render the sidebar every tick). Driven by `AppState`'s poll.
+    func refreshForegroundProcess() {
+        let name = ProcessInspector.runningProcessName(forPane: self)
+        if name != foregroundProcessName { foregroundProcessName = name }
+    }
 
     /// The live terminal NSView for this pane. Created lazily the first time
     /// it's requested, destroyed explicitly when the pane is removed from the
@@ -24,7 +54,7 @@ final class Pane: Identifiable {
 
     func ensureNSView() -> GhosttyTerminalNSView {
         if let existing = _nsView { return existing }
-        let view = GhosttyTerminalNSView(workingDirectory: projectPath)
+        let view = GhosttyTerminalNSView(workingDirectory: projectPath, command: command, shell: shell, env: env)
         _nsView = view
         return view
     }
@@ -79,18 +109,25 @@ final class Pane: Identifiable {
     }
 
     var processTitle: String {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return Self.defaultShellName }
-        let tokens = trimmed.split(whereSeparator: \ .isWhitespace).map(String.init)
-        guard !tokens.isEmpty else { return Self.defaultShellName }
-        if let candidate = tokens.first(where: { !Self.isPathLike($0) && !Self.isNoise($0) }) {
-            return candidate
-        }
+        // The live foreground process name (`hx`, `btop`) when a program is
+        // running, else the shell name when idle. Read from the process table,
+        // never the OSC title — see `foregroundProcessName`.
+        if let proc = foregroundProcessName, !proc.isEmpty { return proc }
         return Self.defaultShellName
     }
 
+    /// Display fallback for a pane with no foreground process yet (its surface
+    /// hasn't been created) — the name of the login shell it will run. Resolves
+    /// from the password database (`getpwuid`), the same shell libghostty
+    /// launches when no explicit `command` is set. We avoid `$SHELL`: that's the
+    /// shell of whatever launched the app (often `/bin/zsh`), not the user's
+    /// login shell, so a `nu` user would otherwise see "zsh". Once the surface
+    /// is live, `foregroundProcessName` (the actual `comm`) takes over.
     private static let defaultShellName: String = {
-        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let loginShell = getpwuid(getuid())?.pointee.pw_shell.map { String(cString: $0) }
+        let shell = (loginShell?.isEmpty == false ? loginShell : nil)
+            ?? ProcessInfo.processInfo.environment["SHELL"]
+            ?? "/bin/zsh"
         return (shell as NSString).lastPathComponent
     }()
 
@@ -98,17 +135,18 @@ final class Pane: Identifiable {
         processTitle
     }
 
-    private static func isPathLike(_ token: String) -> Bool {
-        token.contains("/") || token.hasPrefix("~")
-    }
-
-    private static func isNoise(_ token: String) -> Bool {
-        token.allSatisfy { !$0.isLetter && !$0.isNumber }
-    }
-
-    init(projectPath: String, projectID: UUID) {
+    init(
+        projectPath: String,
+        projectID: UUID,
+        command: String? = nil,
+        shell: String? = nil,
+        env: [String: String]? = nil
+    ) {
         self.projectPath = projectPath
         self.projectID = projectID
+        self.command = command
+        self.shell = shell
+        self.env = env
     }
 }
 

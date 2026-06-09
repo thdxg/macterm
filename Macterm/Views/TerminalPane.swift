@@ -12,6 +12,8 @@ struct TerminalPane: View {
     let onZoomRequest: () -> Void
 
     var body: some View {
+        // The search bar sits above the terminal surface in a VStack, so showing
+        // it pushes the terminal content down rather than overlaying it.
         VStack(spacing: 0) {
             if pane.searchState.isVisible {
                 TerminalSearchBar(
@@ -67,6 +69,11 @@ private struct TerminalSurface: NSViewRepresentable {
         // SwiftUI hosts the scroll view; the surface lives inside it. Both are
         // owned by `Pane` so they survive tab switches / split reshapes.
         let scroll = pane.ensureScrollView()
+        // The pane may have been warmed off-screen by `SurfaceIncubator` (its
+        // shell already running). Detach it from the incubator window before
+        // SwiftUI inserts it — a view can't live in two superviews. This does
+        // not tear down the surface (only `pane.destroySurface()` does).
+        scroll.removeFromSuperview()
         let view = scroll.surfaceView
         configure(view)
         // Defer surface creation until the view is actually in a window — the
@@ -119,11 +126,23 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest
         view.isZoomed = isZoomed
-        view.onTitleChange = { [weak pane] title in pane?.title = title }
+        // The OSC title isn't used for naming (it's shell prompt/cwd churn with
+        // no provenance), but its arrival marks a command boundary — a cheap
+        // extra signal to re-read the foreground process on top of the poll.
+        view.onTitleChange = { [weak pane] in pane?.refreshForegroundProcess() }
         view.isFocused = focused
 
-        view.onSearchStart = { [weak pane] needle in
+        view.onSearchStart = { [weak pane, weak view] needle in
             guard let pane else { return }
+            // Cmd+F toggles: if the search bar is already open, a second
+            // start_search closes it (and returns focus to the terminal),
+            // mirroring the close button rather than re-opening.
+            if pane.searchState.isVisible {
+                guard let view else { return }
+                view.endSearch()
+                view.window?.makeFirstResponder(view)
+                return
+            }
             if let needle, !needle.isEmpty { pane.searchState.needle = needle }
             pane.searchState.isVisible = true
             pane.searchState.startPublishing { [weak view] q in view?.sendSearchQuery(q) }

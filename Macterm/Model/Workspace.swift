@@ -19,6 +19,7 @@ final class TerminalTab: Identifiable {
     /// Record a focus change, pushing the previous pane onto history.
     func focusPane(_ paneID: UUID) {
         guard paneID != focusedPaneID else { return }
+        if zoomedPaneID != nil, zoomedPaneID != paneID { zoomedPaneID = nil }
         if let current = focusedPaneID { paneFocusHistory.push(current) }
         paneFocusHistory.remove(paneID)
         focusedPaneID = paneID
@@ -32,13 +33,6 @@ final class TerminalTab: Identifiable {
         paneFocusHistory.prune(keeping: valid)
         if let recent = paneFocusHistory.popValid(in: valid) { return recent }
         return splitRoot.allPanes().first?.id
-    }
-
-    var title: String {
-        if let customTitle { return customTitle }
-        let panes = splitRoot.allPanes()
-        if panes.isEmpty { return "Terminal" }
-        return panes.map(\.title).joined(separator: " | ")
     }
 
     var autoTitle: String {
