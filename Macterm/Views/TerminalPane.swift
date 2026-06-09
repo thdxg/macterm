@@ -12,6 +12,8 @@ struct TerminalPane: View {
     let onZoomRequest: () -> Void
 
     var body: some View {
+        // The search bar sits above the terminal surface in a VStack, so showing
+        // it pushes the terminal content down rather than overlaying it.
         VStack(spacing: 0) {
             if pane.searchState.isVisible {
                 TerminalSearchBar(
@@ -130,8 +132,17 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onTitleChange = { [weak pane] in pane?.refreshForegroundProcess() }
         view.isFocused = focused
 
-        view.onSearchStart = { [weak pane] needle in
+        view.onSearchStart = { [weak pane, weak view] needle in
             guard let pane else { return }
+            // Cmd+F toggles: if the search bar is already open, a second
+            // start_search closes it (and returns focus to the terminal),
+            // mirroring the close button rather than re-opening.
+            if pane.searchState.isVisible {
+                guard let view else { return }
+                view.endSearch()
+                view.window?.makeFirstResponder(view)
+                return
+            }
             if let needle, !needle.isEmpty { pane.searchState.needle = needle }
             pane.searchState.isVisible = true
             pane.searchState.startPublishing { [weak view] q in view?.sendSearchQuery(q) }

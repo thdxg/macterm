@@ -56,6 +56,15 @@ struct TerminalSearchBar: View {
         .onKeyPress(.escape) { onClose()
             return .handled
         }
+        // Cmd+F again while the bar is open (and the search field has focus)
+        // closes it — a toggle. When the terminal surface has focus instead,
+        // the keystroke reaches ghostty's start_search binding, which
+        // onSearchStart toggles there.
+        .onKeyPress(keys: ["f"]) { press in
+            guard press.modifiers.contains(.command) else { return .ignored }
+            onClose()
+            return .handled
+        }
     }
 }
 
