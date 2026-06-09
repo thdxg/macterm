@@ -198,6 +198,30 @@ struct TerminalTabTests {
     }
 
     @Test
+    func focusPane_while_zoomed_clears_zoom() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let aID = try #require(ids["a"])
+        let bID = try #require(ids["b"])
+        tab.toggleZoom(paneID: aID)
+        #expect(tab.zoomedPaneID == aID)
+        tab.focusPane(bID)
+        #expect(tab.zoomedPaneID == nil)
+        #expect(tab.focusedPaneID == bID)
+    }
+
+    @Test
+    func focusPane_on_zoomed_pane_keeps_zoom() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "b")
+        let aID = try #require(ids["a"])
+        tab.toggleZoom(paneID: aID)
+        #expect(tab.zoomedPaneID == aID)
+        // re-focusing the already-zoomed pane is a no-op (same pane)
+        tab.focusPane(aID)
+        #expect(tab.zoomedPaneID == aID)
+        #expect(tab.focusedPaneID == aID)
+    }
+
+    @Test
     func removing_zoomed_pane_clears_zoom() throws {
         let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
         let bID = try #require(ids["b"])
