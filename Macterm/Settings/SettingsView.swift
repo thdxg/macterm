@@ -385,56 +385,27 @@ private struct KeymapSettings: View {
             .map(\.title)
     }
 
+    /// Bindable actions grouped by the category of the `AppCommand` they back,
+    /// so the keymaps list mirrors the command palette's sectioning instead of
+    /// being one long flat list. Categories appear in `AppCommand.allCases`
+    /// declaration order; actions keep their order within each.
+    private var actionsByCategory: [(category: AppCommand.Category, actions: [HotkeyAction])] {
+        var order: [AppCommand.Category] = []
+        var grouped: [AppCommand.Category: [HotkeyAction]] = [:]
+        for action in HotkeyAction.allCases {
+            let category = action.appCommand.category
+            if grouped[category] == nil { order.append(category) }
+            grouped[category, default: []].append(action)
+        }
+        return order.map { ($0, grouped[$0] ?? []) }
+    }
+
     var body: some View {
         Form {
-            Section("Keyboard Shortcuts") {
-                ForEach(HotkeyAction.allCases) { action in
-                    let partners = conflictPartners(for: action)
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(action.title)
-                            Spacer()
-                            Button {
-                                HotkeyCaptureState.shared.isCapturing = true
-                                capturingActionID = action.id
-                            } label: {
-                                let isCapturing = capturingActionID == action.id
-                                let isUnmapped = HotkeyRegistry
-                                    .displaySymbols(for: values[action.id] ?? "disabled").isEmpty
-                                Text(
-                                    isCapturing
-                                        ? "Press keys..."
-                                        : HotkeyRegistry
-                                        .displayString(for: values[action.id] ?? "disabled")
-                                )
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                                .frame(width: 140, alignment: .leading)
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button("Clear") {
-                                values[action.id] = "disabled"
-                                HotkeyRegistry.setShortcutString("disabled", for: action)
-                                invalidActions.remove(action.id)
-                                if capturingActionID == action.id {
-                                    capturingActionID = nil
-                                    HotkeyCaptureState.shared.isCapturing = false
-                                }
-                            }
-                            .buttonStyle(.borderless)
-
-                            if invalidActions.contains(action.id) || !partners.isEmpty {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.yellow)
-                            }
-                        }
-
-                        if !partners.isEmpty {
-                            Text("Conflicts with \(partners.joined(separator: ", "))")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.yellow)
-                        }
+            ForEach(actionsByCategory, id: \.category) { group in
+                Section(group.category.rawValue) {
+                    ForEach(group.actions) { action in
+                        hotkeyRow(action)
                     }
                 }
             }
@@ -462,6 +433,57 @@ private struct KeymapSettings: View {
         .onDisappear {
             capturingActionID = nil
             HotkeyCaptureState.shared.isCapturing = false
+        }
+    }
+
+    @ViewBuilder
+    private func hotkeyRow(_ action: HotkeyAction) -> some View {
+        let partners = conflictPartners(for: action)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(action.title)
+                Spacer()
+                Button {
+                    HotkeyCaptureState.shared.isCapturing = true
+                    capturingActionID = action.id
+                } label: {
+                    let isCapturing = capturingActionID == action.id
+                    let isUnmapped = HotkeyRegistry
+                        .displaySymbols(for: values[action.id] ?? "disabled").isEmpty
+                    Text(
+                        isCapturing
+                            ? "Press keys..."
+                            : HotkeyRegistry
+                            .displayString(for: values[action.id] ?? "disabled")
+                    )
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .frame(width: 140, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+
+                Button("Clear") {
+                    values[action.id] = "disabled"
+                    HotkeyRegistry.setShortcutString("disabled", for: action)
+                    invalidActions.remove(action.id)
+                    if capturingActionID == action.id {
+                        capturingActionID = nil
+                        HotkeyCaptureState.shared.isCapturing = false
+                    }
+                }
+                .buttonStyle(.borderless)
+
+                if invalidActions.contains(action.id) || !partners.isEmpty {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                }
+            }
+
+            if !partners.isEmpty {
+                Text("Conflicts with \(partners.joined(separator: ", "))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.yellow)
+            }
         }
     }
 
