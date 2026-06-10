@@ -32,7 +32,7 @@ struct MainWindow: View {
                     WelcomeView()
                 }
             }
-            .navigationTitle(activeProject?.name ?? "Macterm")
+            .navigationTitle(activeProject?.name ?? appDisplayName)
             .navigationSubtitle(activeTabTitle)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -105,7 +105,7 @@ struct WelcomeView: View {
             Spacer()
 
             VStack(spacing: 6) {
-                Text("Macterm")
+                Text(appDisplayName)
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(MactermTheme.fg)
                 Text("No project selected")

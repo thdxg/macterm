@@ -13,7 +13,7 @@ enum FileStorage {
         else {
             fatalError("Application Support directory unavailable")
         }
-        let dir = appSupport.appendingPathComponent("Macterm", isDirectory: true)
+        let dir = appSupport.appendingPathComponent(appDisplayName, isDirectory: true)
         try? FileManager.default.createDirectory(
             at: dir,
             withIntermediateDirectories: true,

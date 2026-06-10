@@ -34,7 +34,7 @@ struct QuitConfirmationView: View {
                     .resizable()
                     .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Quit Macterm?")
+                    Text("Quit \(appDisplayName)?")
                         .font(.system(size: 13, weight: .bold))
                     Text(rows.count == 1
                         ? "1 process is still running. Quit anyway?"
@@ -79,7 +79,7 @@ enum QuitConfirmation {
             backing: .buffered,
             defer: false
         )
-        window.title = "Quit Macterm"
+        window.title = "Quit \(appDisplayName)"
         window.isReleasedWhenClosed = false
         window.center()
 
