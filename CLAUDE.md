@@ -187,16 +187,17 @@ A tab's auto-title (`Workspace.autoTitle` → each pane's `Pane.processTitle`) i
 
 ### Config (`Macterm/Config/`)
 
-| File                  | Purpose                                                                             |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| `MactermConfig.swift` | Generates the two wrapper ghostty config files Macterm sandwiches around the user's |
+| File                             | Purpose                                                                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `MactermConfig.swift`            | Generates the two wrapper ghostty config files Macterm sandwiches around the user's                              |
+| `ShellIntegrationFeatures.swift` | Pure merger for the `shell-integration-features` override — user's flags + Macterm's forced `no-*` flags (#75)   |
 
 Macterm reads the user's `~/.config/ghostty/config` (path configurable in Settings → General → Ghostty Config). The user is the source of truth for every ghostty setting — themes, fonts, palettes, keybinds, etc. `MactermConfig.regenerate()` writes two private files in App Support:
 
 - **`macterm-defaults.conf`** — first-launch tasteful defaults (Rose Pine, 16pt, padding, `macos-option-as-alt = true`). User's Ghostty config overrides each line.
-- **`macterm-overrides.conf`** — keys Macterm absolutely needs to lock. Currently just `background-opacity = 0` and `background-blur = 0` so ghostty renders fully transparent and `WindowAppearance` can composite translucency itself without double-tinting.
+- **`macterm-overrides.conf`** — keys Macterm absolutely needs to lock: `background-opacity = 0` and `background-blur = 0` so ghostty renders fully transparent and `WindowAppearance` can composite translucency itself without double-tinting, plus (when the external ghostty CLI is missing/too old) `GHOSTTY_BIN_DIR` and a `shell-integration-features` line disabling the CLI-dependent features. The latter can't be written bare — libghostty re-parses that key from defaults on every occurrence, so a bare line would wipe the user's own flags (e.g. `no-cursor`); `ShellIntegrationFeatures.overrideValue` re-emits the user's effective value with our `no-*` flags appended (#75). Because the override depends on the user's config content, `GhosttyApp.loadConfig` calls `regenerate()` before every load.
 
-`GhosttyApp.loadConfig` loads them in order: `defaults → user's Ghostty config → overrides`. libghostty does last-wins merge, so the user's config overrides our defaults and our overrides override the user. See the README's "For Ghostty Users" section for the user-facing version of what's overridden vs honored.
+`GhosttyApp.loadConfig` loads them in order: `defaults → user's Ghostty config → overrides`. libghostty does last-wins merge, so the user's config overrides our defaults and our overrides override the user. See the README's "Configuration" section for the user-facing version of what's overridden vs honored.
 
 Macterm-specific UI state (window opacity/blur, quick terminal, hotkeys, auto-tile) lives in `Preferences` and never touches the ghostty config pipeline.
 
@@ -230,6 +231,7 @@ Mirror the production tree. Use `@testable import Macterm` and `@MainActor` on t
 | `Ghostty/GhosttyResourceResolverTests.swift`                                                                                | Resource dir selection (`GhosttyResourceResolver`)                                                         |
 | `Ghostty/BundledResourcesTests.swift`                                                                                       | Bundle layout: terminfo is a sibling of `ghostty/`, has `78/xterm-ghostty`, shells, themes (#39/#40 guard) |
 | `Ghostty/ThemeResolverTests.swift`                                                                                          | `theme = light:X,dark:Y` split parsing + side selection (`ThemeResolver`, #38)                             |
+| `Config/ShellIntegrationFeaturesTests.swift`                                                                                | `shell-integration-features` user-value extraction + override merge (`ShellIntegrationFeatures`, #75)      |
 | `Persistence/WorkspaceSerializerTests.swift`                                                                                | Snapshot/restore round-trip + on-disk via `WorkspaceStore`                                                 |
 | `Persistence/LayoutFileTests.swift`                                                                                         | YAML parse/encode round-trip, tab-is-a-node + nested `split:` format, cwd resolution                       |
 | `Persistence/LayoutSerializerTests.swift`                                                                                   | Live workspace → layout file (topology, project-relative cwd, `run`, non-default `shell:`)                 |

@@ -234,6 +234,11 @@ final class GhosttyApp {
         var result = ReloadResult(diagnostics: [])
         guard let cfg = ghostty_config_new() else { return (nil, result) }
 
+        // Recompute the wrapper files against the user's config as it exists
+        // right now: the overrides' shell-integration-features line merges the
+        // user's own value (#75), which may have changed since the last load.
+        MactermConfig.shared.regenerate()
+
         // Three-layer ghostty config:
         //   1. Macterm defaults — tasteful first-launch values.
         //   2. User's Ghostty config — overrides any default. Source of truth

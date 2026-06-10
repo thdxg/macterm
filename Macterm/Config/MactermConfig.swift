@@ -4,8 +4,11 @@ import Foundation
 /// own Ghostty config. The user is the source of truth for every Ghostty
 /// setting; Macterm provides first-launch defaults that the user overrides,
 /// and a minimal must-win overrides file for keys Macterm can't let the
-/// renderer control (currently: background-opacity, background-blur — both
-/// required for the window-level translucency in `WindowAppearance`).
+/// renderer control (background-opacity and background-blur — both required
+/// for the window-level translucency in `WindowAppearance` — plus, when the
+/// external ghostty CLI is missing, a shell-integration-features line that
+/// merges the user's own value with the features Macterm must disable; see
+/// `ShellIntegrationFeatures`).
 ///
 /// `GhosttyApp.loadConfig` loads them in this order:
 ///   defaults → user's Ghostty config → overrides
@@ -33,7 +36,9 @@ final class MactermConfig {
 
     /// Rewrite both wrapper config files. Cheap and idempotent; safe to call
     /// on launch and whenever Macterm-side state changes that's reflected in
-    /// either file.
+    /// either file. The overrides also depend on the *user's* config content
+    /// (the shell-integration-features merge), so `GhosttyApp.loadConfig`
+    /// calls this before every load to pick up user edits.
     func regenerate() {
         let defaults = [
             // First-launch tasteful UX. User's Ghostty config overrides any of
@@ -83,10 +88,30 @@ final class MactermConfig {
             disabledFeatures.append(contentsOf: ["no-ssh-env", "no-ssh-terminfo"])
         }
         if !disabledFeatures.isEmpty {
-            overrides.append("shell-integration-features = \(disabledFeatures.joined(separator: ","))")
+            // A bare `shell-integration-features = <ours>` would replace the
+            // user's own value entirely — libghostty re-parses the key from
+            // defaults on every occurrence — wiping user flags like
+            // `no-cursor`. Re-emit the user's effective value with our forced
+            // flags appended so only those change. (#75)
+            let value = ShellIntegrationFeatures.overrideValue(
+                userConfigText: userGhosttyConfigText(),
+                disabled: disabledFeatures
+            )
+            if let value {
+                overrides.append("shell-integration-features = \(value)")
+            }
         }
 
         let body = overrides.joined(separator: "\n") + "\n"
         try? Data(body.utf8).write(to: overridesURL, options: .atomic)
+    }
+
+    /// The user's Ghostty config text, read for merging their
+    /// `shell-integration-features` value into the overrides. nil when the
+    /// user has disabled loading (empty path) or the file is unreadable.
+    private func userGhosttyConfigText() -> String? {
+        let path = Preferences.shared.expandedUserGhosttyConfigPath
+        guard !path.isEmpty else { return nil }
+        return try? String(contentsOfFile: path, encoding: .utf8)
     }
 }
