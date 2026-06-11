@@ -126,10 +126,10 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest
         view.isZoomed = isZoomed
-        // The OSC title isn't used for naming (it's shell prompt/cwd churn with
-        // no provenance), but its arrival marks a command boundary — a cheap
-        // extra signal to re-read the foreground process on top of the poll.
-        view.onTitleChange = { [weak pane] in pane?.refreshForegroundProcess() }
+        // Each OSC title is a command-boundary signal that re-reads the
+        // foreground process, and — when a real program (not the shell) holds
+        // the foreground — becomes the pane's display title.
+        view.onTitleChange = { [weak pane] title in pane?.receiveReportedTitle(title) }
         view.isFocused = focused
 
         view.onSearchStart = { [weak pane, weak view] needle in

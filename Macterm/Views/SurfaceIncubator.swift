@@ -53,7 +53,7 @@ final class SurfaceIncubator {
         // `configure` re-sets `onTitleChange` to the same effect, so this isn't
         // clobbered in a way that matters. (`currentPwd` is set directly by the
         // callback dispatcher, so it already works off-screen.)
-        pane.nsView?.onTitleChange = { [weak pane] in pane?.refreshForegroundProcess() }
+        pane.nsView?.onTitleChange = { [weak pane] title in pane?.receiveReportedTitle(title) }
         pane.nsView?.createSurface()
     }
 }

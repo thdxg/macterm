@@ -24,23 +24,68 @@ final class Pane: Identifiable {
     /// The basename of the pane's live foreground process — a running command
     /// (`hx`, `btop`), or the pane's shell when idle at a prompt (so a nested
     /// `zsh` launched inside `nu` shows `zsh`). nil only before the surface
-    /// exists. This is the tab name's source of truth: it's read from the
+    /// exists. This is the tab name's default source: it's read from the
     /// process table (`ProcessInspector`), so it's immune to the shell's
-    /// prompt-title churn. We deliberately do NOT use the OSC title: ghostty's
-    /// `SET_TITLE` carries no provenance, so a shell that sets its title from
-    /// its prompt (nushell, Starship, ghostty shell-integration — emitting
-    /// `~/dir`, `host:~/dir`) is indistinguishable from a program setting its
-    /// own, and respecting OSC titles makes the tab show the cwd instead of the
-    /// command. Refreshed by `refreshForegroundProcess()`.
+    /// prompt-title churn. Refreshed by `refreshForegroundProcess()`.
     var foregroundProcessName: String?
+
+    /// A title a foreground *program* set via OSC 0/2 (claude's session
+    /// summary, ssh's `user@host`). When present it wins over
+    /// `foregroundProcessName` in `displayTitle`. The escape sequence itself
+    /// carries no provenance — a shell that titles from its prompt (nushell,
+    /// Starship, ghostty shell-integration — emitting `~/dir`, `host:~/dir`)
+    /// is indistinguishable from a program naming its session — so
+    /// `receiveReportedTitle` recovers provenance from the process table:
+    /// a title is adopted only while the foreground process is NOT a shell,
+    /// and it's pinned to that pid — `applyForegroundRefresh` expires it the
+    /// moment a different process (usually the shell, on exit) takes the
+    /// foreground, so an idle pane falls back to the process name.
+    private(set) var programTitle: String?
+
+    /// The foreground pid that set `programTitle`, used to expire it.
+    @ObservationIgnored
+    private var programTitlePID: pid_t?
+
     let searchState = TerminalSearchState()
 
     /// Re-read the foreground process name from the process table and publish it
     /// only when it changed (so a steady poll doesn't churn `@Observable` and
     /// re-render the sidebar every tick). Driven by `AppState`'s poll.
     func refreshForegroundProcess() {
-        let name = ProcessInspector.runningProcessName(forPane: self)
+        applyForegroundRefresh(
+            name: ProcessInspector.runningProcessName(forPane: self),
+            foregroundPID: nsView?.foregroundPID
+        )
+    }
+
+    /// Testable core of `refreshForegroundProcess`: publish a changed process
+    /// name, and expire `programTitle` when the pid that set it no longer
+    /// holds the foreground.
+    func applyForegroundRefresh(name: String?, foregroundPID: pid_t?) {
         if name != foregroundProcessName { foregroundProcessName = name }
+        if programTitle != nil, programTitlePID != foregroundPID {
+            programTitle = nil
+            programTitlePID = nil
+        }
+    }
+
+    /// Handle an OSC 0/2 title reported by the surface. Always refreshes the
+    /// foreground process (a title arrival is a command boundary); adopts the
+    /// string as `programTitle` only when a real program — not the shell — is
+    /// in the foreground (see `programTitle` for why).
+    func receiveReportedTitle(_ title: String) {
+        receiveReportedTitle(title, programPID: ProcessInspector.foregroundProgramPID(forPane: self))
+    }
+
+    /// Testable core of `receiveReportedTitle`. `programPID` is the pane's
+    /// foreground pid when that process is a non-shell program, nil otherwise.
+    func receiveReportedTitle(_ title: String, programPID: pid_t?) {
+        refreshForegroundProcess()
+        guard let programPID else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if trimmed != programTitle { programTitle = trimmed }
+        programTitlePID = programPID
     }
 
     /// The live terminal NSView for this pane. Created lazily the first time
@@ -110,10 +155,18 @@ final class Pane: Identifiable {
 
     var processTitle: String {
         // The live foreground process name (`hx`, `btop`) when a program is
-        // running, else the shell name when idle. Read from the process table,
-        // never the OSC title — see `foregroundProcessName`.
+        // running, else the shell name when idle. Always process-table derived
+        // (never the OSC title) — the quit confirmation lists real process
+        // names, and `displayTitle` falls back here.
         if let proc = foregroundProcessName, !proc.isEmpty { return proc }
         return Self.defaultShellName
+    }
+
+    /// What the tab/sidebar shows for this pane: a program-reported OSC title
+    /// when one is live (see `programTitle`), else the process name.
+    var displayTitle: String {
+        if let title = programTitle, !title.isEmpty { return title }
+        return processTitle
     }
 
     /// Display fallback for a pane with no foreground process yet (its surface
@@ -132,7 +185,7 @@ final class Pane: Identifiable {
     }()
 
     var sidebarSegmentTitle: String {
-        processTitle
+        displayTitle
     }
 
     init(

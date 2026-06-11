@@ -28,10 +28,10 @@ enum ProcessInspector {
     /// accounting name (`hx`, `btop`, `nvim`), with no path and no arguments.
     /// Returns nil when the pane is idle at a shell prompt (the foreground
     /// process is the shell itself), so callers can fall back to a shell name.
-    /// This is the source of truth for the tab name: it's deterministic and
-    /// immune to the shell's prompt-title churn (Starship & ghostty
-    /// shell-integration emit cwd/prompt titles that overwrite a command's OSC
-    /// title), unlike OSC-2.
+    /// This is the tab name's default source: it's deterministic and immune to
+    /// the shell's prompt-title churn (Starship & ghostty shell-integration
+    /// emit cwd/prompt titles), unlike OSC 0/2. (A program-reported OSC title
+    /// can override it for display — see `Pane.programTitle`.)
     ///
     /// This mirrors how tmux names a window under `automatic-rename` on macOS
     /// (`osdep-darwin.c`): it reads the foreground process group's `pbsi_comm`
@@ -56,6 +56,18 @@ enum ProcessInspector {
         // A login shell's comm may carry a leading `-` (e.g. `-zsh`).
         if comm.hasPrefix("-") { comm.removeFirst() }
         return comm
+    }
+
+    /// The pid of the pane's foreground process when it's a real program, or
+    /// nil when the pane is idle at a shell prompt (or unreadable). This is
+    /// the provenance gate for OSC titles: a title arriving while a program
+    /// holds the foreground was set by that program; one arriving while the
+    /// shell holds it is prompt churn (see `Pane.receiveReportedTitle`).
+    @MainActor
+    static func foregroundProgramPID(forPane pane: Pane) -> pid_t? {
+        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let args = argv(pid: pid), let first = args.first, !isShell(first) else { return nil }
+        return pid
     }
 
     /// The kernel short accounting name (`p_comm` / `pbsi_comm`) of `pid` — a

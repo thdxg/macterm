@@ -28,29 +28,27 @@ final class GhosttyTerminalNSView: NSView {
     /// `ghostty_surface_new`. Retained here and freed in `destroySurface`.
     nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
 
-    /// Whether the surface has ever reported a title (OSC 2 / `SET_TITLE`). The
-    /// title *string* is unused (the tab name comes from the foreground process,
-    /// not the OSC title), but its arrival is a command-boundary signal that
-    /// drives a foreground-process refresh. We remember that at least one fired
-    /// so re-wiring `onTitleChange` (when SwiftUI's `configure` adopts a warmed
-    /// surface) replays the signal once — the surface may have reported its
-    /// title before the callback was wired.
-    private var didReportTitle = false
+    /// The most recent title the surface reported (OSC 0/2 / `SET_TITLE`).
+    /// Remembered so re-wiring `onTitleChange` (when SwiftUI's `configure`
+    /// adopts a warmed surface) replays the latest title once — the surface
+    /// may have reported it before the callback was wired.
+    private var lastReportedTitle: String?
 
-    /// Fires on each OSC title (a command boundary). Carries no value — the
-    /// title string isn't used for naming.
-    var onTitleChange: (() -> Void)? {
+    /// Fires on each OSC title with the reported string. Whether the string
+    /// is *used* for naming is the pane's call (`Pane.receiveReportedTitle`
+    /// gates on the foreground process); every arrival also marks a command
+    /// boundary that drives a foreground-process refresh.
+    var onTitleChange: ((String) -> Void)? {
         didSet {
-            if didReportTitle { onTitleChange?() }
+            if let title = lastReportedTitle { onTitleChange?(title) }
         }
     }
 
-    /// Note that libghostty reported a title (OSC 2 / `SET_TITLE`). The title
-    /// string itself is irrelevant — only the signal matters (see
-    /// `onTitleChange`). Called by `GhosttyCallbacks`.
-    func surfaceDidReportTitle() {
-        didReportTitle = true
-        onTitleChange?()
+    /// Deliver a title reported by libghostty (OSC 0/2 / `SET_TITLE`).
+    /// Called by `GhosttyCallbacks`.
+    func surfaceDidReportTitle(_ title: String) {
+        lastReportedTitle = title
+        onTitleChange?(title)
     }
 
     var onFocus: (() -> Void)?
