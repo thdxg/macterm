@@ -22,11 +22,19 @@ struct TabSwitcherToolbarItem: View {
     @AppStorage(Preferences.Keys.tabSwitcherVisibility)
     private var visibilityRaw: String = TabSwitcherVisibility.whenMultiple.rawValue
 
+    /// Width of the detail column, measured by `MainWindow`. The toolbar has
+    /// no "hide when clipped" mode — a control that doesn't fit folds into
+    /// the overflow (») menu, which is worse than no switcher at all. Below
+    /// `minimumDetailWidth` the switcher hides before AppKit would clip it.
+    var availableWidth: CGFloat = .infinity
+
     private static let windowSize = 5
+    private static let minimumDetailWidth: CGFloat = 420
 
     var body: some View {
         let visibility = TabSwitcherVisibility(rawValue: visibilityRaw) ?? .whenMultiple
         if visibility != .hidden,
+           availableWidth >= Self.minimumDetailWidth,
            let workspace = activeWorkspace,
            !workspace.tabs.isEmpty,
            visibility == .always || workspace.tabs.count > 1

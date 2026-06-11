@@ -8,6 +8,8 @@ struct MainWindow: View {
     private var projectStore
     @State
     private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State
+    private var detailWidth: CGFloat = .infinity
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -34,12 +36,17 @@ struct MainWindow: View {
             }
             .navigationTitle(activeProject?.name ?? appDisplayName)
             .navigationSubtitle(activeTabTitle)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                detailWidth = width
+            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    TabSwitcherToolbarItem()
+                    TabSwitcherToolbarItem(availableWidth: detailWidth)
                 }
             }
         }
