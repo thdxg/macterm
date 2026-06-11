@@ -96,6 +96,9 @@ extension AppCommand {
                 // See .renameTab: defer so the sidebar row exists first.
                 DispatchQueue.main.async { ctx.appState.renamingProjectID = projectID }
             }
+        case .unloadProject:
+            guard let projectID, ctx.appState.isProjectLoaded(projectID) else { return nil }
+            return { ctx.appState.unloadProject(projectID) }
         case .removeProject:
             guard let projectID else { return nil }
             return {

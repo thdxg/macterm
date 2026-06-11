@@ -104,7 +104,10 @@ final class Pane: Identifiable {
         // finished unwinding.
         DispatchQueue.main.async {
             _ = view
-            _ = scroll
+            // Detach the scroll view from whatever still hosts it — notably the
+            // SurfaceIncubator's hidden window, which never removes warmed
+            // views itself — so the dead view pair can actually deallocate.
+            scroll?.removeFromSuperview()
         }
     }
 

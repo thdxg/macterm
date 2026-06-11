@@ -47,6 +47,8 @@ struct SidebarContent: View {
                         expandedProjects.insert(project.id)
                     } onRename: {
                         projectStore.rename(id: project.id, to: $0)
+                    } onUnload: {
+                        appState.unloadProject(project.id)
                     } onRemove: {
                         expandedProjects.remove(project.id)
                         appState.removeProject(project.id)
@@ -139,6 +141,7 @@ private struct SidebarProjectRow: View {
     let index: Int
     let onNewTab: () -> Void
     let onRename: (String) -> Void
+    let onUnload: () -> Void
     let onRemove: () -> Void
     @Environment(AppState.self)
     private var appState
@@ -188,6 +191,8 @@ private struct SidebarProjectRow: View {
             Divider()
             Button("Rename Project") { beginRename() }
             Divider()
+            Button("Unload Project", action: onUnload)
+                .disabled(!appState.isProjectLoaded(project.id))
             Button("Remove Project", role: .destructive, action: onRemove)
         }
         .task(id: appState.renamingProjectID) {

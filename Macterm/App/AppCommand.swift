@@ -30,6 +30,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     // Projects
     case openProject
     case renameProject
+    case unloadProject
     case removeProject
     case replaceProjectPathWithCurrentDir
     case applyLayout
@@ -68,6 +69,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .resizeDown: "Resize Pane Down"
         case .openProject: "Open Project"
         case .renameProject: "Rename Current Project"
+        case .unloadProject: "Unload Current Project"
         case .removeProject: "Remove Current Project"
         case .replaceProjectPathWithCurrentDir: "Replace Project Path with Current Directory"
         case .applyLayout: "Apply Layout"
@@ -105,6 +107,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .resizeDown: .panes
         case .openProject,
              .renameProject,
+             .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
              .applyLayout,
@@ -151,7 +154,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .toggleQuickTerminal: .toggleQuickTerminal
         case .renameTab: .renameTab
         case .renameProject: .renameProject
-        case .removeProject,
+        case .unloadProject,
+             .removeProject,
              .replaceProjectPathWithCurrentDir,
              .applyLayout,
              .saveLayout,

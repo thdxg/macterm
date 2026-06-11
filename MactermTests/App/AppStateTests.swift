@@ -159,6 +159,82 @@ struct AppStateTests {
         #expect(state.activeProjectID == p2.id)
     }
 
+    // MARK: - Unload project
+
+    @Test
+    func unloadProject_keeps_tab_structure_with_fresh_panes() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        ws.createTab(projectPath: "/tmp")
+        ws.tabs[1].customTitle = "build"
+        let beforePaneIDs = Set(ws.tabs.flatMap { $0.splitRoot.allPanes().map(\.id) })
+        let beforeTabIDs = ws.tabs.map(\.id)
+
+        state.unloadProject(p.id)
+
+        let after = try #require(state.workspaces[p.id])
+        #expect(after.tabs.map(\.id) == beforeTabIDs)
+        #expect(after.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(after.tabs[1].customTitle == "build")
+        // Panes are rebuilt fresh (no surfaces), like a launch restore.
+        let afterPaneIDs = Set(after.tabs.flatMap { $0.splitRoot.allPanes().map(\.id) })
+        #expect(afterPaneIDs.isDisjoint(with: beforePaneIDs))
+    }
+
+    @Test
+    func unloadProject_destroys_pane_views() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
+        _ = pane.ensureNSView()
+        #expect(state.isProjectLoaded(p.id))
+
+        state.unloadProject(p.id)
+
+        #expect(pane.nsView == nil)
+        #expect(!state.isProjectLoaded(p.id))
+    }
+
+    @Test
+    func unloadProject_active_project_is_deselected_but_kept() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        #expect(state.activeProjectID == p.id)
+        state.unloadProject(p.id)
+        #expect(state.activeProjectID == nil)
+        #expect(state.workspaces[p.id] != nil)
+    }
+
+    @Test
+    func unloadProject_other_project_keeps_active() {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        state.unloadProject(p1.id)
+        #expect(state.activeProjectID == p2.id)
+        #expect(state.workspaces[p1.id] != nil)
+    }
+
+    @Test
+    func unloadProject_unknown_project_is_noop() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        state.unloadProject(UUID())
+        #expect(state.activeProjectID == p.id)
+        #expect(state.workspaces.count == 1)
+    }
+
+    @Test
+    func isProjectLoaded_false_without_views_or_workspace() {
+        let state = makeAppState()
+        #expect(!state.isProjectLoaded(UUID()))
+        let p = seedProject(state)
+        // Workspace exists but no pane has a view yet (nothing ever rendered).
+        #expect(!state.isProjectLoaded(p.id))
+    }
+
     // MARK: - Rename state
 
     @Test

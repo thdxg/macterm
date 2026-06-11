@@ -123,6 +123,7 @@ struct MactermApp: App {
                     projectStore: projectStore,
                     titleOverride: "Rename Project…"
                 )
+                AppCommandMenuItem(command: .unloadProject, appState: appState, projectStore: projectStore, titleOverride: "Unload Project")
                 AppCommandMenuItem(command: .removeProject, appState: appState, projectStore: projectStore, titleOverride: "Remove Project")
                 AppCommandMenuItem(
                     command: .replaceProjectPathWithCurrentDir,

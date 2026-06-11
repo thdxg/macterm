@@ -262,6 +262,35 @@ final class AppState {
         projectStore.setPath(id: projectID, to: pwd)
     }
 
+    /// Whether any pane in the project's workspace has a live terminal view —
+    /// i.e. there's something for `unloadProject(_:)` to tear down.
+    func isProjectLoaded(_ projectID: UUID) -> Bool {
+        guard let ws = workspaces[projectID] else { return false }
+        return ws.tabs.flatMap { $0.splitRoot.allPanes() }.contains { $0.nsView != nil }
+    }
+
+    /// Tear down a project's terminal surfaces (ending their shell processes)
+    /// while keeping its tab/split layout — returning it to the lazy state an
+    /// unfocused project is in right after launch, where the workspace exists
+    /// in memory but no pane spawns a shell until the project is selected
+    /// again. Implemented as the same snapshot → restore round-trip a
+    /// quit/relaunch performs, so each pane's live cwd is captured before its
+    /// surface dies. Unloading the active project deselects it; leaving it
+    /// active would let SwiftUI respawn the shells immediately.
+    func unloadProject(_ projectID: UUID) {
+        guard let ws = workspaces[projectID] else { return }
+        logger.debug("unloadProject: \(projectID, privacy: .public)")
+        let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
+        for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+            pane.destroySurface()
+        }
+        if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {
+            workspaces[projectID] = restored
+        }
+        if activeProjectID == projectID { activeProjectID = nil }
+        saveWorkspaces()
+    }
+
     func removeProject(_ projectID: UUID) {
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
