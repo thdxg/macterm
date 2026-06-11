@@ -240,6 +240,71 @@ struct TerminalTabTests {
         #expect(try !tab.paneFocusHistory.items.contains(#require(ids["b"])))
     }
 
+    // MARK: - movePane
+
+    @Test
+    func movePane_detaches_and_splits_destination() throws {
+        let (tab, ids) = makeTab(H(pane("a"), V(pane("b"), pane("c"))), focused: "a")
+        #expect(try tab.movePane(#require(ids["a"]), onto: #require(ids["c"]), zone: .right))
+        #expect(render(tab.splitRoot, ids: ids) == "V(b, H(c, a))")
+    }
+
+    @Test
+    func movePane_top_zone_places_pane_before_destination() throws {
+        let (tab, ids) = makeTab(H(pane("a"), V(pane("b"), pane("c"))), focused: "a")
+        #expect(try tab.movePane(#require(ids["a"]), onto: #require(ids["b"]), zone: .top))
+        #expect(render(tab.splitRoot, ids: ids) == "V(V(a, b), c)")
+    }
+
+    @Test
+    func movePane_reuses_pane_instance() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let aID = try #require(ids["a"])
+        let before = try #require(tab.splitRoot.findPane(id: aID))
+        #expect(try tab.movePane(aID, onto: #require(ids["b"]), zone: .bottom))
+        #expect(tab.splitRoot.findPane(id: aID) === before)
+    }
+
+    @Test
+    func movePane_onto_sibling_swaps_sides() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        #expect(try tab.movePane(#require(ids["a"]), onto: #require(ids["b"]), zone: .right))
+        #expect(render(tab.splitRoot, ids: ids) == "H(b, a)")
+    }
+
+    @Test
+    func movePane_focuses_moved_pane_and_clears_zoom() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "b")
+        let aID = try #require(ids["a"])
+        try tab.toggleZoom(paneID: #require(ids["b"]))
+        #expect(try tab.movePane(aID, onto: #require(ids["b"]), zone: .top))
+        #expect(tab.focusedPaneID == aID)
+        #expect(tab.zoomedPaneID == nil)
+    }
+
+    @Test
+    func movePane_onto_self_is_noop() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let aID = try #require(ids["a"])
+        #expect(!tab.movePane(aID, onto: aID, zone: .left))
+        #expect(render(tab.splitRoot, ids: ids) == "H(a, b)")
+    }
+
+    @Test
+    func movePane_only_pane_is_noop() throws {
+        let (tab, ids) = makeTab(pane("a"), focused: "a")
+        #expect(try !tab.movePane(#require(ids["a"]), onto: UUID(), zone: .left))
+        #expect(render(tab.splitRoot, ids: ids) == "a")
+    }
+
+    @Test
+    func movePane_unknown_source_or_destination_is_noop() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        #expect(try !tab.movePane(UUID(), onto: #require(ids["b"]), zone: .left))
+        #expect(try !tab.movePane(#require(ids["a"]), onto: UUID(), zone: .left))
+        #expect(render(tab.splitRoot, ids: ids) == "H(a, b)")
+    }
+
     // MARK: - autoTitle / sidebarTitle / customTitle
 
     @Test

@@ -4,6 +4,48 @@ import Foundation
 enum SplitDirection: String, Codable { case horizontal, vertical }
 enum SplitPosition { case first, second }
 
+/// Which edge of a pane a dragged pane is dropped onto. Determines how the
+/// destination is split and on which side the dragged pane lands.
+enum PaneDropZone: Equatable {
+    case left
+    case right
+    case top
+    case bottom
+
+    /// The drop zone for a cursor position inside a pane: the four triangular
+    /// regions formed by the pane's diagonals, i.e. whichever edge is closest.
+    static func calculate(at point: CGPoint, in size: CGSize) -> PaneDropZone {
+        guard size.width > 0, size.height > 0 else { return .right }
+        let distToLeft = point.x / size.width
+        let distToRight = 1 - distToLeft
+        let distToTop = point.y / size.height
+        let distToBottom = 1 - distToTop
+        let minDist = min(distToLeft, distToRight, distToTop, distToBottom)
+        if minDist == distToLeft { return .left }
+        if minDist == distToRight { return .right }
+        if minDist == distToTop { return .top }
+        return .bottom
+    }
+
+    var splitDirection: SplitDirection {
+        switch self {
+        case .left,
+             .right: .horizontal
+        case .top,
+             .bottom: .vertical
+        }
+    }
+
+    var splitPosition: SplitPosition {
+        switch self {
+        case .left,
+             .top: .first
+        case .right,
+             .bottom: .second
+        }
+    }
+}
+
 /// A pane is the leaf of the split tree — one terminal surface.
 @MainActor @Observable
 final class Pane: Identifiable {
@@ -273,6 +315,38 @@ extension SplitNode {
             )
             branch.second = newSecond
             return (.split(branch), id2)
+        }
+    }
+
+    /// Insert an existing pane next to the pane `destinationID`, wrapping the
+    /// destination in a new split with `pane` at `position`. The structural
+    /// counterpart of `splitting`, used to re-attach a pane during a
+    /// drag-and-drop move. Returns `inserted: false` (tree unchanged) when the
+    /// destination isn't in the tree.
+    func inserting(
+        pane: Pane,
+        at destinationID: UUID,
+        direction: SplitDirection,
+        position: SplitPosition
+    ) -> (node: SplitNode, inserted: Bool) {
+        switch self {
+        case let .pane(p) where p.id == destinationID:
+            let first: SplitNode = position == .first ? .pane(pane) : .pane(p)
+            let second: SplitNode = position == .first ? .pane(p) : .pane(pane)
+            return (.split(SplitBranch(direction: direction, first: first, second: second)), true)
+        case .pane:
+            return (self, false)
+        case let .split(branch):
+            let (newFirst, ok1) = branch.first.inserting(
+                pane: pane, at: destinationID, direction: direction, position: position
+            )
+            branch.first = newFirst
+            if ok1 { return (.split(branch), true) }
+            let (newSecond, ok2) = branch.second.inserting(
+                pane: pane, at: destinationID, direction: direction, position: position
+            )
+            branch.second = newSecond
+            return (.split(branch), ok2)
         }
     }
 

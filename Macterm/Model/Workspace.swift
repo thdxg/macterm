@@ -118,6 +118,30 @@ final class TerminalTab: Identifiable {
         splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
     }
 
+    /// Move a pane next to another pane (drag-and-drop reorganization):
+    /// detach it from its current spot — the tree collapses around it — and
+    /// split the destination, placing the moved pane on the `zone` side. The
+    /// `Pane` object is reused as-is, so its surface and shell are untouched.
+    /// Returns false (tree unchanged) for a self-drop, a pane the tree doesn't
+    /// contain, or the only pane in the tab.
+    @discardableResult
+    func movePane(_ paneID: UUID, onto destinationID: UUID, zone: PaneDropZone) -> Bool {
+        guard paneID != destinationID,
+              let pane = splitRoot.findPane(id: paneID),
+              splitRoot.findPane(id: destinationID) != nil,
+              let detached = splitRoot.removing(paneID: paneID)
+        else { return false }
+        let (newRoot, inserted) = detached.inserting(
+            pane: pane, at: destinationID, direction: zone.splitDirection, position: zone.splitPosition
+        )
+        guard inserted else { return false }
+        splitRoot = newRoot
+        zoomedPaneID = nil
+        focusPane(paneID)
+        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
+        return true
+    }
+
     /// Remove a pane from the tree. Returns `.onlyPaneLeft` if the caller should
     /// close the whole tab (the pane was the last one), otherwise `.removed`.
     /// The pane's surface is destroyed in both cases.

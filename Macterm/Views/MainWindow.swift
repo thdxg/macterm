@@ -215,7 +215,12 @@ struct WorkspaceView: View {
                     appState.saveWorkspaces()
                 },
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) },
-                onToggleZoom: { tab.toggleZoom(paneID: $0) }
+                onToggleZoom: { tab.toggleZoom(paneID: $0) },
+                onMovePane: { source, destination, zone in
+                    if tab.movePane(source, onto: destination, zone: zone) {
+                        appState.saveWorkspaces()
+                    }
+                }
             )
             .id(renderedNode.id)
             .overlay(alignment: .topTrailing) {

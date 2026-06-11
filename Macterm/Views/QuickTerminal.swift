@@ -418,7 +418,10 @@ private struct QuickTerminalView: View {
             onFocusPane: { state.focusPane($0) },
             onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
             onClosePane: { state.closePane($0) },
-            onToggleZoom: { state.tab.toggleZoom(paneID: $0) }
+            onToggleZoom: { state.tab.toggleZoom(paneID: $0) },
+            onMovePane: { source, destination, zone in
+                state.tab.movePane(source, onto: destination, zone: zone)
+            }
         )
         .id(renderedNode.id)
         .background(MactermTheme.bgWithOpacity)

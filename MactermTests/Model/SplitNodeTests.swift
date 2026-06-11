@@ -116,6 +116,78 @@ struct SplitNodeTests {
         #expect(try render(#require(after), ids: ids) == "H(a, b)")
     }
 
+    // MARK: - inserting
+
+    @Test
+    func inserting_first_position_places_pane_before_destination() throws {
+        let (tree, builtIDs) = build(H(pane("a"), pane("b")))
+        let moved = Pane(projectPath: "/", projectID: UUID())
+        var ids = builtIDs
+        ids["m"] = moved.id
+        let (after, inserted) = try tree.inserting(
+            pane: moved, at: #require(ids["b"]), direction: .vertical, position: .first
+        )
+        #expect(inserted)
+        #expect(render(after, ids: ids) == "H(a, V(m, b))")
+    }
+
+    @Test
+    func inserting_second_position_places_pane_after_destination() throws {
+        let (tree, builtIDs) = build(H(pane("a"), pane("b")))
+        let moved = Pane(projectPath: "/", projectID: UUID())
+        var ids = builtIDs
+        ids["m"] = moved.id
+        let (after, inserted) = try tree.inserting(
+            pane: moved, at: #require(ids["a"]), direction: .horizontal, position: .second
+        )
+        #expect(inserted)
+        #expect(render(after, ids: ids) == "H(H(a, m), b)")
+    }
+
+    @Test
+    func inserting_reuses_pane_instance() throws {
+        let (tree, ids) = build(pane("a"))
+        let moved = Pane(projectPath: "/", projectID: UUID())
+        let (after, _) = try tree.inserting(
+            pane: moved, at: #require(ids["a"]), direction: .horizontal, position: .second
+        )
+        #expect(after.findPane(id: moved.id) === moved)
+    }
+
+    @Test
+    func inserting_at_missing_destination_is_noop() {
+        let (tree, ids) = build(H(pane("a"), pane("b")))
+        let moved = Pane(projectPath: "/", projectID: UUID())
+        let (after, inserted) = tree.inserting(
+            pane: moved, at: UUID(), direction: .horizontal, position: .second
+        )
+        #expect(!inserted)
+        #expect(render(after, ids: ids) == "H(a, b)")
+    }
+
+    // MARK: - PaneDropZone
+
+    @Test
+    func dropZone_picks_nearest_edge() {
+        let size = CGSize(width: 100, height: 100)
+        #expect(PaneDropZone.calculate(at: CGPoint(x: 10, y: 50), in: size) == .left)
+        #expect(PaneDropZone.calculate(at: CGPoint(x: 90, y: 50), in: size) == .right)
+        #expect(PaneDropZone.calculate(at: CGPoint(x: 50, y: 10), in: size) == .top)
+        #expect(PaneDropZone.calculate(at: CGPoint(x: 50, y: 90), in: size) == .bottom)
+    }
+
+    @Test
+    func dropZone_maps_to_split_direction_and_position() {
+        #expect(PaneDropZone.left.splitDirection == .horizontal)
+        #expect(PaneDropZone.left.splitPosition == .first)
+        #expect(PaneDropZone.right.splitDirection == .horizontal)
+        #expect(PaneDropZone.right.splitPosition == .second)
+        #expect(PaneDropZone.top.splitDirection == .vertical)
+        #expect(PaneDropZone.top.splitPosition == .first)
+        #expect(PaneDropZone.bottom.splitDirection == .vertical)
+        #expect(PaneDropZone.bottom.splitPosition == .second)
+    }
+
     // MARK: - findPane / contains / allPanes
 
     @Test

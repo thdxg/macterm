@@ -13,6 +13,7 @@ struct SplitTreeView: View {
     let onSplit: (UUID, SplitDirection) -> Void
     let onClosePane: (UUID) -> Void
     let onToggleZoom: (UUID) -> Void
+    let onMovePane: @MainActor (UUID, UUID, PaneDropZone) -> Void
 
     init(
         node: SplitNode,
@@ -24,7 +25,8 @@ struct SplitTreeView: View {
         onFocusPane: @escaping (UUID) -> Void,
         onSplit: @escaping (UUID, SplitDirection) -> Void,
         onClosePane: @escaping (UUID) -> Void,
-        onToggleZoom: @escaping (UUID) -> Void = { _ in }
+        onToggleZoom: @escaping (UUID) -> Void = { _ in },
+        onMovePane: @escaping @MainActor (UUID, UUID, PaneDropZone) -> Void = { _, _, _ in }
     ) {
         self.node = node
         self.focusedPaneID = focusedPaneID
@@ -36,27 +38,23 @@ struct SplitTreeView: View {
         self.onSplit = onSplit
         self.onClosePane = onClosePane
         self.onToggleZoom = onToggleZoom
+        self.onMovePane = onMovePane
     }
 
     var body: some View {
         switch node {
         case let .pane(pane):
-            let isFocused = focusedPaneID == pane.id && isActiveProject
-            TerminalPane(
+            SplitLeafView(
                 pane: pane,
-                focused: isFocused,
+                isFocused: focusedPaneID == pane.id && isActiveProject,
                 isZoomed: zoomedPaneID == pane.id,
+                isSplit: isSplit,
                 onFocus: { onFocusPane(pane.id) },
                 onProcessExit: { onClosePane(pane.id) },
-                onSplitRequest: { dir, _ in onSplit(pane.id, dir) },
-                onZoomRequest: { onToggleZoom(pane.id) }
+                onSplitRequest: { dir in onSplit(pane.id, dir) },
+                onZoomRequest: { onToggleZoom(pane.id) },
+                onMovePane: onMovePane
             )
-            .overlay {
-                if !isFocused, isSplit {
-                    Color.black.opacity(0.2)
-                        .allowsHitTesting(false)
-                }
-            }
 
         case let .split(branch):
             SplitDividerView(branch: branch) {
@@ -70,7 +68,8 @@ struct SplitTreeView: View {
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
                     onClosePane: onClosePane,
-                    onToggleZoom: onToggleZoom
+                    onToggleZoom: onToggleZoom,
+                    onMovePane: onMovePane
                 )
                 .id(branch.first.id)
             } second: {
@@ -84,9 +83,83 @@ struct SplitTreeView: View {
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
                     onClosePane: onClosePane,
-                    onToggleZoom: onToggleZoom
+                    onToggleZoom: onToggleZoom,
+                    onMovePane: onMovePane
                 )
                 .id(branch.second.id)
+            }
+        }
+    }
+}
+
+/// One leaf of the split tree: the terminal pane plus its drag-and-drop
+/// chrome — the grab handle that starts a pane drag, and the drop target that
+/// highlights which half of this pane a dragged pane would land in.
+private struct SplitLeafView: View {
+    let pane: Pane
+    let isFocused: Bool
+    let isZoomed: Bool
+    let isSplit: Bool
+    let onFocus: () -> Void
+    let onProcessExit: () -> Void
+    let onSplitRequest: (SplitDirection) -> Void
+    let onZoomRequest: () -> Void
+    let onMovePane: @MainActor (UUID, UUID, PaneDropZone) -> Void
+
+    @State private var dropState: PaneDropState = .idle
+    @State private var draggingPaneID: UUID?
+
+    /// True while this pane's own grab handle is being dragged. The source
+    /// pane is not a drop target: dropping a pane on itself is meaningless,
+    /// and leaving it invalid lets a released drag animate back to its origin.
+    private var isSelfDragging: Bool { draggingPaneID == pane.id }
+
+    var body: some View {
+        GeometryReader { geo in
+            TerminalPane(
+                pane: pane,
+                focused: isFocused,
+                isZoomed: isZoomed,
+                onFocus: onFocus,
+                onProcessExit: onProcessExit,
+                onSplitRequest: { dir, _ in onSplitRequest(dir) },
+                onZoomRequest: onZoomRequest
+            )
+            .overlay {
+                if !isFocused, isSplit {
+                    Color.black.opacity(0.2)
+                        .allowsHitTesting(false)
+                }
+            }
+            .background {
+                if !isSelfDragging {
+                    Color.clear
+                        .onDrop(of: [.mactermPaneID], delegate: PaneDropDelegate(
+                            dropState: $dropState,
+                            viewSize: geo.size,
+                            destinationPaneID: pane.id,
+                            onMove: onMovePane
+                        ))
+                }
+            }
+            .overlay {
+                if !isSelfDragging, case let .dropping(zone) = dropState {
+                    zone.highlight(in: geo.size)
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay {
+                // Dragging the only pane of a tab has nowhere to go — the
+                // handle only exists once the tab is split.
+                if isSplit {
+                    PaneGrabHandle(pane: pane)
+                }
+            }
+            .onPreferenceChange(DraggingPaneKey.self) { value in
+                MainActor.assumeIsolated {
+                    draggingPaneID = value
+                    if value == pane.id { dropState = .idle }
+                }
             }
         }
     }

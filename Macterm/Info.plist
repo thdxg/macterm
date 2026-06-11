@@ -68,5 +68,20 @@
 	<integer>86400</integer>
 	<key>SUAllowsAutomaticUpdates</key>
 	<true/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.thdxg.macterm.pane-id</string>
+			<key>UTTypeDescription</key>
+			<string>Macterm Pane Identifier</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict/>
+		</dict>
+	</array>
 </dict>
 </plist>
