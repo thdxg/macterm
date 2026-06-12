@@ -23,6 +23,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case focusRight
     case focusUp
     case focusDown
+    case nextPane
+    case previousPane
     case resizeLeft
     case resizeRight
     case resizeUp
@@ -63,6 +65,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .focusRight: "Focus Right"
         case .focusUp: "Focus Up"
         case .focusDown: "Focus Down"
+        case .nextPane: "Next Pane"
+        case .previousPane: "Previous Pane"
         case .resizeLeft: "Resize Pane Left"
         case .resizeRight: "Resize Pane Right"
         case .resizeUp: "Resize Pane Up"
@@ -101,6 +105,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .focusRight,
              .focusUp,
              .focusDown,
+             .nextPane,
+             .previousPane,
              .resizeLeft,
              .resizeRight,
              .resizeUp,
@@ -140,6 +146,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .focusRight: .focusPaneRight
         case .focusUp: .focusPaneUp
         case .focusDown: .focusPaneDown
+        case .nextPane: .nextPane
+        case .previousPane: .previousPane
         case .resizeLeft: .resizePaneLeft
         case .resizeRight: .resizePaneRight
         case .resizeUp: .resizePaneUp

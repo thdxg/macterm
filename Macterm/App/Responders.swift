@@ -226,6 +226,17 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
+        if HotkeyRegistry.matches(event, action: .nextPane) {
+            guard let projectID = appState.activeProjectID else { return .passThrough }
+            appState.cyclePane(forward: true, projectID: projectID)
+            return .handled
+        }
+        if HotkeyRegistry.matches(event, action: .previousPane) {
+            guard let projectID = appState.activeProjectID else { return .passThrough }
+            appState.cyclePane(forward: false, projectID: projectID)
+            return .handled
+        }
+
         if let (_, dir) = Self.resizeActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
             appState.resizePane(dir, projectID: projectID)

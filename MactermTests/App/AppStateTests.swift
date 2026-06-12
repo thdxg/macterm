@@ -137,6 +137,54 @@ struct AppStateTests {
         #expect(tab.focusedPaneID == before)
     }
 
+    @Test
+    func cyclePane_forward_advances_in_tree_order() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let (tree, ids) = build(H(pane("a"), V(pane("b"), pane("c"))))
+        tab.splitRoot = tree
+        tab.focusedPaneID = ids["a"]
+        state.cyclePane(forward: true, projectID: p.id)
+        #expect(tab.focusedPaneID == ids["b"])
+        state.cyclePane(forward: true, projectID: p.id)
+        #expect(tab.focusedPaneID == ids["c"])
+    }
+
+    @Test
+    func cyclePane_forward_wraps_at_end() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let (tree, ids) = build(H(pane("a"), pane("b")))
+        tab.splitRoot = tree
+        tab.focusedPaneID = ids["b"]
+        state.cyclePane(forward: true, projectID: p.id)
+        #expect(tab.focusedPaneID == ids["a"])
+    }
+
+    @Test
+    func cyclePane_backward_wraps_at_start() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let (tree, ids) = build(H(pane("a"), pane("b")))
+        tab.splitRoot = tree
+        tab.focusedPaneID = ids["a"]
+        state.cyclePane(forward: false, projectID: p.id)
+        #expect(tab.focusedPaneID == ids["b"])
+    }
+
+    @Test
+    func cyclePane_single_pane_is_noop() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let before = tab.focusedPaneID
+        state.cyclePane(forward: true, projectID: p.id)
+        #expect(tab.focusedPaneID == before)
+    }
+
     // MARK: - Project lifecycle
 
     @Test
