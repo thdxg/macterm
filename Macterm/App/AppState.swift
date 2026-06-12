@@ -636,11 +636,16 @@ final class AppState {
         }
     }
 
-    /// Move along the active tab's back/forward focus trail. `forward` redoes a
-    /// pane navigated back from; otherwise steps back to the previously focused
-    /// pane. A no-op at either end of the trail.
-    func navigatePaneFocus(forward: Bool, projectID: UUID) {
-        workspaces[projectID]?.activeTab?.navigateFocus(forward: forward)
+    /// Cycle focus through the active tab's panes in tree order, wrapping at
+    /// the ends. `forward` moves to the next pane; otherwise the previous.
+    func cyclePane(forward: Bool, projectID: UUID) {
+        guard let tab = workspaces[projectID]?.activeTab else { return }
+        let panes = tab.splitRoot.allPanes()
+        guard panes.count > 1 else { return }
+        let current = tab.focusedPaneID.flatMap { id in panes.firstIndex(where: { $0.id == id }) } ?? 0
+        let step = forward ? 1 : -1
+        let next = panes[(current + step + panes.count) % panes.count]
+        tab.focusPane(next.id)
     }
 
     // MARK: - Project navigation

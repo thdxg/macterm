@@ -12,49 +12,17 @@ final class TerminalTab: Identifiable {
     /// Transient: not persisted across launches.
     var zoomedPaneID: UUID?
     /// Most-recent-first stack of previously focused pane IDs
-    /// (excludes the currently focused pane). Drives next-focus-after-close.
+    /// (excludes the currently focused pane).
     @ObservationIgnored
     var paneFocusHistory = RecencyStack<UUID>(limit: 20)
-    /// Browser-style back/forward trail for explicit Previous/Next Pane
-    /// navigation. Distinct from `paneFocusHistory`'s MRU role.
-    @ObservationIgnored
-    var paneNavigator = PaneNavigator<UUID>(limit: 50)
 
     /// Record a focus change, pushing the previous pane onto history.
     func focusPane(_ paneID: UUID) {
         guard paneID != focusedPaneID else { return }
         if zoomedPaneID != nil, zoomedPaneID != paneID { zoomedPaneID = nil }
-        if let current = focusedPaneID {
-            paneFocusHistory.push(current)
-            // The tab's first pane is focused via init (bypassing this method),
-            // so seed the trail with the pane we're leaving before recording
-            // the new one — otherwise Back from the second-ever focus has
-            // nowhere to go.
-            paneNavigator.record(current)
-        }
-        paneFocusHistory.remove(paneID)
-        paneNavigator.record(paneID)
-        focusedPaneID = paneID
-    }
-
-    /// Move along the back/forward focus trail (Previous/Next Pane). `forward`
-    /// redoes a pane you navigated back from; otherwise steps back to the
-    /// previously focused pane. Returns the new focused pane ID, or nil at an
-    /// end of the trail. Navigation moves the cursor without recording, so the
-    /// trail stays intact for the opposite direction.
-    @discardableResult
-    func navigateFocus(forward: Bool) -> UUID? {
-        let valid = Set(splitRoot.allPanes().map(\.id))
-        paneNavigator.prune(keeping: valid)
-        guard let target = forward ? paneNavigator.forward() : paneNavigator.back(),
-              valid.contains(target)
-        else { return nil }
-        if zoomedPaneID != nil, zoomedPaneID != target { zoomedPaneID = nil }
-        // Keep the MRU stack consistent without disturbing the navigator cursor.
         if let current = focusedPaneID { paneFocusHistory.push(current) }
-        paneFocusHistory.remove(target)
-        focusedPaneID = target
-        return target
+        paneFocusHistory.remove(paneID)
+        focusedPaneID = paneID
     }
 
     /// Pick the next focus target after a pane is removed from the tree.
@@ -189,7 +157,6 @@ final class TerminalTab: Identifiable {
         splitRoot = newRoot
         if zoomedPaneID == paneID { zoomedPaneID = nil }
         paneFocusHistory.remove(paneID)
-        paneNavigator.prune(keeping: Set(newRoot.allPanes().map(\.id)))
         if focusedPaneID == paneID {
             focusedPaneID = nextFocusAfterClose()
         }

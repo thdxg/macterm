@@ -137,87 +137,51 @@ struct AppStateTests {
         #expect(tab.focusedPaneID == before)
     }
 
-    /// Build a tree with a known focus trail a → b → c (recorded via focusPane).
-    private func seedFocusTrail(_ state: AppState, _ p: Project) throws -> (TerminalTab, [String: UUID]) {
+    @Test
+    func cyclePane_forward_advances_in_tree_order() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
         let tab = try #require(state.workspaces[p.id]?.activeTab)
         let (tree, ids) = build(H(pane("a"), V(pane("b"), pane("c"))))
         tab.splitRoot = tree
-        // Mirror the real init path: the first pane is focused directly (not via
-        // focusPane), then focus moves through b and c. focusPane seeds the
-        // trail with the outgoing pane, so the trail becomes a → b → c.
         tab.focusedPaneID = ids["a"]
-        try tab.focusPane(#require(ids["b"]))
-        try tab.focusPane(#require(ids["c"]))
-        return (tab, ids)
-    }
-
-    @Test
-    func navigatePaneFocus_back_steps_to_previously_focused() throws {
-        let state = makeAppState()
-        let p = seedProject(state)
-        let (tab, ids) = try seedFocusTrail(state, p)
-        // Trail is a, b, c with cursor on c.
-        state.navigatePaneFocus(forward: false, projectID: p.id)
+        state.cyclePane(forward: true, projectID: p.id)
         #expect(tab.focusedPaneID == ids["b"])
-        state.navigatePaneFocus(forward: false, projectID: p.id)
-        #expect(tab.focusedPaneID == ids["a"])
-    }
-
-    @Test
-    func navigatePaneFocus_forward_redoes_after_back() throws {
-        let state = makeAppState()
-        let p = seedProject(state)
-        let (tab, ids) = try seedFocusTrail(state, p)
-        state.navigatePaneFocus(forward: false, projectID: p.id) // -> b
-        state.navigatePaneFocus(forward: false, projectID: p.id) // -> a
-        state.navigatePaneFocus(forward: true, projectID: p.id) // -> b
-        #expect(tab.focusedPaneID == ids["b"])
-        state.navigatePaneFocus(forward: true, projectID: p.id) // -> c
+        state.cyclePane(forward: true, projectID: p.id)
         #expect(tab.focusedPaneID == ids["c"])
     }
 
     @Test
-    func navigatePaneFocus_back_at_start_is_noop() throws {
+    func cyclePane_forward_wraps_at_end() throws {
         let state = makeAppState()
         let p = seedProject(state)
-        let (tab, ids) = try seedFocusTrail(state, p)
-        state.navigatePaneFocus(forward: false, projectID: p.id) // -> b
-        state.navigatePaneFocus(forward: false, projectID: p.id) // -> a (start)
-        state.navigatePaneFocus(forward: false, projectID: p.id) // no-op
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let (tree, ids) = build(H(pane("a"), pane("b")))
+        tab.splitRoot = tree
+        tab.focusedPaneID = ids["b"]
+        state.cyclePane(forward: true, projectID: p.id)
         #expect(tab.focusedPaneID == ids["a"])
     }
 
     @Test
-    func navigatePaneFocus_forward_at_end_is_noop() throws {
+    func cyclePane_backward_wraps_at_start() throws {
         let state = makeAppState()
         let p = seedProject(state)
-        let (tab, ids) = try seedFocusTrail(state, p)
-        // Cursor already at the end (c); forward does nothing.
-        state.navigatePaneFocus(forward: true, projectID: p.id)
-        #expect(tab.focusedPaneID == ids["c"])
-    }
-
-    @Test
-    func navigatePaneFocus_new_focus_after_back_truncates_forward() throws {
-        let state = makeAppState()
-        let p = seedProject(state)
-        let (tab, ids) = try seedFocusTrail(state, p)
-        state.navigatePaneFocus(forward: false, projectID: p.id) // -> b
-        // A normal focus change branches the trail, dropping the path to c.
-        try tab.focusPane(#require(ids["a"]))
-        state.navigatePaneFocus(forward: true, projectID: p.id) // nothing to redo
-        #expect(tab.focusedPaneID == ids["a"])
-        state.navigatePaneFocus(forward: false, projectID: p.id) // back -> b
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let (tree, ids) = build(H(pane("a"), pane("b")))
+        tab.splitRoot = tree
+        tab.focusedPaneID = ids["a"]
+        state.cyclePane(forward: false, projectID: p.id)
         #expect(tab.focusedPaneID == ids["b"])
     }
 
     @Test
-    func navigatePaneFocus_single_pane_is_noop() throws {
+    func cyclePane_single_pane_is_noop() throws {
         let state = makeAppState()
         let p = seedProject(state)
         let tab = try #require(state.workspaces[p.id]?.activeTab)
         let before = tab.focusedPaneID
-        state.navigatePaneFocus(forward: false, projectID: p.id)
+        state.cyclePane(forward: true, projectID: p.id)
         #expect(tab.focusedPaneID == before)
     }
 

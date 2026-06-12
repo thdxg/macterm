@@ -228,12 +228,12 @@ final class MainAppResponder: KeyResponder {
 
         if HotkeyRegistry.matches(event, action: .nextPane) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.navigatePaneFocus(forward: true, projectID: projectID)
+            appState.cyclePane(forward: true, projectID: projectID)
             return .handled
         }
         if HotkeyRegistry.matches(event, action: .previousPane) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.navigatePaneFocus(forward: false, projectID: projectID)
+            appState.cyclePane(forward: false, projectID: projectID)
             return .handled
         }
 

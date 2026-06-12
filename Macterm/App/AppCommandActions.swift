@@ -76,10 +76,10 @@ extension AppCommand {
             return { ctx.appState.focusPaneInDirection(.down, projectID: projectID) }
         case .nextPane:
             guard let projectID else { return nil }
-            return { ctx.appState.navigatePaneFocus(forward: true, projectID: projectID) }
+            return { ctx.appState.cyclePane(forward: true, projectID: projectID) }
         case .previousPane:
             guard let projectID else { return nil }
-            return { ctx.appState.navigatePaneFocus(forward: false, projectID: projectID) }
+            return { ctx.appState.cyclePane(forward: false, projectID: projectID) }
         case .resizeLeft:
             guard let projectID else { return nil }
             return { ctx.appState.resizePane(.left, projectID: projectID) }
