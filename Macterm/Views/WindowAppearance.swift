@@ -228,6 +228,21 @@ enum WindowAppearance {
         // window is). Without this the titlebar paints its own material
         // and you get a visible seam at y=titlebarHeight.
         syncTitlebar(window: window, isTransparent: effectiveTransparent)
+
+        syncToolbar(window: window)
+    }
+
+    /// Lock the toolbar to icon-only rendering. SwiftUI's NavigationSplitView
+    /// toolbar doesn't survive the label display modes: picking "Icon and
+    /// Text" from the toolbar's context menu makes AppKit fold the system
+    /// sidebar-toggle item into the overflow (») menu at the trailing edge
+    /// and grows the titlebar without showing any useful labels. Disabling
+    /// display-mode customization removes those context-menu items; forcing
+    /// `.iconOnly` repairs a mode picked before the lock existed.
+    private static func syncToolbar(window: NSWindow) {
+        guard let toolbar = window.toolbar else { return }
+        if toolbar.displayMode != .iconOnly { toolbar.displayMode = .iconOnly }
+        toolbar.allowsDisplayModeCustomization = false
     }
 
     /// Update the inactive-glass tint when the window gains/loses key status.
