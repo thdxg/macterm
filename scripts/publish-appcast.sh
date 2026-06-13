@@ -78,7 +78,7 @@ for dmg in "$DMG_DIR"/*.dmg; do
       <pubDate>${PUB_DATE}</pubDate>
       <sparkle:version>${VERSION}</sparkle:version>
       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>${NOTES_URL}</sparkle:releaseNotesLink>
       <link>${REPO_URL}/releases/tag/${TAG}</link>
       <enclosure url="${url}" type="application/octet-stream" ${sig} />

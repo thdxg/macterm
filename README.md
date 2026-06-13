@@ -18,7 +18,7 @@
   <a href="https://github.com/thdxg/macterm/actions/workflows/checks.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/thdxg/macterm/checks.yml?branch=main&label=checks" alt="CI status" />
   </a>
-  <img src="https://img.shields.io/badge/macOS-26%2B-black?logo=apple" alt="macOS 26+" />
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+" />
 </p>
 
 ![screenshot](./assets/screenshot.png)
