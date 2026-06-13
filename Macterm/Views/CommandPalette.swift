@@ -26,7 +26,7 @@ struct CommandPaletteOverlay: View {
 
                 CommandPalettePanel()
                     .frame(width: 500)
-                    .glassEffect(in: .rect(cornerRadius: Self.cornerRadius))
+                    .paletteBackground(cornerRadius: Self.cornerRadius)
                     .overlay(
                         RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                             .strokeBorder(MactermTheme.border, lineWidth: 1)
@@ -35,6 +35,18 @@ struct CommandPaletteOverlay: View {
                     .padding(.top, geo.size.height * 0.15)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private extension View {
+    /// Liquid glass on macOS 26; the closest native material on older systems.
+    @ViewBuilder
+    func paletteBackground(cornerRadius: CGFloat) -> some View {
+        if #available(macOS 26.0, *) {
+            glassEffect(in: .rect(cornerRadius: cornerRadius))
+        } else {
+            background(.regularMaterial, in: .rect(cornerRadius: cornerRadius))
         }
     }
 }

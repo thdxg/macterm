@@ -202,21 +202,26 @@ private struct AppearanceSettings: View {
                     Preferences.shared.windowOpacity = v
                 }
 
-                Toggle("Liquid Glass", isOn: $liquidGlass)
-                    .onChange(of: liquidGlass) { _, v in
-                        Preferences.shared.windowGlassEnabled = v
-                    }
-                    .disabled(backgroundOpacity >= 0.999)
+                // Liquid glass (NSGlassEffectView) exists only on macOS 26+;
+                // hide the controls entirely on older systems where they'd be
+                // inert rather than show dead toggles.
+                if WindowAppearance.glassSupported {
+                    Toggle("Liquid Glass", isOn: $liquidGlass)
+                        .onChange(of: liquidGlass) { _, v in
+                            Preferences.shared.windowGlassEnabled = v
+                        }
+                        .disabled(backgroundOpacity >= 0.999)
 
-                Picker("Glass Style", selection: $liquidGlassStyle) {
-                    ForEach(WindowGlassStyle.allCases) { style in
-                        Text(style.displayName).tag(style)
+                    Picker("Glass Style", selection: $liquidGlassStyle) {
+                        ForEach(WindowGlassStyle.allCases) { style in
+                            Text(style.displayName).tag(style)
+                        }
                     }
+                    .onChange(of: liquidGlassStyle) { _, v in
+                        Preferences.shared.windowGlassStyle = v
+                    }
+                    .disabled(backgroundOpacity >= 0.999 || !liquidGlass)
                 }
-                .onChange(of: liquidGlassStyle) { _, v in
-                    Preferences.shared.windowGlassStyle = v
-                }
-                .disabled(backgroundOpacity >= 0.999 || !liquidGlass)
 
                 HStack {
                     Text("Background Blur")
@@ -276,7 +281,9 @@ private struct AppearanceSettings: View {
 
     private var blurFootnote: String {
         if backgroundOpacity >= 0.999 {
-            return "Blur and Liquid Glass only take effect when opacity is below 100%."
+            return WindowAppearance.glassSupported
+                ? "Blur and Liquid Glass only take effect when opacity is below 100%."
+                : "Blur only takes effect when opacity is below 100%."
         }
         if liquidGlass {
             return "Liquid Glass uses the macOS material (blur slider ignored). Regular is frostier; Clear is more transparent."

@@ -242,7 +242,9 @@ enum WindowAppearance {
     private static func syncToolbar(window: NSWindow) {
         guard let toolbar = window.toolbar else { return }
         if toolbar.displayMode != .iconOnly { toolbar.displayMode = .iconOnly }
-        toolbar.allowsDisplayModeCustomization = false
+        if #available(macOS 15.0, *) {
+            toolbar.allowsDisplayModeCustomization = false
+        }
     }
 
     /// Update the inactive-glass tint when the window gains/loses key status.
@@ -255,7 +257,9 @@ enum WindowAppearance {
         }
     }
 
-    private static var glassSupported: Bool {
+    /// Liquid glass (`NSGlassEffectView`) exists only on macOS 26+. Drives both
+    /// the runtime appearance path and the Settings UI's glass controls.
+    static var glassSupported: Bool {
         if #available(macOS 26.0, *) { return true }
         return false
     }
