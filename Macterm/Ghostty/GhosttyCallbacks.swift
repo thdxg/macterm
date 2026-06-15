@@ -80,6 +80,21 @@ final class GhosttyCallbacks: @unchecked Sendable {
                 }
             }
             return true
+        case GHOSTTY_ACTION_CONFIG_CHANGE:
+            // libghostty hands us a surface's *resolved* config — the active
+            // `theme = light:X,dark:Y` side already applied. Reading the chrome
+            // colors from it (rather than the app-global config, whose getters
+            // always collapse a split to its light side) lets the window and
+            // sidebar follow the real appearance, matching how Ghostty's own
+            // chrome works. The config handle is owned by libghostty and valid
+            // only for this call, so snapshot synchronously before handing the
+            // plain values to the main actor. App-target changes carry no
+            // surface conditional state, so only surface targets are useful.
+            guard target.tag == GHOSTTY_TARGET_SURFACE,
+                  let cfg = action.action.config_change.config else { return false }
+            let snapshot = GhosttyApp.readColors(from: cfg)
+            DispatchQueue.main.async { GhosttyApp.shared.adoptResolvedColors(snapshot) }
+            return true
         default:
             return false
         }

@@ -22,6 +22,13 @@ final class GhosttyApp {
     private var resourcesDir: String?
     @ObservationIgnored
     private var appearanceObserver: NSKeyValueObservation?
+    /// Chrome colors as libghostty resolved them for a live surface — the
+    /// active `theme = light:X,dark:Y` side already applied. Populated from
+    /// `GHOSTTY_ACTION_CONFIG_CHANGE` (see `adoptResolvedColors`) and preferred
+    /// over the app-global config getters, which always collapse a split to its
+    /// light side. Nil until the first surface reports its config.
+    @ObservationIgnored
+    private var resolvedColors: ResolvedColors?
 
     private init() {
         resolveResources()
@@ -137,8 +144,10 @@ final class GhosttyApp {
     /// surface's conditional state to `.light`), so a new dark-mode pane shows
     /// light-side foreground until something else reloads the config. Feeding
     /// the existing config back here re-derives the colors against the updated
-    /// conditional state. (Companion to issue #38, which fixes the same split
-    /// for Macterm's own chrome.)
+    /// conditional state. Each `ghostty_surface_update_config` also makes the
+    /// surface re-emit `GHOSTTY_ACTION_CONFIG_CHANGE` with its resolved config,
+    /// which is how Macterm's chrome adopts the new split side (see
+    /// `adoptResolvedColors`). (Companion to issue #38.)
     func softReloadConfig() {
         guard let app, let config else { return }
         ghostty_app_update_config(app, config)
@@ -174,15 +183,21 @@ final class GhosttyApp {
         alert.runModal()
     }
 
-    /// Color accessors prefer the appearance-resolved theme file when the user's
-    /// `theme` is a `light:X,dark:Y` split (issue #38); otherwise they read
-    /// libghostty's config getters, which are correct for a plain theme.
+    /// Color accessors prefer the colors libghostty resolved for a live surface
+    /// (`resolvedColors`, fed by `GHOSTTY_ACTION_CONFIG_CHANGE`): that config has
+    /// the active `theme = light:X,dark:Y` side applied, so it's correct for both
+    /// plain and split themes — the same source Ghostty's own window chrome uses.
+    /// Before the first surface reports (e.g. the launch window) they fall back
+    /// to parsing the appearance-resolved theme file (issue #38), then to
+    /// libghostty's app-global getters, which are correct only for a plain theme.
     var backgroundColor: NSColor {
+        if let rgb = resolvedColors?.background { return nsColor(rgb) }
         if let hex = resolvedThemeColors()?.background, let c = nsColor(fromHex: hex) { return c }
         return configColor("background") ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1)
     }
 
     var foregroundColor: NSColor {
+        if let rgb = resolvedColors?.foreground { return nsColor(rgb) }
         if let hex = resolvedThemeColors()?.foreground, let c = nsColor(fromHex: hex) { return c }
         return configColor("foreground") ?? .white
     }
@@ -191,6 +206,7 @@ final class GhosttyApp {
 
     func paletteColor(at index: Int) -> NSColor? {
         guard (0 ..< 256).contains(index) else { return nil }
+        if let rgb = resolvedColors?.palette[index] { return nsColor(rgb) }
         if let hex = resolvedThemeColors()?.palette[index], let c = nsColor(fromHex: hex) { return c }
         guard let config else { return nil }
         var palette = ghostty_config_palette_s()
@@ -341,13 +357,76 @@ final class GhosttyApp {
               let side = ThemeResolver.resolve(themeValue: themeValue, scheme: currentScheme)
         else { return nil }
 
-        let themeFile = resourcesDir + "/themes/" + side
+        // A theme value is either a bare name (resolved against the bundled
+        // themes dir) or an absolute / `~` path to a user theme file — pass the
+        // latter through untouched instead of nesting it under the themes dir.
+        let themeFile: String =
+            side.hasPrefix("/") || side.hasPrefix("~")
+                ? (side as NSString).expandingTildeInPath
+                : resourcesDir + "/themes/" + side
         guard let themeText = try? String(contentsOfFile: themeFile, encoding: .utf8) else { return nil }
         return ThemeResolver.colors(inThemeFile: themeText)
     }
 
     private var currentScheme: ThemeResolver.Scheme {
         NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    }
+
+    // MARK: - Surface-resolved chrome colors (Ghostty's CONFIG_CHANGE pattern)
+
+    /// A snapshot of the chrome colors read out of a libghostty config handle,
+    /// held as plain values so it can cross from the action callback (which may
+    /// run off the main actor) to the main actor. `palette` always has 256
+    /// entries; an entry is nil only when the getter fails.
+    struct ResolvedColors: Sendable, Equatable {
+        struct RGB: Sendable, Equatable {
+            var r: UInt8
+            var g: UInt8
+            var b: UInt8
+        }
+
+        var background: RGB?
+        var foreground: RGB?
+        var palette: [RGB?]
+    }
+
+    /// Read the chrome colors out of a libghostty config handle. `nonisolated`
+    /// so the `GHOSTTY_ACTION_CONFIG_CHANGE` callback can snapshot synchronously
+    /// while the handle is valid — libghostty owns it only for the duration of
+    /// that call, so the values must be copied out before returning.
+    nonisolated static func readColors(from cfg: ghostty_config_t) -> ResolvedColors {
+        func color(_ key: String) -> ResolvedColors.RGB? {
+            var c = ghostty_config_color_s()
+            guard ghostty_config_get(cfg, &c, key, UInt(key.utf8.count)) else { return nil }
+            return .init(r: c.r, g: c.g, b: c.b)
+        }
+
+        var palette = [ResolvedColors.RGB?](repeating: nil, count: 256)
+        var raw = ghostty_config_palette_s()
+        let key = "palette"
+        if ghostty_config_get(cfg, &raw, key, UInt(key.utf8.count)) {
+            withUnsafePointer(to: &raw.colors) {
+                $0.withMemoryRebound(to: ghostty_config_color_s.self, capacity: 256) { ptr in
+                    for i in 0 ..< 256 { palette[i] = .init(r: ptr[i].r, g: ptr[i].g, b: ptr[i].b) }
+                }
+            }
+        }
+        return ResolvedColors(background: color("background"), foreground: color("foreground"), palette: palette)
+    }
+
+    /// Adopt the colors libghostty resolved for a live surface (delivered via
+    /// `GHOSTTY_ACTION_CONFIG_CHANGE`). Bumps `configVersion` and notifies the
+    /// AppKit chrome so it re-reads `MactermTheme`, but only when the colors
+    /// actually changed — config-change actions fire for many reasons.
+    func adoptResolvedColors(_ colors: ResolvedColors) {
+        guard resolvedColors != colors else { return }
+        resolvedColors = colors
+        configVersion += 1
+        NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
+    }
+
+    private func nsColor(_ rgb: ResolvedColors.RGB) -> NSColor {
+        NSColor(srgbRed: CGFloat(rgb.r) / 255, green: CGFloat(rgb.g) / 255, blue: CGFloat(rgb.b) / 255, alpha: 1)
     }
 
     private func nsColor(fromHex hex: String) -> NSColor? {
