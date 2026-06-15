@@ -91,7 +91,8 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // plain values to the main actor. App-target changes carry no
             // surface conditional state, so only surface targets are useful.
             guard target.tag == GHOSTTY_TARGET_SURFACE,
-                  let cfg = action.action.config_change.config else { return false }
+                  let cfg = action.action.config_change.config
+            else { return false }
             let snapshot = GhosttyApp.readColors(from: cfg)
             DispatchQueue.main.async { GhosttyApp.shared.adoptResolvedColors(snapshot) }
             return true

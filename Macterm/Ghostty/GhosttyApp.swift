@@ -378,8 +378,8 @@ final class GhosttyApp {
     /// held as plain values so it can cross from the action callback (which may
     /// run off the main actor) to the main actor. `palette` always has 256
     /// entries; an entry is nil only when the getter fails.
-    struct ResolvedColors: Sendable, Equatable {
-        struct RGB: Sendable, Equatable {
+    struct ResolvedColors: Equatable {
+        struct RGB: Equatable {
             var r: UInt8
             var g: UInt8
             var b: UInt8
@@ -407,7 +407,9 @@ final class GhosttyApp {
         if ghostty_config_get(cfg, &raw, key, UInt(key.utf8.count)) {
             withUnsafePointer(to: &raw.colors) {
                 $0.withMemoryRebound(to: ghostty_config_color_s.self, capacity: 256) { ptr in
-                    for i in 0 ..< 256 { palette[i] = .init(r: ptr[i].r, g: ptr[i].g, b: ptr[i].b) }
+                    for i in 0 ..< 256 {
+                        palette[i] = .init(r: ptr[i].r, g: ptr[i].g, b: ptr[i].b)
+                    }
                 }
             }
         }
