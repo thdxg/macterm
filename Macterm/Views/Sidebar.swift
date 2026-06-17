@@ -27,8 +27,11 @@ struct SidebarContent: View {
                     get: { expandedProjects.contains(project.id) },
                     set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
                 )) {
-                    ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
-                        SidebarTabRow(tab: tab, index: tabIndex + 1) {
+                    ForEach(Array(tabs.enumerated()), id: \.element.id) { _, tab in
+                        SidebarTabRow(
+                            tab: tab,
+                            isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id
+                        ) {
                             appState.closeTab(tab.id, projectID: project.id)
                         } onRename: { newName in
                             tab.customTitle = newName.isEmpty ? nil : newName
@@ -221,13 +224,11 @@ private struct SidebarProjectRow: View {
 
 private struct SidebarTabRow: View {
     let tab: TerminalTab
-    let index: Int
+    let isActive: Bool
     let onClose: () -> Void
     let onRename: (String) -> Void
     @Environment(AppState.self)
     private var appState
-    @AppStorage(Preferences.Keys.tabIconSymbol)
-    private var tabIconSymbol = "terminal"
     @State
     private var isRenaming = false
     @State
@@ -253,18 +254,10 @@ private struct SidebarTabRow: View {
     }
 
     var body: some View {
-        Group {
-            if tabIconSymbol == Preferences.noIcon {
-                titleContent
-                    .padding(.leading, 6)
-            } else {
-                Label {
-                    titleContent
-                } icon: {
-                    SidebarRowIcon(symbol: tabIconSymbol, index: index)
-                        .foregroundStyle(.secondary)
-                }
-            }
+        Label {
+            titleContent
+        } icon: {
+            TerminalStateIndicator(state: displayState)
         }
         .contextMenu {
             Button("Rename Tab") { beginRename() }
@@ -293,9 +286,47 @@ private struct SidebarTabRow: View {
         appState.restoreFocusToActivePane()
     }
 
+    private var displayState: TerminalExecutionState {
+        if tab.executionState == .running { return .running }
+        return isActive ? .idle : tab.executionState
+    }
+
     private func cancelRename() {
         isRenaming = false
         appState.restoreFocusToActivePane()
+    }
+}
+
+private struct TerminalStateIndicator: View {
+    let state: TerminalExecutionState
+
+    var body: some View {
+        Group {
+            switch state {
+            case .running:
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.secondary)
+            case .done:
+                Image(systemName: "checkmark.circle.fill")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.green)
+            case .idle:
+                Image(systemName: "circle")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .help(helpText)
+        .frame(width: 12, height: 12)
+    }
+
+    private var helpText: String {
+        switch state {
+        case .running: "Running"
+        case .done: "Done"
+        case .idle: "Idle"
+        }
     }
 }
 

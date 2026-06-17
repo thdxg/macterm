@@ -215,6 +215,9 @@ struct WorkspaceView: View {
                     appState.saveWorkspaces()
                 },
                 onClosePane: { appState.requestClosePane($0, projectID: project.id) },
+                onCommandFinished: { paneID in
+                    appState.acknowledgeFinishedCommandIfActive(paneID: paneID, projectID: project.id)
+                },
                 onToggleZoom: { tab.toggleZoom(paneID: $0) },
                 onMovePane: { source, destination, zone in
                     if tab.movePane(source, onto: destination, zone: zone) {

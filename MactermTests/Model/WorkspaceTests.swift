@@ -103,6 +103,20 @@ struct WorkspaceTests {
     }
 
     @Test
+    func selectTab_acknowledges_completion_in_selected_tab_only() {
+        let ws = makeWorkspace()
+        let selected = ws.tabs[0]
+        let other = ws.createTab(projectPath: "/tmp")
+        selected.splitRoot.allPanes().first?.executionState = .done
+        other.splitRoot.allPanes().first?.executionState = .done
+        let selectedID = selected.id
+        ws.selectTab(selectedID)
+        #expect(ws.activeTabID == selectedID)
+        #expect(selected.executionState == .idle)
+        #expect(other.executionState == .done)
+    }
+
+    @Test
     func recencyOrder_active_first_then_history() {
         let ws = makeWorkspace()
         let t1 = ws.tabs[0].id

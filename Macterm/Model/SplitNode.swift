@@ -46,6 +46,12 @@ enum PaneDropZone: Equatable {
     }
 }
 
+enum TerminalExecutionState: Equatable {
+    case idle
+    case running
+    case done
+}
+
 /// A pane is the leaf of the split tree — one terminal surface.
 @MainActor @Observable
 final class Pane: Identifiable {
@@ -89,6 +95,7 @@ final class Pane: Identifiable {
     private var programTitlePID: pid_t?
 
     let searchState = TerminalSearchState()
+    var executionState: TerminalExecutionState = .idle
 
     /// Re-read the foreground process name from the process table and publish it
     /// only when it changed (so a steady poll doesn't churn `@Observable` and
@@ -96,19 +103,37 @@ final class Pane: Identifiable {
     func refreshForegroundProcess() {
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
-            foregroundPID: nsView?.foregroundPID
+            foregroundPID: nsView?.foregroundPID,
+            programPID: ProcessInspector.foregroundProgramPID(forPane: self)
         )
     }
 
     /// Testable core of `refreshForegroundProcess`: publish a changed process
-    /// name, and expire `programTitle` when the pid that set it no longer
-    /// holds the foreground.
-    func applyForegroundRefresh(name: String?, foregroundPID: pid_t?) {
+    /// name, expire `programTitle` when the pid that set it no longer holds the
+    /// foreground, and surface the active execution state.
+    func applyForegroundRefresh(name: String?, foregroundPID: pid_t?, programPID: pid_t?) {
         if name != foregroundProcessName { foregroundProcessName = name }
         if programTitle != nil, programTitlePID != foregroundPID {
             programTitle = nil
             programTitlePID = nil
         }
+        if programPID != nil {
+            executionState = .running
+        } else if executionState == .running {
+            executionState = .done
+        }
+    }
+
+    func markCommandRunning() {
+        executionState = .running
+    }
+
+    func markCommandFinished() {
+        executionState = .done
+    }
+
+    func acknowledgeCommandCompletion() {
+        if executionState == .done { executionState = .idle }
     }
 
     /// Handle an OSC 0/2 title reported by the surface. Always refreshes the
@@ -175,6 +200,7 @@ final class Pane: Identifiable {
         view.onSearchTotal = nil
         view.onSearchSelected = nil
         view.onFocus = nil
+        view.onInteraction = nil
         view.onSplitRequest = nil
         view.onDesktopNotification = nil
         view.onCommandFinished = nil

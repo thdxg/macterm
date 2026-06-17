@@ -159,6 +159,24 @@ struct TerminalTabTests {
         #expect(tab.splitRoot.allPanes().count == 2)
     }
 
+    // MARK: - executionState
+
+    @Test
+    func executionState_prefers_running_then_done_then_idle() throws {
+        let (tab, ids) = makeTab(H(pane("a"), H(pane("b"), pane("c"))), focused: "a")
+        let bID = try #require(ids["b"])
+        let cID = try #require(ids["c"])
+        let b = try #require(tab.splitRoot.findPane(id: bID))
+        let c = try #require(tab.splitRoot.findPane(id: cID))
+        b.executionState = .done
+        c.executionState = .running
+        #expect(tab.executionState == .running)
+        c.executionState = .idle
+        #expect(tab.executionState == .done)
+        b.executionState = .idle
+        #expect(tab.executionState == .idle)
+    }
+
     // MARK: - toggleZoom
 
     @Test

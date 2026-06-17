@@ -112,9 +112,12 @@ final class AppState {
     /// workspaces. Each pane only republishes (and triggers a tab re-render)
     /// when its name actually changes, so this is cheap when nothing's moving.
     func refreshAllForegroundProcesses() {
-        for ws in workspaces.values {
-            for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-                pane.refreshForegroundProcess()
+        for (projectID, ws) in workspaces {
+            for tab in ws.tabs {
+                for pane in tab.splitRoot.allPanes() {
+                    pane.refreshForegroundProcess()
+                    acknowledgeFinishedCommandIfActive(paneID: pane.id, projectID: projectID)
+                }
             }
         }
     }
@@ -678,6 +681,16 @@ final class AppState {
             in: tab.splitRoot,
             window: NSApp.keyWindow ?? NSApp.mainWindow
         )
+    }
+
+    func acknowledgeFinishedCommandIfActive(paneID: UUID, projectID: UUID) {
+        guard NSApp.isActive,
+              projectID == activeProjectID,
+              let tab = workspaces[projectID]?.activeTab,
+              tab.focusedPaneID == paneID,
+              let pane = tab.splitRoot.findPane(id: paneID)
+        else { return }
+        pane.acknowledgeCommandCompletion()
     }
 
     // MARK: - Private

@@ -45,6 +45,39 @@ struct PaneTests {
     }
 
     @Test
+    func executionState_defaults_to_idle() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        #expect(p.executionState == .idle)
+    }
+
+    @Test
+    func executionState_marks_running_then_done_then_idle_on_acknowledge() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.markCommandRunning()
+        #expect(p.executionState == .running)
+        p.markCommandFinished()
+        #expect(p.executionState == .done)
+        p.acknowledgeCommandCompletion()
+        #expect(p.executionState == .idle)
+    }
+
+    @Test
+    func applyForegroundRefresh_marks_running_for_foreground_programs() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.applyForegroundRefresh(name: "claude", foregroundPID: 42, programPID: 42)
+        #expect(p.foregroundProcessName == "claude")
+        #expect(p.executionState == .running)
+    }
+
+    @Test
+    func applyForegroundRefresh_turns_running_into_done_when_foreground_returns_to_shell() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.markCommandRunning()
+        p.applyForegroundRefresh(name: "nu", foregroundPID: 7, programPID: nil)
+        #expect(p.executionState == .done)
+    }
+
+    @Test
     func init_stores_project_path() {
         let p = Pane(projectPath: "/tmp/foo", projectID: UUID())
         #expect(p.projectPath == "/tmp/foo")

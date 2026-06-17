@@ -52,6 +52,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     var onFocus: (() -> Void)?
+    var onInteraction: (() -> Void)?
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
@@ -373,6 +374,7 @@ final class GhosttyTerminalNSView: NSView {
     // MARK: - Keyboard
 
     override func keyDown(with event: NSEvent) {
+        onInteraction?()
         guard let surface else { super.keyDown(with: event)
             return
         }
@@ -467,6 +469,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
+        onInteraction?()
         guard let surface else { return }
         var ke = buildKeyEvent(from: event, action: isFlagPress(event) ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE)
         ke.text = nil
@@ -475,6 +478,7 @@ final class GhosttyTerminalNSView: NSView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if isAppShortcut(event) { return false }
+        onInteraction?()
         guard window?.firstResponder === self || window?.firstResponder === inputContext else { return false }
         guard event.type == .keyDown, let surface else { return false }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -496,6 +500,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        onInteraction?()
         guard let surface else { return }
         window?.makeFirstResponder(self)
         ghostty_surface_set_focus(surface, true)
@@ -531,6 +536,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        onInteraction?()
         guard let surface else { return }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
@@ -549,6 +555,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        onInteraction?()
         guard let surface else { return }
         var scrollMods: ghostty_input_scroll_mods_t = 0
         if event.hasPreciseScrollingDeltas { scrollMods |= 1 }
@@ -595,6 +602,7 @@ final class GhosttyTerminalNSView: NSView {
 
     @objc
     private func handlePaste() {
+        onInteraction?()
         guard let text = GhosttyCallbacks.readPasteboardText() else { return }
         window?.makeFirstResponder(self)
         insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))

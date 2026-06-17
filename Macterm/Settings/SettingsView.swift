@@ -173,8 +173,6 @@ private struct GhosttyCLIBanner: View {
 private struct AppearanceSettings: View {
     @AppStorage(Preferences.Keys.projectIconSymbol)
     private var projectIconSymbol = "folder"
-    @AppStorage(Preferences.Keys.tabIconSymbol)
-    private var tabIconSymbol = "terminal"
     @AppStorage(Preferences.Keys.showNewProjectButton)
     private var showNewProjectButton = true
     @AppStorage(Preferences.Keys.tabSwitcherVisibility)
@@ -247,13 +245,6 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: projectIconSymbol) { _, v in Preferences.shared.projectIconSymbol = v }
-
-                Picker("Tab icon", selection: $tabIconSymbol) {
-                    ForEach(Preferences.tabIconChoices, id: \.self) { name in
-                        iconPickerLabel(name).tag(name)
-                    }
-                }
-                .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }

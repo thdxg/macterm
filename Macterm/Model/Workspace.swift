@@ -43,9 +43,22 @@ final class TerminalTab: Identifiable {
 
     var sidebarTitle: String { customTitle ?? autoTitle }
 
+    var executionState: TerminalExecutionState {
+        let panes = splitRoot.allPanes()
+        if panes.contains(where: { $0.executionState == .running }) { return .running }
+        if panes.contains(where: { $0.executionState == .done }) { return .done }
+        return .idle
+    }
+
     var focusedPane: Pane? {
         guard let focusedPaneID else { return nil }
         return splitRoot.findPane(id: focusedPaneID)
+    }
+
+    func acknowledgeCommandCompletion() {
+        for pane in splitRoot.allPanes() {
+            pane.acknowledgeCommandCompletion()
+        }
     }
 
     init(projectPath: String, projectID: UUID) {
@@ -229,9 +242,10 @@ final class Workspace: Identifiable {
     }
 
     func selectTab(_ tabID: UUID) {
-        guard tabs.contains(where: { $0.id == tabID }) else { return }
+        guard let tab = tabs.first(where: { $0.id == tabID }) else { return }
         if let current = activeTabID, current != tabID { tabHistory.push(current) }
         activeTabID = tabID
+        tab.acknowledgeCommandCompletion()
     }
 
     func selectNextTab() {
