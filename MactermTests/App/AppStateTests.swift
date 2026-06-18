@@ -173,7 +173,7 @@ struct AppStateTests {
         let p = seedProject(state)
         let ws = try #require(state.workspaces[p.id])
         let before = ws.tabs.map(\.id)
-        state.moveTab(try #require(before.first), from: p.id, to: p.id, destPath: p.path)
+        try state.moveTab(#require(before.first), from: p.id, to: p.id, destPath: p.path)
         #expect(ws.tabs.map(\.id) == before)
     }
 
