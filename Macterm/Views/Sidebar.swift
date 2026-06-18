@@ -28,12 +28,20 @@ struct SidebarContent: View {
                     set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
                 )) {
                     ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
-                        SidebarTabRow(tab: tab, index: tabIndex + 1) {
-                            appState.closeTab(tab.id, projectID: project.id)
-                        } onRename: { newName in
-                            tab.customTitle = newName.isEmpty ? nil : newName
-                            appState.saveWorkspaces()
-                        }
+                        SidebarTabRow(
+                            tab: tab,
+                            index: tabIndex + 1,
+                            moveTargets: projectStore.projects.filter { $0.id != project.id },
+                            onClose: { appState.closeTab(tab.id, projectID: project.id) },
+                            onRename: { newName in
+                                tab.customTitle = newName.isEmpty ? nil : newName
+                                appState.saveWorkspaces()
+                            },
+                            onMoveToProject: { destination in
+                                appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
+                                expandedProjects.insert(destination.id)
+                            }
+                        )
                         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
                     }
                     .onMove { source, destination in
@@ -222,8 +230,10 @@ private struct SidebarProjectRow: View {
 private struct SidebarTabRow: View {
     let tab: TerminalTab
     let index: Int
+    let moveTargets: [Project]
     let onClose: () -> Void
     let onRename: (String) -> Void
+    let onMoveToProject: (Project) -> Void
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
@@ -268,6 +278,13 @@ private struct SidebarTabRow: View {
         }
         .contextMenu {
             Button("Rename Tab") { beginRename() }
+            if !moveTargets.isEmpty {
+                Menu("Move to Project") {
+                    ForEach(moveTargets) { project in
+                        Button(project.name) { onMoveToProject(project) }
+                    }
+                }
+            }
             Divider()
             Button("Close Tab", action: onClose)
         }

@@ -336,6 +336,29 @@ final class AppState {
         workspaces[projectID]?.selectTab(tabID)
     }
 
+    /// Move a tab — with its live panes and running shells intact — from one
+    /// project's workspace into another's. The `TerminalTab` object is reused
+    /// as-is, so its surfaces stay valid (both workspaces live in the same
+    /// window). The destination becomes the active project with the moved tab
+    /// selected, so the user lands where they meant to be. No-op for a
+    /// same-project move or an unknown source/tab.
+    func moveTab(_ tabID: UUID, from sourceProjectID: UUID, to destProjectID: UUID, destPath: String) {
+        guard sourceProjectID != destProjectID,
+              let source = workspaces[sourceProjectID],
+              let tab = source.tabs.first(where: { $0.id == tabID })
+        else { return }
+        logger.debug(
+            "moveTab: \(tabID, privacy: .public) from=\(sourceProjectID, privacy: .public) to=\(destProjectID, privacy: .public)"
+        )
+        ensureWorkspace(projectID: destProjectID, path: destPath)
+        guard let dest = workspaces[destProjectID] else { return }
+        source.closeTab(tabID)
+        dest.adoptTab(tab)
+        activeProjectID = destProjectID
+        recordProjectVisit(destProjectID)
+        saveWorkspaces()
+    }
+
     func selectNextTab(projectID: UUID) {
         workspaces[projectID]?.selectNextTab()
     }
