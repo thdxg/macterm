@@ -160,7 +160,9 @@ private struct SidebarProjectRow: View {
     let onUnload: () -> Void
     let onRemove: () -> Void
     /// Move a dragged tab (by UUID) into this project — see TabDragDrop.
-    let onDropTab: (UUID) -> Void
+    /// `@MainActor` so it satisfies the `@MainActor @Sendable` closure that
+    /// `TabDropDelegate` (a `DropDelegate`) stores, matching `PaneDropDelegate`.
+    let onDropTab: @MainActor (UUID) -> Void
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.projectIconSymbol)
