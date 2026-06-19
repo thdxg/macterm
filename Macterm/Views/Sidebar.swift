@@ -27,9 +27,10 @@ struct SidebarContent: View {
                     get: { expandedProjects.contains(project.id) },
                     set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
                 )) {
-                    ForEach(Array(tabs.enumerated()), id: \.element.id) { _, tab in
+                    ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
                         SidebarTabRow(
                             tab: tab,
+                            index: tabIndex + 1,
                             isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id
                         ) {
                             appState.closeTab(tab.id, projectID: project.id)
@@ -224,11 +225,16 @@ private struct SidebarProjectRow: View {
 
 private struct SidebarTabRow: View {
     let tab: TerminalTab
+    let index: Int
     let isActive: Bool
     let onClose: () -> Void
     let onRename: (String) -> Void
     @Environment(AppState.self)
     private var appState
+    @AppStorage(Preferences.Keys.tabIconSymbol)
+    private var tabIconSymbol = "terminal"
+    @AppStorage(Preferences.Keys.tabIndicatorMode)
+    private var tabIndicatorMode = TabIndicatorMode.icon.rawValue
     @State
     private var isRenaming = false
     @State
@@ -254,10 +260,24 @@ private struct SidebarTabRow: View {
     }
 
     var body: some View {
-        Label {
-            titleContent
-        } icon: {
-            TerminalStateIndicator(state: displayState)
+        Group {
+            if tabIndicatorMode == TabIndicatorMode.status.rawValue {
+                Label {
+                    titleContent
+                } icon: {
+                    TerminalStateIndicator(state: displayState)
+                }
+            } else if tabIconSymbol == Preferences.noIcon {
+                titleContent
+                    .padding(.leading, 6)
+            } else {
+                Label {
+                    titleContent
+                } icon: {
+                    SidebarRowIcon(symbol: tabIconSymbol, index: index)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .contextMenu {
             Button("Rename Tab") { beginRename() }

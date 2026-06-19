@@ -173,6 +173,10 @@ private struct GhosttyCLIBanner: View {
 private struct AppearanceSettings: View {
     @AppStorage(Preferences.Keys.projectIconSymbol)
     private var projectIconSymbol = "folder"
+    @AppStorage(Preferences.Keys.tabIconSymbol)
+    private var tabIconSymbol = "terminal"
+    @AppStorage(Preferences.Keys.tabIndicatorMode)
+    private var tabIndicatorMode = TabIndicatorMode.icon.rawValue
     @AppStorage(Preferences.Keys.showNewProjectButton)
     private var showNewProjectButton = true
     @AppStorage(Preferences.Keys.tabSwitcherVisibility)
@@ -245,6 +249,23 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: projectIconSymbol) { _, v in Preferences.shared.projectIconSymbol = v }
+
+                Picker("Tab indicator", selection: $tabIndicatorMode) {
+                    ForEach(TabIndicatorMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                .onChange(of: tabIndicatorMode) { _, v in
+                    Preferences.shared.tabIndicatorMode = TabIndicatorMode(rawValue: v) ?? .icon
+                }
+
+                Picker("Tab icon", selection: $tabIconSymbol) {
+                    ForEach(Preferences.tabIconChoices, id: \.self) { name in
+                        iconPickerLabel(name).tag(name)
+                    }
+                }
+                .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
+                .disabled(tabIndicatorMode == TabIndicatorMode.status.rawValue)
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }

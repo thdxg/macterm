@@ -35,6 +35,20 @@ enum WindowGlassStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum TabIndicatorMode: String, CaseIterable, Identifiable {
+    case icon
+    case status
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .icon: "Icon"
+        case .status: "Status"
+        }
+    }
+}
+
 /// Single observable source of truth for UserDefaults-backed preferences.
 ///
 /// Macterm only stores app-shaped state here (window opacity/blur, quick
@@ -69,6 +83,10 @@ final class Preferences {
 
     var tabIconSymbol: String {
         didSet { defaults.set(tabIconSymbol, forKey: Keys.tabIconSymbol) }
+    }
+
+    var tabIndicatorMode: TabIndicatorMode {
+        didSet { defaults.set(tabIndicatorMode.rawValue, forKey: Keys.tabIndicatorMode) }
     }
 
     var showNewProjectButton: Bool {
@@ -247,6 +265,8 @@ final class Preferences {
         activeProjectID = (defaults.string(forKey: Keys.activeProjectID)).flatMap(UUID.init)
         projectIconSymbol = defaults.string(forKey: Keys.projectIconSymbol) ?? "folder"
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
+        tabIndicatorMode = (defaults.string(forKey: Keys.tabIndicatorMode))
+            .flatMap(TabIndicatorMode.init(rawValue:)) ?? .icon
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
             .flatMap(TabSwitcherVisibility.init(rawValue:)) ?? .whenMultiple
@@ -295,6 +315,7 @@ final class Preferences {
         static let activeProjectID = "macterm.activeProjectID"
         static let projectIconSymbol = "macterm.sidebar.projectIcon"
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
+        static let tabIndicatorMode = "macterm.sidebar.tabIndicatorMode"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
