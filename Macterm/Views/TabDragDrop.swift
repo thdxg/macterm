@@ -3,11 +3,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // Drag-and-drop to move a sidebar tab from one project into another. A tab row
-// is a drag source carrying its UUID; every project row is a drop target.
-// Dropping a tab onto a project hands off to `AppState.moveTab`, which reuses
-// the `TerminalTab` (and its live surfaces/shells) as-is — only the owning
-// workspace changes. This is the direct-manipulation counterpart of the
-// "Move to Project" context-menu command for the same operation.
+// vends its UUID as the drag payload (`.onDrag`); each project's tab list
+// accepts a tab dragged in from a different project through the ForEach
+// `.onInsert` hook. We use `.onInsert` rather than `.onDrop` because SwiftUI
+// ignores `.onDrop` for views inside a `List` on macOS — `.onInsert` is the
+// List-native drop hook, the same family as the `.onMove` that already powers
+// within-project tab reordering (`.onMove` only reorders within one ForEach,
+// so it can't cross projects). The move runs through `AppState.moveTab`,
+// reusing the live `TerminalTab` (and its surfaces/shells) as-is.
 
 extension UTType {
     /// In-app drag payload identifying the tab being moved: its UUID bytes.
@@ -34,40 +37,14 @@ func tabDragItemProvider(for tabID: UUID) -> NSItemProvider {
     return provider
 }
 
-/// Drop target for a sidebar project row: accepts a dragged tab and moves it
-/// into this project. `isTargeted` drives the row's drop highlight.
-struct TabDropDelegate: DropDelegate {
-    @Binding var isTargeted: Bool
-    /// Performs the move; receives the dragged tab's UUID.
-    let onDropTab: @MainActor (UUID) -> Void
-
-    func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.mactermTabID])
-    }
-
-    func dropEntered(info _: DropInfo) {
-        isTargeted = true
-    }
-
-    func dropExited(info _: DropInfo) {
-        isTargeted = false
-    }
-
-    func dropUpdated(info _: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info _: DropInfo) -> Bool {
-        isTargeted = false
-        // The drag never leaves the app (the payload is .ownProcess), so the
-        // tab ID can be read synchronously off the drag pasteboard instead of
-        // round-tripping through the item provider — same as PaneDropDelegate.
-        guard let data = NSPasteboard(name: .drag).pasteboardItems?
-            .compactMap({ $0.data(forType: .mactermTabID) })
-            .first, data.count == 16
-        else { return false }
-        let tabID = data.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) }
-        MainActor.assumeIsolated { onDropTab(tabID) }
-        return true
-    }
+/// The dragged tab's UUID, read synchronously off the active drag pasteboard
+/// during a drop. The drag never leaves the app, so the payload is already on
+/// the `.drag` pasteboard — no need to async-load the `.onInsert` item
+/// providers (the same shortcut `PaneDropDelegate` takes).
+func draggedTabID() -> UUID? {
+    guard let data = NSPasteboard(name: .drag).pasteboardItems?
+        .compactMap({ $0.data(forType: .mactermTabID) })
+        .first, data.count == 16
+    else { return nil }
+    return data.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) }
 }
