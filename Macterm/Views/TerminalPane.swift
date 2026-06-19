@@ -126,7 +126,7 @@ private struct TerminalSurface: NSViewRepresentable {
     private func configure(_ view: GhosttyTerminalNSView) {
         view.onFocus = onFocus
         view.onInteraction = { [weak pane] in
-            pane?.acknowledgeCommandCompletion()
+            pane?.recordUserInteraction()
         }
         view.onProcessExit = onProcessExit
         view.onSplitRequest = onSplitRequest
@@ -181,6 +181,21 @@ private struct TerminalSurface: NSViewRepresentable {
                 trigger: nil
             )
             UNUserNotificationCenter.current().add(request)
+        }
+        view.onProgressStarted = { [weak pane] in
+            pane?.refreshForegroundProcess()
+            pane?.markCommandRunning()
+        }
+        view.onProgressFinished = { [weak pane] in
+            guard let pane, pane.executionState == .running else { return }
+            pane.refreshForegroundProcess()
+            pane.markProgressFinished()
+            onCommandFinished()
+        }
+        view.onTerminalActivity = { [weak pane] in
+            guard let pane else { return }
+            pane.refreshForegroundProcess()
+            pane.markTerminalActivity()
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }

@@ -58,7 +58,7 @@ struct PaneTitleTests {
     func title_survives_while_its_pid_holds_the_foreground() {
         let pane = makePane()
         pane.receiveReportedTitle("session", programPID: 42)
-        pane.applyForegroundRefresh(name: "claude", foregroundPID: 42, programPID: 42)
+        pane.applyForegroundRefresh(name: "claude", foregroundPID: 42)
         #expect(pane.programTitle == "session")
     }
 
@@ -66,7 +66,7 @@ struct PaneTitleTests {
     func title_expires_when_foreground_returns_to_shell() {
         let pane = makePane()
         pane.receiveReportedTitle("session", programPID: 42)
-        pane.applyForegroundRefresh(name: "nu", foregroundPID: 7, programPID: nil)
+        pane.applyForegroundRefresh(name: "nu", foregroundPID: 7, foregroundIsShell: true)
         #expect(pane.programTitle == nil)
         // Display falls back to the process name.
         #expect(pane.displayTitle == "nu")
@@ -78,7 +78,7 @@ struct PaneTitleTests {
         pane.receiveReportedTitle("session", programPID: 42)
         // claude exits and btop starts between two polls: the pid changed,
         // so claude's title must not be attributed to btop.
-        pane.applyForegroundRefresh(name: "btop", foregroundPID: 43, programPID: 43)
+        pane.applyForegroundRefresh(name: "btop", foregroundPID: 43)
         #expect(pane.programTitle == nil)
         #expect(pane.displayTitle == "btop")
     }
@@ -87,7 +87,7 @@ struct PaneTitleTests {
     func title_expires_when_surface_is_gone() {
         let pane = makePane()
         pane.receiveReportedTitle("session", programPID: 42)
-        pane.applyForegroundRefresh(name: nil, foregroundPID: nil, programPID: nil)
+        pane.applyForegroundRefresh(name: nil, foregroundPID: nil)
         #expect(pane.programTitle == nil)
     }
 
@@ -96,7 +96,7 @@ struct PaneTitleTests {
     @Test
     func displayTitle_falls_back_to_process_name_without_a_program_title() {
         let pane = makePane()
-        pane.applyForegroundRefresh(name: "hx", foregroundPID: 9, programPID: nil)
+        pane.applyForegroundRefresh(name: "hx", foregroundPID: 9)
         #expect(pane.displayTitle == "hx")
     }
 

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 @testable import Macterm
 import Testing
@@ -45,5 +46,38 @@ struct ProcessInspectorTests {
     @Test
     func argv_returns_nil_for_nonexistent_pid() {
         #expect(ProcessInspector.argv(pid: 999_999) == nil)
+    }
+
+    @Test
+    func shellDetection_uses_system_shells() throws {
+        let loginShellPtr = try #require(getpwuid(getuid())?.pointee.pw_shell)
+        let loginShell = String(cString: loginShellPtr)
+        let loginShellName = (loginShell as NSString).lastPathComponent
+
+        #expect(ProcessInspector.isShellProcessName(loginShell))
+        #expect(ProcessInspector.isShellProcessName("-\(loginShellName)"))
+        #expect(!ProcessInspector.isShellProcessName("macterm-definitely-not-a-shell"))
+    }
+
+    @Test
+    func terminalInputIsRaw_reads_tty_input_mode() throws {
+        var master: Int32 = -1
+        var slave: Int32 = -1
+        #expect(openpty(&master, &slave, nil, nil, nil) == 0)
+        defer {
+            if master >= 0 { close(master) }
+            if slave >= 0 { close(slave) }
+        }
+        let path = try String(cString: #require(ttyname(slave)))
+
+        #expect(ProcessInspector.terminalInputIsRaw(ttyPath: path) == false)
+
+        var attrs = termios()
+        #expect(tcgetattr(slave, &attrs) == 0)
+        attrs.c_lflag &= ~tcflag_t(ICANON)
+        attrs.c_lflag &= ~tcflag_t(ECHO)
+        #expect(tcsetattr(slave, TCSANOW, &attrs) == 0)
+
+        #expect(ProcessInspector.terminalInputIsRaw(ttyPath: path) == true)
     }
 }

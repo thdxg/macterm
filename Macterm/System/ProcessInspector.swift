@@ -70,6 +70,47 @@ enum ProcessInspector {
         return pid
     }
 
+    /// Whether the pane's foreground process is a shell. Prefer the process's
+    /// executable/argv path over its display name; the shell set itself comes
+    /// from the host (`getusershell`, login shell, `$SHELL`) rather than a
+    /// Macterm-maintained list.
+    @MainActor
+    static func foregroundProcessIsShell(forPane pane: Pane) -> Bool {
+        guard let pid = pane.nsView?.foregroundPID else { return false }
+        return isShellProcess(pid: pid)
+    }
+
+    static func isShellProcess(pid: pid_t) -> Bool {
+        if let path = execPath(pid: pid), isShellProcessName(path) { return true }
+        if let firstArg = argv(pid: pid)?.first, isShellProcessName(firstArg) { return true }
+        if let name = comm(pid: pid), isShellProcessName(name) { return true }
+        return false
+    }
+
+    /// Whether the pane's tty is in raw/cbreak-style input mode. Full-screen and
+    /// interactive CLIs (editors, ssh, agent TUIs) commonly disable canonical
+    /// input and/or echo while they are idle at their own prompt. Plain shell
+    /// commands like `sleep 20` leave the tty in canonical mode, so this lets the
+    /// sidebar avoid treating every long-lived interactive foreground process as
+    /// perpetual work without app-specific process-name exclusions.
+    @MainActor
+    static func terminalInputIsRaw(forPane pane: Pane) -> Bool {
+        terminalInputIsRaw(ttyPath: pane.nsView?.ttyName)
+    }
+
+    static func terminalInputIsRaw(ttyPath: String?) -> Bool {
+        guard let ttyPath else { return false }
+        let fd = open(ttyPath, O_RDONLY | O_NOCTTY | O_NONBLOCK)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        var attrs = termios()
+        guard tcgetattr(fd, &attrs) == 0 else { return false }
+        let canonical = attrs.c_lflag & tcflag_t(ICANON) != 0
+        let echo = attrs.c_lflag & tcflag_t(ECHO) != 0
+        return !canonical || !echo
+    }
+
     /// The kernel short accounting name (`p_comm` / `pbsi_comm`) of `pid` — a
     /// basename truncated to `MAXCOMLEN`, no path or arguments — or nil. Same
     /// field tmux uses for window names.
@@ -107,18 +148,29 @@ enum ProcessInspector {
         return first.hasPrefix("-") ? String(first.dropFirst()) : first
     }
 
+    /// Whether `name` names a shell according to the system user-shell database
+    /// (`/etc/shells` via `getusershell`) plus the current login/environment
+    /// shell. This keeps shell detection aligned with the host instead of a
+    /// hardcoded list that inevitably misses user-installed shells.
+    static func isShellProcessName(_ name: String?) -> Bool {
+        guard let name else { return false }
+        let basename = shellBasename(name)
+        guard !basename.isEmpty else { return false }
+        return knownShellBasenames.contains(basename)
+    }
+
     /// Basename of a shell argv/path with a leading login-shell `-` stripped.
     private static func shellBasename(_ s: String) -> String {
-        var name = s
+        var name = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.hasPrefix("-") { name.removeFirst() }
-        return (name as NSString).lastPathComponent
+        return (name as NSString).lastPathComponent.lowercased()
     }
 
     /// Basename of the user's login shell (`getpwuid`), for distinguishing a
     /// deliberately-launched shell from the idle default.
     private static let loginShellBasename: String = {
         guard let loginShell = getpwuid(getuid())?.pointee.pw_shell.map({ String(cString: $0) }) else { return "" }
-        return (loginShell as NSString).lastPathComponent
+        return (loginShell as NSString).lastPathComponent.lowercased()
     }()
 
     /// The argument vector of `pid` (argv[0…argc-1]) via KERN_PROCARGS2, or nil.
@@ -166,12 +218,25 @@ enum ProcessInspector {
     /// idle prompt, not a command worth capturing). Matches the basename with a
     /// leading login-shell `-` stripped.
     private static func isShell(_ argv0: String) -> Bool {
-        knownShells.contains(shellBasename(argv0))
+        isShellProcessName(argv0)
     }
 
-    private static let knownShells: Set<String> = [
-        "sh", "bash", "zsh", "fish", "nu", "dash", "ksh", "tcsh", "csh", "ash", "xonsh", "elvish",
-    ]
+    private static let knownShellBasenames: Set<String> = {
+        var shells = Set<String>()
+        setusershell()
+        while let ptr = getusershell() {
+            let basename = shellBasename(String(cString: ptr))
+            if !basename.isEmpty { shells.insert(basename) }
+        }
+        endusershell()
+
+        if !loginShellBasename.isEmpty { shells.insert(loginShellBasename) }
+        if let envShell = ProcessInfo.processInfo.environment["SHELL"] {
+            let basename = shellBasename(envShell)
+            if !basename.isEmpty { shells.insert(basename) }
+        }
+        return shells
+    }()
 
     /// Join argv into a display command, stripping a leading login-shell `-`.
     private static func displayCommand(_ argv: [String]) -> String? {

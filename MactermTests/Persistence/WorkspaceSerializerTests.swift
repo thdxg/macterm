@@ -121,6 +121,50 @@ struct WorkspaceSerializerTests {
     }
 
     @Test
+    func round_trip_preserves_done_attention_state() {
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
+        if case let .pane(p) = ws.tabs[0].splitRoot {
+            p.markCommandFinished()
+            #expect(p.executionState == .done)
+        }
+        let roundTripped = roundTrip([ws.projectID: ws])
+        if case let .pane(p) = roundTripped[0].tabs[0].splitRoot {
+            #expect(p.executionState == .done)
+        } else {
+            Issue.record("expected leaf")
+        }
+    }
+
+    @Test
+    func round_trip_does_not_persist_idle_or_running() {
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
+        if case let .pane(p) = ws.tabs[0].splitRoot {
+            // Idle stays idle.
+            #expect(p.executionState == .idle)
+        }
+        let idleRound = roundTrip([ws.projectID: ws])
+        if case let .pane(p) = idleRound[0].tabs[0].splitRoot {
+            #expect(p.executionState == .idle)
+        }
+    }
+
+    @Test
+    func restore_done_is_cleared_by_acknowledge() {
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
+        if case let .pane(p) = ws.tabs[0].splitRoot {
+            p.markCommandFinished()
+        }
+        let roundTripped = roundTrip([ws.projectID: ws])
+        if case let .pane(p) = roundTripped[0].tabs[0].splitRoot {
+            #expect(p.executionState == .done)
+            p.acknowledgeCommandCompletion()
+            #expect(p.executionState == .idle)
+        } else {
+            Issue.record("expected leaf")
+        }
+    }
+
+    @Test
     func roundtrip_via_WorkspaceStore_on_disk() {
         // End-to-end: encode, write to a temp file, load back, restore.
         let tmp = FileManager.default.temporaryDirectory

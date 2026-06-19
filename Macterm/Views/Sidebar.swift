@@ -322,6 +322,10 @@ private struct SidebarTabRow: View {
 
     private var displayState: TerminalExecutionState {
         if tab.executionState == .running { return .running }
+        // The tab the user is already looking at never needs an attention
+        // indicator; a background tab's `done` checkmark is shown until it's
+        // acknowledged (which focusing it does, via the poll's
+        // `acknowledgeFinishedCommandIfActive`).
         return isActive ? .idle : tab.executionState
     }
 

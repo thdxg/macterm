@@ -51,6 +51,23 @@ final class GhosttyTerminalNSView: NSView {
         onTitleChange?(title)
     }
 
+    func surfaceDidReportProgress(running: Bool) {
+        if running {
+            onProgressStarted?()
+        } else {
+            onProgressFinished?()
+        }
+    }
+
+    func surfaceDidUpdateScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
+        let snapshot = ScrollbarSnapshot(total: total, offset: offset, len: len)
+        if let lastScrollbarSnapshot, total > lastScrollbarSnapshot.total {
+            onTerminalActivity?()
+        }
+        lastScrollbarSnapshot = snapshot
+        onScrollbarUpdate?(total, offset, len)
+    }
+
     var onFocus: (() -> Void)?
     var onInteraction: (() -> Void)?
     var onProcessExit: (() -> Void)?
@@ -63,6 +80,9 @@ final class GhosttyTerminalNSView: NSView {
     var onSearchSelected: ((Int?) -> Void)?
     var onDesktopNotification: ((String, String) -> Void)?
     var onCommandFinished: ((Int16, UInt64) -> Void)?
+    var onProgressStarted: (() -> Void)?
+    var onProgressFinished: (() -> Void)?
+    var onTerminalActivity: (() -> Void)?
     /// libghostty pushes scrollback geometry (all values in rows) whenever the
     /// viewport, scrollback size, or visible row count changes.
     /// `(total, offset, len)`: total rows including scrollback, the first
@@ -70,6 +90,14 @@ final class GhosttyTerminalNSView: NSView {
     var onScrollbarUpdate: ((UInt64, UInt64, UInt64) -> Void)?
     var isFocused: Bool = false
     var currentPwd: String?
+
+    private var lastScrollbarSnapshot: ScrollbarSnapshot?
+
+    private struct ScrollbarSnapshot: Equatable {
+        let total: UInt64
+        let offset: UInt64
+        let len: UInt64
+    }
 
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
     private var _selectedRange: NSRange = .init(location: NSNotFound, length: 0)
@@ -198,6 +226,18 @@ final class GhosttyTerminalNSView: NSView {
         guard let surface else { return nil }
         let pid = ghostty_surface_foreground_pid(surface)
         return pid != 0 ? pid_t(pid) : nil
+    }
+
+    /// The slave tty path for this surface's pty, used by `ProcessInspector` to
+    /// read terminal input mode (canonical shell command vs raw/cbreak TUI).
+    var ttyName: String? {
+        guard let surface else { return nil }
+        let tty = ghostty_surface_tty_name(surface)
+        defer { ghostty_string_free(tty) }
+        guard let ptr = tty.ptr, tty.len > 0 else { return nil }
+        let bytes = UnsafeBufferPointer(start: ptr, count: Int(tty.len)).map { UInt8(bitPattern: $0) }
+        guard let name = String(bytes: bytes, encoding: .utf8), !name.isEmpty else { return nil }
+        return name
     }
 
     deinit {

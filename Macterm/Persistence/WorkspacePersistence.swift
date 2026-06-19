@@ -64,6 +64,12 @@ indirect enum SplitNodeSnapshot: Codable {
 struct PaneSnapshot: Codable {
     let id: UUID
     let projectPath: String
+    /// Whether the pane was left in the "done / needs attention" state when the
+    /// app last quit, so the green checkmark survives a restart until the user
+    /// acknowledges it. Only `.done` is worth persisting: `.running` can't
+    /// outlive the shell process, and `.idle` is the default. Optional so older
+    /// snapshots (without the field) decode as nil / idle.
+    var needsAttention: Bool?
     // No `title`: the tab name is derived live from the pane's foreground
     // process, so there's nothing per-pane to persist. (An older snapshot's
     // `title` key is harmlessly ignored on decode.)
@@ -168,7 +174,11 @@ enum WorkspaceSerializer {
             // the user had navigated to. Falls back to projectPath when the
             // surface hasn't reported a pwd yet.
             let path = p.nsView?.currentPwd ?? p.projectPath
-            return .pane(PaneSnapshot(id: p.id, projectPath: path))
+            return .pane(PaneSnapshot(
+                id: p.id,
+                projectPath: path,
+                needsAttention: p.executionState == .done
+            ))
         case let .split(b):
             return .split(SplitBranchSnapshot(
                 direction: b.direction,
@@ -183,6 +193,7 @@ enum WorkspaceSerializer {
         switch snap {
         case let .pane(p):
             let pane = Pane(projectPath: p.projectPath, projectID: projectID)
+            if p.needsAttention == true { pane.restoreNeedsAttention() }
             return .pane(pane)
         case let .split(b):
             return .split(SplitBranch(

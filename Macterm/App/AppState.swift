@@ -116,6 +116,7 @@ final class AppState {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
                     pane.refreshForegroundProcess()
+                    pane.settleTerminalActivityIfQuiet()
                     acknowledgeFinishedCommandIfActive(paneID: pane.id, projectID: projectID)
                 }
             }

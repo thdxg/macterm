@@ -57,10 +57,16 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let duration = action.action.command_finished.duration
             DispatchQueue.main.async { view.onCommandFinished?(exitCode, duration) }
             return true
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            guard let view = surfaceView(from: target) else { return true }
+            let state = action.action.progress_report.state
+            let running = state == GHOSTTY_PROGRESS_STATE_SET || state == GHOSTTY_PROGRESS_STATE_INDETERMINATE
+            DispatchQueue.main.async { view.surfaceDidReportProgress(running: running) }
+            return true
         case GHOSTTY_ACTION_SCROLLBAR:
             guard let view = surfaceView(from: target) else { return true }
             let s = action.action.scrollbar
-            DispatchQueue.main.async { view.onScrollbarUpdate?(s.total, s.offset, s.len) }
+            DispatchQueue.main.async { view.surfaceDidUpdateScrollbar(total: s.total, offset: s.offset, len: s.len) }
             return true
         case GHOSTTY_ACTION_RELOAD_CONFIG:
             // libghostty fires this (with soft = true) when a surface's
