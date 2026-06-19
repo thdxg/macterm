@@ -228,6 +228,16 @@ final class Workspace: Identifiable {
         return tab
     }
 
+    /// Append an existing tab — moved in from another workspace — and make it
+    /// active. Unlike `createTab` the `TerminalTab` (and its live panes/surfaces)
+    /// is reused as-is; the caller is responsible for having removed it from its
+    /// previous workspace first.
+    func adoptTab(_ tab: TerminalTab) {
+        tabs.append(tab)
+        if let current = activeTabID { tabHistory.push(current) }
+        activeTabID = tab.id
+    }
+
     func closeTab(_ tabID: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == tabID }) else { return }
         tabs.remove(at: index)

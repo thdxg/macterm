@@ -26,6 +26,29 @@ struct WorkspaceTests {
     }
 
     @Test
+    func adoptTab_appends_existing_tab_and_selects_it() {
+        let ws = makeWorkspace()
+        let original = ws.tabs[0].id
+        let incoming = TerminalTab(projectPath: "/elsewhere", projectID: UUID())
+        ws.adoptTab(incoming)
+        #expect(ws.tabs.count == 2)
+        #expect(ws.tabs.last?.id == incoming.id)
+        #expect(ws.activeTabID == incoming.id)
+        _ = original
+    }
+
+    @Test
+    func adoptTab_pushes_previous_active_onto_history() {
+        let ws = makeWorkspace()
+        let original = ws.tabs[0].id
+        let incoming = TerminalTab(projectPath: "/elsewhere", projectID: UUID())
+        ws.adoptTab(incoming)
+        // Closing the adopted (active) tab should fall back to the prior active.
+        ws.closeTab(incoming.id)
+        #expect(ws.activeTabID == original)
+    }
+
+    @Test
     func closeTab_active_selects_most_recent_from_history() {
         let ws = makeWorkspace()
         let t1 = ws.tabs[0].id

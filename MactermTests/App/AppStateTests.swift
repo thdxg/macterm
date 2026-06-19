@@ -113,6 +113,80 @@ struct AppStateTests {
         #expect(originalTab.splitRoot.allPanes().count == 1)
     }
 
+    // MARK: - Move tab between projects
+
+    @Test
+    func moveTab_relocates_tab_and_activates_destination() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let ws1 = try #require(state.workspaces[p1.id])
+        // Give p1 a second tab so moving one away doesn't empty it.
+        let moving = ws1.createTab(projectPath: "/tmp1")
+        let staying = try #require(ws1.tabs.first?.id)
+
+        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.path)
+
+        // Source lost the tab; destination gained it (object reused, surfaces intact).
+        #expect(ws1.tabs.map(\.id) == [staying])
+        let ws2 = try #require(state.workspaces[p2.id])
+        #expect(ws2.tabs.contains { $0.id == moving.id })
+        // Destination is now active with the moved tab selected.
+        #expect(state.activeProjectID == p2.id)
+        #expect(ws2.activeTabID == moving.id)
+    }
+
+    @Test
+    func moveTab_leaves_source_workspace_empty_when_moving_its_only_tab() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let ws1 = try #require(state.workspaces[p1.id])
+        let only = try #require(ws1.tabs.first?.id)
+
+        state.moveTab(only, from: p1.id, to: p2.id, destPath: p2.path)
+
+        #expect(ws1.tabs.isEmpty)
+        #expect(ws1.activeTabID == nil)
+        #expect(state.workspaces[p2.id]?.tabs.contains { $0.id == only } == true)
+    }
+
+    @Test
+    func moveTab_creates_destination_workspace_when_absent() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let ws1 = try #require(state.workspaces[p1.id])
+        let tab = ws1.createTab(projectPath: "/tmp1")
+        // A project that's never been opened — no workspace yet.
+        let p2 = Project(name: "p2", path: "/tmp2", sortOrder: 1)
+        #expect(state.workspaces[p2.id] == nil)
+
+        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.path)
+
+        let ws2 = try #require(state.workspaces[p2.id])
+        #expect(ws2.tabs.contains { $0.id == tab.id })
+    }
+
+    @Test
+    func moveTab_same_project_is_noop() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let before = ws.tabs.map(\.id)
+        try state.moveTab(#require(before.first), from: p.id, to: p.id, destPath: p.path)
+        #expect(ws.tabs.map(\.id) == before)
+    }
+
+    @Test
+    func moveTab_unknown_tab_is_noop() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let ws2Before = try #require(state.workspaces[p2.id]).tabs.count
+        state.moveTab(UUID(), from: p1.id, to: p2.id, destPath: p2.path)
+        #expect(state.workspaces[p2.id]?.tabs.count == ws2Before)
+    }
+
     // MARK: - Focus navigation
 
     @Test

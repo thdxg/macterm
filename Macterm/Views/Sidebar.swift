@@ -31,13 +31,18 @@ struct SidebarContent: View {
                         SidebarTabRow(
                             tab: tab,
                             index: tabIndex + 1,
-                            isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id
-                        ) {
-                            appState.closeTab(tab.id, projectID: project.id)
-                        } onRename: { newName in
-                            tab.customTitle = newName.isEmpty ? nil : newName
-                            appState.saveWorkspaces()
-                        }
+                            isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id,
+                            moveTargets: projectStore.projects.filter { $0.id != project.id },
+                            onClose: { appState.closeTab(tab.id, projectID: project.id) },
+                            onRename: { newName in
+                                tab.customTitle = newName.isEmpty ? nil : newName
+                                appState.saveWorkspaces()
+                            },
+                            onMoveToProject: { destination in
+                                appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
+                                expandedProjects.insert(destination.id)
+                            }
+                        )
                         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
                     }
                     .onMove { source, destination in
@@ -227,8 +232,10 @@ private struct SidebarTabRow: View {
     let tab: TerminalTab
     let index: Int
     let isActive: Bool
+    let moveTargets: [Project]
     let onClose: () -> Void
     let onRename: (String) -> Void
+    let onMoveToProject: (Project) -> Void
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
@@ -281,6 +288,13 @@ private struct SidebarTabRow: View {
         }
         .contextMenu {
             Button("Rename Tab") { beginRename() }
+            if !moveTargets.isEmpty {
+                Menu("Move to Project") {
+                    ForEach(moveTargets) { project in
+                        Button(project.name) { onMoveToProject(project) }
+                    }
+                }
+            }
             Divider()
             Button("Close Tab", action: onClose)
         }
