@@ -49,19 +49,27 @@ struct SidebarContent: View {
                         appState.saveWorkspaces()
                     }
                 } label: {
-                    SidebarProjectRow(project: project, index: projectIndex + 1) {
-                        appState.selectProject(project)
-                        appState.createTab(projectID: project.id, projectPath: project.path)
-                        expandedProjects.insert(project.id)
-                    } onRename: {
-                        projectStore.rename(id: project.id, to: $0)
-                    } onUnload: {
-                        appState.unloadProject(project.id)
-                    } onRemove: {
-                        expandedProjects.remove(project.id)
-                        appState.removeProject(project.id)
-                        projectStore.remove(id: project.id)
-                    }
+                    SidebarProjectRow(
+                        project: project,
+                        index: projectIndex + 1,
+                        onNewTab: {
+                            appState.selectProject(project)
+                            appState.createTab(projectID: project.id, projectPath: project.path)
+                            expandedProjects.insert(project.id)
+                        },
+                        onRename: { projectStore.rename(id: project.id, to: $0) },
+                        onUnload: { appState.unloadProject(project.id) },
+                        onRemove: {
+                            expandedProjects.remove(project.id)
+                            appState.removeProject(project.id)
+                            projectStore.remove(id: project.id)
+                        },
+                        onDropTab: { tabID in
+                            guard let source = appState.projectID(containingTab: tabID), source != project.id else { return }
+                            appState.moveTab(tabID, from: source, to: project.id, destPath: project.path)
+                            expandedProjects.insert(project.id)
+                        }
+                    )
                     .tag(SidebarItem.project(project.id))
                 }
             }
@@ -151,6 +159,8 @@ private struct SidebarProjectRow: View {
     let onRename: (String) -> Void
     let onUnload: () -> Void
     let onRemove: () -> Void
+    /// Move a dragged tab (by UUID) into this project — see TabDragDrop.
+    let onDropTab: (UUID) -> Void
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.projectIconSymbol)
@@ -159,6 +169,8 @@ private struct SidebarProjectRow: View {
     private var isRenaming = false
     @State
     private var renameText = ""
+    @State
+    private var isDropTargeted = false
     @FocusState
     private var focused: Bool
 
@@ -190,6 +202,13 @@ private struct SidebarProjectRow: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(MactermTheme.accent.opacity(isDropTargeted ? 0.25 : 0))
+        )
+        .onDrop(of: [.mactermTabID], delegate: TabDropDelegate(isTargeted: $isDropTargeted, onDropTab: onDropTab))
         .contextMenu {
             Button("New Tab", action: onNewTab)
             Button("Copy Path") {
@@ -276,6 +295,7 @@ private struct SidebarTabRow: View {
                 }
             }
         }
+        .onDrag { tabDragItemProvider(for: tab.id) }
         .contextMenu {
             Button("Rename Tab") { beginRename() }
             if !moveTargets.isEmpty {

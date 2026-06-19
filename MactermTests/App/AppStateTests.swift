@@ -178,6 +178,29 @@ struct AppStateTests {
     }
 
     @Test
+    func projectID_containingTab_finds_owning_project() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let tabInP1 = try #require(state.workspaces[p1.id]?.tabs.first?.id)
+        let tabInP2 = try #require(state.workspaces[p2.id]?.tabs.first?.id)
+        #expect(state.projectID(containingTab: tabInP1) == p1.id)
+        #expect(state.projectID(containingTab: tabInP2) == p2.id)
+        #expect(state.projectID(containingTab: UUID()) == nil)
+    }
+
+    @Test
+    func projectID_containingTab_tracks_a_moved_tab() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let moving = try #require(state.workspaces[p1.id]).createTab(projectPath: "/tmp1")
+        #expect(state.projectID(containingTab: moving.id) == p1.id)
+        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.path)
+        #expect(state.projectID(containingTab: moving.id) == p2.id)
+    }
+
+    @Test
     func moveTab_unknown_tab_is_noop() throws {
         let state = makeAppState()
         let p1 = seedProject(state, name: "p1", path: "/tmp1")

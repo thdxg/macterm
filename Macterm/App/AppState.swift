@@ -342,6 +342,13 @@ final class AppState {
     /// window). The destination becomes the active project with the moved tab
     /// selected, so the user lands where they meant to be. No-op for a
     /// same-project move or an unknown source/tab.
+    /// The project whose workspace currently contains the given tab, if any.
+    /// Used by sidebar drag-and-drop, where the drop knows the destination
+    /// project but the dragged tab only carries its own ID.
+    func projectID(containingTab tabID: UUID) -> UUID? {
+        workspaces.first { _, ws in ws.tabs.contains { $0.id == tabID } }?.key
+    }
+
     func moveTab(_ tabID: UUID, from sourceProjectID: UUID, to destProjectID: UUID, destPath: String) {
         guard sourceProjectID != destProjectID,
               let source = workspaces[sourceProjectID],
