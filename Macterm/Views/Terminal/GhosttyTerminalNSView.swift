@@ -799,7 +799,8 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     private func unshiftedCodepoint(from event: NSEvent) -> UInt32 {
-        guard let chars = event.characters(byApplyingModifiers: []),
+        guard event.type == .keyDown || event.type == .keyUp,
+              let chars = event.characters(byApplyingModifiers: []),
               let scalar = chars.unicodeScalars.first
         else { return 0 }
         return scalar.value
