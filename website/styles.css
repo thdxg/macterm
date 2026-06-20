@@ -35,8 +35,8 @@ body {
   background-color: var(--ground);
   /* faint terminal cell grid, echoing the icon's tiled glyph */
   background-image:
-    linear-gradient(to right,  rgba(124, 144, 168, 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(124, 144, 168, 0.045) 1px, transparent 1px);
+    linear-gradient(to right,  rgba(124, 144, 168, 0.085) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(124, 144, 168, 0.085) 1px, transparent 1px);
   background-size: var(--cell) var(--cell);
   color: var(--text);
   font-family: var(--sans);
