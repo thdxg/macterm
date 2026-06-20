@@ -194,7 +194,7 @@ private struct AppearanceSettings: View {
         Form {
             Section("Window") {
                 HStack {
-                    Text("Background Opacity")
+                    Text("Background opacity")
                     Slider(value: $backgroundOpacity, in: 0.0 ... 1.0)
                     Text("\(Int((backgroundOpacity * 100).rounded()))%")
                         .monospacedDigit()
@@ -205,28 +205,21 @@ private struct AppearanceSettings: View {
                 }
 
                 // Liquid glass (NSGlassEffectView) exists only on macOS 26+;
-                // hide the controls entirely on older systems where they'd be
-                // inert rather than show dead toggles.
+                // hide the control entirely on older systems where it'd be
+                // inert rather than show a dead picker. "None" off / a style on
+                // are folded into one picker over the two underlying prefs.
                 if WindowAppearance.glassSupported {
-                    Toggle("Liquid Glass", isOn: $liquidGlass)
-                        .onChange(of: liquidGlass) { _, v in
-                            Preferences.shared.windowGlassEnabled = v
-                        }
-                        .disabled(backgroundOpacity >= 0.999)
-
-                    Picker("Glass Style", selection: $liquidGlassStyle) {
+                    Picker("Liquid glass", selection: glassSelection) {
+                        Text("None").tag(WindowGlassStyle?.none)
                         ForEach(WindowGlassStyle.allCases) { style in
-                            Text(style.displayName).tag(style)
+                            Text(style.displayName).tag(WindowGlassStyle?.some(style))
                         }
                     }
-                    .onChange(of: liquidGlassStyle) { _, v in
-                        Preferences.shared.windowGlassStyle = v
-                    }
-                    .disabled(backgroundOpacity >= 0.999 || !liquidGlass)
+                    .disabled(backgroundOpacity >= 0.999)
                 }
 
                 HStack {
-                    Text("Background Blur")
+                    Text("Background blur")
                     Slider(value: $backgroundBlurRadius, in: 0 ... 100)
                     Text("\(Int(backgroundBlurRadius.rounded()))")
                         .monospacedDigit()
@@ -250,23 +243,23 @@ private struct AppearanceSettings: View {
                 }
                 .onChange(of: projectIconSymbol) { _, v in Preferences.shared.projectIconSymbol = v }
 
-                Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
-                    .onChange(of: showTabStatusIndicator) { _, v in
-                        Preferences.shared.showTabStatusIndicator = v
-                    }
-                Text(
-                    "Replaces a tab’s icon with a spinner while a command is running, " +
-                        "and adds a small checkmark badge when it finishes and awaits attention."
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-
                 Picker("Tab icon", selection: $tabIconSymbol) {
                     ForEach(Preferences.tabIconChoices, id: \.self) { name in
                         iconPickerLabel(name).tag(name)
                     }
                 }
                 .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
+
+                Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
+                    .onChange(of: showTabStatusIndicator) { _, v in
+                        Preferences.shared.showTabStatusIndicator = v
+                    }
+                Text(
+                    "Replaces a tab’s icon with a spinner while a command is running, " +
+                        "and adds a small status dot when it finishes and awaits attention."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
@@ -290,6 +283,26 @@ private struct AppearanceSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// One picker over the two glass prefs: `nil` ("None") means disabled, a
+    /// concrete style means enabled with that material. The remembered style is
+    /// preserved across a None round-trip — picking None only flips the enabled
+    /// flag, so re-selecting glass restores the last material.
+    private var glassSelection: Binding<WindowGlassStyle?> {
+        Binding(
+            get: { liquidGlass ? liquidGlassStyle : nil },
+            set: { selection in
+                if let selection {
+                    liquidGlassStyle = selection
+                    Preferences.shared.windowGlassStyle = selection
+                    liquidGlass = true
+                } else {
+                    liquidGlass = false
+                }
+                Preferences.shared.windowGlassEnabled = liquidGlass
+            }
+        )
     }
 
     private var blurFootnote: String {
