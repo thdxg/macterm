@@ -201,10 +201,7 @@ code, pre, kbd { font-family: var(--mono); }
   position: sticky;
   top: 0;
   z-index: 40;
-  background: rgba(20, 22, 27, 0.72);
-  backdrop-filter: saturate(150%) blur(14px);
-  -webkit-backdrop-filter: saturate(150%) blur(14px);
-  border-bottom: 1px solid var(--line);
+  background: var(--ground);
 }
 .topbar-inner {
   display: flex;
