@@ -1,0 +1,54 @@
+server {
+    listen       80;
+    listen  [::]:80;
+    server_name  _;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    gzip on;
+    gzip_comp_level 6;
+    gzip_min_length 256;
+    gzip_types text/plain text/css application/javascript image/svg+xml;
+
+    # HTML is always revalidated so deploys take effect immediately.
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # Static assets can be cached by the browser for a day.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    # Authenticated proxy to the GitHub API. The browser hits this same-origin
+    # path; nginx attaches the token (injected at container start via envsubst
+    # from the GITHUB_TOKEN env var) and forwards to api.github.com, so the
+    # token is never exposed to the client. Raises the rate limit from 60/hr
+    # (unauthenticated, per IP) to 5000/hr.
+    location /api/gh/ {
+        # Public DNS resolver so the upstream hostname resolves at runtime.
+        resolver 1.1.1.1 8.8.8.8 valid=300s;
+        resolver_timeout 5s;
+
+        # Force runtime resolution via a variable; rewrite strips the prefix.
+        set $github_api "api.github.com";
+        rewrite ^/api/gh/(.*)$ /$1 break;
+        proxy_pass https://$github_api;
+
+        proxy_ssl_server_name on;
+        proxy_set_header Host "api.github.com";
+        proxy_set_header Authorization "Bearer ${GITHUB_TOKEN}";
+        proxy_set_header User-Agent "macterm-website";
+        proxy_set_header Accept "application/vnd.github+json";
+        # Don't forward the client's cookies/headers upstream.
+        proxy_set_header Cookie "";
+
+        # Cache successful responses briefly to soak up bursts.
+        proxy_cache_valid 200 60s;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
