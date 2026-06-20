@@ -55,10 +55,13 @@ final class TerminalTab: Identifiable {
         return splitRoot.findPane(id: focusedPaneID)
     }
 
-    func acknowledgeCommandCompletion() {
+    @discardableResult
+    func acknowledgeCommandCompletion() -> Bool {
+        var didAcknowledge = false
         for pane in splitRoot.allPanes() {
-            pane.acknowledgeCommandCompletion()
+            didAcknowledge = pane.acknowledgeCommandCompletion() || didAcknowledge
         }
+        return didAcknowledge
     }
 
     init(projectPath: String, projectID: UUID) {
@@ -251,25 +254,28 @@ final class Workspace: Identifiable {
         }
     }
 
-    func selectTab(_ tabID: UUID) {
-        guard let tab = tabs.first(where: { $0.id == tabID }) else { return }
+    @discardableResult
+    func selectTab(_ tabID: UUID) -> Bool {
+        guard let tab = tabs.first(where: { $0.id == tabID }) else { return false }
         if let current = activeTabID, current != tabID { tabHistory.push(current) }
         activeTabID = tabID
-        tab.acknowledgeCommandCompletion()
+        return tab.acknowledgeCommandCompletion()
     }
 
-    func selectNextTab() {
+    @discardableResult
+    func selectNextTab() -> Bool {
         guard tabs.count > 1, let activeTabID,
               let i = tabs.firstIndex(where: { $0.id == activeTabID })
-        else { return }
-        selectTab(tabs[(i + 1) % tabs.count].id)
+        else { return false }
+        return selectTab(tabs[(i + 1) % tabs.count].id)
     }
 
-    func selectPreviousTab() {
+    @discardableResult
+    func selectPreviousTab() -> Bool {
         guard tabs.count > 1, let activeTabID,
               let i = tabs.firstIndex(where: { $0.id == activeTabID })
-        else { return }
-        selectTab(tabs[(i - 1 + tabs.count) % tabs.count].id)
+        else { return false }
+        return selectTab(tabs[(i - 1 + tabs.count) % tabs.count].id)
     }
 
     /// Builds a recency-ordered list of tab IDs: current tab first, then most-recent-first from history.
@@ -297,9 +303,10 @@ final class Workspace: Identifiable {
         activeTabID = tabID
     }
 
-    func selectTabByIndex(_ index: Int) {
-        guard index >= 0, index < tabs.count else { return }
-        selectTab(tabs[index].id)
+    @discardableResult
+    func selectTabByIndex(_ index: Int) -> Bool {
+        guard index >= 0, index < tabs.count else { return false }
+        return selectTab(tabs[index].id)
     }
 
     func reorderTabs(fromOffsets source: IndexSet, toOffset destination: Int) {

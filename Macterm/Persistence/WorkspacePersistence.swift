@@ -8,7 +8,7 @@ private let logger = Logger(subsystem: appBundleID, category: "WorkspacePersiste
 /// Current schema version. Bump when the snapshot types change shape.
 /// Adding an optional field does NOT require a bump — Codable decodes
 /// missing fields as nil / default. Removing or renaming fields does.
-private let currentSchemaVersion = 3
+private let currentSchemaVersion = 4
 
 /// Top-level on-disk representation. Wraps the workspace array so we can
 /// evolve the file format (add fields, do migrations) without renaming the
@@ -102,7 +102,7 @@ final class WorkspaceStore {
             }
             // Fallback: pre-envelope format where the file was a bare array
             // of WorkspaceSnapshot. Upgrade on next save.
-            return try decoder.decode([WorkspaceSnapshot].self, from: data)
+            return try clearPersistedAttention(in: decoder.decode([WorkspaceSnapshot].self, from: data))
         } catch {
             logger.error("Failed to load workspaces: \(error)")
             return []
@@ -120,15 +120,48 @@ final class WorkspaceStore {
         }
     }
 
-    /// Apply any needed in-memory migrations. Currently a no-op — future
-    /// schema bumps add cases here.
+    /// Apply any needed in-memory migrations.
     private func migrate(_ file: WorkspacesFile) -> WorkspacesFile {
-        // switch file.version {
-        // case 3: return file
-        // case 4: return migrateV4(file)
-        // ...
-        // }
-        file
+        if file.version < 4 {
+            // v3 could persist spurious completion checkmarks for tabs that had
+            // already been visually cleared. Drop the old attention bits once;
+            // v4+ saves them only after the false-start and clear/save fixes.
+            logger.info("Migrating workspaces v\(file.version, privacy: .public)→4: clearing persisted attention bits")
+            return WorkspacesFile(version: 4, workspaces: clearPersistedAttention(in: file.workspaces))
+        }
+        return file
+    }
+
+    private func clearPersistedAttention(in snapshots: [WorkspaceSnapshot]) -> [WorkspaceSnapshot] {
+        snapshots.map { ws in
+            WorkspaceSnapshot(
+                projectID: ws.projectID,
+                activeTabID: ws.activeTabID,
+                tabs: ws.tabs.map { tab in
+                    TabSnapshot(
+                        id: tab.id,
+                        customTitle: tab.customTitle,
+                        focusedPaneID: tab.focusedPaneID,
+                        splitRoot: clearPersistedAttention(in: tab.splitRoot)
+                    )
+                }
+            )
+        }
+    }
+
+    private func clearPersistedAttention(in node: SplitNodeSnapshot) -> SplitNodeSnapshot {
+        switch node {
+        case var .pane(p):
+            p.needsAttention = nil
+            return .pane(p)
+        case let .split(b):
+            return .split(SplitBranchSnapshot(
+                direction: b.direction,
+                ratio: b.ratio,
+                first: clearPersistedAttention(in: b.first),
+                second: clearPersistedAttention(in: b.second)
+            ))
+        }
     }
 }
 
@@ -174,10 +207,11 @@ enum WorkspaceSerializer {
             // the user had navigated to. Falls back to projectPath when the
             // surface hasn't reported a pwd yet.
             let path = p.nsView?.currentPwd ?? p.projectPath
+            let needsAttention = p.executionState == .done
             return .pane(PaneSnapshot(
                 id: p.id,
                 projectPath: path,
-                needsAttention: p.executionState == .done
+                needsAttention: needsAttention
             ))
         case let .split(b):
             return .split(SplitBranchSnapshot(
@@ -193,7 +227,9 @@ enum WorkspaceSerializer {
         switch snap {
         case let .pane(p):
             let pane = Pane(projectPath: p.projectPath, projectID: projectID)
-            if p.needsAttention == true { pane.restoreNeedsAttention() }
+            if p.needsAttention == true {
+                pane.restoreNeedsAttention()
+            }
             return .pane(pane)
         case let .split(b):
             return .split(SplitBranch(

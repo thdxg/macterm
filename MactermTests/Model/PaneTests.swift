@@ -69,8 +69,34 @@ struct PaneTests {
     }
 
     @Test
+    func initialForegroundBeforeUserInteraction_staysIdle() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
+        p.markTerminalActivity()
+        p.settleTerminalActivityIfQuiet(now: Date(timeIntervalSince1970: 3), quietInterval: 3)
+        #expect(p.foregroundProcessName == "sleep")
+        #expect(p.executionState == .idle)
+    }
+
+    @Test
+    func progressBeforeUserInteraction_staysIdle() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.markCommandRunning()
+        p.markProgressFinished()
+        #expect(p.executionState == .idle)
+    }
+
+    @Test
+    func layoutCommand_tracksInitialForegroundBeforeUserInteraction() {
+        let p = Pane(projectPath: "/", projectID: UUID(), command: "npm test")
+        p.applyForegroundRefresh(name: "npm", foregroundPID: 42)
+        #expect(p.executionState == .running)
+    }
+
+    @Test
     func executionState_marks_running_then_done_then_idle_on_acknowledge() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.markCommandRunning()
         #expect(p.executionState == .running)
         p.markCommandFinished()
@@ -89,6 +115,7 @@ struct PaneTests {
     @Test
     func progressStartAndFinish_tracksRunningThenDone() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.markCommandRunning()
         #expect(p.executionState == .running)
         p.markProgressFinished()
@@ -98,6 +125,7 @@ struct PaneTests {
     @Test
     func progressRunning_isNotCompletedByForegroundOrOutputActivity() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.markCommandRunning()
         p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
         p.markTerminalActivity(at: Date(timeIntervalSince1970: 100))
@@ -110,6 +138,7 @@ struct PaneTests {
     @Test
     func progressFinished_settlesCurrentForegroundProcess() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "node", foregroundPID: 42)
         p.markCommandRunning()
         #expect(p.executionState == .running)
@@ -122,6 +151,7 @@ struct PaneTests {
     @Test
     func progressFinished_settlesNextForegroundProcessWhenNoneWasCaptured() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.markCommandRunning()
         p.markProgressFinished()
         #expect(p.executionState == .done)
@@ -132,6 +162,7 @@ struct PaneTests {
     @Test
     func progressFinished_ignoresOutputFromSettledForegroundProcess() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "node", foregroundPID: 42)
         p.markCommandRunning()
         p.markProgressFinished()
@@ -142,6 +173,7 @@ struct PaneTests {
     @Test
     func progressFinished_allowsForegroundRestartAfterProcessChanges() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "node", foregroundPID: 42)
         p.markCommandRunning()
         p.markProgressFinished()
@@ -163,6 +195,7 @@ struct PaneTests {
     @Test
     func commandFinishedFromRunning_marksDone() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
         #expect(p.executionState == .running)
         p.markCommandFinished()
@@ -172,6 +205,7 @@ struct PaneTests {
     @Test
     func applyForegroundRefresh_marks_nonShell_process_as_running() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
         #expect(p.foregroundProcessName == "sleep")
         #expect(p.executionState == .running)
@@ -180,6 +214,7 @@ struct PaneTests {
     @Test
     func applyForegroundRefresh_marks_done_when_foreground_returns_to_shell() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
         p.applyForegroundRefresh(name: shellName(), foregroundPID: 43, foregroundIsShell: true)
         #expect(p.foregroundProcessName == shellName())
@@ -190,6 +225,7 @@ struct PaneTests {
     func applyForegroundRefresh_marks_longLivedApps_as_running_without_exclusions_when_terminalIsCanonical() {
         for process in ["claude", "pi", "node", "ssh"] {
             let p = Pane(projectPath: "/", projectID: UUID())
+            p.recordUserInteraction()
             p.applyForegroundRefresh(name: process, foregroundPID: 42)
             #expect(p.foregroundProcessName == process)
             #expect(p.executionState == .running)
@@ -207,6 +243,7 @@ struct PaneTests {
     @Test
     func rawForegroundProcess_settlesExistingForegroundOnlyRun() {
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "node", foregroundPID: 42)
         #expect(p.executionState == .running)
 
@@ -253,6 +290,7 @@ struct PaneTests {
     func foregroundProcessWithOutput_settlesAfterQuiet_withoutRestartingSameProcess() {
         let p = Pane(projectPath: "/", projectID: UUID())
         let start = Date(timeIntervalSince1970: 100)
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "node", foregroundPID: 42)
         p.markTerminalActivity(at: start)
         #expect(p.executionState == .running)
@@ -266,6 +304,7 @@ struct PaneTests {
     func silentForegroundProcess_doesNotSettleUntilItReturnsToShell() {
         let p = Pane(projectPath: "/", projectID: UUID())
         let start = Date(timeIntervalSince1970: 100)
+        p.recordUserInteraction()
         p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
         p.settleTerminalActivityIfQuiet(now: start.addingTimeInterval(30), quietInterval: 3)
         #expect(p.executionState == .running)

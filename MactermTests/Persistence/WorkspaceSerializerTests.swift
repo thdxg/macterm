@@ -124,6 +124,7 @@ struct WorkspaceSerializerTests {
     func round_trip_preserves_done_attention_state() {
         let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
         if case let .pane(p) = ws.tabs[0].splitRoot {
+            p.recordUserInteraction()
             p.markCommandRunning()
             p.markCommandFinished()
             #expect(p.executionState == .done)
@@ -153,6 +154,7 @@ struct WorkspaceSerializerTests {
     func restore_done_is_cleared_by_acknowledge() {
         let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
         if case let .pane(p) = ws.tabs[0].splitRoot {
+            p.recordUserInteraction()
             p.markCommandRunning()
             p.markCommandFinished()
         }
@@ -185,6 +187,40 @@ struct WorkspaceSerializerTests {
 
         let restored = WorkspaceSerializer.restore(from: reloaded, validIDs: [ws.projectID])
         #expect(restored[0].tabs[0].splitRoot.allPanes().count == 2)
+    }
+
+    @Test
+    func load_v3_file_clears_persisted_attention_bits() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-v3-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = WorkspaceStore(fileURL: tmp)
+        let projectID = UUID()
+        let tabID = UUID()
+        let paneID = UUID()
+        let file = WorkspacesFile(
+            version: 3,
+            workspaces: [WorkspaceSnapshot(
+                projectID: projectID,
+                activeTabID: tabID,
+                tabs: [TabSnapshot(
+                    id: tabID,
+                    customTitle: nil,
+                    focusedPaneID: paneID,
+                    splitRoot: .pane(PaneSnapshot(
+                        id: paneID,
+                        projectPath: "/tmp",
+                        needsAttention: true
+                    ))
+                )]
+            )]
+        )
+        let encoder = JSONEncoder()
+        try encoder.encode(file).write(to: tmp)
+
+        let restored = WorkspaceSerializer.restore(from: store.load(), validIDs: [projectID])
+
+        #expect(restored.first?.tabs.first?.executionState == .idle)
     }
 
     @Test

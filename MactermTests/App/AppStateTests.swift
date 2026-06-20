@@ -281,6 +281,45 @@ struct AppStateTests {
         #expect(state.activeProjectID == p2.id)
     }
 
+    @Test
+    func selectTab_persists_cleared_completion_indicator() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = WorkspaceStore(fileURL: tmp)
+        let state = makeAppState(store: store)
+        let project = seedProject(state)
+        let tab = try #require(state.workspaces[project.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+        pane.executionState = .done
+        state.saveWorkspaces()
+
+        state.selectTab(tab.id, projectID: project.id)
+
+        let restored = WorkspaceSerializer.restore(from: store.load(), validIDs: [project.id])
+        #expect(restored.first?.tabs.first?.executionState == .idle)
+    }
+
+    @Test
+    func selectProject_persists_cleared_active_tab_indicator() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = WorkspaceStore(fileURL: tmp)
+        let state = makeAppState(store: store)
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        _ = seedProject(state, name: "p2", path: "/tmp2")
+        let tab = try #require(state.workspaces[p1.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+        pane.executionState = .done
+        state.saveWorkspaces()
+
+        state.selectProject(p1)
+
+        let restored = WorkspaceSerializer.restore(from: store.load(), validIDs: [p1.id])
+        #expect(restored.first?.tabs.first?.executionState == .idle)
+    }
+
     // MARK: - Unload project
 
     @Test

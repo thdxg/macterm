@@ -65,6 +65,10 @@ private struct ForegroundProcessKey: Equatable {
 }
 
 private struct TerminalExecutionTracker {
+    init(hasUserInteraction: Bool = false) {
+        self.hasUserInteraction = hasUserInteraction
+    }
+
     /// The foreground process seen on the last poll (nil = shell / none).
     /// Transitions are driven by *changes* to this, not by re-deriving state
     /// on every poll — so a settled idle process never flip-flops back to
@@ -95,7 +99,8 @@ private struct TerminalExecutionTracker {
         hasUserInteraction = true
     }
 
-    mutating func markProgressStarted() -> TerminalExecutionState {
+    mutating func markProgressStarted(currentState: TerminalExecutionState) -> TerminalExecutionState {
+        guard hasUserInteraction else { return currentState }
         progressActive = true
         lastActivityAt = nil
         return .running
@@ -117,6 +122,7 @@ private struct TerminalExecutionTracker {
     }
 
     mutating func markProgressFinished(currentState: TerminalExecutionState) -> TerminalExecutionState {
+        guard hasUserInteraction || progressActive else { return currentState }
         progressActive = false
         if let lastForeground {
             progressQuiesced = lastForeground
@@ -133,10 +139,11 @@ private struct TerminalExecutionTracker {
     ) -> TerminalExecutionState {
         guard !progressActive else { return currentState }
         if let progressQuiesced, progressQuiesced == lastForeground { return currentState }
-        // Output while a command is in the foreground always counts; output
-        // while at a shell prompt only counts after the user has interacted,
-        // so a freshly-restored shell's startup banner doesn't show as work.
-        guard lastForeground != nil || hasUserInteraction else { return currentState }
+        // Output only counts after user interaction (or a declarative `run:`,
+        // which seeds `hasUserInteraction`). Fresh/restored shells can emit
+        // startup banners or shell-integration redraws before the user does
+        // anything; those must not become persisted completion indicators.
+        guard hasUserInteraction else { return currentState }
         lastActivityAt = date
         return .running
     }
@@ -194,6 +201,14 @@ private struct TerminalExecutionTracker {
 
         // Non-shell foreground. Explicit progress owns the state while active.
         if progressActive { return currentState }
+
+        // A newly-created/restored plain shell can briefly look like a
+        // non-shell foreground while its startup files and shell integration
+        // settle. Do not turn that launch noise into a persisted checkmark.
+        // Once the user has interacted, foreground transitions are real user
+        // work. Declarative layout `run:` panes seed `hasUserInteraction` so
+        // their startup command is still tracked.
+        guard hasUserInteraction else { return currentState }
 
         if terminalInputIsRaw {
             // A raw/cbreak-mode program (full-screen editors, multiplexers,
@@ -311,7 +326,7 @@ final class Pane: Identifiable {
     }
 
     func markCommandRunning() {
-        executionState = executionTracker.markProgressStarted()
+        executionState = executionTracker.markProgressStarted(currentState: executionState)
     }
 
     func markCommandFinished() {
@@ -337,8 +352,11 @@ final class Pane: Identifiable {
         )
     }
 
-    func acknowledgeCommandCompletion() {
-        if executionState == .done { executionState = .idle }
+    @discardableResult
+    func acknowledgeCommandCompletion() -> Bool {
+        guard executionState == .done else { return false }
+        executionState = .idle
+        return true
     }
 
     /// Restore the persisted "done / needs attention" state after a relaunch.
@@ -508,6 +526,7 @@ final class Pane: Identifiable {
         self.command = command
         self.shell = shell
         self.env = env
+        executionTracker = TerminalExecutionTracker(hasUserInteraction: command != nil)
     }
 }
 

@@ -117,6 +117,7 @@ final class AppState {
         // skip them in icon mode so the default poll stays as cheap as before
         // this feature.
         let trackExecution = Preferences.shared.tabIndicatorMode == .status
+        var didAcknowledgeCompletion = false
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
@@ -124,10 +125,15 @@ final class AppState {
                     if trackExecution {
                         pane.settleTerminalActivityIfQuiet()
                     }
-                    acknowledgeFinishedCommandIfActive(paneID: pane.id, projectID: projectID)
+                    didAcknowledgeCompletion = acknowledgeFinishedCommandIfActive(
+                        paneID: pane.id,
+                        projectID: projectID,
+                        saveImmediately: false
+                    ) || didAcknowledgeCompletion
                 }
             }
         }
+        if didAcknowledgeCompletion { saveWorkspaces() }
     }
 
     private func recordProjectVisit(_ projectID: UUID) {
@@ -179,6 +185,7 @@ final class AppState {
             // and `ensureWorkspace` only creates a default when neither exists.
             autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: id, path: project.path)
+            acknowledgeActiveTab(projectID: id)
             warmFocusedProject()
         }
     }
@@ -195,6 +202,7 @@ final class AppState {
         recordProjectVisit(project.id)
         autoApplyLayoutOnFirstOpen(project)
         ensureWorkspace(projectID: project.id, path: project.path)
+        acknowledgeActiveTab(projectID: project.id)
         warmFocusedProject()
     }
 
@@ -344,7 +352,12 @@ final class AppState {
     }
 
     func selectTab(_ tabID: UUID, projectID: UUID) {
-        workspaces[projectID]?.selectTab(tabID)
+        guard let ws = workspaces[projectID] else { return }
+        let before = ws.activeTabID
+        let didAcknowledgeCompletion = ws.selectTab(tabID)
+        if ws.activeTabID != before || didAcknowledgeCompletion {
+            saveWorkspaces()
+        }
     }
 
     /// Move a tab — with its live panes and running shells intact — from one
@@ -371,11 +384,21 @@ final class AppState {
     }
 
     func selectNextTab(projectID: UUID) {
-        workspaces[projectID]?.selectNextTab()
+        guard let ws = workspaces[projectID] else { return }
+        let before = ws.activeTabID
+        let didAcknowledgeCompletion = ws.selectNextTab()
+        if ws.activeTabID != before || didAcknowledgeCompletion {
+            saveWorkspaces()
+        }
     }
 
     func selectPreviousTab(projectID: UUID) {
-        workspaces[projectID]?.selectPreviousTab()
+        guard let ws = workspaces[projectID] else { return }
+        let before = ws.activeTabID
+        let didAcknowledgeCompletion = ws.selectPreviousTab()
+        if ws.activeTabID != before || didAcknowledgeCompletion {
+            saveWorkspaces()
+        }
     }
 
     func cycleRecentTab(projectID: UUID) {
@@ -418,14 +441,27 @@ final class AppState {
             case .previous: (currentIndex - 1 + allTabs.count) % allTabs.count
             }
         let (project, tab) = allTabs[newIndex]
+        let beforeProjectID = activeProjectID
+        let beforeTabID = workspaces[project.id]?.activeTabID
 
         activeProjectID = project.id
         ensureWorkspace(projectID: project.id, path: project.path)
-        workspaces[project.id]?.selectTab(tab.id)
+        let didAcknowledgeCompletion = workspaces[project.id]?.selectTab(tab.id) ?? false
+        if activeProjectID != beforeProjectID
+            || workspaces[project.id]?.activeTabID != beforeTabID
+            || didAcknowledgeCompletion
+        {
+            saveWorkspaces()
+        }
     }
 
     func selectTabByIndex(_ index: Int, projectID: UUID) {
-        workspaces[projectID]?.selectTabByIndex(index)
+        guard let ws = workspaces[projectID] else { return }
+        let before = ws.activeTabID
+        let didAcknowledgeCompletion = ws.selectTabByIndex(index)
+        if ws.activeTabID != before || didAcknowledgeCompletion {
+            saveWorkspaces()
+        }
     }
 
     // MARK: - Splits
@@ -640,8 +676,16 @@ final class AppState {
         activeProjectID = projectID
         recordProjectVisit(projectID)
         if let tab = workspaces[projectID]?.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) {
-            workspaces[projectID]?.selectTab(tab.id)
+            let beforeTabID = workspaces[projectID]?.activeTabID
+            let beforeFocusedPaneID = tab.focusedPaneID
+            let didAcknowledgeCompletion = workspaces[projectID]?.selectTab(tab.id) ?? false
             tab.focusPane(paneID)
+            if workspaces[projectID]?.activeTabID != beforeTabID
+                || tab.focusedPaneID != beforeFocusedPaneID
+                || didAcknowledgeCompletion
+            {
+                saveWorkspaces()
+            }
         }
         if let appDelegate = NSApp.delegate as? AppDelegate {
             appDelegate.reopenIfNeeded()
@@ -714,19 +758,36 @@ final class AppState {
         )
     }
 
-    func acknowledgeFinishedCommandIfActive(paneID: UUID, projectID: UUID) {
+    @discardableResult
+    private func acknowledgeActiveTab(projectID: UUID, saveImmediately: Bool = true) -> Bool {
+        guard projectID == activeProjectID,
+              let tab = workspaces[projectID]?.activeTab
+        else { return false }
+        let didAcknowledgeCompletion = tab.acknowledgeCommandCompletion()
+        if didAcknowledgeCompletion, saveImmediately {
+            saveWorkspaces()
+        }
+        return didAcknowledgeCompletion
+    }
+
+    @discardableResult
+    func acknowledgeFinishedCommandIfActive(
+        paneID: UUID,
+        projectID: UUID,
+        saveImmediately: Bool = true
+    ) -> Bool {
         // The sidebar shows the *entire* active tab as idle (displayState masks
         // `.done` for the tab the user is looking at), so every pane in that tab
         // must actually be cleared — not just the focused one. Otherwise a
         // non-focused split pane that finished a command stays `.done` under the
-        // hood, gets persisted on quit, and reappears as a checkmark after
-        // restart even though the user saw an empty circle.
+        // hood, gets persisted, and reappears as a checkmark after restart even
+        // though the user saw an empty circle.
         guard NSApp.isActive,
               projectID == activeProjectID,
               let tab = workspaces[projectID]?.activeTab,
-              let pane = tab.splitRoot.findPane(id: paneID)
-        else { return }
-        pane.acknowledgeCommandCompletion()
+              tab.splitRoot.findPane(id: paneID) != nil
+        else { return false }
+        return acknowledgeActiveTab(projectID: projectID, saveImmediately: saveImmediately)
     }
 
     // MARK: - Private
