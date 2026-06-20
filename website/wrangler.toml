@@ -1,0 +1,7 @@
+name = "macterm-website"
+compatibility_date = "2026-06-20"
+main = "src/index.js"
+
+[assets]
+directory = "public"
+binding = "ASSETS"
