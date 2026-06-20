@@ -124,6 +124,7 @@ struct WorkspaceSerializerTests {
     func round_trip_preserves_done_attention_state() {
         let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
         if case let .pane(p) = ws.tabs[0].splitRoot {
+            p.markCommandRunning()
             p.markCommandFinished()
             #expect(p.executionState == .done)
         }
@@ -152,6 +153,7 @@ struct WorkspaceSerializerTests {
     func restore_done_is_cleared_by_acknowledge() {
         let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
         if case let .pane(p) = ws.tabs[0].splitRoot {
+            p.markCommandRunning()
             p.markCommandFinished()
         }
         let roundTripped = roundTrip([ws.projectID: ws])

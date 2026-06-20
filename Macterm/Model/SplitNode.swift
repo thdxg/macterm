@@ -101,7 +101,14 @@ private struct TerminalExecutionTracker {
         return .running
     }
 
-    mutating func markCommandFinished() -> TerminalExecutionState {
+    mutating func markCommandFinished(currentState: TerminalExecutionState) -> TerminalExecutionState {
+        // Shell integration (OSC 133;D) fires on *every* precmd, including
+        // empty commands — pressing Enter, Ctrl-C, or Ctrl-L on an idle prompt
+        // emits COMMAND_FINISHED with no preceding command. Only treat it as a
+        // real completion when a command was actually running; from idle it's
+        // precmd noise and must not flip the pane to `.done` (which would
+        // persist as a spurious checkmark after restart).
+        guard currentState == .running else { return currentState }
         progressActive = false
         progressQuiesced = nil
         pendingProgressQuiesce = false
@@ -308,7 +315,7 @@ final class Pane: Identifiable {
     }
 
     func markCommandFinished() {
-        executionState = executionTracker.markCommandFinished()
+        executionState = executionTracker.markCommandFinished(currentState: executionState)
     }
 
     func markProgressFinished() {

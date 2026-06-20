@@ -150,8 +150,21 @@ struct PaneTests {
     }
 
     @Test
-    func commandFinishedFromIdle_marksDone() {
+    func commandFinishedFromIdle_staysIdle() {
+        // Shell integration emits OSC 133;D on every precmd, including empty
+        // commands (Enter, Ctrl-C, Ctrl-L on an idle prompt). A COMMAND_FINISHED
+        // with no preceding running state must not flip the pane to `.done`, or
+        // clearing an idle terminal would persist a spurious checkmark.
         let p = Pane(projectPath: "/", projectID: UUID())
+        p.markCommandFinished()
+        #expect(p.executionState == .idle)
+    }
+
+    @Test
+    func commandFinishedFromRunning_marksDone() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
+        #expect(p.executionState == .running)
         p.markCommandFinished()
         #expect(p.executionState == .done)
     }
