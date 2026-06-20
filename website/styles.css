@@ -116,7 +116,7 @@ code, pre, kbd { font-family: var(--mono); }
 
 .section-title {
   font-family: var(--serif);
-  font-weight: 600;
+  font-weight: 400;
   font-size: clamp(1.7rem, 3.7vw, 2.6rem);
   line-height: 1.1;
   letter-spacing: -0.005em;
@@ -232,7 +232,7 @@ code, pre, kbd { font-family: var(--mono); }
 
 .hero-title {
   font-family: var(--serif);
-  font-weight: 600;
+  font-weight: 300;
   font-size: clamp(2.8rem, 7.6vw, 5rem);
   line-height: 1.02;
   letter-spacing: -0.015em;
@@ -299,7 +299,7 @@ code, pre, kbd { font-family: var(--mono); }
 .feature:hover { background: var(--ground-1); }
 .feature-title {
   font-family: var(--serif);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 1.3rem;
   margin: 0 0 0.55rem;
   padding-left: 1rem;
@@ -434,7 +434,7 @@ kbd {
 .install-card--primary { border-color: var(--steel); }
 .install-card-title {
   font-family: var(--serif);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 1.35rem;
   margin: 0;
 }
