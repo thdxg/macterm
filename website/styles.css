@@ -5,10 +5,10 @@
    ============================================================ */
 
 :root {
-  --ground:    #000000;   /* true black */
-  --ground-1:  #0d0e11;   /* raised surface (cards) */
-  --ground-2:  #16181c;   /* hairlines / inset */
-  --line:      #23252b;   /* borders */
+  --ground:    #0c0d0f;   /* near-black, slightly lifted */
+  --ground-1:  #141519;   /* raised surface (cards) */
+  --ground-2:  #1c1e23;   /* hairlines / inset */
+  --line:      #2a2c33;   /* borders */
   --text:      #f4f5f6;   /* near-white */
   --text-dim:  #9da1a8;   /* secondary copy */
   --text-faint:#62666d;   /* captions */
