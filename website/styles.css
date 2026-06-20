@@ -216,6 +216,12 @@ code, pre, kbd { font-family: var(--mono); }
   letter-spacing: 0.01em;
   display: inline-flex;
   align-items: center;
+  gap: 0.55rem;
+}
+.wordmark-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
 }
 .topnav { display: flex; align-items: center; gap: clamp(1rem, 3vw, 2rem); }
 .topnav a {
