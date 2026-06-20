@@ -1,26 +1,34 @@
 // Live GitHub stats — stars and total release downloads.
-// Fetched unauthenticated from the public API; if anything fails the
-// placeholder dash is left in place rather than showing a broken value.
+// Requests go through the same-origin /api/gh/ proxy, which nginx authenticates
+// with a server-side token (see default.conf.template) — the token is never
+// exposed to the browser. If anything fails the placeholder dash is left in
+// place rather than showing a broken value.
 (function loadStats() {
   const REPO = "thdxg/macterm";
+  const GH = "/api/gh";
   const compact = new Intl.NumberFormat("en", {
     notation: "compact",
     maximumFractionDigits: 1,
   });
 
-  const setStat = (id, value) => {
+  // Write a fetched count into a stat element and reveal it. The number
+  // lives in a `.<selector>-num` child when present (the navbar star count),
+  // otherwise on the element itself (the download button count).
+  const setStat = (id, value, numSelector) => {
     const el = document.getElementById(id);
-    if (el && typeof value === "number" && !Number.isNaN(value)) {
-      el.textContent = compact.format(value);
-    }
+    if (!el || typeof value !== "number" || Number.isNaN(value)) return;
+    const target = numSelector ? el.querySelector(numSelector) : el;
+    if (!target) return;
+    target.textContent = compact.format(value);
+    el.hidden = false;
   };
 
-  fetch(`https://api.github.com/repos/${REPO}`)
+  fetch(`${GH}/repos/${REPO}`)
     .then((r) => (r.ok ? r.json() : Promise.reject()))
-    .then((repo) => setStat("stat-stars", repo.stargazers_count))
+    .then((repo) => setStat("stat-stars", repo.stargazers_count, ".topnav-stars-num"))
     .catch(() => {});
 
-  fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`)
+  fetch(`${GH}/repos/${REPO}/releases?per_page=100`)
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then((releases) => {
       if (!Array.isArray(releases)) return;
@@ -29,7 +37,23 @@
           sum + (rel.assets || []).reduce((s, a) => s + (a.download_count || 0), 0),
         0,
       );
-      setStat("stat-downloads", total);
+      const el = document.getElementById("stat-downloads");
+      if (el && total > 0) {
+        el.textContent = `${compact.format(total)} downloads`;
+        el.hidden = false;
+      }
+
+      // Point the hero button straight at the latest .dmg so a click
+      // downloads it instead of opening the GitHub Releases page. The DMG
+      // asset is versioned, so the static releases/latest URL can't link it
+      // directly; we resolve it from the freshest non-prerelease release.
+      const latest = releases.find((rel) => rel && !rel.draft && !rel.prerelease);
+      const dmg = (latest?.assets || []).find((a) => a.name?.endsWith(".dmg"));
+      const btn = document.getElementById("download-btn");
+      if (btn && dmg?.browser_download_url) {
+        btn.href = dmg.browser_download_url;
+        btn.setAttribute("download", dmg.name);
+      }
     })
     .catch(() => {});
 })();
@@ -53,11 +77,12 @@ document.querySelectorAll(".copy-btn").forEach((btn) => {
       document.execCommand("copy");
       sel.removeAllRanges();
     }
-    const original = label.textContent;
-    label.textContent = "Copied";
+    // Text buttons swap their label; icon buttons rely on .is-copied alone.
+    const original = label ? label.textContent : null;
+    if (label) label.textContent = "Copied";
     btn.classList.add("is-copied");
     setTimeout(() => {
-      label.textContent = original;
+      if (label) label.textContent = original;
       btn.classList.remove("is-copied");
     }, 1600);
   });

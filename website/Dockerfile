@@ -4,8 +4,17 @@ FROM nginx:1.27-alpine
 COPY index.html styles.css script.js /usr/share/nginx/html/
 COPY assets/ /usr/share/nginx/html/assets/
 
-# Server config (gzip, caching, SPA-safe routing)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Server config as a template: the official image runs envsubst over
+# /etc/nginx/templates/*.template at container start, writing the result to
+# /etc/nginx/conf.d/. NGINX_ENVSUBST_FILTER limits substitution to GITHUB_TOKEN
+# so nginx's own runtime $variables ($uri, $host, …) are left untouched.
+COPY default.conf.template /etc/nginx/templates/default.conf.template
+ENV NGINX_ENVSUBST_FILTER="GITHUB_TOKEN"
+
+# Provided at runtime (e.g. `docker run -e GITHUB_TOKEN=…`); a fine-grained PAT
+# with public read access is enough. If unset, the token expands to an empty
+# string and the proxy falls back to unauthenticated (60/hr) requests.
+ENV GITHUB_TOKEN=""
 
 EXPOSE 80
 
