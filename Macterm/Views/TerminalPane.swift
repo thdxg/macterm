@@ -183,13 +183,13 @@ private struct TerminalSurface: NSViewRepresentable {
             UNUserNotificationCenter.current().add(request)
         }
         view.onProgressStarted = { [weak pane] in
-            guard Preferences.shared.tabIndicatorMode == .status else { return }
+            guard Preferences.shared.showTabStatusIndicator else { return }
             pane?.refreshForegroundProcess()
             pane?.markCommandRunning()
         }
         view.onProgressFinished = { [weak pane] in
             guard let pane,
-                  Preferences.shared.tabIndicatorMode == .status,
+                  Preferences.shared.showTabStatusIndicator,
                   pane.executionState == .running
             else { return }
             pane.refreshForegroundProcess()
@@ -197,13 +197,13 @@ private struct TerminalSurface: NSViewRepresentable {
             onCommandFinished()
         }
         view.onTerminalActivity = { [weak pane] in
-            guard let pane, Preferences.shared.tabIndicatorMode == .status else { return }
+            guard let pane, Preferences.shared.showTabStatusIndicator else { return }
             pane.refreshForegroundProcess()
             pane.markTerminalActivity()
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }
-            if Preferences.shared.tabIndicatorMode == .status {
+            if Preferences.shared.showTabStatusIndicator {
                 pane.markCommandFinished()
                 onCommandFinished()
             }

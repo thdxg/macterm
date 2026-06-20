@@ -116,7 +116,7 @@ final class AppState {
         // and the quiet-settle only matter when the status indicator is shown;
         // skip them in icon mode so the default poll stays as cheap as before
         // this feature.
-        let trackExecution = Preferences.shared.tabIndicatorMode == .status
+        let trackExecution = Preferences.shared.showTabStatusIndicator
         var didAcknowledgeCompletion = false
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {

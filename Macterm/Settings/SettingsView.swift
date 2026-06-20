@@ -175,8 +175,8 @@ private struct AppearanceSettings: View {
     private var projectIconSymbol = "folder"
     @AppStorage(Preferences.Keys.tabIconSymbol)
     private var tabIconSymbol = "terminal"
-    @AppStorage(Preferences.Keys.tabIndicatorMode)
-    private var tabIndicatorMode = TabIndicatorMode.icon.rawValue
+    @AppStorage(Preferences.Keys.showTabStatusIndicator)
+    private var showTabStatusIndicator = false
     @AppStorage(Preferences.Keys.showNewProjectButton)
     private var showNewProjectButton = true
     @AppStorage(Preferences.Keys.tabSwitcherVisibility)
@@ -250,14 +250,16 @@ private struct AppearanceSettings: View {
                 }
                 .onChange(of: projectIconSymbol) { _, v in Preferences.shared.projectIconSymbol = v }
 
-                Picker("Tab indicator", selection: $tabIndicatorMode) {
-                    ForEach(TabIndicatorMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode.rawValue)
+                Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
+                    .onChange(of: showTabStatusIndicator) { _, v in
+                        Preferences.shared.showTabStatusIndicator = v
                     }
-                }
-                .onChange(of: tabIndicatorMode) { _, v in
-                    Preferences.shared.tabIndicatorMode = TabIndicatorMode(rawValue: v) ?? .icon
-                }
+                Text(
+                    "Replaces a tab’s icon with a spinner while a command is running, " +
+                        "and adds a small checkmark badge when it finishes and awaits attention."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
 
                 Picker("Tab icon", selection: $tabIconSymbol) {
                     ForEach(Preferences.tabIconChoices, id: \.self) { name in
@@ -265,7 +267,6 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
-                .disabled(tabIndicatorMode == TabIndicatorMode.status.rawValue)
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }

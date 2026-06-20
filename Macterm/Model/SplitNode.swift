@@ -289,7 +289,7 @@ final class Pane: Identifiable {
     /// the pref is read once; the default reads `Preferences` for ad-hoc
     /// callers (OSC title, output/progress callbacks) so they stay gated too.
     func refreshForegroundProcess(trackExecution: Bool? = nil) {
-        let track = trackExecution ?? (Preferences.shared.tabIndicatorMode == .status)
+        let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
             foregroundPID: nsView?.foregroundPID,
