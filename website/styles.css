@@ -268,11 +268,45 @@ code, pre, kbd { font-family: var(--mono); }
   text-align: left;
 }
 
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 2.75rem);
+  margin-top: 2.4rem;
+}
+.stat {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text);
+}
+.stat-num {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 3vw, 1.9rem);
+  line-height: 1;
+}
+.stat-label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.stat:hover .stat-label { color: var(--text-dim); }
+.stat-sep {
+  width: 1px;
+  height: 2.4rem;
+  background: var(--line);
+}
+
 .hero-meta {
   font-family: var(--mono);
   font-size: 0.78rem;
   color: var(--text-faint);
-  margin-top: 1.5rem;
+  margin-top: 2.2rem;
 }
 
 .shot-wrap { margin-top: clamp(3rem, 7vw, 5rem); }
