@@ -112,11 +112,18 @@ final class AppState {
     /// workspaces. Each pane only republishes (and triggers a tab re-render)
     /// when its name actually changes, so this is cheap when nothing's moving.
     func refreshAllForegroundProcesses() {
+        // Shell/raw-mode detection (KERN_PROCARGS2 + open/tcgetattr per pane)
+        // and the quiet-settle only matter when the status indicator is shown;
+        // skip them in icon mode so the default poll stays as cheap as before
+        // this feature.
+        let trackExecution = Preferences.shared.tabIndicatorMode == .status
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
-                    pane.refreshForegroundProcess()
-                    pane.settleTerminalActivityIfQuiet()
+                    pane.refreshForegroundProcess(trackExecution: trackExecution)
+                    if trackExecution {
+                        pane.settleTerminalActivityIfQuiet()
+                    }
                     acknowledgeFinishedCommandIfActive(paneID: pane.id, projectID: projectID)
                 }
             }

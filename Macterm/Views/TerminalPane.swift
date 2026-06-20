@@ -183,24 +183,30 @@ private struct TerminalSurface: NSViewRepresentable {
             UNUserNotificationCenter.current().add(request)
         }
         view.onProgressStarted = { [weak pane] in
+            guard Preferences.shared.tabIndicatorMode == .status else { return }
             pane?.refreshForegroundProcess()
             pane?.markCommandRunning()
         }
         view.onProgressFinished = { [weak pane] in
-            guard let pane, pane.executionState == .running else { return }
+            guard let pane,
+                  Preferences.shared.tabIndicatorMode == .status,
+                  pane.executionState == .running
+            else { return }
             pane.refreshForegroundProcess()
             pane.markProgressFinished()
             onCommandFinished()
         }
         view.onTerminalActivity = { [weak pane] in
-            guard let pane else { return }
+            guard let pane, Preferences.shared.tabIndicatorMode == .status else { return }
             pane.refreshForegroundProcess()
             pane.markTerminalActivity()
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }
-            pane.markCommandFinished()
-            onCommandFinished()
+            if Preferences.shared.tabIndicatorMode == .status {
+                pane.markCommandFinished()
+                onCommandFinished()
+            }
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
             let durationSec = Double(durationNs) / 1_000_000_000
             let body = if exitCode < 0 {

@@ -260,29 +260,41 @@ final class Pane: Identifiable {
     /// Re-read the foreground process name from the process table and publish it
     /// only when it changed (so a steady poll doesn't churn `@Observable` and
     /// re-render the sidebar every tick). Driven by `AppState`'s poll.
-    func refreshForegroundProcess() {
+    ///
+    /// `trackExecution` gates the expensive shell/raw-mode syscalls
+    /// (`foregroundProcessIsShell` / `terminalInputIsRaw`) that only feed the
+    /// status indicator. Callers on the hot poll pass a precomputed value so
+    /// the pref is read once; the default reads `Preferences` for ad-hoc
+    /// callers (OSC title, output/progress callbacks) so they stay gated too.
+    func refreshForegroundProcess(trackExecution: Bool? = nil) {
+        let track = trackExecution ?? (Preferences.shared.tabIndicatorMode == .status)
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
             foregroundPID: nsView?.foregroundPID,
-            foregroundIsShell: ProcessInspector.foregroundProcessIsShell(forPane: self),
-            terminalInputIsRaw: ProcessInspector.terminalInputIsRaw(forPane: self)
+            foregroundIsShell: track ? ProcessInspector.foregroundProcessIsShell(forPane: self) : false,
+            terminalInputIsRaw: track ? ProcessInspector.terminalInputIsRaw(forPane: self) : false,
+            applyExecutionState: track
         )
     }
 
     /// Testable core of `refreshForegroundProcess`: publish a changed process
     /// name, and expire `programTitle` when the pid that set it no longer
-    /// holds the foreground.
+    /// holds the foreground. When `applyExecutionState` is false (the status
+    /// indicator is off), the expensive execution-state path is skipped — only
+    /// the process name / title provenance update runs.
     func applyForegroundRefresh(
         name: String?,
         foregroundPID: pid_t?,
         foregroundIsShell: Bool = false,
-        terminalInputIsRaw: Bool = false
+        terminalInputIsRaw: Bool = false,
+        applyExecutionState: Bool = true
     ) {
         if name != foregroundProcessName { foregroundProcessName = name }
         if programTitle != nil, programTitlePID != foregroundPID {
             programTitle = nil
             programTitlePID = nil
         }
+        guard applyExecutionState else { return }
         applyForegroundExecutionState(
             name: name,
             foregroundPID: foregroundPID,

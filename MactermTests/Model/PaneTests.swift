@@ -51,6 +51,24 @@ struct PaneTests {
     }
 
     @Test
+    func applyForegroundRefresh_skipsExecutionState_whenIndicatorDisabled() {
+        // Mirrors `refreshForegroundProcess(trackExecution: false)`: a non-shell
+        // foreground process updates the name but must not flip executionState
+        // when the status indicator is off, so icon-mode users don't pay for
+        // tracker mutations (or the shell/raw syscalls the caller skipped).
+        let p = Pane(projectPath: "/", projectID: UUID())
+        p.applyForegroundRefresh(
+            name: "sleep",
+            foregroundPID: 42,
+            foregroundIsShell: false,
+            terminalInputIsRaw: false,
+            applyExecutionState: false
+        )
+        #expect(p.foregroundProcessName == "sleep")
+        #expect(p.executionState == .idle)
+    }
+
+    @Test
     func executionState_marks_running_then_done_then_idle_on_acknowledge() {
         let p = Pane(projectPath: "/", projectID: UUID())
         p.markCommandRunning()
