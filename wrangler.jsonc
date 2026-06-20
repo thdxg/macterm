@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "macterm",
+  "compatibility_date": "2026-06-20",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "website"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
