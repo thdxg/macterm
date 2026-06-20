@@ -5,10 +5,10 @@
    ============================================================ */
 
 :root {
-  --ground:    #14161b;   /* deep cool slate */
-  --ground-1:  #181b21;   /* raised slate (cards) */
-  --ground-2:  #1f232b;   /* hairlines / inset */
-  --line:      #272c35;   /* borders */
+  --ground:    #000000;   /* true black */
+  --ground-1:  #121419;   /* raised slate (cards) */
+  --ground-2:  #1a1d24;   /* hairlines / inset */
+  --line:      #262b34;   /* borders */
   --text:      #e6e8ec;   /* cool off-white */
   --text-dim:  #9aa3b0;   /* secondary copy */
   --text-faint:#6c7480;   /* captions */
@@ -16,8 +16,9 @@
   --accent:    #f4a638;   /* amber phosphor — the live signal */
   --accent-ink:#1a1206;   /* text on amber */
 
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans:  "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
 
   --cell: 28px;           /* terminal cell grid unit */
   --maxw: 1120px;
@@ -114,11 +115,11 @@ code, pre, kbd { font-family: var(--mono); }
 }
 
 .section-title {
-  font-family: var(--mono);
+  font-family: var(--serif);
   font-weight: 600;
-  font-size: clamp(1.55rem, 3.4vw, 2.35rem);
-  line-height: 1.12;
-  letter-spacing: -0.01em;
+  font-size: clamp(1.7rem, 3.7vw, 2.6rem);
+  line-height: 1.1;
+  letter-spacing: -0.005em;
   margin: 0.7rem 0 0;
   color: var(--text);
 }
@@ -230,11 +231,11 @@ code, pre, kbd { font-family: var(--mono); }
 .hero-inner { max-width: 880px; }
 
 .hero-title {
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: clamp(2.5rem, 7.2vw, 4.6rem);
-  line-height: 1.04;
-  letter-spacing: -0.02em;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(2.8rem, 7.6vw, 5rem);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
   margin: 1.4rem 0 0;
   color: var(--text);
 }
@@ -297,9 +298,9 @@ code, pre, kbd { font-family: var(--mono); }
 }
 .feature:hover { background: var(--ground-1); }
 .feature-title {
-  font-family: var(--mono);
+  font-family: var(--serif);
   font-weight: 600;
-  font-size: 1.06rem;
+  font-size: 1.3rem;
   margin: 0 0 0.55rem;
   padding-left: 1rem;
   position: relative;
@@ -432,9 +433,9 @@ kbd {
 }
 .install-card--primary { border-color: var(--steel); }
 .install-card-title {
-  font-family: var(--mono);
+  font-family: var(--serif);
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1.35rem;
   margin: 0;
 }
 .install-card-note { margin: 0; color: var(--text-dim); font-size: 0.95rem; }
