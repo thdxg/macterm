@@ -324,8 +324,10 @@ private struct SidebarTabRow: View {
         if tab.executionState == .running { return .running }
         // The tab the user is already looking at never needs an attention
         // indicator; a background tab's `done` checkmark is shown until it's
-        // acknowledged (which focusing it does, via the poll's
-        // `acknowledgeFinishedCommandIfActive`).
+        // acknowledged. Visiting the tab clears all of its panes via the poll's
+        // `acknowledgeFinishedCommandIfActive` (which acknowledges the whole
+        // active tab, not just the focused pane, so the persisted state matches
+        // what's displayed).
         return isActive ? .idle : tab.executionState
     }
 

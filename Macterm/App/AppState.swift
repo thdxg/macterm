@@ -715,10 +715,15 @@ final class AppState {
     }
 
     func acknowledgeFinishedCommandIfActive(paneID: UUID, projectID: UUID) {
+        // The sidebar shows the *entire* active tab as idle (displayState masks
+        // `.done` for the tab the user is looking at), so every pane in that tab
+        // must actually be cleared — not just the focused one. Otherwise a
+        // non-focused split pane that finished a command stays `.done` under the
+        // hood, gets persisted on quit, and reappears as a checkmark after
+        // restart even though the user saw an empty circle.
         guard NSApp.isActive,
               projectID == activeProjectID,
               let tab = workspaces[projectID]?.activeTab,
-              tab.focusedPaneID == paneID,
               let pane = tab.splitRoot.findPane(id: paneID)
         else { return }
         pane.acknowledgeCommandCompletion()
