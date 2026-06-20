@@ -6,15 +6,15 @@
 
 :root {
   --ground:    #000000;   /* true black */
-  --ground-1:  #121419;   /* raised slate (cards) */
-  --ground-2:  #1a1d24;   /* hairlines / inset */
-  --line:      #262b34;   /* borders */
-  --text:      #e6e8ec;   /* cool off-white */
-  --text-dim:  #9aa3b0;   /* secondary copy */
-  --text-faint:#6c7480;   /* captions */
-  --steel:     #7c90a8;   /* muted secondary accent */
-  --accent:    #f4a638;   /* amber phosphor — the live signal */
-  --accent-ink:#1a1206;   /* text on amber */
+  --ground-1:  #0d0e11;   /* raised surface (cards) */
+  --ground-2:  #16181c;   /* hairlines / inset */
+  --line:      #23252b;   /* borders */
+  --text:      #f4f5f6;   /* near-white */
+  --text-dim:  #9da1a8;   /* secondary copy */
+  --text-faint:#62666d;   /* captions */
+  --steel:     #868b93;   /* neutral gray secondary */
+  --accent:    #ededee;   /* near-white — the cursor / markers / CTA */
+  --accent-ink:#0a0a0a;   /* text on the light accent */
 
   --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --sans:  "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -28,15 +28,15 @@
 /* --------------------------- reset --------------------------- */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
   background-color: var(--ground);
   /* faint terminal cell grid, echoing the icon's tiled glyph */
   background-image:
-    linear-gradient(to right,  rgba(124, 144, 168, 0.085) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(124, 144, 168, 0.085) 1px, transparent 1px);
+    linear-gradient(to right,  rgba(140, 143, 150, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(140, 143, 150, 0.07) 1px, transparent 1px);
   background-size: var(--cell) var(--cell);
   color: var(--text);
   font-family: var(--sans);
@@ -87,7 +87,6 @@ code, pre, kbd { font-family: var(--mono); }
 .cursor {
   display: inline-block;
   background: var(--accent);
-  box-shadow: 0 0 14px rgba(244, 166, 56, 0.55);
 }
 .prompt {
   width: 0.5em;
@@ -97,12 +96,10 @@ code, pre, kbd { font-family: var(--mono); }
 }
 .cursor {
   width: 0.56em;
-  height: 0.92em;
-  margin-left: 0.12em;
-  vertical-align: -0.04em;
-  animation: blink 1.15s steps(1) infinite;
+  height: 0.66em;
+  margin-left: 0.14em;
+  vertical-align: 0.02em;
 }
-@keyframes blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 
 .eyebrow,
 .section-eyebrow {
@@ -130,7 +127,11 @@ code, pre, kbd { font-family: var(--mono); }
 }
 .section + .section { border-top: 1px solid var(--line); }
 
-.section-head { max-width: 40ch; margin-bottom: clamp(2.5rem, 5vw, 3.5rem); }
+.section-head {
+  max-width: 42ch;
+  margin: 0 auto clamp(2.5rem, 5vw, 3.5rem);
+  text-align: center;
+}
 
 /* terminal command chip with copy button */
 .command {
@@ -167,7 +168,6 @@ code, pre, kbd { font-family: var(--mono); }
   border-radius: 6px;
   padding: 0.35rem 0.7rem;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .copy-btn:hover { color: var(--text); border-color: var(--steel); }
 .copy-btn.is-copied {
@@ -186,10 +186,24 @@ code, pre, kbd { font-family: var(--mono); }
   border: 1px solid var(--steel);
   border-radius: 10px;
   padding: 0.85rem 1.4rem;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
-.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-ghost:hover { border-color: var(--text); color: var(--text); }
 .btn-ghost--block { display: flex; margin-top: auto; }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.95rem 1.8rem;
+}
+.btn-primary:hover { background: #ffffff; border-color: #ffffff; }
 
 /* ========================== topbar ========================== */
 .topbar {
@@ -220,15 +234,14 @@ code, pre, kbd { font-family: var(--mono); }
   font-family: var(--mono);
   font-size: 0.86rem;
   color: var(--text-dim);
-  transition: color 0.15s;
 }
 .topnav a:hover { color: var(--text); }
 .topnav-repo { color: var(--text) !important; }
-.topnav-repo:hover { color: var(--accent) !important; }
+.topnav-repo:hover { color: var(--text-dim) !important; }
 
 /* =========================== hero =========================== */
-.hero { padding-top: clamp(3.5rem, 8vw, 6rem); }
-.hero-inner { max-width: 880px; }
+.hero { padding-top: clamp(3.5rem, 8vw, 6rem); text-align: center; }
+.hero-inner { max-width: 820px; margin-inline: auto; }
 
 .hero-title {
   font-family: var(--serif);
@@ -241,21 +254,25 @@ code, pre, kbd { font-family: var(--mono); }
 }
 
 .lede {
-  font-size: clamp(1.05rem, 2vw, 1.25rem);
-  line-height: 1.6;
+  font-size: clamp(1.1rem, 2vw, 1.3rem);
+  line-height: 1.5;
   color: var(--text-dim);
-  max-width: 56ch;
-  margin: 1.6rem 0 0;
+  max-width: 38ch;
+  margin: 1.5rem auto 0;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
+  justify-content: center;
   gap: 0.85rem;
   margin-top: 2.2rem;
 }
-.hero-actions .command { flex: 1 1 360px; }
+.command--hero {
+  max-width: 440px;
+  margin: 1.1rem auto 0;
+  text-align: left;
+}
 
 .hero-meta {
   font-family: var(--mono);
@@ -294,9 +311,7 @@ code, pre, kbd { font-family: var(--mono); }
 .feature {
   background: var(--ground);
   padding: clamp(1.6rem, 3vw, 2.1rem);
-  transition: background 0.2s;
 }
-.feature:hover { background: var(--ground-1); }
 .feature-title {
   font-family: var(--serif);
   font-weight: 500;
@@ -311,11 +326,10 @@ code, pre, kbd { font-family: var(--mono); }
   content: "";
   position: absolute;
   left: 0;
-  top: 0.18em;
+  top: 0.3em;
   width: 0.42em;
-  height: 0.95em;
+  height: 0.92em;
   background: var(--accent);
-  box-shadow: 0 0 10px rgba(244, 166, 56, 0.5);
 }
 .feature p { margin: 0; color: var(--text-dim); font-size: 0.97rem; }
 .feature code {
@@ -412,9 +426,9 @@ kbd {
 .code-body code { white-space: pre; }
 .c-comment { color: var(--text-faint); font-style: italic; }
 .c-key { color: var(--steel); }
-.c-str { color: var(--accent); }
-.c-val { color: #9ec1a8; }
-.c-num { color: #d8a0c8; }
+.c-str { color: var(--text); }
+.c-val { color: #c3c7cd; }
+.c-num { color: #c3c7cd; }
 
 /* ========================== install ========================= */
 .install-grid {
@@ -467,9 +481,8 @@ kbd {
   font-family: var(--mono);
   font-size: 0.85rem;
   color: var(--text-dim);
-  transition: color 0.15s;
 }
-.footer-nav a:hover { color: var(--accent); }
+.footer-nav a:hover { color: var(--text); }
 
 /* ====================== responsive ======================== */
 @media (max-width: 820px) {
@@ -481,9 +494,3 @@ kbd {
   .hero-actions .command { flex-basis: 100%; }
 }
 
-/* ===================== reduced motion ===================== */
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .cursor { animation: none; opacity: 1; }
-  * { transition-duration: 0.001ms !important; }
-}
