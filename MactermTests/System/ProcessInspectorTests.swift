@@ -13,10 +13,11 @@ struct ProcessInspectorTests {
     /// Launch a process directly (no shell, so argv is deterministic from the
     /// start), run `body` against its pid, then terminate it. Polls briefly for
     /// the pid to become readable.
-    private func withProcess(_ launchPath: String, _ args: [String], _ body: (pid_t) -> Void) {
+    private func withProcess(_ launchPath: String, _ args: [String], cwd: String? = nil, _ body: (pid_t) -> Void) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: launchPath)
         proc.arguments = args
+        if let cwd { proc.currentDirectoryURL = URL(fileURLWithPath: cwd) }
         do {
             try proc.run()
         } catch {
@@ -46,6 +47,25 @@ struct ProcessInspectorTests {
     @Test
     func argv_returns_nil_for_nonexistent_pid() {
         #expect(ProcessInspector.argv(pid: 999_999) == nil)
+    }
+
+    @Test
+    func workingDirectory_reads_the_process_cwd() throws {
+        // The kernel reports the fully symlink-resolved cwd (e.g. /var/folders
+        // → /private/var/folders on macOS), so compare against realpath of the
+        // launch dir rather than the raw path.
+        let launchDir = FileManager.default.temporaryDirectory.path
+        let resolved = try #require(launchDir.withCString { realpath($0, nil) })
+        defer { free(resolved) }
+        let expected = String(cString: resolved)
+        withProcess("/bin/sleep", ["91"], cwd: launchDir) { pid in
+            #expect(ProcessInspector.workingDirectory(pid: pid) == expected)
+        }
+    }
+
+    @Test
+    func workingDirectory_returns_nil_for_nonexistent_pid() {
+        #expect(ProcessInspector.workingDirectory(pid: 999_999) == nil)
     }
 
     @Test

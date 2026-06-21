@@ -111,6 +111,38 @@ enum ProcessInspector {
         return !canonical || !echo
     }
 
+    /// The current working directory of the pane's foreground process, read
+    /// straight from the kernel (`proc_pidinfo(PROC_PIDVNODEPATHINFO)`), or nil.
+    ///
+    /// This is the OS-truth fallback for inheriting cwd on split: unlike
+    /// `GhosttyTerminalNSView.currentPwd` (populated only when the shell emits
+    /// OSC 7 via shell integration), it works even when the shell reports no
+    /// cwd — a prompt without shell integration, nushell, or a non-shell
+    /// program (`hx`, `nvim`) holding the foreground. We read the *foreground*
+    /// pid's cwd, which is what the user sees as "where they are"; for a shell
+    /// at a prompt that's the shell's cwd, and for a running program it's that
+    /// program's cwd (typically launched from, and matching, the shell's).
+    @MainActor
+    static func foregroundWorkingDirectory(forPane pane: Pane) -> String? {
+        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        return workingDirectory(pid: pid)
+    }
+
+    /// The current working directory of `pid` via `PROC_PIDVNODEPATHINFO`, or
+    /// nil. Only same-uid processes are readable (the pane's foreground is).
+    static func workingDirectory(pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        let ret = proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size)
+        guard ret == size else { return nil }
+        let path = withUnsafeBytes(of: &info.pvi_cdir.vip_path) { raw -> String? in
+            let bytes = raw.bindMemory(to: CChar.self)
+            return bytes.baseAddress.map { String(cString: $0) }
+        }
+        guard let path, !path.isEmpty else { return nil }
+        return path
+    }
+
     /// The kernel short accounting name (`p_comm` / `pbsi_comm`) of `pid` — a
     /// basename truncated to `MAXCOMLEN`, no path or arguments — or nil. Same
     /// field tmux uses for window names.

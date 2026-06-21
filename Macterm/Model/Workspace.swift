@@ -103,7 +103,12 @@ final class TerminalTab: Identifiable {
     @discardableResult
     func split(paneID: UUID, direction: SplitDirection) -> UUID? {
         let pane = splitRoot.findPane(id: paneID)
-        let livePwd = pane?.nsView?.currentPwd
+        // Inherit the source pane's cwd. Prefer the shell's OSC 7-reported pwd
+        // (most accurate when shell integration is active), then fall back to
+        // the foreground process's actual cwd read from the kernel (works
+        // without shell integration / when a program holds the foreground),
+        // and only then to the pane's original project path.
+        let livePwd = pane.flatMap { p in p.nsView?.currentPwd ?? ProcessInspector.foregroundWorkingDirectory(forPane: p) }
         let sourcePath = livePwd ?? pane?.projectPath ?? NSHomeDirectory()
         let sourceProjectID = pane?.projectID ?? UUID()
         let (newRoot, newID) = splitRoot.splitting(
