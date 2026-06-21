@@ -15,12 +15,13 @@ import GhosttyKit
 ///        └─ GhosttyTerminalNSView      (pinned to the visible rect)
 /// ```
 ///
-/// Wheel/trackpad events are NOT arbitrated here: they hit the frontmost
-/// surface view, whose `scrollWheel` forwards every event to libghostty, which
-/// decides scrollback vs. cursor-keys vs. mouse-report. The scroll view is
-/// display/drag-only. Scrollback geometry flows **into** this view via the
-/// `GHOSTTY_ACTION_SCROLLBAR` action (`onScrollbarUpdate`), and user drags flow
-/// **out** via the `scroll_to_row:<n>` keybind action.
+/// Wheel/trackpad events hit the frontmost surface view first. Ordinary
+/// scrollback gestures are handled here with an iTerm2-style line accumulator
+/// that converts AppKit's wheel/trackpad deltas (including inertia) into whole
+/// terminal-row movement; mouse-reporting / alt-screen cases continue to go to
+/// libghostty. Scrollback geometry flows **into** this view via the
+/// `GHOSTTY_ACTION_SCROLLBAR` action (`onScrollbarUpdate`), and user-visible
+/// scroll positions flow **out** via the `scroll_to_row:<n>` keybind action.
 final class SurfaceScrollView: NSScrollView {
     /// The Metal terminal surface. Owned by `Pane`; we just re-parent it into
     /// our document view.
@@ -42,6 +43,11 @@ final class SurfaceScrollView: NSScrollView {
     /// Last row index sent to the core via `scroll_to_row`, to dedupe spam.
     private var lastSentRow: Int = -1
 
+    /// iTerm2's default vertical scroll-wheel accumulator. It turns AppKit's
+    /// messy wheel/trackpad deltas into whole terminal-row movement, including
+    /// momentum events, instead of trying to pixel-scroll terminal contents.
+    private let verticalScrollAccumulator = ITermScrollAccumulator()
+
     nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
     init(surfaceView: GhosttyTerminalNSView) {
@@ -56,6 +62,7 @@ final class SurfaceScrollView: NSScrollView {
         hasHorizontalScroller = false
         autohidesScrollers = false
         usesPredominantAxisScrolling = true
+        verticalScrollElasticity = .none
         // The window composites its own translucency (see WindowAppearance);
         // drawing a background here would double-tint.
         drawsBackground = false
@@ -72,6 +79,9 @@ final class SurfaceScrollView: NSScrollView {
         surfaceView.onScrollbarUpdate = { [weak self] total, offset, len in
             self?.applyScrollbar(total: total, offset: offset, len: len)
         }
+        surfaceView.onScrollWheel = { [weak self] event in
+            self?.handleSurfaceScrollWheel(event) ?? false
+        }
     }
 
     @available(*, unavailable)
@@ -80,6 +90,7 @@ final class SurfaceScrollView: NSScrollView {
     }
 
     deinit {
+        MainActor.assumeIsolated { surfaceView.onScrollWheel = nil }
         for token in observers {
             NotificationCenter.default.removeObserver(token)
         }
@@ -144,6 +155,7 @@ final class SurfaceScrollView: NSScrollView {
             return
         }
 
+        verticalLineScroll = cellHeight
         let docHeight = Self.documentHeight(total: total, cellHeight: cellHeight, viewportHeight: viewportHeight)
         if spacer.frame.height != docHeight || spacer.frame.width != contentView.bounds.width {
             spacer.frame = NSRect(x: 0, y: 0, width: contentView.bounds.width, height: docHeight)
@@ -168,9 +180,24 @@ final class SurfaceScrollView: NSScrollView {
 
     // MARK: - UI → Core
 
+    private func handleSurfaceScrollWheel(_ event: NSEvent) -> Bool {
+        let cellHeight = surfaceView.cellHeightPoints
+        guard canHandleScrollbackWheel(event, cellHeight: cellHeight) else { return false }
+        let rowDelta = verticalScrollAccumulator.delta(for: event)
+        guard rowDelta != 0 else { return true }
+        let currentRow = Int(min(offset, UInt64(Int.max)))
+        sendScrollToRow(currentRow - rowDelta)
+        return true
+    }
+
+    private func canHandleScrollbackWheel(_ event: NSEvent, cellHeight: CGFloat) -> Bool {
+        guard surfaceView.surface != nil, cellHeight > 0, total > len else { return false }
+        return abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX)
+    }
+
     private func handleLiveScroll() {
         let cellHeight = surfaceView.cellHeightPoints
-        guard cellHeight > 0, let surface = surfaceView.surface else { return }
+        guard cellHeight > 0, surfaceView.surface != nil else { return }
         let visible = contentView.documentVisibleRect
         let docHeight = spacer.frame.height
         let row = Self.rowFromOffset(
@@ -183,10 +210,25 @@ final class SurfaceScrollView: NSScrollView {
             layoutSurface()
             return
         }
+        sendScrollToRow(row)
+        layoutSurface()
+    }
+
+    private func sendScrollToRow(_ requestedRow: Int) {
+        guard let surface = surfaceView.surface else { return }
+        let maxScrollable = total > len ? total - len : 0
+        let maxRow = Int(min(maxScrollable, UInt64(Int.max)))
+        let row = min(max(0, requestedRow), maxRow)
+        guard row != lastSentRow else { return }
         lastSentRow = row
+
+        // Keep the native scroller in step immediately, like iTerm2's
+        // `scrollRectToVisible`, while the row-based terminal core catches up.
+        offset = UInt64(row)
+        synchronize()
+
         let action = "scroll_to_row:\(row)"
         ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
-        layoutSurface()
     }
 
     // MARK: - Legacy scroller discoverability
@@ -213,6 +255,77 @@ final class SurfaceScrollView: NSScrollView {
         // scroller when the pointer is over its track so it stays discoverable.
         guard NSScroller.preferredScrollerStyle == .legacy else { return }
         flashScrollers()
+    }
+}
+
+// MARK: - iTerm2-style scroll accumulation
+
+/// Swift port of iTerm2's `iTermScrollAccumulator` with its default settings:
+/// modern accumulator enabled, `fastTrackpad = YES`, sensitivity 1.0, and
+/// scroll-wheel acceleration 1.0.
+private final class ITermScrollAccumulator {
+    private var accumulatedDelta: CGFloat = 0
+
+    func delta(for event: NSEvent) -> Int {
+        let accumulated = accumulatedDelta(for: event)
+        let sign: CGFloat = accumulated > 0 ? 1 : -1
+        return Int(pow(abs(accumulated), 1) * sign)
+    }
+
+    private func accumulatedDelta(for event: NSEvent) -> CGFloat {
+        if event.phase.isEmpty, event.momentumPhase.isEmpty {
+            return accumulatedDeltaForMouseWheelEvent(event)
+        }
+        return accumulatedDeltaForTrackpadEvent(event)
+    }
+
+    private func accumulatedDeltaForMouseWheelEvent(_ event: NSEvent) -> CGFloat {
+        let delta = adjustedDelta(for: event)
+        let roundDelta = delta.rounded()
+        if roundDelta == 0, delta != 0 {
+            return delta > 0 ? 1 : -1
+        }
+        return roundDelta
+    }
+
+    private func accumulatedDeltaForTrackpadEvent(_ event: NSEvent) -> CGFloat {
+        if event.phase == .began {
+            accumulatedDelta = 0
+        }
+        let delta = adjustedDelta(for: event)
+        accumulatedDelta += delta
+        return takeWholePortion(delta: delta)
+    }
+
+    private func adjustedDelta(for event: NSEvent) -> CGFloat {
+        if event.hasPreciseScrollingDeltas {
+            // iTerm2's default `fastTrackpad` path, based on Terminal.app:
+            // use the device line delta and round away from zero so small
+            // trackpad gestures don't feel sluggish.
+            return Self.roundAwayFromZero(event.deltaY)
+        }
+        return event.scrollingDeltaY
+    }
+
+    private func takeWholePortion(delta: CGFloat) -> CGFloat {
+        if abs(accumulatedDelta) >= 1 {
+            let roundDelta = Self.roundTowardZero(accumulatedDelta)
+            accumulatedDelta -= roundDelta
+            return roundDelta
+        }
+        if delta * accumulatedDelta < 0 {
+            accumulatedDelta = 0
+            return delta.rounded()
+        }
+        return 0
+    }
+
+    private static func roundTowardZero(_ value: CGFloat) -> CGFloat {
+        value > 0 ? floor(value) : ceil(value)
+    }
+
+    private static func roundAwayFromZero(_ value: CGFloat) -> CGFloat {
+        value > 0 ? ceil(value) : floor(value)
     }
 }
 
@@ -247,6 +360,6 @@ extension SurfaceScrollView {
     ) -> Int {
         guard cellHeight > 0 else { return 0 }
         let topFromTop = documentHeight - visibleOriginY - visibleHeight
-        return max(0, Int((topFromTop / cellHeight).rounded()))
+        return max(0, Int(topFromTop / cellHeight))
     }
 }
