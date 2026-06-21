@@ -71,7 +71,7 @@ private struct GeneralSettings: View {
             Section("Terminal") {
                 HStack {
                     Text("Scroll speed")
-                    Slider(value: $terminalScrollSpeed, in: 0.25 ... 3.0, step: 0.05)
+                    Slider(value: $terminalScrollSpeed, in: 0.25 ... 3.0)
                     Text("\(terminalScrollSpeed, specifier: "%.2f")×")
                         .monospacedDigit()
                         .frame(width: 52, alignment: .trailing)
