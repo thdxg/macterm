@@ -183,7 +183,7 @@ final class SurfaceScrollView: NSScrollView {
     private func handleSurfaceScrollWheel(_ event: NSEvent) -> Bool {
         let cellHeight = surfaceView.cellHeightPoints
         guard canHandleScrollbackWheel(event, cellHeight: cellHeight) else { return false }
-        let rowDelta = verticalScrollAccumulator.delta(for: event)
+        let rowDelta = verticalScrollAccumulator.delta(for: event, sensitivity: Preferences.shared.terminalScrollSpeed)
         guard rowDelta != 0 else { return true }
         let currentRow = Int(min(offset, UInt64(Int.max)))
         sendScrollToRow(currentRow - rowDelta)
@@ -260,39 +260,44 @@ final class SurfaceScrollView: NSScrollView {
 
 // MARK: - iTerm2-style scroll accumulation
 
-/// Swift port of iTerm2's `iTermScrollAccumulator` with its default settings:
-/// modern accumulator enabled, `fastTrackpad = YES`, sensitivity 1.0, and
-/// scroll-wheel acceleration 1.0.
+/// Swift port of iTerm2's `iTermScrollAccumulator`: modern accumulator enabled,
+/// `fastTrackpad = YES`, configurable sensitivity, and scroll-wheel acceleration
+/// 1.0.
 private final class ITermScrollAccumulator {
     private var accumulatedDelta: CGFloat = 0
 
-    func delta(for event: NSEvent) -> Int {
-        let accumulated = accumulatedDelta(for: event)
+    func delta(for event: NSEvent, sensitivity: Double) -> Int {
+        let sensitivity = CGFloat(max(0.25, min(3.0, sensitivity)))
+        let accumulated = accumulatedDelta(for: event, sensitivity: sensitivity)
         let sign: CGFloat = accumulated > 0 ? 1 : -1
         return Int(pow(abs(accumulated), 1) * sign)
     }
 
-    private func accumulatedDelta(for event: NSEvent) -> CGFloat {
+    private func accumulatedDelta(for event: NSEvent, sensitivity: CGFloat) -> CGFloat {
         if event.phase.isEmpty, event.momentumPhase.isEmpty {
-            return accumulatedDeltaForMouseWheelEvent(event)
+            return accumulatedDeltaForMouseWheelEvent(event, sensitivity: sensitivity)
         }
-        return accumulatedDeltaForTrackpadEvent(event)
+        return accumulatedDeltaForTrackpadEvent(event, sensitivity: sensitivity)
     }
 
-    private func accumulatedDeltaForMouseWheelEvent(_ event: NSEvent) -> CGFloat {
+    private func accumulatedDeltaForMouseWheelEvent(_ event: NSEvent, sensitivity: CGFloat) -> CGFloat {
         let delta = adjustedDelta(for: event)
-        let roundDelta = delta.rounded()
-        if roundDelta == 0, delta != 0 {
-            return delta > 0 ? 1 : -1
+        if sensitivity == 1 {
+            let roundDelta = delta.rounded()
+            if roundDelta == 0, delta != 0 {
+                return delta > 0 ? 1 : -1
+            }
+            return roundDelta
         }
-        return roundDelta
+        accumulatedDelta += delta * sensitivity
+        return takeWholePortion(delta: delta)
     }
 
-    private func accumulatedDeltaForTrackpadEvent(_ event: NSEvent) -> CGFloat {
+    private func accumulatedDeltaForTrackpadEvent(_ event: NSEvent, sensitivity: CGFloat) -> CGFloat {
         if event.phase == .began {
             accumulatedDelta = 0
         }
-        let delta = adjustedDelta(for: event)
+        let delta = adjustedDelta(for: event) * sensitivity
         accumulatedDelta += delta
         return takeWholePortion(delta: delta)
     }

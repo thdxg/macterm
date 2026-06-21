@@ -31,6 +31,8 @@ private struct GeneralSettings: View {
     @AppStorage(Preferences.Keys.eagerlyStartProjectTabs)
     private var eagerlyStartProjectTabs = true
     @State
+    private var terminalScrollSpeed: Double = Preferences.shared.terminalScrollSpeed
+    @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
     private let ghosttyCLI = GhosttyCLI.standard
@@ -64,6 +66,22 @@ private struct GeneralSettings: View {
                 )
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+            }
+
+            Section("Terminal") {
+                HStack {
+                    Text("Scroll speed")
+                    Slider(value: $terminalScrollSpeed, in: 0.25 ... 3.0, step: 0.25)
+                    Text("\(terminalScrollSpeed, specifier: "%.2g")×")
+                        .monospacedDigit()
+                        .frame(width: 42, alignment: .trailing)
+                }
+                .onChange(of: terminalScrollSpeed) { _, v in
+                    Preferences.shared.terminalScrollSpeed = v
+                }
+                Text("Controls terminal scrollback speed for trackpads and mouse wheels. 1× matches iTerm2's default.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
 
             Section("Layout") {
