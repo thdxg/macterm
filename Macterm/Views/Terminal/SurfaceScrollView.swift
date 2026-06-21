@@ -43,8 +43,8 @@ final class SurfaceScrollView: NSScrollView {
     /// Last row index sent to the core via `scroll_to_row`, to dedupe spam.
     private var lastSentRow: Int = -1
 
-    /// iTerm2's default vertical scroll-wheel accumulator. It turns AppKit's
-    /// messy wheel/trackpad deltas into whole terminal-row movement, including
+    /// iTerm-style vertical scroll-wheel accumulator. It turns AppKit's messy
+    /// wheel/trackpad deltas into whole terminal-row movement, including
     /// momentum events, instead of trying to pixel-scroll terminal contents.
     private let verticalScrollAccumulator = ITermScrollAccumulator()
 
@@ -304,9 +304,9 @@ private final class ITermScrollAccumulator {
 
     private func adjustedDelta(for event: NSEvent) -> CGFloat {
         if event.hasPreciseScrollingDeltas {
-            // iTerm2's default `fastTrackpad` path, based on Terminal.app:
-            // use the device line delta and round away from zero so small
-            // trackpad gestures don't feel sluggish.
+            // iTerm2's `fastTrackpad` path, based on Terminal.app: use the
+            // device line delta and round away from zero so small trackpad
+            // gestures don't feel sluggish.
             return Self.roundAwayFromZero(event.deltaY)
         }
         return event.scrollingDeltaY

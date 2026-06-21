@@ -71,15 +71,15 @@ private struct GeneralSettings: View {
             Section("Terminal") {
                 HStack {
                     Text("Scroll speed")
-                    Slider(value: $terminalScrollSpeed, in: 0.25 ... 3.0, step: 0.25)
-                    Text("\(terminalScrollSpeed, specifier: "%.2g")×")
+                    Slider(value: $terminalScrollSpeed, in: 0.25 ... 3.0, step: 0.05)
+                    Text("\(terminalScrollSpeed, specifier: "%.2f")×")
                         .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
+                        .frame(width: 52, alignment: .trailing)
                 }
                 .onChange(of: terminalScrollSpeed) { _, v in
                     Preferences.shared.terminalScrollSpeed = v
                 }
-                Text("Controls terminal scrollback speed for trackpads and mouse wheels. 1× matches iTerm2's default.")
+                Text("Controls terminal scrollback speed for trackpads and mouse wheels.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

@@ -62,7 +62,6 @@ final class Preferences {
     }
 
     /// Multiplier applied to terminal scroll wheel / trackpad row deltas.
-    /// 1.0 matches iTerm2's default scroll accumulator behavior.
     var terminalScrollSpeed: Double {
         didSet { defaults.set(terminalScrollSpeed, forKey: Keys.terminalScrollSpeed) }
     }
