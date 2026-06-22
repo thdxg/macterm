@@ -194,12 +194,10 @@ final class GhosttyTerminalNSView: NSView {
         // `ghostty_surface_new`, so its element buffers come from `cString`
         // (freed in destroySurface) and the pointer array is held in a local
         // that spans the call.
-        let launch = ZmxAttach.resolveLaunch(
+        let wrapperArgv: [UnsafePointer<CChar>?] = ZmxAttach.wrapperArgv(
             executablePath: ZmxClient.live.executableURL()?.path,
-            sessionID: ZmxSessionID.make(surfaceID: sessionID),
-            command: nil
-        )
-        let wrapperArgv: [UnsafePointer<CChar>?] = launch.commandWrapper.map { cString($0) }
+            sessionID: ZmxSessionID.make(surfaceID: sessionID)
+        ).map { cString($0) }
 
         // Declared `run` is typed into the (wrapped) shell verbatim, as if the
         // user had entered it at the prompt. No shell-syntax handling: cwd is

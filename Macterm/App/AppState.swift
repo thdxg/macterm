@@ -88,6 +88,11 @@ final class AppState {
     @ObservationIgnored
     private var processNameTimer: Timer?
 
+    /// zmx session-persistence client. Defaults to the live binding; injectable
+    /// so tests can drive the launch-time orphan reaper without a real daemon.
+    @ObservationIgnored
+    var zmx: ZmxClient = .live
+
     init(workspaceStore: WorkspaceStore = WorkspaceStore()) {
         self.workspaceStore = workspaceStore
         autoTileObserver = NotificationCenter.default.addObserver(
@@ -201,7 +206,7 @@ final class AppState {
             .flatMap(\.tabs)
             .flatMap { $0.splitRoot.allPanes() }
             .map(\.sessionID))
-        Task { await ZmxClient.live.reapOrphans(knownSurfaceIDs: known) }
+        Task { [zmx] in await zmx.reapOrphans(knownSurfaceIDs: known) }
     }
 
     func saveWorkspaces() {

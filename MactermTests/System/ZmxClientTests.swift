@@ -130,47 +130,79 @@ struct ZmxReaperTests {
 
 struct ZmxAttachTests {
     @Test
-    func interactiveSurfaceGetsArgvWrapperAndNilCommand() {
-        let (command, wrapper) = ZmxAttach.resolveLaunch(
-            executablePath: "/path/to/zmx", sessionID: "macterm-1", command: nil
-        )
-        #expect(command == nil)
-        #expect(wrapper == ["/path/to/zmx", "attach", "macterm-1"])
+    func wrapperArgvWrapsTheShellWhenExecutablePresent() {
+        let argv = ZmxAttach.wrapperArgv(executablePath: "/path/to/zmx", sessionID: "macterm-1")
+        #expect(argv == ["/path/to/zmx", "attach", "macterm-1"])
     }
 
     @Test
-    func blankCommandIsTreatedAsInteractive() {
-        let (command, wrapper) = ZmxAttach.resolveLaunch(
-            executablePath: "/path/to/zmx", sessionID: "macterm-1", command: "   "
+    func noExecutableYieldsEmptyArgv() {
+        // nil executable (zmx unbundled or over budget) → no wrapper, plain shell.
+        #expect(ZmxAttach.wrapperArgv(executablePath: nil, sessionID: "macterm-1").isEmpty)
+    }
+}
+
+/// Drives the async `reapOrphans` over an injected `ZmxClient` (no real
+/// subprocess), so the known-set mapping, the nil-probe short-circuit, and the
+/// kill fan-out are covered end to end — not just the pure `ZmxReaper.orphans`.
+struct ZmxReapOrphansDriverTests {
+    /// A client whose `ls` returns `entries` and that records every killed id.
+    private func recordingClient(
+        entries: [ZmxSessionListParser.Entry]?,
+        killed: LockedBox<[String]>
+    ) -> ZmxClient {
+        ZmxClient(
+            executableURL: { URL(fileURLWithPath: "/fake/zmx") },
+            isBundled: { true },
+            killSession: { id in killed.mutate { $0.append(id) } },
+            listSessionsWithClients: { entries }
         )
-        #expect(command == nil)
-        #expect(wrapper == ["/path/to/zmx", "attach", "macterm-1"])
     }
 
     @Test
-    func declaredCommandGetsShWrappedStringNoWrapper() {
-        let (command, wrapper) = ZmxAttach.resolveLaunch(
-            executablePath: "/path/to/zmx", sessionID: "macterm-1", command: "npm run dev"
+    func reapsOnlyUnclaimedDetachedSessions() async {
+        let killed = LockedBox<[String]>([])
+        let knownID = UUID()
+        let client = recordingClient(
+            entries: [
+                .init(name: ZmxSessionID.make(surfaceID: knownID), clients: 0), // claimed → spare
+                .init(name: "macterm-orphan", clients: 0), // unclaimed → reap
+                .init(name: "macterm-attached", clients: 1), // attached → spare
+                .init(name: "supa-foreign", clients: 0), // foreign prefix → spare
+            ],
+            killed: killed
         )
-        #expect(command == "'/path/to/zmx' attach macterm-1 /bin/sh -c 'npm run dev'")
-        #expect(wrapper.isEmpty)
+        await client.reapOrphans(knownSurfaceIDs: [knownID])
+        #expect(killed.value == ["macterm-orphan"])
     }
 
     @Test
-    func noExecutableFallsThroughToRawCommandNoZmx() {
-        let (command, wrapper) = ZmxAttach.resolveLaunch(
-            executablePath: nil, sessionID: "macterm-1", command: "npm run dev"
-        )
-        #expect(command == "npm run dev")
-        #expect(wrapper.isEmpty)
+    func failedProbeReapsNothing() async {
+        let killed = LockedBox<[String]>([])
+        // nil listing = probe failed/unavailable → never reap.
+        let client = recordingClient(entries: nil, killed: killed)
+        await client.reapOrphans(knownSurfaceIDs: [])
+        #expect(killed.value.isEmpty)
+    }
+}
+
+/// Minimal thread-safe box so the injected `@Sendable` killSession closure can
+/// record across the reaper's concurrent task group.
+private final class LockedBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: T
+    init(_ value: T) {
+        stored = value
     }
 
-    @Test
-    func singleQuotesInCommandAreEscaped() {
-        let (command, _) = ZmxAttach.resolveLaunch(
-            executablePath: "/zmx", sessionID: "s", command: "echo 'hi'"
-        )
-        // POSIX single-quote escaping: ' becomes '\''
-        #expect(command == "'/zmx' attach s /bin/sh -c 'echo '\\''hi'\\'''")
+    var value: T { lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    func mutate(_ body: (inout T) -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        body(&stored)
     }
 }

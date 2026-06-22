@@ -255,14 +255,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_: Notification) {
         onTerminate?()
         // zmx sessions outlive the app by design (reattach on relaunch). Only
-        // when the user opted into terminate-on-quit do we kill them all here.
-        if Preferences.shared.terminateSessionsOnQuit {
-            for ws in appState?.workspaces.values ?? [:].values {
-                for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-                    pane.killPersistentSession()
-                }
-            }
-        }
+        // when the user opted into terminate-on-quit do we kill them all here —
+        // and it must be a BLOCKING kill: a detached Task would never be
+        // scheduled before the process exits, so the per-pane fire-and-forget
+        // path (killPersistentSession) silently no-ops at quit. Collect the
+        // session ids and tear them down synchronously, bounded so a wedged
+        // daemon can't hang quit.
+        guard Preferences.shared.terminateSessionsOnQuit else { return }
+        let sessionIDs = (appState?.workspaces.values ?? [:].values)
+            .flatMap(\.tabs)
+            .flatMap { $0.splitRoot.allPanes() }
+            .map { ZmxSessionID.make(surfaceID: $0.sessionID) }
+        ZmxClient.live.killSessionsBlocking(sessionIDs)
     }
 
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {

@@ -57,18 +57,20 @@ if $need_resources; then
 fi
 
 if $need_zmx; then
-  # Prebuilt arm64 zmx binary from the thdxg/zmx release. Shipped as a tarball
-  # (preserves the executable bit through the GitHub asset round-trip) holding a
-  # single `zmx` binary; extracted to Macterm/Resources/zmx/zmx (gitignored).
+  # Prebuilt universal (arm64+x86_64) zmx binary from the thdxg/zmx release.
+  # Universal so it execs on both Apple Silicon and Intel, matching Macterm's
+  # universal app build. Shipped as a tarball (preserves the executable bit
+  # through the GitHub asset round-trip) holding a single `zmx` binary;
+  # extracted to Macterm/Resources/zmx/zmx (gitignored).
   ZMX_TAG=$(gh release list --repo "$ZMX_REPO" --limit 1 --json tagName -q ".[0].tagName")
   if [[ -z "$ZMX_TAG" ]]; then
     echo "Error: No zmx releases found in $ZMX_REPO" >&2
     exit 1
   fi
-  gh release download "$ZMX_TAG" --pattern "zmx-aarch64-macos.tar.gz" --repo "$ZMX_REPO"
+  gh release download "$ZMX_TAG" --pattern "zmx-universal-macos.tar.gz" --repo "$ZMX_REPO"
   rm -rf Macterm/Resources/zmx
   mkdir -p Macterm/Resources/zmx
-  tar xzf zmx-aarch64-macos.tar.gz -C Macterm/Resources/zmx
+  tar xzf zmx-universal-macos.tar.gz -C Macterm/Resources/zmx
   chmod +x Macterm/Resources/zmx/zmx
-  rm zmx-aarch64-macos.tar.gz
+  rm zmx-universal-macos.tar.gz
 fi

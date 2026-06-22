@@ -124,6 +124,34 @@ extension ZmxClient {
         }
     }
 
+    /// Synchronously kill `sessionIDs`, blocking the caller until every kill
+    /// finishes or `timeout` elapses. For `applicationWillTerminate`, where the
+    /// run loop is tearing down and a detached `Task` would never be scheduled
+    /// before the process exits — so a fire-and-forget kill silently no-ops. The
+    /// kills run concurrently off the main thread; each is already bounded by the
+    /// 5s subprocess timeout, and `timeout` caps the whole batch so a wedged
+    /// daemon can't hang quit indefinitely.
+    nonisolated func killSessionsBlocking(
+        _ sessionIDs: [String],
+        timeout: Duration = .seconds(6)
+    ) {
+        guard !sessionIDs.isEmpty else { return }
+        let group = DispatchGroup()
+        group.enter()
+        let kill = killSession
+        Task {
+            await withTaskGroup(of: Void.self) { taskGroup in
+                for id in sessionIDs {
+                    taskGroup.addTask { await kill(id) }
+                }
+            }
+            group.leave()
+        }
+        let seconds = Double(timeout.components.seconds)
+            + Double(timeout.components.attoseconds) / 1e18
+        _ = group.wait(timeout: .now() + seconds)
+    }
+
     /// Runs a zmx subcommand; returns captured stdout on success, or nil on any
     /// failure (unbundled, spawn error, timeout, non-zero exit). Uses the
     /// non-budget-gated `bundledExecutable` so kill paths work even when this
@@ -216,7 +244,7 @@ extension ZmxClient {
                 defer { group.cancelAll() }
                 await group.next()
             }
-            logger.warning("\(commandDesc, privacy: .public) timed out after \(subprocessTimeout)")
+            logger.warning("\(commandDesc, privacy: .public) timed out after \(subprocessTimeout, privacy: .public)")
             return nil
         }
         if exitStatus != 0 {
@@ -336,43 +364,17 @@ enum ZmxSocketBudget {
 
 /// Resolves how a surface launches under zmx.
 enum ZmxAttach {
-    /// Launch plan for a surface, given the budget-gated zmx executable path
-    /// (nil when zmx is unbundled or over budget) and the surface's session id.
+    /// The `command-wrapper` argv that wraps a surface's shell in zmx:
+    /// `[zmx, attach, macterm-<id>]`, prepended to ghostty's fully-resolved
+    /// command so the real shell runs (and is shell-integrated) as a child of
+    /// the wrapper. Empty when `executablePath` is nil (zmx unbundled or over the
+    /// socket-path budget) → the surface launches a plain, unpersisted shell.
     ///
-    /// - Interactive surfaces (`command == nil`) keep a nil command and get an
-    ///   argv `command-wrapper` (`[zmx, attach, id]`), so ghostty resolves +
-    ///   integrates the real shell and zmx wraps the result.
-    /// - Explicit commands (a declared `run:`) get a `zmx attach id /bin/sh -c
-    ///   '<cmd>'` command string and no wrapper, matching the prior
-    ///   `initial_input` semantics for declared runs.
-    /// - A nil `executablePath` falls through to the raw command with no zmx.
-    static func resolveLaunch(
-        executablePath: String?,
-        sessionID: String,
-        command: String?
-    ) -> (command: String?, commandWrapper: [String]) {
-        // A blank command is "no command" (interactive); normalize so an empty
-        // string can't slip into the script path and launch a bare shell.
-        let command = command.flatMap {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0
-        }
-        guard let executablePath else { return (command, []) }
-        if command == nil {
-            return (nil, [executablePath, "attach", sessionID])
-        }
-        return (buildCommand(executablePath: executablePath, sessionID: sessionID, userCommand: command), [])
-    }
-
-    /// `zmx attach <id> /bin/sh -c '<cmd>'` for the declared-command path.
-    static func buildCommand(executablePath: String, sessionID: String, userCommand: String?) -> String {
-        let attach = "\(shellQuote(executablePath)) attach \(sessionID)"
-        guard let command = userCommand?.trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else {
-            return attach
-        }
-        return "\(attach) /bin/sh -c \(shellQuote(command))"
-    }
-
-    static func shellQuote(_ value: String) -> String {
-        "'\(value.replacing("'", with: "'\\''"))'"
+    /// A declared `run:` is NOT folded in here — the surface types it into the
+    /// wrapped shell via `initial_input`, preserving the same semantics as a
+    /// non-persisted run.
+    static func wrapperArgv(executablePath: String?, sessionID: String) -> [String] {
+        guard let executablePath else { return [] }
+        return [executablePath, "attach", sessionID]
     }
 }

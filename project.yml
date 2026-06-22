@@ -50,6 +50,7 @@ targets:
           - "Macterm.entitlements"
           - "Resources/ghostty"
           - "Resources/terminfo"
+          - "Resources/zmx"
           - "AppIcon.icon"
       # Ghostty resources (themes + shell-integration), downloaded by setup.sh.
       # Folder reference (not the default "group") because the contents are
