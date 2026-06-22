@@ -26,7 +26,7 @@
 ## Features
 
 - **Vertical Project Sidebar**: Native macOS sidebar for organizing projects and tabs vertically.
-- **Persistent Multiplexing**: Projects, tabs, and panes are saved and restored automatically on relaunch.
+- **Session Persistence**: Quit anytime — your shells keep running in the background and reattach on relaunch, processes and scrollback intact. Powered by [zmx](https://github.com/neurosnap/zmx), so your whole workspace (projects, tabs, splits, and the programs inside them) comes back exactly as you left it. No tmux required.
 - **Declarative Layouts**: Define a `.macterm/layout.yaml` describing each project's tabs, splits, and the process every pane runs; apply or save it from the command palette.
 - **Ghostty Config Compatibility**: Macterm reads your existing Ghostty config. Theme, font, notification, keybinds — all of it just works.
 - **Command Palette**: Versatile command palette to interact with multiplexing and manage projects
