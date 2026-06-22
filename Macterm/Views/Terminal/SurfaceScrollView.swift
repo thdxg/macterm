@@ -15,13 +15,16 @@ import GhosttyKit
 ///        └─ GhosttyTerminalNSView      (pinned to the visible rect)
 /// ```
 ///
-/// Wheel/trackpad events hit the frontmost surface view first. Ordinary
-/// scrollback gestures are handled here with an iTerm2-style line accumulator
-/// that converts AppKit's wheel/trackpad deltas (including inertia) into whole
-/// terminal-row movement; mouse-reporting / alt-screen cases continue to go to
-/// libghostty. Scrollback geometry flows **into** this view via the
-/// `GHOSTTY_ACTION_SCROLLBAR` action (`onScrollbarUpdate`), and user-visible
-/// scroll positions flow **out** via the `scroll_to_row:<n>` keybind action.
+/// Wheel/trackpad events hit the frontmost surface view first. The scroll
+/// view handles them with an iTerm2-style line accumulator that converts
+/// AppKit's wheel/trackpad deltas (including inertia) into whole terminal-row
+/// movement — but only while there's scrollback to move through. Apps with no
+/// scrollback (alternate-screen programs like less/vim, or a fresh prompt)
+/// have nothing to scroll, so the view declines and libghostty handles the
+/// event (mouse reporting / cursor keys). Scrollback geometry flows **into**
+/// this view via the `GHOSTTY_ACTION_SCROLLBAR` action (`onScrollbarUpdate`),
+/// and user-visible scroll positions flow **out** via the `scroll_to_row:<n>`
+/// keybind action.
 final class SurfaceScrollView: NSScrollView {
     /// The Metal terminal surface. Owned by `Pane`; we just re-parent it into
     /// our document view.
@@ -90,7 +93,6 @@ final class SurfaceScrollView: NSScrollView {
     }
 
     deinit {
-        MainActor.assumeIsolated { surfaceView.onScrollWheel = nil }
         for token in observers {
             NotificationCenter.default.removeObserver(token)
         }
@@ -191,6 +193,9 @@ final class SurfaceScrollView: NSScrollView {
     }
 
     private func canHandleScrollbackWheel(_ event: NSEvent, cellHeight: CGFloat) -> Bool {
+        // `total > len` is the alt-screen guard: programs with no scrollback
+        // (less/vim, a fresh prompt) have nothing to scroll, so we decline and
+        // let libghostty handle the event (mouse reporting / cursor keys).
         guard surfaceView.surface != nil, cellHeight > 0, total > len else { return false }
         return abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX)
     }
@@ -268,9 +273,7 @@ private final class ITermScrollAccumulator {
 
     func delta(for event: NSEvent, sensitivity: Double) -> Int {
         let sensitivity = CGFloat(max(0.25, min(3.0, sensitivity)))
-        let accumulated = accumulatedDelta(for: event, sensitivity: sensitivity)
-        let sign: CGFloat = accumulated > 0 ? 1 : -1
-        return Int(pow(abs(accumulated), 1) * sign)
+        return Int(accumulatedDelta(for: event, sensitivity: sensitivity))
     }
 
     private func accumulatedDelta(for event: NSEvent, sensitivity: CGFloat) -> CGFloat {
@@ -281,15 +284,8 @@ private final class ITermScrollAccumulator {
     }
 
     private func accumulatedDeltaForMouseWheelEvent(_ event: NSEvent, sensitivity: CGFloat) -> CGFloat {
-        let delta = adjustedDelta(for: event)
-        if sensitivity == 1 {
-            let roundDelta = delta.rounded()
-            if roundDelta == 0, delta != 0 {
-                return delta > 0 ? 1 : -1
-            }
-            return roundDelta
-        }
-        accumulatedDelta += delta * sensitivity
+        let delta = adjustedDelta(for: event) * sensitivity
+        accumulatedDelta += delta
         return takeWholePortion(delta: delta)
     }
 
