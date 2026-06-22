@@ -169,6 +169,9 @@ final class TerminalTab: Identifiable {
     @discardableResult
     func removePane(_ paneID: UUID) -> PaneRemovalResult {
         guard let pane = splitRoot.findPane(id: paneID) else { return .notFound }
+        // Pane removal is always permanent (it leaves the tree), so kill its
+        // persisted zmx session — unlike transient teardown, which only detaches.
+        pane.killPersistentSession()
         pane.destroySurface()
         let panes = splitRoot.allPanes()
         if panes.count <= 1 {

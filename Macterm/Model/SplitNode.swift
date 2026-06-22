@@ -235,6 +235,13 @@ private struct TerminalExecutionTracker {
 @MainActor @Observable
 final class Pane: Identifiable {
     let id = UUID()
+    /// Stable session id for zmx-backed persistence, distinct from `id`. The
+    /// pane's shell runs under `zmx attach macterm-<sessionID>`; this id is
+    /// persisted in the workspace snapshot (unlike `id`, which is regenerated on
+    /// every restore) so a restored pane re-attaches to its still-running
+    /// daemon. Defaults to a fresh UUID for a new pane; the restore path passes
+    /// the saved one.
+    let sessionID: UUID
     let projectPath: String
     let projectID: UUID
     /// Process the pane launches on first surface creation, injected into the
@@ -418,7 +425,13 @@ final class Pane: Identifiable {
 
     func ensureNSView() -> GhosttyTerminalNSView {
         if let existing = _nsView { return existing }
-        let view = GhosttyTerminalNSView(workingDirectory: projectPath, command: command, shell: shell, env: env)
+        let view = GhosttyTerminalNSView(
+            workingDirectory: projectPath,
+            sessionID: sessionID,
+            command: command,
+            shell: shell,
+            env: env
+        )
         _nsView = view
         return view
     }
@@ -479,6 +492,19 @@ final class Pane: Identifiable {
         }
     }
 
+    /// Permanently kill this pane's persisted zmx session. Call ONLY when the
+    /// pane is gone for good (user closed it, tab/project removed, dropped by a
+    /// layout apply) — NOT on transient teardown (project unload, window hide,
+    /// tab-switch surface churn), where the session must survive so a later
+    /// reattach restores the shell. `destroySurface` alone detaches (the daemon
+    /// lives on); this is the explicit "kill" the detach-not-kill design omits.
+    /// Fire-and-forget: the close path isn't blocked on it, and ZmxClient's
+    /// subprocess timeout bounds a stuck daemon.
+    func killPersistentSession() {
+        let id = ZmxSessionID.make(surfaceID: sessionID)
+        Task { await ZmxClient.live.killSession(id) }
+    }
+
     var processTitle: String {
         // The live foreground process name (`hx`, `btop`) when a program is
         // running, else the shell name when idle. Always process-table derived
@@ -517,12 +543,14 @@ final class Pane: Identifiable {
     init(
         projectPath: String,
         projectID: UUID,
+        sessionID: UUID = UUID(),
         command: String? = nil,
         shell: String? = nil,
         env: [String: String]? = nil
     ) {
         self.projectPath = projectPath
         self.projectID = projectID
+        self.sessionID = sessionID
         self.command = command
         self.shell = shell
         self.env = env

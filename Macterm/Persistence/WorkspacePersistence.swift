@@ -70,9 +70,37 @@ struct PaneSnapshot: Codable {
     /// outlive the shell process, and `.idle` is the default. Optional so older
     /// snapshots (without the field) decode as nil / idle.
     var needsAttention: Bool?
+    /// Stable zmx session id (`Pane.sessionID`). On restore the rebuilt pane
+    /// re-uses this id so its shell re-attaches to the still-running
+    /// `macterm-<sessionID>` daemon instead of spawning fresh. Optional so older
+    /// snapshots (pre-persistence) decode as nil → a fresh id (new session).
+    var sessionID: UUID?
+    /// The pane's live working directory at snapshot time, so a restored pane
+    /// lands back where the user was. Optional/back-compat: nil falls back to
+    /// `projectPath`. (zmx reattach restores the *running* cwd regardless; this
+    /// matters for a session that didn't survive and respawns fresh.)
+    var workingDirectory: String?
     // No `title`: the tab name is derived live from the pane's foreground
     // process, so there's nothing per-pane to persist. (An older snapshot's
     // `title` key is harmlessly ignored on decode.)
+
+    /// Explicit memberwise init with defaults for the optional fields, so call
+    /// sites that predate sessionID/workingDirectory (and tests building old-shape
+    /// snapshots) keep compiling. SwiftLint forbids the `= nil` on the stored
+    /// property declarations, so the defaults live here instead.
+    init(
+        id: UUID,
+        projectPath: String,
+        needsAttention: Bool? = nil,
+        sessionID: UUID? = nil,
+        workingDirectory: String? = nil
+    ) {
+        self.id = id
+        self.projectPath = projectPath
+        self.needsAttention = needsAttention
+        self.sessionID = sessionID
+        self.workingDirectory = workingDirectory
+    }
 }
 
 struct SplitBranchSnapshot: Codable {
@@ -204,14 +232,19 @@ enum WorkspaceSerializer {
         case let .pane(p):
             // Prefer the shell's live cwd over the pane's original project
             // path so reopening the app lands each pane back in the directory
-            // the user had navigated to. Falls back to projectPath when the
-            // surface hasn't reported a pwd yet.
-            let path = p.nsView?.currentPwd ?? p.projectPath
+            // the user had navigated to. OSC 7 (`currentPwd`) first; fall back to
+            // the foreground process's cwd from the process table (reliable even
+            // for shells that don't emit OSC 7); finally projectPath.
+            let path = p.nsView?.currentPwd
+                ?? ProcessInspector.foregroundWorkingDirectory(forPane: p)
+                ?? p.projectPath
             let needsAttention = p.executionState == .done
             return .pane(PaneSnapshot(
                 id: p.id,
                 projectPath: path,
-                needsAttention: needsAttention
+                needsAttention: needsAttention,
+                sessionID: p.sessionID,
+                workingDirectory: path
             ))
         case let .split(b):
             return .split(SplitBranchSnapshot(
@@ -226,7 +259,15 @@ enum WorkspaceSerializer {
     private static func restoreNode(_ snap: SplitNodeSnapshot, projectID: UUID) -> SplitNode {
         switch snap {
         case let .pane(p):
-            let pane = Pane(projectPath: p.projectPath, projectID: projectID)
+            // Reuse the persisted session id so the restored pane re-attaches to
+            // its still-running zmx daemon; nil (old snapshot) → a fresh session.
+            // Land in the saved working directory (workingDirectory is the
+            // explicit field; projectPath is the back-compat fallback).
+            let pane = Pane(
+                projectPath: p.workingDirectory ?? p.projectPath,
+                projectID: projectID,
+                sessionID: p.sessionID ?? UUID()
+            )
             if p.needsAttention == true {
                 pane.restoreNeedsAttention()
             }

@@ -21,6 +21,11 @@ final class GhosttyTerminalNSView: NSView {
     private let shell: String?
     /// Extra environment variables for the spawned shell.
     private let env: [String: String]?
+    /// Stable per-pane session id used to wrap the surface's shell in zmx
+    /// (`zmx attach macterm-<id>`), so the shell survives app quit and the same
+    /// id re-attaches to the live daemon on the next launch. Persisted with the
+    /// pane (unlike `id`, which is fresh per restore).
+    private let sessionID: UUID
 
     /// Heap buffers backing the `const char*` fields of the surface config —
     /// notably `initial_input`, which libghostty writes to the pty
@@ -104,8 +109,15 @@ final class GhosttyTerminalNSView: NSView {
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
-    init(workingDirectory: String, command: String? = nil, shell: String? = nil, env: [String: String]? = nil) {
+    init(
+        workingDirectory: String,
+        sessionID: UUID,
+        command: String? = nil,
+        shell: String? = nil,
+        env: [String: String]? = nil
+    ) {
         self.workingDirectory = workingDirectory
+        self.sessionID = sessionID
         self.command = command
         self.shell = shell
         self.env = env
@@ -171,9 +183,27 @@ final class GhosttyTerminalNSView: NSView {
             config.command = cString(resolvedShell)
         }
 
-        // Declared `run` is typed into the shell verbatim, as if the user had
-        // entered it at the prompt. No shell-syntax handling: cwd is set above,
-        // not via an injected `cd`.
+        // Wrap the resolved shell in zmx for session persistence. The
+        // `command_wrapper` argv is prepended to ghostty's fully-resolved
+        // command (after login(1) + shell integration), so OSC 7 cwd / OSC 133
+        // framing stay intact — the shell just runs as a child of
+        // `zmx attach macterm-<sessionID>`, which upserts the session and
+        // re-attaches the live daemon on relaunch. nil executable (zmx unbundled
+        // or over the socket-path budget) → no wrapper, a plain unpersisted
+        // shell. The argv array of `const char*` must outlive
+        // `ghostty_surface_new`, so its element buffers come from `cString`
+        // (freed in destroySurface) and the pointer array is held in a local
+        // that spans the call.
+        let launch = ZmxAttach.resolveLaunch(
+            executablePath: ZmxClient.live.executableURL()?.path,
+            sessionID: ZmxSessionID.make(surfaceID: sessionID),
+            command: nil
+        )
+        let wrapperArgv: [UnsafePointer<CChar>?] = launch.commandWrapper.map { cString($0) }
+
+        // Declared `run` is typed into the (wrapped) shell verbatim, as if the
+        // user had entered it at the prompt. No shell-syntax handling: cwd is
+        // set above, not via an injected `cd`.
         if let command, !command.isEmpty {
             config.initial_input = cString(command + "\n")
         }
@@ -187,13 +217,31 @@ final class GhosttyTerminalNSView: NSView {
             }
         }
 
-        if envVars.isEmpty {
-            surface = ghostty_surface_new(app, &config)
-        } else {
-            envVars.withUnsafeMutableBufferPointer { buf in
-                config.env_vars = buf.baseAddress
-                config.env_var_count = buf.count
+        /// Sets env on the config and spawns. Split out so the optional
+        /// command-wrapper buffer scope (below) wraps both env-present and
+        /// env-absent paths without four-way nesting.
+        func makeSurface() {
+            if envVars.isEmpty {
                 surface = ghostty_surface_new(app, &config)
+            } else {
+                envVars.withUnsafeMutableBufferPointer { buf in
+                    config.env_vars = buf.baseAddress
+                    config.env_var_count = buf.count
+                    surface = ghostty_surface_new(app, &config)
+                }
+            }
+        }
+
+        // The command_wrapper argv (a `const char* const*`) needs the pointer
+        // array itself to have a stable base for the duration of the spawn;
+        // bind it just around `makeSurface`. Empty wrapper → no zmx (bypass).
+        if wrapperArgv.isEmpty {
+            makeSurface()
+        } else {
+            wrapperArgv.withUnsafeBufferPointer { buf in
+                config.command_wrapper = buf.baseAddress
+                config.command_wrapper_count = buf.count
+                makeSurface()
             }
         }
         guard let surface else { return }

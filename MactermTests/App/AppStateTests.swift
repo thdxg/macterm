@@ -527,9 +527,14 @@ struct AppStateTests {
     }
 
     @Test
-    func layout_file_wins_over_restored_snapshot() throws {
+    func reopen_restores_snapshot_silently_and_ignores_layout() throws {
+        // Reopen is always silent: a restored session snapshot wins (so a layout
+        // project's panes reattach their live shells and its live layout is
+        // remembered), and the committed layout is NOT applied and NOT prompted
+        // for — even when it differs. The layout only seeds a genuine first open
+        // (no snapshot), covered by the next test.
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-layoutwins-\(UUID().uuidString)")
+            .appendingPathComponent("macterm-reopen-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let project = Project(name: "winner", path: dir.path, sortOrder: 0)
@@ -540,7 +545,7 @@ struct AppStateTests {
         let snapshotWS = Workspace(projectID: project.id, projectPath: dir.path)
         store.save(WorkspaceSerializer.snapshot([project.id: snapshotWS]))
 
-        // And a layout file declaring a two-pane split.
+        // And a layout file declaring a different (two-pane) split.
         writeLayout("""
         tabs:
           - name: "Dev"
@@ -550,20 +555,51 @@ struct AppStateTests {
               second: {}
         """, at: dir.path)
 
-        // Make it the active project so restore reopens it.
         let priorActive = Preferences.shared.activeProjectID
         Preferences.shared.activeProjectID = project.id
         defer { Preferences.shared.activeProjectID = priorActive }
 
-        // Restore: the layout file must win — the project's snapshot is skipped
-        // and its workspace is rebuilt from the layout (two panes, not one).
+        let state = makeAppState(store: store)
+        state.restoreSelection(projects: [project])
+
+        // Restored snapshot wins: one pane, layout NOT applied, NO prompt.
+        let ws = try #require(state.workspaces[project.id])
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
+        #expect(ws.tabs[0].customTitle != "Dev")
+        #expect(state.pendingLayoutApply == nil)
+    }
+
+    @Test
+    func layout_auto_applies_on_genuine_first_open_without_snapshot() throws {
+        // No snapshot at all → the layout still seeds the workspace on first open
+        // (pure-spawn, no prompt). This is the only path that auto-applies now.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-firstopen-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let project = Project(name: "fresh", path: dir.path, sortOrder: 0)
+        let store = WorkspaceStore(fileURL: dir.appendingPathComponent("workspaces.json"))
+
+        writeLayout("""
+        tabs:
+          - name: "Dev"
+            split:
+              direction: horizontal
+              first:  { run: "npm run dev" }
+              second: {}
+        """, at: dir.path)
+
+        let priorActive = Preferences.shared.activeProjectID
+        Preferences.shared.activeProjectID = project.id
+        defer { Preferences.shared.activeProjectID = priorActive }
+
         let state = makeAppState(store: store)
         state.restoreSelection(projects: [project])
 
         let ws = try #require(state.workspaces[project.id])
-        #expect(ws.tabs.count == 1)
         #expect(ws.tabs[0].customTitle == "Dev")
         #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(state.pendingLayoutApply == nil) // no prompt on first open
     }
 
     @Test

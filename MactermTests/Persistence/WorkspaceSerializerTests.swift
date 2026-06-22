@@ -224,6 +224,81 @@ struct WorkspaceSerializerTests {
     }
 
     @Test
+    func round_trip_preserves_session_id_for_reattach() {
+        // The session id is the link to the live zmx daemon — it MUST survive a
+        // snapshot/restore so the restored pane re-attaches instead of spawning
+        // a fresh shell. (The pane `id` is intentionally regenerated; sessionID
+        // is the stable one.)
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
+        guard case let .pane(original) = ws.tabs[0].splitRoot else {
+            Issue.record("expected leaf")
+            return
+        }
+        let originalSessionID = original.sessionID
+        let roundTripped = roundTrip([ws.projectID: ws])
+        guard case let .pane(restored) = roundTripped[0].tabs[0].splitRoot else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(restored.sessionID == originalSessionID)
+        #expect(restored.id != original.id) // pane id regenerates; sessionID doesn't
+    }
+
+    @Test
+    func old_snapshot_without_session_id_gets_fresh_one() {
+        // A pre-persistence PaneSnapshot (no sessionID) must restore to a pane
+        // with a fresh session id rather than crashing or reusing a nil — it
+        // simply starts a new session.
+        let projectID = UUID()
+        let snap = WorkspaceSnapshot(
+            projectID: projectID,
+            activeTabID: nil,
+            tabs: [TabSnapshot(
+                id: UUID(),
+                customTitle: nil,
+                focusedPaneID: nil,
+                splitRoot: .pane(PaneSnapshot(id: UUID(), projectPath: "/tmp/old"))
+            )]
+        )
+        let restored = WorkspaceSerializer.restore(from: [snap], validIDs: [projectID])
+        guard case let .pane(p) = restored[0].tabs[0].splitRoot else {
+            Issue.record("expected leaf")
+            return
+        }
+        // A real UUID was minted (not nil/zero), and the saved path carried over.
+        #expect(p.projectPath == "/tmp/old")
+        #expect(p.sessionID != UUID(uuidString: "00000000-0000-0000-0000-000000000000"))
+    }
+
+    @Test
+    func working_directory_is_used_over_project_path_on_restore() {
+        // When workingDirectory is present it wins (the live cwd the user had);
+        // projectPath is only the back-compat fallback.
+        let projectID = UUID()
+        let snap = WorkspaceSnapshot(
+            projectID: projectID,
+            activeTabID: nil,
+            tabs: [TabSnapshot(
+                id: UUID(),
+                customTitle: nil,
+                focusedPaneID: nil,
+                splitRoot: .pane(PaneSnapshot(
+                    id: UUID(),
+                    projectPath: "/tmp/project-root",
+                    sessionID: UUID(),
+                    workingDirectory: "/tmp/project-root/src/deep"
+                ))
+            )]
+        )
+        let restored = WorkspaceSerializer.restore(from: [snap], validIDs: [projectID])
+        guard case let .pane(p) = restored[0].tabs[0].splitRoot else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(p.projectPath == "/tmp/project-root/src/deep")
+    }
+
+    @Test
     func load_from_missing_file_returns_empty() {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-doesnotexist-\(UUID().uuidString).json")

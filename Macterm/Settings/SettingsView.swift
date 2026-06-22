@@ -30,6 +30,8 @@ private struct GeneralSettings: View {
 
     @AppStorage(Preferences.Keys.eagerlyStartProjectTabs)
     private var eagerlyStartProjectTabs = true
+    @AppStorage(Preferences.Keys.terminateSessionsOnQuit)
+    private var terminateSessionsOnQuit = false
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
@@ -82,6 +84,19 @@ private struct GeneralSettings: View {
                 Text("Runs every tab's processes when a project opens, not just the active tab. Other projects still load when focused.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Session Persistence") {
+                Toggle("Quit terminals when Macterm quits", isOn: $terminateSessionsOnQuit)
+                    .onChange(of: terminateSessionsOnQuit) { _, v in
+                        Preferences.shared.terminateSessionsOnQuit = v
+                    }
+                Text(
+                    "Off (default): shells keep running in the background after you quit and reattach on next launch. "
+                        + "On: quitting stops every terminal's processes."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

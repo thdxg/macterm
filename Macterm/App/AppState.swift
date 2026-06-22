@@ -165,14 +165,15 @@ final class AppState {
         hasRestoredSelection = true
         let snapshots = workspaceStore.load()
         let valid = Set(projects.map(\.id))
-        // A committed layout file is the source of truth: skip restoring the
-        // session snapshot for any project that has one, leaving its workspace
-        // nil so it rebuilds from `.macterm/layout.yaml` on open (below / on
-        // first select). Projects with no layout file restore their snapshot.
-        let pathByID = Dictionary(projects.map { ($0.id, $0.path) }, uniquingKeysWith: { a, _ in a })
-        for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid)
-            where !LayoutFile.exists(atProjectRoot: pathByID[ws.projectID] ?? "")
-        {
+        // Restore every project's session snapshot — including layout projects.
+        // The snapshot carries the live tabs/splits and each pane's `sessionID`,
+        // so a layout project's panes reattach their zmx sessions and its live
+        // layout is remembered, instead of being silently overwritten by the
+        // declared `.macterm/layout.yaml` on every launch. The committed layout
+        // is offered (a confirmable apply), not force-applied over a restored
+        // session — see `autoApplyLayoutOnFirstOpen` (first-open seed only) and
+        // `offerLayoutIfChanged`.
+        for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid) {
             workspaces[ws.projectID] = ws
         }
         if let id = Preferences.shared.activeProjectID,
@@ -180,14 +181,27 @@ final class AppState {
         {
             activeProjectID = id
             recordProjectVisit(id)
-            // Build the active project from its layout file if it has one (its
-            // snapshot was skipped above); otherwise the restored snapshot stands
-            // and `ensureWorkspace` only creates a default when neither exists.
+            // Reopen is always silent — never prompt. A restored snapshot wins
+            // (reattach + remembered live layout); only when there's no snapshot
+            // does the committed layout seed the workspace, applied silently.
+            // `autoApplyLayoutOnFirstOpen` guards on `workspaces[id] == nil`, so
+            // a restored snapshot makes it a no-op automatically.
             autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: id, path: project.path)
             acknowledgeActiveTab(projectID: id)
             warmFocusedProject()
         }
+
+        // Reap zmx sessions left behind by a crash / force-quit: any macterm-*
+        // session with no attached client that no restored pane claims. Runs
+        // after workspaces are built so the known set is complete. Detached but
+        // claimed sessions (a pane that will reattach lazily on select) are
+        // spared because their surfaceID is in the known set.
+        let known = Set(workspaces.values
+            .flatMap(\.tabs)
+            .flatMap { $0.splitRoot.allPanes() }
+            .map(\.sessionID))
+        Task { await ZmxClient.live.reapOrphans(knownSurfaceIDs: known) }
     }
 
     func saveWorkspaces() {
@@ -314,6 +328,8 @@ final class AppState {
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+                // Project removed for good → kill each pane's persisted session.
+                pane.killPersistentSession()
                 pane.destroySurface()
             }
         }
@@ -345,6 +361,8 @@ final class AppState {
         else { return }
         logger.debug("closeTab: \(tabID, privacy: .public) project=\(projectID, privacy: .public)")
         for pane in tab.splitRoot.allPanes() {
+            // Tab closed for good → kill each pane's persisted session.
+            pane.killPersistentSession()
             pane.destroySurface()
         }
         ws.closeTab(tabID)
@@ -633,7 +651,11 @@ final class AppState {
         }
 
         // Destroy surfaces only AFTER the new trees no longer reference them.
+        // A pane the reconcile dropped is gone for good (not reused by any
+        // declared node), so kill its persisted session — otherwise it would
+        // orphan a clients==0 zmx daemon until the next launch's reaper.
         for pane in plan.panesToDestroy {
+            pane.killPersistentSession()
             pane.destroySurface()
         }
 

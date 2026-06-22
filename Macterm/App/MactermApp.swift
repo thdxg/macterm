@@ -254,6 +254,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         onTerminate?()
+        // zmx sessions outlive the app by design (reattach on relaunch). Only
+        // when the user opted into terminate-on-quit do we kill them all here.
+        if Preferences.shared.terminateSessionsOnQuit {
+            for ws in appState?.workspaces.values ?? [:].values {
+                for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+                    pane.killPersistentSession()
+                }
+            }
+        }
     }
 
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
@@ -273,6 +282,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Walk every workspace + the quick terminal and emit one row per pane
     /// whose ghostty surface still has a foreground process running.
     private func collectRunningProcessRows() -> [RunningProcessRow] {
+        // With session persistence active (zmx bundled + under budget) and
+        // terminate-on-quit off, every shell survives quit and reattaches on
+        // relaunch — so nothing is actually lost and the "processes will be
+        // killed" prompt is wrong. Skip it. (When the user opts into
+        // terminate-on-quit, sessions DO die, so fall through and prompt.)
+        if ZmxClient.live.executableURL() != nil, !Preferences.shared.terminateSessionsOnQuit {
+            return []
+        }
         var rows: [RunningProcessRow] = []
         let projectsByID = Dictionary(
             uniqueKeysWithValues: (projectStore?.projects ?? []).map { ($0.id, $0) }
