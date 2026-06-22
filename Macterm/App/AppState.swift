@@ -88,6 +88,11 @@ final class AppState {
     @ObservationIgnored
     private var processNameTimer: Timer?
 
+    /// Guards against overlapping `zmx ls` refreshes of the foreground-resolver
+    /// cache: a slow probe shouldn't pile up behind the 250ms poll.
+    @ObservationIgnored
+    private var zmxForegroundRefreshInFlight = false
+
     /// zmx session-persistence client. Defaults to the live binding; injectable
     /// so tests can drive the launch-time orphan reaper without a real daemon.
     @ObservationIgnored
@@ -117,6 +122,14 @@ final class AppState {
     /// workspaces. Each pane only republishes (and triggers a tab re-render)
     /// when its name actually changes, so this is cheap when nothing's moving.
     func refreshAllForegroundProcesses() {
+        // Refresh the zmx session→daemon-leader-pid cache that ProcessInspector
+        // uses to see past the `zmx attach` wrapper to the real foreground
+        // process. One `zmx ls` per tick (not per pane), off-main; the cache is
+        // read synchronously and is at most one tick stale (daemon pids are
+        // stable per session). A guard drops the refresh when one is already in
+        // flight so a slow `ls` can't pile up. Only when panes exist.
+        refreshZmxForegroundCacheIfNeeded()
+
         // Shell/raw-mode detection (KERN_PROCARGS2 + open/tcgetattr per pane)
         // and the quiet-settle only matter when the status indicator is shown;
         // skip them in icon mode so the default poll stays as cheap as before
@@ -139,6 +152,23 @@ final class AppState {
             }
         }
         if didAcknowledgeCompletion { saveWorkspaces() }
+    }
+
+    /// Kick an off-main `zmx ls` to refresh `ZmxForegroundResolver`'s
+    /// session→daemon-leader-pid cache, unless one is already running or no
+    /// panes exist (nothing to resolve, and no reason to spawn a subprocess).
+    private func refreshZmxForegroundCacheIfNeeded() {
+        guard !zmxForegroundRefreshInFlight else { return }
+        let hasPanes = workspaces.values.contains { ws in
+            ws.tabs.contains { !$0.splitRoot.allPanes().isEmpty }
+        }
+        guard hasPanes else { return }
+        zmxForegroundRefreshInFlight = true
+        Task { [zmx] in
+            let map = await zmx.sessionLeaderPIDs()
+            ZmxForegroundResolver.updateCache(map)
+            await MainActor.run { self.zmxForegroundRefreshInFlight = false }
+        }
     }
 
     private func recordProjectVisit(_ projectID: UUID) {

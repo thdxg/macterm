@@ -10,13 +10,31 @@ import Foundation
 /// Everything is best-effort: any failure yields nil rather than throwing. Only
 /// same-uid processes are readable, which the pane's foreground process is.
 enum ProcessInspector {
+    /// The pid to inspect for a pane's foreground process. When the pane's shell
+    /// is wrapped in zmx, libghostty's `foregroundPID` points at the local
+    /// `zmx attach` client (whose `comm` is just `zmx`), while the real shell /
+    /// program runs under the zmx daemon — a detached process tree reachable
+    /// only by session id. `ZmxForegroundResolver` maps the session id to the
+    /// daemon's pty foreground process; use that when available, else fall back
+    /// to libghostty's pid (no zmx, over-budget bypass, or before the first
+    /// `zmx ls` populates the cache).
+    @MainActor
+    private static func foregroundPID(forPane pane: Pane) -> pid_t? {
+        if let resolved = ZmxForegroundResolver.foregroundPID(
+            sessionID: ZmxSessionID.make(surfaceID: pane.sessionID)
+        ) {
+            return resolved
+        }
+        return pane.nsView?.foregroundPID
+    }
+
     /// The command running in the pane's foreground, or nil if the pane is idle
     /// at a shell prompt, has no live surface, or the process can't be read.
     /// The string is the resolved argv joined with spaces (e.g.
     /// `node …/npm-cli.js run dev`), not necessarily what the user typed.
     @MainActor
     static func runningCommand(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), !args.isEmpty else { return nil }
         // Idle at a prompt: the foreground process is the shell itself. Nothing
         // worth recording as a `run` command.
@@ -51,7 +69,7 @@ enum ProcessInspector {
     /// pid at all (surface not yet created).
     @MainActor
     static func runningProcessName(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard var comm = comm(pid: pid), !comm.isEmpty else { return nil }
         // A login shell's comm may carry a leading `-` (e.g. `-zsh`).
         if comm.hasPrefix("-") { comm.removeFirst() }
@@ -65,7 +83,7 @@ enum ProcessInspector {
     /// shell holds it is prompt churn (see `Pane.receiveReportedTitle`).
     @MainActor
     static func foregroundProgramPID(forPane pane: Pane) -> pid_t? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), let first = args.first, !isShell(first) else { return nil }
         return pid
     }
@@ -76,7 +94,7 @@ enum ProcessInspector {
     /// Macterm-maintained list.
     @MainActor
     static func foregroundProcessIsShell(forPane pane: Pane) -> Bool {
-        guard let pid = pane.nsView?.foregroundPID else { return false }
+        guard let pid = foregroundPID(forPane: pane) else { return false }
         return isShellProcess(pid: pid)
     }
 
@@ -124,7 +142,7 @@ enum ProcessInspector {
     /// program's cwd (typically launched from, and matching, the shell's).
     @MainActor
     static func foregroundWorkingDirectory(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         return workingDirectory(pid: pid)
     }
 
@@ -169,7 +187,7 @@ enum ProcessInspector {
     /// (which may be a bare `-zsh` login form).
     @MainActor
     static func runningShell(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), let first = args.first, isShell(first) else { return nil }
         // Skip the user's default login shell — only a shell they switched to is
         // worth recording.

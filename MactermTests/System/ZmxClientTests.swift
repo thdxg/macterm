@@ -128,6 +128,29 @@ struct ZmxReaperTests {
     }
 }
 
+struct ZmxForegroundResolverParseTests {
+    @Test
+    func parsesSessionNameToLeaderPID() {
+        let stdout = """
+          name=macterm-abc\tpid=46878\tclients=1\tcreated=123
+          name=macterm-def\tpid=47353\tclients=0\tcreated=456
+        """
+        let map = ZmxForegroundResolver.parseLeaderPIDs(stdout)
+        #expect(map == ["macterm-abc": 46878, "macterm-def": 47353])
+    }
+
+    @Test
+    func skipsForeignPrefixAndPidlessLines() {
+        let stdout = """
+          name=supa-xyz\tpid=999\tclients=0
+          name=macterm-nopid\tclients=0
+          name=macterm-ok\tpid=42\tclients=1
+        """
+        let map = ZmxForegroundResolver.parseLeaderPIDs(stdout)
+        #expect(map == ["macterm-ok": 42])
+    }
+}
+
 struct ZmxAttachTests {
     @Test
     func wrapperArgvWrapsTheShellWhenExecutablePresent() {
@@ -155,7 +178,8 @@ struct ZmxReapOrphansDriverTests {
             executableURL: { URL(fileURLWithPath: "/fake/zmx") },
             isBundled: { true },
             killSession: { id in killed.mutate { $0.append(id) } },
-            listSessionsWithClients: { entries }
+            listSessionsWithClients: { entries },
+            sessionLeaderPIDs: { [:] }
         )
     }
 

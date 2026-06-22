@@ -30,6 +30,11 @@ struct ZmxClient {
     /// successful empty listing. An entry's `clients == nil` marks an unknown
     /// count (err/status line) the reaper must also spare.
     var listSessionsWithClients: @Sendable () async -> [ZmxSessionListParser.Entry]?
+    /// `macterm-<uuid>` → daemon session-leader pid, parsed from `zmx ls`. Drives
+    /// `ZmxForegroundResolver`'s cache so `ProcessInspector` can find the real
+    /// foreground process under the daemon (not the `zmx attach` client that
+    /// libghostty reports). Empty when the probe fails or no sessions exist.
+    var sessionLeaderPIDs: @Sendable () async -> [String: pid_t]
 }
 
 extension ZmxClient {
@@ -86,6 +91,13 @@ extension ZmxClient {
                 )
                 else { return nil }
                 return ZmxSessionListParser.parse(stdout)
+            },
+            sessionLeaderPIDs: {
+                guard let stdout = await runZmx(
+                    ["ls"], executable: bundledExecutable(), captureStdout: true
+                )
+                else { return [:] }
+                return ZmxForegroundResolver.parseLeaderPIDs(stdout)
             }
         )
     }()
@@ -95,7 +107,8 @@ extension ZmxClient {
         executableURL: { nil },
         isBundled: { false },
         killSession: { _ in },
-        listSessionsWithClients: { [] }
+        listSessionsWithClients: { [] },
+        sessionLeaderPIDs: { [:] }
     )
 
     private enum ProbeOutcome: Equatable { case allow, bypass }
