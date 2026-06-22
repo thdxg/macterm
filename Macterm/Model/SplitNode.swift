@@ -64,31 +64,31 @@ private struct ForegroundProcessKey: Equatable {
     }
 }
 
+private enum TerminalExecutionSource: Equatable {
+    case foreground
+    case activity(Date)
+    case progress
+}
+
 private struct TerminalExecutionTracker {
     init(hasUserInteraction: Bool = false) {
         self.hasUserInteraction = hasUserInteraction
     }
 
-    /// The foreground process seen on the last poll (nil = shell / none).
-    /// Transitions are driven by *changes* to this, not by re-deriving state
-    /// on every poll — so a settled idle process never flip-flops back to
-    /// running just because it's still foreground.
+    /// The foreground process seen on the last poll (nil = idle shell / none).
+    /// Transitions are driven by *changes* to this, not by re-deriving state on
+    /// every poll — so a settled process doesn't flip-flop back to running just
+    /// because it is still foreground.
     private var lastForeground: ForegroundProcessKey?
-    /// Timestamp of the most recent terminal output. nil while running is owed
-    /// to a foreground command or explicit progress (which don't quiet-settle).
-    /// Its presence/absence is the only record of whether running is
-    /// "output-sourced" (settles when quiet) or not — no separate source enum.
-    private var lastActivityAt: Date?
-    /// True while an OSC 9;4 progress report owns the pane; output and
-    /// foreground changes are ignored while it's active.
-    private var progressActive = false
+    /// Why the pane is currently considered running. Foreground and explicit
+    /// progress run until a completion/foreground transition; activity is a
+    /// render/output heartbeat and quiet-settles.
+    private var runningSource: TerminalExecutionSource?
     /// After progress clears, the foreground process that owned it is
-    /// "quiesced": its own output and re-polls are ignored until the
-    /// foreground moves away, so a settled program that reported progress
-    /// doesn't flip back to running on its own render output.
-    /// `pendingProgressQuiesce` covers the race where progress started and
-    /// cleared before any foreground poll — the first process to appear is
-    /// quiesced instead of marked running.
+    /// "quiesced": its own output and re-polls are ignored until the foreground
+    /// moves away, so a settled program that reported progress doesn't flip back
+    /// to running on its own render output. `pendingProgressQuiesce` covers the
+    /// race where progress started and cleared before any foreground poll.
     private var progressQuiesced: ForegroundProcessKey?
     private var pendingProgressQuiesce = false
     /// Output is ignored until the user has interacted with the pane, so a
@@ -101,8 +101,7 @@ private struct TerminalExecutionTracker {
 
     mutating func markProgressStarted(currentState: TerminalExecutionState) -> TerminalExecutionState {
         guard hasUserInteraction else { return currentState }
-        progressActive = true
-        lastActivityAt = nil
+        runningSource = .progress
         return .running
     }
 
@@ -114,22 +113,20 @@ private struct TerminalExecutionTracker {
         // precmd noise and must not flip the pane to `.done` (which would
         // persist as a spurious checkmark after restart).
         guard currentState == .running else { return currentState }
-        progressActive = false
+        runningSource = nil
         progressQuiesced = nil
         pendingProgressQuiesce = false
-        lastActivityAt = nil
         return .done
     }
 
     mutating func markProgressFinished(currentState: TerminalExecutionState) -> TerminalExecutionState {
-        guard hasUserInteraction || progressActive else { return currentState }
-        progressActive = false
+        guard hasUserInteraction || runningSource == .progress else { return currentState }
         if let lastForeground {
             progressQuiesced = lastForeground
         } else {
             pendingProgressQuiesce = true
         }
-        lastActivityAt = nil
+        runningSource = nil
         return currentState == .running ? .done : currentState
     }
 
@@ -137,14 +134,14 @@ private struct TerminalExecutionTracker {
         at date: Date,
         currentState: TerminalExecutionState
     ) -> TerminalExecutionState {
-        guard !progressActive else { return currentState }
+        guard runningSource != .progress else { return currentState }
         if let progressQuiesced, progressQuiesced == lastForeground { return currentState }
-        // Output only counts after user interaction (or a declarative `run:`,
-        // which seeds `hasUserInteraction`). Fresh/restored shells can emit
-        // startup banners or shell-integration redraws before the user does
+        // Output/render only counts after user interaction (or a declarative
+        // `run:`, which seeds `hasUserInteraction`). Fresh/restored shells can
+        // emit startup banners or shell-integration redraws before the user does
         // anything; those must not become persisted completion indicators.
         guard hasUserInteraction else { return currentState }
-        lastActivityAt = date
+        runningSource = .activity(date)
         return .running
     }
 
@@ -154,11 +151,10 @@ private struct TerminalExecutionTracker {
         currentState: TerminalExecutionState
     ) -> TerminalExecutionState {
         guard currentState == .running,
-              !progressActive,
-              let lastActivityAt,
+              case let .activity(lastActivityAt) = runningSource,
               now.timeIntervalSince(lastActivityAt) >= quietInterval
         else { return currentState }
-        self.lastActivityAt = nil
+        runningSource = nil
         return .done
     }
 
@@ -192,41 +188,39 @@ private struct TerminalExecutionTracker {
         let changed = newKey != lastForeground
         lastForeground = newKey
 
-        // Foreground returned to the shell: a running command exited.
+        // Foreground returned to the shell: a foreground-running command exited.
         if newKey == nil {
             guard changed, currentState == .running else { return currentState }
-            lastActivityAt = nil
+            runningSource = nil
             return .done
         }
 
-        // Non-shell foreground. Explicit progress owns the state while active.
-        if progressActive { return currentState }
+        // Explicit progress owns the state while active.
+        if runningSource == .progress { return currentState }
 
-        // A newly-created/restored plain shell can briefly look like a
-        // non-shell foreground while its startup files and shell integration
-        // settle. Do not turn that launch noise into a persisted checkmark.
-        // Once the user has interacted, foreground transitions are real user
-        // work. Declarative layout `run:` panes seed `hasUserInteraction` so
-        // their startup command is still tracked.
+        // A newly-created/restored plain shell can briefly look like a non-shell
+        // foreground while its startup files and shell integration settle. Do
+        // not turn that launch noise into a persisted checkmark. Once the user
+        // has interacted, foreground transitions are real user work.
         guard hasUserInteraction else { return currentState }
 
         if terminalInputIsRaw {
-            // A raw/cbreak-mode program (full-screen editors, multiplexers,
-            // interactive CLIs) shouldn't hold a foreground-only spinner just
-            // because it's the foreground process. If we were running only
-            // because of a prior canonical command (no recent output), settle
-            // now; output-sourced running is left to quiet-settle on its own.
-            if currentState == .running, lastActivityAt == nil {
+            // Raw/cbreak-mode programs (editors, multiplexers, interactive CLIs)
+            // should not be held running by foreground alone. If a canonical
+            // command switched the tty raw, finish that foreground-only run;
+            // activity-sourced runs still quiet-settle normally.
+            if currentState == .running, runningSource == .foreground {
+                runningSource = nil
                 return .done
             }
             return currentState
         }
 
-        // Canonical non-shell command (a build, `sleep`, …) → running until
-        // it returns to the shell. Only act on a change so a settled idle
-        // process doesn't flip back to running on every poll.
+        // Canonical non-shell command (a build, `sleep`, shell script, …) →
+        // running until it returns to the shell. Only act on a change so a
+        // settled idle process doesn't flip back to running on every poll.
         guard changed else { return currentState }
-        lastActivityAt = nil
+        runningSource = .foreground
         return .running
     }
 }
