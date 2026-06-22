@@ -6,7 +6,7 @@ A macOS terminal emulator built with SwiftUI and libghostty. Single-window app w
 
 ```bash
 mise install          # Install tools (gh, swiftformat, swiftlint, xcodegen, xcbeautify)
-mise run setup        # Download pre-built GhosttyKit.xcframework
+mise run setup        # Download pre-built GhosttyKit.xcframework + zmx binary
 mise run run          # Build and launch (debug)
 mise run logs         # Stream live logs from the debug app (--release for release app)
 mise run format       # Auto-fix formatting with swiftformat
@@ -19,7 +19,7 @@ mise run build        # Release build + DMG
 
 Requires macOS 14+, Swift 6.0+. Liquid glass and a few chrome refinements are macOS 26 (Tahoe) features that degrade gracefully on older systems (gated behind `WindowAppearance.glassSupported` / `#available`). GhosttyKit is a pre-built xcframework from `thdxg/ghostty` (a fork that adds CI builds); no zig toolchain needed.
 
-`GhosttyKit.xcframework` and the `Macterm/Resources/{ghostty,terminfo,…}` contents are gitignored artifacts downloaded by `mise run setup` — **every fresh checkout, including a git worktree, must run `mise run setup`** before it can build. Don't symlink them from another checkout: `setup.sh` only re-downloads when the artifact is _absent_ (presence check, not version check), so a symlinked copy silently goes stale. To refresh a stale artifact, delete it and re-run setup.
+`GhosttyKit.xcframework`, the `Macterm/Resources/{ghostty,terminfo,…}` contents, and the bundled `Macterm/Resources/zmx/zmx` binary are gitignored artifacts downloaded by `mise run setup` — **every fresh checkout, including a git worktree, must run `mise run setup`** before it can build. Don't symlink them from another checkout: `setup.sh` only re-downloads when the artifact is _absent_ (presence check, not version check), so a symlinked copy silently goes stale. To refresh a stale artifact, delete it and re-run setup. (`GhosttyKit` comes from the `thdxg/ghostty` release; `zmx` from the `thdxg/zmx` release — both prebuilt by CI, never compiled locally, since zig 0.15.2 can't link against the macOS 26+/Xcode 26.4 SDK locally.)
 
 ## Releasing & Updates
 
@@ -95,6 +95,17 @@ Two non-obvious terminfo facts (the regression behind #39/#40 — broken `TERM=x
 - **Never set TERMINFO ourselves.** At shell spawn libghostty _unconditionally overwrites_ `TERMINFO` with `dirname(GHOSTTY_RESOURCES_DIR)/terminfo`, so the bundle layout must make that derivation land on the dir we ship — terminfo MUST be a sibling of `ghostty/`, never inside it. `BundledResourcesTests` asserts this invariant.
 - **The terminfo tree uses the macOS hashed layout** — `terminfo/78/xterm-ghostty` (`x` = 0x78), not `terminfo/x/...`. It's a `tic -x` compiled tree shipped verbatim.
 
+### Session Persistence (zmx)
+
+Terminal shells survive app quit and reattach on relaunch, backed by [zmx](https://github.com/neurosnap/zmx) — a Zig session multiplexer that passes raw PTY bytes through (no tmux-style screen re-parse). Every surface's shell runs under `zmx attach macterm-<sessionID>`, injected via ghostty's **`command-wrapper`** config (a patch carried by the `thdxg/ghostty` fork — see below): the wrapper argv is prepended to the *fully resolved* shell command (after `login(1)` + shell integration), so OSC 7 cwd / OSC 133 framing — and thus live tab titles and cwd-on-split — stay intact.
+
+- **Bundled binary.** Built by `thdxg/zmx` CI (single squashed patch commit on upstream, like the ghostty fork) and downloaded by `setup.sh` to `Macterm/Resources/zmx/zmx` (gitignored), embedded into the bundle at `Contents/Resources/zmx/zmx` by `embed-zmx.sh` (a `project.yml` post-compile phase). Never compiled locally — zig 0.15.2 can't link against the macOS 26+/Xcode 26.4 SDK.
+- **`ZmxClient`** (`Macterm/System/ZmxClient.swift`) — cache-free wrapper around the binary. `ZmxSessionID` (`macterm-<uuid>`), `ZmxSocketBudget` (bypass wrapping when `sun_path` would overflow — never gate kills on it), `ZmxSessionListParser` (the `zmx ls` tab-delimited parser), `ZmxAttach.resolveLaunch` (interactive → argv wrapper; declared `run:` → `/bin/sh -c` string), and `ZmxReaper.orphans` (pure orphan-selection). A 5s subprocess timeout + zombie-reap bounds every call so a stuck daemon can't hang the close/quit path.
+- **Stable session id.** `Pane.sessionID` (a UUID **distinct from** `Pane.id`, which is regenerated on restore) is persisted in `PaneSnapshot`. On restore the rebuilt pane reuses it, so its surface reattaches the live daemon instead of spawning fresh. `PaneSnapshot` also persists `workingDirectory`.
+- **Detach vs. kill.** `pane.destroySurface()` only *detaches* (the daemon lives on). `pane.killPersistentSession()` is the explicit kill, called **only on permanent close** — `Workspace.removePane`, `AppState.removeProject`/`closeTab`, and `executeLayoutPlan`'s `panesToDestroy`. Transient teardown (`unloadProject`, window hide, tab-switch churn) never kills.
+- **Launch reaper.** `AppState.restoreSelection` calls `ZmxClient.reapOrphans(knownSurfaceIDs:)` — kills `macterm-*` sessions with `clients == 0` that no restored pane claims (crash/force-quit orphans). Prefix-scoped (`macterm-` only, never a co-resident `supa-*` Supacode session); a `nil` probe or `clients > 0` spares everything.
+- **Quit.** Quitting detaches by default (shells reattach next launch). `Preferences.terminateSessionsOnQuit` (default off, Settings → Session Persistence) kills all sessions on quit instead; while off, the "processes will be killed" quit prompt is suppressed since nothing is lost.
+
 ### Tests (`MactermTests/`)
 
 One `XxxTests.swift` per production type, mirroring the source path. `@testable import Macterm` + `@MainActor` on test classes.
@@ -136,7 +147,7 @@ One `XxxTests.swift` per production type, mirroring the source path. `@testable 
 - Workspaces → `~/Library/Application Support/Macterm/workspaces_v3.json`; projects → `projects.json`; wrapper configs (`macterm-defaults.conf`, `macterm-overrides.conf`) in the same directory. The directory name comes from `appDisplayName` (`CFBundleDisplayName`), so debug builds use `Macterm Debug/` — fully separate data per build, mirroring the bundle-ID split.
 - `Pane` IDs are not preserved across restarts — restore creates fresh UUIDs.
 - Declarative layouts are an _authorable_ file at `.macterm/layout.yaml` in the project root, applied/saved on demand via `applyLayout`/`saveLayout`. An unparseable file surfaces `LayoutFileError` and is never applied. JSON schema at `assets/layout.schema.json` — keep it in sync when layout types change.
-  - A committed layout file is the source of truth: on relaunch, `restoreSelection` skips the workspace snapshot for any project that has one; a project's first open auto-applies it (with no live panes the reconcile is pure-spawn, never destructive).
+  - On relaunch, `restoreSelection` restores **every** project's workspace snapshot (including projects with a committed layout file), so a layout project's live tabs/splits and each pane's persisted `sessionID` come back and its zmx sessions reattach. **Reopen never prompts and never re-applies the layout** — a restored snapshot always wins. The committed `.macterm/layout.yaml` only seeds a workspace when there's **no** snapshot to restore (a genuine first open, or first launch after the layout was committed): `autoApplyLayoutOnFirstOpen` applies it silently, guarded on `workspaces[id] == nil` so a restored snapshot makes it a no-op. (Applying a layout to an already-open project remains an explicit user action via `applyLayout`, which still stages `pendingLayoutApply` for confirmation when destructive.)
   - `save` records a pane's `run:` as its **live** foreground command (`ghostty_surface_foreground_pid` → `ProcessInspector` argv via `KERN_PROCARGS2`) — an idle prompt saves no `run`. `shell:` is recorded only when the pane sits in a _non-default_ shell. `run` and `shell` are mutually exclusive on a leaf.
   - `apply` (`LayoutReconciler`) matches live panes to declared ones by that same live `(run, cwd)`; a pane that quit its declared command is respawned. A plain-shell leaf matches an idle pane positionally, but a declared `shell:` only reuses an idle pane running that shell (basename compare). The live-command/live-shell lookups are injected closures (default `ProcessInspector`), so the logic is unit-testable.
   - The file's top-level `name:` is the project it was saved for — a mismatch on apply stages a confirmation warning. Tab `name:` is the tab's title, matched to live tabs during reconcile.
@@ -166,7 +177,6 @@ Macterm-side settings flow through `Preferences` (UserDefaults); ghostty-shaped 
 
 ## Known Limitations
 
-- **No process persistence** — closing the app kills all shells (recommend tmux/zellij).
 - **Single window only** — multi-window would require a tmux-like daemon; out of scope.
 - **Not code-signed with a Developer ID** — first launch needs `xattr -cr /Applications/Macterm.app` (or Homebrew install); Sparkle updates verify EdDSA after that.
 - **Pane IDs not stable across restarts** — fresh views are created on restore.
