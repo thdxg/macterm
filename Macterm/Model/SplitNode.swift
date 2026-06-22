@@ -459,6 +459,7 @@ final class Pane: Identifiable {
         view.onProgressStarted = nil
         view.onProgressFinished = nil
         view.onTerminalActivity = nil
+        view.onTerminalRender = nil
         view.onScrollbarUpdate = nil
         view.destroySurface()
         let scroll = _scrollView

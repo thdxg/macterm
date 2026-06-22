@@ -77,7 +77,7 @@ enum ProcessInspector {
     @MainActor
     static func foregroundProcessIsShell(forPane pane: Pane) -> Bool {
         guard let pid = pane.nsView?.foregroundPID else { return false }
-        return isShellProcess(pid: pid)
+        return isIdleShellProcess(pid: pid)
     }
 
     static func isShellProcess(pid: pid_t) -> Bool {
@@ -85,6 +85,40 @@ enum ProcessInspector {
         if let firstArg = argv(pid: pid)?.first, isShellProcessName(firstArg) { return true }
         if let name = comm(pid: pid), isShellProcessName(name) { return true }
         return false
+    }
+
+    /// Whether `pid` is a shell sitting at an interactive prompt. A shell that
+    /// is executing a script (including a shebang script like
+    /// `/tmp/spinner-test.sh`) or a `-c` command is foreground work, not idle.
+    static func isIdleShellProcess(pid: pid_t) -> Bool {
+        if let args = argv(pid: pid), let first = args.first, isShell(first) {
+            return isIdleShellInvocation(args)
+        }
+        return isShellProcess(pid: pid)
+    }
+
+    static func isIdleShellInvocation(_ argv: [String]) -> Bool {
+        guard let first = argv.first, isShell(first) else { return false }
+        return !shellInvocationRunsCommand(argv)
+    }
+
+    private static func shellInvocationRunsCommand(_ argv: [String]) -> Bool {
+        guard argv.count > 1 else { return false }
+        var index = 1
+        while index < argv.count {
+            let arg = argv[index]
+            if arg == "--" { return index + 1 < argv.count }
+            if !arg.hasPrefix("-") || arg == "-" { return true }
+            if arg == "-c" || (arg.hasPrefix("-") && !arg.hasPrefix("--") && arg.dropFirst().contains("c")) {
+                return true
+            }
+            index += shellOptionConsumesNextArgument(arg) ? 2 : 1
+        }
+        return false
+    }
+
+    private static func shellOptionConsumesNextArgument(_ option: String) -> Bool {
+        option == "--rcfile" || option == "--init-file"
     }
 
     /// Whether the pane's tty is in raw/cbreak-style input mode. Full-screen and

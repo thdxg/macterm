@@ -80,6 +80,16 @@ struct ProcessInspectorTests {
     }
 
     @Test
+    func shellScriptInvocation_isNotIdleShell() {
+        #expect(ProcessInspector.isIdleShellInvocation(["/bin/bash"]))
+        #expect(ProcessInspector.isIdleShellInvocation(["/bin/bash", "-l"]))
+        // This is only an argv shape; the script path is not opened.
+        #expect(!ProcessInspector.isIdleShellInvocation(["/bin/bash", "/path/to/script.sh"]))
+        #expect(!ProcessInspector.isIdleShellInvocation(["/bin/bash", "-c", "sleep 10"]))
+        #expect(!ProcessInspector.isIdleShellInvocation(["/bin/bash", "-lc", "sleep 10"]))
+    }
+
+    @Test
     func terminalInputIsRaw_reads_tty_input_mode() throws {
         var master: Int32 = -1
         var slave: Int32 = -1

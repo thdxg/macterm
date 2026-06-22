@@ -68,6 +68,12 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let s = action.action.scrollbar
             DispatchQueue.main.async { view.surfaceDidUpdateScrollbar(total: s.total, offset: s.offset, len: s.len) }
             return true
+        case GHOSTTY_ACTION_RENDER:
+            guard let view = surfaceView(from: target) else { return false }
+            DispatchQueue.main.async { view.surfaceDidRender() }
+            // Do not consume the action: keep libghostty's existing render path
+            // unchanged, and use this only as an activity signal.
+            return false
         case GHOSTTY_ACTION_RELOAD_CONFIG:
             // libghostty fires this (with soft = true) when a surface's
             // conditional state changes — notably on set_color_scheme, which

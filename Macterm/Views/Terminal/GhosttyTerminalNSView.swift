@@ -59,6 +59,10 @@ final class GhosttyTerminalNSView: NSView {
         }
     }
 
+    func surfaceDidRender() {
+        onTerminalRender?()
+    }
+
     func surfaceDidUpdateScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
         let snapshot = ScrollbarSnapshot(total: total, offset: offset, len: len)
         if let lastScrollbarSnapshot, total > lastScrollbarSnapshot.total {
@@ -83,6 +87,7 @@ final class GhosttyTerminalNSView: NSView {
     var onProgressStarted: (() -> Void)?
     var onProgressFinished: (() -> Void)?
     var onTerminalActivity: (() -> Void)?
+    var onTerminalRender: (() -> Void)?
     /// libghostty pushes scrollback geometry (all values in rows) whenever the
     /// viewport, scrollback size, or visible row count changes.
     /// `(total, offset, len)`: total rows including scrollback, the first
