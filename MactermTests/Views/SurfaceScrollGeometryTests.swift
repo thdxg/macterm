@@ -85,6 +85,16 @@ struct SurfaceScrollGeometryTests {
     }
 
     @Test
+    func row_from_fractional_offset_uses_whole_lines() {
+        // Scroller drags can land between cells, but the terminal core is
+        // row-based, so fractional offsets choose the containing whole row.
+        let row = SurfaceScrollView.rowFromOffset(
+            visibleOriginY: 9, visibleHeight: 480, documentHeight: 2000, cellHeight: cell
+        )
+        #expect(row == 75)
+    }
+
+    @Test
     func row_never_negative() {
         let row = SurfaceScrollView.rowFromOffset(
             visibleOriginY: 9999, visibleHeight: 480, documentHeight: 2000, cellHeight: cell

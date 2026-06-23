@@ -88,6 +88,12 @@ final class GhosttyTerminalNSView: NSView {
     /// `(total, offset, len)`: total rows including scrollback, the first
     /// visible row (0 = top of history), and the visible row count.
     var onScrollbarUpdate: ((UInt64, UInt64, UInt64) -> Void)?
+    /// Gives the hosting `SurfaceScrollView` first chance to handle scrollback
+    /// wheel/trackpad events with its iTerm-style line accumulator. It declines
+    /// when there's no scrollback to move through (so alternate-screen apps
+    /// like less/vim fall through to libghostty for mouse reporting). Return
+    /// false to let libghostty handle the event directly.
+    var onScrollWheel: ((NSEvent) -> Bool)?
     var isFocused: Bool = false
     var currentPwd: String?
 
@@ -597,9 +603,41 @@ final class GhosttyTerminalNSView: NSView {
     override func scrollWheel(with event: NSEvent) {
         onInteraction?()
         guard let surface else { return }
+
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+        if event.hasPreciseScrollingDeltas {
+            // Match Ghostty's macOS frontend: precise trackpad/Magic Mouse
+            // deltas are valid but feel slow at 1x because terminals scroll in
+            // rows instead of continuous document pixels.
+            x *= 2
+            y *= 2
+        }
+
+        if !ghostty_surface_mouse_captured(surface), onScrollWheel?(event) == true {
+            return
+        }
+
+        ghostty_surface_mouse_scroll(surface, x, y, scrollMods(for: event))
+    }
+
+    private func scrollMods(for event: NSEvent) -> ghostty_input_scroll_mods_t {
         var scrollMods: ghostty_input_scroll_mods_t = 0
         if event.hasPreciseScrollingDeltas { scrollMods |= 1 }
-        ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX, event.scrollingDeltaY, scrollMods)
+        scrollMods |= scrollMomentum(for: event.momentumPhase) << 1
+        return scrollMods
+    }
+
+    private func scrollMomentum(for phase: NSEvent.Phase) -> ghostty_input_scroll_mods_t {
+        switch phase {
+        case .began: 1
+        case .stationary: 2
+        case .changed: 3
+        case .ended: 4
+        case .cancelled: 5
+        case .mayBegin: 6
+        default: 0
+        }
     }
 
     // MARK: - Context menu
