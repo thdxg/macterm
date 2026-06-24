@@ -131,9 +131,12 @@ final class GhosttyCallbacks: @unchecked Sendable {
     /// Returns pasted text from the pasteboard: file paths (Finder drag/copy)
     /// fall back to plain string. Called by both the context-menu paste path
     /// and the libghostty Cmd+V clipboard path.
-    static func readPasteboardText() -> String? {
-        let pb = NSPasteboard.general
-
+    ///
+    /// When the pasteboard holds a raw image (e.g. a screenshot) and no text,
+    /// the image is written to a temporary PNG file and its path is returned —
+    /// matching base Ghostty's behavior. This is what lets TUIs such as Claude
+    /// Code receive pasted images: they read the file at the pasted path.
+    static func readPasteboardText(from pb: NSPasteboard = .general) -> String? {
         // Finder copies files as NSURL data, not strings.
         if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL] {
             let paths = urls
@@ -146,7 +149,60 @@ final class GhosttyCallbacks: @unchecked Sendable {
             }
         }
 
-        return pb.string(forType: .string).flatMap { !$0.isEmpty ? $0 : nil }
+        // Prefer real text when present.
+        if let s = pb.string(forType: .string), !s.isEmpty {
+            return s
+        }
+
+        // Raw image on the clipboard (screenshot, "Copy Image", etc.): persist
+        // it to a temp PNG and paste the escaped path.
+        if let path = Self.imagePasteboardPath(pb) {
+            return Self.shellEscape(path)
+        }
+
+        return nil
+    }
+
+    /// Cheap, side-effect-free check for whether there is anything pasteable
+    /// (text, file URLs, or an image). Used to enable/disable the Paste menu
+    /// item without writing a temp file.
+    static func hasPasteboardContent(in pb: NSPasteboard = .general) -> Bool {
+        let types: [NSPasteboard.PasteboardType] = [.string, .fileURL, .URL, .png, .tiff]
+        return pb.availableType(from: types) != nil
+    }
+
+    /// If the pasteboard contains image data, write a normalized PNG to the
+    /// temporary directory and return its absolute path. Returns nil when no
+    /// image is available or the write fails.
+    static func imagePasteboardPath(_ pb: NSPasteboard) -> String? {
+        // Pull raw bytes for the best available image type, normalizing to PNG.
+        let pngData: Data? = if let data = pb.data(forType: .png) {
+            data
+        } else if let data = pb.data(forType: .tiff),
+                  let rep = NSBitmapImageRep(data: data)
+        {
+            rep.representation(using: .png, properties: [:])
+        } else if let image = NSImage(pasteboard: pb),
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff)
+        {
+            rep.representation(using: .png, properties: [:])
+        } else {
+            nil
+        }
+
+        guard let data = pngData else { return nil }
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-paste", isDirectory: true)
+        let url = dir.appendingPathComponent("image-\(UUID().uuidString).png")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try data.write(to: url)
+            return url.path
+        } catch {
+            return nil
+        }
     }
 
     func confirmReadClipboard(ud: UnsafeMutableRawPointer?, content: UnsafePointer<CChar>?, state: UnsafeMutableRawPointer?) {

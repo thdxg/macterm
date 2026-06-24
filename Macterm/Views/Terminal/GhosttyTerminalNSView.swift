@@ -646,7 +646,7 @@ final class GhosttyTerminalNSView: NSView {
         let menu = NSMenu(title: "Terminal")
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
-        paste.isEnabled = GhosttyCallbacks.readPasteboardText() != nil
+        paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
         menu.addItem(paste)
         menu.addItem(.separator())
         addSplitItem(menu, "Split Right", .horizontal, .second)
