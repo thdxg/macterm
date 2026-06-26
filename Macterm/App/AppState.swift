@@ -70,23 +70,27 @@ final class AppState {
 
     private let workspaceStore: WorkspaceStore
     private var autoTileObserver: Any?
-
-    /// Periodically re-reads each pane's foreground process so tab names track
-    /// the running command (`hx`, `btop`, …). This polls like tmux's
-    /// `automatic-rename`, rather than relying on terminal title escapes: with
-    /// shell integration (Starship/ghostty) the OSC title is prompt/cwd churn,
-    /// not the command, and a program may never emit a usable title at all (a
-    /// layout-spawned or eager-warmed pane, a process that sets no title). A
-    /// poll catches every case — manual launches, layout restores, quits —
-    /// within one interval, regardless of titles.
-    ///
-    /// The interval (250ms) is a responsiveness choice, not a cost one: it's a
-    /// run-loop timer (the thread parks between ticks, no busy-loop), and each
-    /// tick is one `proc_pidinfo` per pane — ~0.24µs/call, so even 20 panes
-    /// 4×/sec is ~0.002% of a core. A pane only republishes (→ re-render) when
-    /// its name actually changes, so idle panes are free.
     @ObservationIgnored
-    private var processNameTimer: Timer?
+    nonisolated(unsafe) private var appActivationObservers: [NSObjectProtocol] = []
+
+    // MARK: - Truly Event-Driven Architecture
+
+    // Status indicators are fully event-driven via libghostty callbacks.
+    // Tab names use lazy refresh (on focus/visibility) with minimal fallback.
+    // No polling loops. Timers only for deferred actions (quiet settle).
+
+    /// Single settle timer that runs 3s after the last terminal activity.
+    /// Resets on each activity, so idle panes naturally transition to .done.
+    @ObservationIgnored
+    nonisolated(unsafe) private var quietSettleWorkItem: DispatchWorkItem?
+
+    /// Track the last visibly active tab for lazy name refresh.
+    @ObservationIgnored
+    private var lastVisibleTabID: UUID?
+
+    /// Whether the app is currently active (in the foreground).
+    @ObservationIgnored
+    private(set) var isAppActive = true
 
     init(workspaceStore: WorkspaceStore = WorkspaceStore()) {
         self.workspaceStore = workspaceStore
@@ -101,39 +105,212 @@ final class AppState {
             .compactMap { UUID(uuidString: $0) }
         projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
 
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshAllForegroundProcesses() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        processNameTimer = timer
+        setupAppActivationObservers()
     }
 
-    /// Re-read the foreground process name of every live pane across all
-    /// workspaces. Each pane only republishes (and triggers a tab re-render)
-    /// when its name actually changes, so this is cheap when nothing's moving.
-    func refreshAllForegroundProcesses() {
-        // Shell/raw-mode detection (KERN_PROCARGS2 + open/tcgetattr per pane)
-        // and the quiet-settle only matter when the status indicator is shown;
-        // skip them in icon mode so the default poll stays as cheap as before
-        // this feature.
-        let trackExecution = Preferences.shared.showTabStatusIndicator
-        var didAcknowledgeCompletion = false
-        for (projectID, ws) in workspaces {
+    deinit {
+        // Clean up notification observers
+        for observer in appActivationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        quietSettleWorkItem?.cancel()
+    }
+
+    // MARK: - App Activation (Event-Driven)
+
+    private func setupAppActivationObservers() {
+        let becameActive = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.appDidBecomeActive()
+            }
+        }
+
+        let resignedActive = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.appDidResignActive()
+            }
+        }
+
+        appActivationObservers = [becameActive, resignedActive]
+    }
+
+    func appDidBecomeActive() {
+        guard !isAppActive else { return }
+        logger.info("App became active, refreshing tab names")
+        isAppActive = true
+        // Lazy refresh: refresh tab names once when becoming active
+        refreshAllTabNames()
+    }
+
+    func appDidResignActive() {
+        guard isAppActive else { return }
+        logger.info("App resigned active")
+        isAppActive = false
+        // No polling when inactive - zero CPU
+    }
+
+    // MARK: - Tab Name Refresh (Lazy, Event-Driven)
+
+    /// Refresh tab names (process names only, no execution state tracking).
+    /// Lightweight operation using proc_pidinfo for process names.
+    private func refreshAllTabNames() {
+        for (_, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
-                    pane.refreshForegroundProcess(trackExecution: trackExecution)
-                    if trackExecution {
-                        pane.settleTerminalActivityIfQuiet()
-                    }
-                    didAcknowledgeCompletion = acknowledgeFinishedCommandIfActive(
-                        paneID: pane.id,
-                        projectID: projectID,
-                        saveImmediately: false
-                    ) || didAcknowledgeCompletion
+                    pane.refreshForegroundProcess(trackExecution: false)
                 }
             }
         }
+    }
+
+    /// Refresh tab name for a specific tab when it becomes visible/focused.
+    func refreshTabName(forTabID tabID: UUID) {
+        guard let ws = workspaces.values.first(where: { $0.tabs.contains(where: { $0.id == tabID }) }),
+              let tab = ws.tabs.first(where: { $0.id == tabID })
+        else { return }
+
+        for pane in tab.splitRoot.allPanes() {
+            pane.refreshForegroundProcess(trackExecution: false)
+        }
+    }
+
+    // MARK: - Status Indicators (Event-Driven + Quiet Settle)
+
+    /// Schedule quiet settle check 3s from now. Resets on each activity.
+    /// This is the ONLY timer in the new architecture - a deferred work item,
+    /// not a polling loop. It fires once after 3s of quiet, then reschedules
+    /// if there's still activity.
+    func scheduleQuietSettle() {
+        // Cancel any existing settle timer
+        quietSettleWorkItem?.cancel()
+
+        // Only settle if status indicator is enabled
+        guard Preferences.shared.showTabStatusIndicator else { return }
+
+        // Create new work item
+        let workItem = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.settleAllQuietPanes()
+            }
+        }
+
+        quietSettleWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: workItem)
+    }
+
+    /// Settle all quiet panes to .done state after 3s of no activity.
+    /// Called by the deferred work item; reschedules if any panes are still running.
+    private func settleAllQuietPanes() {
+        var didAcknowledgeCompletion = false
+        var anyStillRunning = false
+
+        for (projectID, ws) in workspaces {
+            for tab in ws.tabs {
+                for pane in tab.splitRoot.allPanes() {
+                    let wasRunning = pane.executionState == .running
+                    pane.settleTerminalActivityIfQuiet()
+
+                    // Check if still running after settle attempt
+                    if pane.executionState == .running {
+                        anyStillRunning = true
+                    }
+
+                    // If this pane just transitioned to .done, acknowledge completion
+                    if wasRunning, pane.executionState == .done {
+                        didAcknowledgeCompletion = acknowledgeFinishedCommandIfActive(
+                            paneID: pane.id,
+                            projectID: projectID,
+                            saveImmediately: false
+                        ) || didAcknowledgeCompletion
+                    }
+                }
+            }
+        }
+
         if didAcknowledgeCompletion { saveWorkspaces() }
+
+        // If any panes are still running, reschedule the settle check
+        if anyStillRunning {
+            scheduleQuietSettle()
+        }
+    }
+
+    // MARK: - Event Handlers (Called by libghostty callbacks)
+
+    /// Called when terminal activity is detected (output, bell, etc.).
+    /// Marks the pane as running and schedules a quiet settle check.
+    func handleTerminalActivity(for paneID: UUID) {
+        // Find the pane and mark activity
+        for (_, ws) in workspaces {
+            for tab in ws.tabs {
+                if let pane = tab.splitRoot.findPane(id: paneID) {
+                    pane.markTerminalActivity()
+                    scheduleQuietSettle()
+                    return
+                }
+            }
+        }
+    }
+
+    /// Called when a command finishes (OSC 133;D).
+    func handleCommandFinished(for paneID: UUID, exitCode: Int16, duration: UInt64) {
+        for (_, ws) in workspaces {
+            for tab in ws.tabs {
+                if let pane = tab.splitRoot.findPane(id: paneID) {
+                    pane.markCommandFinished()
+                    // Command finished is immediate .done, no need to settle
+                    return
+                }
+            }
+        }
+    }
+
+    /// Called when progress starts (OSC 9;4).
+    func handleProgressStarted(for paneID: UUID) {
+        for (_, ws) in workspaces {
+            for tab in ws.tabs {
+                if let pane = tab.splitRoot.findPane(id: paneID) {
+                    pane.markCommandRunning()
+                    scheduleQuietSettle()
+                    return
+                }
+            }
+        }
+    }
+
+    /// Called when progress finishes (OSC 9;4).
+    func handleProgressFinished(for paneID: UUID) {
+        for (_, ws) in workspaces {
+            for tab in ws.tabs {
+                if let pane = tab.splitRoot.findPane(id: paneID) {
+                    pane.markProgressFinished()
+                    scheduleQuietSettle()
+                    return
+                }
+            }
+        }
+    }
+
+    // MARK: - Tab Visibility Tracking
+
+    /// Called when a tab becomes visible/focused. Refreshes its name immediately.
+    func tabDidBecomeVisible(_ tabID: UUID) {
+        lastVisibleTabID = tabID
+        refreshTabName(forTabID: tabID)
+    }
+
+    /// Called when tab focus changes within the active workspace.
+    func tabFocusDidChange(toTabID tabID: UUID) {
+        lastVisibleTabID = tabID
+        refreshTabName(forTabID: tabID)
     }
 
     private func recordProjectVisit(_ projectID: UUID) {
@@ -357,6 +534,8 @@ final class AppState {
         let didAcknowledgeCompletion = ws.selectTab(tabID)
         if ws.activeTabID != before || didAcknowledgeCompletion {
             saveWorkspaces()
+            // Refresh tab name when switching to it
+            tabFocusDidChange(toTabID: tabID)
         }
     }
 
@@ -389,6 +568,9 @@ final class AppState {
         let didAcknowledgeCompletion = ws.selectNextTab()
         if ws.activeTabID != before || didAcknowledgeCompletion {
             saveWorkspaces()
+            if let newTabID = ws.activeTabID {
+                tabFocusDidChange(toTabID: newTabID)
+            }
         }
     }
 
@@ -398,6 +580,9 @@ final class AppState {
         let didAcknowledgeCompletion = ws.selectPreviousTab()
         if ws.activeTabID != before || didAcknowledgeCompletion {
             saveWorkspaces()
+            if let newTabID = ws.activeTabID {
+                tabFocusDidChange(toTabID: newTabID)
+            }
         }
     }
 

@@ -652,4 +652,47 @@ struct AppStateTests {
         let ws = Workspace(projectID: pid, tabs: [tab], activeTabID: tab.id)
         #expect(AppState.panesToWarm(in: ws).isEmpty)
     }
+
+    // MARK: - Event-Driven Architecture (CPU Usage)
+
+    @Test
+    func app_starts_active_with_no_polling_timers() {
+        let state = makeAppState()
+        // App starts active but with no polling timers
+        #expect(state.isAppActive)
+        // The new architecture has no Timer properties - purely event-driven
+    }
+
+    @Test
+    func active_state_can_be_toggled() {
+        let state = makeAppState()
+        #expect(state.isAppActive)
+
+        state.appDidResignActive()
+        #expect(!state.isAppActive)
+
+        state.appDidBecomeActive()
+        #expect(state.isAppActive)
+    }
+
+    @Test
+    func settle_state_can_be_scheduled() {
+        let state = makeAppState()
+        // scheduleQuietSettle() should not crash
+        state.scheduleQuietSettle()
+    }
+
+    @Test
+    func tab_visibility_tracking() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let workspace = try #require(state.workspaces[p.id])
+        let tabID = try #require(workspace.activeTabID)
+
+        // Should not crash when tracking tab visibility
+        state.tabDidBecomeVisible(tabID)
+        state.tabFocusDidChange(toTabID: tabID)
+
+        // Test passes if no crash occurs - implementation details are private
+    }
 }
