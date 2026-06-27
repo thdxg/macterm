@@ -70,7 +70,7 @@ private enum TerminalExecutionSource: Equatable {
     case progress
 }
 
-private struct TerminalExecutionTracker {
+struct TerminalExecutionTracker {
     init(hasUserInteraction: Bool = false) {
         self.hasUserInteraction = hasUserInteraction
     }
@@ -134,6 +134,14 @@ private struct TerminalExecutionTracker {
         at date: Date,
         currentState: TerminalExecutionState
     ) -> TerminalExecutionState {
+        // A render/output heartbeat can keep an already-running command active,
+        // but it must never (re)start one. From `.done` — a finished command
+        // whose checkmark is showing — output (e.g. a background job) must not
+        // flip the pane back to running; only a new foreground process or an
+        // explicit progress marker can. Pinned by TerminalExecutionTrackerTests
+        // so a refactor of the onTerminalRender closure can't silently
+        // reintroduce the "prompt redraw keeps spinning" bug.
+        guard currentState != .done else { return currentState }
         guard runningSource != .progress else { return currentState }
         if let progressQuiesced, progressQuiesced == lastForeground { return currentState }
         // Output/render only counts after user interaction (or a declarative
