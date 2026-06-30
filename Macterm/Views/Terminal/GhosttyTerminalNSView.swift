@@ -913,9 +913,9 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         guard let surface else { return }
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
-        _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.count)
+        _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.utf16.count)
         _selectedRange = selectedRange
-        text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.count)) }
+        text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.utf8.count)) }
     }
 
     func unmarkText() {
