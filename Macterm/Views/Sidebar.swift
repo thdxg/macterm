@@ -152,9 +152,46 @@ struct SidebarContent: View {
         .onChange(of: activeTabID) {
             syncSelection()
         }
+        .onChange(of: appState.sidebarFocusMode) { _, on in
+            // Grab first-responder when entering the mode (already open case);
+            // release it when leaving (AppState restores terminal focus).
+            listFocused = on
+        }
+        .onKeyPress(.return) {
+            guard appState.sidebarFocusMode else { return .ignored }
+            if let item = selection { commitSelection(item) }
+            appState.exitSidebarFocus()
+            return .handled
+        }
+        .onExitCommand {
+            guard appState.sidebarFocusMode else { return }
+            // Cancel: drop the tentative ring back onto the still-active tab,
+            // then restore the sidebar's prior open/closed state and terminal focus.
+            syncSelection()
+            appState.exitSidebarFocus()
+        }
         .onAppear {
             if let id = appState.activeProjectID { appState.expandedProjects.insert(id) }
             syncSelection()
+            // The sidebar may have been collapsed when Focus Sidebar was invoked;
+            // it mounts only once forced open, so claim focus here too.
+            if appState.sidebarFocusMode { listFocused = true }
+        }
+    }
+
+    /// Commit a sidebar selection to the workspace (select the project, and the
+    /// tab if one was chosen). Shared by live click-selection and the Enter key
+    /// in Focus Sidebar mode.
+    private func commitSelection(_ item: SidebarItem) {
+        switch item {
+        case let .project(projectID):
+            guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return }
+            appState.selectProject(project)
+        case let .tab(projectID, tabID):
+            if let project = projectStore.projects.first(where: { $0.id == projectID }) {
+                appState.selectProject(project)
+                appState.selectTab(tabID, projectID: projectID)
+            }
         }
     }
 
