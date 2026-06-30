@@ -317,4 +317,21 @@ final class Workspace: Identifiable {
     func reorderTabs(fromOffsets source: IndexSet, toOffset destination: Int) {
         tabs.move(fromOffsets: source, toOffset: destination)
     }
+
+    /// Move the active tab `offset` positions within the project's tab order,
+    /// wrapping at the ends (moving the first tab up sends it to the end, and
+    /// vice versa). The same tab stays active — only its position changes.
+    /// Returns true if a move happened.
+    @discardableResult
+    func moveActiveTab(by offset: Int) -> Bool {
+        let n = tabs.count
+        guard n > 1, offset != 0, let activeTabID,
+              let i = tabs.firstIndex(where: { $0.id == activeTabID })
+        else { return false }
+        let j = ((i + offset) % n + n) % n
+        guard j != i else { return false }
+        let tab = tabs.remove(at: i)
+        tabs.insert(tab, at: j)
+        return true
+    }
 }

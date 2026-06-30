@@ -12,6 +12,14 @@ final class AppState {
 
     var workspaces: [UUID: Workspace] = [:]
     var sidebarVisible = true
+    /// True while the sidebar is in keyboard-navigation mode (entered via the
+    /// Focus Sidebar hotkey): the sidebar List holds focus, ↑/↓ move a tentative
+    /// focus ring, Enter commits, ESC cancels. While true the sidebar's live
+    /// selection→`selectTab` commit is suppressed so arrowing only moves the ring.
+    var sidebarFocusMode = false
+    /// The sidebar's open/closed state captured when Focus Sidebar mode began, so
+    /// exiting restores it (a sidebar opened only for the interaction re-closes).
+    private var sidebarFocusPriorVisible = true
     var pendingClosePane: PendingClosePane?
     /// A computed layout-apply plan awaiting user confirmation because applying
     /// it would terminate one or more live panes/tabs. nil when no apply is
@@ -401,6 +409,13 @@ final class AppState {
         }
     }
 
+    func moveActiveTab(by offset: Int, projectID: UUID) {
+        guard let ws = workspaces[projectID] else { return }
+        if ws.moveActiveTab(by: offset) {
+            saveWorkspaces()
+        }
+    }
+
     func cycleRecentTab(projectID: UUID) {
         guard let ws = workspaces[projectID] else { return }
         if tabCycleOrder.isEmpty {
@@ -742,6 +757,29 @@ final class AppState {
         else { return }
         let project = projects[(i - 1 + projects.count) % projects.count]
         selectProject(project)
+    }
+
+    // MARK: - Sidebar focus mode
+
+    /// Enter keyboard-navigation mode over the sidebar. Remembers whether the
+    /// sidebar was open, then forces it open and flags the mode; the sidebar
+    /// view observes `sidebarFocusMode` to grab first-responder and draw the
+    /// focus ring on the active row.
+    func enterSidebarFocus() {
+        guard !sidebarFocusMode else { return }
+        sidebarFocusPriorVisible = sidebarVisible
+        sidebarVisible = true
+        sidebarFocusMode = true
+    }
+
+    /// Leave sidebar keyboard-navigation mode: restore the sidebar's prior
+    /// open/closed state and return first-responder to the active pane. The
+    /// caller (sidebar view) has already committed or reverted the selection.
+    func exitSidebarFocus() {
+        guard sidebarFocusMode else { return }
+        sidebarFocusMode = false
+        sidebarVisible = sidebarFocusPriorVisible
+        restoreFocusToActivePane()
     }
 
     // MARK: - Focus

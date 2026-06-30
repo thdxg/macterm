@@ -318,6 +318,29 @@ struct HotkeysTests {
     }
 
     @Test
+    func every_action_is_linked_to_a_command() {
+        // HotkeyAction.appCommand falls back to .newTab when no AppCommand links
+        // the action — which would mislabel it in Settings → Keymaps. Ensure
+        // every action has a real owning command.
+        for action in HotkeyAction.allCases {
+            let owner = AppCommand.allCases.first { $0.hotkeyAction == action }
+            #expect(owner != nil, "no AppCommand links hotkey action \(action.rawValue)")
+        }
+    }
+
+    @Test
+    func new_tab_and_sidebar_actions_have_expected_defaults() {
+        #expect(HotkeyAction.previousTabInProject.defaultShortcut == "cmd+shift+left")
+        #expect(HotkeyAction.nextTabInProject.defaultShortcut == "cmd+shift+right")
+        #expect(HotkeyAction.moveTabUp.defaultShortcut == "cmd+shift+up")
+        #expect(HotkeyAction.moveTabDown.defaultShortcut == "cmd+shift+down")
+        #expect(HotkeyAction.focusSidebar.defaultShortcut == "cmd+shift+b")
+        // Layout actions ship unbound — opt-in via Settings → Keymaps.
+        #expect(HotkeyAction.saveLayout.defaultShortcut == "none")
+        #expect(HotkeyAction.applyLayout.defaultShortcut == "none")
+    }
+
+    @Test
     func all_action_defaultsKeys_are_unique() {
         let keys = HotkeyAction.allCases.map(\.defaultsKey)
         #expect(keys.count == Set(keys).count)

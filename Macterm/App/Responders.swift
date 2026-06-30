@@ -258,11 +258,23 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        // Rename routes through AppCommand.action(in:) — the single source of
-        // truth shared with the palette and menu bar — so the three paths can't
-        // drift. The action defers begin-editing a tick (see AppCommandActions)
-        // so the sidebar row's TextField exists before it takes first responder.
-        for action in [HotkeyAction.renameTab, .renameProject] {
+        // These actions route through AppCommand.action(in:) — the single source
+        // of truth shared with the palette and menu bar — so the paths can't
+        // drift. (Rename defers begin-editing a tick, see AppCommandActions, so
+        // the sidebar row's TextField exists before it takes first responder;
+        // Save/Apply Layout default to unbound and only match once the user binds
+        // them.)
+        for action in [
+            HotkeyAction.previousTabInProject,
+            .nextTabInProject,
+            .moveTabUp,
+            .moveTabDown,
+            .focusSidebar,
+            .saveLayout,
+            .applyLayout,
+            .renameTab,
+            .renameProject,
+        ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
             else { continue }

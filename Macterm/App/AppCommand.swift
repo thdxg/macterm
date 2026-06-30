@@ -14,6 +14,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case nextTab
     case previousTab
     case recentTab
+    case previousTabInProject
+    case nextTabInProject
+    case moveTabUp
+    case moveTabDown
     // Panes
     case splitRight
     case splitDown
@@ -41,6 +45,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case previousProject
     // Window
     case toggleSidebar
+    case focusSidebar
     case closeWindow
     case toggleCommandPalette
     case reloadGhosttyConfig
@@ -57,6 +62,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextTab: "Next Tab"
         case .previousTab: "Previous Tab"
         case .recentTab: "Recent Tab"
+        case .previousTabInProject: "Previous Tab in Project"
+        case .nextTabInProject: "Next Tab in Project"
+        case .moveTabUp: "Move Tab Up"
+        case .moveTabDown: "Move Tab Down"
         case .splitRight: "Split Right"
         case .splitDown: "Split Down"
         case .splitAuto: "Split Automatically"
@@ -81,6 +90,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextProject: "Next Project"
         case .previousProject: "Previous Project"
         case .toggleSidebar: "Toggle Sidebar"
+        case .focusSidebar: "Focus Sidebar"
         case .closeWindow: "Close Window"
         case .toggleCommandPalette: "Command Palette"
         case .reloadGhosttyConfig: "Reload Ghostty Config"
@@ -96,7 +106,11 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .renameTab,
              .nextTab,
              .previousTab,
-             .recentTab: .tabs
+             .recentTab,
+             .previousTabInProject,
+             .nextTabInProject,
+             .moveTabUp,
+             .moveTabDown: .tabs
         case .splitRight,
              .splitDown,
              .splitAuto,
@@ -121,6 +135,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .nextProject,
              .previousProject: .projects
         case .toggleSidebar,
+             .focusSidebar,
              .closeWindow,
              .toggleCommandPalette: .window
         case .reloadGhosttyConfig,
@@ -138,6 +153,13 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextTab: .nextGlobalTab
         case .previousTab: .previousGlobalTab
         case .recentTab: .recentTab
+        case .previousTabInProject: .previousTabInProject
+        case .nextTabInProject: .nextTabInProject
+        case .moveTabUp: .moveTabUp
+        case .moveTabDown: .moveTabDown
+        case .focusSidebar: .focusSidebar
+        case .applyLayout: .applyLayout
+        case .saveLayout: .saveLayout
         case .splitRight: .splitRight
         case .splitDown: .splitDown
         case .splitAuto: .splitAuto
@@ -165,8 +187,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
-             .applyLayout,
-             .saveLayout,
              .checkForUpdate: nil
         }
     }
