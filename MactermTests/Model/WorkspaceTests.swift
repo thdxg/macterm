@@ -197,4 +197,47 @@ struct WorkspaceTests {
         ws.reorderTabs(fromOffsets: IndexSet(integer: 0), toOffset: 2)
         #expect(ws.tabs.map(\.id) == [t2, t1])
     }
+
+    @Test
+    func moveActiveTab_down_shifts_active_later() {
+        let ws = makeWorkspace()
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        let t3 = ws.createTab(projectPath: "/tmp").id
+        ws.selectTab(t1)
+        #expect(ws.moveActiveTab(by: 1))
+        #expect(ws.tabs.map(\.id) == [t2, t1, t3])
+        #expect(ws.activeTabID == t1) // same tab stays active
+    }
+
+    @Test
+    func moveActiveTab_up_from_first_wraps_to_end() {
+        let ws = makeWorkspace()
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        let t3 = ws.createTab(projectPath: "/tmp").id
+        ws.selectTab(t1)
+        #expect(ws.moveActiveTab(by: -1))
+        #expect(ws.tabs.map(\.id) == [t2, t3, t1])
+        #expect(ws.activeTabID == t1)
+    }
+
+    @Test
+    func moveActiveTab_down_from_last_wraps_to_front() {
+        let ws = makeWorkspace()
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        let t3 = ws.createTab(projectPath: "/tmp").id
+        ws.selectTab(t3)
+        #expect(ws.moveActiveTab(by: 1))
+        #expect(ws.tabs.map(\.id) == [t3, t1, t2])
+        #expect(ws.activeTabID == t3)
+    }
+
+    @Test
+    func moveActiveTab_single_tab_is_noop() {
+        let ws = makeWorkspace()
+        #expect(!ws.moveActiveTab(by: 1))
+        #expect(ws.tabs.count == 1)
+    }
 }

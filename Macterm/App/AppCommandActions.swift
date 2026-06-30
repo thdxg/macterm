@@ -37,6 +37,20 @@ extension AppCommand {
         case .recentTab:
             guard let projectID else { return nil }
             return { ctx.appState.cycleRecentTab(projectID: projectID) }
+        case .previousTabInProject:
+            guard let projectID else { return nil }
+            return { ctx.appState.selectPreviousTab(projectID: projectID) }
+        case .nextTabInProject:
+            guard let projectID else { return nil }
+            return { ctx.appState.selectNextTab(projectID: projectID) }
+        case .moveTabUp:
+            guard let projectID else { return nil }
+            return { ctx.appState.moveActiveTab(by: -1, projectID: projectID) }
+        case .moveTabDown:
+            guard let projectID else { return nil }
+            return { ctx.appState.moveActiveTab(by: 1, projectID: projectID) }
+        case .focusSidebar:
+            return { ctx.appState.enterSidebarFocus() }
         case .renameTab:
             guard let projectID,
                   let tab = ctx.appState.workspaces[projectID]?.activeTab

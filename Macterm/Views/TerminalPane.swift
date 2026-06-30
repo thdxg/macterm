@@ -51,6 +51,8 @@ struct TerminalPane: View {
 /// stored instance so SwiftUI lifecycle events (tab switches, split reshapes)
 /// don't destroy the underlying ghostty surface.
 private struct TerminalSurface: NSViewRepresentable {
+    @Environment(AppState.self)
+    private var appState
     let pane: Pane
     let focused: Bool
     let isZoomed: Bool
@@ -81,11 +83,13 @@ private struct TerminalSurface: NSViewRepresentable {
         configure(view)
         // Defer surface creation until the view is actually in a window — the
         // Metal layer needs a non-zero size to initialize.
-        DispatchQueue.main.async { [pane] in
+        DispatchQueue.main.async { [pane, appState] in
             if view.surface == nil, view.window != nil {
                 view.createSurface()
             }
-            if focused {
+            // Don't grab first responder while the user is navigating the
+            // sidebar list with the keyboard — that would yank focus out of it.
+            if focused, !appState.sidebarListFocused {
                 FocusRestoration.restoreFocus(to: pane.id, finder: { pane }, in: view.window)
             }
         }
@@ -108,7 +112,11 @@ private struct TerminalSurface: NSViewRepresentable {
         view.isFocused = focused
         if focused, !wasFocused {
             view.notifySurfaceFocused()
-            FocusRestoration.restoreFocus(to: pane.id, finder: { [pane] in pane }, in: view.window)
+            // While the sidebar list owns keyboard focus (live arrow nav), a tab
+            // switch must not steal first responder back into the terminal.
+            if !appState.sidebarListFocused {
+                FocusRestoration.restoreFocus(to: pane.id, finder: { [pane] in pane }, in: view.window)
+            }
         } else if !focused, wasFocused {
             view.notifySurfaceUnfocused()
         }

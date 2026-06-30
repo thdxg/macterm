@@ -652,4 +652,90 @@ struct AppStateTests {
         let ws = Workspace(projectID: pid, tabs: [tab], activeTabID: tab.id)
         #expect(AppState.panesToWarm(in: ws).isEmpty)
     }
+
+    // MARK: - Sidebar focus (hotkey ring)
+
+    @Test
+    func visibleSidebarRows_expanded_lists_project_then_its_tabs() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let t1 = ws.activeTabID
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        state.expandedProjects = [p.id]
+
+        let rows = state.visibleSidebarRows(projects: [p])
+        #expect(try rows == [
+            .project(p.id),
+            .tab(projectID: p.id, tabID: #require(t1)),
+            .tab(projectID: p.id, tabID: t2),
+        ])
+    }
+
+    @Test
+    func visibleSidebarRows_collapsed_lists_only_project() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        state.expandedProjects = [] // collapsed
+        #expect(state.visibleSidebarRows(projects: [p]) == [.project(p.id)])
+    }
+
+    @Test
+    func enterSidebarFocus_opens_sidebar_and_seeds_ring_on_active_tab() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let activeTab = try #require(state.workspaces[p.id]?.activeTabID)
+        state.sidebarVisible = false
+
+        state.enterSidebarFocus()
+        #expect(state.sidebarFocusMode)
+        #expect(state.sidebarVisible)
+        #expect(state.sidebarFocusItem == .tab(projectID: p.id, tabID: activeTab))
+    }
+
+    @Test
+    func moveSidebarFocus_wraps_through_visible_rows() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let t1 = try #require(ws.activeTabID)
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        ws.selectTab(t1)
+        state.expandedProjects = [p.id]
+        state.enterSidebarFocus() // ring seeded on t1 (rows: [project, t1, t2])
+        state.moveSidebarFocus(by: -1, projects: [p]) // t1 → project header
+        #expect(state.sidebarFocusItem == .project(p.id))
+        state.moveSidebarFocus(by: -1, projects: [p]) // project → wrap to last (t2)
+        #expect(state.sidebarFocusItem == .tab(projectID: p.id, tabID: t2))
+    }
+
+    @Test
+    func exitSidebarFocus_restores_prior_visibility() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        state.sidebarVisible = false
+        state.enterSidebarFocus()
+        #expect(state.sidebarVisible)
+        state.exitSidebarFocus()
+        #expect(!state.sidebarFocusMode)
+        #expect(!state.sidebarVisible) // back to closed
+        #expect(state.sidebarFocusItem == nil)
+        _ = p
+    }
+
+    @Test
+    func commitSidebarFocus_selects_ringed_tab_and_exits() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let t1 = try #require(ws.activeTabID)
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        ws.selectTab(t1)
+        state.expandedProjects = [p.id]
+        state.enterSidebarFocus() // ring on t1
+        state.moveSidebarFocus(by: 1, projects: [p]) // ring t1 → t2
+        state.commitSidebarFocus(projects: [p])
+        #expect(ws.activeTabID == t2)
+        #expect(!state.sidebarFocusMode)
+    }
 }

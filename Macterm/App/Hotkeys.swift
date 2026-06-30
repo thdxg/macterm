@@ -19,6 +19,13 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case previousProject = "previous_project"
     case nextGlobalTab = "next_global_tab"
     case previousGlobalTab = "previous_global_tab"
+    case previousTabInProject = "previous_tab_in_project"
+    case nextTabInProject = "next_tab_in_project"
+    case moveTabUp = "move_tab_up"
+    case moveTabDown = "move_tab_down"
+    case focusSidebar = "focus_sidebar"
+    case saveLayout = "save_layout"
+    case applyLayout = "apply_layout"
     case focusPaneLeft = "focus_pane_left"
     case focusPaneDown = "focus_pane_down"
     case focusPaneUp = "focus_pane_up"
@@ -59,6 +66,13 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .previousProject: "cmd+["
         case .nextGlobalTab: "ctrl+]"
         case .previousGlobalTab: "ctrl+["
+        case .previousTabInProject: "cmd+shift+left"
+        case .nextTabInProject: "cmd+shift+right"
+        case .moveTabUp: "cmd+shift+up"
+        case .moveTabDown: "cmd+shift+down"
+        case .focusSidebar: "cmd+shift+b"
+        case .saveLayout: "none"
+        case .applyLayout: "none"
         case .focusPaneLeft: "cmd+ctrl+h"
         case .focusPaneDown: "cmd+ctrl+j"
         case .focusPaneUp: "cmd+ctrl+k"
@@ -92,7 +106,12 @@ struct HotkeyShortcut: Identifiable {
         guard let token = HotkeyRegistry.eventToken(event),
               token == keyToken
         else { return false }
-        return event.modifierFlags.intersection(.deviceIndependentFlagsMask) == modifiers
+        // Compare only the four modifiers a shortcut can hold. The full
+        // `.deviceIndependentFlagsMask` also carries `.function` and
+        // `.numericPad`, which arrow keys (and other function keys) always set —
+        // so an arrow shortcut would never match. Caps Lock is likewise ignored.
+        let relevant: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        return event.modifierFlags.intersection(relevant) == modifiers
     }
 }
 

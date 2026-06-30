@@ -4,6 +4,21 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "AppState")
 
+/// A row in the sidebar — a project header or one of its tabs. Shared by the
+/// sidebar view (selection + focus ring) and `AppState` (ring navigation).
+enum SidebarFocusItem: Hashable {
+    case project(UUID)
+    case tab(projectID: UUID, tabID: UUID)
+
+    /// The list row identity to scroll to (matches the `ForEach` element ids).
+    var scrollID: UUID {
+        switch self {
+        case let .project(id): id
+        case let .tab(_, tabID): tabID
+        }
+    }
+}
+
 @MainActor @Observable
 final class AppState {
     var activeProjectID: UUID? {
@@ -12,6 +27,30 @@ final class AppState {
 
     var workspaces: [UUID: Workspace] = [:]
     var sidebarVisible = true
+    /// Which project disclosure groups are expanded in the sidebar. Lives here
+    /// (not in the view) so ring navigation can compute the visible-row order.
+    var expandedProjects: Set<UUID> = []
+
+    // Sidebar: hotkey Focus Sidebar mode (tentative ring; terminal keeps focus).
+    /// True while the Focus Sidebar hotkey mode is active: ↑/↓ move a tentative
+    /// ring (`sidebarFocusItem`) without switching the active tab; Enter/click
+    /// choose, ESC cancels. The terminal keeps first responder throughout.
+    var sidebarFocusMode = false
+    /// The tentative ring's row while `sidebarFocusMode` is active.
+    var sidebarFocusItem: SidebarFocusItem?
+    /// The sidebar's open/closed state captured when Focus Sidebar mode began, so
+    /// exiting restores it (a sidebar opened only for the interaction re-closes).
+    private var sidebarFocusPriorVisible = true
+
+    // Sidebar: click-into-list navigation (live switch, keep list focus).
+    /// True while the sidebar List genuinely holds keyboard focus (the user
+    /// clicked into it). While true, an active-tab change must not steal first
+    /// responder into the terminal (see `TerminalSurface`).
+    var sidebarListFocused = false
+    /// Set for one selection change when ↑/↓ drove it (vs a mouse click), so the
+    /// sidebar can switch the tab live without yanking focus into its pane.
+    var sidebarArrowSwitch = false
+
     var pendingClosePane: PendingClosePane?
     /// A computed layout-apply plan awaiting user confirmation because applying
     /// it would terminate one or more live panes/tabs. nil when no apply is
@@ -390,6 +429,8 @@ final class AppState {
         if ws.activeTabID != before || didAcknowledgeCompletion {
             saveWorkspaces()
         }
+        // A keyboard tab-switch should land the cursor in the new tab's pane.
+        restoreFocusToActivePane()
     }
 
     func selectPreviousTab(projectID: UUID) {
@@ -397,6 +438,14 @@ final class AppState {
         let before = ws.activeTabID
         let didAcknowledgeCompletion = ws.selectPreviousTab()
         if ws.activeTabID != before || didAcknowledgeCompletion {
+            saveWorkspaces()
+        }
+        restoreFocusToActivePane()
+    }
+
+    func moveActiveTab(by offset: Int, projectID: UUID) {
+        guard let ws = workspaces[projectID] else { return }
+        if ws.moveActiveTab(by: offset) {
             saveWorkspaces()
         }
     }
@@ -742,6 +791,84 @@ final class AppState {
         else { return }
         let project = projects[(i - 1 + projects.count) % projects.count]
         selectProject(project)
+    }
+
+    // MARK: - Sidebar: hotkey focus mode (tentative ring)
+
+    /// Enter the Focus Sidebar hotkey mode. The terminal keeps first responder;
+    /// the ring is pure state and arrow/Enter/ESC come from the global key
+    /// monitor, so there's no fragile programmatic focus grab. Remembers the
+    /// sidebar's open/closed state, forces it open, and seeds the ring on the
+    /// active tab.
+    func enterSidebarFocus() {
+        guard !sidebarFocusMode else { return }
+        sidebarFocusPriorVisible = sidebarVisible
+        sidebarVisible = true
+        sidebarFocusItem = seededSidebarRingItem()
+        sidebarFocusMode = true
+    }
+
+    /// Move the tentative ring `offset` rows through the visible sidebar rows,
+    /// wrapping at both ends. Does not switch the active tab.
+    func moveSidebarFocus(by offset: Int, projects: [Project]) {
+        guard sidebarFocusMode else { return }
+        let rows = visibleSidebarRows(projects: projects)
+        guard !rows.isEmpty else { return }
+        let current = sidebarFocusItem.flatMap { rows.firstIndex(of: $0) } ?? 0
+        let next = ((current + offset) % rows.count + rows.count) % rows.count
+        sidebarFocusItem = rows[next]
+    }
+
+    /// Choose the ring's row (select its project, and tab if any), then leave
+    /// the mode — restoring the sidebar's prior state and focusing the pane.
+    func commitSidebarFocus(projects: [Project]) {
+        defer { exitSidebarFocus() }
+        guard let item = sidebarFocusItem else { return }
+        switch item {
+        case let .project(projectID):
+            if let project = projects.first(where: { $0.id == projectID }) {
+                selectProject(project)
+            }
+        case let .tab(projectID, tabID):
+            if let project = projects.first(where: { $0.id == projectID }) {
+                selectProject(project)
+                selectTab(tabID, projectID: projectID)
+            }
+        }
+    }
+
+    /// Leave the hotkey mode without choosing: restore the sidebar's prior
+    /// open/closed state and return first responder to the active pane.
+    func exitSidebarFocus() {
+        guard sidebarFocusMode else { return }
+        sidebarFocusMode = false
+        sidebarFocusItem = nil
+        sidebarVisible = sidebarFocusPriorVisible
+        restoreFocusToActivePane()
+    }
+
+    /// The sidebar's rows in on-screen order: each project, followed by its tabs
+    /// when the project is expanded. Drives ring navigation ("all sidebar rows").
+    func visibleSidebarRows(projects: [Project]) -> [SidebarFocusItem] {
+        var rows: [SidebarFocusItem] = []
+        for project in projects {
+            rows.append(.project(project.id))
+            guard expandedProjects.contains(project.id),
+                  let ws = workspaces[project.id]
+            else { continue }
+            for tab in ws.tabs {
+                rows.append(.tab(projectID: project.id, tabID: tab.id))
+            }
+        }
+        return rows
+    }
+
+    private func seededSidebarRingItem() -> SidebarFocusItem? {
+        guard let projectID = activeProjectID else { return nil }
+        if let tabID = workspaces[projectID]?.activeTabID {
+            return .tab(projectID: projectID, tabID: tabID)
+        }
+        return .project(projectID)
     }
 
     // MARK: - Focus

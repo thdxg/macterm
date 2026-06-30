@@ -7,12 +7,23 @@ struct MainWindow: View {
     @Environment(ProjectStore.self)
     private var projectStore
     @State
-    private var columnVisibility: NavigationSplitViewVisibility = .automatic
-    @State
     private var detailWidth: CGFloat = .infinity
 
+    /// Drive the split view's column visibility directly off `sidebarVisible`,
+    /// the single source of truth. A two-way binding (rather than a one-way
+    /// mirror) keeps them in sync when the sidebar is collapsed by the native
+    /// split-view control — otherwise `sidebarVisible` would drift to `true`
+    /// while the column is hidden, and `enterSidebarFocus()` (which sets it
+    /// `true`) couldn't re-open it.
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { appState.sidebarVisible ? .all : .detailOnly },
+            set: { appState.sidebarVisible = ($0 != .detailOnly) }
+        )
+    }
+
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView(columnVisibility: columnVisibility) {
             SidebarContent()
                 .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 280)
         } detail: {
@@ -59,11 +70,6 @@ struct MainWindow: View {
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
-        }
-        .onChange(of: appState.sidebarVisible) { _, visible in
-            withAnimation {
-                columnVisibility = visible ? .automatic : .detailOnly
-            }
         }
         .onChange(of: appState.isCommandPaletteVisible) { _, visible in
             guard !visible else { return }
