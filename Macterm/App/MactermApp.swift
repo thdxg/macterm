@@ -176,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowObserver: Any?
     private var activateObserver: Any?
+    private var appFocusObservers: [Any] = []
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
 
@@ -213,6 +214,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.reopenIfNeeded()
             }
         }
+
+        // Tell libghostty when we stop/start being the active app so idle
+        // surfaces stop blinking the cursor and animating while backgrounded.
+        // Visible terminals keep rendering real output (that's gated by
+        // per-surface occlusion, not app focus), so watching a running command
+        // from another app still updates.
+        let focusCenter = NotificationCenter.default
+        appFocusObservers = [
+            focusCenter.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(true) } },
+            focusCenter.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(false) } },
+        ]
 
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeMainNotification,

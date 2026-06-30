@@ -100,6 +100,16 @@ final class GhosttyApp {
         ghostty_app_tick(app)
     }
 
+    /// Propagate application-level focus to libghostty. When the app is not the
+    /// active app, surfaces stop blinking the cursor and running idle
+    /// animations — redraws that otherwise keep every surface's renderer busy.
+    /// Visible surfaces still draw real terminal output; this only throttles
+    /// app-focus-driven repaints (see also per-surface occlusion).
+    func setAppFocus(_ focused: Bool) {
+        guard let app else { return }
+        ghostty_app_set_focus(app, focused)
+    }
+
     // MARK: - Config
 
     /// Result of a config (re)load. `missingUserConfigPath` is populated when
