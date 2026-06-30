@@ -189,6 +189,8 @@ private struct GhosttyCLIBanner: View {
 // MARK: - Appearance
 
 private struct AppearanceSettings: View {
+    private let sliderLabelWidth: CGFloat = 126
+
     @AppStorage(Preferences.Keys.projectIconSymbol)
     private var projectIconSymbol = "folder"
     @AppStorage(Preferences.Keys.tabIconSymbol)
@@ -213,6 +215,7 @@ private struct AppearanceSettings: View {
             Section("Window") {
                 HStack {
                     Text("Background opacity")
+                        .frame(width: sliderLabelWidth, alignment: .leading)
                     Slider(value: $backgroundOpacity, in: 0.0 ... 1.0)
                     Text("\(Int((backgroundOpacity * 100).rounded()))%")
                         .monospacedDigit()
@@ -238,8 +241,9 @@ private struct AppearanceSettings: View {
 
                 HStack {
                     Text("Background blur")
+                        .frame(width: sliderLabelWidth, alignment: .leading)
                     Slider(value: $backgroundBlurRadius, in: 0 ... 100)
-                    Text("\(Int(backgroundBlurRadius.rounded()))")
+                    Text("\(Int(backgroundBlurRadius.rounded()))%")
                         .monospacedDigit()
                         .frame(width: 42, alignment: .trailing)
                 }
@@ -359,6 +363,8 @@ private struct AppearanceSettings: View {
 // MARK: - Quick Terminal
 
 private struct QuickTerminalSettings: View {
+    private let sliderLabelWidth: CGFloat = 44
+
     @AppStorage(Preferences.Keys.quickTerminalEnabled)
     private var enabled = true
     @State
@@ -373,6 +379,7 @@ private struct QuickTerminalSettings: View {
 
                 HStack {
                     Text("Width")
+                        .frame(width: sliderLabelWidth, alignment: .leading)
                     Slider(value: $qtWidth, in: 0.2 ... 1.0, step: 0.05)
                     Text("\(Int(qtWidth * 100))%")
                         .monospacedDigit()
@@ -385,6 +392,7 @@ private struct QuickTerminalSettings: View {
 
                 HStack {
                     Text("Height")
+                        .frame(width: sliderLabelWidth, alignment: .leading)
                     Slider(value: $qtHeight, in: 0.2 ... 1.0, step: 0.05)
                     Text("\(Int(qtHeight * 100))%")
                         .monospacedDigit()
