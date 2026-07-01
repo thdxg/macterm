@@ -4,6 +4,11 @@ import Testing
 
 /// Direct unit tests for `TerminalExecutionTracker`, the state machine behind a
 /// pane's tab status spinner.
+///
+/// The tracker separates where "running" came from: foreground transitions,
+/// explicit OSC progress, and output/render activity. That keeps prompt redraws
+/// from resurrecting a finished command while still allowing real foreground
+/// work, raw-mode repainting, and progress reports to show activity.
 struct TerminalExecutionTrackerTests {
     @Test
     func markTerminalActivity_fromIdleWithoutInteraction_staysIdle() {
@@ -18,6 +23,19 @@ struct TerminalExecutionTrackerTests {
         tracker.recordUserInteraction()
         let state = tracker.markTerminalActivity(at: Date(timeIntervalSince1970: 1), currentState: .idle)
         #expect(state == .running)
+    }
+
+    @Test
+    func markTerminalActivity_fromDoneWithoutForeground_doesNotReturnToRunning() {
+        var tracker = TerminalExecutionTracker()
+        tracker.recordUserInteraction()
+        var state = tracker.markTerminalActivity(at: Date(timeIntervalSince1970: 100), currentState: .idle)
+        state = tracker.settleIfQuiet(now: Date(timeIntervalSince1970: 103), quietInterval: 3, currentState: state)
+        #expect(state == .done)
+
+        state = tracker.markTerminalActivity(at: Date(timeIntervalSince1970: 110), currentState: state)
+
+        #expect(state == .done)
     }
 
     @Test
@@ -84,11 +102,20 @@ struct TerminalExecutionTrackerTests {
     }
 
     @Test
-    func terminalActivity_fromDoneWithInteractionRestartsRun() {
+    func terminalActivity_fromDoneWithForegroundRestartsRun() {
         var tracker = TerminalExecutionTracker()
         tracker.recordUserInteraction()
+        var state = tracker.refreshForeground(
+            name: "node",
+            pid: 42,
+            foregroundIsShell: false,
+            terminalInputIsRaw: false,
+            currentState: .idle
+        )
+        state = tracker.markCommandFinished(currentState: state)
+        #expect(state == .done)
 
-        let state = tracker.markTerminalActivity(at: Date(timeIntervalSince1970: 100), currentState: .done)
+        state = tracker.markTerminalActivity(at: Date(timeIntervalSince1970: 100), currentState: state)
 
         #expect(state == .running)
     }

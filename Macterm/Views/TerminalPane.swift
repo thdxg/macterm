@@ -210,6 +210,9 @@ private struct TerminalSurface: NSViewRepresentable {
         }
         view.onTerminalRender = { [weak pane] in
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
+            // Renders also happen for prompt redraws and input echo. The tracker
+            // treats them as weak activity, so they can keep a known foreground
+            // alive without letting idle prompt redraws resurrect a done badge.
             if pane.executionState != .running {
                 pane.refreshForegroundProcess()
             }
