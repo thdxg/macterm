@@ -73,14 +73,14 @@ final class AppState {
     @ObservationIgnored
     nonisolated(unsafe) private var appActivationObservers: [NSObjectProtocol] = []
 
-    // MARK: - Truly Event-Driven Architecture
+    // MARK: - Event-Driven Status Tracking
 
-    // Status indicators are fully event-driven via libghostty callbacks.
-    // Tab names use lazy refresh (on focus/visibility) with minimal fallback.
-    // No polling loops. Timers only for deferred actions (quiet settle).
+    // Status indicators are driven by libghostty callbacks. Tab names refresh
+    // lazily on focus/visibility changes instead of a repeating process poll.
 
-    /// Single settle timer that runs 3s after the last terminal activity.
-    /// Resets on each activity, so idle panes naturally transition to .done.
+    /// Single deferred settle task that runs 3s after terminal activity.
+    /// Resets on each accepted output/render heartbeat, so activity-sourced panes
+    /// naturally transition to .done without a repeating poll loop.
     @ObservationIgnored
     nonisolated(unsafe) private var quietSettleWorkItem: DispatchWorkItem?
 
@@ -154,7 +154,7 @@ final class AppState {
         guard isAppActive else { return }
         logger.info("App resigned active")
         isAppActive = false
-        // No polling when inactive - zero CPU
+        // Status tracking does no polling while inactive.
     }
 
     // MARK: - Tab Name Refresh (Lazy, Event-Driven)
@@ -185,9 +185,9 @@ final class AppState {
     // MARK: - Status Indicators (Event-Driven + Quiet Settle)
 
     /// Schedule quiet settle check 3s from now. Resets on each activity.
-    /// This is the ONLY timer in the new architecture - a deferred work item,
-    /// not a polling loop. It fires once after 3s of quiet, then reschedules
-    /// if there's still activity.
+    /// This is a deferred work item, not a polling loop. It fires once after 3s
+    /// of quiet, then reschedules only for activity-sourced panes that still need
+    /// quiet-settle.
     func scheduleQuietSettle() {
         // Cancel any existing settle timer
         quietSettleWorkItem?.cancel()
@@ -210,7 +210,7 @@ final class AppState {
     /// Called by the deferred work item; reschedules if any panes are still running.
     private func settleAllQuietPanes() {
         var didAcknowledgeCompletion = false
-        var anyStillRunning = false
+        var anyNeedsQuietSettle = false
 
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
@@ -218,10 +218,7 @@ final class AppState {
                     let wasRunning = pane.executionState == .running
                     pane.settleTerminalActivityIfQuiet()
 
-                    // Check if still running after settle attempt
-                    if pane.executionState == .running {
-                        anyStillRunning = true
-                    }
+                    if pane.needsTerminalActivityQuietSettle { anyNeedsQuietSettle = true }
 
                     // If this pane just transitioned to .done, acknowledge completion
                     if wasRunning, pane.executionState == .done {
@@ -237,8 +234,9 @@ final class AppState {
 
         if didAcknowledgeCompletion { saveWorkspaces() }
 
-        // If any panes are still running, reschedule the settle check
-        if anyStillRunning {
+        // If any activity-sourced panes are still running, reschedule the settle check.
+        // Foreground- and progress-sourced runs complete from explicit callbacks.
+        if anyNeedsQuietSettle {
             scheduleQuietSettle()
         }
     }
@@ -252,8 +250,9 @@ final class AppState {
         for (_, ws) in workspaces {
             for tab in ws.tabs {
                 if let pane = tab.splitRoot.findPane(id: paneID) {
-                    pane.markTerminalActivity()
-                    scheduleQuietSettle()
+                    if pane.markTerminalActivity() {
+                        scheduleQuietSettle()
+                    }
                     return
                 }
             }
@@ -279,7 +278,6 @@ final class AppState {
             for tab in ws.tabs {
                 if let pane = tab.splitRoot.findPane(id: paneID) {
                     pane.markCommandRunning()
-                    scheduleQuietSettle()
                     return
                 }
             }
@@ -292,7 +290,6 @@ final class AppState {
             for tab in ws.tabs {
                 if let pane = tab.splitRoot.findPane(id: paneID) {
                     pane.markProgressFinished()
-                    scheduleQuietSettle()
                     return
                 }
             }

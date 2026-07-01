@@ -176,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowObserver: Any?
     private var activateObserver: Any?
+    private var appFocusObservers: [Any] = []
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
 
@@ -213,6 +214,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.reopenIfNeeded()
             }
         }
+
+        let focusCenter = NotificationCenter.default
+        appFocusObservers = [
+            focusCenter.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(true) } },
+            focusCenter.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(false) } },
+        ]
 
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeMainNotification,

@@ -100,6 +100,14 @@ final class GhosttyApp {
         ghostty_app_tick(app)
     }
 
+    /// Propagate app focus to libghostty so idle animations such as cursor blink
+    /// can pause when Macterm is not the active app. Visible surfaces still render
+    /// real terminal output; per-surface occlusion handles hidden/off-screen panes.
+    func setAppFocus(_ focused: Bool) {
+        guard let app else { return }
+        ghostty_app_set_focus(app, focused)
+    }
+
     // MARK: - Config
 
     /// Result of a config (re)load. `missingUserConfigPath` is populated when

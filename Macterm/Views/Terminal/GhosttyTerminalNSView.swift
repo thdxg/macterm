@@ -59,6 +59,10 @@ final class GhosttyTerminalNSView: NSView {
         }
     }
 
+    func surfaceDidRender() {
+        onTerminalRender?()
+    }
+
     func surfaceDidUpdateScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
         let snapshot = ScrollbarSnapshot(total: total, offset: offset, len: len)
         if let lastScrollbarSnapshot, total > lastScrollbarSnapshot.total {
@@ -83,6 +87,7 @@ final class GhosttyTerminalNSView: NSView {
     var onProgressStarted: (() -> Void)?
     var onProgressFinished: (() -> Void)?
     var onTerminalActivity: (() -> Void)?
+    var onTerminalRender: (() -> Void)?
     /// libghostty pushes scrollback geometry (all values in rows) whenever the
     /// viewport, scrollback size, or visible row count changes.
     /// `(total, offset, len)`: total rows including scrollback, the first
@@ -213,6 +218,17 @@ final class GhosttyTerminalNSView: NSView {
             ghostty_surface_set_display_id(surface, displayID)
         }
         ghostty_surface_set_focus(surface, isFocused)
+        syncOcclusion()
+    }
+
+    /// Keep libghostty's renderer parked whenever this surface's pixels are not
+    /// actually visible. The pty keeps running; this only stops continuous Metal
+    /// redraws for off-screen tabs, incubated panes, hidden/minimized windows, or
+    /// covered windows.
+    private func syncOcclusion() {
+        guard let surface else { return }
+        let visible = window?.occlusionState.contains(.visible) ?? false
+        ghostty_surface_set_occlusion(surface, visible)
     }
 
     func destroySurface() {
@@ -264,7 +280,10 @@ final class GhosttyTerminalNSView: NSView {
         }
         windowObservers.removeAll()
 
-        guard let window else { return }
+        guard let window else {
+            syncOcclusion()
+            return
+        }
         if surface == nil {
             createSurface()
         } else {
@@ -298,7 +317,15 @@ final class GhosttyTerminalNSView: NSView {
             queue: .main,
             using: handler
         )
-        windowObservers = [backing, screen]
+        let occlusion = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncOcclusion() }
+        }
+        windowObservers = [backing, screen, occlusion]
+        syncOcclusion()
     }
 
     override func setFrameSize(_ newSize: NSSize) {

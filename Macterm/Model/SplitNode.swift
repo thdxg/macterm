@@ -52,6 +52,11 @@ enum TerminalExecutionState: Equatable {
     case done
 }
 
+enum TerminalActivityKind {
+    case output
+    case render
+}
+
 private struct ForegroundProcessKey: Equatable {
     let name: String
     let pid: pid_t?
@@ -64,7 +69,7 @@ private struct ForegroundProcessKey: Equatable {
     }
 }
 
-private struct TerminalExecutionTracker {
+struct TerminalExecutionTracker {
     init(hasUserInteraction: Bool = false) {
         self.hasUserInteraction = hasUserInteraction
     }
@@ -82,25 +87,20 @@ private struct TerminalExecutionTracker {
     /// True while an OSC 9;4 progress report owns the pane; output and
     /// foreground changes are ignored while it's active.
     private var progressActive = false
-    /// After progress clears, the foreground process that owned it is
-    /// "quiesced": its own output and re-polls are ignored until the
-    /// foreground moves away, so a settled program that reported progress
-    /// doesn't flip back to running on its own render output.
-    /// `pendingProgressQuiesce` covers the race where progress started and
-    /// cleared before any foreground poll — the first process to appear is
-    /// quiesced instead of marked running.
-    private var progressQuiesced: ForegroundProcessKey?
-    private var pendingProgressQuiesce = false
     /// Output is ignored until the user has interacted with the pane, so a
     /// freshly-restored shell's startup prompt doesn't show as activity.
     private var hasUserInteraction = false
+
+    var needsQuietSettle: Bool {
+        lastActivityAt != nil && !progressActive
+    }
 
     mutating func recordUserInteraction() {
         hasUserInteraction = true
     }
 
     mutating func markProgressStarted(currentState: TerminalExecutionState) -> TerminalExecutionState {
-        guard hasUserInteraction else { return currentState }
+        hasUserInteraction = true
         progressActive = true
         lastActivityAt = nil
         return .running
@@ -115,35 +115,35 @@ private struct TerminalExecutionTracker {
         // persist as a spurious checkmark after restart).
         guard currentState == .running else { return currentState }
         progressActive = false
-        progressQuiesced = nil
-        pendingProgressQuiesce = false
         lastActivityAt = nil
         return .done
     }
 
     mutating func markProgressFinished(currentState: TerminalExecutionState) -> TerminalExecutionState {
-        guard hasUserInteraction || progressActive else { return currentState }
+        guard progressActive else { return currentState }
         progressActive = false
-        if let lastForeground {
-            progressQuiesced = lastForeground
-        } else {
-            pendingProgressQuiesce = true
-        }
         lastActivityAt = nil
         return currentState == .running ? .done : currentState
     }
 
     mutating func markTerminalActivity(
         at date: Date,
+        kind: TerminalActivityKind = .output,
         currentState: TerminalExecutionState
     ) -> TerminalExecutionState {
         guard !progressActive else { return currentState }
-        if let progressQuiesced, progressQuiesced == lastForeground { return currentState }
-        // Output only counts after user interaction (or a declarative `run:`,
-        // which seeds `hasUserInteraction`). Fresh/restored shells can emit
-        // startup banners or shell-integration redraws before the user does
+        // Output/render only counts after trusted activity (user input,
+        // declarative `run:`, or explicit progress). Fresh/restored shells can
+        // emit startup banners or shell-integration redraws before the user does
         // anything; those must not become persisted completion indicators.
         guard hasUserInteraction else { return currentState }
+        // Render-only callbacks are weak evidence: they can be prompt redraws or
+        // input echo. Let them start/restart a spinner only while a real non-shell
+        // foreground process is known; otherwise they can only keep an already
+        // running activity-sourced command alive.
+        if kind == .render, currentState != .running, lastForeground == nil {
+            return currentState
+        }
         lastActivityAt = date
         return .running
     }
@@ -170,24 +170,6 @@ private struct TerminalExecutionTracker {
         currentState: TerminalExecutionState
     ) -> TerminalExecutionState {
         let newKey = foregroundIsShell ? nil : ForegroundProcessKey(name: name, pid: pid)
-
-        // Resolve a pending progress quiesce: the first foreground process
-        // after a progress race (progress cleared before any poll) is quiesced
-        // rather than marked running. A shell arriving first cancels it.
-        if pendingProgressQuiesce {
-            if let newKey {
-                progressQuiesced = newKey
-                pendingProgressQuiesce = false
-                lastForeground = newKey
-                return currentState
-            }
-            pendingProgressQuiesce = false
-        }
-
-        // Drop the quiesce once the foreground moves off the quiesced process.
-        if let progressQuiesced, progressQuiesced != newKey {
-            self.progressQuiesced = nil
-        }
 
         let changed = newKey != lastForeground
         lastForeground = newKey
@@ -218,6 +200,10 @@ private struct TerminalExecutionTracker {
             // now; output-sourced running is left to quiet-settle on its own.
             if currentState == .running, lastActivityAt == nil {
                 return .done
+            }
+            if changed, currentState != .running {
+                lastActivityAt = Date()
+                return .running
             }
             return currentState
         }
@@ -337,11 +323,14 @@ final class Pane: Identifiable {
         executionState = executionTracker.markProgressFinished(currentState: executionState)
     }
 
-    func markTerminalActivity(at date: Date = Date()) {
+    @discardableResult
+    func markTerminalActivity(at date: Date = Date(), kind: TerminalActivityKind = .output) -> Bool {
         executionState = executionTracker.markTerminalActivity(
             at: date,
+            kind: kind,
             currentState: executionState
         )
+        return executionTracker.needsQuietSettle
     }
 
     func settleTerminalActivityIfQuiet(now: Date = Date(), quietInterval: TimeInterval = 3) {
@@ -350,6 +339,10 @@ final class Pane: Identifiable {
             quietInterval: quietInterval,
             currentState: executionState
         )
+    }
+
+    var needsTerminalActivityQuietSettle: Bool {
+        executionTracker.needsQuietSettle
     }
 
     @discardableResult
@@ -459,6 +452,7 @@ final class Pane: Identifiable {
         view.onProgressStarted = nil
         view.onProgressFinished = nil
         view.onTerminalActivity = nil
+        view.onTerminalRender = nil
         view.onScrollbarUpdate = nil
         view.onScrollWheel = nil
         view.destroySurface()
