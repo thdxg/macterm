@@ -11,7 +11,7 @@ final class TerminalSearchState {
     var displayText: String {
         guard let total else { return "" }
         guard let selected else { return "\(total) matches" }
-        return "\(selected) of \(total)"
+        return "\(selected + 1) of \(total)"
     }
 
     @ObservationIgnored
