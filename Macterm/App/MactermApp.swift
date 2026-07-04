@@ -34,6 +34,38 @@ struct MactermApp: App {
                     Text("A process is still running in this pane. Close it anyway?")
                 }
                 .alert(
+                    "Close running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingCloseTab != nil },
+                        set: { if !$0 { appState.cancelPendingCloseTab() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingCloseTab()
+                    }
+                    Button("Close", role: .destructive) {
+                        appState.confirmPendingCloseTab()
+                    }
+                } message: {
+                    Text("A process is still running in this tab. Closing the tab ends it.")
+                }
+                .alert(
+                    "Remove project with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingRemoveProject != nil },
+                        set: { if !$0 { appState.cancelPendingRemoveProject() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingRemoveProject()
+                    }
+                    Button("Remove", role: .destructive) {
+                        appState.confirmPendingRemoveProject()
+                    }
+                } message: {
+                    Text("A process is still running in this project. Removing it ends every process in its tabs.")
+                }
+                .alert(
                     "Apply layout?",
                     isPresented: Binding(
                         get: { appState.pendingLayoutApply != nil },
@@ -274,6 +306,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         onTerminate?()
+        // Interim (until snapshots carry session identity and quit becomes a
+        // detach): quitting kills every pane's zmx session, blocking briefly so
+        // the kills land before the process exits — a detached Task would never
+        // be scheduled during teardown. Sessions can't be reattached next
+        // launch yet, so leaving them running would only orphan daemons.
+        var names = (appState?.workspaces.values ?? [:].values)
+            .flatMap(\.tabs)
+            .flatMap { $0.splitRoot.allPanes() }
+            .map(\.sessionName)
+        names += QuickTerminalService.shared.splitState.tab.splitRoot.allPanes().map(\.sessionName)
+        (appState?.zmx ?? .live).killSessionsBlocking(names)
     }
 
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {

@@ -64,9 +64,9 @@ final class TerminalTab: Identifiable {
         return didAcknowledge
     }
 
-    init(projectPath: String, projectID: UUID) {
+    init(projectPath: String, projectID: UUID, sessionSlug: String? = nil) {
         id = UUID()
-        let pane = Pane(projectPath: projectPath, projectID: projectID)
+        let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug)
         splitRoot = .pane(pane)
         focusedPaneID = pane.id
     }

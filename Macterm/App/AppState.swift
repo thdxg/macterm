@@ -37,6 +37,26 @@ final class AppState {
         let projectID: UUID
     }
 
+    /// A tab close staged for confirmation because one of its panes has a
+    /// running foreground program (closing kills the pane's zmx session — the
+    /// destructive act now that quit detaches).
+    struct PendingCloseTab: Equatable {
+        let tabID: UUID
+        let projectID: UUID
+    }
+
+    var pendingCloseTab: PendingCloseTab?
+
+    /// A project removal staged for confirmation, same busy rule as tabs.
+    /// Carries the full removal (AppState workspace + ProjectStore entry) as
+    /// a closure, since the store lives with the caller.
+    struct PendingRemoveProject {
+        let projectID: UUID
+        let completeRemoval: () -> Void
+    }
+
+    var pendingRemoveProject: PendingRemoveProject?
+
     /// A reconcile plan staged for confirmation — because applying it would
     /// close panes / end their processes, and/or the file names a different
     /// project than the active one.
@@ -133,6 +153,30 @@ final class AppState {
     @ObservationIgnored
     private var previouslyOccludedPanes: Set<UUID> = []
 
+    /// zmx session-persistence client. Injectable so tests can observe
+    /// session kills without a real daemon.
+    @ObservationIgnored
+    var zmx: ZmxClient = .live
+
+    /// Refresh policy for `ZmxForegroundResolver`'s name→leader-pid cache:
+    /// refresh on session lifecycle events plus a 30s reconcile TTL — never
+    /// per tick (`zmx ls` is a fork/exec).
+    @ObservationIgnored
+    private var zmxRefreshGate = ZmxRefreshGate()
+
+    /// Drops overlapping `zmx ls` refreshes so a slow probe can't pile up
+    /// behind the poll.
+    @ObservationIgnored
+    private var zmxRefreshInFlight = false
+
+    /// Bounded retries while a *wrapped* pane is missing from `zmx ls`: a
+    /// freshly-spawned session registers asynchronously, so the refresh fired
+    /// by its creation event usually runs too early. Reset on every lifecycle
+    /// event; without the cap, a genuinely dead daemon would turn every poll
+    /// tick back into a fork/exec.
+    @ObservationIgnored
+    private var zmxRetryBudget = 8
+
     init(workspaceStore: WorkspaceStore = WorkspaceStore()) {
         self.workspaceStore = workspaceStore
         autoTileObserver = NotificationCenter.default.addObserver(
@@ -167,6 +211,15 @@ final class AppState {
             NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: onEvent
             ),
+            center.addObserver(
+                forName: .zmxSessionsChanged, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.zmxRefreshGate.noteSessionLifecycle()
+                    self?.zmxRetryBudget = 8
+                    self?.notePollEvent()
+                }
+            },
         ]
         pollNow()
     }
@@ -189,8 +242,42 @@ final class AppState {
         // that fire `notePollEvent`, and the fresh poll timestamp turns those
         // into coalesced no-ops instead of recursive polls.
         pollCadence.notePolled(at: Date())
+        refreshZmxCacheIfDue()
         refreshAllForegroundProcesses()
         reschedulePoll()
+    }
+
+    /// Refresh `ZmxForegroundResolver`'s name→leader-pid cache when the gate
+    /// says so (session lifecycle event, or the 30s reconcile TTL). Runs the
+    /// `zmx ls` subprocess off-main; per-tick foreground resolution reads the
+    /// cache with cheap syscalls only. Steady state: at most one fork/exec
+    /// every 30s, zero while polling is paused.
+    private func refreshZmxCacheIfDue() {
+        guard !zmxRefreshInFlight, zmx.isBundled() else { return }
+        guard zmxRefreshGate.shouldRefresh(now: Date()) else { return }
+        zmxRefreshInFlight = true
+        Task { [weak self, zmx] in
+            let map = await zmx.sessionLeaderPIDs()
+            ZmxForegroundResolver.updateCache(map)
+            await MainActor.run { self?.finishZmxRefresh(map: map) }
+        }
+    }
+
+    private func finishZmxRefresh(map: [String: pid_t]) {
+        zmxRefreshInFlight = false
+        // A wrapped pane absent from the listing means the refresh raced the
+        // session's async registration — retry on the next tick (bounded).
+        // Without this, the tab title reads `zmx` (the attach client) until
+        // the 30s reconcile catches up.
+        let missingWrapped = workspaces.values
+            .flatMap(\.tabs)
+            .flatMap { $0.splitRoot.allPanes() }
+            .contains { $0.nsView?.isZmxWrapped == true && map[$0.sessionName] == nil }
+        if missingWrapped, zmxRetryBudget > 0 {
+            zmxRetryBudget -= 1
+            zmxRefreshGate.noteSessionLifecycle()
+            notePollEvent()
+        }
     }
 
     private func reschedulePoll() {
@@ -432,6 +519,11 @@ final class AppState {
         logger.debug("unloadProject: \(projectID, privacy: .public)")
         let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
         for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+            // The snapshot round-trip below rebuilds panes with FRESH session
+            // ids (session identity isn't persisted yet), so the old sessions
+            // would orphan — kill them. Once snapshots carry the session name,
+            // unload becomes a true detach and this kill goes away.
+            pane.killPersistentSession(using: zmx)
             pane.destroySurface()
         }
         if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {
@@ -445,12 +537,38 @@ final class AppState {
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+                // Project removed for good → its sessions die with it.
+                pane.killPersistentSession(using: zmx)
                 pane.destroySurface()
             }
         }
         workspaces.removeValue(forKey: projectID)
         if activeProjectID == projectID { activeProjectID = nil }
         saveWorkspaces()
+    }
+
+    /// Run `removal` (the caller's full remove: workspace + project store)
+    /// immediately when no pane in the project is busy; otherwise stage it
+    /// for the confirmation alert — removal kills every pane's zmx session.
+    func requestRemoveProject(_ projectID: UUID, removal: @escaping () -> Void) {
+        let busy = workspaces[projectID]?.tabs
+            .flatMap { $0.splitRoot.allPanes() }
+            .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+        if busy {
+            pendingRemoveProject = PendingRemoveProject(projectID: projectID, completeRemoval: removal)
+            return
+        }
+        removal()
+    }
+
+    func confirmPendingRemoveProject() {
+        guard let pending = pendingRemoveProject else { return }
+        pendingRemoveProject = nil
+        pending.completeRemoval()
+    }
+
+    func cancelPendingRemoveProject() {
+        pendingRemoveProject = nil
     }
 
     // MARK: - Tabs
@@ -476,10 +594,36 @@ final class AppState {
         else { return }
         logger.debug("closeTab: \(tabID, privacy: .public) project=\(projectID, privacy: .public)")
         for pane in tab.splitRoot.allPanes() {
+            // Tab closed for good → its panes' zmx sessions die with it.
+            pane.killPersistentSession(using: zmx)
             pane.destroySurface()
         }
         ws.closeTab(tabID)
         saveWorkspaces()
+    }
+
+    /// Close a tab, confirming first when any of its panes has a running
+    /// foreground program — closing kills the panes' zmx sessions, so the
+    /// destructive-confirmation lives here (quit will detach, not kill).
+    func requestCloseTab(_ tabID: UUID, projectID: UUID) {
+        let tab = workspaces[projectID]?.tabs.first { $0.id == tabID }
+        let busy = tab?.splitRoot.allPanes()
+            .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+        if busy {
+            pendingCloseTab = PendingCloseTab(tabID: tabID, projectID: projectID)
+            return
+        }
+        closeTab(tabID, projectID: projectID)
+    }
+
+    func confirmPendingCloseTab() {
+        guard let pending = pendingCloseTab else { return }
+        pendingCloseTab = nil
+        closeTab(pending.tabID, projectID: pending.projectID)
+    }
+
+    func cancelPendingCloseTab() {
+        pendingCloseTab = nil
     }
 
     func selectTab(_ tabID: UUID, projectID: UUID) {
@@ -635,6 +779,10 @@ final class AppState {
             return
         }
         logger.debug("closePane: \(paneID, privacy: .public) project=\(projectID, privacy: .public)")
+        // Pane closed for good → its zmx session dies with it. (The
+        // onlyPaneLeft path below re-kills via closeTab; killSession is a
+        // no-op on a missing session, so the overlap is harmless.)
+        tab.splitRoot.findPane(id: paneID)?.killPersistentSession(using: zmx)
         switch tab.removePane(paneID) {
         case .onlyPaneLeft:
             closeTab(tab.id, projectID: projectID)
@@ -764,7 +912,11 @@ final class AppState {
         }
 
         // Destroy surfaces only AFTER the new trees no longer reference them.
+        // A layout-dropped pane is gone for good (no declared node claims it),
+        // so its zmx session dies too — otherwise it would linger as a
+        // clients==0 daemon.
         for pane in plan.panesToDestroy {
+            pane.killPersistentSession(using: zmx)
             pane.destroySurface()
         }
 

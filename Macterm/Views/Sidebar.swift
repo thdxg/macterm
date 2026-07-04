@@ -33,7 +33,7 @@ struct SidebarContent: View {
                             index: tabIndex + 1,
                             isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id,
                             moveTargets: projectStore.projects.filter { $0.id != project.id },
-                            onClose: { appState.closeTab(tab.id, projectID: project.id) },
+                            onClose: { appState.requestCloseTab(tab.id, projectID: project.id) },
                             onRename: { newName in
                                 tab.customTitle = newName.isEmpty ? nil : newName
                                 appState.saveWorkspaces()
@@ -59,9 +59,11 @@ struct SidebarContent: View {
                     } onUnload: {
                         appState.unloadProject(project.id)
                     } onRemove: {
-                        expandedProjects.remove(project.id)
-                        appState.removeProject(project.id)
-                        projectStore.remove(id: project.id)
+                        appState.requestRemoveProject(project.id) {
+                            expandedProjects.remove(project.id)
+                            appState.removeProject(project.id)
+                            projectStore.remove(id: project.id)
+                        }
                     }
                     .tag(SidebarItem.project(project.id))
                 }

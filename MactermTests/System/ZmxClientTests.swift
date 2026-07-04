@@ -194,7 +194,8 @@ struct ZmxReapOrphansDriverTests {
             executableURL: { URL(fileURLWithPath: "/fake/zmx") },
             isBundled: { true },
             killSession: { id in killed.mutate { $0.append(id) } },
-            listSessionsWithClients: { entries }
+            listSessionsWithClients: { entries },
+            sessionLeaderPIDs: { [:] }
         )
     }
 
