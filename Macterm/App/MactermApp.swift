@@ -190,7 +190,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
-        NotificationHandler.shared.requestAuthorization()
+        if BenchmarkControl.isEnabled {
+            // Under the CI benchmark, the notification-permission alert would
+            // steal key focus mid-measurement and nobody is there to answer it.
+            BenchmarkControl.install()
+        } else {
+            NotificationHandler.shared.requestAuthorization()
+        }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
         _ = GhosttyApp.shared
@@ -254,6 +260,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func installResponders(appState: AppState, projectStore: ProjectStore) {
         guard !hasInstalledResponders else { return }
         hasInstalledResponders = true
+        if BenchmarkControl.isEnabled {
+            BenchmarkControl.connect(appState: appState, projectStore: projectStore)
+        }
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
