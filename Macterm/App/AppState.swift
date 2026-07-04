@@ -191,7 +191,7 @@ final class AppState {
         projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
 
         let center = NotificationCenter.default
-        let onEvent: (Notification) -> Void = { [weak self] _ in
+        let onEvent: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.notePollEvent() }
         }
         pollEventObservers = [
