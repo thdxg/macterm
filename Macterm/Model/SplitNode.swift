@@ -166,6 +166,16 @@ struct TerminalExecutionTracker {
         return .done
     }
 
+    /// Restart the quiet window of an activity-sourced run. Used on the
+    /// occluded→visible edge: a parked renderer emits no heartbeats, so the
+    /// elapsed silence says nothing about completion — and a false `.done`
+    /// would stick, because activity can never revive `.done` (see
+    /// `markTerminalActivity`).
+    mutating func refreshActivityWindow(now: Date) {
+        guard case .activity = runningSource else { return }
+        runningSource = .activity(now)
+    }
+
     mutating func refreshForeground(
         name: String?,
         pid: pid_t?,
@@ -352,6 +362,10 @@ final class Pane: Identifiable {
             quietInterval: quietInterval,
             currentState: executionState
         )
+    }
+
+    func refreshTerminalActivityWindow(now: Date = Date()) {
+        executionTracker.refreshActivityWindow(now: now)
     }
 
     @discardableResult

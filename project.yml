@@ -50,6 +50,7 @@ targets:
           - "Macterm.entitlements"
           - "Resources/ghostty"
           - "Resources/terminfo"
+          - "Resources/zmx"
           - "AppIcon.icon"
       # Ghostty resources (themes + shell-integration), downloaded by setup.sh.
       # Folder reference (not the default "group") because the contents are
@@ -132,6 +133,14 @@ targets:
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework
       - sdk: UserNotifications.framework
+    postCompileScripts:
+      # Copy the prebuilt zmx binary (downloaded by setup.sh from the thdxg/zmx
+      # release, like GhosttyKit) into the app bundle at
+      # Contents/Resources/zmx/zmx — ZmxClient resolves it via Bundle.main.
+      # Runs after compile so the bundle's Resources dir exists.
+      - script: "${SRCROOT}/scripts/embed-zmx.sh"
+        name: "Embed zmx"
+        basedOnDependencyAnalysis: false
 
   MactermTests:
     type: bundle.unit-test
