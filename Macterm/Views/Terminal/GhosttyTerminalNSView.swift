@@ -64,6 +64,10 @@ final class GhosttyTerminalNSView: NSView {
         }
     }
 
+    func surfaceDidRender() {
+        onTerminalRender?()
+    }
+
     func surfaceDidUpdateScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
         let snapshot = ScrollbarSnapshot(total: total, offset: offset, len: len)
         if let lastScrollbarSnapshot, total > lastScrollbarSnapshot.total {
@@ -88,11 +92,18 @@ final class GhosttyTerminalNSView: NSView {
     var onProgressStarted: (() -> Void)?
     var onProgressFinished: (() -> Void)?
     var onTerminalActivity: (() -> Void)?
+    var onTerminalRender: (() -> Void)?
     /// libghostty pushes scrollback geometry (all values in rows) whenever the
     /// viewport, scrollback size, or visible row count changes.
     /// `(total, offset, len)`: total rows including scrollback, the first
     /// visible row (0 = top of history), and the visible row count.
     var onScrollbarUpdate: ((UInt64, UInt64, UInt64) -> Void)?
+    /// Gives the hosting `SurfaceScrollView` first chance to handle scrollback
+    /// wheel/trackpad events with its iTerm-style line accumulator. It declines
+    /// when there's no scrollback to move through (so alternate-screen apps
+    /// like less/vim fall through to libghostty for mouse reporting). Return
+    /// false to let libghostty handle the event directly.
+    var onScrollWheel: ((NSEvent) -> Bool)?
     var isFocused: Bool = false
     var currentPwd: String?
 
@@ -253,6 +264,24 @@ final class GhosttyTerminalNSView: NSView {
             ghostty_surface_set_display_id(surface, displayID)
         }
         ghostty_surface_set_focus(surface, isFocused)
+        syncOcclusion()
+    }
+
+    /// Tell libghostty whether this surface's pixels are actually on screen.
+    /// An occluded surface — an off-screen tab parked in the `SurfaceIncubator`
+    /// window, or a covered/minimized/hidden main window — parks its renderer's
+    /// display link instead of drawing every frame. With many panes that idle
+    /// redraw is the dominant background CPU cost. The pty io thread keeps
+    /// running while occluded, so off-screen output stays current and the tab
+    /// is up to date the moment it's viewed.
+    ///
+    /// The bool is "visible" (matches Ghostty's own `updateOcclusionState`):
+    /// true when the surface's window reports `.visible`, false otherwise —
+    /// including when the view has no window at all.
+    private func syncOcclusion() {
+        guard let surface else { return }
+        let visible = window?.occlusionState.contains(.visible) ?? false
+        ghostty_surface_set_occlusion(surface, visible)
     }
 
     func destroySurface() {
@@ -304,7 +333,13 @@ final class GhosttyTerminalNSView: NSView {
         }
         windowObservers.removeAll()
 
-        guard let window else { return }
+        guard let window else {
+            // Detached from its window (e.g. pulled out of the incubator before
+            // re-attaching). Mark occluded so the renderer doesn't draw to an
+            // off-screen layer.
+            syncOcclusion()
+            return
+        }
         if surface == nil {
             createSurface()
         } else {
@@ -338,7 +373,18 @@ final class GhosttyTerminalNSView: NSView {
             queue: .main,
             using: handler
         )
-        windowObservers = [backing, screen]
+        // Park the renderer when this view's window is covered, minimized, or
+        // hidden; resume when it's revealed. The incubator window never reports
+        // `.visible`, so off-screen tabs stay occluded for free.
+        let occlusion = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncOcclusion() }
+        }
+        windowObservers = [backing, screen, occlusion]
+        syncOcclusion()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -643,9 +689,41 @@ final class GhosttyTerminalNSView: NSView {
     override func scrollWheel(with event: NSEvent) {
         onInteraction?()
         guard let surface else { return }
+
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+        if event.hasPreciseScrollingDeltas {
+            // Match Ghostty's macOS frontend: precise trackpad/Magic Mouse
+            // deltas are valid but feel slow at 1x because terminals scroll in
+            // rows instead of continuous document pixels.
+            x *= 2
+            y *= 2
+        }
+
+        if !ghostty_surface_mouse_captured(surface), onScrollWheel?(event) == true {
+            return
+        }
+
+        ghostty_surface_mouse_scroll(surface, x, y, scrollMods(for: event))
+    }
+
+    private func scrollMods(for event: NSEvent) -> ghostty_input_scroll_mods_t {
         var scrollMods: ghostty_input_scroll_mods_t = 0
         if event.hasPreciseScrollingDeltas { scrollMods |= 1 }
-        ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX, event.scrollingDeltaY, scrollMods)
+        scrollMods |= scrollMomentum(for: event.momentumPhase) << 1
+        return scrollMods
+    }
+
+    private func scrollMomentum(for phase: NSEvent.Phase) -> ghostty_input_scroll_mods_t {
+        switch phase {
+        case .began: 1
+        case .stationary: 2
+        case .changed: 3
+        case .ended: 4
+        case .cancelled: 5
+        case .mayBegin: 6
+        default: 0
+        }
     }
 
     // MARK: - Context menu
@@ -654,7 +732,7 @@ final class GhosttyTerminalNSView: NSView {
         let menu = NSMenu(title: "Terminal")
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
-        paste.isEnabled = GhosttyCallbacks.readPasteboardText() != nil
+        paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
         menu.addItem(paste)
         menu.addItem(.separator())
         addSplitItem(menu, "Split Right", .horizontal, .second)
@@ -916,9 +994,9 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         guard let surface else { return }
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
-        _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.count)
+        _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.utf16.count)
         _selectedRange = selectedRange
-        text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.count)) }
+        text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.utf8.count)) }
     }
 
     func unmarkText() {

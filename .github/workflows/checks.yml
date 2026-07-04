@@ -13,7 +13,7 @@ jobs:
     outputs:
       swift: ${{ steps.filter.outputs.swift }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
         id: filter
         with:
@@ -36,7 +36,7 @@ jobs:
     runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - uses: jdx/mise-action@v4
 
@@ -50,7 +50,7 @@ jobs:
     runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - uses: jdx/mise-action@v4
 
@@ -64,7 +64,7 @@ jobs:
     runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - uses: jdx/mise-action@v4
 

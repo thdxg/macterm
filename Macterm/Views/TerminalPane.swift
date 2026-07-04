@@ -201,6 +201,18 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.refreshForegroundProcess()
             pane.markTerminalActivity()
         }
+        view.onTerminalRender = { [weak pane] in
+            guard let pane, Preferences.shared.showTabStatusIndicator else { return }
+            // Renders also happen for prompt redraws and input echo. Use them to
+            // keep an already-detected command active (including in-place
+            // spinners), but don't let a render alone start the status spinner.
+            if pane.executionState != .running {
+                pane.refreshForegroundProcess()
+            }
+            if pane.executionState == .running {
+                pane.markTerminalActivity()
+            }
+        }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }
             if Preferences.shared.showTabStatusIndicator {

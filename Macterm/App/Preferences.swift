@@ -61,6 +61,11 @@ final class Preferences {
         didSet { defaults.set(eagerlyStartProjectTabs, forKey: Keys.eagerlyStartProjectTabs) }
     }
 
+    /// Multiplier applied to terminal scroll wheel / trackpad row deltas.
+    var terminalScrollSpeed: Double {
+        didSet { defaults.set(terminalScrollSpeed, forKey: Keys.terminalScrollSpeed) }
+    }
+
     // MARK: - Sidebar icons
 
     var projectIconSymbol: String {
@@ -251,6 +256,7 @@ final class Preferences {
         self.defaults = defaults
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
         eagerlyStartProjectTabs = (defaults.object(forKey: Keys.eagerlyStartProjectTabs) as? Bool) ?? true
+        terminalScrollSpeed = Self.clampScrollSpeed(defaults.double(forKey: Keys.terminalScrollSpeed), fallback: 1.0)
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
         windowBlurRadius = defaults.integer(forKey: Keys.windowBlurRadius)
         windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
@@ -276,6 +282,11 @@ final class Preferences {
         return max(0.2, min(1.0, v))
     }
 
+    private static func clampScrollSpeed(_ v: Double, fallback: Double) -> Double {
+        guard v > 0 else { return fallback }
+        return max(0.25, min(3.0, v))
+    }
+
     /// Pre-v2 builds stored theme/font/option-as-alt in UserDefaults. Those
     /// settings now live entirely in the user's Ghostty config, so the keys
     /// are dead. Drop them so `defaults read com.thdxg.macterm` is clean
@@ -296,6 +307,7 @@ final class Preferences {
     enum Keys {
         static let autoTiling = "macterm.autoTiling.enabled"
         static let eagerlyStartProjectTabs = "macterm.eagerlyStartProjectTabs.enabled"
+        static let terminalScrollSpeed = "macterm.terminal.scrollSpeed"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"
         static let windowGlassEnabled = "macterm.window.glassEnabled"
