@@ -142,7 +142,7 @@ final class AppState {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebalanceAllWorkspacesIfEnabled() }
         }
-        let restored = (UserDefaults.standard.stringArray(forKey: recencyKey) ?? [])
+        let restored = (Preferences.defaults.stringArray(forKey: recencyKey) ?? [])
             .compactMap { UUID(uuidString: $0) }
         projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
 
@@ -266,7 +266,7 @@ final class AppState {
 
     private func recordProjectVisit(_ projectID: UUID) {
         projectRecency.push(projectID)
-        UserDefaults.standard.set(projectRecency.items.map(\.uuidString), forKey: recencyKey)
+        Preferences.defaults.set(projectRecency.items.map(\.uuidString), forKey: recencyKey)
     }
 
     /// Recently-visited projects, filtered to only those still present in the store.

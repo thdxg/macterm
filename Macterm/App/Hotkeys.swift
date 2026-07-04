@@ -289,7 +289,7 @@ enum HotkeyRegistry {
     }
 
     static func selectedShortcutString(for action: HotkeyAction) -> String {
-        UserDefaults.standard.string(forKey: action.defaultsKey) ?? action.defaultShortcut
+        Preferences.defaults.string(forKey: action.defaultsKey) ?? action.defaultShortcut
     }
 
     static func selectedShortcut(for action: HotkeyAction) -> HotkeyShortcut? {
@@ -297,7 +297,7 @@ enum HotkeyRegistry {
     }
 
     static func setShortcutString(_ shortcut: String, for action: HotkeyAction) {
-        UserDefaults.standard.set(shortcut, forKey: action.defaultsKey)
+        Preferences.defaults.set(shortcut, forKey: action.defaultsKey)
     }
 
     static func isValidShortcutString(_ shortcut: String) -> Bool {

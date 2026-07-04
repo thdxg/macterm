@@ -34,7 +34,7 @@ final class QuickTerminalService: NSObject {
         // which bypasses Preferences entirely. Reading defaults here keeps the
         // service in sync with whatever the toggle's current persisted value
         // actually is.
-        UserDefaults.standard.object(forKey: Preferences.Keys.quickTerminalEnabled) as? Bool ?? true
+        Preferences.defaults.object(forKey: Preferences.Keys.quickTerminalEnabled) as? Bool ?? true
     }
 
     override private init() {

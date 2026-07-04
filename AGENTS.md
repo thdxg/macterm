@@ -101,6 +101,7 @@ One `XxxTests.swift` per production type, mirroring the source path. `@testable 
 
 - Shared helpers in `MactermTests/Support/`: `TreeBuilder` DSL (`H(pane("a"), V(pane("b"), pane("c")))` → tree + name map) and `TreeRenderer` (inverse, for readable assertions).
 - Tests needing `AppState`/`WorkspaceStore` inject a tempdir file — never touch `~/Library/Application Support/`.
+- Tests run hosted inside the debug app, so `UserDefaults.standard` there is the developer's real debug-app domain. `Preferences.defaults` detects a test run (XCTest env vars) and resolves to a wiped `.tests` side suite instead, and everything that persists defaults (`Preferences.shared`, project recency, hotkey overrides) goes through it — so writes, including indirect ones like `AppState.activeProjectID`'s write-through, never leak out of the run (`PreferencesTests` guards this). Never use `UserDefaults.standard` directly in app code.
 - UI (SwiftUI views, AppKit surfaces, libghostty bindings) is not unit-tested; coverage targets model + persistence + palette/hotkey logic and pure helpers.
 - `BundledResourcesTests` is an artifact check: it asserts `Macterm/Resources/` ships what libghostty needs (#39/#40 guard) and `#require`-skips on a fresh checkout before setup has run.
 

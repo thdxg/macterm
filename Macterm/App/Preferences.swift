@@ -43,7 +43,16 @@ enum WindowGlassStyle: String, CaseIterable, Identifiable {
 /// files Macterm generates around it.
 @MainActor @Observable
 final class Preferences {
-    static let shared = Preferences()
+    static let shared = Preferences(defaults: defaults)
+
+    /// The UserDefaults domain all Macterm state persists to — `.standard` in
+    /// the app, a wiped side suite under test (see `resolveDefaults()`). Use
+    /// this instead of `UserDefaults.standard` anywhere the app reads or
+    /// writes defaults directly (project recency, hotkey overrides), so those
+    /// writes get the same test isolation as `Preferences` properties.
+    /// `nonisolated(unsafe)` because the SDK doesn't mark `UserDefaults`
+    /// Sendable even though it's documented thread-safe.
+    nonisolated(unsafe) static let defaults: UserDefaults = resolveDefaults()
 
     // MARK: - Layout / appearance
 
@@ -241,9 +250,34 @@ final class Preferences {
 
     // MARK: - Init
 
+    /// The unit-test suite runs hosted inside the debug app, so
+    /// `UserDefaults.standard` there is the developer's real
+    /// `com.thdxg.macterm.debug` domain — a test mutating a preference (even
+    /// indirectly, e.g. `AppState.activeProjectID`'s write-through) would
+    /// corrupt the app they use day to day. Under a test run, back the app's
+    /// defaults with a wiped side suite instead so writes never leave the run.
+    nonisolated private static func resolveDefaults() -> UserDefaults {
+        guard isTestRun else { return .standard }
+        let suiteName = appBundleID + ".tests"
+        guard let suite = UserDefaults(suiteName: suiteName) else { return .standard }
+        // Wipe residue from previous runs so every test run starts clean.
+        suite.removePersistentDomain(forName: suiteName)
+        return suite
+    }
+
+    /// True when this process is an XCTest / Swift Testing host. Detected via
+    /// the runner's environment (`XCTestConfigurationFilePath`,
+    /// `XCTestSessionIdentifier`, … — the exact key varies by Xcode version)
+    /// rather than a loaded-class check: the test bundle injects only after app
+    /// launch, but the environment is set from process start, so this is
+    /// correct however early `shared` is first touched.
+    nonisolated private static var isTestRun: Bool {
+        ProcessInfo.processInfo.environment.keys.contains { $0.hasPrefix("XCTest") }
+    }
+
     private let defaults: UserDefaults
 
-    private init(defaults: UserDefaults = .standard) {
+    private init(defaults: UserDefaults) {
         self.defaults = defaults
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
         eagerlyStartProjectTabs = (defaults.object(forKey: Keys.eagerlyStartProjectTabs) as? Bool) ?? true
