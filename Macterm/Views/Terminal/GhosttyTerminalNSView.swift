@@ -218,6 +218,24 @@ final class GhosttyTerminalNSView: NSView {
             ghostty_surface_set_display_id(surface, displayID)
         }
         ghostty_surface_set_focus(surface, isFocused)
+        syncOcclusion()
+    }
+
+    /// Tell libghostty whether this surface's pixels are actually on screen.
+    /// An occluded surface — an off-screen tab parked in the `SurfaceIncubator`
+    /// window, or a covered/minimized/hidden main window — parks its renderer's
+    /// display link instead of drawing every frame. With many panes that idle
+    /// redraw is the dominant background CPU cost. The pty io thread keeps
+    /// running while occluded, so off-screen output stays current and the tab
+    /// is up to date the moment it's viewed.
+    ///
+    /// The bool is "visible" (matches Ghostty's own `updateOcclusionState`):
+    /// true when the surface's window reports `.visible`, false otherwise —
+    /// including when the view has no window at all.
+    private func syncOcclusion() {
+        guard let surface else { return }
+        let visible = window?.occlusionState.contains(.visible) ?? false
+        ghostty_surface_set_occlusion(surface, visible)
     }
 
     func destroySurface() {
@@ -269,7 +287,13 @@ final class GhosttyTerminalNSView: NSView {
         }
         windowObservers.removeAll()
 
-        guard let window else { return }
+        guard let window else {
+            // Detached from its window (e.g. pulled out of the incubator before
+            // re-attaching). Mark occluded so the renderer doesn't draw to an
+            // off-screen layer.
+            syncOcclusion()
+            return
+        }
         if surface == nil {
             createSurface()
         } else {
@@ -303,7 +327,18 @@ final class GhosttyTerminalNSView: NSView {
             queue: .main,
             using: handler
         )
-        windowObservers = [backing, screen]
+        // Park the renderer when this view's window is covered, minimized, or
+        // hidden; resume when it's revealed. The incubator window never reports
+        // `.visible`, so off-screen tabs stay occluded for free.
+        let occlusion = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncOcclusion() }
+        }
+        windowObservers = [backing, screen, occlusion]
+        syncOcclusion()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
