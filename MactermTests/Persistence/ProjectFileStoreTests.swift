@@ -1,0 +1,170 @@
+import Foundation
+@testable import Macterm
+import Testing
+
+@MainActor
+struct ProjectFileStoreTests {
+    /// Fresh store rooted in a unique tempdir; the directory is created lazily
+    /// by the first write, mirroring production.
+    private func makeStore() -> ProjectFileStore {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-projectfiles-\(UUID().uuidString)", isDirectory: true)
+        return ProjectFileStore(directoryURL: dir)
+    }
+
+    private func writeRaw(_ store: ProjectFileStore, filename: String, yaml: String) throws {
+        try FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
+        try yaml.write(to: store.directoryURL.appendingPathComponent(filename), atomically: true, encoding: .utf8)
+    }
+
+    private func filenames(_ store: ProjectFileStore) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: store.directoryURL.path)) ?? []).sorted()
+    }
+
+    // MARK: - Matching
+
+    @Test
+    func finds_file_by_canonical_path_not_filename() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "whatever.yaml", yaml: "path: /a/b/")
+        let match = store.find(forProjectPath: "/a/b")
+        #expect(match?.url.lastPathComponent == "whatever.yaml")
+        #expect(store.find(forProjectPath: "/a/c") == nil)
+    }
+
+    @Test
+    func missing_directory_scans_empty() {
+        let store = makeStore()
+        #expect(store.scan().isEmpty)
+        #expect(store.find(forProjectPath: "/a") == nil)
+    }
+
+    @Test
+    func duplicate_paths_first_filename_wins() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "b.yaml", yaml: "name: B\npath: /same")
+        try writeRaw(store, filename: "a.yaml", yaml: "name: A\npath: /same")
+        #expect(store.find(forProjectPath: "/same")?.url.lastPathComponent == "a.yaml")
+    }
+
+    @Test
+    func yml_extension_is_scanned_too() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "p.yml", yaml: "path: /a")
+        #expect(store.find(forProjectPath: "/a") != nil)
+    }
+
+    // MARK: - Apply state
+
+    @Test
+    func apply_state_none_without_matching_file() {
+        #expect(makeStore().applyState(forProjectPath: "/a") == .none)
+    }
+
+    @Test
+    func apply_state_applicable_with_tabs() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "p.yaml", yaml: """
+        path: /a
+        tabs:
+          - run: btop
+        """)
+        #expect(store.applyState(forProjectPath: "/a") == .applicable)
+    }
+
+    @Test
+    func apply_state_empty_tabs_for_bare_declaration() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "p.yaml", yaml: "path: /a")
+        #expect(store.applyState(forProjectPath: "/a") == .emptyTabs)
+        try writeRaw(store, filename: "p.yaml", yaml: "path: /a\ntabs: []")
+        #expect(store.applyState(forProjectPath: "/a") == .emptyTabs)
+    }
+
+    @Test
+    func apply_state_invalid_when_tabs_malformed() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "p.yaml", yaml: """
+        path: /a
+        tabs:
+          - split: { direction: horizontal, first: { } }
+        """)
+        #expect(store.applyState(forProjectPath: "/a") == .invalid)
+        #expect(throws: LayoutFileError.self) {
+            try store.loadFull(forProjectPath: "/a")
+        }
+    }
+
+    // MARK: - Write
+
+    @Test
+    func write_creates_slug_file() throws {
+        let store = makeStore()
+        try store.write(ProjectFile(name: "API Server", path: "/a"), projectName: "API Server")
+        #expect(filenames(store) == ["api_server.yaml"])
+        #expect(try store.loadFull(forProjectPath: "/a")?.name == "API Server")
+    }
+
+    @Test
+    func write_collision_takes_numeric_suffix() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "repo.yaml", yaml: "path: /other")
+        try store.write(ProjectFile(name: "repo", path: "/mine"), projectName: "repo")
+        #expect(filenames(store) == ["repo.yaml", "repo_2.yaml"])
+        #expect(store.find(forProjectPath: "/mine")?.url.lastPathComponent == "repo_2.yaml")
+    }
+
+    @Test
+    func resave_overwrites_own_file_without_suffixing() throws {
+        let store = makeStore()
+        try store.write(ProjectFile(name: "api", path: "/a"), projectName: "api")
+        try store.write(ProjectFile(name: "api", path: "/a", tabs: [
+            LayoutTab(name: nil, layout: .pane(LayoutPane(cwd: nil, run: "btop", shell: nil))),
+        ]), projectName: "api")
+        #expect(filenames(store) == ["api.yaml"])
+        #expect(store.applyState(forProjectPath: "/a") == .applicable)
+    }
+
+    @Test
+    func resave_after_rename_realigns_filename() throws {
+        let store = makeStore()
+        try store.write(ProjectFile(name: "old name", path: "/a"), projectName: "old name")
+        #expect(filenames(store) == ["old_name.yaml"])
+        try store.write(ProjectFile(name: "new name", path: "/a"), projectName: "new name")
+        #expect(filenames(store) == ["new_name.yaml"])
+    }
+
+    @Test
+    func realign_never_steals_another_paths_slug() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "api.yaml", yaml: "path: /other")
+        try store.write(ProjectFile(name: "api", path: "/mine"), projectName: "api")
+        #expect(filenames(store) == ["api.yaml", "api_2.yaml"])
+        // The other project's file is untouched.
+        #expect(store.find(forProjectPath: "/other")?.url.lastPathComponent == "api.yaml")
+    }
+
+    @Test
+    func write_rebinds_by_path_after_hand_rename() throws {
+        let store = makeStore()
+        try store.write(ProjectFile(name: "api", path: "/a"), projectName: "api")
+        // User hand-renames the file; the next save still finds it by path
+        // and realigns the name instead of leaving a duplicate behind.
+        let fm = FileManager.default
+        try fm.moveItem(
+            at: store.directoryURL.appendingPathComponent("api.yaml"),
+            to: store.directoryURL.appendingPathComponent("zzz.yaml")
+        )
+        try store.write(ProjectFile(name: "api", path: "/a"), projectName: "api")
+        #expect(filenames(store) == ["api.yaml"])
+    }
+
+    @Test
+    func unreadable_file_is_skipped_for_matching() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "broken.yaml", yaml: "path: [unclosed")
+        try writeRaw(store, filename: "good.yaml", yaml: "path: /a")
+        #expect(store.find(forProjectPath: "/a")?.url.lastPathComponent == "good.yaml")
+        #expect(store.scan().count == 2)
+    }
+}
