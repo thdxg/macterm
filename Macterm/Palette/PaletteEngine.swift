@@ -23,6 +23,10 @@ struct PaletteItem: Identifiable {
     let keybindSymbols: [String]?
     /// Lower is better. 0 = exact prefix match, ~5 = substring, ~40 = subsequence.
     let score: Int
+    /// A disabled item renders muted, is skipped by keyboard selection, and
+    /// never executes — visible so the user learns *why* it's unavailable
+    /// (the subtitle carries the reason) instead of wondering where it went.
+    let isEnabled: Bool
     let action: () -> Void
 
     init(
@@ -33,6 +37,7 @@ struct PaletteItem: Identifiable {
         keybind: String? = nil,
         keybindSymbols: [String]? = nil,
         score: Int = 1,
+        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) {
         self.id = id ?? "\(category ?? "")/\(title)"
@@ -42,6 +47,7 @@ struct PaletteItem: Identifiable {
         self.keybind = keybind
         self.keybindSymbols = keybindSymbols
         self.score = score
+        self.isEnabled = isEnabled
         self.action = action
     }
 }

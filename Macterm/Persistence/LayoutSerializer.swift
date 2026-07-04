@@ -29,30 +29,6 @@ enum LayoutSerializer {
         )
     }
 
-    /// Write a workspace out to its project's `.macterm/layout.yaml`, creating
-    /// the `.macterm` directory if needed.
-    static func write(
-        _ workspace: Workspace,
-        projectName: String,
-        projectRoot: String,
-        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
-        liveShell: (Pane) -> String? = { ProcessInspector.runningShell(forPane: $0) }
-    ) throws {
-        let file = layout(
-            for: workspace,
-            projectName: projectName,
-            projectRoot: projectRoot,
-            liveCommand: liveCommand,
-            liveShell: liveShell
-        )
-        let url = LayoutFile.url(forProjectRoot: projectRoot)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try file.yaml().write(to: url, atomically: true, encoding: .utf8)
-    }
-
     // MARK: - Tree walk
 
     private static func node(

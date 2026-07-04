@@ -99,6 +99,21 @@ struct MactermApp: App {
                         Text(pending.confirmationMessage)
                     }
                 }
+                .alert(
+                    appState.pendingLayoutError?.title ?? "Couldn't apply layout",
+                    isPresented: Binding(
+                        get: { appState.pendingLayoutError != nil },
+                        set: { if !$0 { appState.pendingLayoutError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        appState.pendingLayoutError = nil
+                    }
+                } message: {
+                    if let pending = appState.pendingLayoutError {
+                        Text(pending.message)
+                    }
+                }
                 .onAppear {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore
@@ -237,6 +252,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return
         }
+        // Before anything can spawn a surface: a launcher terminal's zmx
+        // session marker must not leak into our panes (see ZmxEnvironment).
+        ZmxEnvironment.scrubInheritedSession()
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
         if BenchmarkControl.isEnabled {
             // Under the CI benchmark, the notification-permission alert would

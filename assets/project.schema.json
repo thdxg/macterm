@@ -1,19 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/layout.schema.json",
-  "title": "Macterm layout",
-  "description": "DEPRECATED: superseded by the central project files in ~/.config/macterm/projects/ (see project.schema.json). A .macterm/layout.yaml is only read once, on a project's first open, to seed its central file; support is removed entirely in the next release.",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/project.schema.json",
+  "title": "Macterm project",
+  "description": "A Macterm project declaration. One file per project in ~/.config/macterm/projects/; declares the project's path and, optionally, its tab/pane layout. Files are matched to projects by `path` (the filename is cosmetic). Written by \"Save Layout\"; freely hand-editable.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["tabs"],
+  "required": ["path"],
   "properties": {
     "name": {
       "type": "string",
-      "description": "The project this layout was authored for. On apply, a mismatch against the active project prompts a confirmation. Optional — a file without it applies to any project without warning."
+      "description": "Display name recorded at save time. The app's project list keeps its own name at runtime, so drift is expected — this is informational."
+    },
+    "path": {
+      "type": "string",
+      "description": "Where the project lives, scp-style: an absolute or ~-prefixed path is a local directory (e.g. \"~/dev/api\"); \"[user@]host:dir\" is a directory on a remote host (e.g. \"devbox:~/dev/api\" — host may be an ssh-config alias; port/identity come from ~/.ssh/config). This is the project's identity: files are matched to projects by this value. Matching expands ~ and normalizes ./.. segments, but resolves neither symlinks (including /tmp → /private/tmp) nor letter case — write the directory exactly as the filesystem reports it. Remote projects are not yet supported."
     },
     "tabs": {
       "type": "array",
-      "description": "The tabs to create, in order.",
+      "description": "The tabs to create, in order. Omit for a bare declaration (nothing to apply).",
       "items": { "$ref": "#/$defs/tab" }
     }
   },

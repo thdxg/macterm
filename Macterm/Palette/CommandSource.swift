@@ -40,7 +40,19 @@ struct CommandSource: PaletteSource {
         if command == .toggleCommandPalette { return nil }
 
         let commandCtx = AppCommandContext(appState: ctx.appState, projectStore: ctx.projectStore)
-        guard let rawAction = command.action(in: commandCtx) else { return nil }
+        guard let rawAction = command.action(in: commandCtx) else {
+            // Most inapplicable commands hide; a few explain themselves as a
+            // muted row instead (e.g. "Apply Layout" with no project file).
+            guard let hint = command.paletteDisabledHint(in: commandCtx) else { return nil }
+            return PaletteItem(
+                title: command.title,
+                subtitle: hint,
+                category: command.category.rawValue,
+                score: 0,
+                isEnabled: false,
+                action: {}
+            )
+        }
 
         // Rename actions need to wait until the palette has dismissed so the
         // textfield in the sidebar can take first responder. Defer via
@@ -55,6 +67,7 @@ struct CommandSource: PaletteSource {
 
         return PaletteItem(
             title: command.title,
+            subtitle: command.paletteSubtitle(in: commandCtx),
             category: command.category.rawValue,
             keybind: command.hotkeyAction.flatMap(keybindDisplay),
             keybindSymbols: command.hotkeyAction.flatMap(keybindSymbols),

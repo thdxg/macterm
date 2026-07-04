@@ -197,6 +197,19 @@ struct ZmxAttachTests {
     }
 }
 
+struct ZmxEnvironmentTests {
+    @Test
+    func scrub_removes_inherited_session_marker() {
+        // An app launched from inside a Macterm pane inherits the launcher's
+        // ZMX_SESSION; once that session dies, every `zmx attach` for a new
+        // pane aborts with `session "…" does not exist` instead of creating
+        // it. The scrub must remove the marker from this process.
+        setenv("ZMX_SESSION", "macterm-test-deadbeefcafe", 1)
+        ZmxEnvironment.scrubInheritedSession()
+        #expect(getenv("ZMX_SESSION") == nil)
+    }
+}
+
 /// Drives the async `reapOrphans` over an injected `ZmxClient` (no real
 /// subprocess), so the known-set mapping, the nil-probe short-circuit, and the
 /// kill fan-out are covered end to end — not just the pure `ZmxReaper.orphans`.

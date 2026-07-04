@@ -6,15 +6,23 @@ import Testing
 struct CommandSourceTests {
     // MARK: - Helpers
 
-    private func makeContext(seedProject: Bool = true) -> (PaletteContext, AppState) {
+    private func makeContext(
+        seedProject: Bool = true,
+        projectPath: String = "/tmp"
+    ) -> (PaletteContext, AppState) {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
         let storeTmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
-        let state = AppState(workspaceStore: WorkspaceStore(fileURL: tmp))
+        let filesDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: tmp),
+            projectFiles: ProjectFileStore(directoryURL: filesDir)
+        )
         let store = ProjectStore(fileURL: storeTmp)
         if seedProject {
-            let p = Project(name: "proj", path: "/tmp", sortOrder: 0)
+            let p = Project(name: "proj", path: projectPath, sortOrder: 0)
             store.add(p)
             state.selectProject(p)
         }
@@ -155,5 +163,94 @@ struct CommandSourceTests {
         state.postPaletteAction?()
         await flushMainQueue()
         #expect(state.renamingProjectID == nil)
+    }
+
+    // MARK: - applyLayout muted state
+
+    private func writeProjectFile(_ yaml: String, in state: AppState) {
+        let dir = state.projectFiles.directoryURL
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? yaml.write(to: dir.appendingPathComponent("p.yaml"), atomically: true, encoding: .utf8)
+    }
+
+    @Test
+    func applyLayout_is_muted_with_hint_when_no_project_file_exists() throws {
+        let (ctx, _) = makeContext()
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(!item.isEnabled)
+        #expect(item.subtitle != nil)
+    }
+
+    @Test
+    func applyLayout_is_muted_when_project_file_has_no_tabs() throws {
+        let (ctx, state) = makeContext()
+        writeProjectFile("path: /tmp\n", in: state)
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(!item.isEnabled)
+    }
+
+    @Test
+    func applyLayout_is_enabled_when_project_file_declares_tabs() throws {
+        let (ctx, state) = makeContext()
+        writeProjectFile("path: /tmp\ntabs:\n  - {}\n", in: state)
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(item.isEnabled)
+    }
+
+    @Test
+    func applyLayout_stays_enabled_when_project_file_is_invalid() throws {
+        // Invoking it surfaces the parse-error dialog — hiding or muting the
+        // command would bury the error instead.
+        let (ctx, state) = makeContext()
+        writeProjectFile("path: /tmp\ntabs:\n  - split: { direction: horizontal, first: {} }\n", in: state)
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(item.isEnabled)
+    }
+
+    @Test
+    func applyLayout_is_hidden_without_active_project() {
+        let (ctx, _) = makeContext(seedProject: false)
+        #expect(findItem(title: AppCommand.applyLayout.title, in: ctx) == nil)
+    }
+
+    @Test
+    func applyLayout_is_enabled_when_only_a_legacy_layout_exists() throws {
+        // Deprecated migration path (#114): no central file, but the project
+        // carries a committed `.macterm/layout.yaml` — invoking the command
+        // imports it, so it must not be muted. The legacy file lands *after*
+        // the project is open (as for any pre-central-directory project,
+        // whose snapshot suppresses the first-open import).
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-cmdlegacy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (ctx, _) = makeContext(projectPath: dir.path)
+
+        let legacy = dir.appendingPathComponent(".macterm/layout.yaml")
+        try FileManager.default.createDirectory(
+            at: legacy.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "tabs:\n  - {}\n".write(to: legacy, atomically: true, encoding: .utf8)
+
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(item.isEnabled)
+    }
+
+    @Test
+    func applyLayout_subtitle_names_duplicate_project_files() throws {
+        let (ctx, state) = makeContext()
+        let dir = state.projectFiles.directoryURL
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "path: /tmp\ntabs:\n  - {}\n"
+            .write(to: dir.appendingPathComponent("a.yaml"), atomically: true, encoding: .utf8)
+        try "path: /tmp\n"
+            .write(to: dir.appendingPathComponent("b.yaml"), atomically: true, encoding: .utf8)
+
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(item.isEnabled)
+        let subtitle = try #require(item.subtitle)
+        #expect(subtitle.contains("a.yaml"))
+        #expect(subtitle.contains("b.yaml"))
     }
 }
