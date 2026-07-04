@@ -11,7 +11,12 @@ struct CommandSourceTests {
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
         let storeTmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
-        let state = AppState(workspaceStore: WorkspaceStore(fileURL: tmp))
+        let filesDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: tmp),
+            projectFiles: ProjectFileStore(directoryURL: filesDir)
+        )
         let store = ProjectStore(fileURL: storeTmp)
         if seedProject {
             let p = Project(name: "proj", path: "/tmp", sortOrder: 0)
@@ -155,5 +160,53 @@ struct CommandSourceTests {
         state.postPaletteAction?()
         await flushMainQueue()
         #expect(state.renamingProjectID == nil)
+    }
+
+    // MARK: - applyLayout muted state
+
+    private func writeProjectFile(_ yaml: String, in state: AppState) {
+        let dir = state.projectFiles.directoryURL
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? yaml.write(to: dir.appendingPathComponent("p.yaml"), atomically: true, encoding: .utf8)
+    }
+
+    @Test
+    func applyLayout_is_muted_with_hint_when_no_project_file_exists() throws {
+        let (ctx, _) = makeContext()
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(!item.isEnabled)
+        #expect(item.subtitle != nil)
+    }
+
+    @Test
+    func applyLayout_is_muted_when_project_file_has_no_tabs() throws {
+        let (ctx, state) = makeContext()
+        writeProjectFile("path: /tmp\n", in: state)
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(!item.isEnabled)
+    }
+
+    @Test
+    func applyLayout_is_enabled_when_project_file_declares_tabs() throws {
+        let (ctx, state) = makeContext()
+        writeProjectFile("path: /tmp\ntabs:\n  - {}\n", in: state)
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(item.isEnabled)
+    }
+
+    @Test
+    func applyLayout_stays_enabled_when_project_file_is_invalid() throws {
+        // Invoking it surfaces the parse-error dialog — hiding or muting the
+        // command would bury the error instead.
+        let (ctx, state) = makeContext()
+        writeProjectFile("path: /tmp\ntabs:\n  - split: { direction: horizontal, first: {} }\n", in: state)
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(item.isEnabled)
+    }
+
+    @Test
+    func applyLayout_is_hidden_without_active_project() {
+        let (ctx, _) = makeContext(seedProject: false)
+        #expect(findItem(title: AppCommand.applyLayout.title, in: ctx) == nil)
     }
 }

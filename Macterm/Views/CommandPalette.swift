@@ -222,21 +222,21 @@ struct CommandPalettePanel: View {
             refresh()
         }
         .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { _ in
-            if selectedIndex > 0 { selectedIndex -= 1 }
+            moveSelection(-1)
             return .handled
         }
         .onKeyPress(keys: [.downArrow], phases: [.down, .repeat]) { _ in
-            if selectedIndex < flatItems.count - 1 { selectedIndex += 1 }
+            moveSelection(1)
             return .handled
         }
         .onKeyPress(characters: .init(charactersIn: "p"), phases: [.down, .repeat]) { press in
             guard press.modifiers == .control else { return .ignored }
-            if selectedIndex > 0 { selectedIndex -= 1 }
+            moveSelection(-1)
             return .handled
         }
         .onKeyPress(characters: .init(charactersIn: "n"), phases: [.down, .repeat]) { press in
             guard press.modifiers == .control else { return .ignored }
-            if selectedIndex < flatItems.count - 1 { selectedIndex += 1 }
+            moveSelection(1)
             return .handled
         }
         .onKeyPress(.tab) {
@@ -250,6 +250,26 @@ struct CommandPalettePanel: View {
 
     private func refresh() {
         sections = engine.search(query)
+        // Never rest the selection on a muted row (e.g. when it's the top
+        // match after a query change).
+        if flatItems.indices.contains(selectedIndex), !flatItems[selectedIndex].isEnabled,
+           let firstEnabled = flatItems.indices.first(where: { flatItems[$0].isEnabled })
+        {
+            selectedIndex = firstEnabled
+        }
+    }
+
+    /// Step the keyboard selection by `delta`, skipping disabled rows so
+    /// Enter can never land on one. When only disabled rows remain in that
+    /// direction, the selection stays put.
+    private func moveSelection(_ delta: Int) {
+        var idx = selectedIndex + delta
+        while idx >= 0, idx < flatItems.count, !flatItems[idx].isEnabled {
+            idx += delta
+        }
+        if idx >= 0, idx < flatItems.count {
+            selectedIndex = idx
+        }
     }
 
     /// Select all text in the focused search field via the window's field
@@ -324,6 +344,10 @@ struct CommandPalettePanel: View {
     private func execute() {
         guard selectedIndex >= 0, selectedIndex < flatItems.count else { return }
         let item = flatItems[selectedIndex]
+        // A muted row explains why it can't run; Enter on it is a no-op that
+        // keeps the palette open (selection normally can't land here — this
+        // guards the mouse-hover path).
+        guard item.isEnabled else { return }
         // Executing a command finishes the task, so the next open should start
         // fresh — only a dismissal (Escape / click-outside) preserves the query.
         query = ""
@@ -355,11 +379,11 @@ private struct CommandPaletteRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.system(size: 13))
-                    .foregroundStyle(MactermTheme.fg)
+                    .foregroundStyle(item.isEnabled ? MactermTheme.fg : MactermTheme.fgDim)
                 if let subtitle = item.subtitle {
                     Text(subtitle)
                         .font(.system(size: 11))
-                        .foregroundStyle(MactermTheme.fgMuted)
+                        .foregroundStyle(item.isEnabled ? MactermTheme.fgMuted : MactermTheme.fgDim)
                         .lineLimit(1)
                 }
             }

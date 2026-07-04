@@ -121,19 +121,22 @@ extension AppCommand {
             else { return nil }
             return { ctx.appState.replaceProjectPathWithCurrentDir(projectStore: ctx.projectStore) }
         case .applyLayout:
-            guard let projectID, let current else { return nil }
-            return {
-                if let error = ctx.appState.applyLayout(projectID: projectID, projectName: current.name, projectRoot: current.path) {
-                    presentLayoutError(error, verb: "apply")
-                }
+            // Requires an applicable central file. `.invalid` stays enabled on
+            // purpose: invoking it surfaces the parse-error dialog instead of
+            // failing silently. `.none`/`.emptyTabs` disable the menu item and
+            // mute the palette row (see `paletteDisabledHint`).
+            guard let current else { return nil }
+            switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
+            case .applicable,
+                 .invalid:
+                return { ctx.appState.applyLayoutPresentingError(current) }
+            case .none,
+                 .emptyTabs:
+                return nil
             }
         case .saveLayout:
-            guard let projectID, let current else { return nil }
-            return {
-                if let error = ctx.appState.saveLayout(projectID: projectID, projectName: current.name, projectRoot: current.path) {
-                    presentLayoutError(error, verb: "save")
-                }
-            }
+            guard let current else { return nil }
+            return { ctx.appState.saveLayoutPresentingError(current) }
         case .nextProject:
             return { ctx.appState.selectNextProject(projects: ctx.projectStore.projects) }
         case .previousProject:
@@ -157,15 +160,24 @@ extension AppCommand {
             }
         }
     }
-}
 
-/// Surface a layout apply/save failure (most commonly a missing or unparseable
-/// `.macterm/layout.yaml`) as a simple modal alert.
-@MainActor
-private func presentLayoutError(_ error: Error, verb: String) {
-    let alert = NSAlert()
-    alert.alertStyle = .warning
-    alert.messageText = "Couldn't \(verb) layout"
-    alert.informativeText = error.localizedDescription
-    alert.runModal()
+    /// Why this command shows muted-but-visible in the palette, or nil when it
+    /// should follow the default rule (hidden when `action(in:)` is nil).
+    /// Only "Apply Layout" opts in: a missing or tab-less project file is a
+    /// state worth *seeing* in the palette — hiding the command entirely would
+    /// read as a bug, and the hint says what's missing. The menu bar item
+    /// keeps the plain disabled look either way.
+    @MainActor
+    func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
+        guard self == .applyLayout,
+              let projectID = ctx.appState.activeProjectID,
+              let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
+        else { return nil }
+        return switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
+        case .none: "No project file for this project — use “Save Layout” to create one"
+        case .emptyTabs: "The project file declares no tabs"
+        case .applicable,
+             .invalid: nil
+        }
+    }
 }

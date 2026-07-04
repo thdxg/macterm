@@ -57,31 +57,32 @@ final class AppState {
 
     var pendingRemoveProject: PendingRemoveProject?
 
-    /// A reconcile plan staged for confirmation — because applying it would
-    /// close panes / end their processes, and/or the file names a different
-    /// project than the active one.
+    /// A reconcile plan staged for confirmation because applying it would
+    /// close panes / end their processes. (There's no name-mismatch prompt
+    /// anymore: central project files are matched by *path*, so a differing
+    /// `name:` only means the project was renamed since the last save —
+    /// expected drift, not a wrong-file hazard.)
     struct PendingLayoutApply {
         let projectID: UUID
         let plan: LayoutReconciler.Plan
-        /// The project name the file was saved for, when it differs from the
-        /// active project; nil when names match (or the file omits one).
-        let mismatchedProjectName: String?
-        /// The active project's name, for the mismatch message.
-        let currentProjectName: String
 
-        /// The confirmation dialog body, combining the reasons this apply needs
-        /// confirming (project-name mismatch and/or pane destruction).
         var confirmationMessage: String {
-            var parts: [String] = []
-            if let saved = mismatchedProjectName {
-                parts.append("This layout was saved for “\(saved)”, but you're applying it to “\(currentProjectName)”.")
-            }
-            if plan.isDestructive {
-                parts.append("Applying it will close some panes and end the processes running in them.")
-            }
-            return parts.joined(separator: "\n\n")
+            "Applying this layout will close some panes and end the processes running in them."
         }
     }
+
+    /// A layout apply/save/import failure awaiting presentation (alert in
+    /// `MactermApp`). Fed by the explicit palette/menu commands and by the
+    /// silent first-open auto-apply — an invalid project file must always
+    /// surface a dialog, never fail silently.
+    struct LayoutError: Identifiable {
+        let id = UUID()
+        /// "apply" / "save" / "import" — slotted into the alert title.
+        let verb: String
+        let message: String
+    }
+
+    var pendingLayoutError: LayoutError?
 
     // Tab cycling state (Ctrl+Tab)
     private var tabCycleOrder: [UUID] = []
@@ -177,8 +178,17 @@ final class AppState {
     @ObservationIgnored
     private var zmxRetryBudget = 8
 
-    init(workspaceStore: WorkspaceStore = WorkspaceStore()) {
+    /// Central project-file store (`~/.config/macterm/projects`). Injectable
+    /// so tests never read or write the user's real directory.
+    @ObservationIgnored
+    let projectFiles: ProjectFileStore
+
+    init(
+        workspaceStore: WorkspaceStore = WorkspaceStore(),
+        projectFiles: ProjectFileStore = ProjectFileStore()
+    ) {
         self.workspaceStore = workspaceStore
+        self.projectFiles = projectFiles
         autoTileObserver = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,
             object: nil,
@@ -470,16 +480,44 @@ final class AppState {
     }
 
     /// On a project's first open this session (no live/restored workspace yet),
-    /// build its workspace from `.macterm/layout.yaml` if present. Because there
-    /// are no live panes, the apply is pure-spawn — never destructive, never
-    /// prompts. A restored snapshot already populates `workspaces`, so it takes
-    /// precedence; if there's no layout file this no-ops and `ensureWorkspace`
-    /// creates the default single-pane workspace.
+    /// build its workspace from the central project file matching its path.
+    /// Because there are no live panes, the apply is pure-spawn — never
+    /// destructive, never prompts. A restored snapshot already populates
+    /// `workspaces`, so it takes precedence; with no applicable file this
+    /// no-ops and `ensureWorkspace` creates the default single-pane workspace.
     private func autoApplyLayoutOnFirstOpen(_ project: Project) {
-        guard workspaces[project.id] == nil,
-              LayoutFile.exists(atProjectRoot: project.path)
-        else { return }
-        applyLayout(projectID: project.id, projectName: project.name, projectRoot: project.path)
+        guard workspaces[project.id] == nil else { return }
+        switch projectFiles.applyState(forProjectPath: project.path) {
+        case .applicable:
+            applyLayoutPresentingError(project)
+        case .invalid:
+            // Surface the parse error; the default workspace is created after.
+            applyLayoutPresentingError(project)
+        case .emptyTabs:
+            break
+        case .none:
+            importLegacyLayout(project)
+        }
+    }
+
+    /// Deprecated seed path — remove next release (#114): on first open with
+    /// no central file, a parseable in-repo `.macterm/layout.yaml` is imported
+    /// into the central directory, then applied from there. An unparseable
+    /// legacy file surfaces a dialog and imports nothing.
+    private func importLegacyLayout(_ project: Project) {
+        guard LayoutFile.exists(atProjectRoot: project.path) else { return }
+        do {
+            let legacy = try LayoutFile.load(fromProjectRoot: project.path)
+            try projectFiles.write(
+                ProjectFile(name: project.name, path: project.path, tabs: legacy.tabs),
+                projectName: project.name
+            )
+            logger.info("Imported legacy layout for \(project.name, privacy: .public)")
+            applyLayoutPresentingError(project)
+        } catch {
+            logger.error("Legacy layout import failed: \(error, privacy: .public)")
+            pendingLayoutError = LayoutError(verb: "import", message: error.localizedDescription)
+        }
     }
 
     /// Shows an open panel, adds the selected directory as a project, and selects it.
@@ -835,48 +873,53 @@ final class AppState {
 
     // MARK: - Layout files
 
-    /// Apply a project's declarative layout to its live workspace, reconciling
-    /// with minimal destruction (see `LayoutReconciler`). A non-destructive
-    /// reconcile (only spawns + resizes) runs immediately; one that would
-    /// terminate panes/tabs is staged in `pendingLayoutApply` for confirmation.
-    /// Returns an error to surface if the file is missing or unparseable.
+    /// Apply the central project file matching `project.path` to its live
+    /// workspace, reconciling with minimal destruction (see
+    /// `LayoutReconciler`). A non-destructive reconcile (only spawns +
+    /// resizes) runs immediately; one that would terminate panes/tabs is
+    /// staged in `pendingLayoutApply` for confirmation. Returns an error to
+    /// surface when no file matches, the file is unparseable, or it declares
+    /// no tabs (an empty declaration must never plan "close every tab").
     @discardableResult
-    func applyLayout(projectID: UUID, projectName: String, projectRoot: String) -> Error? {
-        logger.info("applyLayout: project=\(projectName, privacy: .public)")
-        let file: LayoutFile
+    func applyLayout(project: Project) -> Error? {
+        logger.info("applyLayout: project=\(project.name, privacy: .public)")
+        let layout: LayoutFile
         do {
-            file = try LayoutFile.load(fromProjectRoot: projectRoot)
+            guard let file = try projectFiles.loadFull(forProjectPath: project.path) else {
+                return LayoutFileError.noProjectFile(projectPath: project.path)
+            }
+            guard let bridged = file.layoutFile else {
+                return LayoutFileError.noTabs
+            }
+            layout = bridged
         } catch {
             logger.error("applyLayout failed to load: \(error, privacy: .public)")
             return error
         }
         let plan = LayoutReconciler.plan(
-            layout: file,
-            workspace: workspaces[projectID],
-            projectRoot: projectRoot,
-            projectID: projectID
+            layout: layout,
+            workspace: workspaces[project.id],
+            projectRoot: project.path,
+            projectID: project.id
         )
         let planDesc = "tabs=\(plan.tabs.count) destroy=\(plan.panesToDestroy.count) closeTabs=\(plan.tabsToClose.count)"
         logger.info("applyLayout plan: \(planDesc, privacy: .public)")
-        // The file names a different project than the one we're applying to.
-        // Optional in the format, so only flag when present and mismatched.
-        let mismatchedName: String? = {
-            guard let saved = file.name, saved != projectName else { return nil }
-            return saved
-        }()
-        // Confirm if applying would destroy panes OR the project name mismatches.
-        if plan.isDestructive || mismatchedName != nil {
-            logger.info("applyLayout: staged for confirmation, mismatch=\(mismatchedName ?? "none", privacy: .public)")
-            pendingLayoutApply = PendingLayoutApply(
-                projectID: projectID,
-                plan: plan,
-                mismatchedProjectName: mismatchedName,
-                currentProjectName: projectName
-            )
+        if plan.isDestructive {
+            logger.info("applyLayout: staged for confirmation")
+            pendingLayoutApply = PendingLayoutApply(projectID: project.id, plan: plan)
         } else {
-            executeLayoutPlan(plan, projectID: projectID)
+            executeLayoutPlan(plan, projectID: project.id)
         }
         return nil
+    }
+
+    /// `applyLayout` + error presentation: failures land in
+    /// `pendingLayoutError` (the alert in `MactermApp`). The shared entry
+    /// point for the palette/menu command and the first-open auto-apply.
+    func applyLayoutPresentingError(_ project: Project) {
+        if let error = applyLayout(project: project) {
+            pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription)
+        }
     }
 
     func confirmPendingLayoutApply() {
@@ -889,18 +932,32 @@ final class AppState {
         pendingLayoutApply = nil
     }
 
-    /// Save the active project's live workspace to its `.macterm/layout.yaml`.
+    /// Save the project's live workspace as its central project file — one of
+    /// the two ways a project file ever changes (the other is the user's own
+    /// editor). Creates the file when none declares this path yet; realigns
+    /// the filename to the current name slug when it drifted.
     @discardableResult
-    func saveLayout(projectID: UUID, projectName: String, projectRoot: String) -> Error? {
-        logger.info("saveLayout: project=\(projectName, privacy: .public)")
-        guard let ws = workspaces[projectID] else { return nil }
+    func saveLayout(project: Project) -> Error? {
+        logger.info("saveLayout: project=\(project.name, privacy: .public)")
+        guard let ws = workspaces[project.id] else { return nil }
         do {
-            try LayoutSerializer.write(ws, projectName: projectName, projectRoot: projectRoot)
+            let layout = LayoutSerializer.layout(for: ws, projectName: project.name, projectRoot: project.path)
+            try projectFiles.write(
+                ProjectFile(name: project.name, path: project.path, tabs: layout.tabs),
+                projectName: project.name
+            )
             logger.info("saveLayout succeeded: tabs=\(ws.tabs.count, privacy: .public)")
             return nil
         } catch {
             logger.error("saveLayout failed: \(error, privacy: .public)")
             return error
+        }
+    }
+
+    /// `saveLayout` + error presentation, mirroring `applyLayoutPresentingError`.
+    func saveLayoutPresentingError(_ project: Project) {
+        if let error = saveLayout(project: project) {
+            pendingLayoutError = LayoutError(verb: "save", message: error.localizedDescription)
         }
     }
 

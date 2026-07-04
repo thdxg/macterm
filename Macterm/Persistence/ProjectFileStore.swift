@@ -66,10 +66,8 @@ struct ProjectFileStore {
         if matches.count > 1 {
             let ignored = matches.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
             let winner = matches[0].url.lastPathComponent
-            logger
-                .warning(
-                    "Duplicate files declare \(projectPath, privacy: .public): using \(winner, privacy: .public), ignoring \(ignored, privacy: .public)"
-                )
+            logger.warning("Duplicate files declare \(projectPath, privacy: .public)")
+            logger.warning("Using \(winner, privacy: .public), ignoring \(ignored, privacy: .public)")
         }
         return matches.first
     }

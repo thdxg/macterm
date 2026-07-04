@@ -83,6 +83,21 @@ struct MactermApp: App {
                         Text(pending.confirmationMessage)
                     }
                 }
+                .alert(
+                    "Couldn't \(appState.pendingLayoutError?.verb ?? "apply") layout",
+                    isPresented: Binding(
+                        get: { appState.pendingLayoutError != nil },
+                        set: { if !$0 { appState.pendingLayoutError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        appState.pendingLayoutError = nil
+                    }
+                } message: {
+                    if let pending = appState.pendingLayoutError {
+                        Text(pending.message)
+                    }
+                }
                 .onAppear {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore
