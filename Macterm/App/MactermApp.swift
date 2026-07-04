@@ -50,6 +50,22 @@ struct MactermApp: App {
                     Text("A process is still running in this tab. Closing the tab ends it.")
                 }
                 .alert(
+                    "Unload project with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingUnloadProject != nil },
+                        set: { if !$0 { appState.cancelPendingUnloadProject() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingUnloadProject()
+                    }
+                    Button("Unload", role: .destructive) {
+                        appState.confirmPendingUnloadProject()
+                    }
+                } message: {
+                    Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
+                }
+                .alert(
                     "Remove project with running processes?",
                     isPresented: Binding(
                         get: { appState.pendingRemoveProject != nil },
