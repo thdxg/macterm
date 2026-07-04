@@ -2,6 +2,7 @@
 set -euo pipefail
 
 FORK_REPO="thdxg/ghostty"
+ZMX_REPO="thdxg/zmx"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # Marker for the downloaded upstream resources. The tarball mirrors a real
 # Ghostty.app Resources layout: ghostty/{themes,shell-integration} plus a
@@ -9,14 +10,20 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # presence signals the download ran. Keyed on terminfo/ so checkouts predating
 # the terminfo bundling (or the flat-layout interim) re-download it.
 RESOURCES_MARKER="Macterm/Resources/terminfo"
+# Prebuilt zmx session multiplexer (session persistence). Built by thdxg/zmx CI
+# and downloaded here, mirroring GhosttyKit — never compiled locally (zig).
+# Embedded into the bundle at Contents/Resources/zmx/zmx by embed-zmx.sh.
+ZMX_BIN="Macterm/Resources/zmx/zmx"
 
 need_xcframework=true
 need_resources=true
+need_zmx=true
 [[ -d "$XCFRAMEWORK_DIR" ]] && need_xcframework=false
 [[ -d "$RESOURCES_MARKER" ]] && need_resources=false
+[[ -x "$ZMX_BIN" ]] && need_zmx=false
 
-if ! $need_xcframework && ! $need_resources; then
-  echo "GhosttyKit and resources already present"
+if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
+  echo "GhosttyKit, resources, and zmx already present"
   exit 0
 fi
 
@@ -47,4 +54,23 @@ if $need_resources; then
   mkdir -p Macterm/Resources
   tar xzf ghostty-resources.tar.gz -C Macterm/Resources
   rm ghostty-resources.tar.gz
+fi
+
+if $need_zmx; then
+  # Prebuilt universal (arm64+x86_64) zmx binary from the thdxg/zmx release.
+  # Universal so it execs on both Apple Silicon and Intel, matching Macterm's
+  # universal app build. Shipped as a tarball (preserves the executable bit
+  # through the GitHub asset round-trip) holding a single `zmx` binary;
+  # extracted to Macterm/Resources/zmx/zmx (gitignored).
+  ZMX_TAG=$(gh release list --repo "$ZMX_REPO" --limit 1 --json tagName -q ".[0].tagName")
+  if [[ -z "$ZMX_TAG" ]]; then
+    echo "Error: No zmx releases found in $ZMX_REPO" >&2
+    exit 1
+  fi
+  gh release download "$ZMX_TAG" --pattern "zmx-universal-macos.tar.gz" --repo "$ZMX_REPO"
+  rm -rf Macterm/Resources/zmx
+  mkdir -p Macterm/Resources/zmx
+  tar xzf zmx-universal-macos.tar.gz -C Macterm/Resources/zmx
+  chmod +x Macterm/Resources/zmx/zmx
+  rm zmx-universal-macos.tar.gz
 fi
