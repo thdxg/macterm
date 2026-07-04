@@ -652,4 +652,76 @@ struct AppStateTests {
         let ws = Workspace(projectID: pid, tabs: [tab], activeTabID: tab.id)
         #expect(AppState.panesToWarm(in: ws).isEmpty)
     }
+
+    // MARK: - Occlusion-aware quiet-settle
+
+    /// Seed a project whose single pane is running from terminal activity
+    /// that went quiet long ago (well past the 3s settle threshold).
+    private func seedQuietRunningPane(
+        _ state: AppState
+    ) throws -> Pane {
+        let p = seedProject(state)
+        let pane = try #require(state.workspaces[p.id]?.activeTab?.splitRoot.allPanes().first)
+        pane.recordUserInteraction()
+        pane.markTerminalActivity(at: Date().addingTimeInterval(-10))
+        #expect(pane.executionState == .running)
+        return pane
+    }
+
+    private func withStatusIndicator(_ body: () throws -> Void) rethrows {
+        let prior = Preferences.shared.showTabStatusIndicator
+        Preferences.shared.showTabStatusIndicator = true
+        defer { Preferences.shared.showTabStatusIndicator = prior }
+        try body()
+    }
+
+    @Test
+    func occluded_pane_does_not_quiet_settle() throws {
+        try withStatusIndicator {
+            let state = makeAppState()
+            let pane = try seedQuietRunningPane(state)
+            state.paneIsOccluded = { _ in true }
+
+            state.refreshAllForegroundProcesses()
+            // 10s of silence, but the renderer was parked — silence proves
+            // nothing, the pane must stay running.
+            #expect(pane.executionState == .running)
+        }
+    }
+
+    @Test
+    func visible_pane_still_quiet_settles() throws {
+        try withStatusIndicator {
+            let state = makeAppState()
+            let pane = try seedQuietRunningPane(state)
+            state.paneIsOccluded = { _ in false }
+
+            state.refreshAllForegroundProcesses()
+            #expect(pane.executionState == .done)
+        }
+    }
+
+    @Test
+    func deoccluded_pane_gets_fresh_quiet_window_before_settling() throws {
+        try withStatusIndicator {
+            let state = makeAppState()
+            let pane = try seedQuietRunningPane(state)
+
+            // Tick 1: occluded — no settle.
+            state.paneIsOccluded = { _ in true }
+            state.refreshAllForegroundProcesses()
+            #expect(pane.executionState == .running)
+
+            // Tick 2: now visible. The stale 10s-old activity timestamp must
+            // not settle it instantly — `.done` would stick, since activity
+            // can never revive a done pane. The window restarts instead.
+            state.paneIsOccluded = { _ in false }
+            state.refreshAllForegroundProcesses()
+            #expect(pane.executionState == .running)
+
+            // With heartbeats back and genuine quiet elapsing, it settles.
+            pane.settleTerminalActivityIfQuiet(now: Date().addingTimeInterval(4))
+            #expect(pane.executionState == .done)
+        }
+    }
 }

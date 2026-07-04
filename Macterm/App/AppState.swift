@@ -88,6 +88,21 @@ final class AppState {
     @ObservationIgnored
     private var processNameTimer: Timer?
 
+    /// Whether a pane's surface is occluded — its renderer parked by
+    /// `ghostty_surface_set_occlusion`, so render/scrollbar heartbeats are
+    /// suppressed and silence says nothing about completion. Injectable for
+    /// tests. "No window" counts as occluded, which also covers panes
+    /// incubated off-screen (the incubator window is never visible).
+    @ObservationIgnored
+    var paneIsOccluded: (Pane) -> Bool = { pane in
+        !(pane.nsView?.window?.occlusionState.contains(.visible) ?? false)
+    }
+
+    /// Panes that were occluded on the previous poll tick, so the visible
+    /// transition can restart their quiet window before settling resumes.
+    @ObservationIgnored
+    private var previouslyOccludedPanes: Set<UUID> = []
+
     init(workspaceStore: WorkspaceStore = WorkspaceStore()) {
         self.workspaceStore = workspaceStore
         autoTileObserver = NotificationCenter.default.addObserver(
@@ -118,12 +133,14 @@ final class AppState {
         // this feature.
         let trackExecution = Preferences.shared.showTabStatusIndicator
         var didAcknowledgeCompletion = false
+        var seenPanes: Set<UUID> = []
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
+                    seenPanes.insert(pane.id)
                     pane.refreshForegroundProcess(trackExecution: trackExecution)
                     if trackExecution {
-                        pane.settleTerminalActivityIfQuiet()
+                        settleIfVisible(pane)
                     }
                     didAcknowledgeCompletion = acknowledgeFinishedCommandIfActive(
                         paneID: pane.id,
@@ -133,7 +150,24 @@ final class AppState {
                 }
             }
         }
+        previouslyOccludedPanes.formIntersection(seenPanes)
         if didAcknowledgeCompletion { saveWorkspaces() }
+    }
+
+    /// Quiet-settle only while the surface actually renders: an occluded pane
+    /// emits no activity heartbeats (its renderer is parked), so settling it
+    /// would misread suppressed output as completion. On the occluded→visible
+    /// edge the quiet window restarts, giving a still-running program time to
+    /// deliver heartbeats again before the settle can fire.
+    private func settleIfVisible(_ pane: Pane) {
+        if paneIsOccluded(pane) {
+            previouslyOccludedPanes.insert(pane.id)
+            return
+        }
+        if previouslyOccludedPanes.remove(pane.id) != nil {
+            pane.refreshTerminalActivityWindow()
+        }
+        pane.settleTerminalActivityIfQuiet()
     }
 
     private func recordProjectVisit(_ projectID: UUID) {
