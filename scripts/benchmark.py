@@ -278,11 +278,16 @@ def cmd_run(args):
     print(f"wrote {args.out}")
 
 
+# A delta is significant when it clears BOTH bars: the relative threshold
+# and the metric's absolute noise floor. The floor keeps tiny absolute
+# swings (minimized CPU going 0.03 → 0.05 is "+66%") from flagging noise.
+THRESHOLD_PCT = 25
 METRICS = (
-    ("cpu_pct", "CPU %", "{:.2f}"),
-    ("rss_mb", "Memory (RSS MB)", "{:.1f}"),
-    ("cpu_ms_per_s", "CPU ms/s (powermetrics)", "{:.1f}"),
-    ("wakeups_per_s", "Wakeups/s (powermetrics)", "{:.1f}"),
+    # key, table label, format, absolute noise floor
+    ("cpu_pct", "CPU %", "{:.2f}", 0.5),
+    ("rss_mb", "Memory (RSS MB)", "{:.1f}", 25.0),
+    ("cpu_ms_per_s", "CPU ms/s (powermetrics)", "{:.1f}", 5.0),
+    ("wakeups_per_s", "Wakeups/s (powermetrics)", "{:.1f}", 50.0),
 )
 
 
@@ -290,15 +295,26 @@ def fmt(value, pattern):
     return pattern.format(value) if value is not None else "—"
 
 
-def delta_cell(base, current):
+def significant_pct(base, current, floor):
+    """Signed % change if significant (positive = regression), else None."""
+    if base is None or current is None or base == 0:
+        return None
+    diff = current - base
+    pct = diff / base * 100
+    if abs(pct) >= THRESHOLD_PCT and abs(diff) >= floor:
+        return pct
+    return None
+
+
+def delta_cell(base, current, floor):
     if base is None or current is None:
         return "—"
     diff = current - base
     if base == 0:
         return "—" if diff == 0 else f"+{diff:.2f}"
-    pct = diff / base * 100
-    arrow = "🔺" if pct > 25 else ("🔻" if pct < -25 else "")
-    return f"{pct:+.0f}% {arrow}".strip()
+    sig = significant_pct(base, current, floor)
+    arrow = "" if sig is None else ("🔺" if sig > 0 else "🔻")
+    return f"{diff / base * 100:+.0f}% {arrow}".strip()
 
 
 def cmd_report(args):
@@ -319,10 +335,11 @@ def cmd_report(args):
     else:
         lines += ["| State | Metric | Value |", "|---|---|---:|"]
 
+    regressions, improvements = [], []
     for state in STATES:
         cur_state = current["states"].get(state, {})
         base_state = (baseline or {}).get("states", {}).get(state, {})
-        for key, label, pattern in METRICS:
+        for key, label, pattern, floor in METRICS:
             cur = cur_state.get(key)
             if cur is None and (not baseline or base_state.get(key) is None):
                 continue
@@ -330,21 +347,63 @@ def cmd_report(args):
                 base = base_state.get(key)
                 lines.append(
                     f"| {state} | {label} | {fmt(base, pattern)} "
-                    f"| {fmt(cur, pattern)} | {delta_cell(base, cur)} |"
+                    f"| {fmt(cur, pattern)} | {delta_cell(base, cur, floor)} |"
                 )
+                sig = significant_pct(base, cur, floor)
+                if sig is not None:
+                    bucket = regressions if sig > 0 else improvements
+                    bucket.append({
+                        "state": state,
+                        "metric": label,
+                        "base": base,
+                        "current": cur,
+                        "pct": round(sig),
+                        "pattern": pattern,
+                    })
             else:
                 lines.append(f"| {state} | {label} | {fmt(cur, pattern)} |")
+
+    for entries, label_name, verdict_line in (
+        (regressions, "benchmark-regression", "regressed"),
+        (improvements, "benchmark-improvement", "improved"),
+    ):
+        if not entries:
+            continue
+        lines += [
+            "",
+            f"### {'⚠️' if verdict_line == 'regressed' else '🎉'} Labeled `{label_name}`",
+            "",
+            f"This PR is labeled `{label_name}` because these metrics {verdict_line} "
+            f"by ≥{THRESHOLD_PCT}% vs {base_ref} (beyond each metric's absolute noise floor):",
+            "",
+        ]
+        lines += [
+            f"- **{e['state']} — {e['metric']}**: "
+            f"{fmt(e['base'], e['pattern'])} → {fmt(e['current'], e['pattern'])} ({e['pct']:+d}%)"
+            for e in entries
+        ]
 
     lines += [
         "",
         f"_{current['seconds_per_state']}s sampling window per state; CPU % is the "
         "process CPU-time delta over the window. Runs land on different shared "
-        "runners, so treat small deltas as noise — 🔺/🔻 marks ±25%._",
+        f"runners, so treat small deltas as noise — 🔺/🔻 marks changes ≥{THRESHOLD_PCT}% "
+        "that also clear the metric's absolute noise floor, and those add the "
+        "`benchmark-regression` / `benchmark-improvement` label._",
     ]
     if baseline is None:
         lines.append("")
         lines.append("_No main-branch baseline found; showing absolute values only._")
     print("\n".join(lines))
+
+    if args.verdict:
+        with open(args.verdict, "w") as f:
+            json.dump({
+                "regression": bool(regressions),
+                "improvement": bool(improvements),
+                "regressions": regressions,
+                "improvements": improvements,
+            }, f, indent=2)
 
 
 def main():
@@ -362,6 +421,7 @@ def main():
     report = sub.add_parser("report", help="render results as markdown")
     report.add_argument("results", help="results JSON from `run`")
     report.add_argument("--baseline", help="baseline results JSON to compare against")
+    report.add_argument("--verdict", help="also write a labeling verdict JSON to this path")
     report.set_defaults(func=cmd_report)
 
     args = parser.parse_args()

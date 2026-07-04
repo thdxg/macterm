@@ -44,6 +44,7 @@ jobs:
       contents: read
       actions: read # download the baseline artifact from a main run
       pull-requests: write # upsert the comparison comment
+      issues: write # create/apply the benchmark-regression/-improvement labels
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -91,10 +92,38 @@ jobs:
 
       - name: Report
         run: |
-          args=(build/benchmark/results.json)
+          args=(build/benchmark/results.json --verdict build/benchmark/verdict.json)
           [ -f baseline/results.json ] && args+=(--baseline baseline/results.json)
           python3 scripts/benchmark.py report "${args[@]}" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Label PR on significant deltas
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          verdict=build/benchmark/verdict.json
+          regression=$(jq -r '.regression' "$verdict" 2>/dev/null || echo false)
+          improvement=$(jq -r '.improvement' "$verdict" 2>/dev/null || echo false)
+          repo='${{ github.repository }}'
+          pr='${{ github.event.pull_request.number }}'
+          gh label create benchmark-regression --repo "$repo" --force \
+            --color D93F0B --description "CI benchmark: significant resource regression vs main"
+          gh label create benchmark-improvement --repo "$repo" --force \
+            --color 0E8A16 --description "CI benchmark: significant resource improvement vs main"
+          # Keep labels in sync with the latest run: apply when the verdict
+          # says so, remove a stale one when a newer push clears it.
+          if [ "$regression" = "true" ]; then
+            gh pr edit "$pr" --repo "$repo" --add-label benchmark-regression
+          else
+            gh pr edit "$pr" --repo "$repo" --remove-label benchmark-regression || true
+          fi
+          if [ "$improvement" = "true" ]; then
+            gh pr edit "$pr" --repo "$repo" --add-label benchmark-improvement
+          else
+            gh pr edit "$pr" --repo "$repo" --remove-label benchmark-improvement || true
+          fi
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
