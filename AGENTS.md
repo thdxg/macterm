@@ -13,6 +13,7 @@ mise run format       # Auto-fix formatting with swiftformat
 mise run lint         # swiftlint
 mise run test         # Run the test suite
 mise run build        # Release build + DMG
+mise run bench        # Release build + window-state resource benchmark
 ```
 
 `format`, `lint`, and `test` show a spinner and print output only on failure. **Always pass `--verbose`** (e.g. `mise run test --verbose`) to stream the raw output.
@@ -26,6 +27,12 @@ Requires macOS 14+, Swift 6.0+. Liquid glass and a few chrome refinements are ma
 Auto-updates ship via [Sparkle](https://sparkle-project.org/) — daily background check, manual via **Macterm → Check for Updates…**. Updates verify an EdDSA signature, so no `xattr` workaround after first install. No telemetry.
 
 Tag-pushed builds release via `.github/workflows/release.yml`, which needs repo secrets: `GH_PAT` (contents:read on `thdxg/ghostty`, downloads GhosttyKit), `SPARKLE_ED_PUBLIC_KEY` (baked into `Info.plist`), and `SPARKLE_ED_PRIVATE_KEY` (signs each DMG — **back it up; losing it means users can't auto-update to any further release**). The workflow appends an `<item>` to `appcast.xml` on `gh-pages` (served at `https://thdxg.github.io/macterm/appcast.xml`, the feed URL in `Info.plist`) along with a per-version notes page rendered from the GitHub Release body (`publish-appcast.sh`).
+
+## Benchmarks
+
+`.github/workflows/benchmark.yml` measures resource usage (CPU-time delta, RSS, and — best-effort via `powermetrics` — wakeups/s) across three window states: focused, open-but-unfocused, and minimized. Pushes to `main` upload a `benchmark-results` artifact that serves as the baseline; PR runs download the latest main baseline and post a comparison table to the job summary and a single updated-in-place PR comment. Runs land on different shared runners, so cross-run deltas are noisy — a delta is flagged only when it clears both ±25% _and_ the metric's absolute noise floor (`METRICS` in `benchmark.py`). Significant deltas add the `benchmark:regression` / `benchmark:improvement` PR label (removed again when a later push clears them) and the comment explains which metrics triggered it.
+
+The harness (`scripts/benchmark.py`, invoked by `mise run bench`) launches the Release app under a throwaway `$HOME` (hermetic: no user ghostty config, fresh App Support) with `MACTERM_BENCHMARK=1`, which arms `BenchmarkControl` — Darwin-notification remote control (`notifyutil -p com.thdxg.macterm.bench.<cmd>`; commands: `open-project`, `activate`, `minimize`, `restore`). Darwin notifications and `open`-based activation need no TCC grants, which is what lets a headless CI runner script window states at all (AppleScript/synthetic keys would need an Accessibility grant). Benchmark mode also skips the notification-permission prompt (it would steal key focus mid-measurement) and doesn't start the Sparkle updater — a bench-built Release app carries the placeholder EdDSA key, so Sparkle's failed-start alert would otherwise block the launch run loop until someone clicks OK.
 
 ## Architecture
 
