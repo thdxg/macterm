@@ -33,7 +33,18 @@ import tempfile
 import time
 
 STATES = ("focused", "unfocused", "minimized")
+# With --workload, the same three states are re-sampled after spawning busy
+# tabs/panes via the bundled `macterm` CLI. Separate keys keep the idle
+# states comparable against pre-workload baselines: a baseline that lacks a
+# state simply shows no delta for it (first run after enabling), while
+# focused/unfocused/minimized keep their history.
+WORKLOAD_STATES = tuple(f"workload-{state}" for state in STATES)
 NOTIFY_PREFIX = "com.thdxg.macterm.bench."
+# Runs in every workload pane: a real external child process emitting a line
+# a second — "logs trickling in" — without meaningful CPU of its own. Typed
+# into the pane's shell verbatim, so it must parse in POSIX shells AND
+# nushell; invoking /bin/sh with a quoted script does.
+WORKLOAD_COMMAND = '/bin/sh -c "while :; do date; sleep 1; done"'
 
 
 def sh(args, **kwargs):
@@ -168,6 +179,69 @@ def dump_diagnostics(out_path):
     print(result.stdout or result.stderr, flush=True)
 
 
+def enter_state(app, state):
+    """Drive the window into a (possibly workload-prefixed) state."""
+    base = state.removeprefix("workload-")
+    if base == "focused":
+        # The window may be minimized from the previous round; restore is
+        # idempotent when it isn't. `open` on the running bundle activates
+        # via LaunchServices (user-intent level, unlike cooperative
+        # NSApp.activate).
+        notify("restore")
+        sh(["open", app])
+        notify("activate")
+    elif base == "unfocused":
+        notify("restore")
+        sh(["open", "-a", "Finder"])
+    elif base == "minimized":
+        notify("minimize")
+
+
+def spawn_workload(app, data_dir, tabs, out_path):
+    """Spawn `tabs` busy tabs (2×2 grid each) through the bundled CLI.
+
+    Fails hard on any miss: silently sampling a partial workload would
+    compare unlike against unlike across runs.
+    """
+    cli = os.path.join(app, "Contents", "Resources", "bin", "macterm")
+    socket = os.path.join(data_dir, "control.sock")
+    if not os.path.exists(cli):
+        sys.exit("error: bundled macterm CLI missing from the app")
+
+    def cli_run(*cli_args):
+        result = sh([cli, *cli_args, "--socket", socket])
+        if result.returncode != 0:
+            dump_diagnostics(out_path)
+            sys.exit(f"error: macterm {' '.join(cli_args)} failed: {result.stderr.strip()}")
+        return result
+
+    # The socket answers `starting` until AppState attaches; by this point
+    # the project is open so one poll round is usually enough.
+    for _ in range(30):
+        if sh([cli, "status", "--socket", socket]).returncode == 0:
+            break
+        time.sleep(1)
+    else:
+        dump_diagnostics(out_path)
+        sys.exit("error: control socket never became ready for the workload")
+
+    print(f"spawning workload: {tabs} tabs x 4 panes", flush=True)
+    for _ in range(tabs):
+        cli_run("tab", "new", "--run", WORKLOAD_COMMAND)
+        cli_run("grid", "2x2", "--run", WORKLOAD_COMMAND)
+        # Pace the spawn burst: each tab is 4 shells + zmx sessions, and a
+        # mass simultaneous spawn is its own pathology (PAM/memory storm),
+        # not the steady state this measures.
+        time.sleep(0.5)
+
+    listing = json.loads(cli_run("pane", "list", "--json").stdout)
+    panes = listing.get("panes") or []
+    expected = 1 + tabs * 4  # the project's original idle pane + the grids
+    if len(panes) != expected:
+        dump_diagnostics(out_path)
+        sys.exit(f"error: workload spawned {len(panes)} panes, expected {expected}")
+
+
 def git_sha():
     sha = os.environ.get("GITHUB_SHA")
     if sha:
@@ -243,20 +317,27 @@ def cmd_run(args):
         time.sleep(args.boot_settle)
 
         results = {}
-        for state in STATES:
-            if state == "focused":
-                # `open` on the running bundle activates it via LaunchServices
-                # (user-intent level, unlike cooperative NSApp.activate).
-                sh(["open", app])
-                notify("activate")
-            elif state == "unfocused":
-                sh(["open", "-a", "Finder"])
-            elif state == "minimized":
-                notify("minimize")
+        state_plan = list(STATES)
+        for state in state_plan:
+            enter_state(app, state)
             time.sleep(args.settle)
             print(f"sampling {state} for {args.seconds}s", flush=True)
             results[state] = sample_state(pid, args.seconds)
             print(f"  {results[state]}", flush=True)
+
+        if args.workload > 0:
+            # Re-run the same three states with busy tabs on screen so the
+            # numbers reflect an app doing real terminal work, not an empty
+            # window. Spawn while restored (surfaces need a window).
+            enter_state(app, "focused")
+            spawn_workload(app, bench_env["MACTERM_BENCHMARK_DATA_DIR"], args.workload, args.out)
+            time.sleep(args.boot_settle)
+            for state in WORKLOAD_STATES:
+                enter_state(app, state)
+                time.sleep(args.settle)
+                print(f"sampling {state} for {args.seconds}s", flush=True)
+                results[state] = sample_state(pid, args.seconds)
+                print(f"  {results[state]}", flush=True)
     finally:
         # SIGKILL: SIGTERM would hang on the quit-confirmation dialog for the
         # running shell.
@@ -272,6 +353,12 @@ def cmd_run(args):
         "seconds_per_state": args.seconds,
         "states": results,
     }
+    if args.workload > 0:
+        payload["workload"] = {
+            "tabs": args.workload,
+            "panes_per_tab": 4,
+            "command": WORKLOAD_COMMAND,
+        }
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=2)
@@ -336,9 +423,14 @@ def cmd_report(args):
         lines += ["| State | Metric | Value |", "|---|---|---:|"]
 
     regressions, improvements = [], []
-    for state in STATES:
+    workload_missing_baseline = False
+    for state in STATES + WORKLOAD_STATES:
         cur_state = current["states"].get(state, {})
+        if not cur_state:
+            continue  # e.g. a run without --workload
         base_state = (baseline or {}).get("states", {}).get(state, {})
+        if baseline and state in WORKLOAD_STATES and not base_state:
+            workload_missing_baseline = True
         state_cell = state  # only label the state's first row
         for key, label, pattern, floor in METRICS:
             cur = cur_state.get(key)
@@ -400,6 +492,13 @@ def cmd_report(args):
     if baseline is None:
         lines.append("")
         lines.append("_No main-branch baseline found; showing absolute values only._")
+    elif workload_missing_baseline:
+        lines.append("")
+        lines.append(
+            "_The `workload-*` states (busy tabs spawned via the `macterm` CLI) "
+            "have no baseline yet — deltas for them appear once main's baseline "
+            "includes a workload run._"
+        )
     print("\n".join(lines))
 
     if args.verdict:
@@ -422,6 +521,11 @@ def main():
     run.add_argument("--seconds", type=int, default=30, help="sampling window per state")
     run.add_argument("--settle", type=int, default=5, help="settle time after each state change")
     run.add_argument("--boot-settle", type=int, default=10, help="settle time after launch / project open")
+    run.add_argument(
+        "--workload", type=int, default=0, metavar="TABS",
+        help="also sample workload-* states after spawning TABS busy tabs "
+             "(2x2 grid each) via the bundled macterm CLI (default: off)",
+    )
     run.set_defaults(func=cmd_run)
 
     report = sub.add_parser("report", help="render results as markdown")
