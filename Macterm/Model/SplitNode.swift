@@ -621,6 +621,10 @@ final class Pane: Identifiable {
     func killPersistentSession(using zmx: ZmxClient) {
         let name = sessionName
         NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        if let remote = ProjectPath.remote(from: projectPath) {
+            Task { await zmx.killRemoteSession(remote, name) }
+            return
+        }
         Task { await zmx.killSession(name) }
     }
 }

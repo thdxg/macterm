@@ -987,12 +987,17 @@ struct AppStateTests {
 
     // MARK: - zmx session lifecycle on close paths
 
-    /// A ZmxClient that records every killed session name.
-    private func recordingZmx(into killed: KilledSessions) -> ZmxClient {
+    /// A ZmxClient that records every killed session name. Remote kills are
+    /// recorded into `remoteKilled` (when given) so a test can assert routing.
+    private func recordingZmx(
+        into killed: KilledSessions,
+        remoteInto remoteKilled: KilledSessions? = nil
+    ) -> ZmxClient {
         ZmxClient(
             executableURL: { nil },
             isBundled: { true },
             killSession: { name in await killed.append(name) },
+            killRemoteSession: { _, name in await (remoteKilled ?? killed).append(name) },
             listSessionsWithClients: { [] },
             sessionLeaderPIDs: { [:] }
         )
@@ -1015,6 +1020,27 @@ struct AppStateTests {
 
         await killed.settle()
         #expect(await killed.names == names)
+    }
+
+    @Test
+    func closing_remote_pane_routes_kill_over_ssh() async throws {
+        // A remote pane's session lives on the remote daemon — a local kill
+        // of its name would silently no-op and strand the session (#104).
+        let killed = KilledSessions()
+        let remoteKilled = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed, remoteInto: remoteKilled)
+        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let target = try #require(tab.focusedPaneID)
+        let targetName = try #require(tab.splitRoot.findPane(id: target)?.sessionName)
+
+        state.closePane(target, projectID: p.id)
+
+        await remoteKilled.settle()
+        #expect(await remoteKilled.names == [targetName])
+        #expect(await killed.names.isEmpty)
     }
 
     @Test
