@@ -443,8 +443,13 @@ final class Pane: Identifiable {
     /// foreground pid when that process is a non-shell program, nil otherwise.
     func receiveReportedTitle(_ title: String, programPID: pid_t?) {
         // A title arrival is a command boundary — wake the adaptive poll so
-        // the other panes' names catch up too.
-        NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        // the other panes' names catch up too. Deferred: this path also runs
+        // from the `onTitleChange` replay inside `TerminalSurface.configure`,
+        // i.e. mid view-update — posting (and polling) synchronously there
+        // re-invalidates SwiftUI from within its own render transaction.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        }
         refreshForegroundProcess()
         guard let programPID else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)

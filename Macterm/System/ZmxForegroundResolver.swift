@@ -26,14 +26,28 @@ private let logger = Logger(subsystem: appBundleID, category: "ZmxForeground")
 /// a slow reconcile. `ZmxRefreshGate` owns that policy; per-tick work here is
 /// two cheap syscalls (`kill(pid, 0)` liveness + `tcgetpgrp`).
 enum ZmxForegroundResolver {
-    /// Cached `macterm-…` name → daemon session-leader pid. Guarded by an
-    /// unfair lock; written by the off-main refresh, read on the main actor.
-    private static let cache = OSAllocatedUnfairLock<[String: pid_t]>(initialState: [:])
+    struct Entry {
+        let leaderPID: pid_t
+        /// The daemon-side pty path, resolved ONCE per refresh: `devname` falls
+        /// back to a full /dev scan (readdir + lstat per node) whenever the
+        /// dev_t misses its static cache, which pty slaves reliably do. Doing
+        /// that per foreground refresh on the main thread saturated the render
+        /// loop (observed: app wedged at ~90% CPU inside devname_r). A
+        /// session's leader keeps its tty for life, so resolve off-main here
+        /// and never again.
+        let ttyPath: String?
+    }
 
-    /// Replace the cached session→leader-pid map from a fresh `zmx ls`.
+    /// Cached `macterm-…` name → daemon leader (pid + tty). Guarded by an
+    /// unfair lock; written by the off-main refresh, read on the main actor.
+    private static let cache = OSAllocatedUnfairLock<[String: Entry]>(initialState: [:])
+
+    /// Replace the cache from a fresh `zmx ls`. Called OFF-MAIN: the per-pid
+    /// tty resolution below is the expensive devname path.
     static func updateCache(_ map: [String: pid_t]) {
-        cache.withLock { $0 = map }
-        logger.debug("updateCache: \(map.count, privacy: .public) session(s)")
+        let entries = map.mapValues { Entry(leaderPID: $0, ttyPath: ttyPath(pid: $0)) }
+        cache.withLock { $0 = entries }
+        logger.debug("updateCache: \(entries.count, privacy: .public) session(s)")
     }
 
     /// The pid of the real foreground process for `sessionName`, or nil when
@@ -49,7 +63,7 @@ enum ZmxForegroundResolver {
     /// and `proc_pidinfo` can't be used either — the leader is root's
     /// `/usr/bin/login`, unreadable across uids. The sysctl works for both.
     static func foregroundPID(sessionName: String) -> pid_t? {
-        guard let leaderPID = cache.withLock({ $0[sessionName] }) else { return nil }
+        guard let leaderPID = cache.withLock({ $0[sessionName]?.leaderPID }) else { return nil }
         guard let info = kinfoProc(pid: leaderPID) else {
             cache.withLock { $0[sessionName] = nil }
             logger.debug("resolver: leader \(leaderPID, privacy: .public) gone, evicted")
@@ -68,8 +82,7 @@ enum ZmxForegroundResolver {
     /// the daemon's pty, because the `zmx attach` client keeps the client-side
     /// pty raw permanently.
     static func daemonTTYPath(sessionName: String) -> String? {
-        guard let leaderPID = cache.withLock({ $0[sessionName] }) else { return nil }
-        return ttyPath(pid: leaderPID)
+        cache.withLock { $0[sessionName]?.ttyPath }
     }
 
     /// The kinfo_proc for `pid` via `sysctl(KERN_PROC_PID)`, or nil when the
