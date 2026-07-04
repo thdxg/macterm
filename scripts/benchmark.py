@@ -155,6 +155,19 @@ def sample_state(pid, seconds):
     }
 
 
+def dump_diagnostics(out_path):
+    """On failure, surface what the app saw: its log lines and a screenshot."""
+    diag_dir = os.path.join(os.path.dirname(os.path.abspath(out_path)), "diagnostics")
+    os.makedirs(diag_dir, exist_ok=True)
+    sh(["screencapture", "-x", os.path.join(diag_dir, "screen.png")])
+    result = sh([
+        "log", "show", "--last", "5m", "--style", "compact", "--level", "debug",
+        "--predicate", 'subsystem == "com.thdxg.macterm"',
+    ])
+    print("--- app log ---", flush=True)
+    print(result.stdout or result.stderr, flush=True)
+
+
 def git_sha():
     sha = os.environ.get("GITHUB_SHA")
     if sha:
@@ -221,6 +234,7 @@ def cmd_run(args):
             if os.path.exists(project_marker):
                 break
         else:
+            dump_diagnostics(args.out)
             sys.exit(
                 "error: app never opened the benchmark project — window creation "
                 "requires app activation; is someone actively using this desktop?"

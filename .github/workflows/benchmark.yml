@@ -64,6 +64,14 @@ jobs:
           name: benchmark-results
           path: build/benchmark/results.json
 
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-diagnostics
+          path: build/benchmark/diagnostics/
+          if-no-files-found: ignore
+
       - name: Fetch main baseline
         if: github.event_name == 'pull_request'
         env:

@@ -60,6 +60,7 @@ enum BenchmarkControl {
             options: .userInitiatedAllowingIdleSystemSleep,
             reason: "window-state benchmark"
         )
+        nudgeActivationUntilWindowExists()
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         for command in Command.allCases {
             CFNotificationCenterAddObserver(
@@ -78,6 +79,25 @@ enum BenchmarkControl {
             )
         }
         logger.info("benchmark control listening (MACTERM_BENCHMARK=1)")
+    }
+
+    /// SwiftUI doesn't create the WindowGroup window until the app becomes
+    /// active, and a single post-launch activation request can be denied
+    /// (cooperative activation) or arrive before the session is ready on a
+    /// fresh CI runner. Re-request every second until the window exists.
+    private static func nudgeActivationUntilWindowExists(attempt: Int = 0) {
+        if mainWindow != nil {
+            logger.info("bench window exists after \(attempt, privacy: .public) activation nudges")
+            return
+        }
+        guard attempt < 120 else {
+            logger.error("bench window never appeared; giving up activation nudges")
+            return
+        }
+        NSApp.activate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            nudgeActivationUntilWindowExists(attempt: attempt + 1)
+        }
     }
 
     private static func handle(_ rawName: String) {
