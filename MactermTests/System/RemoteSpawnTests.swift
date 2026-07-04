@@ -52,6 +52,18 @@ struct RemoteSpawnTests {
         #expect(RemoteSpawn.opArgv(remote: .local("/a"), zmxArguments: ["ls"]) == nil)
     }
 
+    // MARK: - Foreground probe
+
+    @Test
+    func probe_argv_is_noninteractive_and_carries_the_script() {
+        let argv = try? #require(RemoteSpawn.foregroundProbeArgv(remote: remote))
+        #expect(argv?.prefix(4) == ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
+        #expect(argv?.dropFirst(4).first == "devbox")
+        #expect(argv?.last == RemoteSpawn.foregroundProbeScript)
+        #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
+        #expect(RemoteSpawn.foregroundProbeArgv(remote: .local("/a")) == nil)
+    }
+
     // MARK: - Quoting
 
     @Test

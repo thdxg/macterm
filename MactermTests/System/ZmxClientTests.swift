@@ -223,6 +223,8 @@ struct ZmxReapOrphansDriverTests {
             executableURL: { URL(fileURLWithPath: "/fake/zmx") },
             isBundled: { true },
             killSession: { id in killed.mutate { $0.append(id) } },
+            killRemoteSession: { _, _ in },
+            remoteForegroundComms: { _ in nil },
             listSessionsWithClients: { entries },
             sessionLeaderPIDs: { [:] }
         )
@@ -252,26 +254,5 @@ struct ZmxReapOrphansDriverTests {
         let client = recordingClient(entries: nil, killed: killed)
         await client.reapOrphans(knownSessionNames: [])
         #expect(killed.value.isEmpty)
-    }
-}
-
-/// Minimal thread-safe box so the injected `@Sendable` killSession closure can
-/// record across the reaper's concurrent task group.
-private final class LockedBox<T>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var stored: T
-    init(_ value: T) {
-        stored = value
-    }
-
-    var value: T { lock.lock()
-        defer { lock.unlock() }
-        return stored
-    }
-
-    func mutate(_ body: (inout T) -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-        body(&stored)
     }
 }

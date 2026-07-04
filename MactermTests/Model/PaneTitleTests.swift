@@ -91,6 +91,62 @@ struct PaneTitleTests {
         #expect(pane.programTitle == nil)
     }
 
+    // MARK: - Remote panes (#104): execution-gated titles, probe-fed names
+
+    private func makeRemotePane() -> Pane {
+        Pane(projectPath: "devbox:~/dev/api", projectID: UUID())
+    }
+
+    @Test
+    func remote_title_is_adopted_only_while_executing() {
+        let pane = makeRemotePane()
+        // At the prompt: shell churn, discarded (the OSC 133 state is the
+        // provenance gate — there's no local pid to gate on).
+        pane.receiveRemoteReportedTitle("~/dev/api")
+        #expect(pane.programTitle == nil)
+
+        // The tracker gates running on a user interaction (typing the
+        // command), same as the real flow.
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        pane.receiveRemoteReportedTitle("✳ remote session")
+        #expect(pane.programTitle == "✳ remote session")
+    }
+
+    @Test
+    func remote_title_expires_when_the_command_ends() {
+        let pane = makeRemotePane()
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        pane.receiveRemoteReportedTitle("✳ remote session")
+        pane.markCommandFinished()
+        #expect(pane.programTitle == nil)
+    }
+
+    @Test
+    func remote_pane_idle_title_is_the_host() {
+        let pane = makeRemotePane()
+        #expect(pane.displayTitle == "devbox")
+    }
+
+    @Test
+    func remote_foreground_name_comes_from_the_probe_and_keeps_basename() {
+        let pane = makeRemotePane()
+        // A macOS remote reports comm as a full path; keep the basename.
+        pane.applyRemoteForegroundName("/usr/local/bin/btop")
+        #expect(pane.displayTitle == "btop")
+        // A probe miss (nil) keeps the last-known name — no title flapping.
+        pane.applyRemoteForegroundName(nil)
+        #expect(pane.displayTitle == "btop")
+    }
+
+    @Test
+    func local_pane_is_not_remote() {
+        let pane = makePane()
+        #expect(!pane.isRemote)
+        #expect(pane.remoteHost == nil)
+    }
+
     // MARK: - displayTitle
 
     @Test

@@ -50,6 +50,44 @@ enum RemoteSpawn {
         ] + zmxArguments.map(shellQuote)
     }
 
+    /// One-round-trip foreground probe for tier-2 remote tab naming: resolve
+    /// every `macterm-*` session on the host to its tty's foreground process
+    /// name — the same session→leader→tpgid→comm pipeline
+    /// `ZmxForegroundResolver` runs locally, expressed as portable POSIX sh
+    /// (Linux, BSD, macOS remotes). Emits `session<TAB>comm` lines; parsed by
+    /// `RemoteForegroundResolver.parseProbeOutput`.
+    static let foregroundProbeScript = """
+    zmx ls 2>/dev/null | while read -r line; do
+      n=; p=
+      for f in $line; do
+        case "$f" in
+          name=*) n=${f#name=} ;;
+          pid=*) p=${f#pid=} ;;
+        esac
+      done
+      case "$n" in macterm-*) ;; *) continue ;; esac
+      case "$p" in ''|*[!0-9]*) continue ;; esac
+      t=$(ps -o tpgid= -p "$p" 2>/dev/null | tr -d ' ')
+      [ -n "$t" ] || continue
+      c=$(ps -o comm= -p "$t" 2>/dev/null)
+      [ -n "$c" ] || continue
+      printf '%s\\t%s\\n' "$n" "$c"
+    done
+    """
+
+    /// argv (for `/usr/bin/ssh`) running the foreground probe on the remote
+    /// host — the same non-interactive profile as `opArgv`. nil for a local
+    /// path.
+    static func foregroundProbeArgv(remote: ProjectPath) -> [String]? {
+        guard case let .remote(user, host, _) = remote else { return nil }
+        return [
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
+            destination(user: user, host: host),
+            foregroundProbeScript,
+        ]
+    }
+
     /// POSIX single-quote escaping: safe against spaces, globs, `$`, and
     /// embedded quotes (`'` → `'\''`).
     static func shellQuote(_ value: String) -> String {

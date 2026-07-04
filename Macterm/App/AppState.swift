@@ -169,6 +169,13 @@ final class AppState {
     @ObservationIgnored
     private var zmxRefreshGate = ZmxRefreshGate()
 
+    /// Tier-2 remote tab naming (#104): batched per-host ssh probes on their
+    /// own throttled cadence, decoupled from the local poll's 250ms bursts.
+    /// The probe closure is handed in per refresh so it always reads the
+    /// injectable `zmx` (tests swap `zmx` after init).
+    @ObservationIgnored
+    private let remoteForegroundResolver = RemoteForegroundResolver()
+
     /// Drops overlapping `zmx ls` refreshes so a slow probe can't pile up
     /// behind the poll.
     @ObservationIgnored
@@ -323,11 +330,24 @@ final class AppState {
         var didAcknowledgeCompletion = false
         var seenPanes: Set<UUID> = []
         var sawBusyPane = false
+        var activeRemotePanes: [Pane] = []
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
                     seenPanes.insert(pane.id)
-                    pane.refreshForegroundProcess(trackExecution: trackExecution)
+                    if pane.isRemote {
+                        // The local process table only knows `ssh` here — a
+                        // local refresh would stomp the probe-derived name
+                        // and instantly expire remote OSC titles. Execution
+                        // state still settles from output heartbeats, and
+                        // the frontmost project's panes feed the throttled
+                        // remote probe below.
+                        if projectID == activeProjectID {
+                            activeRemotePanes.append(pane)
+                        }
+                    } else {
+                        pane.refreshForegroundProcess(trackExecution: trackExecution)
+                    }
                     if trackExecution {
                         settleIfVisible(pane)
                     }
@@ -343,6 +363,9 @@ final class AppState {
         previouslyOccludedPanes.formIntersection(seenPanes)
         lastPollSawBusyPane = sawBusyPane
         if didAcknowledgeCompletion { saveWorkspaces() }
+        if !activeRemotePanes.isEmpty, isAnyWindowVisible() {
+            remoteForegroundResolver.refresh(panes: activeRemotePanes, probe: zmx.remoteForegroundComms)
+        }
     }
 
     /// Quiet-settle only while the surface actually renders: an occluded pane

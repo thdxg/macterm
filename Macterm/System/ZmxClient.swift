@@ -31,9 +31,12 @@ struct ZmxClient {
     /// `ssh -o BatchMode=yes … zmx kill <id>`. Best-effort: an unreachable
     /// host or auth failure logs and moves on (the session either detached
     /// with its dead ssh client or will be the user's to `zmx kill`).
-    /// Defaulted to a no-op so test doubles that only exercise local paths
-    /// don't have to provide it.
-    var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String) async -> Void = { _, _ in }
+    var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String) async -> Void
+    /// One batched foreground probe of a remote host (#104): session name →
+    /// foreground `comm` for every `macterm-*` session there, via
+    /// `RemoteSpawn.foregroundProbeArgv`. nil = probe failed (unreachable /
+    /// auth / timeout) — `RemoteForegroundResolver` degrades silently.
+    var remoteForegroundComms: @Sendable (_ remote: ProjectPath) async -> [String: String]?
     /// Each live Macterm session with its attached-client count, or nil when the
     /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
     /// successful empty listing. An entry's `clients == nil` marks an unknown
@@ -106,6 +109,17 @@ extension ZmxClient {
                     timeout: .seconds(10)
                 )
             },
+            remoteForegroundComms: { remote in
+                guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote) else { return nil }
+                guard let stdout = await runZmx(
+                    argv,
+                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    captureStdout: true,
+                    timeout: .seconds(10)
+                )
+                else { return nil }
+                return RemoteForegroundResolver.parseProbeOutput(stdout)
+            },
             listSessionsWithClients: {
                 // nil from runZmx is the UNKNOWN signal (spawn error / timeout /
                 // non-zero exit); preserve it so the reaper never kills on a
@@ -131,6 +145,8 @@ extension ZmxClient {
         executableURL: { nil },
         isBundled: { false },
         killSession: { _ in },
+        killRemoteSession: { _, _ in },
+        remoteForegroundComms: { _ in nil },
         listSessionsWithClients: { [] },
         sessionLeaderPIDs: { [:] }
     )
