@@ -364,8 +364,8 @@ def cmd_report(args):
                 lines.append(f"| {state} | {label} | {fmt(cur, pattern)} |")
 
     for entries, label_name, verdict_line in (
-        (regressions, "benchmark-regression", "regressed"),
-        (improvements, "benchmark-improvement", "improved"),
+        (regressions, "benchmark:regression", "regressed"),
+        (improvements, "benchmark:improvement", "improved"),
     ):
         if not entries:
             continue
@@ -389,7 +389,7 @@ def cmd_report(args):
         "process CPU-time delta over the window. Runs land on different shared "
         f"runners, so treat small deltas as noise — 🔺/🔻 marks changes ≥{THRESHOLD_PCT}% "
         "that also clear the metric's absolute noise floor, and those add the "
-        "`benchmark-regression` / `benchmark-improvement` label._",
+        "`benchmark:regression` / `benchmark:improvement` label._",
     ]
     if baseline is None:
         lines.append("")

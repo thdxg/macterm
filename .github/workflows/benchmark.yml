@@ -44,7 +44,7 @@ jobs:
       contents: read
       actions: read # download the baseline artifact from a main run
       pull-requests: write # upsert the comparison comment
-      issues: write # create/apply the benchmark-regression/-improvement labels
+      issues: write # create/apply the benchmark:regression / benchmark:improvement labels
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -108,21 +108,21 @@ jobs:
           improvement=$(jq -r '.improvement' "$verdict" 2>/dev/null || echo false)
           repo='${{ github.repository }}'
           pr='${{ github.event.pull_request.number }}'
-          gh label create benchmark-regression --repo "$repo" --force \
+          gh label create benchmark:regression --repo "$repo" --force \
             --color D93F0B --description "CI benchmark: significant resource regression vs main"
-          gh label create benchmark-improvement --repo "$repo" --force \
+          gh label create benchmark:improvement --repo "$repo" --force \
             --color 0E8A16 --description "CI benchmark: significant resource improvement vs main"
           # Keep labels in sync with the latest run: apply when the verdict
           # says so, remove a stale one when a newer push clears it.
           if [ "$regression" = "true" ]; then
-            gh pr edit "$pr" --repo "$repo" --add-label benchmark-regression
+            gh pr edit "$pr" --repo "$repo" --add-label benchmark:regression
           else
-            gh pr edit "$pr" --repo "$repo" --remove-label benchmark-regression || true
+            gh pr edit "$pr" --repo "$repo" --remove-label benchmark:regression || true
           fi
           if [ "$improvement" = "true" ]; then
-            gh pr edit "$pr" --repo "$repo" --add-label benchmark-improvement
+            gh pr edit "$pr" --repo "$repo" --add-label benchmark:improvement
           else
-            gh pr edit "$pr" --repo "$repo" --remove-label benchmark-improvement || true
+            gh pr edit "$pr" --repo "$repo" --remove-label benchmark:improvement || true
           fi
 
       - name: Comment on PR
