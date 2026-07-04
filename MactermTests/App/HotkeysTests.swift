@@ -404,6 +404,29 @@ struct HotkeysTests {
         #expect(HotkeyRegistry.displayString(for: "cmd+down") == "⌘↓")
     }
 
+    /// Real hardware arrow-key NSEvents carry `.numericPad`/`.function` in
+    /// `modifierFlags` — unlike the synthetic events above, which only set the
+    /// modifiers passed in. Matching must ignore those bits (#106) or every
+    /// arrow-key binding fails against a live keypress despite passing the
+    /// hand-rolled synthetic-event tests.
+    @Test
+    func matches_arrow_key_with_real_hardware_modifier_flags() throws {
+        let shortcut = try #require(HotkeyRegistry.parseShortcut("cmd+opt+right"))
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.command, .option, .numericPad, .function],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: 124 // right arrow
+        ))
+        #expect(shortcut.matches(event))
+    }
+
     // MARK: - Escape key support
 
     @Test

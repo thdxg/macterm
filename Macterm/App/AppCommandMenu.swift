@@ -80,6 +80,10 @@ private func swiftUIShortcut(for command: AppCommand) -> (key: KeyEquivalent, mo
     case "space": .space
     case "escape": .escape
     case "delete": .delete
+    case "left": .leftArrow
+    case "right": .rightArrow
+    case "up": .upArrow
+    case "down": .downArrow
     default:
         keyToken.count == 1 ? KeyEquivalent(Character(keyToken)) : nil
     }
