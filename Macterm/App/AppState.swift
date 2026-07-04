@@ -71,22 +71,52 @@ final class AppState {
     private let workspaceStore: WorkspaceStore
     private var autoTileObserver: Any?
 
-    /// Periodically re-reads each pane's foreground process so tab names track
-    /// the running command (`hx`, `btop`, …). This polls like tmux's
-    /// `automatic-rename`, rather than relying on terminal title escapes: with
-    /// shell integration (Starship/ghostty) the OSC title is prompt/cwd churn,
-    /// not the command, and a program may never emit a usable title at all (a
-    /// layout-spawned or eager-warmed pane, a process that sets no title). A
-    /// poll catches every case — manual launches, layout restores, quits —
-    /// within one interval, regardless of titles.
+    /// Re-reads each pane's foreground process so tab names track the running
+    /// command (`hx`, `btop`, …). This polls like tmux's `automatic-rename`,
+    /// rather than relying on terminal title escapes: with shell integration
+    /// (Starship/ghostty) the OSC title is prompt/cwd churn, not the command,
+    /// and a program may never emit a usable title at all (a layout-spawned or
+    /// eager-warmed pane, a process that sets no title). A poll catches every
+    /// case — manual launches, layout restores, quits — within one interval,
+    /// regardless of titles.
     ///
-    /// The interval (250ms) is a responsiveness choice, not a cost one: it's a
-    /// run-loop timer (the thread parks between ticks, no busy-loop), and each
-    /// tick is one `proc_pidinfo` per pane — ~0.24µs/call, so even 20 panes
-    /// 4×/sec is ~0.002% of a core. A pane only republishes (→ re-render) when
-    /// its name actually changes, so idle panes are free.
+    /// The cadence is adaptive (`PollCadence`): 250ms only while something is
+    /// moving (recent tab switch / keystroke / OSC title / execution
+    /// transition, or a running command with the app frontmost), 1s when the
+    /// app is active but idle, 2s when inactive with a window still visible,
+    /// and fully stopped when nothing is on screen. Each interesting moment
+    /// fires `notePollEvent()`, which resumes instantly — so title liveness is
+    /// event-bounded, not interval-bounded, and an idle app costs nothing.
     @ObservationIgnored
-    private var processNameTimer: Timer?
+    private var pollTimer: Timer?
+
+    @ObservationIgnored
+    private var pollCadence = PollCadence()
+
+    /// Whether the previous tick saw any `.running` pane; feeds
+    /// `PollCadence.Context.isAnyPaneBusy` so a running command holds the
+    /// fast cadence while the app is frontmost.
+    @ObservationIgnored
+    private var lastPollSawBusyPane = false
+
+    @ObservationIgnored
+    private var pollEventObservers: [Any] = []
+
+    /// Injectable for tests (`PollCadence.Context` inputs). `NSApp` is nil
+    /// while the SwiftUI `App` struct (and thus AppState) is constructed —
+    /// before `NSApplicationMain` — so both closures must not force-unwrap:
+    /// "no app yet" reads as inactive/invisible, which parks the poll until
+    /// the first activation/occlusion event fires.
+    @ObservationIgnored
+    var isAppActive: () -> Bool = { NSApp?.isActive ?? false }
+
+    /// Any on-screen window counts — including the quick terminal's
+    /// non-activating panel. The surface incubator's window is ordered out and
+    /// never becomes visible, so it never keeps polling alive.
+    @ObservationIgnored
+    var isAnyWindowVisible: () -> Bool = {
+        (NSApp?.windows ?? []).contains { $0.isVisible && $0.occlusionState.contains(.visible) }
+    }
 
     /// Whether a pane's surface is occluded — its renderer parked by
     /// `ghostty_surface_set_occlusion`, so render/scrollbar heartbeats are
@@ -116,11 +146,68 @@ final class AppState {
             .compactMap { UUID(uuidString: $0) }
         projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
 
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshAllForegroundProcesses() }
+        let center = NotificationCenter.default
+        let onEvent: (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.notePollEvent() }
         }
+        pollEventObservers = [
+            center.addObserver(forName: .terminalPollEvent, object: nil, queue: .main, using: onEvent),
+            center.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: onEvent
+            ),
+            center.addObserver(
+                forName: NSApplication.didResignActiveNotification, object: nil, queue: .main, using: onEvent
+            ),
+            center.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main, using: onEvent
+            ),
+            // Wake is on NSWorkspace's own center, not the default one. A
+            // timer whose fire date passed during sleep also fires once on
+            // wake; `noteEvent` coalescing absorbs the double tick.
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: onEvent
+            ),
+        ]
+        pollNow()
+    }
+
+    // MARK: - Poll scheduling
+
+    /// An instant-resume trigger for the poll (see `PollCadence.noteEvent`).
+    func notePollEvent() {
+        if pollCadence.noteEvent(at: Date()) {
+            pollNow()
+        } else {
+            // Coalesced — but the mode may still have shortened (idle → fast
+            // right after a tick), so re-arm at the new cadence.
+            reschedulePoll()
+        }
+    }
+
+    private func pollNow() {
+        // Before the work: the refresh publishes execution-state transitions
+        // that fire `notePollEvent`, and the fresh poll timestamp turns those
+        // into coalesced no-ops instead of recursive polls.
+        pollCadence.notePolled(at: Date())
+        refreshAllForegroundProcesses()
+        reschedulePoll()
+    }
+
+    private func reschedulePoll() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+        let context = PollCadence.Context(
+            isAppActive: isAppActive(),
+            isAnyWindowVisible: isAnyWindowVisible(),
+            isAnyPaneBusy: lastPollSawBusyPane
+        )
+        guard let delay = pollCadence.nextDelay(at: Date(), context: context) else { return }
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollNow() }
+        }
+        timer.tolerance = delay * 0.1
         RunLoop.main.add(timer, forMode: .common)
-        processNameTimer = timer
+        pollTimer = timer
     }
 
     /// Re-read the foreground process name of every live pane across all
@@ -134,6 +221,7 @@ final class AppState {
         let trackExecution = Preferences.shared.showTabStatusIndicator
         var didAcknowledgeCompletion = false
         var seenPanes: Set<UUID> = []
+        var sawBusyPane = false
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
@@ -142,6 +230,7 @@ final class AppState {
                     if trackExecution {
                         settleIfVisible(pane)
                     }
+                    if pane.executionState == .running { sawBusyPane = true }
                     didAcknowledgeCompletion = acknowledgeFinishedCommandIfActive(
                         paneID: pane.id,
                         projectID: projectID,
@@ -151,6 +240,7 @@ final class AppState {
             }
         }
         previouslyOccludedPanes.formIntersection(seenPanes)
+        lastPollSawBusyPane = sawBusyPane
         if didAcknowledgeCompletion { saveWorkspaces() }
     }
 
@@ -238,6 +328,9 @@ final class AppState {
         ensureWorkspace(projectID: project.id, path: project.path)
         acknowledgeActiveTab(projectID: project.id)
         warmFocusedProject()
+        // Creating a workspace doesn't change any tab selection (the poll's
+        // usual wake signal), so bump it directly.
+        notePollEvent()
     }
 
     /// Start the shells for every tab of the focused project, not just the

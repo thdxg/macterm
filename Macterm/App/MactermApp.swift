@@ -303,6 +303,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let projectName = project?.name ?? "Project"
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.nsView?.needsConfirmQuit() == true {
+                    // The adaptive poll may be slow or fully paused here (e.g.
+                    // quitting a minimized app), so the cached name can be
+                    // stale — re-read before showing it in the dialog.
+                    pane.refreshForegroundProcess(trackExecution: false)
                     rows.append(RunningProcessRow(
                         projectName: projectName,
                         processName: pane.processTitle
@@ -313,6 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let qtTab = QuickTerminalService.shared.splitState.tab
         for pane in qtTab.splitRoot.allPanes() where pane.nsView?.needsConfirmQuit() == true {
+            pane.refreshForegroundProcess(trackExecution: false)
             rows.append(RunningProcessRow(
                 projectName: "Quick Terminal",
                 processName: pane.processTitle

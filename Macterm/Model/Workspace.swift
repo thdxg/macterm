@@ -197,7 +197,15 @@ enum PaneRemovalResult {
 final class Workspace: Identifiable {
     let projectID: UUID
     var tabs: [TerminalTab] = []
-    var activeTabID: UUID?
+    var activeTabID: UUID? {
+        didSet {
+            guard activeTabID != oldValue else { return }
+            // Every selection path (select/peek/adopt/close) lands here — the
+            // one funnel that wakes the adaptive foreground poll on tab switch.
+            NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        }
+    }
+
     @ObservationIgnored
     private var tabHistory = RecencyStack<UUID>(limit: 50)
 

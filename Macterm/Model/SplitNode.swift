@@ -286,7 +286,15 @@ final class Pane: Identifiable {
     private var programTitlePID: pid_t?
 
     let searchState = TerminalSearchState()
-    var executionState: TerminalExecutionState = .idle
+    var executionState: TerminalExecutionState = .idle {
+        didSet {
+            guard executionState != oldValue else { return }
+            // Transitions (idle→running, running→done) are exactly when the
+            // adaptive poll should speed up; steady-state assignments and
+            // per-frame heartbeats don't reach here (value unchanged).
+            NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        }
+    }
 
     @ObservationIgnored
     private var executionTracker = TerminalExecutionTracker()
@@ -387,6 +395,10 @@ final class Pane: Identifiable {
     func recordUserInteraction() {
         executionTracker.recordUserInteraction()
         acknowledgeCommandCompletion()
+        // Keystrokes are the strongest "about to launch something" signal —
+        // and the only one available while the non-activating quick terminal
+        // has keyboard focus without app focus.
+        NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
     }
 
     private func applyForegroundExecutionState(
@@ -415,6 +427,9 @@ final class Pane: Identifiable {
     /// Testable core of `receiveReportedTitle`. `programPID` is the pane's
     /// foreground pid when that process is a non-shell program, nil otherwise.
     func receiveReportedTitle(_ title: String, programPID: pid_t?) {
+        // A title arrival is a command boundary — wake the adaptive poll so
+        // the other panes' names catch up too.
+        NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
         refreshForegroundProcess()
         guard let programPID else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
