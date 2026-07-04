@@ -64,9 +64,9 @@ final class TerminalTab: Identifiable {
         return didAcknowledge
     }
 
-    init(projectPath: String, projectID: UUID, sessionSlug: String? = nil) {
+    init(projectPath: String, projectID: UUID, sessionSlug: String? = nil, command: String? = nil) {
         id = UUID()
-        let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug)
+        let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug, command: command)
         splitRoot = .pane(pane)
         focusedPaneID = pane.id
     }
@@ -100,8 +100,10 @@ final class TerminalTab: Identifiable {
 
     /// Split the focused pane (or a specific pane) in `direction`, placing the
     /// new pane in the `.second` position. Returns the new pane ID if created.
+    /// A `command` spawns in the new pane via libghostty's `initial_input`
+    /// (the layout `run:` path — typed into the fresh shell verbatim).
     @discardableResult
-    func split(paneID: UUID, direction: SplitDirection) -> UUID? {
+    func split(paneID: UUID, direction: SplitDirection, command: String? = nil) -> UUID? {
         let pane = splitRoot.findPane(id: paneID)
         // Inherit the source pane's cwd. Prefer the shell's OSC 7-reported pwd
         // (most accurate when shell integration is active), then fall back to
@@ -112,7 +114,12 @@ final class TerminalTab: Identifiable {
         let sourcePath = livePwd ?? pane?.projectPath ?? NSHomeDirectory()
         let sourceProjectID = pane?.projectID ?? UUID()
         let (newRoot, newID) = splitRoot.splitting(
-            paneID: paneID, direction: direction, position: .second, projectPath: sourcePath, projectID: sourceProjectID
+            paneID: paneID,
+            direction: direction,
+            position: .second,
+            projectPath: sourcePath,
+            projectID: sourceProjectID,
+            command: command
         )
         splitRoot = newRoot
         // Splitting reveals a new pane — exit zoom so it's visible.
@@ -120,6 +127,42 @@ final class TerminalTab: Identifiable {
         if let newID { focusPane(newID) }
         if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
         return newID
+    }
+
+    /// Split a pane into a `rows`×`columns` grid of equal cells (row-major),
+    /// optionally spawning `command` in every NEW pane. The source pane
+    /// becomes the top-left cell and keeps its running shell — a command
+    /// can only be injected at spawn (`initial_input`), so the caller runs
+    /// text into it separately if needed. Returns the new pane IDs.
+    @discardableResult
+    func makeGrid(paneID: UUID, rows: Int, columns: Int, command: String? = nil) -> [UUID] {
+        guard rows >= 1, columns >= 1, rows * columns > 1,
+              splitRoot.findPane(id: paneID) != nil
+        else { return [] }
+        var created: [UUID] = []
+        // Build the row column first (splitting the newest pane each time
+        // keeps top-to-bottom order), then widen each row left-to-right.
+        var rowHeads = [paneID]
+        for _ in 1 ..< rows {
+            guard let previous = rowHeads.last,
+                  let newID = split(paneID: previous, direction: .vertical, command: command)
+            else { break }
+            rowHeads.append(newID)
+            created.append(newID)
+        }
+        for head in rowHeads {
+            var current = head
+            for _ in 1 ..< columns {
+                guard let newID = split(paneID: current, direction: .horizontal, command: command) else { break }
+                created.append(newID)
+                current = newID
+            }
+        }
+        // Equal cells regardless of the auto-tiling preference — a grid is
+        // an explicit request for uniformity.
+        splitRoot = splitRoot.rebalanced()
+        focusPane(paneID)
+        return created
     }
 
     /// Split the focused pane along its longer on-screen axis (Ghostty's
@@ -236,8 +279,8 @@ final class Workspace: Identifiable {
     }
 
     @discardableResult
-    func createTab(projectPath: String) -> TerminalTab {
-        let tab = TerminalTab(projectPath: projectPath, projectID: projectID)
+    func createTab(projectPath: String, command: String? = nil) -> TerminalTab {
+        let tab = TerminalTab(projectPath: projectPath, projectID: projectID, command: command)
         tabs.append(tab)
         if let current = activeTabID { tabHistory.push(current) }
         activeTabID = tab.id

@@ -65,17 +65,51 @@ struct ControlArgs: Codable, Equatable {
     /// zmx session name (`macterm-<slug>-<hex12>`) — the restart-stable pane
     /// address.
     var session: String?
+    /// Filesystem path (`project.create`).
+    var path: String?
+    /// Display name (`project.create`).
+    var name: String?
+    /// Also select/activate what was created (`project.create`).
+    var select: Bool?
+    /// Command to run: spawned via `initial_input` in new panes
+    /// (`tab.new`, `pane.split`, `grid`), typed into the live shell for
+    /// `pane.run`.
+    var run: String?
+    /// Split direction: `right`, `down`, or `auto`.
+    var direction: String?
+    /// Skip the busy-confirmation and destructive-plan guards
+    /// (`tab.close`, `pane.close`, `layout.apply`).
+    var force: Bool?
+    /// Grid shape (`grid`).
+    var rows: Int?
+    var cols: Int?
 
     init(
         project: String? = nil,
         tab: String? = nil,
         pane: String? = nil,
-        session: String? = nil
+        session: String? = nil,
+        path: String? = nil,
+        name: String? = nil,
+        select: Bool? = nil,
+        run: String? = nil,
+        direction: String? = nil,
+        force: Bool? = nil,
+        rows: Int? = nil,
+        cols: Int? = nil
     ) {
         self.project = project
         self.tab = tab
         self.pane = pane
         self.session = session
+        self.path = path
+        self.name = name
+        self.select = select
+        self.run = run
+        self.direction = direction
+        self.force = force
+        self.rows = rows
+        self.cols = cols
     }
 }
 

@@ -283,4 +283,291 @@ struct ControlHandlerTests {
         let empty = await handler.handle(request("session.info"))
         #expect(empty.error?.code == .badRequest)
     }
+
+    // MARK: - project.create / project.select
+
+    @Test
+    func project_create_adds_and_optionally_selects() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let created = await handler.handle(request(
+            "project.create", args: ControlArgs(path: dir.path, name: "fresh", select: true)
+        ))
+        #expect(created.ok)
+        let info = created.data?.projects?.first
+        #expect(info?.name == "fresh")
+        #expect(info?.active == true)
+        #expect(info?.loaded == true)
+        #expect(projectStore.projects.count == 1)
+        #expect(appState.activeProjectID?.uuidString == info?.id)
+
+        // Idempotent: same path returns the existing project, adds nothing.
+        let again = await handler.handle(request("project.create", args: ControlArgs(path: dir.path)))
+        #expect(again.data?.projects?.first?.id == info?.id)
+        #expect(projectStore.projects.count == 1)
+    }
+
+    @Test
+    func project_create_rejects_bad_paths() async {
+        let (handler, _, projectStore) = makeHandler()
+        let relative = await handler.handle(request("project.create", args: ControlArgs(path: "dev/api")))
+        #expect(relative.error?.code == .badRequest)
+        let remote = await handler.handle(request("project.create", args: ControlArgs(path: "host:~/dev/api")))
+        #expect(remote.error?.code == .badRequest)
+        #expect(remote.error?.message.contains("#104") == true)
+        let missing = await handler.handle(request(
+            "project.create", args: ControlArgs(path: "/nonexistent-\(UUID().uuidString)")
+        ))
+        #expect(missing.error?.code == .notFound)
+        let empty = await handler.handle(request("project.create"))
+        #expect(empty.error?.code == .badRequest)
+        #expect(projectStore.projects.isEmpty)
+    }
+
+    @Test
+    func project_select_switches_active() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "one")
+        let two = seedProject(appState, projectStore, name: "two", select: false)
+        let response = await handler.handle(request("project.select", args: ControlArgs(project: "two")))
+        #expect(response.ok)
+        #expect(appState.activeProjectID == two.id)
+
+        let empty = await handler.handle(request("project.select"))
+        #expect(empty.error?.code == .badRequest)
+    }
+
+    // MARK: - tab.new / tab.select / tab.close
+
+    @Test
+    func tab_new_creates_selects_and_reports() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let response = await handler.handle(request("tab.new", args: ControlArgs(run: "btop")))
+        #expect(response.ok)
+        let info = try #require(response.data?.tabs?.first)
+        #expect(info.index == 2)
+        #expect(info.active == true)
+        let workspace = try #require(appState.workspaces[project.id])
+        #expect(workspace.tabs.count == 2)
+        // The declared command reaches the new tab's pane (spawns via
+        // initial_input when the surface is created).
+        #expect(workspace.tabs.last?.splitRoot.allPanes().first?.command == "btop")
+    }
+
+    @Test
+    func tab_select_activates_by_index() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        let workspace = try #require(appState.workspaces[project.id])
+        let firstID = try #require(workspace.tabs.first?.id)
+
+        let response = await handler.handle(request("tab.select", args: ControlArgs(tab: "tab:1")))
+        #expect(response.ok)
+        #expect(workspace.activeTabID == firstID)
+
+        let empty = await handler.handle(request("tab.select"))
+        #expect(empty.error?.code == .badRequest)
+    }
+
+    @Test
+    func tab_close_removes_tab_and_kills_sessions() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        let workspace = try #require(appState.workspaces[project.id])
+        #expect(workspace.tabs.count == 2)
+
+        let response = await handler.handle(request("tab.close", args: ControlArgs(tab: "tab:2")))
+        #expect(response.ok)
+        #expect(workspace.tabs.count == 1)
+
+        let empty = await handler.handle(request("tab.close"))
+        #expect(empty.error?.code == .badRequest)
+    }
+
+    // MARK: - pane.split / pane.focus / pane.close / pane.run
+
+    @Test
+    func pane_split_directions_and_command() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+
+        let right = await handler.handle(request(
+            "pane.split", args: ControlArgs(run: "yes", direction: "right")
+        ))
+        #expect(right.ok)
+        let newInfo = try #require(right.data?.panes?.first)
+        #expect(tab.splitRoot.allPanes().count == 2)
+        let newID = try #require(UUID(uuidString: newInfo.id))
+        let newPane = try #require(tab.splitRoot.findPane(id: newID))
+        #expect(newPane.command == "yes")
+
+        let bogus = await handler.handle(request("pane.split", args: ControlArgs(direction: "sideways")))
+        #expect(bogus.error?.code == .badRequest)
+
+        // Headless auto (no NSView bounds) falls back to horizontal.
+        let auto = await handler.handle(request("pane.split", args: ControlArgs(direction: "auto")))
+        #expect(auto.ok)
+        #expect(tab.splitRoot.allPanes().count == 3)
+    }
+
+    @Test
+    func pane_split_targets_session_selector() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+
+        let response = await handler.handle(request(
+            "pane.split", args: ControlArgs(session: source.sessionName, direction: "down")
+        ))
+        #expect(response.ok)
+        #expect(tab.splitRoot.allPanes().count == 2)
+
+        let both = await handler.handle(request(
+            "pane.split", args: ControlArgs(pane: "pane:1", session: source.sessionName, direction: "down")
+        ))
+        #expect(both.error?.code == .badRequest)
+
+        let unknown = await handler.handle(request(
+            "pane.split", args: ControlArgs(session: "macterm-nope-000000000000", direction: "down")
+        ))
+        #expect(unknown.error?.code == .notFound)
+    }
+
+    @Test
+    func pane_focus_selects_pane_across_tabs() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let workspace = try #require(appState.workspaces[project.id])
+        let firstTab = try #require(workspace.tabs.first)
+        let firstPane = try #require(firstTab.splitRoot.allPanes().first)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        #expect(workspace.activeTabID != firstTab.id)
+
+        let response = await handler.handle(request(
+            "pane.focus", args: ControlArgs(pane: firstPane.id.uuidString)
+        ))
+        #expect(response.ok)
+        #expect(workspace.activeTabID == firstTab.id)
+        #expect(firstTab.focusedPaneID == firstPane.id)
+    }
+
+    @Test
+    func pane_close_requires_explicit_target() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        appState.splitPane(direction: .horizontal, projectID: project.id)
+        #expect(tab.splitRoot.allPanes().count == 2)
+
+        let bare = await handler.handle(request("pane.close"))
+        #expect(bare.error?.code == .badRequest)
+
+        let second = try #require(tab.splitRoot.allPanes().last)
+        let response = await handler.handle(request(
+            "pane.close", args: ControlArgs(pane: second.id.uuidString)
+        ))
+        #expect(response.ok)
+        #expect(tab.splitRoot.allPanes().count == 1)
+    }
+
+    @Test
+    func pane_run_without_surface_is_no_surface() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore)
+        // Headless test panes never create an NSView/surface, so this is the
+        // no-surface path; the live path is covered by manual verification.
+        let response = await handler.handle(request("pane.run", args: ControlArgs(run: "echo hi")))
+        #expect(response.error?.code == .noSurface)
+
+        let empty = await handler.handle(request("pane.run"))
+        #expect(empty.error?.code == .badRequest)
+    }
+
+    // MARK: - grid
+
+    @Test
+    func grid_builds_cells_and_reports_created_panes() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+
+        let response = await handler.handle(request(
+            "grid", args: ControlArgs(run: "yes", rows: 2, cols: 2)
+        ))
+        #expect(response.ok)
+        #expect(response.data?.panes?.count == 3)
+        #expect(tab.splitRoot.allPanes().count == 4)
+
+        let degenerate = await handler.handle(request("grid", args: ControlArgs(rows: 1, cols: 1)))
+        #expect(degenerate.error?.code == .badRequest)
+
+        let huge = await handler.handle(request("grid", args: ControlArgs(rows: 10, cols: 10)))
+        #expect(huge.error?.code == .badRequest)
+    }
+
+    // MARK: - session.kill
+
+    @Test
+    func session_kill_verifies_then_kills() async {
+        let (handler, appState, _) = makeHandler()
+        let killed = KilledNames()
+        appState.zmx = ZmxClient(
+            executableURL: { nil },
+            isBundled: { true },
+            killSession: { name in await killed.append(name) },
+            listSessionsWithClients: { [.init(name: "macterm-x-000011112222", clients: 0)] },
+            sessionLeaderPIDs: { [:] }
+        )
+
+        let miss = await handler.handle(request("session.kill", args: ControlArgs(session: "macterm-y-000011112222")))
+        #expect(miss.error?.code == .notFound)
+        #expect(await killed.names.isEmpty)
+
+        let hit = await handler.handle(request("session.kill", args: ControlArgs(session: "macterm-x-000011112222")))
+        #expect(hit.ok)
+        #expect(await killed.names == ["macterm-x-000011112222"])
+    }
+
+    // MARK: - layout.apply / layout.save
+
+    @Test
+    func layout_save_then_apply_round_trips() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-layout-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let project = Project(name: "roundtrip", path: dir.path, sortOrder: 0)
+        projectStore.add(project)
+        appState.selectProject(project)
+
+        // No file yet → apply reports the miss.
+        let before = await handler.handle(request("layout.apply"))
+        #expect(before.error?.code == .notFound)
+
+        let saved = await handler.handle(request("layout.save"))
+        #expect(saved.ok)
+        #expect(appState.projectFiles.find(forProjectPath: dir.path) != nil)
+
+        // Reconciling the unchanged workspace against its own save is
+        // non-destructive: applies cleanly without --force.
+        let applied = await handler.handle(request("layout.apply"))
+        #expect(applied.ok)
+        #expect(appState.pendingLayoutApply == nil)
+    }
+}
+
+/// Actor recording killed session names (kills hop through async closures).
+private actor KilledNames {
+    private(set) var names: Set<String> = []
+    func append(_ name: String) {
+        names.insert(name)
+    }
 }

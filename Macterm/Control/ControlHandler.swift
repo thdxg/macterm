@@ -57,10 +57,23 @@ final class ControlHandler {
         switch request.command {
         case "status": return status()
         case "project.list": return projectList()
+        case "project.create": return try projectCreate(args)
+        case "project.select": return try projectSelect(args)
         case "tab.list": return try tabList(args)
+        case "tab.new": return try tabNew(args)
+        case "tab.select": return try tabSelect(args)
+        case "tab.close": return try tabClose(args)
         case "pane.list": return try paneList(args)
+        case "pane.split": return try paneSplit(args)
+        case "pane.focus": return try paneFocus(args)
+        case "pane.close": return try paneClose(args)
+        case "pane.run": return try paneRun(args)
+        case "grid": return try grid(args)
         case "session.list": return try await sessionList()
         case "session.info": return try await sessionInfo(args)
+        case "session.kill": return try await sessionKill(args)
+        case "layout.apply": return try layoutApply(args)
+        case "layout.save": return try layoutSave(args)
         default:
             throw ControlError(
                 code: .unknownCommand,
@@ -115,21 +128,8 @@ final class ControlHandler {
         } else {
             tabs = Array(zip(1..., workspace.tabs))
         }
-        var infos: [ControlPaneInfo] = []
-        for (tabIndex, tab) in tabs {
-            for (paneIndex, pane) in zip(1..., tab.splitRoot.allPanes()) {
-                infos.append(ControlPaneInfo(
-                    index: paneIndex,
-                    id: pane.id.uuidString,
-                    session: pane.sessionName,
-                    tabIndex: tabIndex,
-                    tabID: tab.id.uuidString,
-                    title: pane.displayTitle,
-                    process: pane.foregroundProcessName,
-                    cwd: pane.nsView?.currentPwd ?? pane.projectPath,
-                    focused: tab.id == workspace.activeTabID && pane.id == tab.focusedPaneID
-                ))
-            }
+        let infos = tabs.flatMap { _, tab in
+            tab.splitRoot.allPanes().map { paneInfo($0, in: tab, workspace: workspace) }
         }
         return ControlData(panes: infos)
     }
@@ -168,6 +168,243 @@ final class ControlHandler {
             )
         }
         return ControlData(sessions: [match])
+    }
+
+    // MARK: - Project mutations
+
+    /// Create (or find) a project for a local path. Idempotent by canonical
+    /// path — re-creating an existing project returns it instead of erroring,
+    /// so scripted setups (the benchmark) can run unconditionally.
+    private func projectCreate(_ args: ControlArgs) throws -> ControlData {
+        guard let rawPath = args.path, !rawPath.isEmpty else {
+            throw ControlError(code: .badRequest, message: "project.create requires a path")
+        }
+        guard let parsed = ProjectPath.parse(rawPath) else {
+            throw ControlError(code: .badRequest, message: "\"\(rawPath)\" is not an absolute or ~-prefixed path")
+        }
+        guard case .local = parsed else {
+            throw ControlError(
+                code: .badRequest,
+                message: "remote projects aren't supported yet (#104)",
+                action: "pass a local directory path"
+            )
+        }
+        let canonical = ProjectPath.canonicalLocal(rawPath)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: canonical, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw ControlError(code: .notFound, message: "no directory at \(canonical)")
+        }
+
+        let project: Project
+        if let existing = projectStore.projects.first(where: { ProjectPath.canonicalLocal($0.path) == canonical }) {
+            project = existing
+        } else {
+            let name = args.name ?? (canonical as NSString).lastPathComponent
+            project = Project(name: name, path: canonical, sortOrder: projectStore.projects.count)
+            projectStore.add(project)
+        }
+        if args.select == true {
+            // selectProject runs the same first-open path the sidebar does —
+            // including auto-applying a matching central project file, so a
+            // declared layout spawns its tabs.
+            appState.selectProject(project)
+        }
+        return projectData(project)
+    }
+
+    private func projectSelect(_ args: ControlArgs) throws -> ControlData {
+        guard args.project != nil else {
+            throw ControlError(code: .badRequest, message: "project.select requires a project selector")
+        }
+        let project = try resolveProject(args.project)
+        appState.selectProject(project)
+        return projectData(project)
+    }
+
+    // MARK: - Tab mutations
+
+    private func tabNew(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        guard let tabID = appState.createTab(projectID: project.id, projectPath: project.path, command: args.run),
+              let index = workspace.tabs.firstIndex(where: { $0.id == tabID })
+        else {
+            throw ControlError(code: .internalError, message: "tab creation failed")
+        }
+        return ControlData(tabs: [tabInfo(workspace.tabs[index], index: index + 1, in: workspace)])
+    }
+
+    private func tabSelect(_ args: ControlArgs) throws -> ControlData {
+        guard args.tab != nil else {
+            throw ControlError(code: .badRequest, message: "tab.select requires a tab selector")
+        }
+        let (project, workspace) = try resolveWorkspace(args)
+        let (index, tab) = try resolveTab(args, in: workspace)
+        appState.selectTab(tab.id, projectID: project.id)
+        return ControlData(tabs: [tabInfo(tab, index: index, in: workspace)])
+    }
+
+    private func tabClose(_ args: ControlArgs) throws -> ControlData {
+        guard args.tab != nil else {
+            throw ControlError(code: .badRequest, message: "tab.close requires a tab selector")
+        }
+        let (project, workspace) = try resolveWorkspace(args)
+        let (_, tab) = try resolveTab(args, in: workspace)
+        // Closing kills the panes' zmx sessions. The UI stages a confirmation
+        // dialog for busy tabs; a headless caller gets a typed `busy` error
+        // instead — never a dialog the CLI can't answer.
+        let busy = tab.splitRoot.allPanes().contains { $0.nsView?.needsConfirmQuit() == true }
+        if busy, args.force != true {
+            throw ControlError(
+                code: .busy,
+                message: "a pane in that tab has a running program (closing kills its session)",
+                action: "re-run with --force to close anyway"
+            )
+        }
+        appState.closeTab(tab.id, projectID: project.id)
+        return ControlData()
+    }
+
+    // MARK: - Pane mutations
+
+    private func paneSplit(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let direction: SplitDirection
+        switch args.direction ?? "auto" {
+        case "right": direction = .horizontal
+        case "down": direction = .vertical
+        case "auto":
+            // The UI's auto-split picks the longer on-screen axis from the
+            // pane's live NSView bounds; a never-shown pane measures zero and
+            // falls back to horizontal — same as TerminalTab.autoSplit.
+            let bounds = target.pane.nsView?.bounds.size ?? .zero
+            direction = bounds.height > bounds.width ? .vertical : .horizontal
+        default:
+            throw ControlError(code: .badRequest, message: "direction must be right, down, or auto")
+        }
+        guard let newID = appState.splitPane(
+            target.pane.id, direction: direction, projectID: project.id, command: args.run
+        ), let newPane = target.tab.splitRoot.findPane(id: newID)
+        else {
+            throw ControlError(code: .internalError, message: "split failed")
+        }
+        return ControlData(panes: [paneInfo(newPane, in: target.tab, workspace: workspace)])
+    }
+
+    private func paneFocus(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        // navigateToPane selects the containing tab, fronts the window, and
+        // restores first responder — everything "focus" means for a human.
+        appState.navigateToPane(target.pane.id, projectID: project.id)
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    private func paneClose(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        guard args.pane != nil || args.session != nil else {
+            throw ControlError(code: .badRequest, message: "pane.close requires a pane or session selector")
+        }
+        let target = try resolvePane(args, in: workspace)
+        let busy = target.pane.nsView?.needsConfirmQuit() == true
+        if busy, args.force != true {
+            throw ControlError(
+                code: .busy,
+                message: "that pane has a running program (closing kills its session)",
+                action: "re-run with --force to close anyway"
+            )
+        }
+        appState.closePane(target.pane.id, projectID: project.id)
+        return ControlData()
+    }
+
+    private func paneRun(_ args: ControlArgs) throws -> ControlData {
+        guard let command = args.run, !command.isEmpty else {
+            throw ControlError(code: .badRequest, message: "pane.run requires a command")
+        }
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard let view = target.pane.nsView, view.sendText(command + "\n") else {
+            throw ControlError(
+                code: .noSurface,
+                message: "the pane's terminal isn't live yet",
+                action: "select its tab once so the surface spawns, then retry"
+            )
+        }
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    private func grid(_ args: ControlArgs) throws -> ControlData {
+        guard let rows = args.rows, let cols = args.cols, rows >= 1, cols >= 1, rows * cols > 1 else {
+            throw ControlError(code: .badRequest, message: "grid requires rows×cols with at least 2 cells")
+        }
+        let cellCap = 16
+        guard rows * cols <= cellCap else {
+            throw ControlError(code: .badRequest, message: "grid caps at \(cellCap) cells")
+        }
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let created = appState.makeGrid(
+            target.pane.id, rows: rows, columns: cols, projectID: project.id, command: args.run
+        )
+        guard !created.isEmpty else {
+            throw ControlError(code: .internalError, message: "grid produced no panes")
+        }
+        let infos = created.compactMap { id in
+            target.tab.splitRoot.findPane(id: id).map { paneInfo($0, in: target.tab, workspace: workspace) }
+        }
+        return ControlData(panes: infos)
+    }
+
+    // MARK: - Session / layout mutations
+
+    private func sessionKill(_ args: ControlArgs) async throws -> ControlData {
+        guard let name = args.session, !name.isEmpty else {
+            throw ControlError(code: .badRequest, message: "session.kill requires a session name")
+        }
+        guard let entries = await zmx.listSessionsWithClients() else {
+            throw ControlError(code: .internalError, message: "zmx session listing unavailable")
+        }
+        guard entries.contains(where: { $0.name == name }) else {
+            throw ControlError(
+                code: .notFound,
+                message: "no zmx session named \"\(name)\"",
+                action: "run `macterm session list` to see live sessions"
+            )
+        }
+        await zmx.killSession(name)
+        return ControlData()
+    }
+
+    private func layoutApply(_ args: ControlArgs) throws -> ControlData {
+        let project = try resolveProject(args.project)
+        if let error = appState.applyLayout(project: project) {
+            throw ControlError(code: .notFound, message: error.localizedDescription)
+        }
+        // A destructive reconcile is staged for UI confirmation; headless
+        // callers either force it through or get a typed `busy` — the staged
+        // dialog must never dangle waiting for a click that won't come.
+        if appState.pendingLayoutApply != nil {
+            if args.force == true {
+                appState.confirmPendingLayoutApply()
+            } else {
+                appState.cancelPendingLayoutApply()
+                throw ControlError(
+                    code: .busy,
+                    message: "applying would close panes and end their processes",
+                    action: "re-run with --force to apply anyway"
+                )
+            }
+        }
+        return ControlData()
+    }
+
+    private func layoutSave(_ args: ControlArgs) throws -> ControlData {
+        let project = try resolveProject(args.project)
+        if let error = appState.saveLayout(project: project) {
+            throw ControlError(code: .internalError, message: error.localizedDescription)
+        }
+        return ControlData()
     }
 
     // MARK: - Selector resolution
@@ -267,18 +504,99 @@ final class ControlHandler {
         return value
     }
 
+    /// Resolve the pane target: `session` (restart-stable name, searched
+    /// across the whole workspace), `pane` (UUID anywhere, or `pane:N` index
+    /// within the resolved tab), else the focused pane of the active tab.
+    /// `session` and `pane` together conflict — an explicit error, never a
+    /// silent winner.
+    private func resolvePane(_ args: ControlArgs, in workspace: Workspace) throws -> (tab: TerminalTab, pane: Pane) {
+        if args.session != nil, args.pane != nil {
+            throw ControlError(code: .badRequest, message: "pass either --session or --pane, not both")
+        }
+        if let session = args.session, !session.isEmpty {
+            for tab in workspace.tabs {
+                if let pane = tab.splitRoot.allPanes().first(where: { $0.sessionName == session }) {
+                    return (tab, pane)
+                }
+            }
+            throw ControlError(
+                code: .notFound,
+                message: "no pane in this project runs session \"\(session)\"",
+                action: "run `macterm pane list` for live panes"
+            )
+        }
+        if let selector = args.pane, !selector.isEmpty {
+            if let id = UUID(uuidString: selector) {
+                for tab in workspace.tabs {
+                    if let pane = tab.splitRoot.findPane(id: id) { return (tab, pane) }
+                }
+                throw ControlError(code: .notFound, message: "no pane with id \(selector)")
+            }
+            let (_, tab) = try resolveTab(args, in: workspace)
+            let panes = tab.splitRoot.allPanes()
+            guard let index = parseIndex(selector, prefix: "pane"), panes.indices.contains(index - 1) else {
+                throw ControlError(
+                    code: .notFound,
+                    message: "no pane \(selector) in that tab",
+                    action: "run `macterm pane list` for indexes"
+                )
+            }
+            return (tab, panes[index - 1])
+        }
+        // No pane selector: an explicit tab selector means "that tab's
+        // focused pane"; otherwise the active tab's.
+        let (_, tab) = try resolveTab(args, in: workspace)
+        guard let focusedID = tab.focusedPaneID, let pane = tab.splitRoot.findPane(id: focusedID) else {
+            throw ControlError(code: .notFound, message: "the tab has no focused pane")
+        }
+        return (tab, pane)
+    }
+
     // MARK: - Shared projections
+
+    private func projectData(_ project: Project) -> ControlData {
+        let info = ControlProjectInfo(
+            id: project.id.uuidString,
+            name: project.name,
+            path: project.path,
+            active: project.id == appState.activeProjectID,
+            loaded: appState.workspaces[project.id] != nil,
+            tabCount: appState.workspaces[project.id]?.tabs.count
+        )
+        return ControlData(projects: [info])
+    }
+
+    private func tabInfo(_ tab: TerminalTab, index: Int, in workspace: Workspace) -> ControlTabInfo {
+        ControlTabInfo(
+            index: index,
+            id: tab.id.uuidString,
+            title: tab.sidebarTitle,
+            active: tab.id == workspace.activeTabID,
+            paneCount: tab.splitRoot.allPanes().count
+        )
+    }
 
     private func tabInfos(in workspace: Workspace) -> [ControlTabInfo] {
         zip(1..., workspace.tabs).map { index, tab in
-            ControlTabInfo(
-                index: index,
-                id: tab.id.uuidString,
-                title: tab.sidebarTitle,
-                active: tab.id == workspace.activeTabID,
-                paneCount: tab.splitRoot.allPanes().count
-            )
+            tabInfo(tab, index: index, in: workspace)
         }
+    }
+
+    private func paneInfo(_ pane: Pane, in tab: TerminalTab, workspace: Workspace) -> ControlPaneInfo {
+        let panes = tab.splitRoot.allPanes()
+        let paneIndex = (panes.firstIndex(where: { $0.id == pane.id }) ?? 0) + 1
+        let tabIndex = (workspace.tabs.firstIndex(where: { $0.id == tab.id }) ?? 0) + 1
+        return ControlPaneInfo(
+            index: paneIndex,
+            id: pane.id.uuidString,
+            session: pane.sessionName,
+            tabIndex: tabIndex,
+            tabID: tab.id.uuidString,
+            title: pane.displayTitle,
+            process: pane.foregroundProcessName,
+            cwd: pane.nsView?.currentPwd ?? pane.projectPath,
+            focused: tab.id == workspace.activeTabID && pane.id == tab.focusedPaneID
+        )
     }
 
     private func paneIDsBySessionName() -> [String: String] {
