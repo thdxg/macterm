@@ -62,9 +62,16 @@ final class GhosttyApp {
         app = createdApp
         config = cfg
 
-        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+        // Ticking is event-driven: libghostty's `wakeup_cb` fires whenever the
+        // core needs `ghostty_app_tick` (GhosttyCallbacks.wakeup schedules it
+        // on the main queue) — the same model as upstream Ghostty.app. A slow
+        // 1s timer remains as a safety net so a missed wakeup degrades to one
+        // extra tick per second instead of a wedged UI; it replaces a 120Hz
+        // timer that burned 120 wakeups/sec even while the app was hidden.
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        timer.tolerance = 0.5
         RunLoop.main.add(timer, forMode: .common)
         tickTimer = timer
 
