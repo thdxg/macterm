@@ -83,13 +83,18 @@ struct SidebarContent: View {
                 VStack(spacing: 0) {
                     Divider()
                     HStack(spacing: 0) {
-                        Button {
-                            openProject()
+                        Menu {
+                            Button("Local Folder…") { openProject() }
+                            Button("Remote Machine…") {
+                                appState.isNewRemoteProjectSheetPresented = true
+                            }
                         } label: {
                             Label("New Project", systemImage: "plus")
                                 .font(.body)
                         }
-                        .buttonStyle(.borderless)
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
                         Spacer()
                     }
                     .padding(.horizontal, 16)
@@ -175,8 +180,17 @@ private struct SidebarProjectRow: View {
                 .onExitCommand { cancelRename() }
                 .onAppear { focused = true }
         } else {
-            Text(project.name)
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(project.name)
+                    .lineLimit(1)
+                if project.isRemote {
+                    // Remote project (#104): panes live on this host over ssh.
+                    Image(systemName: "network")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .help(project.path)
+                }
+            }
         }
     }
 

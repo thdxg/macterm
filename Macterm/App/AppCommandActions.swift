@@ -94,6 +94,8 @@ extension AppCommand {
             return { ctx.appState.resizePane(.down, projectID: projectID) }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
+        case .newRemoteProject:
+            return { ctx.appState.isNewRemoteProjectSheetPresented = true }
         case .renameProject:
             guard let current else { return nil }
             let projectID = current.id
@@ -114,10 +116,13 @@ extension AppCommand {
                 }
             }
         case .replaceProjectPathWithCurrentDir:
-            guard let projectID,
-                  let pane = ctx.appState.focusedPane(for: projectID),
+            // Remote projects (#104): OSC 7 reports a directory on the REMOTE
+            // host — writing it into `Project.path` would corrupt the
+            // project's identity into a local-looking path.
+            guard let current, !current.isRemote,
+                  let pane = ctx.appState.focusedPane(for: current.id),
                   let pwd = pane.nsView?.currentPwd, !pwd.isEmpty,
-                  current?.path != pwd
+                  current.path != pwd
             else { return nil }
             return { ctx.appState.replaceProjectPathWithCurrentDir(projectStore: ctx.projectStore) }
         case .applyLayout:

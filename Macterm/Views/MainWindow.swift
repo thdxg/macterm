@@ -56,6 +56,12 @@ struct MainWindow: View {
                 CommandPaletteOverlay()
             }
         }
+        .sheet(isPresented: Binding(
+            get: { appState.isNewRemoteProjectSheetPresented },
+            set: { appState.isNewRemoteProjectSheetPresented = $0 }
+        )) {
+            NewRemoteProjectSheet()
+        }
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)

@@ -88,6 +88,10 @@ final class AppState {
 
     var pendingLayoutError: LayoutError?
 
+    /// Presents the "New Remote Project" sheet (#104) — set by the palette
+    /// command and the sidebar's New Project menu, consumed by `MainWindow`.
+    var isNewRemoteProjectSheetPresented = false
+
     // Tab cycling state (Ctrl+Tab)
     private var tabCycleOrder: [UUID] = []
     private var tabCycleIndex: Int = 0
@@ -574,6 +578,10 @@ final class AppState {
     /// `project.path`) will land in the new directory.
     func replaceProjectPathWithCurrentDir(projectStore: ProjectStore) {
         guard let projectID = activeProjectID,
+              let project = projectStore.projects.first(where: { $0.id == projectID }),
+              // Remote projects (#104): the reported pwd is a REMOTE
+              // directory — adopting it would corrupt the project's identity.
+              !project.isRemote,
               let pane = focusedPane(for: projectID),
               let pwd = pane.nsView?.currentPwd,
               !pwd.isEmpty

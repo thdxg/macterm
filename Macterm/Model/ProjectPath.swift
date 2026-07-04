@@ -112,6 +112,16 @@ enum ProjectPath: Equatable {
         return parsed
     }
 
+    /// Compose a remote `path:` string from the New Remote Project sheet's
+    /// fields (`[user@]host` + directory), validating through the parser.
+    /// nil when the pair doesn't form a well-formed remote spec.
+    static func composeRemote(host: String, directory: String) -> String? {
+        let composed = host.trimmingCharacters(in: .whitespaces)
+            + ":"
+            + directory.trimmingCharacters(in: .whitespaces)
+        return isRemote(composed) ? composed : nil
+    }
+
     /// Whether two raw path strings identify the same project location.
     /// Locals compare canonically; remotes compare structurally (same
     /// user/host/directory after parsing). A local never equals a remote,
