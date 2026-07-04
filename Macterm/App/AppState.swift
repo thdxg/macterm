@@ -249,7 +249,11 @@ final class AppState {
     /// would misread suppressed output as completion. On the occluded→visible
     /// edge the quiet window restarts, giving a still-running program time to
     /// deliver heartbeats again before the settle can fire.
-    private func settleIfVisible(_ pane: Pane) {
+    ///
+    /// Not private so tests can drive the guard directly (`paneIsOccluded` is
+    /// injectable) without a live surface or mutating the `Preferences`
+    /// singleton the poll reads.
+    func settleIfVisible(_ pane: Pane) {
         if paneIsOccluded(pane) {
             previouslyOccludedPanes.insert(pane.id)
             return
