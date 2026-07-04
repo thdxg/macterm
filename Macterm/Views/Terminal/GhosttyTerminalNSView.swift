@@ -24,7 +24,21 @@ final class GhosttyTerminalNSView: NSView {
     /// The pane's zmx session name. The surface's shell runs under
     /// `zmx attach <sessionName>` (ghostty `command-wrapper`), so it survives
     /// app quit and the same name re-attaches the live daemon on relaunch.
+    /// For a remote pane the same name identifies the session on the REMOTE
+    /// host's daemon instead.
     private let sessionName: String
+
+    /// The parsed `[user@]host:dir` spec when this pane belongs to a remote
+    /// project (#104); nil for local panes. A remote surface runs
+    /// `ssh -t … zmx attach` directly as its command — never under the local
+    /// zmx wrapper (nested zmx is broken upstream) — so all the local
+    /// persistence machinery (wrapper, ZMX_DIR pin, `isZmxWrapped`) stays off.
+    private let remoteSpec: ProjectPath?
+
+    /// Whether this surface belongs to a remote project. Read by the poll
+    /// and title paths, which must not treat the local `ssh` client as the
+    /// pane's real foreground process.
+    var isRemote: Bool { remoteSpec != nil }
 
     /// Whether this surface actually spawned under the zmx wrapper (false when
     /// zmx is unbundled or the socket-path budget forced a bypass). Read by
@@ -137,13 +151,15 @@ final class GhosttyTerminalNSView: NSView {
         sessionName: String,
         command: String? = nil,
         shell: String? = nil,
-        env: [String: String]? = nil
+        env: [String: String]? = nil,
+        remoteSpec: ProjectPath? = nil
     ) {
         self.workingDirectory = workingDirectory
         self.sessionName = sessionName
         self.command = command
         self.shell = shell
         self.env = env
+        self.remoteSpec = remoteSpec
         super.init(frame: .zero)
         setupTrackingArea()
         registerForDraggedTypes(Array(Self.dropTypes))
@@ -198,15 +214,32 @@ final class GhosttyTerminalNSView: NSView {
             return UnsafePointer(p)
         }
 
-        config.working_directory = cString(workingDirectory)
+        if let remoteSpec {
+            // Remote pane (#104): the surface command IS the ssh client —
+            // `ssh -t host 'cd dir && exec zmx attach <name>'`. Persistence
+            // lives in the remote daemon; the local process is disposable, so
+            // no zmx wrapper, no ZMX_DIR pin, no local working directory
+            // (ghostty defaults to home; the cd happens on the remote). The
+            // declared `shell:` doesn't apply either — the remote session
+            // spawns the remote user's login shell. Interactive auth works
+            // because there's no BatchMode: prompts render in the pane, and
+            // any connect failure surfaces on ghostty's abnormal-exit screen.
+            if let sshCommand = RemoteSpawn.paneCommand(remote: remoteSpec, sessionName: sessionName) {
+                config.command = cString(sshCommand)
+            }
+        } else {
+            config.working_directory = cString(workingDirectory)
 
-        // Shell binary → the surface's program. nil falls back to libghostty's
-        // own resolution (which honors the user's ghostty config / login shell).
-        if let resolvedShell = shell ?? GhosttyApp.shared.configuredShell {
-            config.command = cString(resolvedShell)
+            // Shell binary → the surface's program. nil falls back to libghostty's
+            // own resolution (which honors the user's ghostty config / login shell).
+            if let resolvedShell = shell ?? GhosttyApp.shared.configuredShell {
+                config.command = cString(resolvedShell)
+            }
         }
 
-        // Wrap the resolved shell in zmx for session persistence. The
+        // Wrap the resolved shell in zmx for session persistence (LOCAL panes
+        // only — a remote pane's persistence is the remote daemon's job, and
+        // nesting local zmx around the ssh client is broken upstream). The
         // `command_wrapper` argv is prepended to ghostty's fully-resolved
         // command (after login(1) + shell integration), so OSC 7 cwd / OSC 133
         // framing stay intact — the shell just runs as a child of
@@ -215,7 +248,7 @@ final class GhosttyTerminalNSView: NSView {
         // the socket-path budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        let wrapperArgv: [UnsafePointer<CChar>?] = ZmxAttach.wrapperArgv(
+        let wrapperArgv: [UnsafePointer<CChar>?] = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
             executablePath: ZmxClient.live.executableURL()?.path,
             sessionID: sessionName
         ).map { cString($0) }

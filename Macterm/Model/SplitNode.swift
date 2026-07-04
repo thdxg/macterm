@@ -264,6 +264,10 @@ final class Pane: Identifiable {
     /// The raw slug this pane's session was named under, so a split-off
     /// sibling groups under the same project in `zmx ls`.
     let sessionSlug: String
+    /// Whether this pane's project is remote (#104) — its `projectPath` is an
+    /// scp-style spec and its session lives on the remote host. Cached at
+    /// init: the poll and title paths read it every tick.
+    let isRemote: Bool
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -474,7 +478,8 @@ final class Pane: Identifiable {
             sessionName: sessionName,
             command: command,
             shell: shell,
-            env: env
+            env: env,
+            remoteSpec: ProjectPath.remote(from: projectPath)
         )
         _nsView = view
         return view
@@ -586,6 +591,7 @@ final class Pane: Identifiable {
         self.projectPath = projectPath
         self.projectID = projectID
         self.sessionID = sessionID
+        isRemote = ProjectPath.isRemote(projectPath)
         if let persistedSessionName {
             // Restore path: the snapshot's name is authoritative and used
             // VERBATIM — the slug inside it reflects the project at creation,
