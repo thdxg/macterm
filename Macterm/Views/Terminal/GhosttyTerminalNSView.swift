@@ -228,6 +228,17 @@ final class GhosttyTerminalNSView: NSView {
                 envVars.append(ghostty_env_var_s(key: cString(key), value: cString(value)))
             }
         }
+        if !wrapperArgv.isEmpty {
+            // Pin the socket dir into the WRAPPED SHELL's env, not just our own
+            // zmx subprocesses: a user's shell rc re-exporting ZMX_DIR/TMPDIR
+            // would otherwise move where a *nested* zmx invocation resolves
+            // sockets, past what the budget probe validated — kill and attach
+            // could then target different dirs. (Same defense Supacode ships.)
+            envVars.append(ghostty_env_var_s(
+                key: cString("ZMX_DIR"),
+                value: cString(ZmxSocketBudget.socketDir())
+            ))
+        }
 
         /// Sets env on the config and spawns. Split out so the optional
         /// command-wrapper buffer scope (below) wraps both env-present and
