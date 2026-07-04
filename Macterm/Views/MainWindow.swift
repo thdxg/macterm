@@ -322,6 +322,24 @@ private struct WindowStyler: NSViewRepresentable {
             swiftuiDelegate?.windowDidResignKey?(notification)
         }
 
+        func window(
+            _ window: NSWindow,
+            willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []
+        ) -> NSApplication.PresentationOptions {
+            // Auto-hide the toolbar together with the menu bar in native
+            // fullscreen. Without .autoHideToolbar AppKit pins the
+            // NSToolbarFullScreenWindow (the titlebar/toolbar strip) across
+            // the top of the screen for the whole fullscreen session, which
+            // is the persistent top bar from issue #24. Hiding its
+            // NSTitlebarBackgroundView only recolors the strip; the window
+            // itself has to auto-hide. (#24)
+            var options = proposedOptions
+            if let inner = swiftuiDelegate?.window?(window, willUseFullScreenPresentationOptions: proposedOptions) {
+                options = inner
+            }
+            return options.union([.fullScreen, .autoHideMenuBar, .autoHideToolbar])
+        }
+
         func windowDidEnterFullScreen(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
             WindowAppearance.sync(window: window)
