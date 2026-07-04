@@ -22,11 +22,13 @@ struct ProjectFileStore {
 
     /// `~/.config/macterm/projects`. Deliberately shared across debug/release
     /// builds — these are user config like the ghostty config, not app state
-    /// (App Support splits per build; this doesn't). Resolved through
-    /// `NSHomeDirectory()`, which honors `$HOME`, so the benchmark harness's
-    /// throwaway home keeps CI runs hermetic.
+    /// (App Support splits per build; this doesn't). Resolved `$HOME`-first:
+    /// `NSHomeDirectory()` resolves via the user record and IGNORES the env
+    /// var (verified empirically), which would defeat the benchmark harness's
+    /// throwaway-home isolation. The login session sets `$HOME` for normal
+    /// launches, so env-first behaves identically outside the harness.
     nonisolated static func defaultDirectory() -> URL {
-        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        URL(fileURLWithPath: ProjectPath.currentHome, isDirectory: true)
             .appendingPathComponent(".config/macterm/projects", isDirectory: true)
     }
 

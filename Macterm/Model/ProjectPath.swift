@@ -50,13 +50,34 @@ enum ProjectPath: Equatable {
         return .local(trimmed)
     }
 
+    /// The user's home directory, `$HOME`-first. `NSHomeDirectory()` and
+    /// `expandingTildeInPath` resolve via the user record and IGNORE the env
+    /// var, which would defeat the benchmark harness's throwaway-home
+    /// isolation; the login session sets `$HOME` for normal launches, so
+    /// env-first behaves identically outside the harness.
+    static var currentHome: String {
+        if let home = ProcessInfo.processInfo.environment["HOME"], !home.isEmpty {
+            return home
+        }
+        return NSHomeDirectory()
+    }
+
     /// Canonical form of a *local* path for identity comparisons (matching a
-    /// project file's `path:` against a project's directory): tilde expanded,
-    /// `.`/`..` segments standardized, trailing slash stripped. Symlinks are
-    /// deliberately NOT resolved — two paths the user treats as distinct must
-    /// stay distinct even when one links to the other.
+    /// project file's `path:` against a project's directory): tilde expanded
+    /// (against `currentHome`), `.`/`..` segments standardized, trailing
+    /// slash stripped. Symlinks are deliberately NOT resolved — two paths the
+    /// user treats as distinct must stay distinct even when one links to the
+    /// other.
     static func canonicalLocal(_ path: String) -> String {
-        let expanded = (path as NSString).expandingTildeInPath
+        var expanded = path
+        if expanded == "~" {
+            expanded = currentHome
+        } else if expanded.hasPrefix("~/") {
+            expanded = currentHome + expanded.dropFirst(1)
+        } else if expanded.hasPrefix("~") {
+            // `~user/...` — no env override applies; defer to Foundation.
+            expanded = (expanded as NSString).expandingTildeInPath
+        }
         var standardized = URL(fileURLWithPath: expanded).standardizedFileURL.path
         while standardized.count > 1, standardized.hasSuffix("/") {
             standardized.removeLast()

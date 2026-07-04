@@ -67,8 +67,11 @@ struct ProjectPathTests {
 
     @Test
     func canonical_expands_tilde() {
-        let home = NSHomeDirectory()
+        // Against `currentHome` ($HOME-first), not NSHomeDirectory() — the
+        // benchmark harness's throwaway home must isolate the central dir.
+        let home = ProjectPath.currentHome
         #expect(ProjectPath.canonicalLocal("~/dev") == "\(home)/dev")
+        #expect(ProjectPath.canonicalLocal("~") == home)
     }
 
     @Test
