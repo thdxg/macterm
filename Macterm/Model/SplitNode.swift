@@ -573,6 +573,7 @@ final class Pane: Identifiable {
         projectID: UUID,
         sessionID: UUID = UUID(),
         sessionSlug: String? = nil,
+        sessionName persistedSessionName: String? = nil,
         command: String? = nil,
         shell: String? = nil,
         env: [String: String]? = nil
@@ -580,9 +581,20 @@ final class Pane: Identifiable {
         self.projectPath = projectPath
         self.projectID = projectID
         self.sessionID = sessionID
-        let slug = sessionSlug ?? (projectPath as NSString).lastPathComponent
-        self.sessionSlug = slug
-        sessionName = ZmxSessionName.make(projectName: slug, paneSessionID: sessionID)
+        if let persistedSessionName {
+            // Restore path: the snapshot's name is authoritative and used
+            // VERBATIM — the slug inside it reflects the project at creation,
+            // and re-deriving after a project rename would target a session
+            // that doesn't exist. The slug is recovered only so a split off
+            // this pane groups with it.
+            sessionName = persistedSessionName
+            self.sessionSlug = ZmxSessionName.slug(fromName: persistedSessionName)
+                ?? (projectPath as NSString).lastPathComponent
+        } else {
+            let slug = sessionSlug ?? (projectPath as NSString).lastPathComponent
+            self.sessionSlug = slug
+            sessionName = ZmxSessionName.make(projectName: slug, paneSessionID: sessionID)
+        }
         self.command = command
         self.shell = shell
         self.env = env

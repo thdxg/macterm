@@ -380,14 +380,14 @@ final class AppState {
         hasRestoredSelection = true
         let snapshots = workspaceStore.load()
         let valid = Set(projects.map(\.id))
-        // A committed layout file is the source of truth: skip restoring the
-        // session snapshot for any project that has one, leaving its workspace
-        // nil so it rebuilds from `.macterm/layout.yaml` on open (below / on
-        // first select). Projects with no layout file restore their snapshot.
-        let pathByID = Dictionary(projects.map { ($0.id, $0.path) }, uniquingKeysWith: { a, _ in a })
-        for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid)
-            where !LayoutFile.exists(atProjectRoot: pathByID[ws.projectID] ?? "")
-        {
+        // Restore every project's snapshot — including layout-file projects.
+        // The snapshot carries each pane's persisted zmx session identity, so
+        // panes REATTACH their still-running shells; force-applying the
+        // committed `.macterm/layout.yaml` here would silently destroy them
+        // on every launch. The layout now only seeds a genuine first open
+        // (no snapshot) — `autoApplyLayoutOnFirstOpen` guards on
+        // `workspaces[id] == nil`, so a restored snapshot disables it.
+        for ws in WorkspaceSerializer.restore(from: snapshots, validIDs: valid) {
             workspaces[ws.projectID] = ws
         }
         if let id = Preferences.shared.activeProjectID,
@@ -395,14 +395,21 @@ final class AppState {
         {
             activeProjectID = id
             recordProjectVisit(id)
-            // Build the active project from its layout file if it has one (its
-            // snapshot was skipped above); otherwise the restored snapshot stands
-            // and `ensureWorkspace` only creates a default when neither exists.
             autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: id, path: project.path)
             acknowledgeActiveTab(projectID: id)
             warmFocusedProject()
         }
+        // Sweep crash/force-quit orphans: kill zero-client macterm-* sessions
+        // no restored pane claims. Attach-aware and fail-closed (a failed
+        // probe reaps nothing); foreign prefixes (supa-*, user sessions) are
+        // spared. Quick-terminal sessions are never persisted, so leftovers
+        // from a crash die here too.
+        let known = Set(workspaces.values
+            .flatMap(\.tabs)
+            .flatMap { $0.splitRoot.allPanes() }
+            .map(\.sessionName))
+        Task { [zmx] in await zmx.reapOrphans(knownSessionNames: known) }
     }
 
     func saveWorkspaces() {
@@ -434,8 +441,22 @@ final class AppState {
               let projectID = activeProjectID,
               let ws = workspaces[projectID]
         else { return }
-        for pane in Self.panesToWarm(in: ws) {
-            SurfaceIncubator.shared.warm(pane)
+        // Stagger the spawns: each warm is a login shell (PAM, rc files) and —
+        // when restoring — a `zmx attach` reattaching a daemon. Firing them all
+        // in one tick multiplies launch pressure with tab count (cmux hit a
+        // relaunch memory/PAM storm doing exactly this). 125ms apart keeps
+        // relaunch smooth; `warm` is idempotent, so a pane the user views
+        // before its slot just spawns early via SwiftUI and the delayed warm
+        // no-ops.
+        for (index, pane) in Self.panesToWarm(in: ws).enumerated() {
+            if index == 0 {
+                SurfaceIncubator.shared.warm(pane)
+                continue
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.125 * Double(index)) { [weak pane] in
+                guard let pane else { return }
+                SurfaceIncubator.shared.warm(pane)
+            }
         }
     }
 
@@ -519,11 +540,9 @@ final class AppState {
         logger.debug("unloadProject: \(projectID, privacy: .public)")
         let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
         for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-            // The snapshot round-trip below rebuilds panes with FRESH session
-            // ids (session identity isn't persisted yet), so the old sessions
-            // would orphan — kill them. Once snapshots carry the session name,
-            // unload becomes a true detach and this kill goes away.
-            pane.killPersistentSession(using: zmx)
+            // Detach, don't kill: the snapshot round-trip preserves each
+            // pane's session identity, so reopening the project reattaches
+            // the still-running shells.
             pane.destroySurface()
         }
         if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {

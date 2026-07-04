@@ -118,6 +118,22 @@ struct ZmxSessionNameTests {
         let b = ZmxSessionName.make(projectName: "proj", paneSessionID: UUID())
         #expect(a != b)
     }
+
+    @Test
+    func slug_round_trips_through_a_made_name() {
+        let name = ZmxSessionName.make(projectName: "My Cool App!", paneSessionID: id)
+        #expect(ZmxSessionName.slug(fromName: name) == "mycoolapp")
+    }
+
+    @Test
+    func slug_recovery_rejects_foreign_or_corrupt_names() {
+        #expect(ZmxSessionName.slug(fromName: "supa-abcdef123456") == nil)
+        #expect(ZmxSessionName.slug(fromName: "macterm-nohex") == nil)
+        #expect(ZmxSessionName.slug(fromName: "macterm--aaaaaaaabbbb") == nil)
+        // Slugs may themselves contain hex-looking segments; only a trailing
+        // 12-hex-digit component counts as the id.
+        #expect(ZmxSessionName.slug(fromName: "macterm-abc-def-aaaaaaaabbbb") == "abc-def")
+    }
 }
 
 struct ZmxReaperTests {

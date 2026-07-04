@@ -96,6 +96,15 @@ final class Preferences {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
     }
 
+    /// When true, quitting Macterm kills every pane's zmx session so nothing
+    /// keeps running in the background. Default off — session persistence
+    /// (shells survive quit and reattach on relaunch) is the point, so quit
+    /// detaches rather than terminates. Macterm-side only; never touches the
+    /// ghostty config pipeline.
+    var terminateSessionsOnQuit: Bool {
+        didSet { defaults.set(terminateSessionsOnQuit, forKey: Keys.terminateSessionsOnQuit) }
+    }
+
     // MARK: - Toolbar
 
     var tabSwitcherVisibility: TabSwitcherVisibility {
@@ -296,6 +305,7 @@ final class Preferences {
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
+        terminateSessionsOnQuit = defaults.object(forKey: Keys.terminateSessionsOnQuit) as? Bool ?? false
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
             .flatMap(TabSwitcherVisibility.init(rawValue:)) ?? .whenMultiple
         Self.runOneTimeMigrations(defaults: defaults)
@@ -345,6 +355,7 @@ final class Preferences {
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
+        static let terminateSessionsOnQuit = "macterm.session.terminateOnQuit"
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
     }

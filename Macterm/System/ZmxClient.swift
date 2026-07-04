@@ -314,6 +314,22 @@ enum ZmxSessionName {
     static var maxByteCount: Int {
         prefix.utf8.count + maxSlugLength + 1 + shortHexLength
     }
+
+    /// Recover the slug from a persisted `macterm-<slug>-<hex12>` name, or nil
+    /// when the name doesn't match our construction (foreign/corrupt). Used on
+    /// restore so a split off a restored pane groups under the same project.
+    static func slug(fromName name: String) -> String? {
+        guard name.hasPrefix(prefix) else { return nil }
+        let body = name.dropFirst(prefix.count)
+        guard let dash = body.lastIndex(of: "-") else { return nil }
+        let slugPart = body[..<dash]
+        let hexPart = body[body.index(after: dash)...]
+        guard !slugPart.isEmpty,
+              hexPart.count == shortHexLength,
+              hexPart.allSatisfy(\.isHexDigit)
+        else { return nil }
+        return String(slugPart)
+    }
 }
 
 /// Pure parser for zmx's full (`ls`, non-`--short`) tab-delimited listing.

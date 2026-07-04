@@ -241,3 +241,80 @@ struct WorkspaceSerializerTests {
         #expect(store.load().isEmpty)
     }
 }
+
+@MainActor
+struct WorkspaceSerializerSessionIdentityTests {
+    @Test
+    func round_trips_session_identity_and_working_directory() throws {
+        let projectID = UUID()
+        let pane = Pane(projectPath: "/tmp/proj", projectID: projectID)
+        let tab = TerminalTab(id: UUID(), splitRoot: .pane(pane), focusedPaneID: pane.id)
+        let ws = Workspace(projectID: projectID, tabs: [tab], activeTabID: tab.id)
+
+        let snapshots = WorkspaceSerializer.snapshot([projectID: ws])
+        let restored = try #require(
+            WorkspaceSerializer.restore(from: snapshots, validIDs: [projectID]).first
+        )
+        let restoredPane = try #require(restored.tabs.first?.splitRoot.allPanes().first)
+
+        // Session identity survives verbatim; the runtime pane id does not.
+        #expect(restoredPane.sessionID == pane.sessionID)
+        #expect(restoredPane.sessionName == pane.sessionName)
+        #expect(restoredPane.id != pane.id)
+        // With no live surface the cwd falls back to the project path.
+        #expect(restoredPane.projectPath == "/tmp/proj")
+    }
+
+    @Test
+    func old_snapshot_without_identity_gets_a_fresh_session() throws {
+        let projectID = UUID()
+        let snap = WorkspaceSnapshot(
+            projectID: projectID,
+            activeTabID: nil,
+            tabs: [TabSnapshot(
+                id: UUID(),
+                customTitle: nil,
+                focusedPaneID: nil,
+                splitRoot: .pane(PaneSnapshot(id: UUID(), projectPath: "/tmp/old"))
+            )]
+        )
+        let restored = try #require(
+            WorkspaceSerializer.restore(from: [snap], validIDs: [projectID]).first
+        )
+        let pane = try #require(restored.tabs.first?.splitRoot.allPanes().first)
+        #expect(pane.sessionName.hasPrefix(ZmxSessionName.prefix))
+        #expect(pane.projectPath == "/tmp/old")
+    }
+
+    @Test
+    func restored_pane_uses_persisted_name_over_rederivation() throws {
+        // The persisted name's slug reflects the project AT CREATION — a
+        // rename must not re-derive it, or reattach targets a dead session.
+        let projectID = UUID()
+        let sessionID = UUID()
+        let snap = WorkspaceSnapshot(
+            projectID: projectID,
+            activeTabID: nil,
+            tabs: [TabSnapshot(
+                id: UUID(),
+                customTitle: nil,
+                focusedPaneID: nil,
+                splitRoot: .pane(PaneSnapshot(
+                    id: UUID(),
+                    projectPath: "/tmp/renamed-project",
+                    sessionID: sessionID,
+                    sessionName: "macterm-oldname-aaaaaaaabbbb",
+                    workingDirectory: "/tmp/renamed-project/src"
+                ))
+            )]
+        )
+        let restored = try #require(
+            WorkspaceSerializer.restore(from: [snap], validIDs: [projectID]).first
+        )
+        let pane = try #require(restored.tabs.first?.splitRoot.allPanes().first)
+        #expect(pane.sessionName == "macterm-oldname-aaaaaaaabbbb")
+        #expect(pane.sessionID == sessionID)
+        #expect(pane.sessionSlug == "oldname")
+        #expect(pane.projectPath == "/tmp/renamed-project/src")
+    }
+}

@@ -135,9 +135,9 @@ One `XxxTests.swift` per production type, mirroring the source path. `@testable 
 ### Persistence
 
 - Workspaces → `~/Library/Application Support/Macterm/workspaces_v3.json`; projects → `projects.json`; wrapper configs (`macterm-defaults.conf`, `macterm-overrides.conf`) in the same directory. The directory name comes from `appDisplayName` (`CFBundleDisplayName`), so debug builds use `Macterm Debug/` — fully separate data per build, mirroring the bundle-ID split.
-- `Pane` IDs are not preserved across restarts — restore creates fresh UUIDs.
+- `Pane` IDs are not preserved across restarts — restore creates fresh UUIDs. Session identity is separate: `Pane.sessionID`/`sessionName` persist in the snapshot (the name VERBATIM, never re-derived — its slug reflects the project at creation), so a restored pane reattaches its still-running zmx session.
 - Declarative layouts are an _authorable_ file at `.macterm/layout.yaml` in the project root, applied/saved on demand via `applyLayout`/`saveLayout`. An unparseable file surfaces `LayoutFileError` and is never applied. JSON schema at `assets/layout.schema.json` — keep it in sync when layout types change.
-  - A committed layout file is the source of truth: on relaunch, `restoreSelection` skips the workspace snapshot for any project that has one; a project's first open auto-applies it (with no live panes the reconcile is pure-spawn, never destructive).
+  - On relaunch the workspace snapshot always wins — it carries live session identity, and force-applying a committed layout would destroy reattachable shells. A committed layout file only seeds a genuine first open (no snapshot; pure-spawn, never destructive) via `autoApplyLayoutOnFirstOpen`.
   - `save` records a pane's `run:` as its **live** foreground command (`ghostty_surface_foreground_pid` → `ProcessInspector` argv via `KERN_PROCARGS2`) — an idle prompt saves no `run`. `shell:` is recorded only when the pane sits in a _non-default_ shell. `run` and `shell` are mutually exclusive on a leaf.
   - `apply` (`LayoutReconciler`) matches live panes to declared ones by that same live `(run, cwd)`; a pane that quit its declared command is respawned. A plain-shell leaf matches an idle pane positionally, but a declared `shell:` only reuses an idle pane running that shell (basename compare). The live-command/live-shell lookups are injected closures (default `ProcessInspector`), so the logic is unit-testable.
   - The file's top-level `name:` is the project it was saved for — a mismatch on apply stages a confirmation warning. Tab `name:` is the tab's title, matched to live tabs during reconcile.
@@ -167,7 +167,7 @@ Macterm-side settings flow through `Preferences` (UserDefaults); ghostty-shaped 
 
 ## Known Limitations
 
-- **No process persistence** — closing the app kills all shells (recommend tmux/zellij).
+- **Quick-terminal sessions are ephemeral** — they die on quit (workspace panes persist via zmx and reattach on relaunch; sessions don't survive reboot — the zmx daemon dies with the OS).
 - **Single window only** — multi-window would require a tmux-like daemon; out of scope.
 - **Not code-signed with a Developer ID** — first launch needs `xattr -cr /Applications/Macterm.app` (or Homebrew install); Sparkle updates verify EdDSA after that.
 - **Pane IDs not stable across restarts** — fresh views are created on restore.

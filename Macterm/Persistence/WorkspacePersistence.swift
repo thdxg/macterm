@@ -70,9 +70,40 @@ struct PaneSnapshot: Codable {
     /// outlive the shell process, and `.idle` is the default. Optional so older
     /// snapshots (without the field) decode as nil / idle.
     var needsAttention: Bool?
+    /// Stable zmx session id (`Pane.sessionID`). On restore the rebuilt pane
+    /// reuses it, so its shell reattaches to the still-running daemon instead
+    /// of spawning fresh. Optional: older snapshots decode nil → fresh id.
+    var sessionID: UUID?
+    /// The pane's zmx session name, persisted VERBATIM — never re-derived. The
+    /// name embeds the project slug at creation time, so re-deriving it after
+    /// a project rename would target a session that doesn't exist.
+    var sessionName: String?
+    /// The pane's live working directory at snapshot time, so a session that
+    /// did NOT survive (reboot, external kill) respawns where the user was.
+    /// A surviving session reattaches with its own live cwd regardless.
+    var workingDirectory: String?
     // No `title`: the tab name is derived live from the pane's foreground
     // process, so there's nothing per-pane to persist. (An older snapshot's
     // `title` key is harmlessly ignored on decode.)
+
+    /// Memberwise init with defaults for the optional fields, so call sites
+    /// and tests that build old-shape snapshots keep compiling. (SwiftLint
+    /// forbids `= nil` on the stored declarations.)
+    init(
+        id: UUID,
+        projectPath: String,
+        needsAttention: Bool? = nil,
+        sessionID: UUID? = nil,
+        sessionName: String? = nil,
+        workingDirectory: String? = nil
+    ) {
+        self.id = id
+        self.projectPath = projectPath
+        self.needsAttention = needsAttention
+        self.sessionID = sessionID
+        self.sessionName = sessionName
+        self.workingDirectory = workingDirectory
+    }
 }
 
 struct SplitBranchSnapshot: Codable {
@@ -204,14 +235,20 @@ enum WorkspaceSerializer {
         case let .pane(p):
             // Prefer the shell's live cwd over the pane's original project
             // path so reopening the app lands each pane back in the directory
-            // the user had navigated to. Falls back to projectPath when the
-            // surface hasn't reported a pwd yet.
-            let path = p.nsView?.currentPwd ?? p.projectPath
+            // the user had navigated to: OSC 7 (`currentPwd`) first, then the
+            // foreground process's kernel cwd (works without shell
+            // integration), finally projectPath.
+            let path = p.nsView?.currentPwd
+                ?? ProcessInspector.foregroundWorkingDirectory(forPane: p)
+                ?? p.projectPath
             let needsAttention = p.executionState == .done
             return .pane(PaneSnapshot(
                 id: p.id,
                 projectPath: path,
-                needsAttention: needsAttention
+                needsAttention: needsAttention,
+                sessionID: p.sessionID,
+                sessionName: p.sessionName,
+                workingDirectory: path
             ))
         case let .split(b):
             return .split(SplitBranchSnapshot(
@@ -226,7 +263,18 @@ enum WorkspaceSerializer {
     private static func restoreNode(_ snap: SplitNodeSnapshot, projectID: UUID) -> SplitNode {
         switch snap {
         case let .pane(p):
-            let pane = Pane(projectPath: p.projectPath, projectID: projectID)
+            // Reuse the persisted session identity so the restored pane
+            // reattaches to its still-running zmx daemon: `zmx attach` is an
+            // upsert, so a session that died while the app was closed just
+            // becomes a fresh shell in the saved working directory — no
+            // staleness handling needed. Old snapshots (nil identity) get a
+            // fresh session.
+            let pane = Pane(
+                projectPath: p.workingDirectory ?? p.projectPath,
+                projectID: projectID,
+                sessionID: p.sessionID ?? UUID(),
+                sessionName: p.sessionName
+            )
             if p.needsAttention == true {
                 pane.restoreNeedsAttention()
             }
