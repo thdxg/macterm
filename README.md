@@ -113,6 +113,17 @@ Related commands:
 
 - **Apply layout**: Reconciles the live workspace toward the file with minimal disruption: a pane already running the declared `run` in the same directory is kept (only resized if its split ratio changed), and only panes that genuinely deviate are restarted or closed. When an apply would terminate any pane, Macterm asks first. An invalid layout file is reported and not applied.
 
+## Session Persistence
+
+Terminal sessions survive quitting the app. Each pane's shell runs under a bundled [zmx](https://github.com/neurosnap/zmx) session (`macterm-<project>-<id>`), so quitting Macterm detaches — no confirmation dialog — and relaunching reattaches every pane with its scrollback and running processes intact. Closing a pane, tab, or project is what actually ends its shell (you'll be asked first if something is running), and Settings → General → Session Persistence has a toggle to restore kill-on-quit.
+
+Notes:
+
+- Sessions don't survive reboot (the daemon dies with the OS); panes respawn in their last working directory.
+- The quick terminal is scratch space: its sessions end on every quit.
+- `zmx ls` from any pane lists live sessions; `zmx kill <name>` ends one by hand. Force-quit leftovers are cleaned up on the next launch.
+- On systems with unusually long home/TMPDIR paths the unix-socket limit can disable persistence; Settings shows a notice when that happens.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build, and PR guidelines.

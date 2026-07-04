@@ -32,6 +32,17 @@ private struct GeneralSettings: View {
     private var eagerlyStartProjectTabs = true
     @AppStorage(Preferences.Keys.terminateSessionsOnQuit)
     private var terminateSessionsOnQuit = false
+
+    /// Why session persistence is inactive, when it is. Missing binary is a
+    /// dev-build state; an over-budget socket path is an environment problem
+    /// (very long home/TMPDIR paths push past sun_path).
+    private var zmxUnavailableReason: String {
+        if !ZmxClient.live.isBundled() {
+            return "Session persistence is inactive: the zmx binary isn't bundled. Run `mise run setup` and rebuild."
+        }
+        return "Session persistence is inactive: this system's zmx socket path is too long. Terminals run without persistence."
+    }
+
     @State
     private var terminalScrollSpeed: Double = Preferences.shared.terminalScrollSpeed
     @State
@@ -115,6 +126,19 @@ private struct GeneralSettings: View {
                 )
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+
+                // Persistence can be silently unavailable (Supacode shipped the
+                // same probe and users only noticed via a buried log line) —
+                // say so where the toggle lives.
+                if ZmxClient.live.executableURL() == nil {
+                    Label {
+                        Text(zmxUnavailableReason)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle")
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                }
             }
         }
         .formStyle(.grouped)
