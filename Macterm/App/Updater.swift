@@ -33,11 +33,16 @@ final class Updater: ObservableObject {
         // the production EdDSA key, so it pops an "Unable to Check For
         // Updates" dialog on every launch. Start the controller without
         // kicking off update checks; release builds still auto-check.
+        //
+        // Benchmark mode is a Release build with the placeholder key
+        // (scripts/bench.sh builds without SPARKLE_ED_PUBLIC_KEY), so the
+        // updater fails to start and its app-modal alert blocks the run
+        // loop at launch — on CI nobody can click OK.
         let startUpdater: Bool = {
             #if DEBUG
             return false
             #else
-            return true
+            return !BenchmarkControl.isEnabled
             #endif
         }()
         let updaterDelegate = updaterDelegate

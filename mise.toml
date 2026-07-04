@@ -124,6 +124,18 @@ run = """
   fi
 """
 
+[tasks.bench]
+description = "Build the release app and run the window-state benchmark"
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
+run = """
+  source scripts/_lib.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/bench.sh
+  else
+    run_step "Benchmarking..." ./scripts/bench.sh
+  fi
+"""
+
 [tasks.clean]
 description = "Clean build artifacts"
 run = "rm -rf build Macterm.xcodeproj"
