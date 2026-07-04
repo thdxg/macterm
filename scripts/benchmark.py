@@ -339,6 +339,7 @@ def cmd_report(args):
     for state in STATES:
         cur_state = current["states"].get(state, {})
         base_state = (baseline or {}).get("states", {}).get(state, {})
+        state_cell = state  # only label the state's first row
         for key, label, pattern, floor in METRICS:
             cur = cur_state.get(key)
             if cur is None and (not baseline or base_state.get(key) is None):
@@ -346,7 +347,7 @@ def cmd_report(args):
             if baseline:
                 base = base_state.get(key)
                 lines.append(
-                    f"| {state} | {label} | {fmt(base, pattern)} "
+                    f"| {state_cell} | {label} | {fmt(base, pattern)} "
                     f"| {fmt(cur, pattern)} | {delta_cell(base, cur, floor)} |"
                 )
                 sig = significant_pct(base, cur, floor)
@@ -361,7 +362,8 @@ def cmd_report(args):
                         "pattern": pattern,
                     })
             else:
-                lines.append(f"| {state} | {label} | {fmt(cur, pattern)} |")
+                lines.append(f"| {state_cell} | {label} | {fmt(cur, pattern)} |")
+            state_cell = ""
 
     for entries, label_name, verdict_line in (
         (regressions, "benchmark:regression", "regressed"),
