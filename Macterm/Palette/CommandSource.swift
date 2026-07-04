@@ -67,6 +67,7 @@ struct CommandSource: PaletteSource {
 
         return PaletteItem(
             title: command.title,
+            subtitle: command.paletteSubtitle(in: commandCtx),
             category: command.category.rawValue,
             keybind: command.hotkeyAction.flatMap(keybindDisplay),
             keybindSymbols: command.hotkeyAction.flatMap(keybindSymbols),

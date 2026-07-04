@@ -71,15 +71,19 @@ final class AppState {
         }
     }
 
-    /// A layout apply/save/import failure awaiting presentation (alert in
+    /// A layout apply/save/import notice awaiting presentation (alert in
     /// `MactermApp`). Fed by the explicit palette/menu commands and by the
     /// silent first-open auto-apply — an invalid project file must always
     /// surface a dialog, never fail silently.
     struct LayoutError: Identifiable {
         let id = UUID()
-        /// "apply" / "save" / "import" — slotted into the alert title.
+        /// "apply" / "save" / "import" — slotted into the default alert title.
         let verb: String
         let message: String
+        /// Title override for notices that aren't failures (e.g. a save that
+        /// landed but is shadowed by a duplicate file).
+        var customTitle: String?
+        var title: String { customTitle ?? "Couldn't \(verb) layout" }
     }
 
     var pendingLayoutError: LayoutError?
@@ -496,28 +500,24 @@ final class AppState {
         case .emptyTabs:
             break
         case .none:
-            importLegacyLayout(project)
+            // Legacy seed: `applyLayoutPresentingError` imports a committed
+            // `.macterm/layout.yaml` before applying.
+            guard LayoutFile.exists(atProjectRoot: project.path) else { break }
+            applyLayoutPresentingError(project)
         }
     }
 
-    /// Deprecated seed path — remove next release (#114): on first open with
-    /// no central file, a parseable in-repo `.macterm/layout.yaml` is imported
-    /// into the central directory, then applied from there. An unparseable
-    /// legacy file surfaces a dialog and imports nothing.
-    private func importLegacyLayout(_ project: Project) {
-        guard LayoutFile.exists(atProjectRoot: project.path) else { return }
-        do {
-            let legacy = try LayoutFile.load(fromProjectRoot: project.path)
-            try projectFiles.write(
-                ProjectFile(name: project.name, path: project.path, tabs: legacy.tabs),
-                projectName: project.name
-            )
-            logger.info("Imported legacy layout for \(project.name, privacy: .public)")
-            applyLayoutPresentingError(project)
-        } catch {
-            logger.error("Legacy layout import failed: \(error, privacy: .public)")
-            pendingLayoutError = LayoutError(verb: "import", message: error.localizedDescription)
-        }
+    /// Deprecated seed path — remove next release (#114): a parseable in-repo
+    /// `.macterm/layout.yaml` is imported into the central directory, to then
+    /// be applied from there. Throws when the legacy file doesn't parse — the
+    /// caller surfaces it; nothing is imported.
+    private func importLegacyLayout(_ project: Project) throws {
+        let legacy = try LayoutFile.load(fromProjectRoot: project.path)
+        try projectFiles.write(
+            ProjectFile(name: project.name, path: project.path, tabs: legacy.tabs),
+            projectName: project.name
+        )
+        logger.info("Imported legacy layout for \(project.name, privacy: .public)")
     }
 
     /// Shows an open panel, adds the selected directory as a project, and selects it.
@@ -951,7 +951,25 @@ final class AppState {
     /// `applyLayout` + error presentation: failures land in
     /// `pendingLayoutError` (the alert in `MactermApp`). The shared entry
     /// point for the palette/menu command and the first-open auto-apply.
+    ///
+    /// When no central file declares the project's path but a committed
+    /// legacy `.macterm/layout.yaml` exists, it's imported first (deprecated
+    /// seed, #114). Explicit apply needs this as much as first open does:
+    /// an existing project always has a restored snapshot, so first-open
+    /// never fires for it — without this, its legacy file would be
+    /// unreachable for the whole deprecation window.
     func applyLayoutPresentingError(_ project: Project) {
+        if projectFiles.find(forProjectPath: project.path) == nil,
+           LayoutFile.exists(atProjectRoot: project.path)
+        {
+            do {
+                try importLegacyLayout(project)
+            } catch {
+                logger.error("Legacy layout import failed: \(error, privacy: .public)")
+                pendingLayoutError = LayoutError(verb: "import", message: error.localizedDescription)
+                return
+            }
+        }
         if let error = applyLayout(project: project) {
             pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription)
         }
@@ -977,16 +995,44 @@ final class AppState {
         guard let ws = workspaces[project.id] else { return nil }
         do {
             let layout = LayoutSerializer.layout(for: ws, projectName: project.name, projectRoot: project.path)
-            try projectFiles.write(
+            let target = try projectFiles.write(
                 ProjectFile(name: project.name, path: project.path, tabs: layout.tabs),
                 projectName: project.name
             )
             logger.info("saveLayout succeeded: tabs=\(ws.tabs.count, privacy: .public)")
+            presentSaveConflictIfNeeded(project: project, savedTo: target)
             return nil
         } catch {
             logger.error("saveLayout failed: \(error, privacy: .public)")
             return error
         }
+    }
+
+    /// A save that lands next to *other* files declaring the same path gets a
+    /// visible notice, not just a log line: filename order decides which file
+    /// `find` picks, so a duplicate (hand-authored, or an old file whose
+    /// realign-delete failed) can silently shadow what was just saved.
+    private func presentSaveConflictIfNeeded(project: Project, savedTo target: URL) {
+        let matches = projectFiles.matches(forProjectPath: project.path)
+        guard matches.count > 1 else { return }
+        let winner = matches[0].url
+        // Compare by filename: names are unique within the directory, and the
+        // URLs come from different constructions (`appendingPathComponent` vs
+        // a directory listing) that need not compare equal for the same file.
+        let message = if winner.lastPathComponent != target.lastPathComponent {
+            "The layout was saved to “\(target.lastPathComponent)”, but “\(winner.lastPathComponent)” "
+                + "also declares this project’s path and takes precedence. "
+                + "Remove or merge the duplicate in the projects directory."
+        } else {
+            "Duplicate files also declare this project’s path and are ignored: "
+                + matches.dropFirst().map { "“\($0.url.lastPathComponent)”" }.joined(separator: ", ")
+                + ". The layout was saved to “\(target.lastPathComponent)”."
+        }
+        pendingLayoutError = LayoutError(
+            verb: "save",
+            message: message,
+            customTitle: "Layout saved with a conflict"
+        )
     }
 
     /// `saveLayout` + error presentation, mirroring `applyLayoutPresentingError`.

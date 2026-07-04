@@ -100,7 +100,7 @@ struct MactermApp: App {
                     }
                 }
                 .alert(
-                    "Couldn't \(appState.pendingLayoutError?.verb ?? "apply") layout",
+                    appState.pendingLayoutError?.title ?? "Couldn't apply layout",
                     isPresented: Binding(
                         get: { appState.pendingLayoutError != nil },
                         set: { if !$0 { appState.pendingLayoutError = nil } }

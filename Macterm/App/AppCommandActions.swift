@@ -124,14 +124,20 @@ extension AppCommand {
             // Requires an applicable central file. `.invalid` stays enabled on
             // purpose: invoking it surfaces the parse-error dialog instead of
             // failing silently. `.none`/`.emptyTabs` disable the menu item and
-            // mute the palette row (see `paletteDisabledHint`).
+            // mute the palette row (see `paletteDisabledHint`) — except that a
+            // committed legacy `.macterm/layout.yaml` keeps `.none` enabled:
+            // invoking it imports the file into the central directory, then
+            // applies (deprecated seed, #114 — an existing project's snapshot
+            // suppresses the first-open import, so this is its only way in).
             guard let current else { return nil }
             switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
             case .applicable,
                  .invalid:
                 return { ctx.appState.applyLayoutPresentingError(current) }
-            case .none,
-                 .emptyTabs:
+            case .none:
+                guard LayoutFile.exists(atProjectRoot: current.path) else { return nil }
+                return { ctx.appState.applyLayoutPresentingError(current) }
+            case .emptyTabs:
                 return nil
             }
         case .saveLayout:
@@ -173,11 +179,33 @@ extension AppCommand {
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
         else { return nil }
-        return switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
-        case .none: "No project file for this project — use “Save Layout” to create one"
-        case .emptyTabs: "The project file declares no tabs"
+        switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
+        case .none:
+            // A legacy `.macterm/layout.yaml` keeps the command enabled
+            // (import-then-apply), so no hint for it.
+            guard !LayoutFile.exists(atProjectRoot: current.path) else { return nil }
+            return "No project file for this project — use “Save Layout” to create one"
+        case .emptyTabs:
+            return "The project file declares no tabs"
         case .applicable,
-             .invalid: nil
+             .invalid:
+            return nil
         }
+    }
+
+    /// Secondary line for an *enabled* palette row. Only "Apply Layout" uses
+    /// it: when duplicate files declare the active project's path, filename
+    /// order silently picks one — say which, so a hand-authored duplicate
+    /// doesn't read as "my edits don't apply".
+    @MainActor
+    func paletteSubtitle(in ctx: AppCommandContext) -> String? {
+        guard self == .applyLayout,
+              let projectID = ctx.appState.activeProjectID,
+              let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
+        else { return nil }
+        let matches = ctx.appState.projectFiles.matches(forProjectPath: current.path)
+        guard matches.count > 1 else { return nil }
+        let ignored = matches.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
+        return "Using \(matches[0].url.lastPathComponent) — ignoring duplicate \(ignored)"
     }
 }

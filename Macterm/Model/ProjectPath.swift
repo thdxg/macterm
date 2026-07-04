@@ -35,14 +35,16 @@ enum ProjectPath: Equatable {
             guard !directory.isEmpty else { return nil }
 
             // `user@host` splits at the LAST `@` (usernames may contain `@`
-            // in principle; hosts never do).
+            // in principle; hosts never do). A host starting with `~` is
+            // rejected: scp would accept it, but `~foo:bar` is far likelier a
+            // mistyped local path than a host literally named `~foo`.
             if let at = userHost.lastIndex(of: "@") {
                 let user = String(userHost[..<at])
                 let host = String(userHost[userHost.index(after: at)...])
-                guard !user.isEmpty, !host.isEmpty else { return nil }
+                guard !user.isEmpty, !host.isEmpty, !host.hasPrefix("~") else { return nil }
                 return .remote(user: user, host: host, directory: directory)
             }
-            guard !userHost.isEmpty else { return nil }
+            guard !userHost.isEmpty, !userHost.hasPrefix("~") else { return nil }
             return .remote(user: nil, host: String(userHost), directory: directory)
         }
 
@@ -60,6 +62,17 @@ enum ProjectPath: Equatable {
             return home
         }
         return NSHomeDirectory()
+    }
+
+    /// Inverse of the `~` expansion in `canonicalLocal`, for *writing* a
+    /// local path: the current home prefix contracts to `~` so saved project
+    /// files stay valid when `~/.config/macterm` syncs (dotfiles) to a
+    /// machine with a different user name. Paths outside home pass through.
+    static func homeContracted(_ path: String) -> String {
+        let home = currentHome
+        if path == home { return "~" }
+        if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
+        return path
     }
 
     /// Canonical form of a *local* path for identity comparisons (matching a

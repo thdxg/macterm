@@ -13,7 +13,7 @@
     },
     "path": {
       "type": "string",
-      "description": "Where the project lives, scp-style: an absolute or ~-prefixed path is a local directory (e.g. \"~/dev/api\"); \"[user@]host:dir\" is a directory on a remote host (e.g. \"devbox:~/dev/api\" — host may be an ssh-config alias; port/identity come from ~/.ssh/config). This is the project's identity: files are matched to projects by this value. Remote projects are not yet supported."
+      "description": "Where the project lives, scp-style: an absolute or ~-prefixed path is a local directory (e.g. \"~/dev/api\"); \"[user@]host:dir\" is a directory on a remote host (e.g. \"devbox:~/dev/api\" — host may be an ssh-config alias; port/identity come from ~/.ssh/config). This is the project's identity: files are matched to projects by this value. Matching expands ~ and normalizes ./.. segments, but resolves neither symlinks (including /tmp → /private/tmp) nor letter case — write the directory exactly as the filesystem reports it. Remote projects are not yet supported."
     },
     "tabs": {
       "type": "array",

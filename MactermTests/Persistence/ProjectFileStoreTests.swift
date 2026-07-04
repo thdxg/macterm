@@ -160,6 +160,44 @@ struct ProjectFileStoreTests {
     }
 
     @Test
+    func write_contracts_home_prefix_to_tilde() throws {
+        let store = makeStore()
+        let home = ProjectPath.currentHome
+        try store.write(ProjectFile(name: "api", path: "\(home)/dev/api"), projectName: "api")
+        // The file is dotfile-syncable config: no hardcoded /Users/<name>.
+        let text = try String(
+            contentsOf: store.directoryURL.appendingPathComponent("api.yaml"),
+            encoding: .utf8
+        )
+        #expect(!text.contains(home))
+        let loaded = try store.loadFull(forProjectPath: "\(home)/dev/api")
+        #expect(loaded?.path == "~/dev/api")
+    }
+
+    @Test
+    func write_outside_home_stays_absolute() throws {
+        let store = makeStore()
+        try store.write(ProjectFile(name: "app", path: "/srv/app"), projectName: "app")
+        #expect(try store.loadFull(forProjectPath: "/srv/app")?.path == "/srv/app")
+    }
+
+    @Test
+    func write_returns_the_written_url() throws {
+        let store = makeStore()
+        let url = try store.write(ProjectFile(name: "api", path: "/a"), projectName: "api")
+        #expect(url.lastPathComponent == "api.yaml")
+    }
+
+    @Test
+    func matches_lists_duplicates_in_filename_order() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "b.yaml", yaml: "path: /same")
+        try writeRaw(store, filename: "a.yaml", yaml: "path: /same")
+        try writeRaw(store, filename: "other.yaml", yaml: "path: /other")
+        #expect(store.matches(forProjectPath: "/same").map(\.url.lastPathComponent) == ["a.yaml", "b.yaml"])
+    }
+
+    @Test
     func unreadable_file_is_skipped_for_matching() throws {
         let store = makeStore()
         try writeRaw(store, filename: "broken.yaml", yaml: "path: [unclosed")

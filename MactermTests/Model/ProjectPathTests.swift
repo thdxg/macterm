@@ -63,6 +63,14 @@ struct ProjectPathTests {
         #expect(ProjectPath.parse("  /a/b  ") == .local("/a/b"))
     }
 
+    @Test
+    func tilde_host_is_rejected_as_likely_typo() {
+        // scp would treat `~foo:bar` as host `~foo`, but here it's far
+        // likelier a mistyped local path — reject rather than surprise.
+        #expect(ProjectPath.parse("~foo:bar") == nil)
+        #expect(ProjectPath.parse("user@~host:dir") == nil)
+    }
+
     // MARK: - Canonicalization
 
     @Test
@@ -94,6 +102,16 @@ struct ProjectPathTests {
 
         // The link path stays the link path — distinct from the target.
         #expect(ProjectPath.canonicalLocal(link.path).hasSuffix("/link"))
+    }
+
+    @Test
+    func home_contraction_inverts_expansion() {
+        let home = ProjectPath.currentHome
+        #expect(ProjectPath.homeContracted(home) == "~")
+        #expect(ProjectPath.homeContracted("\(home)/dev") == "~/dev")
+        #expect(ProjectPath.homeContracted("/srv/app") == "/srv/app")
+        // A sibling that merely shares the prefix string isn't under home.
+        #expect(ProjectPath.homeContracted(home + "2/dev") == home + "2/dev")
     }
 
     // MARK: - Matching

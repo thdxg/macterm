@@ -613,6 +613,110 @@ struct AppStateTests {
     }
 
     @Test
+    func apply_layout_imports_legacy_for_already_open_project() throws {
+        // The migration path for existing projects (#114): a restored
+        // snapshot (here, a live workspace) suppresses the first-open import,
+        // so an explicit Apply Layout must import the committed legacy file
+        // itself — otherwise it stays unreachable for the whole deprecation
+        // window. Remove alongside the legacy path next release.
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-legacylive-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let project = Project(name: "Existing", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+        #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+        writeLegacyLayout("""
+        tabs:
+          - name: "Dev"
+            split:
+              direction: horizontal
+              first:  { run: "npm run dev" }
+              second: {}
+        """, at: dir.path)
+
+        state.applyLayoutPresentingError(project)
+
+        #expect(state.pendingLayoutError == nil)
+        // Imported into the central store, named by the project-name slug…
+        #expect(files.find(forProjectPath: dir.path)?.url.lastPathComponent == "existing.yaml")
+        // …and applied to the live workspace (non-destructive: the idle pane
+        // is reused positionally, the command pane spawns).
+        let ws = try #require(state.workspaces[project.id])
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs[0].customTitle == "Dev")
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+    }
+
+    @Test
+    func apply_layout_with_unparseable_legacy_surfaces_import_error() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-legacylivebad-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let project = Project(name: "Existing", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+        writeLegacyLayout("tabs:\n  - split: { direction: horizontal, first: {} }\n", at: dir.path)
+
+        state.applyLayoutPresentingError(project)
+
+        #expect(state.pendingLayoutError?.verb == "import")
+        #expect(files.find(forProjectPath: dir.path) == nil)
+    }
+
+    // MARK: - saveLayout duplicate conflicts
+
+    @Test
+    func save_layout_warns_when_a_duplicate_file_shadows_the_save() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let (project, root) = seedProjectWithDir(state)
+        // Two hand-authored duplicates. The save replaces the first (bound)
+        // one, but "bbb.yaml" survives and sorts before "proj.yaml" — so it
+        // shadows what was just saved.
+        writeProjectFile("path: \(root)", in: files, filename: "aaa.yaml")
+        writeProjectFile("path: \(root)", in: files, filename: "bbb.yaml")
+
+        state.saveLayoutPresentingError(project)
+
+        let notice = try #require(state.pendingLayoutError)
+        #expect(notice.title == "Layout saved with a conflict")
+        #expect(notice.message.contains("bbb.yaml"))
+        #expect(notice.message.contains("takes precedence"))
+    }
+
+    @Test
+    func save_layout_lists_ignored_duplicates_when_the_save_wins() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let (project, root) = seedProjectWithDir(state)
+        // "proj.yaml" (the save target) sorts before the surviving duplicate.
+        writeProjectFile("path: \(root)", in: files, filename: "aaa.yaml")
+        writeProjectFile("path: \(root)", in: files, filename: "zzz.yaml")
+
+        state.saveLayoutPresentingError(project)
+
+        let notice = try #require(state.pendingLayoutError)
+        #expect(notice.title == "Layout saved with a conflict")
+        #expect(notice.message.contains("zzz.yaml"))
+        #expect(notice.message.contains("ignored"))
+    }
+
+    @Test
+    func save_layout_stays_silent_without_duplicates() {
+        let state = makeAppState()
+        let (project, _) = seedProjectWithDir(state)
+        state.saveLayoutPresentingError(project)
+        #expect(state.pendingLayoutError == nil)
+    }
+
+    @Test
     func selecting_project_without_layout_file_uses_default_workspace() {
         let state = makeAppState()
         let dir = FileManager.default.temporaryDirectory

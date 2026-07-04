@@ -58,20 +58,27 @@ struct ProjectFileStore {
             }
     }
 
-    /// The file declaring `projectPath` (first match wins; later duplicates
-    /// are logged). nil when no file declares that path.
-    func find(forProjectPath projectPath: String) -> ScannedFile? {
-        let matches = scan().filter { file in
+    /// Every file declaring `projectPath`, in filename order — the first is
+    /// the one `find`/`loadFull` use; the rest are ignored duplicates the UI
+    /// surfaces (a hand-authored copy, or a realign-delete that failed).
+    func matches(forProjectPath projectPath: String) -> [ScannedFile] {
+        scan().filter { file in
             guard let declared = file.header?.path else { return false }
             return ProjectPath.matches(declared, projectPath)
         }
-        if matches.count > 1 {
-            let ignored = matches.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
-            let winner = matches[0].url.lastPathComponent
+    }
+
+    /// The file declaring `projectPath` (first match wins; later duplicates
+    /// are logged). nil when no file declares that path.
+    func find(forProjectPath projectPath: String) -> ScannedFile? {
+        let found = matches(forProjectPath: projectPath)
+        if found.count > 1 {
+            let ignored = found.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
+            let winner = found[0].url.lastPathComponent
             logger.warning("Duplicate files declare \(projectPath, privacy: .public)")
             logger.warning("Using \(winner, privacy: .public), ignoring \(ignored, privacy: .public)")
         }
-        return matches.first
+        return found.first
     }
 
     /// Fully decode the file declaring `projectPath`. nil when no file
@@ -124,7 +131,17 @@ struct ProjectFileStore {
     /// only when an on-disk file with that name declares a *different* path;
     /// comparison is case-insensitive so case-sensitive APFS volumes behave
     /// like the default case-insensitive ones.
-    func write(_ file: ProjectFile, projectName: String) throws {
+    ///
+    /// A local `path` has its home prefix contracted to `~` on the way out:
+    /// these files are dotfile-syncable user config, and a hardcoded
+    /// `/Users/<name>/…` breaks on the next machine. Returns the written URL
+    /// so callers can tell whether their file is the one `find` will pick.
+    @discardableResult
+    func write(_ file: ProjectFile, projectName: String) throws -> URL {
+        var file = file
+        if case .local = ProjectPath.parse(file.path) {
+            file.path = ProjectPath.homeContracted(file.path)
+        }
         try FileManager.default.createDirectory(
             at: directoryURL,
             withIntermediateDirectories: true,
@@ -154,8 +171,15 @@ struct ProjectFileStore {
         // Realign: drop the old bound file when the slug moved (rename-by-
         // write-and-delete keeps both steps atomic).
         if let bound, bound.url.lastPathComponent.lowercased() != target.lastPathComponent.lowercased() {
-            try? FileManager.default.removeItem(at: bound.url)
-            logger.info("Removed superseded project file \(bound.url.lastPathComponent, privacy: .public)")
+            do {
+                try FileManager.default.removeItem(at: bound.url)
+                logger.info("Removed superseded project file \(bound.url.lastPathComponent, privacy: .public)")
+            } catch {
+                // The save itself succeeded; the leftover is now a duplicate
+                // declaration the caller surfaces via `matches`.
+                logger.error("Couldn't remove superseded \(bound.url.lastPathComponent, privacy: .public): \(error, privacy: .public)")
+            }
         }
+        return target
     }
 }
