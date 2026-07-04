@@ -177,6 +177,46 @@ struct TerminalTabTests {
         #expect(tab.executionState == .idle)
     }
 
+    @Test
+    func executionState_rawRenderOnlyPaneMakesTabRunning() throws {
+        // The sidebar spinner reads the tab aggregate. If a raw-mode pane only
+        // repaints through render callbacks, the pane and tab should still become
+        // `.running`.
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let bID = try #require(ids["b"])
+        let b = try #require(tab.splitRoot.findPane(id: bID))
+        b.recordUserInteraction()
+        b.applyForegroundRefresh(name: "btop", foregroundPID: 42, terminalInputIsRaw: true)
+
+        simulateTerminalRender(
+            for: b,
+            name: "btop",
+            foregroundPID: 42,
+            terminalInputIsRaw: true,
+            at: Date(timeIntervalSince1970: 100)
+        )
+
+        #expect(tab.executionState == .running)
+    }
+
+    @Test
+    func executionState_freshRawActivityOverridesStaleDone() throws {
+        // A stale `.done` pane should not keep the tab in done/checkmark state
+        // after a new raw foreground process emits activity.
+        let (tab, ids) = makeTab(pane("a"), focused: "a")
+        let aID = try #require(ids["a"])
+        let p = try #require(tab.splitRoot.findPane(id: aID))
+        p.recordUserInteraction()
+        p.applyForegroundRefresh(name: "sleep", foregroundPID: 42)
+        p.applyForegroundRefresh(name: "zsh", foregroundPID: 43, foregroundIsShell: true)
+        #expect(tab.executionState == .done)
+
+        p.applyForegroundRefresh(name: "watch", foregroundPID: 44, terminalInputIsRaw: true)
+        p.markTerminalActivity(at: Date(timeIntervalSince1970: 100))
+
+        #expect(tab.executionState == .running)
+    }
+
     // MARK: - toggleZoom
 
     @Test
@@ -377,5 +417,24 @@ struct TerminalTabTests {
         #expect(try remaining == [#require(ids["r1"]), #require(ids["r2"])])
         #expect(tab.focusedPaneID != nil)
         #expect(try remaining.contains(#require(tab.focusedPaneID)))
+    }
+
+    private func simulateTerminalRender(
+        for pane: Pane,
+        name: String,
+        foregroundPID: pid_t,
+        foregroundIsShell: Bool = false,
+        terminalInputIsRaw: Bool = false,
+        at date: Date
+    ) {
+        if pane.executionState != .running {
+            pane.applyForegroundRefresh(
+                name: name,
+                foregroundPID: foregroundPID,
+                foregroundIsShell: foregroundIsShell,
+                terminalInputIsRaw: terminalInputIsRaw
+            )
+        }
+        pane.markTerminalActivity(at: date, kind: .render)
     }
 }

@@ -12,6 +12,9 @@ struct TerminalPane: View {
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
 
+    @Environment(AppState.self)
+    private var appState
+
     var body: some View {
         // The search bar sits above the terminal surface in a VStack, so showing
         // it pushes the terminal content down rather than overlaying it.
@@ -40,7 +43,8 @@ struct TerminalPane: View {
                 onProcessExit: onProcessExit,
                 onCommandFinished: onCommandFinished,
                 onSplitRequest: onSplitRequest,
-                onZoomRequest: onZoomRequest
+                onZoomRequest: onZoomRequest,
+                onActivityNeedsQuietSettle: { appState.scheduleQuietSettle() }
             )
         }
     }
@@ -59,6 +63,7 @@ private struct TerminalSurface: NSViewRepresentable {
     let onCommandFinished: () -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
+    let onActivityNeedsQuietSettle: () -> Void
 
     final class Coordinator {
         var wasFocused = false
@@ -199,18 +204,20 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onTerminalActivity = { [weak pane] in
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
             pane.refreshForegroundProcess()
-            pane.markTerminalActivity()
+            if pane.markTerminalActivity(kind: .output) {
+                onActivityNeedsQuietSettle()
+            }
         }
         view.onTerminalRender = { [weak pane] in
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
-            // Renders also happen for prompt redraws and input echo. Use them to
-            // keep an already-detected command active (including in-place
-            // spinners), but don't let a render alone start the status spinner.
+            // Renders also happen for prompt redraws and input echo. The tracker
+            // treats them as weak activity, so they can keep a known foreground
+            // alive without letting idle prompt redraws resurrect a done badge.
             if pane.executionState != .running {
                 pane.refreshForegroundProcess()
             }
-            if pane.executionState == .running {
-                pane.markTerminalActivity()
+            if pane.markTerminalActivity(kind: .render) {
+                onActivityNeedsQuietSettle()
             }
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
