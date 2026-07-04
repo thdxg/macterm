@@ -425,6 +425,24 @@ enum ZmxSocketBudget {
     }
 }
 
+/// Process-environment hygiene for zmx.
+enum ZmxEnvironment {
+    /// Drop the session marker inherited from whatever terminal launched the
+    /// app. zmx exports `ZMX_SESSION=<name>` into every shell it wraps, so an
+    /// app launched from inside a Macterm pane (`mise run run`) inherits the
+    /// launcher pane's session identity and passes it to every surface it
+    /// spawns — and `zmx attach` consults that parent session before creating
+    /// the requested one, killing every new surface with `session "…" does
+    /// not exist` once the launcher's session dies. The launcher's identity
+    /// is never right for this process's own panes (zmx re-exports the
+    /// correct value inside each wrapped shell), so scrub it before anything
+    /// spawns. `ZMX_DIR` is deliberately kept — that's user socket-dir
+    /// config, honored by `ZmxSocketBudget.socketDir`.
+    static func scrubInheritedSession() {
+        unsetenv("ZMX_SESSION")
+    }
+}
+
 /// Resolves how a surface launches under zmx.
 enum ZmxAttach {
     /// The `command-wrapper` argv that wraps a surface's shell in zmx:

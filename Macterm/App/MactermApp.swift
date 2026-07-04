@@ -252,6 +252,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return
         }
+        // Before anything can spawn a surface: a launcher terminal's zmx
+        // session marker must not leak into our panes (see ZmxEnvironment).
+        ZmxEnvironment.scrubInheritedSession()
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
         if BenchmarkControl.isEnabled {
             // Under the CI benchmark, the notification-permission alert would
