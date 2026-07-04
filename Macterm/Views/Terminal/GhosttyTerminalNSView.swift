@@ -50,7 +50,14 @@ final class GhosttyTerminalNSView: NSView {
     /// boundary that drives a foreground-process refresh.
     var onTitleChange: ((String) -> Void)? {
         didSet {
-            if let title = lastReportedTitle { onTitleChange?(title) }
+            // Replay ASYNC: this setter runs inside TerminalSurface.configure,
+            // i.e. mid SwiftUI view update. A synchronous replay runs a full
+            // foreground refresh whose republishing re-invalidates SwiftUI
+            // from inside its own render transaction — with per-refresh state
+            // flaps that loop never settles (observed twice as a ~90%-CPU
+            // frozen app). Deferring one runloop turn breaks the cycle.
+            guard let title = lastReportedTitle, let callback = onTitleChange else { return }
+            DispatchQueue.main.async { callback(title) }
         }
     }
 

@@ -150,6 +150,14 @@ enum ProcessInspector {
         // keystrokes), which would misread every wrapped pane as a raw-mode
         // TUI and break the status indicator's canonical-command detection.
         let daemonTTY = ZmxForegroundResolver.daemonTTYPath(sessionName: pane.sessionName)
+        if daemonTTY == nil, pane.nsView?.isZmxWrapped == true {
+            // A wrapped pane whose daemon tty isn't cached yet must NOT fall
+            // back to the client-side tty: the zmx attach client keeps that
+            // pty permanently raw, so the answer would flap raw/canonical
+            // across cache refreshes — each flip republishes execution state
+            // and re-renders, which is one edge of the frozen-render loop.
+            return false
+        }
         return terminalInputIsRaw(ttyPath: daemonTTY ?? pane.nsView?.ttyName)
     }
 
