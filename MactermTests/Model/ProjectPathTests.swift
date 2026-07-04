@@ -131,6 +131,13 @@ struct ProjectPathTests {
     }
 
     @Test
+    func isRemote_convenience_on_raw_strings() {
+        #expect(ProjectPath.isRemote("devbox:~/dev"))
+        #expect(!ProjectPath.isRemote("/a/b"))
+        #expect(!ProjectPath.isRemote("not a path"))
+    }
+
+    @Test
     func local_never_matches_remote_or_invalid() {
         #expect(!ProjectPath.matches("/a/b", "host:/a/b"))
         #expect(!ProjectPath.matches("foo/bar", "foo/bar"))

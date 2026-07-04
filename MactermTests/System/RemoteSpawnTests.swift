@@ -1,0 +1,89 @@
+import Foundation
+@testable import Macterm
+import Testing
+
+struct RemoteSpawnTests {
+    private let remote = ProjectPath.remote(user: nil, host: "devbox", directory: "~/dev/api")
+
+    // MARK: - Pane command
+
+    @Test
+    func pane_command_cds_and_execs_zmx_attach_over_tty() {
+        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
+        #expect(cmd == "ssh -t 'devbox' 'cd ~/'\\''dev/api'\\'' && exec zmx attach '\\''macterm-api-abc123'\\'''")
+    }
+
+    @Test
+    func pane_command_includes_user_in_destination() {
+        let cmd = RemoteSpawn.paneCommand(
+            remote: .remote(user: "deploy", host: "10.0.0.5", directory: "/srv/app"),
+            sessionName: "macterm-app-ff00"
+        )
+        #expect(cmd?.contains("ssh -t 'deploy@10.0.0.5'") == true)
+        #expect(cmd?.contains("cd '\\''/srv/app'\\''") == true)
+    }
+
+    @Test
+    func pane_command_has_no_batchmode_so_auth_can_prompt() {
+        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
+        #expect(cmd?.contains("BatchMode") == false)
+    }
+
+    @Test
+    func pane_command_is_nil_for_local_paths() {
+        #expect(RemoteSpawn.paneCommand(remote: .local("/a/b"), sessionName: "s") == nil)
+    }
+
+    // MARK: - Background op argv
+
+    @Test
+    func op_argv_uses_batchmode_and_connect_timeout() {
+        let argv = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["kill", "macterm-api-abc123"])
+        #expect(argv == [
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=5",
+            "devbox",
+            "zmx", "'kill'", "'macterm-api-abc123'",
+        ])
+    }
+
+    @Test
+    func op_argv_is_nil_for_local_paths() {
+        #expect(RemoteSpawn.opArgv(remote: .local("/a"), zmxArguments: ["ls"]) == nil)
+    }
+
+    // MARK: - Quoting
+
+    @Test
+    func shell_quote_survives_spaces_dollars_and_quotes() {
+        #expect(RemoteSpawn.shellQuote("plain") == "'plain'")
+        #expect(RemoteSpawn.shellQuote("with space") == "'with space'")
+        #expect(RemoteSpawn.shellQuote("$HOME") == "'$HOME'")
+        #expect(RemoteSpawn.shellQuote("it's") == "'it'\\''s'")
+    }
+
+    @Test
+    func remote_directory_keeps_tilde_expandable() {
+        // A quoted tilde is a literal directory named "~" — the tilde segment
+        // must stay bare so the remote shell expands it.
+        #expect(RemoteSpawn.quoteRemoteDirectory("~") == "~")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~/dev/api") == "~/'dev/api'")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~/dir with space") == "~/'dir with space'")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~deploy/app") == "~deploy/'app'")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~deploy") == "~deploy")
+    }
+
+    @Test
+    func remote_directory_quotes_plain_paths_whole() {
+        #expect(RemoteSpawn.quoteRemoteDirectory("/srv/my app") == "'/srv/my app'")
+        #expect(RemoteSpawn.quoteRemoteDirectory("work/api") == "'work/api'")
+    }
+
+    // MARK: - Destination
+
+    @Test
+    func destination_composes_user_and_host() {
+        #expect(RemoteSpawn.destination(user: nil, host: "devbox") == "devbox")
+        #expect(RemoteSpawn.destination(user: "me", host: "devbox") == "me@devbox")
+    }
+}
