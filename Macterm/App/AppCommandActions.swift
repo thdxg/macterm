@@ -104,7 +104,7 @@ extension AppCommand {
             }
         case .unloadProject:
             guard let projectID, ctx.appState.isProjectLoaded(projectID) else { return nil }
-            return { ctx.appState.unloadProject(projectID) }
+            return { ctx.appState.requestUnloadProject(projectID) }
         case .removeProject:
             guard let projectID else { return nil }
             return {

@@ -931,6 +931,31 @@ struct AppStateTests {
     }
 
     @Test
+    func unloadProject_kills_every_session_but_keeps_layout() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let names = try Set(
+            #require(state.workspaces[p.id]).tabs
+                .flatMap { $0.splitRoot.allPanes() }
+                .map(\.sessionName)
+        )
+        #expect(names.count == 2)
+
+        state.unloadProject(p.id)
+
+        await killed.settle()
+        // Sessions die (unload = stop the project's shells)…
+        #expect(await killed.names == names)
+        // …but the layout survives for the next open.
+        let ws = try #require(state.workspaces[p.id])
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+    }
+
+    @Test
     func moveTab_kills_nothing() async throws {
         let killed = KilledSessions()
         let state = makeAppState()

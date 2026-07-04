@@ -92,11 +92,17 @@ struct HotkeyShortcut: Identifiable {
         guard let token = HotkeyRegistry.eventToken(event),
               token == keyToken
         else { return false }
-        return event.modifierFlags.intersection(.deviceIndependentFlagsMask) == modifiers
+        return event.modifierFlags.intersection(HotkeyRegistry.comparableModifierMask) == modifiers
     }
 }
 
 enum HotkeyRegistry {
+    /// Modifier bits Macterm's shortcut grammar models. Real arrow/function-key
+    /// NSEvents also carry `.numericPad`/`.function` in `.deviceIndependentFlagsMask`,
+    /// which parsed shortcuts never include — so matching against the full mask
+    /// makes every arrow-key binding fail to match its own live event.
+    static let comparableModifierMask: NSEvent.ModifierFlags = [.command, .control, .shift, .option]
+
     private static let keyCodes: [String: UInt16] = [
         "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5,
         "z": 6, "x": 7, "c": 8, "v": 9, "b": 11,
@@ -222,7 +228,7 @@ enum HotkeyRegistry {
     }
 
     static func shortcutString(from event: NSEvent) -> String? {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let flags = event.modifierFlags.intersection(comparableModifierMask)
         if modifierOnlyCodes.contains(event.keyCode) { return nil }
 
         var parts: [String] = []

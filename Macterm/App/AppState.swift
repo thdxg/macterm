@@ -578,9 +578,13 @@ final class AppState {
         logger.debug("unloadProject: \(projectID, privacy: .public)")
         let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
         for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-            // Detach, don't kill: the snapshot round-trip preserves each
-            // pane's session identity, so reopening the project reattaches
-            // the still-running shells.
+            // Unload KILLS: with quit now a detach, this is the one action
+            // that stops a whole project's shells while keeping its layout
+            // (the group-kill #113 asked for). A detaching unload would be
+            // a trap — "unloaded" shells silently running forever. The
+            // snapshot keeps the layout; reopening spawns fresh shells in
+            // the saved cwds (`zmx attach` upserts over the dead names).
+            pane.killPersistentSession(using: zmx)
             pane.destroySurface()
         }
         if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {
@@ -602,6 +606,37 @@ final class AppState {
         workspaces.removeValue(forKey: projectID)
         if activeProjectID == projectID { activeProjectID = nil }
         saveWorkspaces()
+    }
+
+    /// An unload staged for confirmation because one of the project's panes
+    /// has a running foreground program — unload now stops every shell in
+    /// the project (keeping the layout), so it's destructive.
+    struct PendingUnloadProject: Equatable {
+        let projectID: UUID
+    }
+
+    var pendingUnloadProject: PendingUnloadProject?
+
+    /// Unload a project, confirming first when any pane is busy.
+    func requestUnloadProject(_ projectID: UUID) {
+        let busy = workspaces[projectID]?.tabs
+            .flatMap { $0.splitRoot.allPanes() }
+            .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+        if busy {
+            pendingUnloadProject = PendingUnloadProject(projectID: projectID)
+            return
+        }
+        unloadProject(projectID)
+    }
+
+    func confirmPendingUnloadProject() {
+        guard let pending = pendingUnloadProject else { return }
+        pendingUnloadProject = nil
+        unloadProject(pending.projectID)
+    }
+
+    func cancelPendingUnloadProject() {
+        pendingUnloadProject = nil
     }
 
     /// Run `removal` (the caller's full remove: workspace + project store)

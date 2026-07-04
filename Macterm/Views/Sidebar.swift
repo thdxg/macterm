@@ -57,7 +57,7 @@ struct SidebarContent: View {
                     } onRename: {
                         projectStore.rename(id: project.id, to: $0)
                     } onUnload: {
-                        appState.unloadProject(project.id)
+                        appState.requestUnloadProject(project.id)
                     } onRemove: {
                         appState.requestRemoveProject(project.id) {
                             expandedProjects.remove(project.id)
