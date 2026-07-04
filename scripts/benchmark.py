@@ -385,13 +385,17 @@ def cmd_report(args):
             for e in entries
         ]
 
+    floors = ", ".join(
+        f"{label.replace(' (powermetrics)', '')} ≥{floor:g}"
+        for _, label, _, floor in METRICS
+    )
     lines += [
         "",
         f"_{current['seconds_per_state']}s sampling window per state; CPU % is the "
         "process CPU-time delta over the window. Runs land on different shared "
         f"runners, so treat small deltas as noise — 🔺/🔻 marks changes ≥{THRESHOLD_PCT}% "
-        "that also clear the metric's absolute noise floor, and those add the "
-        "`benchmark:regression` / `benchmark:improvement` label._",
+        f"that also clear the metric's absolute noise floor ({floors}), and those "
+        "add the `benchmark:regression` / `benchmark:improvement` label._",
     ]
     if baseline is None:
         lines.append("")
