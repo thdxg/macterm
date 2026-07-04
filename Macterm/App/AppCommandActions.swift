@@ -108,8 +108,10 @@ extension AppCommand {
         case .removeProject:
             guard let projectID else { return nil }
             return {
-                ctx.appState.removeProject(projectID)
-                ctx.projectStore.remove(id: projectID)
+                ctx.appState.requestRemoveProject(projectID) {
+                    ctx.appState.removeProject(projectID)
+                    ctx.projectStore.remove(id: projectID)
+                }
             }
         case .replaceProjectPathWithCurrentDir:
             guard let projectID,

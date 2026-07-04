@@ -21,6 +21,16 @@ final class GhosttyTerminalNSView: NSView {
     private let shell: String?
     /// Extra environment variables for the spawned shell.
     private let env: [String: String]?
+    /// The pane's zmx session name. The surface's shell runs under
+    /// `zmx attach <sessionName>` (ghostty `command-wrapper`), so it survives
+    /// app quit and the same name re-attaches the live daemon on relaunch.
+    private let sessionName: String
+
+    /// Whether this surface actually spawned under the zmx wrapper (false when
+    /// zmx is unbundled or the socket-path budget forced a bypass). Read by
+    /// the resolver-cache retry: only wrapped panes are expected to appear in
+    /// `zmx ls`.
+    private(set) var isZmxWrapped = false
 
     /// Heap buffers backing the `const char*` fields of the surface config —
     /// notably `initial_input`, which libghostty writes to the pty
@@ -115,8 +125,15 @@ final class GhosttyTerminalNSView: NSView {
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
-    init(workingDirectory: String, command: String? = nil, shell: String? = nil, env: [String: String]? = nil) {
+    init(
+        workingDirectory: String,
+        sessionName: String,
+        command: String? = nil,
+        shell: String? = nil,
+        env: [String: String]? = nil
+    ) {
         self.workingDirectory = workingDirectory
+        self.sessionName = sessionName
         self.command = command
         self.shell = shell
         self.env = env
@@ -182,9 +199,23 @@ final class GhosttyTerminalNSView: NSView {
             config.command = cString(resolvedShell)
         }
 
-        // Declared `run` is typed into the shell verbatim, as if the user had
-        // entered it at the prompt. No shell-syntax handling: cwd is set above,
-        // not via an injected `cd`.
+        // Wrap the resolved shell in zmx for session persistence. The
+        // `command_wrapper` argv is prepended to ghostty's fully-resolved
+        // command (after login(1) + shell integration), so OSC 7 cwd / OSC 133
+        // framing stay intact — the shell just runs as a child of
+        // `zmx attach <sessionName>`, which upserts the session and re-attaches
+        // the live daemon on relaunch. nil executable (zmx unbundled or over
+        // the socket-path budget) → no wrapper, a plain unpersisted shell.
+        // The argv element buffers come from `cString` (freed in
+        // destroySurface); the pointer array is bound around the spawn below.
+        let wrapperArgv: [UnsafePointer<CChar>?] = ZmxAttach.wrapperArgv(
+            executablePath: ZmxClient.live.executableURL()?.path,
+            sessionID: sessionName
+        ).map { cString($0) }
+
+        // Declared `run` is typed into the (wrapped) shell verbatim, as if the
+        // user had entered it at the prompt. No shell-syntax handling: cwd is
+        // set above, not via an injected `cd`.
         if let command, !command.isEmpty {
             config.initial_input = cString(command + "\n")
         }
@@ -197,17 +228,55 @@ final class GhosttyTerminalNSView: NSView {
                 envVars.append(ghostty_env_var_s(key: cString(key), value: cString(value)))
             }
         }
+        if !wrapperArgv.isEmpty {
+            // Pin the socket dir into the WRAPPED SHELL's env, not just our own
+            // zmx subprocesses: a user's shell rc re-exporting ZMX_DIR/TMPDIR
+            // would otherwise move where a *nested* zmx invocation resolves
+            // sockets, past what the budget probe validated — kill and attach
+            // could then target different dirs. (Same defense Supacode ships.)
+            envVars.append(ghostty_env_var_s(
+                key: cString("ZMX_DIR"),
+                value: cString(ZmxSocketBudget.socketDir())
+            ))
+        }
 
-        if envVars.isEmpty {
-            surface = ghostty_surface_new(app, &config)
-        } else {
-            envVars.withUnsafeMutableBufferPointer { buf in
-                config.env_vars = buf.baseAddress
-                config.env_var_count = buf.count
+        /// Sets env on the config and spawns. Split out so the optional
+        /// command-wrapper buffer scope (below) wraps both env-present and
+        /// env-absent paths without four-way nesting.
+        func makeSurface() {
+            if envVars.isEmpty {
                 surface = ghostty_surface_new(app, &config)
+            } else {
+                envVars.withUnsafeMutableBufferPointer { buf in
+                    config.env_vars = buf.baseAddress
+                    config.env_var_count = buf.count
+                    surface = ghostty_surface_new(app, &config)
+                }
+            }
+        }
+
+        // The command_wrapper argv (a `const char* const*`) needs the pointer
+        // array itself to have a stable base for the duration of the spawn;
+        // bind it just around `makeSurface`. Empty wrapper → no zmx (bypass).
+        if wrapperArgv.isEmpty {
+            makeSurface()
+        } else {
+            wrapperArgv.withUnsafeBufferPointer { buf in
+                config.command_wrapper = buf.baseAddress
+                config.command_wrapper_count = buf.count
+                makeSurface()
             }
         }
         guard let surface else { return }
+
+        // A wrapped spawn created (or reattached) a zmx session — the
+        // resolver's name→leader-pid cache needs a refresh to see it. (The
+        // session registers asynchronously, so the first refresh may miss;
+        // AppState retries while a wrapped pane is absent from `zmx ls`.)
+        if !wrapperArgv.isEmpty {
+            isZmxWrapped = true
+            NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        }
 
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)

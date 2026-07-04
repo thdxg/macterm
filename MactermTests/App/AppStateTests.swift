@@ -716,4 +716,130 @@ struct AppStateTests {
         pane.settleTerminalActivityIfQuiet(now: Date().addingTimeInterval(4))
         #expect(pane.executionState == .done)
     }
+
+    // MARK: - zmx session lifecycle on close paths
+
+    /// A ZmxClient that records every killed session name.
+    private func recordingZmx(into killed: KilledSessions) -> ZmxClient {
+        ZmxClient(
+            executableURL: { nil },
+            isBundled: { true },
+            killSession: { name in await killed.append(name) },
+            listSessionsWithClients: { [] },
+            sessionLeaderPIDs: { [:] }
+        )
+    }
+
+    @Test
+    func closeTab_kills_every_panes_session() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let names = Set(tab.splitRoot.allPanes().map(\.sessionName))
+        #expect(names.count == 2)
+
+        // Second tab so the close leaves a valid workspace.
+        _ = state.workspaces[p.id]?.createTab(projectPath: "/tmp")
+        state.closeTab(tab.id, projectID: p.id)
+
+        await killed.settle()
+        #expect(await killed.names == names)
+    }
+
+    @Test
+    func closePane_kills_only_that_panes_session() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let target = try #require(tab.focusedPaneID)
+        let targetName = try #require(tab.splitRoot.findPane(id: target)?.sessionName)
+
+        state.closePane(target, projectID: p.id)
+
+        await killed.settle()
+        #expect(await killed.names == [targetName])
+    }
+
+    @Test
+    func moveTab_kills_nothing() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let moving = try #require(state.workspaces[p1.id]?.tabs.first?.id)
+
+        state.moveTab(moving, from: p1.id, to: p2.id, destPath: p2.path)
+
+        await killed.settle()
+        #expect(await killed.names.isEmpty)
+    }
+
+    // MARK: - Busy-close confirmations
+
+    @Test
+    func requestCloseTab_with_idle_panes_closes_immediately() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        _ = ws.createTab(projectPath: "/tmp")
+
+        // No live surfaces in a unit test → needsConfirmQuit is unreachable →
+        // not busy → closes without staging.
+        state.requestCloseTab(tab.id, projectID: p.id)
+        #expect(state.pendingCloseTab == nil)
+        #expect(ws.tabs.count == 1)
+    }
+
+    @Test
+    func requestRemoveProject_idle_runs_removal_immediately() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        var removed = false
+        state.requestRemoveProject(p.id) { removed = true }
+        #expect(removed)
+        #expect(state.pendingRemoveProject == nil)
+    }
+
+    @Test
+    func pendingCloseTab_confirm_and_cancel() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        _ = ws.createTab(projectPath: "/tmp")
+
+        // Stage manually (busy detection needs a live surface).
+        state.pendingCloseTab = AppState.PendingCloseTab(tabID: tab.id, projectID: p.id)
+        state.cancelPendingCloseTab()
+        #expect(state.pendingCloseTab == nil)
+        #expect(ws.tabs.count == 2)
+
+        state.pendingCloseTab = AppState.PendingCloseTab(tabID: tab.id, projectID: p.id)
+        state.confirmPendingCloseTab()
+        #expect(state.pendingCloseTab == nil)
+        #expect(ws.tabs.count == 1)
+    }
+}
+
+/// Actor recording killed session names across the fire-and-forget kill tasks.
+private actor KilledSessions {
+    private(set) var names: Set<String> = []
+    func append(_ name: String) {
+        names.insert(name)
+    }
+
+    /// Give the detached kill Tasks a beat to run.
+    func settle() async {
+        for _ in 0 ..< 20 where names.isEmpty {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
 }

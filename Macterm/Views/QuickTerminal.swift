@@ -297,7 +297,11 @@ final class QuickTerminalSplitState {
     }
 
     init() {
-        tab = TerminalTab(projectPath: NSHomeDirectory(), projectID: QuickTerminalService.ephemeralProjectID)
+        tab = TerminalTab(
+            projectPath: NSHomeDirectory(),
+            projectID: QuickTerminalService.ephemeralProjectID,
+            sessionSlug: ZmxSessionName.quickTerminalSlug
+        )
     }
 
     func focusPane(_ paneID: UUID) {
@@ -364,12 +368,19 @@ final class QuickTerminalSplitState {
     }
 
     func closePane(_ paneID: UUID) {
+        // Quick-terminal panes are ephemeral: closing one is permanent, so its
+        // zmx session dies with it (transient hide/show never reaches here).
+        tab.splitRoot.findPane(id: paneID)?.killPersistentSession(using: .live)
         switch tab.removePane(paneID) {
         case .onlyPaneLeft:
             // Replace the whole tab with a fresh one — the quick terminal should
             // always have at least one pane, but we fully reset so the prior
             // pane's surface is torn down (removePane already destroyed it).
-            tab = TerminalTab(projectPath: NSHomeDirectory(), projectID: QuickTerminalService.ephemeralProjectID)
+            tab = TerminalTab(
+                projectPath: NSHomeDirectory(),
+                projectID: QuickTerminalService.ephemeralProjectID,
+                sessionSlug: ZmxSessionName.quickTerminalSlug
+            )
         case .removed,
              .notFound:
             break

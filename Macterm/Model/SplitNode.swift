@@ -249,6 +249,21 @@ final class Pane: Identifiable {
     let id = UUID()
     let projectPath: String
     let projectID: UUID
+    /// Stable session id for zmx-backed persistence, distinct from `id` (which
+    /// is regenerated on every restore). Fresh for a new pane; the restore
+    /// path will pass the saved one.
+    let sessionID: UUID
+    /// The pane's zmx session name (`macterm-<slug>-<hex>`), fixed at creation
+    /// and — once persistence lands — stored verbatim in the snapshot, never
+    /// re-derived: the slug embeds the project *at creation*, and a later
+    /// project rename must not orphan the session. The slug comes from the
+    /// project path's basename (which is the project's name for every project
+    /// added from a folder); callers with a better label (quick terminal)
+    /// pass `sessionSlug` explicitly, and splits inherit the source pane's.
+    let sessionName: String
+    /// The raw slug this pane's session was named under, so a split-off
+    /// sibling groups under the same project in `zmx ls`.
+    let sessionSlug: String
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -449,7 +464,13 @@ final class Pane: Identifiable {
 
     func ensureNSView() -> GhosttyTerminalNSView {
         if let existing = _nsView { return existing }
-        let view = GhosttyTerminalNSView(workingDirectory: projectPath, command: command, shell: shell, env: env)
+        let view = GhosttyTerminalNSView(
+            workingDirectory: projectPath,
+            sessionName: sessionName,
+            command: command,
+            shell: shell,
+            env: env
+        )
         _nsView = view
         return view
     }
@@ -550,16 +571,34 @@ final class Pane: Identifiable {
     init(
         projectPath: String,
         projectID: UUID,
+        sessionID: UUID = UUID(),
+        sessionSlug: String? = nil,
         command: String? = nil,
         shell: String? = nil,
         env: [String: String]? = nil
     ) {
         self.projectPath = projectPath
         self.projectID = projectID
+        self.sessionID = sessionID
+        let slug = sessionSlug ?? (projectPath as NSString).lastPathComponent
+        self.sessionSlug = slug
+        sessionName = ZmxSessionName.make(projectName: slug, paneSessionID: sessionID)
         self.command = command
         self.shell = shell
         self.env = env
         executionTracker = TerminalExecutionTracker(hasUserInteraction: command != nil)
+    }
+
+    /// Permanently kill this pane's zmx session. Call ONLY when the pane is
+    /// gone for good (closed, tab/project removed, dropped by a layout apply)
+    /// — NOT on transient teardown (window hide, tab-switch churn), where the
+    /// daemon must survive. Fire-and-forget: close paths aren't blocked on it
+    /// and ZmxClient's subprocess timeout bounds a stuck daemon. The client is
+    /// a parameter so AppState's injectable instance flows through in tests.
+    func killPersistentSession(using zmx: ZmxClient) {
+        let name = sessionName
+        NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        Task { await zmx.killSession(name) }
     }
 }
 
@@ -605,7 +644,9 @@ extension SplitNode {
     ) -> (node: SplitNode, newPaneID: UUID?) {
         switch self {
         case let .pane(p) where p.id == paneID:
-            let newPane = Pane(projectPath: projectPath, projectID: projectID)
+            // Inherit the source pane's session slug so the new sibling groups
+            // under the same project in `zmx ls`.
+            let newPane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: p.sessionSlug)
             let first: SplitNode = position == .first ? .pane(newPane) : .pane(p)
             let second: SplitNode = position == .first ? .pane(p) : .pane(newPane)
             return (.split(SplitBranch(direction: direction, first: first, second: second)), newPane.id)

@@ -30,6 +30,11 @@ struct ZmxClient {
     /// successful empty listing. An entry's `clients == nil` marks an unknown
     /// count (err/status line) the reaper must also spare.
     var listSessionsWithClients: @Sendable () async -> [ZmxSessionListParser.Entry]?
+    /// `macterm-…` session name → daemon session-leader pid, parsed from
+    /// `zmx ls`. Feeds `ZmxForegroundResolver`'s cache so `ProcessInspector`
+    /// can see past the `zmx attach` client to the real foreground process.
+    /// Empty when the probe fails or no sessions exist.
+    var sessionLeaderPIDs: @Sendable () async -> [String: pid_t]
 }
 
 extension ZmxClient {
@@ -54,7 +59,13 @@ extension ZmxClient {
             let outcome: ProbeOutcome = probed.withLock { current in
                 if let current { return current }
                 let computed: ProbeOutcome
-                if let reason = ZmxSocketBudget.probe() {
+                if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+                    // The unit-test host is the full app: it boots, spawns the
+                    // active project's panes, and then dies without the quit
+                    // sweep — wrapping here would orphan a zmx daemon on every
+                    // `mise run test`. Plain unpersisted shells under test.
+                    computed = .bypass
+                } else if let reason = ZmxSocketBudget.probe() {
                     logger.warning("Bypassing zmx wrapping: \(reason, privacy: .public)")
                     computed = .bypass
                 } else {
@@ -86,6 +97,13 @@ extension ZmxClient {
                 )
                 else { return nil }
                 return ZmxSessionListParser.parse(stdout)
+            },
+            sessionLeaderPIDs: {
+                guard let stdout = await runZmx(
+                    ["ls"], executable: bundledExecutable(), captureStdout: true
+                )
+                else { return [:] }
+                return ZmxForegroundResolver.parseLeaderPIDs(stdout)
             }
         )
     }()
@@ -95,7 +113,8 @@ extension ZmxClient {
         executableURL: { nil },
         isBundled: { false },
         killSession: { _ in },
-        listSessionsWithClients: { [] }
+        listSessionsWithClients: { [] },
+        sessionLeaderPIDs: { [:] }
     )
 
     private enum ProbeOutcome: Equatable { case allow, bypass }

@@ -326,4 +326,35 @@ struct PaneTests {
         p.destroySurface() // idempotent
         #expect(p.nsView == nil)
     }
+
+    // MARK: - zmx session naming
+
+    @Test
+    func session_name_slugs_from_project_path_basename() throws {
+        let id = try #require(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
+        let p = Pane(projectPath: "/Users/me/dev/Macterm", projectID: UUID(), sessionID: id)
+        #expect(p.sessionName == "macterm-macterm-aaaaaaaabbbb")
+        #expect(p.sessionSlug == "Macterm")
+    }
+
+    @Test
+    func explicit_session_slug_wins_over_path_basename() {
+        let p = Pane(projectPath: NSHomeDirectory(), projectID: UUID(), sessionSlug: ZmxSessionName.quickTerminalSlug)
+        #expect(p.sessionName.hasPrefix("macterm-quick-"))
+    }
+
+    @Test
+    func split_inherits_the_source_panes_session_slug() throws {
+        let source = Pane(projectPath: "/tmp", projectID: UUID(), sessionSlug: "myproj")
+        let root = SplitNode.pane(source)
+        let (newRoot, newID) = root.splitting(
+            paneID: source.id, direction: .horizontal, position: .second,
+            projectPath: "/somewhere/else", projectID: source.projectID
+        )
+        let createdID = try #require(newID)
+        let newPane = try #require(newRoot.findPane(id: createdID))
+        #expect(newPane.sessionSlug == "myproj")
+        #expect(newPane.sessionName.hasPrefix("macterm-myproj-"))
+        #expect(newPane.sessionName != source.sessionName)
+    }
 }
