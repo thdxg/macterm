@@ -5,20 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{TITLE}}</title>
   <meta name="description" content="{{DESCRIPTION}}" />
+  <meta name="theme-color" content="#f7f5f0" />
+  <link rel="canonical" href="{{CANONICAL}}" />
 
   <link rel="icon" type="image/png" href="/assets/icon.png" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" />
 
   <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Macterm" />
   <meta property="og:title" content="{{TITLE}}" />
   <meta property="og:description" content="{{DESCRIPTION}}" />
-  <meta property="og:image" content="/assets/screenshot.png" />
+  <meta property="og:url" content="{{CANONICAL}}" />
+  <meta property="og:image" content="{{SITE_URL}}/assets/screenshot.png" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{TITLE}}" />
+  <meta name="twitter:description" content="{{DESCRIPTION}}" />
+  <meta name="twitter:image" content="{{SITE_URL}}/assets/screenshot.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="/tailwind.css" />
+
+  <script type="application/ld+json">{{JSONLD}}</script>
 </head>
 <body class="font-sans text-ink min-h-screen">
 
@@ -32,7 +42,13 @@
       <a href="/docs/" class="nav-tag font-mono text-[12px] text-label leading-none no-underline hover:text-ink transition-colors">/ docs</a>
     </div>
     <div class="flex items-center" style="gap:clamp(14px,3vw,26px)">
-      <a href="https://github.com/thdxg/macterm" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">GitHub ↗</a>
+      <a href="https://github.com/thdxg/macterm" class="nav-secondary inline-flex items-center gap-[7px] text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">
+        <span>GitHub ↗</span>
+        <span data-stat-stars hidden class="inline-flex items-center gap-[3px] font-mono text-[12.5px] text-meta">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.786 1.401 8.169L12 18.896l-7.335 3.869 1.401-8.169L.132 9.21l8.2-1.192z"/></svg>
+          <span data-stat-stars-num>0</span>
+        </span>
+      </a>
       <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center h-9 box-border px-[18px] rounded-full bg-ink text-canvas no-underline text-[14px] font-medium transition-opacity hover:opacity-[0.88]">Download</a>
     </div>
   </nav>

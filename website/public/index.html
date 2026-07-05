@@ -5,32 +5,71 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Macterm — a native macOS terminal that remembers</title>
   <meta name="description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty. Quit anytime; your projects, tabs, and split panes come back exactly as you left them." />
+  <meta name="keywords" content="macOS terminal, terminal emulator, libghostty, Ghostty, tmux alternative, terminal multiplexer, session persistence, split panes, native macOS app" />
+  <meta name="theme-color" content="#f7f5f0" />
+  <link rel="canonical" href="https://macterm.thdxg.dev/" />
 
-  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <link rel="icon" type="image/png" href="/assets/icon.png" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" />
 
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Macterm" />
   <meta property="og:title" content="Macterm — a native macOS terminal that remembers" />
   <meta property="og:description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty." />
-  <meta property="og:image" content="assets/screenshot.png" />
+  <meta property="og:url" content="https://macterm.thdxg.dev/" />
+  <meta property="og:image" content="https://macterm.thdxg.dev/assets/screenshot.png" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Macterm — a native macOS terminal that remembers" />
+  <meta name="twitter:description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty." />
+  <meta name="twitter:image" content="https://macterm.thdxg.dev/assets/screenshot.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="tailwind.css" />
+  <link rel="stylesheet" href="/tailwind.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "Macterm",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS 14+",
+        "url": "https://macterm.thdxg.dev/",
+        "downloadUrl": "https://github.com/thdxg/macterm/releases/latest",
+        "description": "A native macOS terminal with a vertical project sidebar and persistent multiplexing, built on libghostty.",
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      },
+      {
+        "@type": "WebSite",
+        "name": "Macterm",
+        "url": "https://macterm.thdxg.dev/"
+      }
+    ]
+  }
+  </script>
 </head>
 <body class="font-sans text-ink [overflow-x:hidden] min-h-screen">
 
   <!-- sticky top bar -->
   <nav data-nav-bar data-nav-threshold="16" class="site-nav">
     <a href="https://github.com/thdxg/macterm" class="flex items-center gap-[9px] no-underline text-ink">
-      <img src="assets/icon.png" width="28" height="28" alt="Macterm" class="block rounded-[7px]" />
+      <img src="/assets/icon.png" width="28" height="28" alt="Macterm" class="block rounded-[7px]" />
       <span class="font-semibold text-[17px] tracking-[-0.01em] leading-none">Macterm</span>
     </a>
     <div class="flex items-center" style="gap:clamp(14px,3vw,26px)">
       <a href="/docs/" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">Docs</a>
-      <a href="https://github.com/thdxg/macterm" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">GitHub ↗</a>
+      <a href="https://github.com/thdxg/macterm" class="nav-secondary inline-flex items-center gap-[7px] text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">
+        <span>GitHub ↗</span>
+        <span data-stat-stars hidden class="inline-flex items-center gap-[3px] font-mono text-[12.5px] text-meta">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.786 1.401 8.169L12 18.896l-7.335 3.869 1.401-8.169L.132 9.21l8.2-1.192z"/></svg>
+          <span data-stat-stars-num>0</span>
+        </span>
+      </a>
       <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center h-9 box-border px-[18px] rounded-full bg-ink text-canvas no-underline text-[14px] font-medium transition-opacity hover:opacity-[0.88]">Download</a>
     </div>
   </nav>
@@ -39,7 +78,7 @@
     <!-- hero: screenshot + text on one screen, centered -->
     <section class="box-border flex flex-col items-center justify-center" style="min-height:calc(100vh - 70px);gap:clamp(24px,4.5vh,52px);padding:clamp(24px,4vh,56px) var(--site-gutter)">
       <figure class="m-0 w-full flex justify-center" style="max-width:1000px">
-        <img src="assets/screenshot.png" alt="Macterm running on macOS — vertical project sidebar, editor, and a Claude Code split" class="w-full block rounded-[12px]" style="max-height:54vh;object-fit:contain;box-shadow:0 40px 90px -50px rgba(0,0,0,.4)" />
+        <img src="/assets/screenshot.png" alt="Macterm running on macOS — vertical project sidebar, editor, and a Claude Code split" class="w-full block rounded-[12px]" style="max-height:54vh;object-fit:contain;box-shadow:0 40px 90px -50px rgba(0,0,0,.4)" />
       </figure>
       <div class="text-center">
         <h1 class="font-sans font-medium leading-none tracking-[-0.03em] m-0" style="font-size:clamp(28px,3.6vw,42px)">Macterm</h1>
@@ -56,6 +95,16 @@
           </div>
           <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center justify-center gap-[9px] h-[52px] box-border bg-ink text-canvas no-underline font-medium text-[15px] px-[26px] rounded-full transition-opacity hover:opacity-[0.88]">Download for macOS ↓</a>
         </div>
+        <p data-stats-line hidden class="font-mono text-[12.5px] text-meta mt-[18px] mb-0 flex items-center justify-center gap-[14px] flex-wrap">
+          <span data-stat-stars hidden class="inline-flex items-center gap-[5px]">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.786 1.401 8.169L12 18.896l-7.335 3.869 1.401-8.169L.132 9.21l8.2-1.192z"/></svg>
+            <span><span data-stat-stars-num>0</span> stars</span>
+          </span>
+          <span data-stat-downloads hidden class="inline-flex items-center gap-[5px]">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span><span data-stat-downloads-num>0</span> downloads</span>
+          </span>
+        </p>
       </div>
     </section>
 
@@ -110,6 +159,6 @@
     </nav>
   </footer>
 
-  <script src="site.js"></script>
+  <script src="/site.js"></script>
 </body>
 </html>

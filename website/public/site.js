@@ -76,24 +76,44 @@
   items.forEach((el) => io.observe(el));
 })();
 
-// --- Live GitHub stats: point Download buttons at the latest .dmg,
-//     and show the star count next to the GitHub link if present. ---
+// --- Live GitHub stats from /api/stats: fill star + download counts, reveal
+//     their containers, and point Download buttons at the latest .dmg. ---
 (async function loadStats() {
-  const starEls = document.querySelectorAll("[data-stat-stars]");
+  const starWraps = document.querySelectorAll("[data-stat-stars]");
+  const dlWraps = document.querySelectorAll("[data-stat-downloads]");
   const dlBtns = document.querySelectorAll("[data-download-latest]");
-  if (!starEls.length && !dlBtns.length) return;
+  if (!starWraps.length && !dlWraps.length && !dlBtns.length) return;
+
   const compact = new Intl.NumberFormat("en", {
     notation: "compact",
     maximumFractionDigits: 1,
   });
+  // Reveal a stat's own wrapper and any [data-stats-line] container holding it.
+  const reveal = (el) => {
+    el.hidden = false;
+    const line = el.closest("[data-stats-line]");
+    if (line) line.hidden = false;
+  };
+
   try {
     const r = await fetch("/api/stats");
     if (!r.ok) return;
     const data = await r.json();
+
     if (typeof data.stars === "number" && data.stars > 0) {
-      starEls.forEach((el) => {
-        el.textContent = compact.format(data.stars);
-        el.hidden = false;
+      const text = compact.format(data.stars);
+      starWraps.forEach((wrap) => {
+        const num = wrap.querySelector("[data-stat-stars-num]") || wrap;
+        num.textContent = text;
+        reveal(wrap);
+      });
+    }
+    if (typeof data.downloads === "number" && data.downloads > 0) {
+      const text = compact.format(data.downloads);
+      dlWraps.forEach((wrap) => {
+        const num = wrap.querySelector("[data-stat-downloads-num]") || wrap;
+        num.textContent = text;
+        reveal(wrap);
       });
     }
     if (data.latestDmg) {
