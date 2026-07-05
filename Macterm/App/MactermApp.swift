@@ -242,6 +242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appFocusObservers: [Any] = []
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
+    private var controlServer: ControlSocketServer?
+    private var controlHandler: ControlHandler?
 
     func applicationDidFinishLaunching(_: Notification) {
         // Skip the heavy launch path when the app is hosting unit tests.
@@ -255,6 +257,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Before anything can spawn a surface: a launcher terminal's zmx
         // session marker must not leak into our panes (see ZmxEnvironment).
         ZmxEnvironment.scrubInheritedSession()
+        // Control socket for the bundled `macterm` CLI. Started before any
+        // surface spawns so every shell inherits MACTERM_SOCKET and the
+        // bundled CLI on PATH (setenv mutates this process's environ, which
+        // libghostty passes to spawned shells). Requests get a `starting`
+        // error until installResponders attaches the handler.
+        let controlServer = ControlSocketServer(socketPath: ControlSocketServer.defaultSocketPath())
+        controlServer.start()
+        self.controlServer = controlServer
+        setenv(ControlProtocol.socketEnvVar, controlServer.path, 1)
+        if let binDir = Bundle.main.resourceURL?.appendingPathComponent("bin", isDirectory: true).path,
+           FileManager.default.isExecutableFile(atPath: binDir + "/macterm")
+        {
+            let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+            setenv("PATH", existingPath.isEmpty ? binDir : "\(binDir):\(existingPath)", 1)
+        }
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
         if BenchmarkControl.isEnabled {
             // Under the CI benchmark, the notification-permission alert would
@@ -329,6 +346,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if BenchmarkControl.isEnabled {
             BenchmarkControl.connect(appState: appState, projectStore: projectStore)
         }
+        if let controlServer {
+            let handler = ControlHandler(appState: appState, projectStore: projectStore)
+            controlHandler = handler
+            controlServer.attach { raw in await handler.handle(raw) }
+        }
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
@@ -348,6 +370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
+        controlServer?.stop()
         onTerminate?()
         // Quit is a DETACH by default: workspace panes' sessions survive and
         // reattach on relaunch (the snapshot saved by onTerminate carries each

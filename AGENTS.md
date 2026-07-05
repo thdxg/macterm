@@ -83,6 +83,18 @@ A tab's auto-title is, by default, the pane's live **foreground process name** (
 - `Macterm/System/ProcessInspector.swift` — resolves a pane's foreground pid three ways: `runningCommand` (full argv via `KERN_PROCARGS2` → layout `run:`), `runningShell` (non-default shell's `exec_path` → layout `shell:`), `runningProcessName` (kernel `comm` → tab name).
 - `Macterm/Config/` — `MactermConfig` (wrapper ghostty config files), `ShellIntegrationFeatures` (override merger, #75).
 - `Macterm/Settings/SettingsView.swift` — preferences window.
+- `Macterm/Control/` — control-socket plumbing for the bundled `macterm` CLI: `ControlProtocol` (wire types, shared source with the CLI target), `ControlSocketServer`, `ControlHandler`.
+- `CLI/` — the `MactermCLI` target (`macterm` binary): ArgumentParser command tree, `ControlClient` (socket discovery + one-shot request), `Output` (human/`--json` renderers).
+
+### Control CLI (`macterm`)
+
+A bundled CLI (issue #107) controls the running app over a Unix socket at `<App Support>/control.sock` (per build flavor; `MACTERM_BENCHMARK_DATA_DIR` relocates it with the rest of app data). Built as the `MactermCLI` tool target — `PRODUCT_NAME` is `macterm` but `PRODUCT_MODULE_NAME` must stay `MactermCLI` (a `macterm` module would collide case-insensitively with the app's `Macterm.swiftmodule` in the shared products dir). A post-build script copies it to `Contents/Resources/bin/macterm`; the app prepends that dir to `PATH` and exports `MACTERM_SOCKET` before any shell spawns, so `macterm` works inside every pane.
+
+- **Wire protocol** (`ControlProtocol.swift`, compiled into both targets so the codec can't drift): one request per connection; newline-terminated JSON both ways; client half-closes after sending. Requests are `{v, id, command, args}` with `command` namespaced `noun.verb` (`pane.list`); responses echo `id` with `{ok, data}` or `{ok:false, error:{code, message, action?}}` — `action` is a human recovery hint. Errors use snake_case codes (`not_found`, `busy`, `no_surface`, `starting`…).
+- **Server** (`ControlSocketServer`): dedicated thread polling a non-blocking listen fd (20ms) — never a blocking `accept()` on a queue shared with `stop()`, which would starve shutdown. Per-connection dispatch hops to `@MainActor`. Starts in `applicationDidFinishLaunching` (skipped under xctest); the handler attaches later in `installResponders` when AppState exists — early requests get a `starting` error. `FD_CLOEXEC` on the listen fd so spawned shells can't hold the socket past quit.
+- **Handler** (`ControlHandler`): translate-and-delegate only — resolves selectors (name/UUID/1-based index for projects and tabs; conflicts and dupes are typed `ambiguous` errors) and calls the same `AppState`/`ProjectStore`/`ZmxClient` methods the UI uses. Reads zmx through `appState.zmx` so tests stub one seam.
+- **CLI client**: discovery order `--socket` (hard pin) → `MACTERM_SOCKET` (hint only — falls through to the well-known release/debug paths when stale, avoiding cmux's pinned-env trap) → per-flavor App Support paths. Refuses sockets not owned by the current user; non-blocking connect with a 250ms poll so a dead socket never hangs. Safe-fail contract: stdout only on success; exit 0 ok / 1 app error / 2 unreachable.
+- Security posture: same-user only, enforced by filesystem permissions (0600 socket, 0700 dir) — the same boundary zmx itself uses. No token auth by design; the request envelope leaves room for an `auth` field if that ever changes.
 
 ### Ghostty Config Pipeline
 
