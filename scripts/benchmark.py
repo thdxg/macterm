@@ -218,12 +218,16 @@ def spawn_workload(app, data_dir, tabs, out_path):
     # The socket answers `starting` until AppState attaches; by this point
     # the project is open so one poll round is usually enough.
     for _ in range(30):
-        if sh([cli, "status", "--socket", socket]).returncode == 0:
+        probe = sh([cli, "status", "--socket", socket])
+        if probe.returncode == 0:
             break
         time.sleep(1)
     else:
         dump_diagnostics(out_path)
-        sys.exit("error: control socket never became ready for the workload")
+        sys.exit(
+            "error: control socket never became ready for the workload: "
+            f"{probe.stderr.strip()}"
+        )
 
     print(f"spawning workload: {tabs} tabs x 4 panes", flush=True)
     for _ in range(tabs):
@@ -261,7 +265,13 @@ def cmd_run(args):
     # isolation needs the explicit MACTERM_BENCHMARK_DATA_DIR override
     # (FileStorage.swift). Without it, a local run reads and writes the real
     # app's projects/workspaces.
-    home = tempfile.mkdtemp(prefix="macterm-bench-home-")
+    #
+    # Rooted in /tmp, NOT the default $TMPDIR: the control socket lives at
+    # <data-dir>/control.sock, and a Unix socket path must fit sun_path
+    # (~104 bytes). CI runners' $TMPDIR (/var/folders/…/T/) pushes the path
+    # right past that, so the app refuses to bind and the workload can never
+    # connect. /tmp keeps it ~50 bytes with room to spare.
+    home = tempfile.mkdtemp(prefix="macterm-bench-home-", dir="/tmp")
     bench_env = {
         "MACTERM_BENCHMARK": "1",
         "MACTERM_BENCHMARK_DATA_DIR": os.path.join(home, "app-data"),
