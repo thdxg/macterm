@@ -3,251 +3,113 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Macterm — the terminal that remembers</title>
-  <meta name="description" content="A native macOS terminal with a vertical project sidebar and persistent multiplexing. Quit anytime; your projects, tabs, and split panes come back exactly as you left them. Built on libghostty." />
+  <title>Macterm — a native macOS terminal that remembers</title>
+  <meta name="description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty. Quit anytime; your projects, tabs, and split panes come back exactly as you left them." />
 
   <link rel="icon" type="image/png" href="assets/icon.png" />
 
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Macterm — the terminal that remembers" />
-  <meta property="og:description" content="A native macOS terminal with a vertical project sidebar and persistent multiplexing. Built on libghostty." />
+  <meta property="og:title" content="Macterm — a native macOS terminal that remembers" />
+  <meta property="og:description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty." />
   <meta property="og:image" content="assets/screenshot.png" />
   <meta name="twitter:card" content="summary_large_image" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="tailwind.css" />
 </head>
-<body>
-  <a class="skip-link" href="#main">Skip to content</a>
+<body class="font-sans text-ink [overflow-x:hidden] min-h-screen">
 
-  <header class="topbar">
-    <div class="wrap topbar-inner">
-      <a class="wordmark" href="#main" aria-label="Macterm home">
-        <img class="wordmark-logo" src="assets/icon.png" width="28" height="28" alt="Macterm" />
-      </a>
-      <nav class="topnav" aria-label="Primary">
-        <a href="#features">Features</a>
-        <a href="#layouts">Layouts</a>
-        <a href="#install">Install</a>
-        <a class="topnav-repo" href="https://github.com/thdxg/macterm" aria-label="Macterm on GitHub">
-          <svg class="topnav-repo-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.05-.02-2.06-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.33-1.76-1.33-1.76-1.09-.74.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.31-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.87.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.81 1.1.81 2.22 0 1.61-.01 2.9-.01 3.29 0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5Z" />
-          </svg>
-          <span class="topnav-stars" id="stat-stars" hidden>
-            <span class="topnav-stars-num"></span>
-          </span>
-        </a>
-      </nav>
+  <!-- sticky top bar -->
+  <nav data-nav-bar data-nav-threshold="16" class="site-nav">
+    <a href="https://github.com/thdxg/macterm" class="flex items-center gap-[9px] no-underline text-ink">
+      <img src="assets/icon.png" width="28" height="28" alt="Macterm" class="block rounded-[7px]" />
+      <span class="font-semibold text-[17px] tracking-[-0.01em]">Macterm</span>
+    </a>
+    <div class="flex items-center" style="gap:clamp(14px,3vw,26px)">
+      <a href="/docs.html" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">Docs</a>
+      <a href="https://github.com/thdxg/macterm" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">GitHub ↗</a>
+      <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center h-[38px] box-border px-[18px] rounded-full bg-ink text-canvas no-underline text-[14px] font-medium transition-opacity hover:opacity-[0.88]">Download</a>
     </div>
-  </header>
+  </nav>
 
   <main id="main">
-    <!-- ============================ HERO ============================ -->
-    <section class="hero">
-      <div class="wrap hero-inner">
-        <h1 class="hero-title">
-          The terminal<br />that remembers
-        </h1>
-
-        <p class="lede">Macterm is a macOS terminal for keeping your projects organized and right where you left them.</p>
-
-        <div class="hero-actions">
-          <div class="command command--hero" role="group" aria-label="Install with Homebrew">
-            <span class="command-sigil" aria-hidden="true">$</span>
-            <code id="brew-cmd">brew install --cask thdxg/tap/macterm</code>
-            <button class="copy-btn copy-btn--icon" type="button" data-copy="#brew-cmd" aria-label="Copy Homebrew command">
-              <svg class="copy-icon copy-icon--copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              <svg class="copy-icon copy-icon--check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
+    <!-- hero: screenshot + text on one screen, centered -->
+    <section class="box-border flex flex-col items-center justify-center" style="min-height:calc(100vh - 70px);gap:clamp(24px,4.5vh,52px);padding:clamp(24px,4vh,56px) var(--site-gutter)">
+      <figure class="m-0 w-full flex justify-center" style="max-width:1000px">
+        <img src="assets/screenshot.png" alt="Macterm running on macOS — vertical project sidebar, editor, and a Claude Code split" class="w-full block rounded-[12px]" style="max-height:54vh;object-fit:contain;box-shadow:0 40px 90px -50px rgba(0,0,0,.4)" />
+      </figure>
+      <div class="text-center">
+        <h1 class="font-sans font-medium leading-none tracking-[-0.03em] m-0" style="font-size:clamp(28px,3.6vw,42px)">Macterm</h1>
+        <p class="font-normal leading-[1.5] tracking-[-0.005em] text-lede mt-4 mb-0 mx-auto" style="font-size:clamp(15px,1.7vw,18px);max-width:40ch">
+          A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty.
+        </p>
+        <div class="flex justify-center items-center gap-4 mt-[34px] flex-wrap">
+          <div class="flex items-center gap-[10px] h-[52px] box-border font-mono text-[13px] text-ink rounded-full" style="padding:0 8px 0 20px;background:rgba(23,21,15,.055)">
+            <code class="whitespace-nowrap">brew install --cask thdxg/tap/macterm</code>
+            <button type="button" data-copy aria-label="Copy install command" class="flex-none inline-flex items-center justify-center w-8 h-8 bg-transparent border-0 rounded-full text-ink cursor-pointer transition-colors hover:bg-[rgba(23,21,15,0.08)]">
+              <svg data-i="copy" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <svg data-i="check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M20 6 9 17l-5-5"/></svg>
             </button>
           </div>
-
-          <a class="btn-primary" id="download-btn" href="https://github.com/thdxg/macterm/releases/latest" aria-label="Download for macOS">
-            <svg class="btn-primary-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3v12" />
-              <path d="m7 10 5 5 5-5" />
-              <path d="M5 21h14" />
-            </svg>
-            <span class="btn-primary-count" id="stat-downloads" hidden></span>
-          </a>
+          <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center justify-center gap-[9px] h-[52px] box-border bg-ink text-canvas no-underline font-medium text-[15px] px-[26px] rounded-full transition-opacity hover:opacity-[0.88]">Download for macOS ↓</a>
         </div>
       </div>
-
-      <div class="wrap shot-wrap">
-        <figure class="shot">
-          <img
-            src="assets/screenshot.png"
-            width="1200" height="750"
-            alt="Macterm running on macOS: a vertical project sidebar lists projects on the left, a code editor fills the center, and a Claude Code session runs in a split pane on the right."
-            loading="eager" decoding="async"
-          />
-        </figure>
-      </div>
     </section>
 
-    <!-- ========================== FEATURES ========================== -->
-    <section id="features" class="section features">
-      <div class="wrap">
-        <header class="section-head">
-          <p class="section-eyebrow">// what you get</p>
-          <h2 class="section-title">Built for people who live in the terminal</h2>
-        </header>
-
-        <ul class="feature-grid">
-          <li class="feature">
-            <h3 class="feature-title">Vertical project sidebar</h3>
-            <p>Organize projects and their tabs in a native macOS sidebar, stacked
-            vertically where there's actually room to read them.</p>
-          </li>
-          <li class="feature">
-            <h3 class="feature-title">Persistent multiplexing</h3>
-            <p>Projects, tabs, and panes are saved and restored on relaunch. Close
-            the app and your whole workspace comes back.</p>
-          </li>
-          <li class="feature">
-            <h3 class="feature-title">Command palette</h3>
-            <p>Press <kbd>&#8984;P</kbd> to split panes, switch projects, or open a
-            directory. Every action is one keystroke away.</p>
-          </li>
-          <li class="feature">
-            <h3 class="feature-title">Declarative layouts</h3>
-            <p>Describe a project's tabs, splits, and per-pane commands in
-            <code>layout.yaml</code>. Open the project; the workspace builds itself.</p>
-          </li>
-          <li class="feature">
-            <h3 class="feature-title">Quick terminal</h3>
-            <p>A global terminal that drops down from anywhere with a hotkey, then
-            gets out of your way when you're done.</p>
-          </li>
-          <li class="feature">
-            <h3 class="feature-title">Ghostty config compatibility</h3>
-            <p>Reads your existing <code>~/.config/ghostty/config</code>. Theme,
-            font, keybinds &mdash; all of it just works.</p>
-          </li>
-        </ul>
+    <!-- features -->
+    <section class="mx-auto" style="max-width:1180px;padding:clamp(88px,12vw,140px) var(--site-gutter) 48px">
+      <div class="flex justify-between items-baseline mb-6">
+        <h2 class="text-[22px] font-medium m-0">Features</h2>
+        <span class="font-mono text-[12px] text-meta">six of them</span>
       </div>
-    </section>
-
-    <!-- ========================== LAYOUTS =========================== -->
-    <section id="layouts" class="section layouts">
-      <div class="wrap layouts-inner">
-        <div class="layouts-copy">
-          <p class="section-eyebrow">// declarative layouts</p>
-          <h2 class="section-title">Commit a layout. Open the project.</h2>
-          <p class="layouts-lede">
-            Drop a <code>.macterm/layout.yaml</code> in any repo to describe its
-            tabs, split ratios, working directories, and the command each pane
-            runs. The file is the source of truth &mdash; Macterm reconciles the
-            live workspace toward it, restarting only the panes that drifted.
-          </p>
-          <ul class="layouts-points">
-            <li><strong>Save layout</strong> writes your current workspace out, capturing each pane's live command.</li>
-            <li><strong>Apply layout</strong> rebuilds from the file with minimal disruption &mdash; matching panes are kept, not killed.</li>
-          </ul>
+      <div>
+        <div data-reveal class="feature-row">
+          <span class="font-mono text-[13px] text-meta">01</span>
+          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Vertical project sidebar</h3>
+          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Organize projects and their tabs in a native macOS sidebar, stacked vertically where there's actually room to read them.</p>
         </div>
-
-        <figure class="code-card">
-          <figcaption class="code-head">
-            <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="code-path">.macterm/layout.yaml</span>
-          </figcaption>
-<pre class="code-body" tabindex="0"><code><span class="c-comment"># yaml-language-server: $schema=…/layout.schema.json</span>
-<span class="c-key">name</span>: <span class="c-str">"MyApp"</span>
-<span class="c-key">tabs</span>:
-  <span class="c-comment"># a single-pane tab</span>
-  - <span class="c-key">run</span>: <span class="c-str">"npm run dev"</span>
-  <span class="c-comment"># a tab with a custom name and splits</span>
-  - <span class="c-key">name</span>: <span class="c-str">"Dev"</span>
-    <span class="c-key">split</span>:
-      <span class="c-key">direction</span>: <span class="c-val">horizontal</span>
-      <span class="c-key">ratio</span>: <span class="c-num">0.6</span>
-      <span class="c-key">first</span>:
-        <span class="c-key">cwd</span>: <span class="c-str">"./api"</span>
-        <span class="c-key">run</span>: <span class="c-str">"npm run dev"</span>
-      <span class="c-key">second</span>:
-        <span class="c-key">split</span>:
-          <span class="c-key">direction</span>: <span class="c-val">vertical</span>
-          <span class="c-key">first</span>:  { <span class="c-key">cwd</span>: <span class="c-str">"./api"</span>, <span class="c-key">run</span>: <span class="c-str">"npm test -- --watch"</span> }
-          <span class="c-key">second</span>: {} <span class="c-comment"># plain shell pane</span></code></pre>
-        </figure>
-      </div>
-    </section>
-
-    <!-- ========================== INSTALL =========================== -->
-    <section id="install" class="section install">
-      <div class="wrap">
-        <header class="section-head">
-          <p class="section-eyebrow">// install</p>
-          <h2 class="section-title">Up and running in a minute</h2>
-        </header>
-
-        <div class="install-grid">
-          <div class="install-card install-card--primary">
-            <h3 class="install-card-title">Homebrew</h3>
-            <p class="install-card-note">The cask strips the Gatekeeper quarantine flag on install, so it launches with no extra prompts.</p>
-            <div class="command" role="group" aria-label="Install with Homebrew">
-              <span class="command-sigil" aria-hidden="true">$</span>
-              <code id="brew-cmd-2">brew install --cask thdxg/tap/macterm</code>
-              <button class="copy-btn copy-btn--icon" type="button" data-copy="#brew-cmd-2" aria-label="Copy Homebrew command">
-                <svg class="copy-icon copy-icon--copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                <svg class="copy-icon copy-icon--check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="install-card">
-            <h3 class="install-card-title">Direct download</h3>
-            <p class="install-card-note">Grab the <code>.dmg</code>, then clear the quarantine flag once, since the app isn't signed with an Apple Developer certificate:</p>
-            <div class="command" role="group" aria-label="Clear quarantine flag">
-              <span class="command-sigil" aria-hidden="true">$</span>
-              <code id="xattr-cmd">xattr -cr /Applications/Macterm.app</code>
-              <button class="copy-btn copy-btn--icon" type="button" data-copy="#xattr-cmd" aria-label="Copy xattr command">
-                <svg class="copy-icon copy-icon--copy" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                <svg class="copy-icon copy-icon--check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              </button>
-            </div>
-            <a class="btn-ghost btn-ghost--block" href="https://github.com/thdxg/macterm/releases/latest">
-              Download from Releases&nbsp;&#8599;
-            </a>
-          </div>
+        <div data-reveal class="feature-row">
+          <span class="font-mono text-[13px] text-meta">02</span>
+          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Persistent multiplexing</h3>
+          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Projects, tabs, and panes are saved and restored on relaunch. Close the app; your whole workspace comes back.</p>
+        </div>
+        <div data-reveal class="feature-row">
+          <span class="font-mono text-[13px] text-meta">03</span>
+          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Command palette</h3>
+          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Press <kbd class="font-mono bg-chip border border-[rgba(23,21,15,0.16)] rounded-[5px]" style="font-size:.8em;padding:.1em .4em">⌘P</kbd> to split panes, switch projects, or open a directory — every action a keystroke away.</p>
+        </div>
+        <div data-reveal class="feature-row">
+          <span class="font-mono text-[13px] text-meta">04</span>
+          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Declarative layouts</h3>
+          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Describe a project's tabs, splits, and per-pane commands in <code class="font-mono" style="font-size:.85em">layout.yaml</code>. Open it; the workspace builds itself.</p>
+        </div>
+        <div data-reveal class="feature-row">
+          <span class="font-mono text-[13px] text-meta">05</span>
+          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Quick terminal</h3>
+          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">A global terminal that drops down from anywhere with a hotkey, then gets out of your way when you're done.</p>
+        </div>
+        <div data-reveal class="feature-row">
+          <span class="font-mono text-[13px] text-meta">06</span>
+          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Ghostty compatibility</h3>
+          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Reads your existing <code class="font-mono" style="font-size:.85em">ghostty/config</code>. Theme, font, keybinds — all of it just works.</p>
         </div>
       </div>
     </section>
   </main>
 
-  <footer class="footer">
-    <div class="wrap footer-inner">
-      <div class="footer-brand">
-        <img class="footer-logo" src="assets/icon.png" width="22" height="22" alt="" />macterm
-      </div>
-      <p class="footer-line">
-        A native macOS terminal built on libghostty. MIT licensed.
-      </p>
-      <nav class="footer-nav" aria-label="Footer">
-        <a href="https://github.com/thdxg/macterm">GitHub</a>
-        <a href="https://github.com/thdxg/macterm/releases">Releases</a>
-        <a href="https://ghostty.org">Ghostty</a>
-      </nav>
-    </div>
+  <!-- footer -->
+  <footer class="site-footer">
+    <span class="font-semibold text-ink">Macterm</span>
+    <nav>
+      <a href="https://github.com/thdxg/macterm">GitHub</a>
+      <a href="https://github.com/thdxg/macterm/releases">Releases</a>
+      <a href="https://ghostty.org">Ghostty</a>
+    </nav>
   </footer>
 
-  <script src="script.js" defer></script>
+  <script src="site.js"></script>
 </body>
 </html>

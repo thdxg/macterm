@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Macterm Docs</title>
+  <meta name="description" content="Install, configure, and drive Macterm — a native macOS terminal with a vertical project sidebar and persistent multiplexing, built on libghostty." />
+
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Macterm Docs" />
+  <meta property="og:description" content="Install, configure, and drive Macterm — a native macOS terminal built on libghostty." />
+  <meta property="og:image" content="assets/screenshot.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="tailwind.css" />
+</head>
+<body class="font-sans text-ink min-h-screen">
+
+  <!-- top bar -->
+  <nav data-nav-bar data-nav-threshold="10" class="site-nav">
+    <div class="flex items-center gap-[9px]">
+      <a href="/" class="flex items-center gap-[9px] text-ink no-underline">
+        <img src="assets/icon.png" width="28" height="28" alt="Macterm" class="block rounded-[7px]" />
+        <span class="font-semibold text-[17px] tracking-[-0.01em]">Macterm</span>
+      </a>
+      <span class="nav-tag font-mono text-[12px] text-label">/ docs</span>
+    </div>
+    <div class="flex items-center" style="gap:clamp(14px,3vw,26px)">
+      <a href="https://github.com/thdxg/macterm" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">GitHub ↗</a>
+      <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center h-9 box-border px-[18px] rounded-full bg-ink text-canvas no-underline text-[14px] font-medium transition-opacity hover:opacity-[0.88]">Download</a>
+    </div>
+  </nav>
+
+  <!-- shell -->
+  <div class="docs-shell">
+    <!-- sidebar (generated from Markdown headings) -->
+    <aside class="docs-sidebar">
+<!-- SIDEBAR -->
+    </aside>
+
+    <!-- content (rendered from Markdown) -->
+    <main class="docs-main prose-docs">
+<!-- CONTENT -->
+    </main>
+  </div>
+
+  <!-- footer -->
+  <footer class="site-footer">
+    <a href="/" class="font-semibold text-ink no-underline">← Macterm</a>
+    <nav>
+      <a href="https://github.com/thdxg/macterm">GitHub</a>
+      <a href="https://github.com/thdxg/macterm/releases">Releases</a>
+      <a href="https://ghostty.org">Ghostty</a>
+    </nav>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>
