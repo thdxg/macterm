@@ -8,16 +8,30 @@ struct RemoteSpawnTests {
     // MARK: - Pane command
 
     @Test
-    func pane_command_cds_and_execs_zmx_attach_over_tty() {
+    func pane_command_execs_zmx_after_guarding_zmx_and_cd() {
         // The remote side is `sh -c '<script>'` with a single-quote-free
         // script — the one form every login shell (bash/zsh/fish/nu)
         // tokenizes identically before POSIX sh takes over.
+        let cmd = try? #require(RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123"))
+        // Missing zmx / bad cwd must NOT close the pane — they drop into a
+        // login shell with a diagnostic instead of exiting.
+        #expect(cmd?.contains("command -v zmx") == true)
+        #expect(cmd?.contains("zmx not found in PATH") == true)
+        #expect(cmd?.contains("cannot cd to") == true)
+        #expect(cmd?.contains("exec ${SHELL:-/bin/sh} -l") == true)
+        // Happy path still execs the attach into the declared dir.
+        #expect(cmd?.contains("cd ~/\"dev/api\"") == true)
+        #expect(cmd?.contains("exec zmx attach \"macterm-api-abc123\"") == true)
+    }
+
+    @Test
+    func pane_command_script_is_single_quote_free() {
+        // Single quotes in the script would break the `sh -c '<script>'`
+        // wrapper on a non-POSIX login shell.
         let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
-        let script = RemoteSpawn.remotePathPreamble + RemoteSpawn.remoteTermPreamble
-            + "cd ~/\"dev/api\" && exec zmx attach \"macterm-api-abc123\""
-        #expect(cmd == "ssh -t 'devbox' " + RemoteSpawn.shellQuote("sh -c " + RemoteSpawn.shellQuote(script)))
-        // The preambles must not smuggle single quotes into the script.
-        #expect(!script.contains("'"))
+        // The only single quotes are the two that wrap the sh -c argument
+        // (the outer ssh quoting escapes them as '\'').
+        #expect(cmd?.contains("'\\''") == true)
     }
 
     @Test

@@ -34,8 +34,13 @@ enum RemoteSpawn {
     /// shells (fish, nushell) don't source the profiles that would add user
     /// dirs — a zmx findable in an interactive session can be invisible to
     /// `ssh host <cmd>`. Extended, never replaced: an existing PATH wins.
+    ///
+    /// Covers the usual user-bin dirs (`~/bin`, `~/.local/bin`) and the
+    /// common system prefixes (`/usr/local/bin` Linux/Intel-mac, `~/.cargo/bin`
+    /// for a cargo-installed zmx, `/opt/homebrew/bin` Apple-silicon mac).
     static let remotePathPreamble =
-        "PATH=\"$PATH:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin\"; export PATH; "
+        "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
+            + "export PATH; "
 
     /// Prepended to the pane script only: ssh forwards the local
     /// TERM=xterm-ghostty, which most remotes have no terminfo entry for
@@ -59,9 +64,27 @@ enum RemoteSpawn {
     /// then runs under POSIX sh regardless of the login shell.
     static func paneCommand(remote: ProjectPath, sessionName: String) -> String? {
         guard case let .remote(user, host, directory) = remote else { return nil }
-        let attach = remotePathPreamble + remoteTermPreamble
-            + "cd \(quoteRemoteDirectory(directory)) && exec zmx attach \(posixDoubleQuote(sessionName))"
-        let remoteCommand = "sh -c \(shellQuote(attach))"
+        // If zmx isn't on the (non-interactive) PATH, DON'T let the script
+        // exit — that closes the pane with no explanation (the surface's
+        // command exiting fires closeSurface). Instead print a diagnostic and
+        // drop into a plain login shell so the failure is visible and the pane
+        // is still usable. Same for a `cd` into a missing directory. Only the
+        // happy path `exec`s zmx (replacing the shell, so its exit is the
+        // session detaching, not an error).
+        let quotedDir = quoteRemoteDirectory(directory)
+        let quotedSession = posixDoubleQuote(sessionName)
+        // `${SHELL:-/bin/sh} -l`: a login shell, falling back to /bin/sh when
+        // the remote leaves $SHELL unset — so the diagnostic fallback can
+        // never itself exit-and-close the pane.
+        let fallbackShell = "exec ${SHELL:-/bin/sh} -l"
+        let script = remotePathPreamble + remoteTermPreamble + [
+            "command -v zmx >/dev/null 2>&1 || "
+                + "{ echo \"macterm: zmx not found in PATH on this host ($PATH)\" >&2; \(fallbackShell); }",
+            "cd \(quotedDir) || "
+                + "{ echo \"macterm: cannot cd to \(quotedDir)\" >&2; \(fallbackShell); }",
+            "exec zmx attach \(quotedSession)",
+        ].joined(separator: "; ")
+        let remoteCommand = "sh -c \(shellQuote(script))"
         return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(remoteCommand))"
     }
 
