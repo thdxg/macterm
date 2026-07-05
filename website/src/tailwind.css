@@ -18,7 +18,9 @@
 
   /* Surfaces */
   --color-canvas: #f7f5f0; /* page background */
-  --color-code: #141210; /* dark code-block surface */
+  /* Light code-block surface — the same warm translucent fill as the landing
+     install pill, so all command/code surfaces match. */
+  --color-code: rgba(23, 21, 15, 0.055);
 
   /* Ink */
   --color-ink: #17150f; /* primary text, buttons */
@@ -31,18 +33,18 @@
 
   /* Chips & inline code */
   --color-chip: #e6e0d3; /* inline code / kbd fill */
-  --color-codetext: #e8e4da; /* light text on dark code surface */
+  --color-codetext: #17150f; /* code text on the light code surface */
 
-  /* Code-block chrome (dark surface) */
-  --color-code-caption: #8a8375; /* filename label */
-  --color-code-btn: #b7b1a4; /* copy-button glyph */
+  /* Code-block chrome (light surface) */
+  --color-code-caption: #6b6558; /* filename label */
+  --color-code-btn: #6b6558; /* copy-button glyph */
 
-  /* Syntax highlighting (YAML sample) */
-  --color-syn-key: #7c766a;
-  --color-syn-str: #c9c3b6;
-  --color-syn-val: #9a958a;
-  --color-syn-dash: #807a6e;
-  --color-syn-comment: #5e594f;
+  /* Syntax highlighting (YAML sample) — darker tones for the light surface. */
+  --color-syn-key: #6b6558;
+  --color-syn-str: #4a4539;
+  --color-syn-val: #77715f;
+  --color-syn-dash: #938b7b;
+  --color-syn-comment: #a39c8b;
 }
 
 /* Global chrome that isn't a per-element utility. */
@@ -482,15 +484,15 @@
     justify-content: center;
     width: 30px;
     height: 30px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(23, 21, 15, 0.05);
+    border: 1px solid rgba(23, 21, 15, 0.1);
     border-radius: 7px;
     color: var(--color-code-btn);
     cursor: pointer;
     transition: background 0.2s;
   }
   .code-block-copy:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(23, 21, 15, 0.1);
   }
   /* Code block with a filename caption bar. */
   .code-block-caption {
@@ -498,7 +500,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 11px 12px 11px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    border-bottom: 1px solid rgba(23, 21, 15, 0.09);
   }
   .code-block-caption span {
     font-family: var(--font-mono);
