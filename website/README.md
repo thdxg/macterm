@@ -45,6 +45,18 @@ the language for a filename caption bar.
 
 ## Deploy
 
+Deployed as a Cloudflare Worker via **Workers Builds** (Git integration): on
+push, Cloudflare runs the `[build]` command in `wrangler.toml`
+(`bun install && bun run build`) and then `wrangler deploy`. The generated
+`docs.html` / `tailwind.css` are gitignored, so the build step is what produces
+them — never ship `public/` without building.
+
+Because this Worker lives in a subdirectory of the repo, its **root directory**
+in the Cloudflare dashboard (Worker → Settings → Builds) must be set to
+`website` so the build and deploy commands run here.
+
+To deploy by hand instead:
+
 ```sh
 bun run deploy      # build + wrangler deploy
 ```
