@@ -76,29 +76,6 @@
   items.forEach((el) => io.observe(el));
 })();
 
-// --- Scroll-spy for the docs sidebar. ---
-// Highlights the [data-nav-link] whose [data-section] is in view.
-(function scrollSpy() {
-  const links = Array.from(document.querySelectorAll("[data-nav-link]"));
-  const sections = Array.from(document.querySelectorAll("[data-section]"));
-  if (!links.length || !sections.length) return;
-  const setActive = (id) => {
-    links.forEach((l) =>
-      l.classList.toggle("is-active", l.getAttribute("href") === "#" + id)
-    );
-  };
-  if (!("IntersectionObserver" in window)) return;
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((en) => {
-        if (en.isIntersecting) setActive(en.target.id);
-      });
-    },
-    { rootMargin: "-72px 0px -68% 0px", threshold: 0 }
-  );
-  sections.forEach((s) => io.observe(s));
-})();
-
 // --- Live GitHub stats: point Download buttons at the latest .dmg,
 //     and show the star count next to the GitHub link if present. ---
 (async function loadStats() {
