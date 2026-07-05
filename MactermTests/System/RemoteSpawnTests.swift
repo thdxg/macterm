@@ -9,8 +9,11 @@ struct RemoteSpawnTests {
 
     @Test
     func pane_command_cds_and_execs_zmx_attach_over_tty() {
+        // The remote side is `sh -c '<script>'` with a single-quote-free
+        // script — the one form every login shell (bash/zsh/fish/nu)
+        // tokenizes identically before POSIX sh takes over.
         let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
-        #expect(cmd == "ssh -t 'devbox' 'cd ~/'\\''dev/api'\\'' && exec zmx attach '\\''macterm-api-abc123'\\'''")
+        #expect(cmd == "ssh -t 'devbox' 'sh -c '\\''cd ~/\"dev/api\" && exec zmx attach \"macterm-api-abc123\"'\\'''")
     }
 
     @Test
@@ -20,7 +23,7 @@ struct RemoteSpawnTests {
             sessionName: "macterm-app-ff00"
         )
         #expect(cmd?.contains("ssh -t 'deploy@10.0.0.5'") == true)
-        #expect(cmd?.contains("cd '\\''/srv/app'\\''") == true)
+        #expect(cmd?.contains("cd \"/srv/app\"") == true)
     }
 
     @Test
@@ -59,8 +62,11 @@ struct RemoteSpawnTests {
         let argv = try? #require(RemoteSpawn.foregroundProbeArgv(remote: remote))
         #expect(argv?.prefix(4) == ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
         #expect(argv?.dropFirst(4).first == "devbox")
-        #expect(argv?.last == RemoteSpawn.foregroundProbeScript)
+        #expect(argv?.last == "sh -c " + RemoteSpawn.shellQuote(RemoteSpawn.foregroundProbeScript))
         #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
+        // The sh -c wrapper only survives arbitrary login shells while the
+        // script stays free of single quotes.
+        #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))
         #expect(RemoteSpawn.foregroundProbeArgv(remote: .local("/a")) == nil)
     }
 
@@ -77,18 +83,28 @@ struct RemoteSpawnTests {
     @Test
     func remote_directory_keeps_tilde_expandable() {
         // A quoted tilde is a literal directory named "~" — the tilde segment
-        // must stay bare so the remote shell expands it.
+        // must stay bare so sh expands it. Double quotes, so the containing
+        // sh -c script stays single-quote-free.
         #expect(RemoteSpawn.quoteRemoteDirectory("~") == "~")
-        #expect(RemoteSpawn.quoteRemoteDirectory("~/dev/api") == "~/'dev/api'")
-        #expect(RemoteSpawn.quoteRemoteDirectory("~/dir with space") == "~/'dir with space'")
-        #expect(RemoteSpawn.quoteRemoteDirectory("~deploy/app") == "~deploy/'app'")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~/dev/api") == "~/\"dev/api\"")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~/dir with space") == "~/\"dir with space\"")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~deploy/app") == "~deploy/\"app\"")
         #expect(RemoteSpawn.quoteRemoteDirectory("~deploy") == "~deploy")
     }
 
     @Test
     func remote_directory_quotes_plain_paths_whole() {
-        #expect(RemoteSpawn.quoteRemoteDirectory("/srv/my app") == "'/srv/my app'")
-        #expect(RemoteSpawn.quoteRemoteDirectory("work/api") == "'work/api'")
+        #expect(RemoteSpawn.quoteRemoteDirectory("/srv/my app") == "\"/srv/my app\"")
+        #expect(RemoteSpawn.quoteRemoteDirectory("work/api") == "\"work/api\"")
+    }
+
+    @Test
+    func posix_double_quote_escapes_shell_metacharacters() {
+        #expect(RemoteSpawn.posixDoubleQuote("plain") == "\"plain\"")
+        #expect(RemoteSpawn.posixDoubleQuote("a$b") == "\"a\\$b\"")
+        #expect(RemoteSpawn.posixDoubleQuote("a\"b") == "\"a\\\"b\"")
+        #expect(RemoteSpawn.posixDoubleQuote("a`b") == "\"a\\`b\"")
+        #expect(RemoteSpawn.posixDoubleQuote("a\\b") == "\"a\\\\b\"")
     }
 
     // MARK: - Destination

@@ -30,12 +30,21 @@ enum RemoteSpawn {
     }
 
     /// The surface command for a remote pane, as the single string handed to
-    /// ghostty's `command`: `ssh -t <dest> '<cd … && exec zmx attach …>'`.
-    /// nil for a local path.
+    /// ghostty's `command`: `ssh -t <dest> 'sh -c <script>'`. nil for a local
+    /// path.
+    ///
+    /// The remote side is wrapped in `sh -c` because sshd executes the
+    /// command string through the user's LOGIN shell — and `&&`, tilde-plus-
+    /// quote splicing, or `'\''` escapes are POSIX-isms a fish/nushell login
+    /// shell won't parse. `sh -c '<script>'` with a single-quote-free script
+    /// tokenizes identically in bash, zsh, fish, and nu (all treat a
+    /// single-quoted word as one literal argument), and the script itself
+    /// then runs under POSIX sh regardless of the login shell.
     static func paneCommand(remote: ProjectPath, sessionName: String) -> String? {
         guard case let .remote(user, host, directory) = remote else { return nil }
-        let attach = "cd \(quoteRemoteDirectory(directory)) && exec zmx attach \(shellQuote(sessionName))"
-        return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(attach))"
+        let attach = "cd \(quoteRemoteDirectory(directory)) && exec zmx attach \(posixDoubleQuote(sessionName))"
+        let remoteCommand = "sh -c \(shellQuote(attach))"
+        return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(remoteCommand))"
     }
 
     /// argv (for `/usr/bin/ssh`) running a background `zmx` operation on the
@@ -56,6 +65,10 @@ enum RemoteSpawn {
     /// `ZmxForegroundResolver` runs locally, expressed as portable POSIX sh
     /// (Linux, BSD, macOS remotes). Emits `session<TAB>comm` lines; parsed by
     /// `RemoteForegroundResolver.parseProbeOutput`.
+    ///
+    /// Deliberately contains NO single quotes: it ships to the host wrapped
+    /// as `sh -c '<script>'`, and the outer quoting must survive any login
+    /// shell (see `paneCommand`).
     static let foregroundProbeScript = """
     zmx ls 2>/dev/null | while read -r line; do
       n=; p=
@@ -66,44 +79,62 @@ enum RemoteSpawn {
         esac
       done
       case "$n" in macterm-*) ;; *) continue ;; esac
-      case "$p" in ''|*[!0-9]*) continue ;; esac
-      t=$(ps -o tpgid= -p "$p" 2>/dev/null | tr -d ' ')
+      case "$p" in ""|*[!0-9]*) continue ;; esac
+      t=$(ps -o tpgid= -p "$p" 2>/dev/null | tr -d " ")
       [ -n "$t" ] || continue
       c=$(ps -o comm= -p "$t" 2>/dev/null)
       [ -n "$c" ] || continue
-      printf '%s\\t%s\\n' "$n" "$c"
+      printf "%s\\t%s\\n" "$n" "$c"
     done
     """
 
     /// argv (for `/usr/bin/ssh`) running the foreground probe on the remote
-    /// host — the same non-interactive profile as `opArgv`. nil for a local
-    /// path.
+    /// host — the same non-interactive profile as `opArgv`, with the script
+    /// wrapped in `sh -c` so any login shell delivers it intact. nil for a
+    /// local path.
     static func foregroundProbeArgv(remote: ProjectPath) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
         return [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
             destination(user: user, host: host),
-            foregroundProbeScript,
+            "sh -c \(shellQuote(foregroundProbeScript))",
         ]
     }
 
     /// POSIX single-quote escaping: safe against spaces, globs, `$`, and
-    /// embedded quotes (`'` → `'\''`).
+    /// embedded quotes (`'` → `'\''`). For strings parsed by a shell that is
+    /// KNOWN to be POSIX — the local bash ghostty spawns through, or the
+    /// inside of an `sh -c` script. Never for text a remote login shell
+    /// tokenizes with embedded quotes present (see `paneCommand`).
     static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// Quote a remote directory for `cd`, keeping a leading tilde segment
-    /// *unquoted* so the remote shell still expands it (`~`, `~/dev with
-    /// spaces`, `~deploy/app`). A quoted tilde is a literal directory named
-    /// `~`. Everything after the tilde segment is quoted normally; plain
-    /// paths (absolute or home-relative) are quoted whole.
+    /// POSIX double-quote escaping (`\`, `"`, `$`, backtick), used INSIDE the
+    /// `sh -c` scripts so the script itself stays free of single quotes.
+    static func posixDoubleQuote(_ value: String) -> String {
+        var escaped = ""
+        for ch in value {
+            if ch == "\\" || ch == "\"" || ch == "$" || ch == "`" {
+                escaped.append("\\")
+            }
+            escaped.append(ch)
+        }
+        return "\"\(escaped)\""
+    }
+
+    /// Quote a remote directory for the `cd` inside the `sh -c` script,
+    /// keeping a leading tilde segment *unquoted* so sh still expands it
+    /// (`~`, `~/dev with spaces`, `~deploy/app`). A quoted tilde is a literal
+    /// directory named `~`. Everything after the tilde segment is
+    /// double-quoted; plain paths (absolute or home-relative) are quoted
+    /// whole.
     static func quoteRemoteDirectory(_ directory: String) -> String {
-        guard directory.hasPrefix("~") else { return shellQuote(directory) }
+        guard directory.hasPrefix("~") else { return posixDoubleQuote(directory) }
         guard let slash = directory.firstIndex(of: "/") else { return directory }
         let tilde = String(directory[..<slash])
         let rest = String(directory[directory.index(after: slash)...])
-        return rest.isEmpty ? directory : "\(tilde)/\(shellQuote(rest))"
+        return rest.isEmpty ? directory : "\(tilde)/\(posixDoubleQuote(rest))"
     }
 }
