@@ -13,7 +13,11 @@ struct RemoteSpawnTests {
         // script — the one form every login shell (bash/zsh/fish/nu)
         // tokenizes identically before POSIX sh takes over.
         let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123")
-        #expect(cmd == "ssh -t 'devbox' 'sh -c '\\''cd ~/\"dev/api\" && exec zmx attach \"macterm-api-abc123\"'\\'''")
+        let script = RemoteSpawn.remotePathPreamble + RemoteSpawn.remoteTermPreamble
+            + "cd ~/\"dev/api\" && exec zmx attach \"macterm-api-abc123\""
+        #expect(cmd == "ssh -t 'devbox' " + RemoteSpawn.shellQuote("sh -c " + RemoteSpawn.shellQuote(script)))
+        // The preambles must not smuggle single quotes into the script.
+        #expect(!script.contains("'"))
     }
 
     @Test
@@ -46,7 +50,9 @@ struct RemoteSpawnTests {
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=5",
             "devbox",
-            "zmx", "'kill'", "'macterm-api-abc123'",
+            "sh -c " + RemoteSpawn.shellQuote(
+                RemoteSpawn.remotePathPreamble + "exec zmx \"kill\" \"macterm-api-abc123\""
+            ),
         ])
     }
 
@@ -62,7 +68,8 @@ struct RemoteSpawnTests {
         let argv = try? #require(RemoteSpawn.foregroundProbeArgv(remote: remote))
         #expect(argv?.prefix(4) == ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
         #expect(argv?.dropFirst(4).first == "devbox")
-        #expect(argv?.last == "sh -c " + RemoteSpawn.shellQuote(RemoteSpawn.foregroundProbeScript))
+        #expect(argv?.last == "sh -c "
+            + RemoteSpawn.shellQuote(RemoteSpawn.remotePathPreamble + RemoteSpawn.foregroundProbeScript))
         #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
         // The sh -c wrapper only survives arbitrary login shells while the
         // script stays free of single quotes.

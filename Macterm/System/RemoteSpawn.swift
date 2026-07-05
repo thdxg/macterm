@@ -29,6 +29,23 @@ enum RemoteSpawn {
         return host
     }
 
+    /// Prepended to every remote `sh -c` script: extend PATH with the places
+    /// zmx commonly lives. sshd's default PATH is bare and non-POSIX login
+    /// shells (fish, nushell) don't source the profiles that would add user
+    /// dirs — a zmx findable in an interactive session can be invisible to
+    /// `ssh host <cmd>`. Extended, never replaced: an existing PATH wins.
+    static let remotePathPreamble =
+        "PATH=\"$PATH:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin\"; export PATH; "
+
+    /// Prepended to the pane script only: ssh forwards the local
+    /// TERM=xterm-ghostty, which most remotes have no terminfo entry for
+    /// (ghostty's own ssh-terminfo integration only helps the external CLI's
+    /// wrapper, not our direct spawn) — TUIs would refuse to start. Fall back
+    /// to the universally-known xterm-256color unless the remote actually
+    /// knows the current TERM.
+    static let remoteTermPreamble =
+        "infocmp \"$TERM\" >/dev/null 2>&1 || { TERM=xterm-256color; export TERM; }; "
+
     /// The surface command for a remote pane, as the single string handed to
     /// ghostty's `command`: `ssh -t <dest> 'sh -c <script>'`. nil for a local
     /// path.
@@ -42,21 +59,25 @@ enum RemoteSpawn {
     /// then runs under POSIX sh regardless of the login shell.
     static func paneCommand(remote: ProjectPath, sessionName: String) -> String? {
         guard case let .remote(user, host, directory) = remote else { return nil }
-        let attach = "cd \(quoteRemoteDirectory(directory)) && exec zmx attach \(posixDoubleQuote(sessionName))"
+        let attach = remotePathPreamble + remoteTermPreamble
+            + "cd \(quoteRemoteDirectory(directory)) && exec zmx attach \(posixDoubleQuote(sessionName))"
         let remoteCommand = "sh -c \(shellQuote(attach))"
         return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(remoteCommand))"
     }
 
     /// argv (for `/usr/bin/ssh`) running a background `zmx` operation on the
-    /// remote host. nil for a local path.
+    /// remote host, `sh -c`-wrapped like every remote command (login-shell
+    /// portability + the PATH preamble). nil for a local path.
     static func opArgv(remote: ProjectPath, zmxArguments: [String]) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
+        let op = remotePathPreamble + "exec zmx "
+            + zmxArguments.map(posixDoubleQuote).joined(separator: " ")
         return [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
             destination(user: user, host: host),
-            "zmx",
-        ] + zmxArguments.map(shellQuote)
+            "sh -c \(shellQuote(op))",
+        ]
     }
 
     /// One-round-trip foreground probe for tier-2 remote tab naming: resolve
@@ -98,7 +119,7 @@ enum RemoteSpawn {
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
             destination(user: user, host: host),
-            "sh -c \(shellQuote(foregroundProbeScript))",
+            "sh -c \(shellQuote(remotePathPreamble + foregroundProbeScript))",
         ]
     }
 
