@@ -242,7 +242,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appFocusObservers: [Any] = []
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
-    private var controlServer: ControlSocketServer?
+    /// Exists from delegate init — NOT created in applicationDidFinishLaunching
+    /// — because SwiftUI can run the window's onAppear (which calls
+    /// `installResponders`, attaching the request handler) BEFORE
+    /// applicationDidFinishLaunching on some launches. Attaching to a
+    /// not-yet-started server is fine; the reverse order lost the handler and
+    /// left the socket answering `starting` forever.
+    private let controlServer = ControlSocketServer(socketPath: ControlSocketServer.defaultSocketPath())
     private var controlHandler: ControlHandler?
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -262,9 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // bundled CLI on PATH (setenv mutates this process's environ, which
         // libghostty passes to spawned shells). Requests get a `starting`
         // error until installResponders attaches the handler.
-        let controlServer = ControlSocketServer(socketPath: ControlSocketServer.defaultSocketPath())
         controlServer.start()
-        self.controlServer = controlServer
         setenv(ControlProtocol.socketEnvVar, controlServer.path, 1)
         if let binDir = Bundle.main.resourceURL?.appendingPathComponent("bin", isDirectory: true).path,
            FileManager.default.isExecutableFile(atPath: binDir + "/macterm")
@@ -346,11 +350,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if BenchmarkControl.isEnabled {
             BenchmarkControl.connect(appState: appState, projectStore: projectStore)
         }
-        if let controlServer {
-            let handler = ControlHandler(appState: appState, projectStore: projectStore)
-            controlHandler = handler
-            controlServer.attach { raw in await handler.handle(raw) }
-        }
+        let handler = ControlHandler(appState: appState, projectStore: projectStore)
+        controlHandler = handler
+        controlServer.attach { raw in await handler.handle(raw) }
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
@@ -370,7 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
-        controlServer?.stop()
+        controlServer.stop()
         onTerminate?()
         // Quit is a DETACH by default: workspace panes' sessions survive and
         // reattach on relaunch (the snapshot saved by onTerminate carries each
