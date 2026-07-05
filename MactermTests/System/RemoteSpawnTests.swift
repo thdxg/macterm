@@ -64,10 +64,12 @@ struct RemoteSpawnTests {
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=5",
             "devbox",
-            "sh -c " + RemoteSpawn.shellQuote(
-                RemoteSpawn.remotePathPreamble + "exec zmx \"kill\" \"macterm-api-abc123\""
+            "\(RemoteSpawn.remoteShell) " + RemoteSpawn.shellQuote(
+                RemoteSpawn.remotePathFallback + "exec zmx \"kill\" \"macterm-api-abc123\""
             ),
         ])
+        // Login shell (-l) is what loads the user's real PATH.
+        #expect(RemoteSpawn.remoteShell == "sh -lc")
     }
 
     @Test
@@ -82,8 +84,8 @@ struct RemoteSpawnTests {
         let argv = try? #require(RemoteSpawn.foregroundProbeArgv(remote: remote))
         #expect(argv?.prefix(4) == ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
         #expect(argv?.dropFirst(4).first == "devbox")
-        #expect(argv?.last == "sh -c "
-            + RemoteSpawn.shellQuote(RemoteSpawn.remotePathPreamble + RemoteSpawn.foregroundProbeScript))
+        #expect(argv?.last == "\(RemoteSpawn.remoteShell) "
+            + RemoteSpawn.shellQuote(RemoteSpawn.remotePathFallback + RemoteSpawn.foregroundProbeScript))
         #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
         // The sh -c wrapper only survives arbitrary login shells while the
         // script stays free of single quotes.
