@@ -8,6 +8,12 @@ import Foundation
 @MainActor
 struct DirectorySource: PaletteSource {
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
+        // A typed remote spec offers add/switch, mirroring local directories
+        // (#104). No filesystem browsing — the host isn't consulted; the
+        // exact spec is the offer.
+        if PaletteQuery.isRemoteSpecQuery(query) {
+            return [remoteItem(spec: query, context: context)]
+        }
         let expanded = (query as NSString).expandingTildeInPath
         guard expanded.hasPrefix("/") else { return [] }
 
@@ -75,6 +81,48 @@ struct DirectorySource: PaletteSource {
 
     func emptyItems(context _: PaletteContext) -> [PaletteItem]? {
         nil
+    }
+
+    /// Add-or-switch for a typed remote spec, shaped like `directoryItem`:
+    /// an existing project matching the spec (structurally, via
+    /// `ProjectPath.matches`) switches; otherwise the item creates the
+    /// remote project. The display name is the remote directory's basename,
+    /// falling back to the host for `host:~` / `host:/`.
+    private func remoteItem(spec: String, context: PaletteContext) -> PaletteItem {
+        if let existing = context.projectStore.projects.first(where: { ProjectPath.matches($0.path, spec) }) {
+            return PaletteItem(
+                id: "remote-switch:\(spec)",
+                title: existing.name,
+                subtitle: "Switch to remote project: \(spec)",
+                category: "Directories",
+                score: 0
+            ) { [appState = context.appState] in
+                appState.selectProject(existing)
+            }
+        }
+        let base = (spec as NSString).lastPathComponent
+        let name: String = if base.isEmpty || base == "~" || base == "/" || base == spec {
+            ProjectPath.remote(from: spec).flatMap {
+                if case let .remote(_, host, _) = $0 { host } else { nil }
+            } ?? spec
+        } else {
+            base
+        }
+        return PaletteItem(
+            id: "remote-open:\(spec)",
+            title: name,
+            subtitle: "Add remote project: \(spec)",
+            category: "Directories",
+            score: 0
+        ) { [appState = context.appState, projectStore = context.projectStore] in
+            let project = Project(
+                name: name,
+                path: spec,
+                sortOrder: projectStore.projects.count
+            )
+            projectStore.add(project)
+            appState.selectProject(project)
+        }
     }
 
     private func directoryItem(

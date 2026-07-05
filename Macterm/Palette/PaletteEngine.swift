@@ -61,7 +61,24 @@ struct PaletteQuery {
     let raw: String
     var trimmed: String { raw.trimmingCharacters(in: .whitespaces) }
     var isEmpty: Bool { trimmed.isEmpty }
-    var looksLikePath: Bool { trimmed.hasPrefix("/") || trimmed.hasPrefix("~") }
+    var looksLikePath: Bool {
+        trimmed.hasPrefix("/") || trimmed.hasPrefix("~") || Self.isRemoteSpecQuery(trimmed)
+    }
+
+    /// A typed `[user@]host:dir` spec — the remote analogue of a typed local
+    /// path (#104). Deliberately STRICTER than `ProjectPath.parse`: path mode
+    /// short-circuits the whole palette, so any `word:word` must not swallow
+    /// a command query. Requires no whitespace, a hostname-shaped host, and
+    /// a `~`- or `/`-anchored directory (a relative remote dir is valid in a
+    /// project file, but too ambiguous to hijack the palette for).
+    static func isRemoteSpecQuery(_ query: String) -> Bool {
+        guard !query.contains(where: \.isWhitespace),
+              case let .remote(_, host, directory)? = ProjectPath.remote(from: query),
+              directory.hasPrefix("~") || directory.hasPrefix("/"),
+              host.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" })
+        else { return false }
+        return true
+    }
 }
 
 /// A pluggable source of palette items. Sources return scored items for a
