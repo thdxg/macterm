@@ -55,6 +55,10 @@
 
   html {
     scroll-behavior: smooth;
+    /* Always reserve the scrollbar gutter so a short page (docs) and a long one
+       (landing) have the same content width — otherwise the nav shifts
+       horizontally when switching between them. */
+    scrollbar-gutter: stable;
   }
 
   body {
