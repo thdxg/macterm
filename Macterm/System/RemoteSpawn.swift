@@ -31,23 +31,26 @@ enum RemoteSpawn {
 
     /// How every remote command is delivered: `sh -lc '<script>'`.
     ///
-    /// The **login** flag is what makes PATH resolution the *user's* problem,
-    /// not ours — a login `sh` sources `/etc/profile` and the user's profile,
-    /// which is where their real PATH (incl. `~/bin`, `~/.cargo/bin`, whatever)
-    /// gets set. sshd runs commands non-login/non-interactive with a bare
-    /// PATH, so without `-l` a zmx findable in an interactive session is
+    /// The **login** flag is what makes PATH resolution mostly the *user's*
+    /// problem, not ours — a login `sh` sources `/etc/profile` and the user's
+    /// profile, which is where their real PATH (incl. `~/bin`, `~/.cargo/bin`,
+    /// whatever) gets set. sshd runs commands non-login/non-interactive with a
+    /// bare PATH, so without `-l` a zmx findable in an interactive session is
     /// invisible over `ssh host <cmd>`. Naming `sh` explicitly (rather than
     /// relying on the login shell sshd picks) keeps the script POSIX no matter
     /// whether that shell is bash, zsh, fish, or nu.
     static let remoteShell = "sh -lc"
 
-    /// Fallback PATH append, prepended to each script AFTER the login shell
-    /// has set up its own. Belt-and-suspenders for two cases `sh -lc` alone
-    /// misses: a broken/short-circuiting `~/.profile` (a bad `source` line
-    /// aborts it before the PATH export), and a user who only sets PATH in a
-    /// *non-POSIX* shell's config (fish/nu), which `sh` never reads. Appended,
-    /// so the login shell's own PATH always takes precedence — this only adds
-    /// the common install dirs as a last resort, it doesn't override.
+    /// Fallback PATH, set by each script's first statement (before the rest of
+    /// the body runs, but note the login shell has ALREADY sourced profiles by
+    /// then — this appends to whatever they produced). Belt-and-suspenders for
+    /// what `sh -lc` alone can miss, both confirmed against a Linux container:
+    /// a `~/.profile` that short-circuits before its PATH export (a bad
+    /// `source` line — fatal under zsh, non-fatal under dash, so it's
+    /// shell-dependent and not safe to rely on), and a user who sets PATH only
+    /// in a *non-POSIX* shell's config (fish/nu) that `sh` never reads. `$PATH`
+    /// is preserved first, so the login shell's own PATH keeps precedence —
+    /// this only adds the common install dirs as a last resort.
     static let remotePathFallback =
         "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
             + "export PATH; "
