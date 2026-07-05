@@ -141,6 +141,20 @@ struct PaneTitleTests {
     }
 
     @Test
+    func remote_login_shell_dash_is_stripped() {
+        // A login shell's argv[0] carries a leading '-' (`-/opt/homebrew/bin/nu`,
+        // `-zsh`) — kernel comm never does, so it must be stripped only here.
+        #expect(Pane.normalizeRemoteComm("-/opt/homebrew/bin/nu") == "nu")
+        #expect(Pane.normalizeRemoteComm("-zsh") == "zsh")
+        #expect(Pane.normalizeRemoteComm("/usr/bin/hx") == "hx")
+        #expect(Pane.normalizeRemoteComm("btop") == "btop")
+
+        let pane = makeRemotePane()
+        pane.applyRemoteForegroundName("-/opt/homebrew/bin/nu")
+        #expect(pane.displayTitle == "nu")
+    }
+
+    @Test
     func local_pane_is_not_remote() {
         let pane = makePane()
         #expect(!pane.isRemote)

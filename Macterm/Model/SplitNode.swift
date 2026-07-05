@@ -490,8 +490,17 @@ final class Pane: Identifiable {
     /// keeps the last-known name: a blip must not flap tab titles.
     func applyRemoteForegroundName(_ comm: String?) {
         guard let comm, !comm.isEmpty else { return }
-        let base = (comm as NSString).lastPathComponent
-        if base != foregroundProcessName { foregroundProcessName = base }
+        let base = Self.normalizeRemoteComm(comm)
+        if !base.isEmpty, base != foregroundProcessName { foregroundProcessName = base }
+    }
+
+    /// Basename of a remote `ps -o comm=` value, minus the leading `-` a
+    /// login shell carries in its argv[0] (`-/opt/homebrew/bin/nu` → `nu`,
+    /// `-zsh` → `zsh`). Local kernel `comm` never has this dash, so the
+    /// stripping is remote-only. Pure + static for testing.
+    static func normalizeRemoteComm(_ comm: String) -> String {
+        let stripped = comm.hasPrefix("-") ? String(comm.dropFirst()) : comm
+        return (stripped as NSString).lastPathComponent
     }
 
     /// Testable core of `receiveReportedTitle`. `programPID` is the pane's
