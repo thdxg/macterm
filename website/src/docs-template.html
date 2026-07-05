@@ -41,7 +41,7 @@
       </a>
       <a href="/docs/" class="nav-tag font-mono text-[12px] text-label leading-none no-underline hover:text-ink transition-colors">/ docs</a>
     </div>
-    <div class="flex items-center" style="gap:clamp(14px,3vw,26px)">
+    <div class="nav-links flex items-center" style="gap:clamp(14px,3vw,26px)" id="nav-links">
       <a href="https://github.com/thdxg/macterm" class="nav-secondary inline-flex items-center gap-[7px] text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">
         <span>GitHub ↗</span>
         <span data-stat-stars hidden class="inline-flex items-center gap-[3px] font-mono text-[12.5px] text-meta">
@@ -51,6 +51,9 @@
       </a>
       <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center h-9 box-border px-[18px] rounded-full bg-ink text-canvas no-underline text-[14px] font-medium transition-opacity hover:opacity-[0.88]">Download</a>
     </div>
+    <button type="button" data-nav-toggle class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
+      <span class="nav-toggle-icon" aria-hidden="true"></span>
+    </button>
   </nav>
 
   <!-- shell -->

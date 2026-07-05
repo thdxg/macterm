@@ -15,6 +15,39 @@
   onScroll();
 })();
 
+// --- Mobile nav: hamburger toggles the collapsed nav links panel. ---
+(function mobileNav() {
+  const nav = document.querySelector("[data-nav-bar]");
+  const toggle = nav && nav.querySelector("[data-nav-toggle]");
+  if (!nav || !toggle) return;
+
+  const setOpen = (open) => {
+    nav.classList.toggle("nav-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  const close = () => setOpen(false);
+
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(!nav.classList.contains("nav-open"));
+  });
+  // Close when a link in the panel is chosen.
+  nav.querySelectorAll(".nav-links a").forEach((a) =>
+    a.addEventListener("click", close)
+  );
+  // Close on outside click and Escape.
+  document.addEventListener("click", (e) => {
+    if (nav.classList.contains("nav-open") && !nav.contains(e.target)) close();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
+  });
+  // Reset if the viewport grows back to the desktop layout.
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 640) close();
+  });
+})();
+
 // --- Copy-to-clipboard for code chips/blocks. ---
 // A [data-copy] button copies the <code> inside its enclosing [data-block]
 // (or, on the landing hero, the chip it lives in), then swaps its glyph.

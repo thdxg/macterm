@@ -96,16 +96,120 @@
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
   }
-  /* Keep the nav to one line on small screens: drop the "/ docs" tag and the
-     secondary text link, leaving wordmark + the Download CTA. */
-  @media (max-width: 480px) {
-    .site-nav .nav-tag,
-    .site-nav .nav-secondary {
-      display: none;
-    }
+  /* Hamburger toggle — hidden on desktop, shown when the nav links collapse. */
+  .nav-toggle {
+    display: none;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    margin-right: -8px;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .nav-toggle:hover {
+    background: rgba(23, 21, 15, 0.06);
+  }
+  /* Two-line hamburger that morphs into an X when open. */
+  .nav-toggle-icon,
+  .nav-toggle-icon::before,
+  .nav-toggle-icon::after {
+    content: "";
+    display: block;
+    width: 18px;
+    height: 1.5px;
+    background: currentColor;
+    border-radius: 2px;
+    transition:
+      transform 0.25s ease,
+      opacity 0.2s ease;
+  }
+  .nav-toggle-icon {
+    position: relative;
+  }
+  .nav-toggle-icon::before {
+    position: absolute;
+    top: -5.5px;
+  }
+  .nav-toggle-icon::after {
+    position: absolute;
+    top: 5.5px;
+  }
+  .site-nav.nav-open .nav-toggle-icon {
+    background: transparent;
+  }
+  .site-nav.nav-open .nav-toggle-icon::before {
+    top: 0;
+    transform: rotate(45deg);
+  }
+  .site-nav.nav-open .nav-toggle-icon::after {
+    top: 0;
+    transform: rotate(-45deg);
+  }
+
+  /* On small screens, collapse the nav links into a dropdown panel below the
+     bar, toggled by the hamburger. Above the breakpoint it's a plain flex row. */
+  @media (max-width: 640px) {
     .site-nav {
       padding-top: 14px;
       padding-bottom: 14px;
+    }
+    .site-nav .nav-tag {
+      display: none;
+    }
+    .nav-toggle {
+      display: inline-flex;
+    }
+    .nav-links {
+      position: absolute;
+      top: 100%;
+      right: var(--site-gutter);
+      left: var(--site-gutter);
+      flex-direction: column;
+      align-items: stretch !important;
+      gap: 4px !important;
+      padding: 8px;
+      background: rgba(247, 245, 240, 0.96);
+      border: 1px solid rgba(23, 21, 15, 0.1);
+      border-radius: 14px;
+      box-shadow: 0 12px 32px -12px rgba(23, 21, 15, 0.25);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      /* Hidden until opened. */
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition:
+        opacity 0.2s ease,
+        transform 0.2s ease;
+    }
+    .site-nav.nav-open .nav-links {
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+    }
+    /* Stack each item full-width, left-aligned, comfortable tap targets. */
+    .nav-links > a {
+      width: 100%;
+      box-sizing: border-box;
+      justify-content: flex-start;
+      height: auto;
+      padding: 11px 12px;
+      border-radius: 9px;
+      opacity: 1;
+    }
+    .nav-links > a:not([data-download-latest]):hover {
+      background: rgba(23, 21, 15, 0.05);
+    }
+    /* The Download CTA keeps its filled pill but goes full-width. */
+    .nav-links > a[data-download-latest] {
+      justify-content: center;
+      margin-top: 4px;
     }
   }
 
