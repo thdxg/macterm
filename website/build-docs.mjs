@@ -31,6 +31,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const PAGES_DIR = join(here, "docs", "pages");
 const TEMPLATE = join(here, "src", "docs-template.html");
 const OUT_DIR = join(here, "public", "docs");
+const PUBLIC_DIR = join(here, "public");
+
+// Canonical production origin — used for canonical tags, OG URLs, and the
+// sitemap. No trailing slash.
+const SITE_URL = "https://macterm.thdxg.dev";
 
 const COPY_SVG = `<svg data-i="copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg data-i="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M20 6 9 17l-5-5"/></svg>`;
 
@@ -213,21 +218,69 @@ function main() {
     const description =
       page.meta.description ||
       "Install, configure, and drive Macterm — a native macOS terminal built on libghostty.";
+    const canonical = SITE_URL + urlForSlug(page.meta.slug);
+
+    // TechArticle + breadcrumb, so search engines understand the docs tree.
+    const jsonld = JSON.stringify({
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "TechArticle",
+          headline: page.meta.title,
+          description,
+          url: canonical,
+          inLanguage: "en",
+          isPartOf: { "@type": "WebSite", name: "Macterm", url: SITE_URL + "/" },
+          about: { "@type": "SoftwareApplication", name: "Macterm" },
+        },
+        {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Docs", item: SITE_URL + "/docs/" },
+            { "@type": "ListItem", position: 2, name: page.meta.title, item: canonical },
+          ],
+        },
+      ],
+    });
 
     // Function replacements so `$`-sequences in content aren't treated as
     // replacement patterns.
     const out = template
       .replaceAll("{{TITLE}}", () => escapeHtml(title))
       .replaceAll("{{DESCRIPTION}}", () => escapeHtml(description))
+      .replaceAll("{{CANONICAL}}", () => canonical)
+      .replaceAll("{{SITE_URL}}", () => SITE_URL)
+      .replace("{{JSONLD}}", () => jsonld)
       .replace("<!-- SIDEBAR -->", () => sidebar)
       .replace("<!-- CONTENT -->", () => content);
 
     writeFileSync(join(OUT_DIR, `${page.meta.slug}.html`), out);
   }
 
+  writeSitemapAndRobots(pages);
+
   console.log(
     `build-docs: wrote ${pages.length} pages to ${OUT_DIR} (${files.join(", ")})`
   );
+}
+
+// Emit sitemap.xml (landing + every docs page) and robots.txt into public/.
+function writeSitemapAndRobots(pages) {
+  const urls = [SITE_URL + "/", ...pages.map((p) => SITE_URL + urlForSlug(p.meta.slug))];
+  const sitemap =
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    urls
+      .map(
+        (u) =>
+          `  <url>\n    <loc>${u}</loc>\n    <changefreq>weekly</changefreq>\n  </url>`
+      )
+      .join("\n") +
+    `\n</urlset>\n`;
+  writeFileSync(join(PUBLIC_DIR, "sitemap.xml"), sitemap);
+
+  const robots = `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`;
+  writeFileSync(join(PUBLIC_DIR, "robots.txt"), robots);
 }
 
 main();

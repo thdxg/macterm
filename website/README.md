@@ -18,8 +18,15 @@ src/
   docs-template.html  Shell each rendered docs page is injected into
 docs/
   pages/*.md       Docs content — one Markdown file per page
-build-docs.mjs     Renders docs/pages/*.md → public/docs/<slug>.html
+build-docs.mjs     Renders docs/pages/*.md → public/docs/<slug>.html;
+                   also emits public/sitemap.xml and public/robots.txt
 ```
+
+The canonical production origin lives in one place — the `SITE_URL` constant at
+the top of `build-docs.mjs` — and feeds the docs canonical tags, Open Graph
+URLs, JSON-LD, and the sitemap. The landing page (`public/index.html`) is
+hand-authored, so its canonical/OG URLs and JSON-LD are inline; keep them in
+sync with `SITE_URL` if the domain ever changes.
 
 The docs are a **multi-page site**. Each `docs/pages/*.md` becomes one page;
 files are ordered by their numeric filename prefix (`10-installation.md`). The

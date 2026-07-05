@@ -4,3 +4,5 @@ node_modules/
 # `bun run dev` / `bun run deploy`). Source lives in docs/, src/, and index.html.
 public/docs/
 public/tailwind.css
+public/sitemap.xml
+public/robots.txt
