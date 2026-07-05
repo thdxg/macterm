@@ -62,14 +62,18 @@ enum RemoteSpawn {
             + "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
             + "export PATH; "
 
-    /// Prepended to the pane script only: ssh forwards the local
-    /// TERM=xterm-ghostty, which most remotes have no terminfo entry for
-    /// (ghostty's own ssh-terminfo integration only helps the external CLI's
-    /// wrapper, not our direct spawn) — TUIs would refuse to start. Fall back
-    /// to the universally-known xterm-256color unless the remote actually
-    /// knows the current TERM.
-    static let remoteTermPreamble =
-        "infocmp \"$TERM\" >/dev/null 2>&1 || { TERM=xterm-256color; export TERM; }; "
+    /// Prepended to the pane script only: force TERM=xterm-256color for the
+    /// remote session, UNCONDITIONALLY.
+    ///
+    /// ssh forwards the local TERM=xterm-ghostty, which fails both ways:
+    /// hosts *without* its terminfo can't start TUIs, and hosts *with* it
+    /// (modern ncurses ships the entry) are worse — zmx 0.6.0's interactive
+    /// rendering breaks under TERM=xterm-ghostty, drawing the prompt but no
+    /// command output (found on a real host: session looked dead while
+    /// working fine under xterm-256color; the earlier `infocmp`-conditional
+    /// fallback passed on such hosts and left the broken TERM in place).
+    /// xterm-256color is the one value that works everywhere.
+    static let remoteTermPreamble = "TERM=xterm-256color; export TERM; "
 
     /// How the script invokes zmx: a user-supplied absolute path used verbatim
     /// (deterministic — bypasses all PATH resolution), or the bare command
