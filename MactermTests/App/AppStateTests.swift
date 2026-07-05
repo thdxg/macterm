@@ -997,8 +997,8 @@ struct AppStateTests {
             executableURL: { nil },
             isBundled: { true },
             killSession: { name in await killed.append(name) },
-            killRemoteSession: { _, name in await (remoteKilled ?? killed).append(name) },
-            remoteForegroundComms: { _ in nil },
+            killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
+            remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { [] },
             sessionLeaderPIDs: { [:] }
         )

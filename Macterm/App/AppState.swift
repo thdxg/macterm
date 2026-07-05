@@ -438,6 +438,8 @@ final class AppState {
             recordProjectVisit(id)
             autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: id, path: project.path)
+            // Reattaching remote panes need the zmx path before warm/render.
+            stampRemoteZmxPath(project)
             acknowledgeActiveTab(projectID: id)
             warmFocusedProject()
         }
@@ -465,11 +467,25 @@ final class AppState {
         recordProjectVisit(project.id)
         autoApplyLayoutOnFirstOpen(project)
         ensureWorkspace(projectID: project.id, path: project.path)
+        // Stamp the remote zmx path onto every pane BEFORE any surface spawns
+        // (warmFocusedProject / render → ensureNSView reads it). It's a host
+        // property re-derived from the project on each open, not persisted.
+        stampRemoteZmxPath(project)
         acknowledgeActiveTab(projectID: project.id)
         warmFocusedProject()
         // Creating a workspace doesn't change any tab selection (the poll's
         // usual wake signal), so bump it directly.
         notePollEvent()
+    }
+
+    /// Apply `project.zmxPath` to every pane in its workspace, so the remote
+    /// spawn/kill/probe commands use it. Idempotent; safe to call on each
+    /// open. No-op for local projects (nil path leaves PATH resolution).
+    private func stampRemoteZmxPath(_ project: Project) {
+        guard let ws = workspaces[project.id] else { return }
+        for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+            pane.remoteZmxPath = project.zmxPath
+        }
     }
 
     /// Start the shells for every tab of the focused project, not just the
@@ -1027,7 +1043,7 @@ final class AppState {
         do {
             let layout = LayoutSerializer.layout(for: ws, projectName: project.name, projectRoot: project.path)
             let target = try projectFiles.write(
-                ProjectFile(name: project.name, path: project.path, tabs: layout.tabs),
+                ProjectFile(name: project.name, path: project.path, zmxPath: project.zmxPath, tabs: layout.tabs),
                 projectName: project.name
             )
             logger.info("saveLayout succeeded: tabs=\(ws.tabs.count, privacy: .public)")

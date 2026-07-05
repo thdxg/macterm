@@ -223,8 +223,8 @@ struct ZmxReapOrphansDriverTests {
             executableURL: { URL(fileURLWithPath: "/fake/zmx") },
             isBundled: { true },
             killSession: { id in killed.mutate { $0.append(id) } },
-            killRemoteSession: { _, _ in },
-            remoteForegroundComms: { _ in nil },
+            killRemoteSession: { _, _, _ in },
+            remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { entries },
             sessionLeaderPIDs: { [:] }
         )

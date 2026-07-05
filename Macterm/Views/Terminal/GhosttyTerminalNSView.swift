@@ -40,6 +40,10 @@ final class GhosttyTerminalNSView: NSView {
     /// pane's real foreground process.
     var isRemote: Bool { remoteSpec != nil }
 
+    /// Optional explicit remote zmx path (#104), used verbatim in the spawn
+    /// command instead of PATH-resolving `zmx`. nil = PATH lookup.
+    private let remoteZmxPath: String?
+
     /// Whether this surface actually spawned under the zmx wrapper (false when
     /// zmx is unbundled or the socket-path budget forced a bypass). Read by
     /// the resolver-cache retry: only wrapped panes are expected to appear in
@@ -152,7 +156,8 @@ final class GhosttyTerminalNSView: NSView {
         command: String? = nil,
         shell: String? = nil,
         env: [String: String]? = nil,
-        remoteSpec: ProjectPath? = nil
+        remoteSpec: ProjectPath? = nil,
+        remoteZmxPath: String? = nil
     ) {
         self.workingDirectory = workingDirectory
         self.sessionName = sessionName
@@ -160,6 +165,7 @@ final class GhosttyTerminalNSView: NSView {
         self.shell = shell
         self.env = env
         self.remoteSpec = remoteSpec
+        self.remoteZmxPath = remoteZmxPath
         super.init(frame: .zero)
         setupTrackingArea()
         registerForDraggedTypes(Array(Self.dropTypes))
@@ -224,7 +230,9 @@ final class GhosttyTerminalNSView: NSView {
             // spawns the remote user's login shell. Interactive auth works
             // because there's no BatchMode: prompts render in the pane, and
             // any connect failure surfaces on ghostty's abnormal-exit screen.
-            if let sshCommand = RemoteSpawn.paneCommand(remote: remoteSpec, sessionName: sessionName) {
+            if let sshCommand = RemoteSpawn.paneCommand(
+                remote: remoteSpec, sessionName: sessionName, zmxPath: remoteZmxPath
+            ) {
                 config.command = cString(sshCommand)
             }
         } else {

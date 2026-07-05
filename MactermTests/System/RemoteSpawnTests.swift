@@ -18,10 +18,21 @@ struct RemoteSpawnTests {
         #expect(cmd?.contains("command -v zmx") == true)
         #expect(cmd?.contains("zmx not found in PATH") == true)
         #expect(cmd?.contains("cannot cd to") == true)
-        #expect(cmd?.contains("exec ${SHELL:-/bin/sh} -l") == true)
+        #expect(cmd?.contains("exec ${SHELL:-/bin/sh}") == true)
         // Happy path still execs the attach into the declared dir.
         #expect(cmd?.contains("cd ~/\"dev/api\"") == true)
         #expect(cmd?.contains("exec zmx attach \"macterm-api-abc123\"") == true)
+    }
+
+    @Test
+    func pane_command_with_explicit_zmx_path_skips_the_presence_guard() {
+        // An explicit path is used verbatim and needs no `command -v` guard —
+        // its own failure surfaces as zmx's error, still visible in the pane.
+        let cmd = try? #require(RemoteSpawn.paneCommand(
+            remote: remote, sessionName: "macterm-api-abc123", zmxPath: "~/bin/zmx"
+        ))
+        #expect(cmd?.contains("command -v zmx") == false)
+        #expect(cmd?.contains("exec \"~/bin/zmx\" attach \"macterm-api-abc123\"") == true)
     }
 
     @Test
@@ -65,11 +76,20 @@ struct RemoteSpawnTests {
             "-o", "ConnectTimeout=5",
             "devbox",
             "\(RemoteSpawn.remoteShell) " + RemoteSpawn.shellQuote(
-                RemoteSpawn.remotePathFallback + "exec zmx \"kill\" \"macterm-api-abc123\""
+                RemoteSpawn.remoteEnvPreamble + "exec zmx \"kill\" \"macterm-api-abc123\""
             ),
         ])
-        // Login shell (-l) is what loads the user's real PATH.
-        #expect(RemoteSpawn.remoteShell == "sh -lc")
+        // sh -c (NOT sh -lc): the login flag is unportable — older dash rejects
+        // it and drops to an interactive shell.
+        #expect(RemoteSpawn.remoteShell == "sh -c")
+    }
+
+    @Test
+    func op_argv_uses_explicit_zmx_path_verbatim() {
+        let argv = RemoteSpawn.opArgv(
+            remote: remote, zmxArguments: ["kill", "s"], zmxPath: "~/bin/zmx"
+        )
+        #expect(argv?.last?.contains("exec \"~/bin/zmx\" \"kill\" \"s\"") == true)
     }
 
     @Test
@@ -84,13 +104,20 @@ struct RemoteSpawnTests {
         let argv = try? #require(RemoteSpawn.foregroundProbeArgv(remote: remote))
         #expect(argv?.prefix(4) == ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
         #expect(argv?.dropFirst(4).first == "devbox")
-        #expect(argv?.last == "\(RemoteSpawn.remoteShell) "
-            + RemoteSpawn.shellQuote(RemoteSpawn.remotePathFallback + RemoteSpawn.foregroundProbeScript))
+        let expectedScript = RemoteSpawn.remoteEnvPreamble
+            + RemoteSpawn.foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: "zmx")
+        #expect(argv?.last == "\(RemoteSpawn.remoteShell) " + RemoteSpawn.shellQuote(expectedScript))
         #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
         // The sh -c wrapper only survives arbitrary login shells while the
         // script stays free of single quotes.
         #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))
         #expect(RemoteSpawn.foregroundProbeArgv(remote: .local("/a")) == nil)
+    }
+
+    @Test
+    func probe_argv_substitutes_explicit_zmx_path() {
+        let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: "/opt/zmx")
+        #expect(argv?.last?.contains("\"/opt/zmx\" ls") == true)
     }
 
     // MARK: - Quoting

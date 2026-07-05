@@ -35,7 +35,7 @@ final class RemoteForegroundResolver {
     /// `ZmxClient.remoteForegroundComms`; tests hand in a recorder).
     func refresh(
         panes: [Pane],
-        probe: @escaping @Sendable (ProjectPath) async -> [String: String]?,
+        probe: @escaping @Sendable (ProjectPath, String?) async -> [String: String]?,
         now: Date = Date()
     ) {
         guard !panes.isEmpty else { return }
@@ -55,8 +55,10 @@ final class RemoteForegroundResolver {
             inflight.insert(dest)
             lastProbeAt[dest] = now
             let targets = panesByDest[dest] ?? []
+            // zmxPath is a host property — all panes on this dest share it.
+            let zmxPath = targets.first?.remoteZmxPath
             Task {
-                let map = await probe(spec)
+                let map = await probe(spec, zmxPath)
                 finish(dest: dest, map: map, panes: targets)
             }
         }

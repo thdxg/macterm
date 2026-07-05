@@ -7,19 +7,22 @@ import Yams
 /// project:
 ///
 ///     name: API server           # optional, display only
-///     path: ~/dev/api            # required — the project's identity
+///     path: devbox:~/dev/api     # required — the project's identity
+///     zmxPath: ~/bin/zmx         # optional — explicit remote zmx path
 ///     tabs:                      # optional — same schema as LayoutFile
 ///       - run: "npm run dev"
 ///
 /// `path` is scp-style (`ProjectPath`): a plain absolute/`~` path is local,
 /// `[user@]host:dir` is remote. Files are matched to projects by canonicalized
 /// path, re-resolved on every use — the filename is a cosmetic slug and never
-/// identity. Files and the runtime project list are deliberately decoupled:
-/// Macterm writes a file only on explicit "Save Layout", and never deletes
-/// one.
+/// identity. `zmxPath` (#104) is the absolute remote zmx path used verbatim
+/// when PATH resolution can't find it (only meaningful for remote `path`).
+/// Files and the runtime project list are deliberately decoupled: Macterm
+/// writes a file only on explicit "Save Layout", and never deletes one.
 struct ProjectFile: Codable, Equatable {
     var name: String?
     var path: String
+    var zmxPath: String?
     var tabs: [LayoutTab]?
 
     /// Bridge to the layout types `LayoutBuilder`/`LayoutReconciler` consume.

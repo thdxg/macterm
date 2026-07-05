@@ -29,30 +29,37 @@ enum RemoteSpawn {
         return host
     }
 
-    /// How every remote command is delivered: `sh -lc '<script>'`.
+    /// How every remote command is delivered: `sh -c '<script>'`.
     ///
-    /// The **login** flag is what makes PATH resolution mostly the *user's*
-    /// problem, not ours — a login `sh` sources `/etc/profile` and the user's
-    /// profile, which is where their real PATH (incl. `~/bin`, `~/.cargo/bin`,
-    /// whatever) gets set. sshd runs commands non-login/non-interactive with a
-    /// bare PATH, so without `-l` a zmx findable in an interactive session is
-    /// invisible over `ssh host <cmd>`. Naming `sh` explicitly (rather than
-    /// relying on the login shell sshd picks) keeps the script POSIX no matter
-    /// whether that shell is bash, zsh, fish, or nu.
-    static let remoteShell = "sh -lc"
+    /// NOT `sh -lc`: the login flag is unportable. Debian/Ubuntu `/bin/sh` is
+    /// dash, and older dash (e.g. on a real CMU host tested here) rejects `-l`
+    /// outright — `sh -lc '…'` then ignores the command and drops to an
+    /// interactive shell, silently. `sh -c` runs everywhere. We reproduce
+    /// what `-l` was for (loading the user's PATH) by sourcing the profiles
+    /// ourselves in `remoteEnvPreamble`. Naming `sh` explicitly keeps the
+    /// script POSIX no matter which login shell sshd hands the outer string to
+    /// (bash/zsh/fish/nu).
+    static let remoteShell = "sh -c"
 
-    /// Fallback PATH, set by each script's first statement (before the rest of
-    /// the body runs, but note the login shell has ALREADY sourced profiles by
-    /// then — this appends to whatever they produced). Belt-and-suspenders for
-    /// what `sh -lc` alone can miss, both confirmed against a Linux container:
-    /// a `~/.profile` that short-circuits before its PATH export (a bad
-    /// `source` line — fatal under zsh, non-fatal under dash, so it's
-    /// shell-dependent and not safe to rely on), and a user who sets PATH only
-    /// in a *non-POSIX* shell's config (fish/nu) that `sh` never reads. `$PATH`
-    /// is preserved first, so the login shell's own PATH keeps precedence —
-    /// this only adds the common install dirs as a last resort.
-    static let remotePathFallback =
-        "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
+    /// PATH setup prepended to each script. sshd runs commands
+    /// non-login/non-interactive with a bare PATH, so a zmx findable in an
+    /// interactive session is otherwise invisible over `ssh host <cmd>`. Two
+    /// best-effort steps, in order:
+    ///
+    /// 1. Source `/etc/profile` and `~/.profile` (both silenced + `|| true`,
+    ///    so a broken or short-circuiting profile can never abort the script).
+    ///    This picks up a POSIX-configured PATH the way `-l` would have.
+    /// 2. Append the common install dirs as a last resort — `~/bin` first
+    ///    (the spot that broke), preserving `$PATH` so anything the profiles
+    ///    set keeps precedence. Covers hosts whose PATH lives only in a
+    ///    non-POSIX shell's config (fish/nu), which `sh` never reads.
+    ///
+    /// A user-supplied absolute zmx path (project `zmxPath`) bypasses all of
+    /// this — see `paneCommand`.
+    static let remoteEnvPreamble =
+        "{ . /etc/profile; } >/dev/null 2>&1 || true; "
+            + "{ . \"$HOME/.profile\"; } >/dev/null 2>&1 || true; "
+            + "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
             + "export PATH; "
 
     /// Prepended to the pane script only: ssh forwards the local
@@ -64,45 +71,66 @@ enum RemoteSpawn {
     static let remoteTermPreamble =
         "infocmp \"$TERM\" >/dev/null 2>&1 || { TERM=xterm-256color; export TERM; }; "
 
+    /// How the script invokes zmx: a user-supplied absolute path used verbatim
+    /// (deterministic — bypasses all PATH resolution), or the bare command
+    /// `zmx` resolved through `remoteEnvPreamble`'s PATH setup. `zmxPath` comes
+    /// from the project's optional `zmxPath` (New Remote Project sheet / layout
+    /// file) — the escape hatch for hosts where PATH resolution can't find it
+    /// (network-homed dirs, exotic `/bin/sh`, PATH set only in a non-POSIX
+    /// shell config). Double-quoted so a path with spaces survives.
+    static func zmxInvocation(zmxPath: String?) -> String {
+        guard let zmxPath, !zmxPath.trimmingCharacters(in: .whitespaces).isEmpty else { return "zmx" }
+        return posixDoubleQuote(zmxPath.trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Whether the zmx-presence guard is needed: only when relying on PATH
+    /// resolution. An explicit path is used directly (its failure surfaces as
+    /// zmx's own error, still visible in the pane).
+    private static func zmxPresenceGuard(zmx: String, fallbackShell: String) -> String? {
+        zmx == "zmx"
+            ? "command -v zmx >/dev/null 2>&1 || "
+            + "{ echo \"macterm: zmx not found in PATH on this host ($PATH)\" >&2; \(fallbackShell); }"
+            : nil
+    }
+
     /// The surface command for a remote pane, as the single string handed to
-    /// ghostty's `command`: `ssh -t <dest> 'sh -lc <script>'`. nil for a local
-    /// path.
+    /// ghostty's `command`: `ssh -t <dest> 'sh -c <script>'`. nil for a local
+    /// path. `zmxPath` (optional) is an absolute remote zmx path used verbatim.
     ///
-    /// Delivered as `sh -lc '<single-quote-free script>'` (see `remoteShell`):
-    /// the login `sh` loads the user's real PATH, and the single-quoted
-    /// argument tokenizes identically whether sshd hands the outer string to
-    /// bash, zsh, fish, or nu.
-    static func paneCommand(remote: ProjectPath, sessionName: String) -> String? {
+    /// Delivered as `sh -c '<single-quote-free script>'` (see `remoteShell`):
+    /// portable across every `/bin/sh`, and the single-quoted argument
+    /// tokenizes identically whether sshd hands the outer string to bash, zsh,
+    /// fish, or nu.
+    static func paneCommand(remote: ProjectPath, sessionName: String, zmxPath: String? = nil) -> String? {
         guard case let .remote(user, host, directory) = remote else { return nil }
-        // If zmx isn't on PATH, DON'T let the script exit — that closes the
-        // pane with no explanation (the surface's command exiting fires
-        // closeSurface). Instead print a diagnostic and drop into a login
-        // shell so the failure is visible and the pane is still usable. Same
-        // for a `cd` into a missing directory. Only the happy path `exec`s
+        // On failure DON'T let the script exit — that closes the pane with no
+        // explanation (the surface's command exiting fires closeSurface).
+        // Instead print a diagnostic and drop into a shell so the failure is
+        // visible and the pane is still usable. Only the happy path `exec`s
         // zmx (replacing the shell, so its exit is the session detaching).
         let quotedDir = quoteRemoteDirectory(directory)
         let quotedSession = posixDoubleQuote(sessionName)
-        // `${SHELL:-/bin/sh} -l`: a login shell, falling back to /bin/sh when
-        // the remote leaves $SHELL unset — so the diagnostic fallback can
-        // never itself exit-and-close the pane.
-        let fallbackShell = "exec ${SHELL:-/bin/sh} -l"
-        let script = remotePathFallback + remoteTermPreamble + [
-            "command -v zmx >/dev/null 2>&1 || "
-                + "{ echo \"macterm: zmx not found in PATH on this host ($PATH)\" >&2; \(fallbackShell); }",
+        let zmx = zmxInvocation(zmxPath: zmxPath)
+        // `${SHELL:-/bin/sh}`: fall back to /bin/sh when the remote leaves
+        // $SHELL unset, so the diagnostic shell can never itself exit-and-close
+        // the pane. No `-l` (unportable — see remoteShell).
+        let fallbackShell = "exec ${SHELL:-/bin/sh}"
+        let script = remoteEnvPreamble + remoteTermPreamble + [
+            zmxPresenceGuard(zmx: zmx, fallbackShell: fallbackShell),
             "cd \(quotedDir) || "
                 + "{ echo \"macterm: cannot cd to \(quotedDir)\" >&2; \(fallbackShell); }",
-            "exec zmx attach \(quotedSession)",
-        ].joined(separator: "; ")
+            "exec \(zmx) attach \(quotedSession)",
+        ].compactMap(\.self).joined(separator: "; ")
         let remoteCommand = "\(remoteShell) \(shellQuote(script))"
         return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(remoteCommand))"
     }
 
     /// argv (for `/usr/bin/ssh`) running a background `zmx` operation on the
-    /// remote host, `sh -lc`-wrapped like every remote command (login PATH +
-    /// login-shell portability). nil for a local path.
-    static func opArgv(remote: ProjectPath, zmxArguments: [String]) -> [String]? {
+    /// remote host, `sh -c`-wrapped like every remote command. `zmxPath`
+    /// (optional) is used verbatim. nil for a local path.
+    static func opArgv(remote: ProjectPath, zmxArguments: [String], zmxPath: String? = nil) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
-        let op = remotePathFallback + "exec zmx "
+        let op = remoteEnvPreamble + "exec \(zmxInvocation(zmxPath: zmxPath)) "
             + zmxArguments.map(posixDoubleQuote).joined(separator: " ")
         return [
             "-o", "BatchMode=yes",
@@ -120,10 +148,12 @@ enum RemoteSpawn {
     /// `RemoteForegroundResolver.parseProbeOutput`.
     ///
     /// Deliberately contains NO single quotes: it ships to the host wrapped
-    /// as `sh -lc '<script>'`, and the outer quoting must survive any login
+    /// as `sh -c '<script>'`, and the outer quoting must survive any login
     /// shell (see `paneCommand`).
+    /// `<ZMX>` is substituted with the resolved zmx invocation (bare `zmx` or
+    /// the explicit quoted path) before shipping.
     static let foregroundProbeScript = """
-    zmx ls 2>/dev/null | while read -r line; do
+    <ZMX> ls 2>/dev/null | while read -r line; do
       n=; p=
       for f in $line; do
         case "$f" in
@@ -142,16 +172,18 @@ enum RemoteSpawn {
     """
 
     /// argv (for `/usr/bin/ssh`) running the foreground probe on the remote
-    /// host — the same non-interactive profile as `opArgv`, `sh -lc`-wrapped
-    /// so any login shell delivers it intact with the user's PATH. nil for a
-    /// local path.
-    static func foregroundProbeArgv(remote: ProjectPath) -> [String]? {
+    /// host — the same non-interactive profile as `opArgv`, `sh -c`-wrapped so
+    /// any login shell delivers it intact. `zmxPath` (optional) is used
+    /// verbatim. nil for a local path.
+    static func foregroundProbeArgv(remote: ProjectPath, zmxPath: String? = nil) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
+        let script = remoteEnvPreamble
+            + foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath))
         return [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
             destination(user: user, host: host),
-            "\(remoteShell) \(shellQuote(remotePathFallback + foregroundProbeScript))",
+            "\(remoteShell) \(shellQuote(script))",
         ]
     }
 

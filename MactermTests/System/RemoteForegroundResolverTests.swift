@@ -39,7 +39,7 @@ struct RemoteForegroundResolverTests {
     func probes_once_per_host_within_the_interval() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
-        let probe: @Sendable (ProjectPath) async -> [String: String]? = { spec in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
             return [:]
         }
@@ -60,7 +60,7 @@ struct RemoteForegroundResolverTests {
     func distinct_hosts_probe_independently_in_one_pass() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
-        resolver.refresh(panes: [remotePane(host: "alpha"), remotePane(host: "beta")], probe: { spec in
+        resolver.refresh(panes: [remotePane(host: "alpha"), remotePane(host: "beta")], probe: { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
             return [:]
         })
@@ -75,7 +75,7 @@ struct RemoteForegroundResolverTests {
         let pane = remotePane()
         let resolver = RemoteForegroundResolver(minInterval: 0)
         let session = pane.sessionName
-        resolver.refresh(panes: [pane], probe: { _ in [session: "btop"] })
+        resolver.refresh(panes: [pane], probe: { _, _ in [session: "btop"] })
         await flush()
         #expect(pane.foregroundProcessName == "btop")
     }
@@ -85,7 +85,7 @@ struct RemoteForegroundResolverTests {
         let pane = remotePane()
         pane.applyRemoteForegroundName("btop")
         let resolver = RemoteForegroundResolver(minInterval: 0)
-        resolver.refresh(panes: [pane], probe: { _ in nil })
+        resolver.refresh(panes: [pane], probe: { _, _ in nil })
         await flush()
         // Silent degradation: the name froze instead of flapping to nil.
         #expect(pane.foregroundProcessName == "btop")

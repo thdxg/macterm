@@ -358,7 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the process exits (a detached Task is never scheduled during
         // teardown), bounded by ZmxClient's timeouts.
         var names = QuickTerminalService.shared.splitState.tab.splitRoot.allPanes().map(\.sessionName)
-        var remoteKills: [(remote: ProjectPath, sessionID: String)] = []
+        var remoteKills: [ZmxClient.RemoteKill] = []
         if Preferences.shared.terminateSessionsOnQuit {
             for pane in (appState?.workspaces.values ?? [:].values)
                 .flatMap(\.tabs)
@@ -368,7 +368,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // ssh; a local kill of a remote name would silently no-op
                 // and strand the session running on the host.
                 if let remote = ProjectPath.remote(from: pane.projectPath) {
-                    remoteKills.append((remote: remote, sessionID: pane.sessionName))
+                    remoteKills.append(.init(
+                        remote: remote, sessionID: pane.sessionName, zmxPath: pane.remoteZmxPath
+                    ))
                 } else {
                     names.append(pane.sessionName)
                 }

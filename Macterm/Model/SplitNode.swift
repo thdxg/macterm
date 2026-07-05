@@ -271,6 +271,13 @@ final class Pane: Identifiable {
     /// The remote host name for display fallback (`processTitle` shows it
     /// while no remote process name is known). nil for local panes.
     let remoteHost: String?
+    /// Optional explicit remote zmx path (#104), from the pane's `Project`.
+    /// Not part of pane identity and not persisted — `AppState` stamps it from
+    /// the project each time the workspace is built (it's a host property,
+    /// re-derivable on every open). Read by `ensureNSView` (spawn) and
+    /// `killPersistentSession` (teardown). nil = resolve `zmx` via PATH.
+    @ObservationIgnored
+    var remoteZmxPath: String?
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -539,7 +546,8 @@ final class Pane: Identifiable {
             command: command,
             shell: shell,
             env: env,
-            remoteSpec: ProjectPath.remote(from: projectPath)
+            remoteSpec: ProjectPath.remote(from: projectPath),
+            remoteZmxPath: remoteZmxPath
         )
         _nsView = view
         return view
@@ -692,7 +700,8 @@ final class Pane: Identifiable {
         let name = sessionName
         NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
         if let remote = ProjectPath.remote(from: projectPath) {
-            Task { await zmx.killRemoteSession(remote, name) }
+            let zmxPath = remoteZmxPath
+            Task { await zmx.killRemoteSession(remote, name, zmxPath) }
             return
         }
         Task { await zmx.killSession(name) }

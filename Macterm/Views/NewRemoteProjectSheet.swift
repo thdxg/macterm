@@ -21,9 +21,16 @@ struct NewRemoteProjectSheet: View {
     private var host = ""
     @State
     private var directory = "~"
+    @State
+    private var zmxPath = ""
 
     private var composedPath: String? {
         ProjectPath.composeRemote(host: host, directory: directory)
+    }
+
+    private var trimmedZmxPath: String? {
+        let t = zmxPath.trimmingCharacters(in: .whitespaces)
+        return t.isEmpty ? nil : t
     }
 
     var body: some View {
@@ -34,10 +41,12 @@ struct NewRemoteProjectSheet: View {
                 TextField("Name", text: $name, prompt: Text(host.isEmpty ? "devbox" : host))
                 TextField("Host", text: $host, prompt: Text("[user@]host or ssh alias"))
                 TextField("Directory", text: $directory, prompt: Text("~/dev/api"))
+                TextField("zmx path (optional)", text: $zmxPath, prompt: Text("auto-detect via PATH"))
             }
             .textFieldStyle(.roundedBorder)
             Text(
                 "Panes run persistent zmx sessions on the host over ssh — zmx must be installed there. "
+                    + "If it isn't found automatically, set an absolute path (e.g. ~/bin/zmx or /usr/local/bin/zmx). "
                     + "Port, identity, and ControlMaster come from ~/.ssh/config."
             )
             .font(.caption)
@@ -62,7 +71,8 @@ struct NewRemoteProjectSheet: View {
         let project = Project(
             name: trimmedName.isEmpty ? host.trimmingCharacters(in: .whitespaces) : trimmedName,
             path: path,
-            sortOrder: projectStore.projects.count
+            sortOrder: projectStore.projects.count,
+            zmxPath: trimmedZmxPath
         )
         projectStore.add(project)
         appState.selectProject(project)

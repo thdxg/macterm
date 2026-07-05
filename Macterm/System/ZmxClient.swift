@@ -31,12 +31,13 @@ struct ZmxClient {
     /// `ssh -o BatchMode=yes … zmx kill <id>`. Best-effort: an unreachable
     /// host or auth failure logs and moves on (the session either detached
     /// with its dead ssh client or will be the user's to `zmx kill`).
-    var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String) async -> Void
+    var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String, _ zmxPath: String?) async -> Void
     /// One batched foreground probe of a remote host (#104): session name →
     /// foreground `comm` for every `macterm-*` session there, via
-    /// `RemoteSpawn.foregroundProbeArgv`. nil = probe failed (unreachable /
-    /// auth / timeout) — `RemoteForegroundResolver` degrades silently.
-    var remoteForegroundComms: @Sendable (_ remote: ProjectPath) async -> [String: String]?
+    /// `RemoteSpawn.foregroundProbeArgv`. `zmxPath` (optional) is the explicit
+    /// remote zmx path. nil result = probe failed (unreachable / auth /
+    /// timeout) — `RemoteForegroundResolver` degrades silently.
+    var remoteForegroundComms: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> [String: String]?
     /// Each live Macterm session with its attached-client count, or nil when the
     /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
     /// successful empty listing. An entry's `clients == nil` marks an unknown
@@ -100,8 +101,10 @@ extension ZmxClient {
             killSession: { sessionID in
                 _ = await runZmx(["kill", sessionID], executable: bundledExecutable())
             },
-            killRemoteSession: { remote, sessionID in
-                guard let argv = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["kill", sessionID])
+            killRemoteSession: { remote, sessionID, zmxPath in
+                guard let argv = RemoteSpawn.opArgv(
+                    remote: remote, zmxArguments: ["kill", sessionID], zmxPath: zmxPath
+                )
                 else { return }
                 _ = await runZmx(
                     argv,
@@ -109,8 +112,9 @@ extension ZmxClient {
                     timeout: .seconds(10)
                 )
             },
-            remoteForegroundComms: { remote in
-                guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote) else { return nil }
+            remoteForegroundComms: { remote, zmxPath in
+                guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: zmxPath)
+                else { return nil }
                 guard let stdout = await runZmx(
                     argv,
                     executable: URL(fileURLWithPath: "/usr/bin/ssh"),
@@ -145,8 +149,8 @@ extension ZmxClient {
         executableURL: { nil },
         isBundled: { false },
         killSession: { _ in },
-        killRemoteSession: { _, _ in },
-        remoteForegroundComms: { _ in nil },
+        killRemoteSession: { _, _, _ in },
+        remoteForegroundComms: { _, _ in nil },
         listSessionsWithClients: { [] },
         sessionLeaderPIDs: { [:] }
     )
@@ -203,13 +207,21 @@ extension ZmxClient {
     /// terminate-on-quit sweep. Longer default cap: each kill is an ssh
     /// round-trip (BatchMode, so it fails fast rather than prompting — an
     /// unreachable host just forfeits its kills when the cap lands).
+    /// One remote session to tear down on quit: its host spec, session name,
+    /// and the project's optional explicit zmx path.
+    struct RemoteKill {
+        let remote: ProjectPath
+        let sessionID: String
+        let zmxPath: String?
+    }
+
     nonisolated func killRemoteSessionsBlocking(
-        _ kills: [(remote: ProjectPath, sessionID: String)],
+        _ kills: [RemoteKill],
         timeout: Duration = .seconds(12)
     ) {
         let kill = killRemoteSession
         runKillsBlocking(
-            kills.map { pair in { await kill(pair.remote, pair.sessionID) } },
+            kills.map { k in { await kill(k.remote, k.sessionID, k.zmxPath) } },
             timeout: timeout
         )
     }
