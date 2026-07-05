@@ -20,6 +20,12 @@ enum ProcessInspector {
     /// the first `zmx ls` populates the cache).
     @MainActor
     private static func foregroundPID(forPane pane: Pane) -> pid_t? {
+        // Remote panes (#104): the only local process is the ssh client — no
+        // local pid ever describes what runs inside the pane. Every pane-level
+        // API returns nil/false, so layout save emits a plain leaf, reconcile
+        // matches the pane as idle, and titles come from the remote pipeline
+        // (`RemoteForegroundResolver` / execution-gated OSC titles).
+        guard !pane.isRemote else { return nil }
         if let resolved = ZmxForegroundResolver.foregroundPID(sessionName: pane.sessionName) {
             return resolved
         }

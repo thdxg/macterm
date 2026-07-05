@@ -9,8 +9,25 @@ enum LayoutBuilder {
     /// Resolve a pane's working directory against the project root. A nil/empty
     /// `cwd` resolves to the project root; `~` is expanded; absolute paths pass
     /// through; everything else is treated as relative to the root.
+    ///
+    /// A REMOTE root (#104) resolves as pure strings — no local filesystem
+    /// semantics apply: `~`/absolute declared cwds are remote-home/-absolute
+    /// (never expanded against the local home), relative ones join the root's
+    /// directory, and the result keeps the `[user@]host:` prefix so the pane
+    /// stays a remote pane.
     static func resolveCwd(_ cwd: String?, projectRoot: String) -> String {
         guard let cwd, !cwd.isEmpty else { return projectRoot }
+        if case let .remote(user, host, directory)? = ProjectPath.parse(projectRoot) {
+            let resolved: String = if cwd.hasPrefix("/") || cwd.hasPrefix("~") {
+                cwd
+            } else if directory.hasSuffix("/") {
+                directory + cwd
+            } else {
+                directory + "/" + cwd
+            }
+            let userPrefix = user.map { "\($0)@" } ?? ""
+            return "\(userPrefix)\(host):\(resolved)"
+        }
         let expanded = (cwd as NSString).expandingTildeInPath
         if expanded.hasPrefix("/") { return expanded }
         return URL(fileURLWithPath: projectRoot)
