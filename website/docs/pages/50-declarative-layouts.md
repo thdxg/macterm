@@ -27,4 +27,6 @@ Each tab is a layout node: a leaf pane (`cwd` / `run` / `shell`) or a `split` wi
 
 Run **Save layout** from the palette to write your current workspace out, or **Apply layout** to reconcile the live workspace toward the file — matching panes are kept, only ones that drifted are restarted.
 
+A `path` can also be a remote spec (`devbox:~/dev/api`), declaring a [remote project](/docs/remote-projects) whose tabs spawn on that host — with an optional top-level `zmxPath` when zmx needs an explicit location there.
+
 > The older in-project `.macterm/layout.yaml` still seeds a project on first open, but it's deprecated in favor of the central files above.

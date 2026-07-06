@@ -231,6 +231,8 @@ struct ControlHandlerTests {
             executableURL: { nil },
             isBundled: { true },
             killSession: { _ in },
+            killRemoteSession: { _, _, _ in },
+            remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { entries },
             sessionLeaderPIDs: { leaders }
         )
@@ -523,6 +525,8 @@ struct ControlHandlerTests {
             executableURL: { nil },
             isBundled: { true },
             killSession: { name in await killed.append(name) },
+            killRemoteSession: { _, _, _ in },
+            remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { [.init(name: "macterm-x-000011112222", clients: 0)] },
             sessionLeaderPIDs: { [:] }
         )
