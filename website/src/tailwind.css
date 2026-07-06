@@ -66,6 +66,11 @@
   body {
     background: var(--color-canvas);
     color: var(--color-ink);
+    /* Sticky footer: lay the page out as a column so the footer can be pushed
+       to the bottom of the viewport on short pages (see .site-footer). Pairs
+       with the min-h-screen utility already on <body>. */
+    display: flex;
+    flex-direction: column;
   }
 
   ::selection {
@@ -264,6 +269,9 @@
     padding: 28px var(--site-gutter);
     font-size: 13px;
     border-top: 1px solid rgba(23, 21, 15, 0.14);
+    /* Take up the slack in the body flex column so a short page still drops the
+       footer to the bottom of the viewport. */
+    margin-top: auto;
   }
   .site-footer nav {
     display: flex;
