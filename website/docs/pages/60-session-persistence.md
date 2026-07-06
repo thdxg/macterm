@@ -2,7 +2,7 @@
 slug: session-persistence
 title: Session persistence
 nav: Session persistence
-group: Projects
+group: Projects & sessions
 description: Terminal sessions survive quitting Macterm via a bundled zmx session.
 -->
 

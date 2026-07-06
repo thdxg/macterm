@@ -2,7 +2,7 @@
 slug: command-palette
 title: Command palette
 nav: Command palette
-group: Usage
+group: Everyday use
 description: Drive Macterm from the keyboard with the ⌘P command palette.
 -->
 

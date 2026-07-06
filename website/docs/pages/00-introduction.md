@@ -2,7 +2,7 @@
 slug: index
 title: Introduction
 nav: Introduction
-group: Overview
+group: Getting started
 description: Macterm — a native macOS terminal with a vertical project sidebar and persistent multiplexing, built on libghostty.
 -->
 

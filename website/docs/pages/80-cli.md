@@ -1,14 +1,16 @@
 <!-- page:
 slug: cli
 title: The macterm CLI
-nav: macterm CLI
+nav: CLI
 group: Automation
 description: Drive the running app — projects, tabs, panes, sessions — from scripts and AI agents over a local socket.
 -->
 
 # The `macterm` CLI
 
-Macterm bundles a control CLI that drives the **running app** — projects, tabs, panes, zmx sessions — over a local Unix socket, so scripts, AI agents, and other apps can orchestrate the terminal. Shells spawned by Macterm get it on `PATH` automatically; from elsewhere, invoke it by bundle path (`Macterm.app/Contents/Resources/bin/macterm`) or symlink it somewhere on your `PATH`.
+Macterm bundles a control CLI that drives the **running app** — projects, tabs, panes, and their zmx sessions — over a local Unix socket. It's how scripts, AI agents, and other apps orchestrate the terminal: spawn a grid of panes, run a command in each, focus one, tear it down.
+
+Shells that Macterm spawns already have `macterm` on their `PATH`, so inside any pane it just works:
 
 ```console
 $ macterm status
@@ -18,77 +20,114 @@ $ macterm tab new --run "npm run dev"
 tab:3  *  npm  1 pane
 
 $ macterm grid 2x2 --run "tail -f log/dev.log"
-$ macterm pane run -- git pull
 $ macterm session list
 macterm-api-8f327ce4a3f8  clients:1  pid:4310  attached-pane
 ```
 
-Every command takes `--json` (raw response payload, stable field names) and `--socket <path>` (explicit socket override). `--help` works at every level.
+From a shell Macterm *didn't* spawn, invoke it by bundle path (or symlink it onto your `PATH`):
+
+```sh
+/Applications/Macterm.app/Contents/Resources/bin/macterm status
+```
+
+Every command takes `--json` for a stable, scriptable payload instead of the human table, and `--socket <path>` to target a specific app instance. `--help` works at every level of the command tree.
 
 ## Commands
 
+The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `list` verb, so `macterm project` is `macterm project list`.
+
 | Command | Description |
 |---|---|
-| `status` | Liveness probe: version, pid, active project. |
+| `status` | Liveness probe: version, pid, active project. Exits non-zero if no app is reachable. |
 | `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
-| `project create <path> [--name N] [--select]` | Add a project for a local directory. Idempotent by canonical path. `--select` activates it — and, on first open, applies a matching central project file, spawning its declared tabs. |
+| `project create <path> [--name N] [--select]` | Add a project for a local directory. Idempotent by canonical path. `--select` activates it — and, on first open, applies a matching [layout file](/docs/declarative-layouts). |
 | `project select <name\|uuid\|index>` | Make a project active. |
 | `tab list [--project P]` | Tabs of a project (default: active project). |
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
 | `tab select <tab>` | Activate a tab (`tab:3`, index, UUID, or exact title). |
-| `tab close <tab> [--force]` | Close a tab — kills its panes' sessions. Refuses with a `busy` error when a pane has a running program, unless forced. |
+| `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker. |
-| `pane split [--direction right\|down\|auto] [--run CMD]` | Split a pane; the new pane inherits the source's cwd. |
-| `pane focus` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
-| `pane close (--pane P \| --session S) [--force]` | Close a pane (kills its session). Always explicit — never defaults to "the pane you're in". |
-| `pane run <command…>` | Type a command (plus newline) into a live pane's shell. |
-| `grid <RxC> [--run CMD]` | Split a pane into an equal R×C grid (≤16 cells). `--run` spawns CMD in every **new** pane. |
+| `pane split [--direction right\|down\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the source's cwd. `auto` picks the longer on-screen axis. |
+| `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
+| `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |
+| `pane run <command…> [target]` | Type a command (plus newline) into an **existing** live pane's shell. |
+| `grid <RxC> [--run CMD] [target]` | Split a pane into an equal R×C grid (≤16 cells). `--run` spawns CMD in every **new** pane. |
 | `session list` / `session info <name>` | zmx sessions as the daemon reports them, with attached-pane mapping. |
-| `session kill <name>` | Kill a zmx session. |
-| `layout apply [--project P] [--force]` | Reconcile the workspace to the project's [central layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes, unless forced. |
+| `session kill <name>` | Kill a zmx session. If a live pane is attached, that pane's shell exits. |
+| `layout apply [--project P] [--force]` | Reconcile the workspace to the project's [layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes, unless forced. |
 | `layout save [--project P]` | Write the live workspace to `~/.config/macterm/projects/<slug>.yaml`. |
 
-## Targeting
+> `pane run` types into a live shell — different from `--run`, which only applies to a pane at spawn time.
 
-Projects and tabs accept a **name/title**, a **UUID**, or the **1-based index** shown in list output (bare `3` or ref-style `tab:3`). Duplicate names are an explicit `ambiguous` error, never a silent first-match.
+## Targeting a pane
 
-Pane verbs resolve their target in this order:
+Projects and tabs accept a **name/title**, a **UUID**, or the **1-based index** shown in list output (bare `3` or ref-style `tab:3`). A duplicate name is an `ambiguous` error, never a silent first-match.
 
-1. `--session <name>` — the zmx session name (`macterm-<slug>-<hex12>`). This is the **restart-stable** address: pane UUIDs are regenerated on every launch, session names persist verbatim.
-2. `--pane <uuid|index>` — a pane UUID (searched project-wide) or an index within the tab scope.
-3. `MACTERM_SESSION` — inside a Macterm pane, the app injects this env var, so a bare `macterm pane split` splits *the pane you're running in*. An explicit `--tab` disables this fallback.
-4. Otherwise: the focused pane of the active tab.
+Pane verbs (`split`, `focus`, `close`, `run`, `grid`) resolve their target in this order:
 
-`pane close` never uses the env fallback — destroying "whatever pane I happen to be in" because no target was given is a footgun; it demands an explicit target.
+1. `--session <name>` — the zmx session name (`macterm-<slug>-<hex12>`). This is the **restart-stable** address: pane UUIDs regenerate every launch, session names persist verbatim.
+2. `--pane <uuid|index>` — a pane UUID (searched project-wide), or its index within the tab scope.
+3. `MACTERM_SESSION` — inside a pane, Macterm sets this to that pane's own session, so a bare `macterm pane split` splits *the pane you're in*. An explicit `--tab` disables this fallback.
+4. Otherwise, the focused pane of the active tab.
+
+`pane close` never uses the `MACTERM_SESSION` fallback — destroying "whatever pane I'm in" because no target was given is a footgun, so it always demands an explicit `--pane` or `--session`.
 
 ## Environment
 
 The app exports into every spawned shell:
 
-- `MACTERM_SOCKET` — the control socket path. A discovery *hint*: if the hinted socket doesn't answer (the app restarted since this shell spawned), the CLI falls back to the well-known locations. Only `--socket` pins hard.
+- `MACTERM_SOCKET` — the control socket path. A discovery *hint*: if it doesn't answer (the app restarted since this shell spawned), the CLI falls back to the well-known locations. Only `--socket` pins hard.
 - `MACTERM_SESSION` — the pane's own session name, for self-targeting.
-- `PATH` — prepended with the bundle's `Resources/bin`.
+- `PATH` — prepended with the bundle's `Resources/bin`, so `macterm` resolves.
 
 ## Exit codes
 
-- `0` — success. stdout carries the result (and *only* then).
-- `1` — the app returned an error. stderr gets the message plus a recovery hint when the app can suggest one.
-- `2` — no running Macterm reachable. stderr lists every socket path tried.
+The CLI is pipeline-safe: **stdout carries output only on success**, everything else goes to stderr.
 
-Anything captured from stdout is real output, which makes the CLI pipeline-safe.
+- `0` — success.
+- `1` — the app returned an error (message plus a recovery hint on stderr, when it can suggest one).
+- `2` — no running Macterm could be reached (stderr lists every socket path tried).
+
+Scripts can gate on liveness:
+
+```sh
+until macterm status >/dev/null 2>&1; do sleep 0.2; done
+```
+
+## Scripting example
+
+Spin up a project workspace from scratch, one pane per service:
+
+```sh title="dev-up.sh"
+#!/bin/sh
+set -e
+mac=/Applications/Macterm.app/Contents/Resources/bin/macterm
+
+# Wait for the app, then open the repo as a project.
+until "$mac" status >/dev/null 2>&1; do sleep 0.2; done
+"$mac" project create ~/dev/myapp --select
+
+# A tab running the dev server, split for a test watcher.
+"$mac" tab new --run "npm run dev"
+"$mac" pane split --direction down --run "npm test -- --watch"
+```
 
 ## Wire protocol
 
-Any same-user process can speak the protocol directly; the CLI is just a convenience. One request per connection to the Unix socket at `~/Library/Application Support/Macterm/control.sock`:
+The `macterm` binary is a thin client over a documented protocol — any same-user process can speak it directly. One request per connection to the socket at `~/Library/Application Support/Macterm/control.sock`: write one newline-terminated JSON line, half-close your write end, and read one line back.
 
-```json title="request — one newline-terminated line, then half-close your write end"
+```json title="request"
 {"v":1,"id":"<any-string>","command":"pane.split","args":{"direction":"down","run":"btop"}}
 ```
 
-```json title="response — one line back, then the server closes"
+```json title="response"
 {"v":1,"id":"<echoed>","ok":true,"data":{"panes":[{"id":"…","session":"macterm-api-1a2b3c4d5e6f","index":2}]}}
 ```
 
-Failures are `{"ok":false,"error":{"code":"busy","message":"…","action":"…"}}` with snake_case codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `internal`. Commands are `noun.verb`; unknown fields are ignored on both sides, so additive evolution never breaks a client. Debuggable by hand: `echo '{"v":1,"id":"x","command":"status"}' | nc -U <socket>`.
+Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}` with snake_case codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `internal`. Commands are `noun.verb`; unknown fields are ignored on both sides, so the protocol can grow without breaking clients. Debuggable by hand:
 
-> The boundary is filesystem permissions, same-user only: the socket is mode `0600` in a `0700` directory, and the CLI refuses sockets owned by another user. Sessions listed by `session list` may belong to *other* Macterm instances sharing the zmx daemon — such sessions show as `orphan`; killing one kills it for its real owner too.
+```sh
+echo '{"v":1,"id":"x","command":"status"}' | nc -U ~/Library/Application\ Support/Macterm/control.sock
+```
+
+> The boundary is filesystem permissions, same-user only: the socket is mode `0600` in a `0700` directory, and the CLI refuses sockets owned by another user. There's no token auth by design — it's the same trust boundary the zmx session daemon already uses.
