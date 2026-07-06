@@ -137,6 +137,29 @@ final class MainAppResponder: KeyResponder {
         // into the palette would fire Cmd+T's New Tab action.
         if appState.isCommandPaletteVisible { return .passThrough }
 
+        // Everything below acts on the main terminal window's workspace.
+        // When a different window is key — Settings, an alert sheet — none of
+        // it may fire: Cmd+W would close a terminal tab behind the window the
+        // user is actually looking at. Close shortcuts retarget to the key
+        // window (the macOS convention: Cmd+W closes the key window). Pass-
+        // through alone can't provide that — the system File > Close item is
+        // replaced by our "Close Pane" (CommandGroup(replacing: .saveItem)),
+        // so the menu bar would re-route Cmd+W right back to the tab. The
+        // quick-terminal panel is exempt: QuickTerminalResponder has already
+        // claimed its slice, and the app-wide keys that fall through (project
+        // nav, new tab, …) intentionally keep working while the panel is up.
+        if let keyWindow = NSApp.keyWindow, keyWindow !== mainWindow,
+           !(keyWindow is QuickTerminalPanel)
+        {
+            if HotkeyRegistry.matches(event, action: .closePane)
+                || HotkeyRegistry.matches(event, action: .closeWindow)
+            {
+                keyWindow.performClose(nil)
+                return .handled
+            }
+            return .passThrough
+        }
+
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // Quick-terminal toggle. The same shortcut is also a Carbon global
