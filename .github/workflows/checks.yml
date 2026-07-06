@@ -82,7 +82,7 @@ jobs:
       # once a week rather than every run. Shared verbatim with the benchmark
       # workflow.
       - name: Cache GhosttyKit
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             GhosttyKit.xcframework
@@ -100,7 +100,7 @@ jobs:
       # path (build/DerivedData), different cache namespace, so the two configs
       # never clobber each other.
       - name: Cache DerivedData (Debug)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/DerivedData
           key: derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
