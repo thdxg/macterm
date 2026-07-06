@@ -18,6 +18,28 @@ jobs:
 
       - uses: jdx/mise-action@v4
 
+      # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
+      - name: Cache epoch
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # GhosttyKit + bundled resources + zmx: shared verbatim with the test and
+      # benchmark workflows (identical key), so a release rides the cache they
+      # keep warm. Only the source-independent download is cached — NOT
+      # DerivedData: a release is a clean universal Release build so the shipped
+      # binary can't inherit a stale incremental artifact.
+      - name: Cache GhosttyKit
+        uses: actions/cache@v4
+        with:
+          path: |
+            GhosttyKit.xcframework
+            Macterm/Resources/ghostty
+            Macterm/Resources/terminfo
+            Macterm/Resources/zmx
+          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+          restore-keys: |
+            ghosttykit-${{ hashFiles('scripts/setup.sh') }}-
+
       - name: Setup GhosttyKit
         run: mise run setup --verbose
 

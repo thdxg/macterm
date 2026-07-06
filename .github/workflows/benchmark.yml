@@ -34,15 +34,57 @@ jobs:
               - "scripts/**"
               - ".github/workflows/benchmark.yml"
 
+  # Fetch the latest main baseline in parallel with the build+sample job. It's
+  # pure GitHub API + a download with no dependency on the build, so keeping it
+  # off the benchmark job's critical path removes its latency entirely. Runs on
+  # a cheap ubuntu runner and hands the file to `benchmark` via an artifact.
+  baseline:
+    name: Fetch baseline
+    needs: changes
+    if: needs.changes.outputs.swift == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # download the baseline artifact from a main run
+    steps:
+      - name: Fetch main baseline
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # Walk recent successful main runs: a run whose benchmark job was
+          # skipped by the paths filter has no artifact, so try until one
+          # downloads.
+          for run_id in $(gh run list --workflow benchmark.yml --branch main --status success \
+              --limit 20 --json databaseId --jq '.[].databaseId'); do
+            if gh run download "$run_id" --name benchmark-results --dir baseline 2>/dev/null; then
+              echo "baseline: run $run_id"
+              break
+            fi
+          done
+          [ -f baseline/results.json ] || echo "no main baseline found; reporting absolute values"
+
+      - name: Upload baseline
+        if: hashFiles('baseline/results.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: baseline/results.json
+
   benchmark:
     name: Window states
-    needs: changes
-    if: needs.changes.outputs.swift == 'true'
+    needs: [changes, baseline]
+    # `baseline` is skipped on pushes to main (it's PR-only); always() lets this
+    # job run anyway, gated on the real condition. A failed baseline fetch must
+    # not block the benchmark — the report just falls back to absolute values.
+    if: |
+      always() && needs.changes.outputs.swift == 'true'
+      && needs.baseline.result != 'cancelled'
     runs-on: macos-26
     timeout-minutes: 30
     permissions:
       contents: read
-      actions: read # download the baseline artifact from a main run
+      actions: read # download the baseline artifact
       pull-requests: write # upsert the comparison comment
       issues: write # create/apply the benchmark:regression / benchmark:improvement labels
     steps:
@@ -50,6 +92,43 @@ jobs:
         uses: actions/checkout@v7
 
       - uses: jdx/mise-action@v4
+
+      # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
+      - name: Cache epoch
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # Shared verbatim with the test workflow — same key, so both feed one
+      # GhosttyKit cache entry. setup.sh is a presence check, so a restored
+      # cache makes it a no-op. Keyed on setup.sh + the ISO week so a new
+      # upstream ghostty release is picked up within a week (setup.sh pulls
+      # `latest`, but the presence check would otherwise never re-download).
+      - name: Cache GhosttyKit
+        uses: actions/cache@v4
+        with:
+          path: |
+            GhosttyKit.xcframework
+            Macterm/Resources/ghostty
+            Macterm/Resources/terminfo
+            Macterm/Resources/zmx
+          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+          restore-keys: |
+            ghosttykit-${{ hashFiles('scripts/setup.sh') }}-
+
+      # Release build products. Separate key prefix from the test workflow's
+      # Debug cache: same on-disk path (build/DerivedData), different cache
+      # namespace, so the two configs never clobber each other. Release
+      # incremental caching is less reliable than Debug, but the benchmark
+      # measures runtime resource use, not build correctness, so a partial
+      # recompile only costs time.
+      - name: Cache DerivedData (Release)
+        uses: actions/cache@v4
+        with:
+          path: build/DerivedData
+          key: derived-release-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-release-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-release-
 
       - name: Setup GhosttyKit
         run: mise run setup --verbose
@@ -73,22 +152,16 @@ jobs:
           path: build/benchmark/diagnostics/
           if-no-files-found: ignore
 
-      - name: Fetch main baseline
+      # Bring in the baseline the parallel job fetched. Best-effort: absent on
+      # pushes to main and when no main baseline exists yet, in which case the
+      # report falls back to absolute values.
+      - name: Download baseline
         if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Walk recent successful main runs: a run whose benchmark job was
-          # skipped by the paths filter has no artifact, so try until one
-          # downloads.
-          for run_id in $(gh run list --workflow benchmark.yml --branch main --status success \
-              --limit 20 --json databaseId --jq '.[].databaseId'); do
-            if gh run download "$run_id" --name benchmark-results --dir baseline 2>/dev/null; then
-              echo "baseline: run $run_id"
-              break
-            fi
-          done
-          [ -f baseline/results.json ] || echo "no main baseline found; reporting absolute values"
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: baseline
 
       - name: Report
         run: |

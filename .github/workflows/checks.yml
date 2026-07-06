@@ -68,6 +68,46 @@ jobs:
 
       - uses: jdx/mise-action@v4
 
+      # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
+      - name: Cache epoch
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # GhosttyKit + bundled resources + zmx: the source-independent download
+      # (setup.sh). setup.sh is a presence check, so a restored cache makes it a
+      # no-op. Keyed on setup.sh's hash + the ISO week so a new upstream ghostty
+      # release is picked up within a week without manual cache-busting (setup.sh
+      # pulls `latest`, but the presence check would otherwise never re-download
+      # once cached). The week rolls the exact key, so a fresh cache is saved
+      # once a week rather than every run. Shared verbatim with the benchmark
+      # workflow.
+      - name: Cache GhosttyKit
+        uses: actions/cache@v4
+        with:
+          path: |
+            GhosttyKit.xcframework
+            Macterm/Resources/ghostty
+            Macterm/Resources/terminfo
+            Macterm/Resources/zmx
+          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+          restore-keys: |
+            ghosttykit-${{ hashFiles('scripts/setup.sh') }}-
+
+      # Debug build products. `xcodebuild test` reuses this for a fast
+      # incremental compile; tests still run fresh regardless of what's cached,
+      # so a stale cache can never change a result — only the compile time.
+      # Separate key prefix from the benchmark's Release cache: same on-disk
+      # path (build/DerivedData), different cache namespace, so the two configs
+      # never clobber each other.
+      - name: Cache DerivedData (Debug)
+        uses: actions/cache@v4
+        with:
+          path: build/DerivedData
+          key: derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-
+
       - name: Setup GhosttyKit
         run: mise run setup --verbose
         env:
