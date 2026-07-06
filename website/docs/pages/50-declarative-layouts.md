@@ -2,7 +2,7 @@
 slug: declarative-layouts
 title: Declarative layouts
 nav: Declarative layouts
-group: Projects
+group: Projects & sessions
 description: Describe a project's tabs, splits, and per-pane commands in YAML.
 -->
 

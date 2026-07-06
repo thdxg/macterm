@@ -2,7 +2,7 @@
 slug: quick-terminal
 title: Quick terminal
 nav: Quick terminal
-group: Usage
+group: Everyday use
 description: A global drop-down terminal for scratch work, on a hotkey.
 -->
 

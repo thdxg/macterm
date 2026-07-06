@@ -2,7 +2,7 @@
 slug: remote-projects
 title: Remote projects
 nav: Remote projects
-group: Projects
+group: Projects & sessions
 description: Projects that live on a remote machine over SSH, with panes that persist on the host — surviving quits, disconnects, and even local reboots.
 -->
 
