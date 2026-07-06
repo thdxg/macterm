@@ -46,19 +46,26 @@ enum RemoteSpawn {
     /// interactive session is otherwise invisible over `ssh host <cmd>`. Two
     /// best-effort steps, in order:
     ///
-    /// 1. Source `/etc/profile` and `~/.profile` (both silenced + `|| true`,
-    ///    so a broken or short-circuiting profile can never abort the script).
-    ///    This picks up a POSIX-configured PATH the way `-l` would have.
-    /// 2. Append the common install dirs as a last resort — `~/bin` first
-    ///    (the spot that broke), preserving `$PATH` so anything the profiles
-    ///    set keeps precedence. Covers hosts whose PATH lives only in a
-    ///    non-POSIX shell's config (fish/nu), which `sh` never reads.
+    /// 1. Harvest PATH from `/etc/profile` + `~/.profile` sourced inside a
+    ///    COMMAND-SUBSTITUTION SUBSHELL — never in our own shell. Profiles
+    ///    are arbitrary code: a real host's `~/.profile` ended in `exec zsh`,
+    ///    which (sourced inline under our `>/dev/null` silencing) replaced
+    ///    the script wholesale — the exec'd shell inherited stdout→/dev/null,
+    ///    producing a pane with a visible prompt (ZLE writes to /dev/tty),
+    ///    visible keystrokes (kernel pty echo), and invisible command output,
+    ///    with zmx never attached. In a subshell, an `exec`/`exit`/abort can
+    ///    only kill the subshell: the substitution comes back empty and we
+    ///    fall through. The harvested PATH is adopted only when non-empty.
+    /// 2. Append the common install dirs as a last resort — `~/bin` first,
+    ///    preserving `$PATH` so anything the profiles set keeps precedence.
+    ///    Covers hosts whose PATH lives only in a non-POSIX shell's config
+    ///    (fish/nu), which `sh` never reads.
     ///
     /// A user-supplied absolute zmx path (project `zmxPath`) bypasses all of
     /// this — see `paneCommand`.
     static let remoteEnvPreamble =
-        "{ . /etc/profile; } >/dev/null 2>&1 || true; "
-            + "{ . \"$HOME/.profile\"; } >/dev/null 2>&1 || true; "
+        "mt_path=$( { . /etc/profile; . \"$HOME/.profile\"; } >/dev/null 2>&1; printf %s \"$PATH\" ) || true; "
+            + "[ -n \"$mt_path\" ] && PATH=\"$mt_path\"; unset mt_path; "
             + "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
             + "export PATH; "
 
