@@ -195,14 +195,10 @@ final class ControlHandler {
             throw ControlError(code: .notFound, message: "no directory at \(canonical)")
         }
 
-        let project: Project
-        if let existing = projectStore.projects.first(where: { ProjectPath.canonicalLocal($0.path) == canonical }) {
-            project = existing
-        } else {
-            let name = args.name ?? (canonical as NSString).lastPathComponent
-            project = Project(name: name, path: canonical, sortOrder: projectStore.projects.count)
-            projectStore.add(project)
-        }
+        let project = projectStore.findOrCreate(
+            name: args.name ?? (canonical as NSString).lastPathComponent,
+            path: canonical
+        )
         if args.select == true {
             // selectProject runs the same first-open path the sidebar does —
             // including auto-applying a matching central project file, so a

@@ -13,6 +13,20 @@ final class ProjectStore {
         load()
     }
 
+    func project(matchingPath path: String) -> Project? {
+        projects.first { ProjectPath.matches($0.path, path) }
+    }
+
+    @discardableResult
+    func findOrCreate(name: String, path: String, zmxPath: String? = nil) -> Project {
+        if let existing = project(matchingPath: path) {
+            return existing
+        }
+        let project = Project(name: name, path: path, sortOrder: projects.count, zmxPath: zmxPath)
+        add(project)
+        return project
+    }
+
     func add(_ project: Project) {
         projects.append(project)
         save()

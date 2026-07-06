@@ -34,10 +34,6 @@ struct DirectorySource: PaletteSource {
         }
         guard fm.fileExists(atPath: dir) else { return [] }
 
-        let existingByPath = Dictionary(
-            uniqueKeysWithValues: context.projectStore.projects.map { ($0.path, $0) }
-        )
-
         var items: [PaletteItem] = []
 
         // Exact match at the top (when the typed path is itself a directory).
@@ -46,7 +42,7 @@ struct DirectorySource: PaletteSource {
             items.append(directoryItem(
                 name: name,
                 fullPath: exact,
-                existing: existingByPath[exact],
+                existing: context.projectStore.project(matchingPath: exact),
                 context: context,
                 score: 0
             ))
@@ -69,7 +65,7 @@ struct DirectorySource: PaletteSource {
                 return directoryItem(
                     name: name,
                     fullPath: full,
-                    existing: existingByPath[full],
+                    existing: context.projectStore.project(matchingPath: full),
                     context: context,
                     score: offset + 1
                 )
@@ -115,12 +111,10 @@ struct DirectorySource: PaletteSource {
             category: "Directories",
             score: 0
         ) { [appState = context.appState, projectStore = context.projectStore] in
-            let project = Project(
+            let project = projectStore.findOrCreate(
                 name: name,
-                path: spec,
-                sortOrder: projectStore.projects.count
+                path: spec
             )
-            projectStore.add(project)
             appState.selectProject(project)
         }
     }
@@ -150,12 +144,10 @@ struct DirectorySource: PaletteSource {
             category: "Directories",
             score: score
         ) { [appState = context.appState, projectStore = context.projectStore] in
-            let project = Project(
+            let project = projectStore.findOrCreate(
                 name: name,
-                path: fullPath,
-                sortOrder: projectStore.projects.count
+                path: fullPath
             )
-            projectStore.add(project)
             appState.selectProject(project)
         }
     }
