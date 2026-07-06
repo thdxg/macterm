@@ -131,6 +131,22 @@ struct ProjectPathTests {
     }
 
     @Test
+    func isRemote_convenience_on_raw_strings() {
+        #expect(ProjectPath.isRemote("devbox:~/dev"))
+        #expect(!ProjectPath.isRemote("/a/b"))
+        #expect(!ProjectPath.isRemote("not a path"))
+    }
+
+    @Test
+    func compose_remote_validates_through_the_parser() {
+        #expect(ProjectPath.composeRemote(host: "devbox", directory: "~/dev") == "devbox:~/dev")
+        #expect(ProjectPath.composeRemote(host: " me@devbox ", directory: " /srv/app ") == "me@devbox:/srv/app")
+        #expect(ProjectPath.composeRemote(host: "", directory: "~/dev") == nil)
+        #expect(ProjectPath.composeRemote(host: "devbox", directory: "") == nil)
+        #expect(ProjectPath.composeRemote(host: "~oops", directory: "dir") == nil)
+    }
+
+    @Test
     func local_never_matches_remote_or_invalid() {
         #expect(!ProjectPath.matches("/a/b", "host:/a/b"))
         #expect(!ProjectPath.matches("foo/bar", "foo/bar"))

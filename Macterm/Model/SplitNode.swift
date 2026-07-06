@@ -264,6 +264,20 @@ final class Pane: Identifiable {
     /// The raw slug this pane's session was named under, so a split-off
     /// sibling groups under the same project in `zmx ls`.
     let sessionSlug: String
+    /// Whether this pane's project is remote (#104) — its `projectPath` is an
+    /// scp-style spec and its session lives on the remote host. Cached at
+    /// init: the poll and title paths read it every tick.
+    let isRemote: Bool
+    /// The remote host name for display fallback (`processTitle` shows it
+    /// while no remote process name is known). nil for local panes.
+    let remoteHost: String?
+    /// Optional explicit remote zmx path (#104), from the pane's `Project`.
+    /// Not part of pane identity and not persisted — `AppState` stamps it from
+    /// the project each time the workspace is built (it's a host property,
+    /// re-derivable on every open). Read by `ensureNSView` (spawn) and
+    /// `killPersistentSession` (teardown). nil = resolve `zmx` via PATH.
+    @ObservationIgnored
+    var remoteZmxPath: String?
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -304,6 +318,12 @@ final class Pane: Identifiable {
     var executionState: TerminalExecutionState = .idle {
         didSet {
             guard executionState != oldValue else { return }
+            // A remote pane's OSC title expires when its command ends — the
+            // execution edge is the pid-change analogue local panes get from
+            // the poll (see `receiveRemoteReportedTitle`).
+            if isRemote, oldValue == .running, programTitle != nil {
+                programTitle = nil
+            }
             // Transitions (idle→running, running→done) are exactly when the
             // adaptive poll should speed up; steady-state assignments and
             // per-frame heartbeats don't reach here (value unchanged).
@@ -324,6 +344,13 @@ final class Pane: Identifiable {
     /// the pref is read once; the default reads `Preferences` for ad-hoc
     /// callers (OSC title, output/progress callbacks) so they stay gated too.
     func refreshForegroundProcess(trackExecution: Bool? = nil) {
+        // Remote panes (#104): the local process table only knows the ssh
+        // client — reading it would stomp the probe-derived name, expire
+        // remote OSC titles, and feed the execution tracker a perpetual
+        // "ssh is running". Names come from `RemoteForegroundResolver`,
+        // titles from `receiveRemoteReportedTitle`, execution state from
+        // OSC 133 markers and activity heartbeats.
+        guard !isRemote else { return }
         let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
@@ -436,7 +463,51 @@ final class Pane: Identifiable {
     /// string as `programTitle` only when a real program — not the shell — is
     /// in the foreground (see `programTitle` for why).
     func receiveReportedTitle(_ title: String) {
+        if isRemote {
+            receiveRemoteReportedTitle(title)
+            return
+        }
         receiveReportedTitle(title, programPID: ProcessInspector.foregroundProgramPID(forPane: self))
+    }
+
+    /// Remote-pane title path (#104): there is no local foreground pid to
+    /// gate provenance on (the local process is always `ssh`), so the OSC 133
+    /// execution state stands in — a title arriving while a command runs is
+    /// the program naming itself; one arriving at the prompt is shell churn,
+    /// discarded exactly like the local gate discards it. Expiry is the
+    /// running→ended edge in `executionState.didSet`.
+    func receiveRemoteReportedTitle(_ title: String) {
+        // A title arrival is a command boundary — wake the poll (it drives
+        // the remote foreground probe). Deferred for the same render-loop
+        // reason as the local path.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        }
+        guard executionState == .running else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if trimmed != programTitle { programTitle = trimmed }
+        programTitlePID = nil
+    }
+
+    /// Tier-2 naming input for remote panes (#104): the remote resolver's
+    /// foreground `comm` for this pane's session. A macOS remote reports
+    /// `comm` as a full executable path — keep the basename, matching local
+    /// kernel-comm behavior. nil (session missing from a successful probe)
+    /// keeps the last-known name: a blip must not flap tab titles.
+    func applyRemoteForegroundName(_ comm: String?) {
+        guard let comm, !comm.isEmpty else { return }
+        let base = Self.normalizeRemoteComm(comm)
+        if !base.isEmpty, base != foregroundProcessName { foregroundProcessName = base }
+    }
+
+    /// Basename of a remote `ps -o comm=` value, minus the leading `-` a
+    /// login shell carries in its argv[0] (`-/opt/homebrew/bin/nu` → `nu`,
+    /// `-zsh` → `zsh`). Local kernel `comm` never has this dash, so the
+    /// stripping is remote-only. Pure + static for testing.
+    static func normalizeRemoteComm(_ comm: String) -> String {
+        let stripped = comm.hasPrefix("-") ? String(comm.dropFirst()) : comm
+        return (stripped as NSString).lastPathComponent
     }
 
     /// Testable core of `receiveReportedTitle`. `programPID` is the pane's
@@ -483,7 +554,9 @@ final class Pane: Identifiable {
             sessionName: sessionName,
             command: command,
             shell: shell,
-            env: mergedEnv
+            env: mergedEnv,
+            remoteSpec: ProjectPath.remote(from: projectPath),
+            remoteZmxPath: remoteZmxPath
         )
         _nsView = view
         return view
@@ -551,8 +624,12 @@ final class Pane: Identifiable {
         // The live foreground process name (`hx`, `btop`) when a program is
         // running, else the shell name when idle. Always process-table derived
         // (never the OSC title) — the quit confirmation lists real process
-        // names, and `displayTitle` falls back here.
+        // names, and `displayTitle` falls back here. For a remote pane the
+        // name comes from the remote probe; before one lands (or when the
+        // host is unreachable) the host name is the honest fallback — the
+        // local login shell never runs in a remote pane.
         if let proc = foregroundProcessName, !proc.isEmpty { return proc }
+        if let remoteHost { return remoteHost }
         return Self.defaultShellName
     }
 
@@ -595,6 +672,13 @@ final class Pane: Identifiable {
         self.projectPath = projectPath
         self.projectID = projectID
         self.sessionID = sessionID
+        if case let .remote(_, host, _)? = ProjectPath.parse(projectPath) {
+            isRemote = true
+            remoteHost = host
+        } else {
+            isRemote = false
+            remoteHost = nil
+        }
         if let persistedSessionName {
             // Restore path: the snapshot's name is authoritative and used
             // VERBATIM — the slug inside it reflects the project at creation,
@@ -624,6 +708,11 @@ final class Pane: Identifiable {
     func killPersistentSession(using zmx: ZmxClient) {
         let name = sessionName
         NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        if let remote = ProjectPath.remote(from: projectPath) {
+            let zmxPath = remoteZmxPath
+            Task { await zmx.killRemoteSession(remote, name, zmxPath) }
+            return
+        }
         Task { await zmx.killSession(name) }
     }
 }

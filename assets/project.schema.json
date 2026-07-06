@@ -13,7 +13,11 @@
     },
     "path": {
       "type": "string",
-      "description": "Where the project lives, scp-style: an absolute or ~-prefixed path is a local directory (e.g. \"~/dev/api\"); \"[user@]host:dir\" is a directory on a remote host (e.g. \"devbox:~/dev/api\" — host may be an ssh-config alias; port/identity come from ~/.ssh/config). This is the project's identity: files are matched to projects by this value. Matching expands ~ and normalizes ./.. segments, but resolves neither symlinks (including /tmp → /private/tmp) nor letter case — write the directory exactly as the filesystem reports it. Remote projects are not yet supported."
+      "description": "Where the project lives, scp-style: an absolute or ~-prefixed path is a local directory (e.g. \"~/dev/api\"); \"[user@]host:dir\" is a directory on a remote host (e.g. \"devbox:~/dev/api\" — host may be an ssh-config alias; port/identity come from ~/.ssh/config; ControlMaster there makes splits fast). This is the project's identity: files are matched to projects by this value. Matching expands ~ and normalizes ./.. segments, but resolves neither symlinks (including /tmp → /private/tmp) nor letter case — write the directory exactly as the filesystem reports it. Remote paths match structurally (same user/host/directory). A remote project's panes run persistent zmx sessions on the host over ssh; zmx must be installed there."
+    },
+    "zmxPath": {
+      "type": "string",
+      "description": "Absolute path to zmx on the remote host, used verbatim instead of resolving `zmx` through PATH. Only meaningful for a remote `path`. Set this when the pane shows \"zmx not found in PATH\" — non-interactive ssh gets a bare PATH, and hosts with a network-mounted home, an exotic /bin/sh, or PATH configured only in a non-POSIX shell won't resolve zmx automatically. Example: \"~/bin/zmx\" or \"/usr/local/bin/zmx\". Omit to auto-detect via PATH."
     },
     "tabs": {
       "type": "array",
@@ -45,7 +49,7 @@
     "paneProperties": {
       "cwd": {
         "type": "string",
-        "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through."
+        "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through. Under a remote root, '~' and absolute paths are remote-side (never the local home)."
       },
       "run": {
         "type": "string",

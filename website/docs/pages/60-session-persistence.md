@@ -16,4 +16,4 @@ Closing a pane, tab, or project is what actually ends its shell (you'll be asked
 zmx ls
 ```
 
-> Sessions don't survive a reboot (the daemon dies with the OS); panes respawn in their last working directory.
+> Local sessions don't survive a reboot (the daemon dies with the OS); panes respawn in their last working directory. Sessions in [remote projects](/docs/remote-projects) live on the host, so they *do* survive your Mac rebooting.

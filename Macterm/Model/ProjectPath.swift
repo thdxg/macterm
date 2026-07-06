@@ -98,6 +98,30 @@ enum ProjectPath: Equatable {
         return standardized
     }
 
+    /// Convenience for call sites holding a raw path string (`Project.path`,
+    /// `Pane.projectPath` — the remote spec travels and persists as a string).
+    static func isRemote(_ raw: String) -> Bool {
+        if case .remote = parse(raw) { return true }
+        return false
+    }
+
+    /// The parsed spec when `raw` is a remote path; nil for local or invalid.
+    /// The typed input for `RemoteSpawn` call sites.
+    static func remote(from raw: String) -> ProjectPath? {
+        guard let parsed = parse(raw), case .remote = parsed else { return nil }
+        return parsed
+    }
+
+    /// Compose a remote `path:` string from the New Remote Project sheet's
+    /// fields (`[user@]host` + directory), validating through the parser.
+    /// nil when the pair doesn't form a well-formed remote spec.
+    static func composeRemote(host: String, directory: String) -> String? {
+        let composed = host.trimmingCharacters(in: .whitespaces)
+            + ":"
+            + directory.trimmingCharacters(in: .whitespaces)
+        return isRemote(composed) ? composed : nil
+    }
+
     /// Whether two raw path strings identify the same project location.
     /// Locals compare canonically; remotes compare structurally (same
     /// user/host/directory after parsing). A local never equals a remote,

@@ -88,6 +88,10 @@ final class AppState {
 
     var pendingLayoutError: LayoutError?
 
+    /// Presents the "New Remote Project" sheet (#104) — set by the palette
+    /// command and the sidebar's New Project menu, consumed by `MainWindow`.
+    var isNewRemoteProjectSheetPresented = false
+
     // Tab cycling state (Ctrl+Tab)
     private var tabCycleOrder: [UUID] = []
     private var tabCycleIndex: Int = 0
@@ -168,6 +172,13 @@ final class AppState {
     /// per tick (`zmx ls` is a fork/exec).
     @ObservationIgnored
     private var zmxRefreshGate = ZmxRefreshGate()
+
+    /// Tier-2 remote tab naming (#104): batched per-host ssh probes on their
+    /// own throttled cadence, decoupled from the local poll's 250ms bursts.
+    /// The probe closure is handed in per refresh so it always reads the
+    /// injectable `zmx` (tests swap `zmx` after init).
+    @ObservationIgnored
+    private let remoteForegroundResolver = RemoteForegroundResolver()
 
     /// Drops overlapping `zmx ls` refreshes so a slow probe can't pile up
     /// behind the poll.
@@ -323,11 +334,24 @@ final class AppState {
         var didAcknowledgeCompletion = false
         var seenPanes: Set<UUID> = []
         var sawBusyPane = false
+        var activeRemotePanes: [Pane] = []
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
                     seenPanes.insert(pane.id)
-                    pane.refreshForegroundProcess(trackExecution: trackExecution)
+                    if pane.isRemote {
+                        // The local process table only knows `ssh` here — a
+                        // local refresh would stomp the probe-derived name
+                        // and instantly expire remote OSC titles. Execution
+                        // state still settles from output heartbeats, and
+                        // the frontmost project's panes feed the throttled
+                        // remote probe below.
+                        if projectID == activeProjectID {
+                            activeRemotePanes.append(pane)
+                        }
+                    } else {
+                        pane.refreshForegroundProcess(trackExecution: trackExecution)
+                    }
                     if trackExecution {
                         settleIfVisible(pane)
                     }
@@ -343,6 +367,9 @@ final class AppState {
         previouslyOccludedPanes.formIntersection(seenPanes)
         lastPollSawBusyPane = sawBusyPane
         if didAcknowledgeCompletion { saveWorkspaces() }
+        if !activeRemotePanes.isEmpty, isAnyWindowVisible() {
+            remoteForegroundResolver.refresh(panes: activeRemotePanes, probe: zmx.remoteForegroundComms)
+        }
     }
 
     /// Quiet-settle only while the surface actually renders: an occluded pane
@@ -411,6 +438,8 @@ final class AppState {
             recordProjectVisit(id)
             autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: id, path: project.path)
+            // Reattaching remote panes need the zmx path before warm/render.
+            stampRemoteZmxPath(project)
             acknowledgeActiveTab(projectID: id)
             warmFocusedProject()
         }
@@ -438,11 +467,25 @@ final class AppState {
         recordProjectVisit(project.id)
         autoApplyLayoutOnFirstOpen(project)
         ensureWorkspace(projectID: project.id, path: project.path)
+        // Stamp the remote zmx path onto every pane BEFORE any surface spawns
+        // (warmFocusedProject / render → ensureNSView reads it). It's a host
+        // property re-derived from the project on each open, not persisted.
+        stampRemoteZmxPath(project)
         acknowledgeActiveTab(projectID: project.id)
         warmFocusedProject()
         // Creating a workspace doesn't change any tab selection (the poll's
         // usual wake signal), so bump it directly.
         notePollEvent()
+    }
+
+    /// Apply `project.zmxPath` to every pane in its workspace, so the remote
+    /// spawn/kill/probe commands use it. Idempotent; safe to call on each
+    /// open. No-op for local projects (nil path leaves PATH resolution).
+    private func stampRemoteZmxPath(_ project: Project) {
+        guard let ws = workspaces[project.id] else { return }
+        for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+            pane.remoteZmxPath = project.zmxPath
+        }
     }
 
     /// Start the shells for every tab of the focused project, not just the
@@ -551,6 +594,10 @@ final class AppState {
     /// `project.path`) will land in the new directory.
     func replaceProjectPathWithCurrentDir(projectStore: ProjectStore) {
         guard let projectID = activeProjectID,
+              let project = projectStore.projects.first(where: { $0.id == projectID }),
+              // Remote projects (#104): the reported pwd is a REMOTE
+              // directory — adopting it would corrupt the project's identity.
+              !project.isRemote,
               let pane = focusedPane(for: projectID),
               let pwd = pane.nsView?.currentPwd,
               !pwd.isEmpty
@@ -1039,7 +1086,7 @@ final class AppState {
         do {
             let layout = LayoutSerializer.layout(for: ws, projectName: project.name, projectRoot: project.path)
             let target = try projectFiles.write(
-                ProjectFile(name: project.name, path: project.path, tabs: layout.tabs),
+                ProjectFile(name: project.name, path: project.path, zmxPath: project.zmxPath, tabs: layout.tabs),
                 projectName: project.name
             )
             logger.info("saveLayout succeeded: tabs=\(ws.tabs.count, privacy: .public)")

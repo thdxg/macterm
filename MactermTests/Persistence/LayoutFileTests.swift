@@ -111,6 +111,19 @@ struct LayoutFileTests {
     }
 
     @Test
+    func cwd_resolution_against_a_remote_root_is_string_only() {
+        // Remote roots (#104): no local filesystem semantics. `~` must stay
+        // remote-home (never the local user's), relatives join the root's
+        // directory, and the [user@]host: prefix survives so the pane stays
+        // remote.
+        let root = "me@devbox:~/dev/api"
+        #expect(LayoutBuilder.resolveCwd(nil, projectRoot: root) == root)
+        #expect(LayoutBuilder.resolveCwd("sub/dir", projectRoot: root) == "me@devbox:~/dev/api/sub/dir")
+        #expect(LayoutBuilder.resolveCwd("/srv/logs", projectRoot: root) == "me@devbox:/srv/logs")
+        #expect(LayoutBuilder.resolveCwd("~/other", projectRoot: root) == "me@devbox:~/other")
+    }
+
+    @Test
     func built_tab_focuses_its_first_pane() throws {
         let yaml = """
         tabs:

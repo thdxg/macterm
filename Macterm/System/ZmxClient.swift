@@ -12,7 +12,9 @@ private let logger = Logger(subsystem: appBundleID, category: "ZmxClient")
 /// Cache-free by design: zmx itself is authoritative for attach-vs-create, so we
 /// never gate launch on a stale local snapshot of daemon state. Adapted from
 /// Supacode's `ZmxClient`, trimmed to Macterm's single-window model (no
-/// per-worktree concept, no remote SSH surfaces).
+/// per-worktree concept). Remote panes (#104) attach on the REMOTE host's
+/// daemon — only their teardown flows through here (`killRemoteSession`);
+/// listing/reaping stay local-only (see `reapOrphans`).
 struct ZmxClient {
     /// Bundled zmx executable URL when the socket-path budget probe passed,
     /// otherwise nil. Use for the wrap-vs-bypass decision on NEW surfaces.
@@ -25,6 +27,17 @@ struct ZmxClient {
     /// Tear down a session. No-op on a missing session. Bounded by the
     /// subprocess timeout so a stuck daemon can't hold the close path forever.
     var killSession: @Sendable (_ sessionID: String) async -> Void
+    /// Tear down a session on a REMOTE host (#104), via
+    /// `ssh -o BatchMode=yes … zmx kill <id>`. Best-effort: an unreachable
+    /// host or auth failure logs and moves on (the session either detached
+    /// with its dead ssh client or will be the user's to `zmx kill`).
+    var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String, _ zmxPath: String?) async -> Void
+    /// One batched foreground probe of a remote host (#104): session name →
+    /// foreground `comm` for every `macterm-*` session there, via
+    /// `RemoteSpawn.foregroundProbeArgv`. `zmxPath` (optional) is the explicit
+    /// remote zmx path. nil result = probe failed (unreachable / auth /
+    /// timeout) — `RemoteForegroundResolver` degrades silently.
+    var remoteForegroundComms: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> [String: String]?
     /// Each live Macterm session with its attached-client count, or nil when the
     /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
     /// successful empty listing. An entry's `clients == nil` marks an unknown
@@ -88,6 +101,29 @@ extension ZmxClient {
             killSession: { sessionID in
                 _ = await runZmx(["kill", sessionID], executable: bundledExecutable())
             },
+            killRemoteSession: { remote, sessionID, zmxPath in
+                guard let argv = RemoteSpawn.opArgv(
+                    remote: remote, zmxArguments: ["kill", sessionID], zmxPath: zmxPath
+                )
+                else { return }
+                _ = await runZmx(
+                    argv,
+                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    timeout: .seconds(10)
+                )
+            },
+            remoteForegroundComms: { remote, zmxPath in
+                guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: zmxPath)
+                else { return nil }
+                guard let stdout = await runZmx(
+                    argv,
+                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    captureStdout: true,
+                    timeout: .seconds(10)
+                )
+                else { return nil }
+                return RemoteForegroundResolver.parseProbeOutput(stdout)
+            },
             listSessionsWithClients: {
                 // nil from runZmx is the UNKNOWN signal (spawn error / timeout /
                 // non-zero exit); preserve it so the reaper never kills on a
@@ -113,6 +149,8 @@ extension ZmxClient {
         executableURL: { nil },
         isBundled: { false },
         killSession: { _ in },
+        killRemoteSession: { _, _, _ in },
+        remoteForegroundComms: { _, _ in nil },
         listSessionsWithClients: { [] },
         sessionLeaderPIDs: { [:] }
     )
@@ -128,6 +166,13 @@ extension ZmxClient {
     /// reaps nothing. `knownSessionNames` are the persisted session names every
     /// live + restored pane owns this launch (names are stored verbatim, never
     /// re-derived — see `ZmxSessionName`).
+    ///
+    /// LOCAL-ONLY by design, not oversight (#104): `listSessionsWithClients`
+    /// probes the local daemon, so remote sessions never enter the orphan set.
+    /// Reaping a remote host would be wrong even if we could — another
+    /// machine's Macterm legitimately parks zero-client `macterm-*` sessions
+    /// there, and we'd destroy them. Remote crash leftovers are the user's to
+    /// `zmx kill` until sessions carry a per-installation marker.
     func reapOrphans(knownSessionNames: Set<String>) async {
         guard let live = await listSessionsWithClients() else {
             logger.info("Skipping orphan reap: zmx session probe unavailable")
@@ -154,14 +199,44 @@ extension ZmxClient {
         _ sessionIDs: [String],
         timeout: Duration = .seconds(6)
     ) {
-        guard !sessionIDs.isEmpty else { return }
+        let kill = killSession
+        runKillsBlocking(sessionIDs.map { id in { await kill(id) } }, timeout: timeout)
+    }
+
+    /// Remote counterpart of `killSessionsBlocking`, for the quit path's
+    /// terminate-on-quit sweep. Longer default cap: each kill is an ssh
+    /// round-trip (BatchMode, so it fails fast rather than prompting — an
+    /// unreachable host just forfeits its kills when the cap lands).
+    /// One remote session to tear down on quit: its host spec, session name,
+    /// and the project's optional explicit zmx path.
+    struct RemoteKill {
+        let remote: ProjectPath
+        let sessionID: String
+        let zmxPath: String?
+    }
+
+    nonisolated func killRemoteSessionsBlocking(
+        _ kills: [RemoteKill],
+        timeout: Duration = .seconds(12)
+    ) {
+        let kill = killRemoteSession
+        runKillsBlocking(
+            kills.map { k in { await kill(k.remote, k.sessionID, k.zmxPath) } },
+            timeout: timeout
+        )
+    }
+
+    nonisolated private func runKillsBlocking(
+        _ kills: [@Sendable () async -> Void],
+        timeout: Duration
+    ) {
+        guard !kills.isEmpty else { return }
         let group = DispatchGroup()
         group.enter()
-        let kill = killSession
         Task {
             await withTaskGroup(of: Void.self) { taskGroup in
-                for id in sessionIDs {
-                    taskGroup.addTask { await kill(id) }
+                for kill in kills {
+                    taskGroup.addTask { await kill() }
                 }
             }
             group.leave()
@@ -171,17 +246,21 @@ extension ZmxClient {
         _ = group.wait(timeout: .now() + seconds)
     }
 
-    /// Runs a zmx subcommand; returns captured stdout on success, or nil on any
-    /// failure (unbundled, spawn error, timeout, non-zero exit). Uses the
-    /// non-budget-gated `bundledExecutable` so kill paths work even when this
-    /// launch is over budget.
+    /// Runs a zmx subcommand — directly (the bundled binary) or through ssh
+    /// (remote ops pass `/usr/bin/ssh` and a `RemoteSpawn.opArgv`). Returns
+    /// captured stdout on success, or nil on any failure (unbundled, spawn
+    /// error, timeout, non-zero exit). Local callers use the non-budget-gated
+    /// `bundledExecutable` so kill paths work even when this launch is over
+    /// budget. Remote callers pass a longer `timeout`: ssh's ConnectTimeout
+    /// alone can eat the local 5s budget.
     private static func runZmx(
         _ arguments: [String],
         executable: URL?,
-        captureStdout: Bool = false
+        captureStdout: Bool = false,
+        timeout: Duration = subprocessTimeout
     ) async -> String? {
         guard let executable else { return nil }
-        let commandDesc = "zmx " + arguments.joined(separator: " ")
+        let commandDesc = "\(executable.lastPathComponent) " + arguments.joined(separator: " ")
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
@@ -244,7 +323,7 @@ extension ZmxClient {
                 return nil
             }
             group.addTask {
-                try? await Task.sleep(for: subprocessTimeout)
+                try? await Task.sleep(for: timeout)
                 return nil
             }
             defer { group.cancelAll() }
@@ -263,7 +342,7 @@ extension ZmxClient {
                 defer { group.cancelAll() }
                 await group.next()
             }
-            logger.warning("\(commandDesc, privacy: .public) timed out after \(subprocessTimeout, privacy: .public)")
+            logger.warning("\(commandDesc, privacy: .public) timed out after \(timeout, privacy: .public)")
             return nil
         }
         if exitStatus != 0 {
