@@ -563,8 +563,8 @@ final class AppState {
         logger.info("Imported legacy layout for \(project.name, privacy: .public)")
     }
 
-    /// Shows an open panel, adds the selected directory as a project, and selects it.
-    /// Returns the new project if one was created, nil if cancelled.
+    /// Shows an open panel, adds or finds the selected directory as a project,
+    /// and selects it. Returns the selected project, nil if cancelled.
     @discardableResult
     func openProject(store: ProjectStore) -> Project? {
         let panel = NSOpenPanel()
@@ -573,12 +573,10 @@ final class AppState {
         panel.allowsMultipleSelection = false
         panel.message = "Select a project folder"
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        let project = Project(
+        let project = store.findOrCreate(
             name: url.lastPathComponent,
-            path: url.path(percentEncoded: false),
-            sortOrder: store.projects.count
+            path: url.path(percentEncoded: false)
         )
-        store.add(project)
         selectProject(project)
         return project
     }

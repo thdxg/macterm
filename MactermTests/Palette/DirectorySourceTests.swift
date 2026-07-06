@@ -44,6 +44,24 @@ struct DirectorySourceTests {
     // MARK: - Remote items
 
     @Test
+    func local_directory_switches_to_existing_matching_project() throws {
+        let (ctx, state, store) = makeContext()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-dir-source-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let existing = Project(name: "existing", path: dir.path + "/./", sortOrder: 0)
+        store.add(existing)
+
+        let items = DirectorySource().items(query: dir.path, context: ctx)
+        let item = try #require(items.first)
+        #expect(item.subtitle?.contains("Switch to project") == true)
+        item.action()
+
+        #expect(state.activeProjectID == existing.id)
+        #expect(store.projects.count == 1)
+    }
+
+    @Test
     func typed_remote_spec_offers_add_as_remote_project() throws {
         let (ctx, state, store) = makeContext()
         let items = DirectorySource().items(query: "devbox:~/dev/api", context: ctx)

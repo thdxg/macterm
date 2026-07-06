@@ -68,13 +68,11 @@ struct NewRemoteProjectSheet: View {
     private func add() {
         guard let path = composedPath else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        let project = Project(
+        let project = projectStore.findOrCreate(
             name: trimmedName.isEmpty ? host.trimmingCharacters(in: .whitespaces) : trimmedName,
             path: path,
-            sortOrder: projectStore.projects.count,
             zmxPath: trimmedZmxPath
         )
-        projectStore.add(project)
         appState.selectProject(project)
         dismiss()
     }
