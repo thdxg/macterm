@@ -860,13 +860,6 @@ final class AppState {
         restoreFocusToActivePane()
     }
 
-    func moveActiveProjectTab(by offset: Int, projectID: UUID) {
-        guard let ws = workspaces[projectID] else { return }
-        if ws.moveActiveTab(by: offset) {
-            saveWorkspaces()
-        }
-    }
-
     func moveActiveTab(by offset: Int, projectID: UUID) {
         guard let ws = workspaces[projectID] else { return }
         if ws.moveActiveTab(by: offset) {
@@ -1352,6 +1345,19 @@ final class AppState {
         let current = sidebarFocusItem.flatMap { rows.firstIndex(of: $0) } ?? 0
         let next = ((current + offset) % rows.count + rows.count) % rows.count
         sidebarFocusItem = rows[next]
+    }
+
+    /// Reorder the ringed tab `offset` positions within its project (shift+↑/↓ in
+    /// Focus Sidebar mode). The ring stays on the moved tab. No-op when the ring
+    /// is on a project header rather than a tab.
+    func moveSidebarFocusTab(by offset: Int) {
+        guard sidebarFocusMode, let item = sidebarFocusItem,
+              case let .tab(projectID, tabID) = item,
+              let ws = workspaces[projectID]
+        else { return }
+        if ws.moveTab(id: tabID, by: offset) {
+            saveWorkspaces()
+        }
     }
 
     /// Choose the ring's row (select its project, and tab if any), then leave

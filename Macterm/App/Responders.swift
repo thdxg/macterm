@@ -147,13 +147,23 @@ final class MainAppResponder: KeyResponder {
         let isAppShortcut = HotkeyAction.allCases.contains { HotkeyRegistry.matches(event, action: $0) }
         if !renaming, !isAppShortcut, appState.sidebarFocusMode {
             // Hotkey Focus Sidebar: a tentative ring; the terminal keeps first
-            // responder. Bare ↑/↓ move the ring, Enter/ESC choose/cancel.
+            // responder. Bare ↑/↓ move the ring; shift+↑/↓ reorder the ringed
+            // tab within its project; Enter/ESC choose/cancel.
+            let shift = event.modifierFlags.contains(.shift)
             switch HotkeyRegistry.eventToken(event) ?? "" {
             case "up":
-                appState.moveSidebarFocus(by: -1, projects: projectStore.projects)
+                if shift {
+                    appState.moveSidebarFocusTab(by: -1)
+                } else {
+                    appState.moveSidebarFocus(by: -1, projects: projectStore.projects)
+                }
                 return .handled
             case "down":
-                appState.moveSidebarFocus(by: 1, projects: projectStore.projects)
+                if shift {
+                    appState.moveSidebarFocusTab(by: 1)
+                } else {
+                    appState.moveSidebarFocus(by: 1, projects: projectStore.projects)
+                }
                 return .handled
             case "return",
                  "enter":
@@ -198,7 +208,12 @@ final class MainAppResponder: KeyResponder {
         // quick-terminal panel is exempt: QuickTerminalResponder has already
         // claimed its slice, and the app-wide keys that fall through (project
         // nav, new tab, …) intentionally keep working while the panel is up.
-        if let keyWindow = NSApp.keyWindow, keyWindow !== mainWindow,
+        // Only retarget when we actually know the main window. If `mainWindow`
+        // is nil (not yet wired), we can't tell "a different window is key" from
+        // "the main window is key", and returning here would swallow every
+        // routed-loop hotkey (Focus Sidebar, tab-nav, rename) — which have no
+        // menu-bar fallback — before they're ever reached.
+        if let mainWindow, let keyWindow = NSApp.keyWindow, keyWindow !== mainWindow,
            !(keyWindow is QuickTerminalPanel)
         {
             if HotkeyRegistry.matches(event, action: .closePane)

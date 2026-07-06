@@ -151,6 +151,12 @@ struct SidebarContent: View {
         }
         .onChange(of: listFocused) { _, focused in
             appState.sidebarListFocused = focused
+            // Leaving the sidebar while in Focus Sidebar mode (e.g. clicking
+            // away) exits the mode, which returns keyboard focus to the active
+            // tab's pane. ESC does the same via the key responder.
+            if !focused, appState.sidebarFocusMode {
+                appState.exitSidebarFocus()
+            }
         }
         .onChange(of: appState.activeProjectID) { _, newID in
             if let newID { appState.expandedProjects.insert(newID) }

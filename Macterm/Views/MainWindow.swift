@@ -25,7 +25,7 @@ struct MainWindow: View {
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
             SidebarContent()
-                .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 280)
+                .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: .infinity)
         } detail: {
             ZStack {
                 // The window's NSWindow.backgroundColor (set by WindowAppearance)
