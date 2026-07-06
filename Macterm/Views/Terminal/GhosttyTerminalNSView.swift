@@ -326,8 +326,7 @@ final class GhosttyTerminalNSView: NSView {
             NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
         }
 
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+        syncColorScheme()
 
         if let screen = window?.screen ?? NSScreen.main,
            let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
@@ -471,8 +470,15 @@ final class GhosttyTerminalNSView: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        syncColorScheme()
+    }
+
+    /// Push the split-resolution scheme into libghostty — keyed off the
+    /// tracked system scheme, never this view's `effectiveAppearance`, which
+    /// our own preferredColorScheme pins (issue #144).
+    func syncColorScheme() {
         guard let surface else { return }
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let isDark = GhosttyApp.shared.systemScheme == .dark
         ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 

@@ -20,6 +20,21 @@ enum ThemeResolver {
         case dark
     }
 
+    /// The *system* scheme from raw inputs (pure, for tests). A pinned app's
+    /// effective appearance echoes our own `preferredColorScheme` (issue
+    /// #144), so it's trusted only unpinned; otherwise the OS-maintained
+    /// `AppleInterfaceStyle` global default ("Dark"/absent) decides.
+    static func systemScheme(
+        appHasAppearanceOverride: Bool,
+        effectiveAppearanceIsDark: Bool,
+        globalInterfaceStyle: String?
+    ) -> Scheme {
+        guard appHasAppearanceOverride else {
+            return effectiveAppearanceIsDark ? .dark : .light
+        }
+        return globalInterfaceStyle?.caseInsensitiveCompare("Dark") == .orderedSame ? .dark : .light
+    }
+
     /// The subset of theme-file colors Macterm's chrome needs.
     struct Colors: Equatable {
         var background: String?
