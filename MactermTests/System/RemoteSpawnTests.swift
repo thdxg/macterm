@@ -36,6 +36,23 @@ struct RemoteSpawnTests {
     }
 
     @Test
+    func remote_scripts_never_source_profiles() {
+        // Locked-in decision (#104): profiles are arbitrary code in the
+        // pane's critical path. Sourcing them — inline, in a subshell, or
+        // with stdin detached — produced three distinct pane-killers on real
+        // hosts (exec hijack of our fds, tty-stdin read-block, profile
+        // exec-loop spin). PATH comes from the fallback dir list; anything
+        // else is the project's explicit zmxPath.
+        let pane = RemoteSpawn.paneCommand(remote: remote, sessionName: "s") ?? ""
+        let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
+        let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
+        for wire in [pane, op, probe] {
+            #expect(!wire.contains(".profile"))
+            #expect(!wire.contains("/etc/profile"))
+        }
+    }
+
+    @Test
     func pane_command_script_is_single_quote_free() {
         // Single quotes in the script would break the `sh -c '<script>'`
         // wrapper on a non-POSIX login shell.

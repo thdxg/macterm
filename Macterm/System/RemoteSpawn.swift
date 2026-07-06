@@ -41,32 +41,29 @@ enum RemoteSpawn {
     /// (bash/zsh/fish/nu).
     static let remoteShell = "sh -c"
 
-    /// PATH setup prepended to each script. sshd runs commands
-    /// non-login/non-interactive with a bare PATH, so a zmx findable in an
-    /// interactive session is otherwise invisible over `ssh host <cmd>`. Two
-    /// best-effort steps, in order:
+    /// PATH setup prepended to each script: append the common install dirs.
+    /// sshd runs commands non-login/non-interactive with a bare PATH, so a
+    /// zmx findable in an interactive session is otherwise invisible over
+    /// `ssh host <cmd>`.
     ///
-    /// 1. Harvest PATH from `/etc/profile` + `~/.profile` sourced inside a
-    ///    COMMAND-SUBSTITUTION SUBSHELL — never in our own shell. Profiles
-    ///    are arbitrary code: a real host's `~/.profile` ended in `exec zsh`,
-    ///    which (sourced inline under our `>/dev/null` silencing) replaced
-    ///    the script wholesale — the exec'd shell inherited stdout→/dev/null,
-    ///    producing a pane with a visible prompt (ZLE writes to /dev/tty),
-    ///    visible keystrokes (kernel pty echo), and invisible command output,
-    ///    with zmx never attached. In a subshell, an `exec`/`exit`/abort can
-    ///    only kill the subshell: the substitution comes back empty and we
-    ///    fall through. The harvested PATH is adopted only when non-empty.
-    /// 2. Append the common install dirs as a last resort — `~/bin` first,
-    ///    preserving `$PATH` so anything the profiles set keeps precedence.
-    ///    Covers hosts whose PATH lives only in a non-POSIX shell's config
-    ///    (fish/nu), which `sh` never reads.
-    ///
-    /// A user-supplied absolute zmx path (project `zmxPath`) bypasses all of
-    /// this — see `paneCommand`.
+    /// Profiles (`/etc/profile`, `~/.profile`) are DELIBERATELY NOT sourced,
+    /// in any form. They are arbitrary code in the pane's critical path, and
+    /// every containment attempt leaked a new pane-killing failure mode,
+    /// each found on a real or harness host:
+    /// - inline + silenced: a `~/.profile` ending in `exec zsh` replaced the
+    ///   script wholesale; the exec'd shell inherited stdout→/dev/null
+    ///   (prompt visible via ZLE's /dev/tty, keystrokes via kernel pty echo,
+    ///   output invisible, zmx never attached);
+    /// - subshell harvest: the exec'd shell inherited the pane's tty stdin
+    ///   and sat reading keystrokes forever, blocking before attach;
+    /// - subshell + stdin</dev/null: a profile exec'ing a login shell that
+    ///   re-reads the same profile spins in an exec loop no fd isolation
+    ///   can unblock.
+    /// The fallback dir list below covers where zmx actually lives in
+    /// practice (`~/bin` included), and the project `zmxPath` covers
+    /// everything else, deterministically — see `paneCommand`.
     static let remoteEnvPreamble =
-        "mt_path=$( { . /etc/profile; . \"$HOME/.profile\"; } >/dev/null 2>&1; printf %s \"$PATH\" ) || true; "
-            + "[ -n \"$mt_path\" ] && PATH=\"$mt_path\"; unset mt_path; "
-            + "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
+        "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
             + "export PATH; "
 
     /// Prepended to the pane script only: ssh forwards the local
