@@ -860,7 +860,7 @@ final class AppState {
         restoreFocusToActivePane()
     }
 
-    func moveActiveTab(by offset: Int, projectID: UUID) {
+    func moveActiveProjectTab(by offset: Int, projectID: UUID) {
         guard let ws = workspaces[projectID] else { return }
         if ws.moveActiveTab(by: offset) {
             saveWorkspaces()
