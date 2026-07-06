@@ -335,8 +335,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window = note.object as? NSWindow
             MainActor.assumeIsolated {
                 guard let self, let window else { return }
+                // Settings (and other auxiliary windows) also become main —
+                // only the first window to do so is the terminal window. The
+                // responder must track that same pointer; assigning `window`
+                // unconditionally handed it the Settings window whenever
+                // Settings was frontmost, defeating its key-window gate.
                 if self.mainWindow == nil { self.mainWindow = window }
-                self.mainAppResponder?.mainWindow = window
+                self.mainAppResponder?.mainWindow = self.mainWindow
             }
         }
     }
