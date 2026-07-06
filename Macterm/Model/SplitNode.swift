@@ -540,12 +540,21 @@ final class Pane: Identifiable {
 
     func ensureNSView() -> GhosttyTerminalNSView {
         if let existing = _nsView { return existing }
+        // Every pane's shell learns its own restart-stable address so
+        // `macterm` invoked inside it can self-target (`MACTERM_SESSION`).
+        // Injected at spawn, which means a zmx-reattached shell keeps the
+        // value from its original spawn — correct, because the session name
+        // is persisted verbatim and survives restarts (pane UUIDs don't).
+        // Our value wins over a layout-declared duplicate: this is identity,
+        // not configuration.
+        var mergedEnv = env ?? [:]
+        mergedEnv[ControlProtocol.sessionEnvVar] = sessionName
         let view = GhosttyTerminalNSView(
             workingDirectory: projectPath,
             sessionName: sessionName,
             command: command,
             shell: shell,
-            env: env,
+            env: mergedEnv,
             remoteSpec: ProjectPath.remote(from: projectPath),
             remoteZmxPath: remoteZmxPath
         )
@@ -746,13 +755,16 @@ extension SplitNode {
         direction: SplitDirection,
         position: SplitPosition,
         projectPath: String,
-        projectID: UUID
+        projectID: UUID,
+        command: String? = nil
     ) -> (node: SplitNode, newPaneID: UUID?) {
         switch self {
         case let .pane(p) where p.id == paneID:
             // Inherit the source pane's session slug so the new sibling groups
             // under the same project in `zmx ls`.
-            let newPane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: p.sessionSlug)
+            let newPane = Pane(
+                projectPath: projectPath, projectID: projectID, sessionSlug: p.sessionSlug, command: command
+            )
             let first: SplitNode = position == .first ? .pane(newPane) : .pane(p)
             let second: SplitNode = position == .first ? .pane(p) : .pane(newPane)
             return (.split(SplitBranch(direction: direction, first: first, second: second)), newPane.id)
@@ -764,7 +776,8 @@ extension SplitNode {
                 direction: direction,
                 position: position,
                 projectPath: projectPath,
-                projectID: projectID
+                projectID: projectID,
+                command: command
             )
             branch.first = newFirst
             if id1 != nil { return (.split(branch), id1) }
@@ -773,7 +786,8 @@ extension SplitNode {
                 direction: direction,
                 position: position,
                 projectPath: projectPath,
-                projectID: projectID
+                projectID: projectID,
+                command: command
             )
             branch.second = newSecond
             return (.split(branch), id2)

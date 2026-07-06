@@ -1042,6 +1042,31 @@ final class GhosttyTerminalNSView: NSView {
     }
 }
 
+// MARK: - Programmatic text input
+
+extension GhosttyTerminalNSView {
+    /// Write text to the terminal as if pasted — the same `ghostty_surface_key`
+    /// text path `insertText` takes outside a key event, bypassing keyboard
+    /// handling entirely. The control CLI's `pane run` uses this to type a
+    /// command (plus newline) into a live shell. Returns false when the
+    /// surface doesn't exist yet, so callers can report the miss instead of
+    /// silently dropping input.
+    @discardableResult
+    func sendText(_ text: String) -> Bool {
+        guard let surface, !text.isEmpty else { return false }
+        // Same liveness signal a keystroke sends (execution tracking + poll
+        // resume), so an injected command updates the tab title promptly.
+        onInteraction?()
+        text.withCString { ptr in
+            var ke = ghostty_input_key_s()
+            ke.action = GHOSTTY_ACTION_PRESS
+            ke.text = ptr
+            _ = ghostty_surface_key(surface, ke)
+        }
+        return true
+    }
+}
+
 // MARK: - NSTextInputClient
 
 extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {

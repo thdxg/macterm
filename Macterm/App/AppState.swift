@@ -712,11 +712,16 @@ final class AppState {
 
     // MARK: - Tabs
 
-    func createTab(projectID: UUID, projectPath: String) {
-        guard let ws = workspaces[projectID] else { return }
-        ws.createTab(projectPath: projectPath)
+    /// A `command` spawns in the new tab's pane via `initial_input` (layout
+    /// `run:` semantics). Returns the new tab's ID, nil when the project has
+    /// no live workspace.
+    @discardableResult
+    func createTab(projectID: UUID, projectPath: String, command: String? = nil) -> UUID? {
+        guard let ws = workspaces[projectID] else { return nil }
+        let tab = ws.createTab(projectPath: projectPath, command: command)
         logger.debug("createTab: project=\(projectID, privacy: .public) tabs=\(ws.tabs.count, privacy: .public)")
         saveWorkspaces()
+        return tab.id
     }
 
     /// Convenience overload: look up the project's canonical path from the
@@ -887,6 +892,44 @@ final class AppState {
         logger.debug("splitPane: \(String(describing: direction), privacy: .public) pane=\(paneID, privacy: .public)")
         tab.split(paneID: paneID, direction: direction)
         saveWorkspaces()
+    }
+
+    /// Split a SPECIFIC pane — found in whichever of the project's tabs holds
+    /// it, unlike the focused-pane overload above — optionally spawning
+    /// `command` in the new pane. The control CLI's split path. Returns the
+    /// new pane's ID.
+    @discardableResult
+    func splitPane(
+        _ paneID: UUID,
+        direction: SplitDirection,
+        projectID: UUID,
+        command: String? = nil
+    ) -> UUID? {
+        guard let ws = workspaces[projectID],
+              let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
+        else { return nil }
+        let newID = tab.split(paneID: paneID, direction: direction, command: command)
+        saveWorkspaces()
+        return newID
+    }
+
+    /// Split a pane into an equal `rows`×`columns` grid (see
+    /// `TerminalTab.makeGrid`), spawning `command` in each new pane. Returns
+    /// the new pane IDs.
+    @discardableResult
+    func makeGrid(
+        _ paneID: UUID,
+        rows: Int,
+        columns: Int,
+        projectID: UUID,
+        command: String? = nil
+    ) -> [UUID] {
+        guard let ws = workspaces[projectID],
+              let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
+        else { return [] }
+        let created = tab.makeGrid(paneID: paneID, rows: rows, columns: columns, command: command)
+        if !created.isEmpty { saveWorkspaces() }
+        return created
     }
 
     /// Split the focused pane along its longer on-screen axis (Ghostty's

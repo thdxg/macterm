@@ -1,0 +1,516 @@
+@import "tailwindcss";
+
+/* Scan the static HTML the Worker serves for utility classes, plus the docs
+   template and build script that emit classes into the generated docs.html. */
+@source "../public/**/*.html";
+@source "../public/**/*.js";
+@source "../src/*.html";
+@source "../build-docs.mjs";
+
+/* ---------------------------------------------------------------------------
+   Macterm site design tokens — from the Claude Design redesign handoff.
+   Warm cream canvas, near-black ink, JetBrains Mono for code/meta.
+--------------------------------------------------------------------------- */
+@theme {
+  /* Fonts. Helvetica Neue system stack for UI; JetBrains Mono for code/meta. */
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Surfaces */
+  --color-canvas: #f7f5f0; /* page background */
+  /* Light code-block surface — the same warm translucent fill as the landing
+     install pill, so all command/code surfaces match. */
+  --color-code: rgba(23, 21, 15, 0.055);
+
+  /* Ink */
+  --color-ink: #17150f; /* primary text, buttons */
+  --color-body: #4a4539; /* body copy */
+  --color-lede: #3a362d; /* hero lede */
+  --color-muted: #6b6558; /* footer / blockquote */
+  --color-sidebar: #77715f; /* docs sidebar inactive link */
+  --color-label: #a39c8b; /* eyebrow / section labels */
+  --color-meta: #938b7b; /* feature numbers / counts */
+
+  /* Chips & inline code */
+  --color-chip: #e6e0d3; /* inline code / kbd fill */
+  --color-codetext: #17150f; /* code text on the light code surface */
+
+  /* Code-block chrome (light surface) */
+  --color-code-caption: #6b6558; /* filename label */
+  --color-code-btn: #6b6558; /* copy-button glyph */
+
+  /* Syntax highlighting (YAML sample) — darker tones for the light surface. */
+  --color-syn-key: #6b6558;
+  --color-syn-str: #4a4539;
+  --color-syn-val: #77715f;
+  --color-syn-dash: #938b7b;
+  --color-syn-comment: #a39c8b;
+}
+
+/* Global chrome that isn't a per-element utility. */
+@layer base {
+  :root {
+    /* Shared horizontal rhythm so the nav, page shell, and footer line up
+       across the landing and docs pages. */
+    --site-gutter: clamp(20px, 4vw, 40px);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    /* Always reserve the scrollbar gutter so a short page (docs) and a long one
+       (landing) have the same content width — otherwise the nav shifts
+       horizontally when switching between them. */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
+  ::selection {
+    background: var(--color-ink);
+    color: var(--color-canvas);
+  }
+}
+
+/* Stateful bits toggled by site.js — cleaner as component classes than as a
+   pile of inline utilities driven from JS. */
+@layer components {
+  .site-nav {
+    /* Sticky nav: transparent at rest, frosted once scrolled. */
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px var(--site-gutter);
+    background: rgba(247, 245, 240, 0);
+    transition:
+      background 0.3s ease,
+      box-shadow 0.3s ease,
+      backdrop-filter 0.3s ease;
+  }
+  .site-nav.is-scrolled {
+    background: rgba(247, 245, 240, 0.85);
+    box-shadow: 0 1px 0 rgba(23, 21, 15, 0.08);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  /* Hamburger toggle — hidden on desktop, shown when the nav links collapse. */
+  .nav-toggle {
+    display: none;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    margin-right: -8px;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .nav-toggle:hover {
+    background: rgba(23, 21, 15, 0.06);
+  }
+  /* Two-line hamburger that morphs into an X when open. */
+  .nav-toggle-icon,
+  .nav-toggle-icon::before,
+  .nav-toggle-icon::after {
+    content: "";
+    display: block;
+    width: 18px;
+    height: 1.5px;
+    background: currentColor;
+    border-radius: 2px;
+    transition:
+      transform 0.25s ease,
+      opacity 0.2s ease;
+  }
+  .nav-toggle-icon {
+    position: relative;
+  }
+  .nav-toggle-icon::before {
+    position: absolute;
+    top: -5.5px;
+  }
+  .nav-toggle-icon::after {
+    position: absolute;
+    top: 5.5px;
+  }
+  .site-nav.nav-open .nav-toggle-icon {
+    background: transparent;
+  }
+  .site-nav.nav-open .nav-toggle-icon::before {
+    top: 0;
+    transform: rotate(45deg);
+  }
+  .site-nav.nav-open .nav-toggle-icon::after {
+    top: 0;
+    transform: rotate(-45deg);
+  }
+
+  /* On small screens, collapse the nav links into a dropdown panel below the
+     bar, toggled by the hamburger. Above the breakpoint it's a plain flex row. */
+  @media (max-width: 640px) {
+    .site-nav {
+      padding-top: 14px;
+      padding-bottom: 14px;
+    }
+    .site-nav .nav-tag {
+      display: none;
+    }
+    .nav-toggle {
+      display: inline-flex;
+    }
+    .nav-links {
+      position: absolute;
+      top: 100%;
+      right: var(--site-gutter);
+      left: var(--site-gutter);
+      flex-direction: column;
+      align-items: stretch !important;
+      gap: 4px !important;
+      padding: 8px;
+      background: rgba(247, 245, 240, 0.96);
+      border: 1px solid rgba(23, 21, 15, 0.1);
+      border-radius: 14px;
+      box-shadow: 0 12px 32px -12px rgba(23, 21, 15, 0.25);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      /* Hidden until opened. */
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition:
+        opacity 0.2s ease,
+        transform 0.2s ease;
+    }
+    .site-nav.nav-open .nav-links {
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+    }
+    /* Stack each item full-width, left-aligned, comfortable tap targets. */
+    .nav-links > a {
+      width: 100%;
+      box-sizing: border-box;
+      justify-content: flex-start;
+      height: auto;
+      padding: 11px 12px;
+      border-radius: 9px;
+      opacity: 1;
+    }
+    .nav-links > a:not([data-download-latest]):hover {
+      background: rgba(23, 21, 15, 0.05);
+    }
+    /* The Download CTA keeps its filled pill but goes full-width. */
+    .nav-links > a[data-download-latest] {
+      justify-content: center;
+      margin-top: 4px;
+    }
+  }
+
+  /* Docs sidebar active link — set by scroll-spy. */
+  [data-nav-link].is-active {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  /* Landing feature rows: three columns on desktop, stacked on mobile. */
+  .feature-row {
+    display: grid;
+    grid-template-columns: clamp(48px, 6vw, 64px) 1.1fr 1.2fr;
+    gap: clamp(16px, 3vw, 32px);
+    align-items: start;
+    padding: 34px 0;
+    border-top: 1px solid rgba(23, 21, 15, 0.2);
+  }
+  .feature-row:last-child {
+    border-bottom: 1px solid rgba(23, 21, 15, 0.2);
+  }
+  @media (max-width: 640px) {
+    .feature-row {
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 28px 0;
+    }
+  }
+
+  /* Reveal-on-scroll rows (landing features). */
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 0.7s ease,
+      transform 0.7s ease;
+  }
+  [data-reveal].is-revealed {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* ---- Shared footer ---------------------------------------------------- */
+  .site-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding: 28px var(--site-gutter);
+    font-size: 13px;
+    border-top: 1px solid rgba(23, 21, 15, 0.14);
+  }
+  .site-footer nav {
+    display: flex;
+    gap: 22px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--color-muted);
+  }
+  .site-footer nav a {
+    color: var(--color-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .site-footer nav a:hover {
+    color: var(--color-ink);
+  }
+
+  /* ---- Docs shell + sidebar -------------------------------------------- */
+  .docs-shell {
+    display: flex;
+    gap: clamp(28px, 5vw, 64px);
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 var(--site-gutter);
+    align-items: flex-start;
+  }
+  .docs-sidebar {
+    position: sticky;
+    top: 64px;
+    flex: none;
+    width: 212px;
+    padding: 40px 0 60px;
+    align-self: flex-start;
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+  }
+  .docs-sidebar-group {
+    margin-bottom: 26px;
+  }
+  .docs-sidebar-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-label);
+    margin-bottom: 12px;
+  }
+  .docs-sidebar a {
+    display: block;
+    font-size: 14px;
+    color: var(--color-sidebar);
+    font-weight: 400;
+    text-decoration: none;
+    padding: 5px 0;
+    transition: color 0.15s;
+  }
+  .docs-sidebar a:hover {
+    color: var(--color-ink);
+  }
+  .docs-sidebar a.is-active {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  .docs-main {
+    flex: 1;
+    min-width: 0;
+    max-width: 760px;
+    padding: 40px 0 120px;
+  }
+  @media (max-width: 768px) {
+    .docs-shell {
+      display: block;
+    }
+    .docs-sidebar {
+      position: static;
+      width: 100%;
+      max-height: none;
+      overflow: visible;
+      padding: 28px 0 8px;
+    }
+    .docs-main {
+      padding-top: 8px;
+    }
+  }
+
+  /* ---- Docs prose (rendered from Markdown) ----------------------------- */
+  .prose-docs {
+    color: var(--color-body);
+  }
+  .prose-docs > section {
+    scroll-margin-top: 84px;
+  }
+  .prose-docs .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--color-label);
+    margin: 0 0 12px;
+  }
+  .prose-docs h1 {
+    font-size: clamp(34px, 4.5vw, 46px);
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    color: var(--color-ink);
+    margin: 0 0 18px;
+  }
+  .prose-docs h2 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+    margin: 0 0 16px;
+  }
+  .prose-docs h3 {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--color-ink);
+    margin: 24px 0 10px;
+  }
+  .prose-docs p {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-body);
+    margin: 0 0 14px;
+    max-width: 64ch;
+  }
+  /* The intro paragraphs run a touch larger. */
+  .prose-docs #intro p {
+    font-size: 17px;
+    margin-bottom: 16px;
+  }
+  .prose-docs #intro p:last-child {
+    margin-bottom: 0;
+  }
+  .prose-docs strong {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .prose-docs a {
+    color: var(--color-ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .prose-docs ul {
+    margin: 0 0 14px;
+    padding-left: 22px;
+    color: var(--color-body);
+    font-size: 16px;
+    line-height: 1.7;
+    max-width: 64ch;
+  }
+  .prose-docs hr {
+    border: none;
+    border-top: 1px solid rgba(23, 21, 15, 0.14);
+    margin: 52px 0;
+  }
+  .prose-docs blockquote {
+    border-left: 2px solid rgba(23, 21, 15, 0.35);
+    padding: 2px 0 2px 16px;
+    margin: 20px 0;
+    color: var(--color-muted);
+    font-size: 15px;
+    line-height: 1.55;
+    max-width: 60ch;
+  }
+  .prose-docs blockquote p {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--color-muted);
+    margin: 0;
+    max-width: none;
+  }
+  /* Inline code + kbd chips. */
+  .prose-docs :not(pre) > code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--color-chip);
+    border-radius: 4px;
+    padding: 0.08em 0.34em;
+  }
+  .prose-docs kbd {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    background: var(--color-chip);
+    border: 1px solid rgba(23, 21, 15, 0.16);
+    border-radius: 5px;
+    padding: 0.12em 0.45em;
+  }
+
+  /* ---- Dark code blocks ------------------------------------------------- */
+  .code-block {
+    position: relative;
+    background: var(--color-code);
+    border-radius: 10px;
+    margin: 0 0 24px;
+  }
+  .code-block pre {
+    margin: 0;
+    padding: 16px 48px 16px 18px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--color-codetext);
+  }
+  .code-block pre code {
+    font-family: inherit;
+    background: none;
+    padding: 0;
+  }
+  .code-block-copy {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: rgba(23, 21, 15, 0.05);
+    border: 1px solid rgba(23, 21, 15, 0.1);
+    border-radius: 7px;
+    color: var(--color-code-btn);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .code-block-copy:hover {
+    background: rgba(23, 21, 15, 0.1);
+  }
+  /* Code block with a filename caption bar. */
+  .code-block-caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 12px 11px 16px;
+    border-bottom: 1px solid rgba(23, 21, 15, 0.09);
+  }
+  .code-block-caption span {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--color-code-caption);
+  }
+  .code-block-caption .code-block-copy {
+    position: static;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+  }
+}

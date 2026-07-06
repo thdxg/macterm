@@ -23,7 +23,10 @@ xcodebuild \
   build \
   | (xcbeautify --quiet 2>/dev/null || cat)
 
+# On top of the idle states, BENCH_WORKLOAD busy tabs (2x2 grids spawned via
+# the bundled macterm CLI) are sampled as workload-* states; 0 skips them.
 python3 "$PROJECT_ROOT/scripts/benchmark.py" run \
   --app "$DERIVED_DATA/Build/Products/Release/Macterm.app" \
   --out "$OUT_DIR/results.json" \
-  --seconds "${BENCH_SECONDS:-30}"
+  --seconds "${BENCH_SECONDS:-30}" \
+  --workload "${BENCH_WORKLOAD:-2}"
