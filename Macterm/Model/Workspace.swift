@@ -104,15 +104,23 @@ final class TerminalTab: Identifiable {
     /// (the layout `run:` path — typed into the fresh shell verbatim).
     @discardableResult
     func split(paneID: UUID, direction: SplitDirection, command: String? = nil) -> UUID? {
-        let pane = splitRoot.findPane(id: paneID)
-        // Inherit the source pane's cwd. Prefer the shell's OSC 7-reported pwd
-        // (most accurate when shell integration is active), then fall back to
-        // the foreground process's actual cwd read from the kernel (works
-        // without shell integration / when a program holds the foreground),
-        // and only then to the pane's original project path.
-        let livePwd = pane.flatMap { p in p.nsView?.currentPwd ?? ProcessInspector.foregroundWorkingDirectory(forPane: p) }
-        let sourcePath = livePwd ?? pane?.projectPath ?? NSHomeDirectory()
-        let sourceProjectID = pane?.projectID ?? UUID()
+        // Bail before any side effect if the pane isn't in this tab — otherwise
+        // an unknown ID would clear the user's zoom and rebalance ratios for a
+        // split that never happens (mirrors toggleZoom/makeGrid's guard).
+        guard let pane = splitRoot.findPane(id: paneID) else { return nil }
+        // Inherit the source pane's cwd. For a LOCAL pane, prefer the shell's
+        // OSC 7-reported pwd (most accurate when shell integration is active),
+        // then the foreground process's actual kernel cwd (works without shell
+        // integration), and only then the pane's original project path. For a
+        // REMOTE pane, `currentPwd` is a remote-filesystem path with no host
+        // prefix — inheriting it would spawn the sibling as a LOCAL shell in a
+        // bogus dir instead of a remote zmx session — so skip the live cwd and
+        // inherit the scp-style `projectPath` verbatim.
+        let livePwd = pane.isRemote
+            ? nil
+            : (pane.nsView?.currentPwd ?? ProcessInspector.foregroundWorkingDirectory(forPane: pane))
+        let sourcePath = livePwd ?? pane.projectPath
+        let sourceProjectID = pane.projectID
         let (newRoot, newID) = splitRoot.splitting(
             paneID: paneID,
             direction: direction,

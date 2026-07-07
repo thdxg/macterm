@@ -271,6 +271,12 @@ final class Pane: Identifiable {
     /// The remote host name for display fallback (`processTitle` shows it
     /// while no remote process name is known). nil for local panes.
     let remoteHost: String?
+    /// The parsed scp-style spec for a remote pane (`.remote(user,host,dir)`),
+    /// or nil for a local pane. Cached at init so the spawn (`ensureNSView`)
+    /// and teardown (`killPersistentSession`) paths don't re-parse
+    /// `projectPath` — they read this instead.
+    @ObservationIgnored
+    let remoteSpec: ProjectPath?
     /// Optional explicit remote zmx path (#104), from the pane's `Project`.
     /// Not part of pane identity and not persisted — `AppState` stamps it from
     /// the project each time the workspace is built (it's a host property,
@@ -555,7 +561,7 @@ final class Pane: Identifiable {
             command: command,
             shell: shell,
             env: mergedEnv,
-            remoteSpec: ProjectPath.remote(from: projectPath),
+            remoteSpec: remoteSpec,
             remoteZmxPath: remoteZmxPath
         )
         _nsView = view
@@ -675,9 +681,11 @@ final class Pane: Identifiable {
         if case let .remote(_, host, _)? = ProjectPath.parse(projectPath) {
             isRemote = true
             remoteHost = host
+            remoteSpec = ProjectPath.remote(from: projectPath)
         } else {
             isRemote = false
             remoteHost = nil
+            remoteSpec = nil
         }
         if let persistedSessionName {
             // Restore path: the snapshot's name is authoritative and used
@@ -707,13 +715,20 @@ final class Pane: Identifiable {
     /// a parameter so AppState's injectable instance flows through in tests.
     func killPersistentSession(using zmx: ZmxClient) {
         let name = sessionName
-        NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
-        if let remote = ProjectPath.remote(from: projectPath) {
+        if let remote = remoteSpec {
             let zmxPath = remoteZmxPath
-            Task { await zmx.killRemoteSession(remote, name, zmxPath) }
+            Task {
+                await zmx.killRemoteSession(remote, name, zmxPath)
+                // Post AFTER the kill so observers that re-list sessions see
+                // the post-kill state instead of racing the still-alive one.
+                NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+            }
             return
         }
-        Task { await zmx.killSession(name) }
+        Task {
+            await zmx.killSession(name)
+            NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        }
     }
 }
 

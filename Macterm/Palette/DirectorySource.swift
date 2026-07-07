@@ -54,10 +54,16 @@ struct DirectorySource: PaletteSource {
                 let full = (dir as NSString).appendingPathComponent(name)
                 var childIsDir: ObjCBool = false
                 guard fm.fileExists(atPath: full, isDirectory: &childIsDir), childIsDir.boolValue else { return false }
-                if name.hasPrefix(".") { return false }
+                // Hide dotdirs — unless the user's typed prefix itself opts into
+                // the hidden namespace (e.g. `~/.conf` should complete `.config`).
+                if !prefix.hasPrefix("."), name.hasPrefix(".") { return false }
                 if prefix.isEmpty { return true }
                 return name.lowercased().hasPrefix(prefix.lowercased())
             }
+            // `contentsOfDirectory` order is unspecified; sort so BOTH which 10
+            // children survive the cap AND their ranking are deterministic
+            // across runs and filesystems.
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             .prefix(10)
             .enumerated()
             .map { offset, name -> PaletteItem in

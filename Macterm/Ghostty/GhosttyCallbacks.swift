@@ -114,8 +114,12 @@ final class GhosttyCallbacks: @unchecked Sendable {
     }
 
     func readClipboard(ud: UnsafeMutableRawPointer?, location: ghostty_clipboard_e, state: UnsafeMutableRawPointer?) -> Bool {
+        // `ghostty_surface_complete_clipboard_request`'s surface parameter is
+        // non-null on the Zig side; a request completing during surface
+        // teardown (nil `surface`) is UB, not a graceful no-op. Guard it.
+        guard let surface = surface(from: ud) else { return false }
         let text = Self.readPasteboardText() ?? ""
-        text.withCString { ghostty_surface_complete_clipboard_request(surface(from: ud), $0, state, false) }
+        text.withCString { ghostty_surface_complete_clipboard_request(surface, $0, state, false) }
         return true
     }
 
@@ -204,6 +208,7 @@ final class GhosttyCallbacks: @unchecked Sendable {
         let url = dir.appendingPathComponent("image-\(UUID().uuidString).png")
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            pruneOldPasteImages(in: dir)
             try data.write(to: url)
             return url.path
         } catch {
@@ -211,18 +216,75 @@ final class GhosttyCallbacks: @unchecked Sendable {
         }
     }
 
-    func confirmReadClipboard(ud: UnsafeMutableRawPointer?, content: UnsafePointer<CChar>?, state: UnsafeMutableRawPointer?) {
-        guard let content else { return }
-        ghostty_surface_complete_clipboard_request(surface(from: ud), content, state, true)
+    /// Best-effort prune of pasted-image temp PNGs older than a day, so the
+    /// per-paste files can't accumulate unboundedly. Errors are ignored — this
+    /// is opportunistic housekeeping, not a correctness path.
+    private static func pruneOldPasteImages(in dir: URL, olderThan maxAge: TimeInterval = 86400) {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+        else { return }
+        let cutoff = Date().addingTimeInterval(-maxAge)
+        for entry in entries where entry.pathExtension.lowercased() == "png" {
+            guard let modified = try? entry.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate
+            else { continue }
+            if modified < cutoff { try? FileManager.default.removeItem(at: entry) }
+        }
     }
 
-    func writeClipboard(content: UnsafePointer<ghostty_clipboard_content_s>?, len: UInt) {
+    func confirmReadClipboard(ud: UnsafeMutableRawPointer?, content: UnsafePointer<CChar>?, state: UnsafeMutableRawPointer?) {
+        guard let content, let surface = surface(from: ud) else { return }
+        ghostty_surface_complete_clipboard_request(surface, content, state, true)
+    }
+
+    func writeClipboard(
+        content: UnsafePointer<ghostty_clipboard_content_s>?,
+        len: UInt,
+        location _: ghostty_clipboard_e,
+        confirm: Bool
+    ) {
         guard let content, len > 0 else { return }
+        // macOS has no separate X11-style selection clipboard, so both
+        // STANDARD and SELECTION target the general pasteboard (matching
+        // upstream Ghostty on macOS) — hence `location` is intentionally
+        // ignored here.
         for item in UnsafeBufferPointer(start: content, count: Int(len)) {
-            guard let data = item.data, let mime = item.mime, String(cString: mime).hasPrefix("text/plain") else { continue }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(String(cString: data), forType: .string)
+            guard let data = item.data, let mime = item.mime,
+                  String(cString: mime).hasPrefix("text/plain")
+            else { continue }
+            let string = String(cString: data)
+            // libghostty asks the host to CONFIRM before applying an OSC 52
+            // write (a remote/TUI program overwriting the user's clipboard).
+            // Honor it: prompt before clobbering, instead of writing silently.
+            if confirm {
+                confirmAndWriteClipboard(string)
+            } else {
+                Self.setPasteboardString(string)
+            }
             return
+        }
+    }
+
+    private static func setPasteboardString(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+    }
+
+    /// Prompt before applying a confirm-required OSC 52 clipboard write, so a
+    /// remote/TUI program can't silently overwrite the user's clipboard.
+    private func confirmAndWriteClipboard(_ string: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Allow clipboard write?"
+            alert.informativeText = "A terminal program wants to copy text to your clipboard."
+            alert.addButton(withTitle: "Allow")
+            alert.addButton(withTitle: "Deny")
+            if alert.runModal() == .alertFirstButtonReturn {
+                Self.setPasteboardString(string)
+            }
         }
     }
 

@@ -35,6 +35,25 @@ enum MactermTheme {
     @MainActor
     static var terminalBg: Color { bg }
 
+    /// Semantic status colors, mapped from the ghostty terminal palette so they
+    /// track the user's theme instead of the fixed system `.yellow`/`.green`.
+    /// Palette indices follow the ANSI convention: 2 = green, 3 = yellow.
+    @MainActor
+    static var warning: Color {
+        GhosttyApp.shared.paletteColor(at: 3).map { Color(nsColor: $0) } ?? .yellow
+    }
+
+    @MainActor
+    static var success: Color {
+        GhosttyApp.shared.paletteColor(at: 2).map { Color(nsColor: $0) } ?? .green
+    }
+
+    /// A translucent overlay that dims an unfocused pane. Derived from the
+    /// theme foreground (inverted vs the terminal bg) rather than a fixed
+    /// black, so it reads correctly on light themes too.
+    @MainActor
+    static var dimOverlay: Color { colorScheme == .light ? fgAlpha(0.12) : Color.black.opacity(0.2) }
+
     @MainActor
     static var colorScheme: ColorScheme {
         let bg = GhosttyApp.shared.backgroundColor

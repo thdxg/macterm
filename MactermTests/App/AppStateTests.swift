@@ -1000,7 +1000,8 @@ struct AppStateTests {
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
             remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { [] },
-            sessionLeaderPIDs: { [:] }
+            sessionLeaderPIDs: { [:] },
+            sessionListSnapshot: { (entries: [], leaders: [:]) }
         )
     }
 
@@ -1019,7 +1020,7 @@ struct AppStateTests {
         _ = state.workspaces[p.id]?.createTab(projectPath: "/tmp")
         state.closeTab(tab.id, projectID: p.id)
 
-        await killed.settle()
+        await killed.settle(expecting: names.count)
         #expect(await killed.names == names)
     }
 
@@ -1039,7 +1040,7 @@ struct AppStateTests {
 
         state.closePane(target, projectID: p.id)
 
-        await remoteKilled.settle()
+        await remoteKilled.settle(expecting: 1)
         #expect(await remoteKilled.names == [targetName])
         #expect(await killed.names.isEmpty)
     }
@@ -1057,7 +1058,7 @@ struct AppStateTests {
 
         state.closePane(target, projectID: p.id)
 
-        await killed.settle()
+        await killed.settle(expecting: 1)
         #expect(await killed.names == [targetName])
     }
 
@@ -1077,7 +1078,7 @@ struct AppStateTests {
 
         state.unloadProject(p.id)
 
-        await killed.settle()
+        await killed.settle(expecting: names.count)
         // Sessions die (unload = stop the project's shells)…
         #expect(await killed.names == names)
         // …but the layout survives for the next open.
@@ -1097,7 +1098,7 @@ struct AppStateTests {
 
         state.moveTab(moving, from: p1.id, to: p2.id, destPath: p2.path)
 
-        await killed.settle()
+        await killed.settleExpectingNone()
         #expect(await killed.names.isEmpty)
     }
 
@@ -1156,10 +1157,21 @@ private actor KilledSessions {
         names.insert(name)
     }
 
-    /// Give the detached kill Tasks a beat to run.
-    func settle() async {
-        for _ in 0 ..< 20 where names.isEmpty {
-            try? await Task.sleep(for: .milliseconds(10))
+    /// Wait until at least `count` distinct names have been recorded (or a
+    /// generous timeout elapses). Waiting for the EXPECTED count — not merely
+    /// "anything arrived" — means a slow second kill can't make a positive
+    /// assertion pass before all kills have landed.
+    func settle(expecting count: Int) async {
+        for _ in 0 ..< 200 where names.count < count {
+            try? await Task.sleep(for: .milliseconds(5))
         }
+    }
+
+    /// For negative assertions ("nothing should have been killed"): wait a
+    /// deterministic window so a late kill would have shown up, then the caller
+    /// asserts emptiness. Named distinctly so its intent (and its inherent
+    /// fixed-wait limitation) is explicit at the call site.
+    func settleExpectingNone() async {
+        try? await Task.sleep(for: .milliseconds(200))
     }
 }

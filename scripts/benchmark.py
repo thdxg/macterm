@@ -290,11 +290,21 @@ def cmd_run(args):
     if result.returncode != 0:
         sys.exit(f"error: open failed: {result.stderr.strip()}")
 
+    # Match the launched process by its EXACT executable path, not a loose
+    # `pgrep -f <path>` (which treats the path as a regex — an unescaped `.` in
+    # the build dir matches any char — and blindly takes the first pid). Escape
+    # the path for the regex, then verify each candidate's real command line
+    # points at our binary, so a leftover instance from an aborted run can't be
+    # sampled/killed instead of the fresh launch.
     pid = None
     for _ in range(20):
-        pids = sh(["pgrep", "-f", binary]).stdout.split()
-        if pids:
-            pid = int(pids[0])
+        pids = sh(["pgrep", "-f", "--", re.escape(binary)]).stdout.split()
+        for candidate in pids:
+            command = sh(["ps", "-p", candidate, "-o", "command="]).stdout.strip()
+            if command.startswith(binary):
+                pid = int(candidate)
+                break
+        if pid is not None:
             break
         time.sleep(0.5)
     if pid is None:

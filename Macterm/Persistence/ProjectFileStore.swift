@@ -62,7 +62,11 @@ struct ProjectFileStore {
     /// the one `find`/`loadFull` use; the rest are ignored duplicates the UI
     /// surfaces (a hand-authored copy, or a realign-delete that failed).
     func matches(forProjectPath projectPath: String) -> [ScannedFile] {
-        scan().filter { file in
+        matches(forProjectPath: projectPath, in: scan())
+    }
+
+    private func matches(forProjectPath projectPath: String, in scanned: [ScannedFile]) -> [ScannedFile] {
+        scanned.filter { file in
             guard let declared = file.header?.path else { return false }
             return ProjectPath.matches(declared, projectPath)
         }
@@ -71,7 +75,11 @@ struct ProjectFileStore {
     /// The file declaring `projectPath` (first match wins; later duplicates
     /// are logged). nil when no file declares that path.
     func find(forProjectPath projectPath: String) -> ScannedFile? {
-        let found = matches(forProjectPath: projectPath)
+        find(forProjectPath: projectPath, in: scan())
+    }
+
+    private func find(forProjectPath projectPath: String, in scanned: [ScannedFile]) -> ScannedFile? {
+        let found = matches(forProjectPath: projectPath, in: scanned)
         if found.count > 1 {
             let ignored = found.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
             let winner = found[0].url.lastPathComponent
@@ -85,7 +93,11 @@ struct ProjectFileStore {
     /// matches; throws `LayoutFileError.parse` when one matches but doesn't
     /// decode (surfaced to the user as the apply-error dialog).
     func loadFull(forProjectPath projectPath: String) throws -> ProjectFile? {
-        guard let match = find(forProjectPath: projectPath) else { return nil }
+        try loadFull(forProjectPath: projectPath, in: scan())
+    }
+
+    private func loadFull(forProjectPath projectPath: String, in scanned: [ScannedFile]) throws -> ProjectFile? {
+        guard let match = find(forProjectPath: projectPath, in: scanned) else { return nil }
         let text: String
         do {
             text = try String(contentsOf: match.url, encoding: .utf8)
@@ -110,9 +122,14 @@ struct ProjectFileStore {
     }
 
     func applyState(forProjectPath projectPath: String) -> ApplyState {
-        guard find(forProjectPath: projectPath) != nil else { return .none }
+        // Scan the directory ONCE and thread it through find + loadFull, rather
+        // than re-scanning (and re-parsing every file's header) three times
+        // within this single operation. Statelessness across DISTINCT
+        // operations is intentional; the intra-operation rescans were waste.
+        let scanned = scan()
+        guard find(forProjectPath: projectPath, in: scanned) != nil else { return .none }
         do {
-            guard let file = try loadFull(forProjectPath: projectPath) else { return .none }
+            guard let file = try loadFull(forProjectPath: projectPath, in: scanned) else { return .none }
             return file.layoutFile == nil ? .emptyTabs : .applicable
         } catch {
             return .invalid
@@ -152,25 +169,42 @@ struct ProjectFileStore {
             guard let declared = scanned.header?.path else { return false }
             return ProjectPath.matches(declared, file.path)
         }
+
+        // Pick the target filename. When a file already declares this path,
+        // compute the fresh slug candidate; if it names the SAME file the bound
+        // one already occupies (case-insensitively — the default APFS behavior),
+        // rewrite that exact file in place, preserving its on-disk casing. This
+        // avoids the case-sensitive-volume hazard where writing `api.yaml`
+        // beside a hand-named `API.yaml` leaves two files declaring one path and
+        // byte-order lets the stale `API.yaml` win.
         let takenNames = Set(
             existing
                 .filter { $0.url != bound?.url }
                 .map { $0.url.lastPathComponent.lowercased() }
         )
-
         let slug = ProjectSlug.slug(from: projectName)
         var attempt = 1
         while takenNames.contains(ProjectSlug.filename(slug: slug, attempt: attempt).lowercased()) {
             attempt += 1
         }
-        let target = directoryURL.appendingPathComponent(ProjectSlug.filename(slug: slug, attempt: attempt))
+        let candidate = directoryURL.appendingPathComponent(ProjectSlug.filename(slug: slug, attempt: attempt))
+
+        let target: URL = if let bound, bound.url.lastPathComponent.lowercased() == candidate.lastPathComponent.lowercased() {
+            // Same file up to case — rewrite in place at its existing name so we
+            // don't create a case-variant twin on a case-sensitive volume.
+            bound.url
+        } else {
+            candidate
+        }
 
         try file.yaml().write(to: target, atomically: true, encoding: .utf8)
         logger.info("Wrote project file \(target.lastPathComponent, privacy: .public)")
 
-        // Realign: drop the old bound file when the slug moved (rename-by-
-        // write-and-delete keeps both steps atomic).
-        if let bound, bound.url.lastPathComponent.lowercased() != target.lastPathComponent.lowercased() {
+        // Realign: drop the old bound file when the slug genuinely moved to a
+        // different name (rename-by-write-and-delete keeps both steps atomic).
+        // Guarded by `bound.url != target` so we never delete the file we just
+        // rewrote in place.
+        if let bound, bound.url != target {
             do {
                 try FileManager.default.removeItem(at: bound.url)
                 logger.info("Removed superseded project file \(bound.url.lastPathComponent, privacy: .public)")

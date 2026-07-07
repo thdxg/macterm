@@ -131,6 +131,13 @@ final class AppState {
     @ObservationIgnored
     private var pollEventObservers: [Any] = []
 
+    /// Every block-based observer token paired with the center it was added to,
+    /// so `deinit` can remove them from the correct center. `nonisolated(unsafe)`
+    /// so the nonisolated deinit can read it — the object is being destroyed, so
+    /// there is no concurrent access. Tokens are `NSObjectProtocol` (what
+    /// `addObserver(forName:…)` returns).
+    nonisolated(unsafe) private var observerTokens: [(center: NotificationCenter, token: NSObjectProtocol)] = []
+
     /// Injectable for tests (`PollCadence.Context` inputs). `NSApp` is nil
     /// while the SwiftUI `App` struct (and thus AppState) is constructed —
     /// before `NSApplicationMain` — so both closures must not force-unwrap:
@@ -204,39 +211,42 @@ final class AppState {
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
-        autoTileObserver = NotificationCenter.default.addObserver(
+        let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebalanceAllWorkspacesIfEnabled() }
         }
+        autoTileObserver = autoTileToken
+        observerTokens.append((NotificationCenter.default, autoTileToken))
         let restored = (Preferences.defaults.stringArray(forKey: recencyKey) ?? [])
             .compactMap { UUID(uuidString: $0) }
         projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
 
         let center = NotificationCenter.default
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
         let onEvent: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.notePollEvent() }
         }
-        pollEventObservers = [
-            center.addObserver(forName: .terminalPollEvent, object: nil, queue: .main, using: onEvent),
-            center.addObserver(
+        let tokens: [(NotificationCenter, NSObjectProtocol)] = [
+            (center, center.addObserver(forName: .terminalPollEvent, object: nil, queue: .main, using: onEvent)),
+            (center, center.addObserver(
                 forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: onEvent
-            ),
-            center.addObserver(
+            )),
+            (center, center.addObserver(
                 forName: NSApplication.didResignActiveNotification, object: nil, queue: .main, using: onEvent
-            ),
-            center.addObserver(
+            )),
+            (center, center.addObserver(
                 forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main, using: onEvent
-            ),
+            )),
             // Wake is on NSWorkspace's own center, not the default one. A
             // timer whose fire date passed during sleep also fires once on
             // wake; `noteEvent` coalescing absorbs the double tick.
-            NSWorkspace.shared.notificationCenter.addObserver(
+            (workspaceCenter, workspaceCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: onEvent
-            ),
-            center.addObserver(
+            )),
+            (center, center.addObserver(
                 forName: .zmxSessionsChanged, object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
@@ -244,9 +254,24 @@ final class AppState {
                     self?.zmxRetryBudget = 8
                     self?.notePollEvent()
                 }
-            },
+            }),
         ]
+        pollEventObservers = tokens.map(\.1)
+        observerTokens.append(contentsOf: tokens.map { (center: $0.0, token: $0.1) })
         pollNow()
+    }
+
+    deinit {
+        // Remove every block-based observer from the center each was added to.
+        // Production runs one app-lifetime instance, but tests build fresh
+        // AppStates — without this, their observers accumulate on the shared
+        // centers and dead instances' blocks keep firing into a nil weak self.
+        // Only nonisolated-safe calls here (observerTokens is nonisolated).
+        // The poll timer self-cleans: it's non-repeating with a `[weak self]`
+        // closure, so a dead instance's timer fires once into nil and stops.
+        for entry in observerTokens {
+            entry.center.removeObserver(entry.token)
+        }
     }
 
     // MARK: - Poll scheduling
@@ -1220,8 +1245,16 @@ final class AppState {
         }
         NSApp.activate()
         if let tab = workspaces[projectID]?.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) {
-            let window = NSApp.keyWindow ?? NSApp.mainWindow
+            // Resolve the target window INSIDE the deferred continuation:
+            // `NSApp.activate()` is asynchronous, so reading keyWindow/mainWindow
+            // synchronously here (the common caller is a notification click while
+            // Macterm is inactive) returns nil and makes restoreFocus no-op. Fall
+            // back to the AppDelegate's cached terminal window when both are still
+            // nil (an ordered-out/unfocused SwiftUI window reports neither).
             DispatchQueue.main.async {
+                let window = NSApp.keyWindow
+                    ?? NSApp.mainWindow
+                    ?? (NSApp.delegate as? AppDelegate)?.mainWindow
                 FocusRestoration.restoreFocus(to: paneID, in: tab.splitRoot, window: window)
             }
         }
@@ -1310,7 +1343,10 @@ final class AppState {
         // non-focused split pane that finished a command stays `.done` under the
         // hood, gets persisted, and reappears as a checkmark after restart even
         // though the user saw an empty circle.
-        guard NSApp.isActive,
+        // Route through the injected `isAppActive` seam (not `NSApp.isActive`
+        // directly): NSApp is nil during construction and unset in tests, and
+        // this path is reachable from init via pollNow().
+        guard isAppActive(),
               projectID == activeProjectID,
               let tab = workspaces[projectID]?.activeTab,
               tab.splitRoot.findPane(id: paneID) != nil

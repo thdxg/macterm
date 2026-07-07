@@ -133,9 +133,12 @@ enum BenchmarkControl {
         appState.selectProject(project)
     }
 
-    /// Same filter as `AppDelegate.reopenIfNeeded`: the single main window is
-    /// the only non-panel window (panels: quick terminal, settings).
+    /// The terminal window, identified positively by its stamped identifier —
+    /// NOT by "not an NSPanel", which also matches the Settings window (a plain
+    /// NSWindow). Falls back to the first non-panel window only if the terminal
+    /// window hasn't been stamped yet (before it first became main).
     private static var mainWindow: NSWindow? {
-        NSApp.windows.first { !($0 is NSPanel) }
+        NSApp.windows.first { $0.identifier == AppDelegate.terminalWindowIdentifier }
+            ?? NSApp.windows.first { !($0 is NSPanel) }
     }
 }

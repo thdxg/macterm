@@ -7,6 +7,11 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectStore")
 final class ProjectStore {
     private(set) var projects: [Project] = []
     private let fileURL: URL
+    /// Set when `load()` found a present-but-undecodable projects.json. While
+    /// set, `save()` refuses to overwrite — a transient read/decode failure
+    /// must never let the next mutation wipe the user's entire project list.
+    @ObservationIgnored
+    private var loadFailed = false
 
     init(fileURL: URL = FileStorage.fileURL(filename: "projects.json")) {
         self.fileURL = fileURL
@@ -59,22 +64,41 @@ final class ProjectStore {
     }
 
     private func save() {
+        guard !loadFailed else {
+            logger.error("Refusing to save projects: prior load failed, file preserved")
+            return
+        }
         do {
-            let data = try JSONEncoder().encode(projects)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(projects)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            logger.error("Failed to save projects: \(error)")
+            logger.error("Failed to save projects: \(error, privacy: .public)")
         }
     }
 
     private func load() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        let data: Data
         do {
-            let data = try Data(contentsOf: fileURL)
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            logger.error("Failed to read projects file: \(error, privacy: .public)")
+            loadFailed = true
+            return
+        }
+        // An empty file is a genuine empty state, not corruption.
+        guard !data.isEmpty else { return }
+        do {
             projects = try JSONDecoder().decode([Project].self, from: data)
             projects.sort { $0.sortOrder < $1.sortOrder }
         } catch {
-            logger.error("Failed to load projects: \(error)")
+            // Present but undecodable — a corrupt entry or a future format.
+            // Preserve the file: refuse to overwrite it until this session
+            // restarts and reads it cleanly (or the user fixes it).
+            logger.error("Failed to decode projects file: \(error, privacy: .public)")
+            loadFailed = true
         }
     }
 }

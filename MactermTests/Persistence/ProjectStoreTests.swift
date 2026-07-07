@@ -4,8 +4,8 @@ import Testing
 
 @MainActor
 struct ProjectStoreTests {
-    private func makeStore() -> ProjectStore {
-        ProjectStore(fileURL: FileManager.default.temporaryDirectory
+    private func makeStore(fileURL: URL? = nil) -> ProjectStore {
+        ProjectStore(fileURL: fileURL ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-project-store-tests-\(UUID().uuidString).json"))
     }
 
@@ -40,5 +40,74 @@ struct ProjectStoreTests {
         #expect(project.id == existing.id)
         #expect(project.zmxPath == nil)
         #expect(store.projects.count == 1)
+    }
+
+    // MARK: - Mutators
+
+    @Test
+    func remove_drops_the_project() {
+        let store = makeStore()
+        let a = Project(name: "a", path: "/tmp/a", sortOrder: 0)
+        let b = Project(name: "b", path: "/tmp/b", sortOrder: 1)
+        store.add(a)
+        store.add(b)
+        store.remove(id: a.id)
+        #expect(store.projects.map(\.id) == [b.id])
+    }
+
+    @Test
+    func rename_changes_name_but_not_identity_or_path() {
+        let store = makeStore()
+        let p = Project(name: "old", path: "/tmp/x", sortOrder: 0)
+        store.add(p)
+        store.rename(id: p.id, to: "new")
+        let updated = store.projects.first { $0.id == p.id }
+        #expect(updated?.name == "new")
+        #expect(updated?.path == "/tmp/x")
+    }
+
+    @Test
+    func setPath_updates_the_path() {
+        let store = makeStore()
+        let p = Project(name: "x", path: "/tmp/before", sortOrder: 0)
+        store.add(p)
+        store.setPath(id: p.id, to: "/tmp/after")
+        #expect(store.projects.first { $0.id == p.id }?.path == "/tmp/after")
+    }
+
+    @Test
+    func reorder_reindexes_sortOrder() {
+        let store = makeStore()
+        let a = Project(name: "a", path: "/tmp/a", sortOrder: 0)
+        let b = Project(name: "b", path: "/tmp/b", sortOrder: 1)
+        let c = Project(name: "c", path: "/tmp/c", sortOrder: 2)
+        store.add(a)
+        store.add(b)
+        store.add(c)
+        // Move the last (c) to the front.
+        store.reorder(fromOffsets: IndexSet(integer: 2), toOffset: 0)
+        #expect(store.projects.map(\.name) == ["c", "a", "b"])
+        #expect(store.projects.map(\.sortOrder) == [0, 1, 2])
+    }
+
+    // MARK: - On-disk round-trip
+
+    @Test
+    func round_trips_through_the_file() {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-project-store-roundtrip-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let writer = makeStore(fileURL: fileURL)
+        let a = Project(name: "alpha", path: "/tmp/alpha", sortOrder: 0)
+        let b = Project(name: "beta", path: "/tmp/beta", sortOrder: 1)
+        writer.add(a)
+        writer.add(b)
+
+        // A fresh store reading the same file sees the persisted contents.
+        let reader = makeStore(fileURL: fileURL)
+        #expect(reader.projects.map(\.name) == ["alpha", "beta"])
+        #expect(reader.projects.map(\.path) == ["/tmp/alpha", "/tmp/beta"])
+        #expect(reader.projects.map(\.id) == [a.id, b.id])
     }
 }

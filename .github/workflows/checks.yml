@@ -76,11 +76,16 @@ jobs:
       # GhosttyKit + bundled resources + zmx: the source-independent download
       # (setup.sh). setup.sh is a presence check, so a restored cache makes it a
       # no-op. Keyed on setup.sh's hash + the ISO week so a new upstream ghostty
-      # release is picked up within a week without manual cache-busting (setup.sh
-      # pulls `latest`, but the presence check would otherwise never re-download
-      # once cached). The week rolls the exact key, so a fresh cache is saved
-      # once a week rather than every run. Shared verbatim with the benchmark
-      # workflow.
+      # release (setup.sh pulls `latest`) is actually picked up within a week.
+      #
+      # NO `restore-keys` fallback ON PURPOSE: pairing a time-rolling key with a
+      # prefix restore-key re-baptizes last week's content under the fresh key
+      # forever (the week rolls → exact key misses → prefix restores the stale
+      # cache → the presence-check setup no-ops → actions/cache saves the SAME
+      # stale bytes under the new key). Without the fallback, a new week starts
+      # empty, setup re-downloads once, and the fresh content is cached — the
+      # intended "picked up within a week" behavior. Shared verbatim with the
+      # benchmark and release workflows.
       - name: Cache GhosttyKit
         uses: actions/cache@v6
         with:
@@ -90,8 +95,6 @@ jobs:
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
-          restore-keys: |
-            ghosttykit-${{ hashFiles('scripts/setup.sh') }}-
 
       # Debug build products. `xcodebuild test` reuses this for a fast
       # incremental compile; tests still run fresh regardless of what's cached,

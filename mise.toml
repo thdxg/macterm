@@ -1,9 +1,12 @@
+# Pinned exactly (not "latest"): swiftformat/swiftlint output is part of the CI
+# contract — a new release can change rules and turn a green main red on
+# untouched code, and float local vs CI. Bump these in deliberate commits.
 [tools]
-gh = "latest"
-swiftformat = "latest"
-swiftlint = "latest"
-xcodegen = "latest"
-xcbeautify = "latest"
+gh = "2.95.0"
+swiftformat = "0.61.1"
+swiftlint = "0.63.3"
+xcodegen = "2.45.4"
+xcbeautify = "3.2.1"
 
 [settings]
 task.output = "quiet"

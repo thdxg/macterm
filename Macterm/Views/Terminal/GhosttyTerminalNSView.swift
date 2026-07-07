@@ -62,6 +62,15 @@ final class GhosttyTerminalNSView: NSView {
     /// may have reported it before the callback was wired.
     private var lastReportedTitle: String?
 
+    /// The title already delivered to a callback. The replay in `onTitleChange`'s
+    /// didSet fires ONLY when a title arrived while no callback was wired
+    /// (`lastReportedTitle != lastDeliveredTitle`) — a genuine catch-up. Without
+    /// this, `TerminalSurface.configure` re-assigning the callback on every
+    /// `updateNSView` (focus flips, divider drags) replayed the title each time,
+    /// re-running `receiveReportedTitle` → sysctl + foreground refresh +
+    /// `.terminalPollEvent`, pinning the adaptive poll in its 250ms burst.
+    private var lastDeliveredTitle: String?
+
     /// Fires on each OSC title with the reported string. Whether the string
     /// is *used* for naming is the pane's call (`Pane.receiveReportedTitle`
     /// gates on the foreground process); every arrival also marks a command
@@ -74,7 +83,13 @@ final class GhosttyTerminalNSView: NSView {
             // from inside its own render transaction — with per-refresh state
             // flaps that loop never settles (observed twice as a ~90%-CPU
             // frozen app). Deferring one runloop turn breaks the cycle.
-            guard let title = lastReportedTitle, let callback = onTitleChange else { return }
+            //
+            // Replay only when there's a title the current callback hasn't
+            // received yet — not on every re-wire (see `lastDeliveredTitle`).
+            guard let title = lastReportedTitle, title != lastDeliveredTitle,
+                  let callback = onTitleChange
+            else { return }
+            lastDeliveredTitle = title
             DispatchQueue.main.async { callback(title) }
         }
     }
@@ -83,6 +98,7 @@ final class GhosttyTerminalNSView: NSView {
     /// Called by `GhosttyCallbacks`.
     func surfaceDidReportTitle(_ title: String) {
         lastReportedTitle = title
+        lastDeliveredTitle = title
         onTitleChange?(title)
     }
 
@@ -687,8 +703,13 @@ final class GhosttyTerminalNSView: NSView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if isAppShortcut(event) { return false }
-        onInteraction?()
+        // Confirm this view owns keyboard focus BEFORE firing the interaction
+        // side effect: AppKit offers key equivalents to the whole hierarchy, so
+        // every visible pane in a split receives this. Running `onInteraction`
+        // before the guard cleared "needs attention" on untouched panes and
+        // posted a poll event per pane per keypress.
         guard window?.firstResponder === self || window?.firstResponder === inputContext else { return false }
+        onInteraction?()
         guard event.type == .keyDown, let surface else { return false }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard flags.contains(.command) || flags.contains(.control) || flags.contains(.option) else { return false }
@@ -886,7 +907,8 @@ final class GhosttyTerminalNSView: NSView {
 
     func startSearch() {
         guard let surface else { return }
-        ghostty_surface_binding_action(surface, "start_search", 12)
+        let action = "start_search"
+        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
     enum SearchDirection: String { case next, previous }

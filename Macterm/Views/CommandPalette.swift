@@ -89,10 +89,6 @@ struct CommandPalettePanel: View {
         nonmutating set { appState.commandPaletteQuery = newValue }
     }
 
-    private var queryBinding: Binding<String> {
-        Binding(get: { appState.commandPaletteQuery }, set: { appState.commandPaletteQuery = $0 })
-    }
-
     /// Sources are stateless structs, so rebuilding the engine per render is fine.
     private var engine: PaletteEngine {
         let context = PaletteContext(appState: appState, projectStore: projectStore)
@@ -105,6 +101,13 @@ struct CommandPalettePanel: View {
 
     private var flatItems: [PaletteItem] { sections.flatMap(\.items) }
 
+    /// `PaletteItem.id → flat index`, built once per body build. Replaces the
+    /// per-row `flatItems.firstIndex(where:)` (O(n) over a freshly-flattened
+    /// array each call → O(n²) across all rows).
+    private var flatIndexByID: [String: Int] {
+        Dictionary(flatItems.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
+    }
+
     private var placeholderText: String {
         let q = query.trimmingCharacters(in: .whitespaces)
         if q.hasPrefix("/") || q.hasPrefix("~") { return "Open directory as new project..." }
@@ -112,13 +115,16 @@ struct CommandPalettePanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        // Bind the search field to the @Observable AppState via @Bindable
+        // rather than a hand-rolled Binding(get:set:).
+        @Bindable var appState = appState
+        return VStack(spacing: 0) {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14))
                     .foregroundStyle(MactermTheme.fgMuted)
-                TextField(placeholderText, text: queryBinding)
+                TextField(placeholderText, text: $appState.commandPaletteQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundStyle(MactermTheme.fg)
@@ -132,6 +138,8 @@ struct CommandPalettePanel: View {
 
             // Results
             ScrollViewReader { proxy in
+                // Build the id→index map ONCE per body, not per row.
+                let indexByID = flatIndexByID
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(sections.enumerated()), id: \.offset) { sectionIndex, section in
@@ -144,7 +152,7 @@ struct CommandPalettePanel: View {
                                     .padding(.bottom, 4)
                             }
                             ForEach(section.items) { item in
-                                let idx = flatItems.firstIndex(where: { $0.id == item.id }) ?? 0
+                                let idx = indexByID[item.id] ?? 0
                                 Button {
                                     selectedIndex = idx
                                     execute()

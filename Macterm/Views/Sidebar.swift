@@ -392,7 +392,7 @@ private struct TabStatusGlyph: View {
                         .frame(width: 7, height: 7)
                         .overlay(
                             Circle()
-                                .fill(.green)
+                                .fill(MactermTheme.success)
                                 .frame(width: 5, height: 5)
                         )
                         .offset(x: 2.5, y: 2.5)

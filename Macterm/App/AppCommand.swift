@@ -185,8 +185,23 @@ enum AppCommand: String, CaseIterable, Identifiable {
 }
 
 extension HotkeyAction {
-    /// Reverse lookup: the AppCommand that owns this binding.
+    /// Memoized reverse map: `HotkeyAction` → the `AppCommand` that owns it.
+    /// Built once instead of an O(n) `allCases` scan per lookup (called per
+    /// action per Settings/palette render).
+    private static let commandByAction: [HotkeyAction: AppCommand] = Dictionary(
+        AppCommand.allCases.compactMap { command in
+            command.hotkeyAction.map { ($0, command) }
+        },
+        uniquingKeysWith: { first, _ in first }
+    )
+
+    /// Reverse lookup: the AppCommand that owns this binding. Every
+    /// `HotkeyAction` is linked to exactly one `AppCommand`, so a miss is a
+    /// construction error (a new action added without its command) — trap in
+    /// debug rather than silently mis-titling it as "New Tab".
     var appCommand: AppCommand {
-        AppCommand.allCases.first(where: { $0.hotkeyAction == self }) ?? .newTab
+        if let command = Self.commandByAction[self] { return command }
+        assertionFailure("HotkeyAction \(rawValue) has no owning AppCommand")
+        return .newTab
     }
 }

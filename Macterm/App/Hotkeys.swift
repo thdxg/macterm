@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import os
 
 @MainActor
 final class HotkeyCaptureState {
@@ -145,6 +146,11 @@ enum HotkeyRegistry {
         for (token, code) in baseEntries {
             result[code] = token
         }
+        // Keypad Enter (kVK_ANSI_KeypadEnter = 76) is a distinct hardware key
+        // from Return (36) and emits no `charactersIgnoringModifiers` we map,
+        // so without this a keypad-Enter press produced no token and could
+        // neither be bound nor match a `return` binding. Fold it to `return`.
+        result[76] = "return"
         return result
     }()
 
@@ -194,6 +200,15 @@ enum HotkeyRegistry {
         return Self.keyCodeToBaseToken[event.keyCode]
     }
 
+    /// Fold input aliases to the single canonical token the event-matching
+    /// path can actually produce. `"enter"` validates (it's in `keyCodes`) but
+    /// `eventToken` only ever emits `"return"` for that key, so an un-normalized
+    /// `"enter"` binding would validate in Settings yet never fire. Normalizing
+    /// here keeps the set of tokens that parse identical to the set that match.
+    private static func canonicalKeyToken(_ token: String) -> String {
+        token == "enter" ? "return" : token
+    }
+
     static func parseShortcut(_ raw: String) -> HotkeyShortcut? {
         let cleaned = raw.lowercased().replacingOccurrences(of: " ", with: "")
         if cleaned.isEmpty || cleaned == "none" || cleaned == "disabled" {
@@ -201,7 +216,9 @@ enum HotkeyRegistry {
         }
 
         let tokens = cleaned.split(separator: "+").map(String.init)
-        guard let keyToken = tokens.last, let keyCode = keyCodes[keyToken] else {
+        guard let rawKeyToken = tokens.last else { return nil }
+        let keyToken = canonicalKeyToken(rawKeyToken)
+        guard let keyCode = keyCodes[keyToken] else {
             return nil
         }
 
@@ -298,12 +315,28 @@ enum HotkeyRegistry {
         Preferences.defaults.string(forKey: action.defaultsKey) ?? action.defaultShortcut
     }
 
+    /// Cache of parsed shortcuts keyed by action. `MainAppResponder.handle`
+    /// evaluates ~20 `matches` calls PER KEYSTROKE typed into a terminal, and
+    /// each used to read UserDefaults + re-run `parseShortcut` (lowercasing,
+    /// splitting, dictionary builds). Parsed shortcuts only change on a rebind,
+    /// so cache them and invalidate in `setShortcutString`. `.some(nil)`
+    /// distinguishes "parsed to disabled/invalid" from "not yet cached".
+    private static let shortcutCache = OSAllocatedUnfairLock<[HotkeyAction: HotkeyShortcut?]>(initialState: [:])
+
     static func selectedShortcut(for action: HotkeyAction) -> HotkeyShortcut? {
-        parseShortcut(selectedShortcutString(for: action))
+        shortcutCache.withLock { cache in
+            if let cached = cache[action] { return cached }
+            let parsed = parseShortcut(selectedShortcutString(for: action))
+            cache[action] = parsed
+            return parsed
+        }
     }
 
     static func setShortcutString(_ shortcut: String, for action: HotkeyAction) {
         Preferences.defaults.set(shortcut, forKey: action.defaultsKey)
+        // A rebind is the only thing that changes a parsed shortcut — drop the
+        // stale cache entry so the next `matches` re-parses it once.
+        shortcutCache.withLock { $0[action] = nil }
     }
 
     static func isValidShortcutString(_ shortcut: String) -> Bool {
@@ -315,7 +348,9 @@ enum HotkeyRegistry {
     }
 
     static func matches(_ event: NSEvent, action: HotkeyAction) -> Bool {
-        guard let shortcut = selectedShortcut(for: action), shortcut.id != "none" else { return false }
+        // No `shortcut.id != "none"` check: parseShortcut already returns nil
+        // for none/disabled/empty, so a shortcut with id "none" is unreachable.
+        guard let shortcut = selectedShortcut(for: action) else { return false }
         return shortcut.matches(event)
     }
 

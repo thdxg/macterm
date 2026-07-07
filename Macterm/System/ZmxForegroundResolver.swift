@@ -112,25 +112,16 @@ enum ZmxForegroundResolver {
 
 extension ZmxForegroundResolver {
     /// Parse a `zmx ls` listing into a `sessionName → leaderPID` map. Only
-    /// `macterm-` sessions with a readable pid are included.
+    /// `macterm-` sessions with a readable pid are included. Shares
+    /// `ZmxListLexer` with `ZmxSessionListParser` so the two projections of the
+    /// same grammar can't drift.
     static func parseLeaderPIDs(_ stdout: String) -> [String: pid_t] {
         var map: [String: pid_t] = [:]
-        for line in stdout.split(whereSeparator: \.isNewline) {
-            var trimmed = Substring(line)
-            if trimmed.hasPrefix("→ ") { trimmed = trimmed.dropFirst(2) }
-            while trimmed.first?.isWhitespace == true {
-                trimmed = trimmed.dropFirst()
-            }
-            var name: String?
-            var pid: pid_t?
-            for field in trimmed.split(separator: "\t") {
-                guard let sep = field.firstIndex(of: "=") else { continue }
-                let key = field[field.startIndex ..< sep]
-                let value = field[field.index(after: sep)...]
-                if key == "name" { name = String(value) }
-                if key == "pid" { pid = Int32(value) }
-            }
-            if let name, name.hasPrefix(ZmxSessionName.prefix), let pid { map[name] = pid }
+        ZmxListLexer.forEachLine(stdout) { values in
+            guard let name = values["name"], name.hasPrefix(ZmxSessionName.prefix),
+                  let pid = values["pid"].flatMap({ Int32($0) })
+            else { return }
+            map[String(name)] = pid
         }
         return map
     }

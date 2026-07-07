@@ -276,23 +276,26 @@ enum ProcessInspector {
 
     /// The argument vector of `pid` (argv[0…argc-1]) via KERN_PROCARGS2, or nil.
     static func argv(pid: pid_t) -> [String]? {
-        guard let tokens = procArgsTokens(pid: pid) else { return nil }
-        let (argc, args) = tokens
-        // args[0] is exec_path; argv follows.
-        guard args.count >= argc + 1 else { return nil }
-        return Array(args[1 ..< (1 + argc)])
+        procArgs(pid: pid)?.argv
     }
 
-    /// The kernel `exec_path` of `pid` (the first NUL-delimited token after argc
-    /// in KERN_PROCARGS2) — an absolute path to the executable — or nil.
+    /// The kernel `exec_path` of `pid` (the executable path stored ahead of
+    /// argv in KERN_PROCARGS2) — an absolute path — or nil.
     static func execPath(pid: pid_t) -> String? {
-        guard let (_, args) = procArgsTokens(pid: pid), let path = args.first else { return nil }
-        return path
+        procArgs(pid: pid)?.execPath
     }
 
-    /// Raw KERN_PROCARGS2 read: `(argc, [exec_path, argv0, argv1, …, env…])`.
-    /// Layout: `[int32 argc][exec_path\0][\0 padding][argv0\0…][env…]`.
-    private static func procArgsTokens(pid: pid_t) -> (argc: Int, tokens: [String])? {
+    /// Structured KERN_PROCARGS2 parse.
+    ///
+    /// Layout: `[int32 argc][exec_path\0][\0 padding][argv0\0 argv1\0 …][env…]`.
+    /// We parse POSITIONALLY — read `exec_path`, skip its NUL padding, then take
+    /// exactly `argc` NUL-terminated fields as argv. Crucially we do NOT use
+    /// `split(omittingEmptySubsequences:)` (which would drop a legitimately
+    /// empty argv element, sliding an env var into the argv window) and we
+    /// decode losslessly with `String(decoding:as:)` (a non-UTF-8 argument
+    /// yields replacement chars but keeps the field count correct — never
+    /// dropped, which would also shift the window).
+    private static func procArgs(pid: pid_t) -> (execPath: String, argv: [String])? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
@@ -308,11 +311,38 @@ enum ProcessInspector {
         let argc = buffer.withUnsafeBytes { $0.load(as: Int32.self) }
         guard argc > 0 else { return nil }
 
-        let rest = buffer[MemoryLayout<Int32>.size...]
-        let tokens = rest.split(separator: 0, omittingEmptySubsequences: true).compactMap {
-            String(bytes: $0, encoding: .utf8)
+        // Cursor over the bytes after the argc int.
+        var i = MemoryLayout<Int32>.size
+        let end = buffer.count
+
+        // exec_path: bytes up to the first NUL.
+        let execStart = i
+        while i < end, buffer[i] != 0 {
+            i += 1
         }
-        return (Int(argc), tokens)
+        guard i < end else { return nil } // no terminator → malformed
+        let execPath = String(decoding: buffer[execStart ..< i], as: UTF8.self)
+        i += 1 // consume the exec_path terminator
+
+        // Skip the NUL padding between exec_path and argv0.
+        while i < end, buffer[i] == 0 {
+            i += 1
+        }
+
+        // Take exactly argc NUL-terminated fields, preserving empty ones.
+        var argv: [String] = []
+        argv.reserveCapacity(Int(argc))
+        for _ in 0 ..< Int(argc) {
+            guard i < end else { break }
+            let fieldStart = i
+            while i < end, buffer[i] != 0 {
+                i += 1
+            }
+            argv.append(String(decoding: buffer[fieldStart ..< i], as: UTF8.self))
+            i += 1 // consume the field terminator (past `end` is harmless)
+        }
+        guard argv.count == Int(argc) else { return nil }
+        return (execPath, argv)
     }
 
     /// Whether `argv0` names a shell (so a foreground process matching it is an

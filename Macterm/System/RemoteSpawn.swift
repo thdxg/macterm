@@ -126,12 +126,12 @@ enum RemoteSpawn {
         // $SHELL unset, so the diagnostic shell can never itself exit-and-close
         // the pane. No `-l` (unportable — see remoteShell).
         let fallbackShell = "exec ${SHELL:-/bin/sh}"
-        let script = remoteEnvPreamble + remoteTermPreamble + [
+        let script = assertSingleQuoteFree(remoteEnvPreamble + remoteTermPreamble + [
             zmxPresenceGuard(zmx: zmx, fallbackShell: fallbackShell),
             "cd \(quotedDir) || "
                 + "{ echo \"macterm: cannot cd to \(quotedDir)\" >&2; \(fallbackShell); }",
             "exec \(zmx) attach \(quotedSession)",
-        ].compactMap(\.self).joined(separator: "; ")
+        ].compactMap(\.self).joined(separator: "; "))
         let remoteCommand = "\(remoteShell) \(shellQuote(script))"
         return "ssh -t \(shellQuote(destination(user: user, host: host))) \(shellQuote(remoteCommand))"
     }
@@ -141,8 +141,8 @@ enum RemoteSpawn {
     /// (optional) is used verbatim. nil for a local path.
     static func opArgv(remote: ProjectPath, zmxArguments: [String], zmxPath: String? = nil) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
-        let op = remoteEnvPreamble + "exec \(zmxInvocation(zmxPath: zmxPath)) "
-            + zmxArguments.map(posixDoubleQuote).joined(separator: " ")
+        let op = assertSingleQuoteFree(remoteEnvPreamble + "exec \(zmxInvocation(zmxPath: zmxPath)) "
+            + zmxArguments.map(posixDoubleQuote).joined(separator: " "))
         return [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
@@ -188,8 +188,8 @@ enum RemoteSpawn {
     /// verbatim. nil for a local path.
     static func foregroundProbeArgv(remote: ProjectPath, zmxPath: String? = nil) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
-        let script = remoteEnvPreamble
-            + foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath))
+        let script = assertSingleQuoteFree(remoteEnvPreamble
+            + foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath)))
         return [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
@@ -209,6 +209,13 @@ enum RemoteSpawn {
 
     /// POSIX double-quote escaping (`\`, `"`, `$`, backtick), used INSIDE the
     /// `sh -c` scripts so the script itself stays free of single quotes.
+    ///
+    /// A single quote in `value` is passed through literally (double quotes
+    /// don't escape `'`), which would violate the single-quote-free wire-format
+    /// invariant: `shellQuote` would then emit `'\''`, and fish/nu tokenize that
+    /// differently than POSIX sh. Callers that feed user-controlled fields
+    /// (project directory, `zmxPath`) must reject `'` upstream — see
+    /// `assertSingleQuoteFree` — so this can never receive one in practice.
     static func posixDoubleQuote(_ value: String) -> String {
         var escaped = ""
         for ch in value {
@@ -220,17 +227,47 @@ enum RemoteSpawn {
         return "\"\(escaped)\""
     }
 
+    /// The wire-format invariant: an assembled remote script must contain NO
+    /// single quotes, so `sh -c '<script>'` tokenizes identically under every
+    /// login shell (bash/zsh/fish/nu). Returns the script unchanged when it
+    /// holds, or a safe diagnostic script (never nil, never a `'`) when a
+    /// user-supplied field smuggled one in — so the pane surfaces the problem
+    /// instead of mistokenizing on a non-POSIX login shell.
+    static func assertSingleQuoteFree(_ script: String) -> String {
+        guard script.contains("'") else { return script }
+        // Keep the replacement itself single-quote-free.
+        return remoteEnvPreamble
+            + "echo \"macterm: remote path contains an unsupported single quote\" >&2; "
+            + "exec ${SHELL:-/bin/sh}"
+    }
+
     /// Quote a remote directory for the `cd` inside the `sh -c` script,
-    /// keeping a leading tilde segment *unquoted* so sh still expands it
-    /// (`~`, `~/dev with spaces`, `~deploy/app`). A quoted tilde is a literal
-    /// directory named `~`. Everything after the tilde segment is
-    /// double-quoted; plain paths (absolute or home-relative) are quoted
-    /// whole.
+    /// keeping ONLY a leading `~` or `~username` *unquoted* so sh still expands
+    /// it (`~`, `~/dev with spaces`, `~deploy/app`). A quoted tilde is a literal
+    /// directory named `~`, so the tilde itself can't be quoted — but anything
+    /// past it (and any `~username` segment) is either double-quoted or, if it
+    /// isn't a valid bare-safe username, the whole string falls back to full
+    /// double-quoting. This closes the hole where `~$(cmd)/sub` (or a slashless
+    /// `~$(cmd)`) shipped a command substitution unquoted into the `cd` line.
     static func quoteRemoteDirectory(_ directory: String) -> String {
         guard directory.hasPrefix("~") else { return posixDoubleQuote(directory) }
-        guard let slash = directory.firstIndex(of: "/") else { return directory }
-        let tilde = String(directory[..<slash])
-        let rest = String(directory[directory.index(after: slash)...])
-        return rest.isEmpty ? directory : "\(tilde)/\(posixDoubleQuote(rest))"
+        // Split into the tilde segment (`~` or `~name`) and the remainder.
+        let afterTilde = directory.index(after: directory.startIndex)
+        let slashIndex = directory[afterTilde...].firstIndex(of: "/")
+        let tildeSegment = String(directory[..<(slashIndex ?? directory.endIndex)])
+        // The username part between `~` and the first `/` (empty for a bare `~`).
+        let username = String(tildeSegment.dropFirst())
+        // A bare-safe username is a strict allowlist; anything else (spaces,
+        // `$`, backticks, command substitution) must NOT ship unquoted.
+        let usernameIsSafe = username.isEmpty
+            || username.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" || $0 == "-" }
+        guard usernameIsSafe else { return posixDoubleQuote(directory) }
+        guard let slashIndex else {
+            // No slash: the whole string is just `~` or `~name` — emit the
+            // validated tilde segment bare (nothing else to quote).
+            return tildeSegment
+        }
+        let rest = String(directory[directory.index(after: slashIndex)...])
+        return rest.isEmpty ? "\(tildeSegment)/" : "\(tildeSegment)/\(posixDoubleQuote(rest))"
     }
 }

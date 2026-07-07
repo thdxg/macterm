@@ -24,9 +24,12 @@ struct TerminalPane: View {
                     onClose: {
                         guard let view = pane.nsView else { return }
                         view.endSearch()
-                        // Return focus to the terminal so typing resumes
-                        // without requiring a click.
-                        view.window?.makeFirstResponder(view)
+                        // Return focus to the terminal so typing resumes without
+                        // a click. Closing the search bar removes it from the
+                        // VStack — a reshape — so route through FocusRestoration
+                        // rather than a bare makeFirstResponder that races the
+                        // NSView's window re-attachment.
+                        FocusRestoration.restoreFocus(to: pane.id, finder: { pane }, in: view.window)
                     }
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -146,7 +149,9 @@ private struct TerminalSurface: NSViewRepresentable {
             if pane.searchState.isVisible {
                 guard let view else { return }
                 view.endSearch()
-                view.window?.makeFirstResponder(view)
+                // Closing the search bar is a reshape — route focus through
+                // FocusRestoration, not a bare makeFirstResponder (see onClose).
+                FocusRestoration.restoreFocus(to: pane.id, finder: { [weak pane] in pane }, in: view.window)
                 return
             }
             if let needle, !needle.isEmpty { pane.searchState.needle = needle }
@@ -167,20 +172,7 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onDesktopNotification = { [weak pane, weak view] title, body in
             guard let pane else { return }
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            content.userInfo = [
-                "paneID": pane.id.uuidString,
-                "projectID": pane.projectID.uuidString,
-                "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
-            ]
-            let request = UNNotificationRequest(
-                identifier: "macterm-\(pane.id.uuidString)-\(UUID().uuidString)",
-                content: content,
-                trigger: nil
-            )
-            UNUserNotificationCenter.current().add(request)
+            Self.postPaneNotification(pane: pane, title: title, body: body)
         }
         view.onProgressStarted = { [weak pane] in
             guard Preferences.shared.showTabStatusIndicator else { return }
@@ -226,21 +218,29 @@ private struct TerminalSurface: NSViewRepresentable {
             } else {
                 String(format: "Exited with code %d (%@)", exitCode, Self.formatDuration(durationSec))
             }
-            let content = UNMutableNotificationContent()
-            content.title = "Command Finished"
-            content.body = body
-            content.userInfo = [
-                "paneID": pane.id.uuidString,
-                "projectID": pane.projectID.uuidString,
-                "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
-            ]
-            let request = UNNotificationRequest(
-                identifier: "macterm-\(pane.id.uuidString)-\(UUID().uuidString)",
-                content: content,
-                trigger: nil
-            )
-            UNUserNotificationCenter.current().add(request)
+            Self.postPaneNotification(pane: pane, title: "Command Finished", body: body)
         }
+    }
+
+    /// Post a user notification for a pane, with the single routing-critical
+    /// `userInfo` contract (paneID / projectID / isQuickTerminal) defined ONCE
+    /// so the desktop-notification and command-finished paths can't drift and
+    /// silently break tap-routing for one of them.
+    private static func postPaneNotification(pane: Pane, title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.userInfo = [
+            "paneID": pane.id.uuidString,
+            "projectID": pane.projectID.uuidString,
+            "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
+        ]
+        let request = UNNotificationRequest(
+            identifier: "macterm-\(pane.id.uuidString)-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     private static func formatDuration(_ seconds: Double) -> String {
