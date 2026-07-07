@@ -118,6 +118,13 @@ final class AppState {
     /// event-bounded, not interval-bounded, and an idle app costs nothing.
     @ObservationIgnored
     private var pollTimer: Timer?
+    /// The delay `pollTimer` was scheduled with, so `reschedulePoll` can skip
+    /// tearing down and rebuilding an identical timer — `.terminalPollEvent`
+    /// fires often under a busy workload (every keystroke, output transition,
+    /// OSC title), and each fire recomputed the same cadence and churned a new
+    /// `Timer` + RunLoop registration for no behavior change.
+    @ObservationIgnored
+    private var pollTimerDelay: TimeInterval?
 
     @ObservationIgnored
     private var pollCadence = PollCadence()
@@ -331,20 +338,31 @@ final class AppState {
     }
 
     private func reschedulePoll() {
-        pollTimer?.invalidate()
-        pollTimer = nil
         let context = PollCadence.Context(
             isAppActive: isAppActive(),
             isAnyWindowVisible: isAnyWindowVisible(),
             isAnyPaneBusy: lastPollSawBusyPane
         )
-        guard let delay = pollCadence.nextDelay(at: Date(), context: context) else { return }
+        guard let delay = pollCadence.nextDelay(at: Date(), context: context) else {
+            pollTimer?.invalidate()
+            pollTimer = nil
+            pollTimerDelay = nil
+            return
+        }
+        // A running timer with the same cadence needs no change — rebuilding it
+        // (invalidate + new Timer + RunLoop.add) on every `.terminalPollEvent`
+        // is pure churn under a busy workload. Only rebuild when the delay
+        // actually changed (or no timer is scheduled). The one-shot timer
+        // clears `pollTimer` when it fires, so a nil timer here always rebuilds.
+        if let existing = pollTimer, existing.isValid, pollTimerDelay == delay { return }
+        pollTimer?.invalidate()
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollNow() }
         }
         timer.tolerance = delay * 0.1
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
+        pollTimerDelay = delay
     }
 
     /// Re-read the foreground process name of every live pane across all
