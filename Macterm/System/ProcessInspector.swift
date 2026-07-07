@@ -18,6 +18,18 @@ enum ProcessInspector {
     /// to the daemon's pty foreground process; use that when available, else
     /// fall back to libghostty's pid (no zmx, over-budget bypass, or before
     /// the first `zmx ls` populates the cache).
+    /// The resolved foreground pid for a pane — the zmx daemon-side shell/program
+    /// when wrapped, else libghostty's client pid — the SAME value the title
+    /// provenance gate (`foregroundProgramPID`) and name lookups resolve through.
+    /// Callers comparing against `Pane.programTitlePID` (the title's pin) MUST use
+    /// this, not `nsView.foregroundPID` (the raw client pid) — for a wrapped pane
+    /// the two never match, which would expire every adopted OSC title on the
+    /// next poll.
+    @MainActor
+    static func resolvedForegroundPID(forPane pane: Pane) -> pid_t? {
+        foregroundPID(forPane: pane)
+    }
+
     @MainActor
     private static func foregroundPID(forPane pane: Pane) -> pid_t? {
         // Remote panes (#104): the only local process is the ssh client — no

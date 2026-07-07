@@ -368,7 +368,15 @@ final class Pane: Identifiable {
         let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
-            foregroundPID: nsView?.foregroundPID,
+            // The RESOLVED foreground pid (daemon-side shell/program for a
+            // wrapped pane), NOT the raw `nsView.foregroundPID` (the zmx attach
+            // client). `programTitlePID` is pinned to this resolved pid, so the
+            // expiry compare in `applyForegroundRefresh` must use the same
+            // source — otherwise a wrapped pane's client pid never matches and
+            // every adopted OSC title (e.g. Claude Code's "✳ Claude Code")
+            // expires on the very next 250ms poll, snapping back to the process
+            // name.
+            foregroundPID: ProcessInspector.resolvedForegroundPID(forPane: self),
             foregroundIsShell: track ? ProcessInspector.foregroundProcessIsShell(forPane: self) : false,
             terminalInputIsRaw: track ? ProcessInspector.terminalInputIsRaw(forPane: self) : false,
             applyExecutionState: track
