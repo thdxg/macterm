@@ -676,6 +676,7 @@ struct HotkeysTests {
     }
 
     // MARK: - HotkeyRegistry.matches (the static cache path)
+
     //
     // The static `matches(event:action:)` runs the parsed-shortcut cache — the
     // path `KeyRouter`/`isAppShortcut` actually use per keystroke. It was
@@ -712,8 +713,7 @@ struct HotkeysTests {
         let action = HotkeyAction.splitRight
         let prior = Preferences.defaults.string(forKey: action.defaultsKey)
         defer {
-            if let prior { HotkeyRegistry.setShortcutString(prior, for: action) }
-            else { HotkeyRegistry.setShortcutString(action.defaultShortcut, for: action) }
+            HotkeyRegistry.setShortcutString(prior ?? action.defaultShortcut, for: action)
         }
 
         // Prime the cache with the default (cmd+d).
