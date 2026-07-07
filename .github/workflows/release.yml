@@ -1,8 +1,12 @@
 name: Release
 
+# Triggered by publishing a GitHub Release (not a bare tag push), so the
+# release's `prerelease` flag — a first-class boolean — gates the stable
+# distribution channels. A prerelease still builds and attaches DMGs for
+# testers, but skips the appcast (auto-update feed) and the Homebrew tap.
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -106,6 +110,8 @@ jobs:
       # which is served as https://thdxg.github.io/macterm/appcast.xml.
 
       - name: Install Sparkle tools
+        # Prereleases don't touch the stable auto-update feed.
+        if: ${{ !github.event.release.prerelease }}
         run: |
           SPARKLE_VERSION="2.9.1"
           curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
@@ -113,6 +119,7 @@ jobs:
           echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
 
       - name: Publish appcast to gh-pages
+        if: ${{ !github.event.release.prerelease }}
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           VERSION: ${{ steps.release.outputs.version }}
@@ -121,6 +128,8 @@ jobs:
 
   bump-cask:
     needs: release
+    # Prereleases never bump the Homebrew tap — stable installs stay stable.
+    if: ${{ !github.event.release.prerelease }}
     runs-on: macos-26
     env:
       GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
