@@ -148,7 +148,17 @@ final class MainAppResponder: KeyResponder {
         // quick-terminal panel is exempt: QuickTerminalResponder has already
         // claimed its slice, and the app-wide keys that fall through (project
         // nav, new tab, …) intentionally keep working while the panel is up.
-        if let keyWindow = NSApp.keyWindow, keyWindow !== mainWindow,
+        //
+        // This branch requires a KNOWN `mainWindow`: it only means "a DIFFERENT
+        // window is key" when we know which one is the terminal window. At
+        // launch `mainWindow` is briefly nil (set on `didBecomeMain`, after
+        // responders install), and a nil pointer is `!==` every real window —
+        // so without the `let main` guard, the terminal window itself would be
+        // treated as "different", making Cmd+W close the window and Cmd+D
+        // pass through until the first `didBecomeMain`. When `mainWindow` is
+        // unknown, fall through to normal handling (the terminal window is the
+        // only window that can be key that early).
+        if let main = mainWindow, let keyWindow = NSApp.keyWindow, keyWindow !== main,
            !(keyWindow is QuickTerminalPanel)
         {
             if HotkeyRegistry.matches(event, action: .closePane)
