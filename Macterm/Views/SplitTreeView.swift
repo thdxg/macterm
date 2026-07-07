@@ -135,7 +135,7 @@ private struct SplitLeafView: View {
             )
             .overlay {
                 if !isFocused, isSplit {
-                    Color.black.opacity(0.2)
+                    Color.black.opacity(Preferences.shared.paneDimOpacity)
                         .allowsHitTesting(false)
                 }
             }
