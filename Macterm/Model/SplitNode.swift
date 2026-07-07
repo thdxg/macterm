@@ -500,6 +500,9 @@ final class Pane: Identifiable {
         guard executionState == .running else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // Discard a bare version number (see the local path) — e.g. remote
+        // Claude Code emitting `2.1.202` as its title.
+        guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
         if trimmed != programTitle { programTitle = trimmed }
         programTitlePID = nil
     }
@@ -539,6 +542,12 @@ final class Pane: Identifiable {
         guard let programPID else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // A bare version number is not a useful display title — Claude Code
+        // emits its version (`2.1.202`) as an OSC 2 title at its prompt. Discard
+        // it so `displayTitle` falls back to the process name instead of pinning
+        // the version. (Its real status titles aren't version-shaped, so they
+        // still adopt normally.)
+        guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
         if trimmed != programTitle { programTitle = trimmed }
         programTitlePID = programPID
     }

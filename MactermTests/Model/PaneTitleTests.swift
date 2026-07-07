@@ -52,6 +52,34 @@ struct PaneTitleTests {
         #expect(pane.programTitle == "second")
     }
 
+    @Test
+    func bare_version_title_is_ignored() {
+        // Claude Code emits its version (`2.1.202`) as an OSC 2 title at its
+        // prompt — useless as a tab name. Discard it so displayTitle falls back
+        // to the process name; a real (non-version) title still adopts.
+        let pane = makePane()
+        pane.receiveReportedTitle("2.1.202", programPID: 42)
+        #expect(pane.programTitle == nil)
+
+        pane.receiveReportedTitle("✳ Claude Code", programPID: 42)
+        #expect(pane.programTitle == "✳ Claude Code")
+    }
+
+    @Test
+    func looksLikeVersionString_matches_only_bare_dotted_numbers() {
+        #expect(ProcessInspector.looksLikeVersionString("2.1.202"))
+        #expect(ProcessInspector.looksLikeVersionString("1.0"))
+        #expect(ProcessInspector.looksLikeVersionString("10.20.30.40"))
+        // Not versions: no dot, non-numeric, or version embedded in a name.
+        #expect(!ProcessInspector.looksLikeVersionString("claude"))
+        #expect(!ProcessInspector.looksLikeVersionString("node"))
+        #expect(!ProcessInspector.looksLikeVersionString("v2.1.202"))
+        #expect(!ProcessInspector.looksLikeVersionString("2.1.202-beta"))
+        #expect(!ProcessInspector.looksLikeVersionString("2"))
+        #expect(!ProcessInspector.looksLikeVersionString("."))
+        #expect(!ProcessInspector.looksLikeVersionString(""))
+    }
+
     // MARK: - applyForegroundRefresh (expiry)
 
     @Test

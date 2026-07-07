@@ -29,6 +29,17 @@ enum ProcessInspector {
         if let resolved = ZmxForegroundResolver.foregroundPID(sessionName: pane.sessionName) {
             return resolved
         }
+        // For a zmx-WRAPPED pane, libghostty's `foregroundPID` is the local
+        // `zmx attach` CLIENT — never the real shell (that runs under the
+        // daemon, reachable only by session name via the resolver above). If
+        // the resolver hasn't populated the cache yet (the async-registration
+        // race right after spawn/restore), returning the client pid would make
+        // the tab read `zmx` and Save Layout capture the wrapper argv as a
+        // `run:` command. Return nil instead: the pane reads as resolving
+        // (falls back to the shell name, saves no run) until the cache catches
+        // up. The client-pid fallback is only correct for UNWRAPPED panes
+        // (zmx unbundled / over the socket-path budget).
+        if pane.nsView?.isZmxWrapped == true { return nil }
         return pane.nsView?.foregroundPID
     }
 
@@ -77,7 +88,26 @@ enum ProcessInspector {
         guard var comm = comm(pid: pid), !comm.isEmpty else { return nil }
         // A login shell's comm may carry a leading `-` (e.g. `-zsh`).
         if comm.hasPrefix("-") { comm.removeFirst() }
+        // Some programs overwrite `p_comm` via `setproctitle`/`process.title` —
+        // Claude Code sets it to its bare version (`2.1.202`), which is useless
+        // as a tab name. When `comm` is version-shaped, fall back to the
+        // executable's basename (the real program name, e.g. `claude`), which
+        // `p_comm` no longer reflects but `exec_path` still does.
+        if looksLikeVersionString(comm), let exec = execPath(pid: pid) {
+            let base = (exec as NSString).lastPathComponent
+            if !base.isEmpty { return base }
+        }
         return comm
+    }
+
+    /// Whether `value` is a bare dotted version number (e.g. `2.1.202`, `1.0`) —
+    /// i.e. a `setproctitle`-clobbered `p_comm` rather than a real process name.
+    /// Digits and dots only, at least one dot, digits at both ends.
+    static func looksLikeVersionString(_ value: String) -> Bool {
+        guard value.contains(".") else { return false }
+        return value.allSatisfy { $0.isNumber || $0 == "." }
+            && (value.first?.isNumber ?? false)
+            && (value.last?.isNumber ?? false)
     }
 
     /// The pid of the pane's foreground process when it's a real program, or
