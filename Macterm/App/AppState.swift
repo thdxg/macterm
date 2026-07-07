@@ -820,6 +820,14 @@ final class AppState {
         guard let dest = workspaces[destProjectID] else { return }
         source.closeTab(tabID)
         dest.adoptTab(tab)
+        // Restamp the moved panes' routing identity to the destination project.
+        // Without this they keep the SOURCE projectID, so a later
+        // notification-click navigates to the old project and can't find the
+        // tab. Only the routing key changes — session identity (name/host)
+        // stays put, so a moved remote pane still tears down over ssh.
+        for pane in tab.splitRoot.allPanes() {
+            pane.rebind(projectID: destProjectID)
+        }
         activeProjectID = destProjectID
         recordProjectVisit(destProjectID)
         saveWorkspaces()

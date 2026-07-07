@@ -34,11 +34,12 @@ enum RemoteSpawn {
     /// NOT `sh -lc`: the login flag is unportable. Debian/Ubuntu `/bin/sh` is
     /// dash, and older dash (e.g. on a real CMU host tested here) rejects `-l`
     /// outright — `sh -lc '…'` then ignores the command and drops to an
-    /// interactive shell, silently. `sh -c` runs everywhere. We reproduce
-    /// what `-l` was for (loading the user's PATH) by sourcing the profiles
-    /// ourselves in `remoteEnvPreamble`. Naming `sh` explicitly keeps the
-    /// script POSIX no matter which login shell sshd hands the outer string to
-    /// (bash/zsh/fish/nu).
+    /// interactive shell, silently. `sh -c` runs everywhere. Instead of what
+    /// `-l` would have done (source the user's login profiles), `remoteEnvPreamble`
+    /// appends a fixed fallback dir list to PATH — profiles are DELIBERATELY
+    /// never sourced (see `remoteEnvPreamble` for why every containment attempt
+    /// leaked a pane-killer). Naming `sh` explicitly keeps the script POSIX no
+    /// matter which login shell sshd hands the outer string to (bash/zsh/fish/nu).
     static let remoteShell = "sh -c"
 
     /// PATH setup prepended to each script: append the common install dirs.

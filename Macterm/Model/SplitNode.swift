@@ -248,7 +248,15 @@ struct TerminalExecutionTracker {
 final class Pane: Identifiable {
     let id = UUID()
     let projectPath: String
-    let projectID: UUID
+    /// The workspace this pane currently belongs to — the ROUTING identity used
+    /// to locate the pane's tab (notification-click navigation bakes this into
+    /// `userInfo`; the quit sweep groups panes by it). Restampable because a tab
+    /// can be moved between projects (`AppState.moveTab`); `rebind(projectID:)`
+    /// updates it. Distinct from SESSION identity (`sessionName`/`sessionSlug`/
+    /// `projectPath`/`remoteSpec`), which stays tied to where the session was
+    /// created and must NOT change on a move — the shell keeps running on its
+    /// original host under its original name.
+    private(set) var projectID: UUID
     /// Stable session id for zmx-backed persistence, distinct from `id` (which
     /// is regenerated on every restore). Fresh for a new pane; the restore
     /// path will pass the saved one.
@@ -705,6 +713,19 @@ final class Pane: Identifiable {
         self.shell = shell
         self.env = env
         executionTracker = TerminalExecutionTracker(hasUserInteraction: command != nil)
+    }
+
+    /// Re-point this pane at a new workspace after its tab is moved between
+    /// projects (`AppState.moveTab`). Updates ONLY the routing identity — the
+    /// `projectID` that notification navigation and the quit sweep key on — so a
+    /// notification click after a move finds the tab in its new project.
+    ///
+    /// Session identity (`sessionName`, `sessionSlug`, `projectPath`,
+    /// `remoteSpec`, `remoteZmxPath`) is deliberately NOT touched: the shell
+    /// keeps running on its original host under its original name, so a
+    /// remote pane moved into a local project still tears down over ssh.
+    func rebind(projectID: UUID) {
+        self.projectID = projectID
     }
 
     /// Permanently kill this pane's zmx session. Call ONLY when the pane is

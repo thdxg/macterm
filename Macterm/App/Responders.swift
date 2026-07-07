@@ -176,13 +176,6 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        // Block Cmd+N from opening a second window.
-        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
-            mainWindow?.makeKeyAndOrderFront(nil)
-            NSApp.activate()
-            return .handled
-        }
-
         if HotkeyRegistry.matches(event, action: .newTab) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
             appState.createTab(projectID: projectID, projects: projectStore.projects)
@@ -292,6 +285,16 @@ final class MainAppResponder: KeyResponder {
             let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
             guard let run = command.action(in: ctx) else { return .passThrough }
             run()
+            return .handled
+        }
+
+        // Cmd+N re-fronts the single window (SwiftUI's "New Window" is replaced
+        // by "Show Window"). Checked AFTER the configurable hotkeys — same
+        // rationale as Cmd+1-9 below — so a user who rebinds an action to cmd+n
+        // wins over this fixed fallback instead of being silently shadowed.
+        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
+            mainWindow?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
             return .handled
         }
 

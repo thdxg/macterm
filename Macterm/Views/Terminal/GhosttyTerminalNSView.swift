@@ -98,8 +98,15 @@ final class GhosttyTerminalNSView: NSView {
     /// Called by `GhosttyCallbacks`.
     func surfaceDidReportTitle(_ title: String) {
         lastReportedTitle = title
-        lastDeliveredTitle = title
-        onTitleChange?(title)
+        // Only mark it delivered if a callback actually received it — otherwise
+        // a title that arrives before a callback is wired would be recorded as
+        // delivered and the catch-up replay in `onTitleChange`'s didSet would
+        // never fire for it. (Unreachable today, since the callback is wired at
+        // configure time before titles flow, but keeps the two fields honest.)
+        if let onTitleChange {
+            lastDeliveredTitle = title
+            onTitleChange(title)
+        }
     }
 
     func surfaceDidReportProgress(running: Bool) {

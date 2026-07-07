@@ -165,6 +165,81 @@ struct RemoteSpawnTests {
         #expect(RemoteSpawn.quoteRemoteDirectory("work/api") == "\"work/api\"")
     }
 
+    // MARK: - Security: tilde-segment injection (§5.3)
+
+    @Test
+    func remote_directory_never_ships_a_command_substitution_unquoted() {
+        // Only a literal `~` or a `[A-Za-z0-9._-]` username may stay bare. A
+        // tilde segment carrying `$(...)`, backticks, or spaces is NOT expandable
+        // config — it's an injection vector — so the WHOLE string is
+        // double-quoted (escaping `$`/backtick), never emitted raw into the `cd`.
+        #expect(RemoteSpawn.quoteRemoteDirectory("~$(touch /tmp/pwned)/sub") == "\"~\\$(touch /tmp/pwned)/sub\"")
+        // Slashless form must also be quoted (was previously returned verbatim).
+        #expect(RemoteSpawn.quoteRemoteDirectory("~$(id)") == "\"~\\$(id)\"")
+        #expect(RemoteSpawn.quoteRemoteDirectory("~`id`") == "\"~\\`id\\`\"")
+        // A username with a space is not a valid bare-safe name → fully quoted.
+        #expect(RemoteSpawn.quoteRemoteDirectory("~evil user/app") == "\"~evil user/app\"")
+    }
+
+    @Test
+    func remote_directory_bare_forms_produce_no_shell_metacharacters() {
+        // Every bare (unquoted) result must be free of shell-active characters,
+        // so nothing a tilde path can carry reaches `sh` unquoted.
+        for input in ["~", "~/dev/api", "~deploy/app", "~$(cmd)/x", "~a b/c", "/abs/$x"] {
+            let quoted = RemoteSpawn.quoteRemoteDirectory(input)
+            // Strip the double-quoted spans; whatever remains bare must be inert.
+            let bareParts = quoted.split(separator: "\"", omittingEmptySubsequences: false)
+                .enumerated().filter { $0.offset.isMultiple(of: 2) }.map(\.element).joined()
+            #expect(!bareParts.contains("$"), "bare `$` leaked for \(input): \(quoted)")
+            #expect(!bareParts.contains("`"), "bare backtick leaked for \(input): \(quoted)")
+            #expect(!bareParts.contains(" "), "bare space leaked for \(input): \(quoted)")
+        }
+    }
+
+    // MARK: - Security: single-quote-free wire invariant (§5.4)
+
+    @Test
+    func assert_single_quote_free_passes_clean_scripts_through() {
+        let clean = "PATH=$PATH; exec \"zmx\" attach \"macterm-x-abc\""
+        #expect(RemoteSpawn.assertSingleQuoteFree(clean) == clean)
+    }
+
+    @Test
+    func assert_single_quote_free_replaces_a_script_carrying_a_single_quote() {
+        // A `'` in a user-controlled field (project dir / zmxPath) would, once
+        // wrapped by `shellQuote`, become `'\''` — which fish/nu tokenize
+        // differently than POSIX sh, the exact breakage the invariant prevents.
+        // Such a script is swapped for a diagnostic that is itself quote-free.
+        let dirty = "cd \"~/it's-a-dir\"; exec zmx"
+        let result = RemoteSpawn.assertSingleQuoteFree(dirty)
+        #expect(result != dirty)
+        #expect(!result.contains("'"))
+        #expect(result.contains("unsupported single quote"))
+        #expect(result.contains("exec ${SHELL:-/bin/sh}"))
+    }
+
+    @Test
+    func pane_command_with_single_quote_in_directory_stays_quote_free() {
+        // End-to-end: a `'` in the remote directory must not survive into the
+        // shipped `sh -c '<script>'` (its `'` would break the outer quoting).
+        let remoteWithQuote = ProjectPath.remote(user: nil, host: "devbox", directory: "~/it's")
+        let cmd = try? #require(RemoteSpawn.paneCommand(remote: remoteWithQuote, sessionName: "macterm-x-abc123"))
+        // The script body (between the outer single quotes) carries no attach —
+        // it was replaced by the quote-free diagnostic.
+        #expect(cmd?.contains("unsupported single quote") == true)
+        #expect(cmd?.contains("exec zmx attach") == false)
+    }
+
+    @Test
+    func op_argv_with_single_quote_in_zmx_path_stays_quote_free() {
+        let cmd = RemoteSpawn.opArgv(
+            remote: remote, zmxArguments: ["kill", "macterm-x-abc123"], zmxPath: "~/it's/zmx"
+        )
+        let script = try? #require(cmd?.last)
+        #expect(script?.contains("unsupported single quote") == true)
+        #expect(script?.contains("kill") == false)
+    }
+
     @Test
     func posix_double_quote_escapes_shell_metacharacters() {
         #expect(RemoteSpawn.posixDoubleQuote("plain") == "\"plain\"")

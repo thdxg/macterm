@@ -1102,6 +1102,30 @@ struct AppStateTests {
         #expect(await killed.names.isEmpty)
     }
 
+    @Test
+    func moveTab_restamps_pane_routing_identity_but_not_session() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let tab = try #require(state.workspaces[p1.id]?.activeTab)
+        // Split so the moved tab carries more than one pane to restamp.
+        state.splitPane(direction: .horizontal, projectID: p1.id)
+        let panes = tab.splitRoot.allPanes()
+        #expect(panes.count == 2)
+        let originalSessionNames = Set(panes.map(\.sessionName))
+        let originalPaths = Set(panes.map(\.projectPath))
+
+        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.path)
+
+        // Routing identity (projectID) is restamped to the destination so a
+        // notification click navigates to the right workspace.
+        #expect(tab.splitRoot.allPanes().allSatisfy { $0.projectID == p2.id })
+        // Session identity is untouched — the shells keep running under their
+        // original names and paths (a remote pane would still kill over ssh).
+        #expect(Set(tab.splitRoot.allPanes().map(\.sessionName)) == originalSessionNames)
+        #expect(Set(tab.splitRoot.allPanes().map(\.projectPath)) == originalPaths)
+    }
+
     // MARK: - Busy-close confirmations
 
     @Test
