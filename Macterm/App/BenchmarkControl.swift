@@ -133,12 +133,13 @@ enum BenchmarkControl {
         appState.selectProject(project)
     }
 
-    /// The terminal window, identified positively by its stamped identifier —
-    /// NOT by "not an NSPanel", which also matches the Settings window (a plain
-    /// NSWindow). Falls back to the first non-panel window only if the terminal
-    /// window hasn't been stamped yet (before it first became main).
+    /// The terminal window: the pointer `AppDelegate` cached when the first
+    /// window became main — NOT identified by "not an NSPanel", which also
+    /// matches the Settings window (a plain NSWindow). Falls back to the first
+    /// non-panel window only before that pointer is set (no benchmark command
+    /// arrives before the window exists in practice).
     private static var mainWindow: NSWindow? {
-        NSApp.windows.first { $0.identifier == AppDelegate.terminalWindowIdentifier }
+        (NSApp.delegate as? AppDelegate)?.mainWindow
             ?? NSApp.windows.first { !($0 is NSPanel) }
     }
 }

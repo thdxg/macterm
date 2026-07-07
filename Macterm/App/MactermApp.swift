@@ -233,11 +233,6 @@ private struct AppColorScheme: ViewModifier {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Stamped on the terminal window the first time it becomes main, so it can
-    /// be identified POSITIVELY (Settings is a plain NSWindow that a
-    /// "not an NSPanel" test would wrongly match — see `reopenIfNeeded`).
-    static let terminalWindowIdentifier = NSUserInterfaceItemIdentifier("macterm.terminalWindow")
-
     var onTerminate: (() -> Void)?
     var appState: AppState?
     var projectStore: ProjectStore?
@@ -346,14 +341,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // responder must track that same pointer; assigning `window`
                 // unconditionally handed it the Settings window whenever
                 // Settings was frontmost, defeating its key-window gate.
-                if self.mainWindow == nil {
-                    self.mainWindow = window
-                    // Tag it positively so `reopenIfNeeded`/`BenchmarkControl`
-                    // can find the terminal window by identity rather than by
-                    // "not an NSPanel" (Settings is a plain NSWindow, not a
-                    // panel, and would match that negative test).
-                    window.identifier = AppDelegate.terminalWindowIdentifier
-                }
+                // The first window to become main is the terminal window;
+                // cache that pointer as the authoritative identity. Do NOT
+                // stamp `window.identifier` — this is a SwiftUI `WindowGroup`
+                // window, and forcing an identifier on it interferes with
+                // SwiftUI's own window management (it can recreate the window,
+                // nilling the responder's weak `mainWindow` and breaking the
+                // key-window gate that guards every hotkey).
+                if self.mainWindow == nil { self.mainWindow = window }
                 self.mainAppResponder?.mainWindow = self.mainWindow
             }
         }
@@ -504,32 +499,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    /// Bring our (possibly ordered-out) terminal window back. Robust to a stale
-    /// `self.mainWindow`: identifies the terminal window POSITIVELY by its
-    /// stamped identifier, falling back to the cached pointer.
+    /// Bring our (possibly ordered-out) terminal window back. The terminal
+    /// window is identified by the pointer `didBecomeMain` cached (the first
+    /// window to become main) — NOT by "not an NSPanel", which also matches the
+    /// Settings window (a plain NSWindow). We never stamp a SwiftUI window's
+    /// identifier (that breaks its window management), so identity is the cached
+    /// pointer; the non-panel heuristic is only a last-resort fallback for
+    /// before the terminal window has ever become main.
     func reopenIfNeeded() {
-        /// The terminal window, identified positively — never by "not an
-        /// NSPanel", which also matches the Settings window (a plain NSWindow)
-        /// and could front/reassign it as the main window.
-        func isTerminalWindow(_ window: NSWindow) -> Bool {
-            window.identifier == AppDelegate.terminalWindowIdentifier
-        }
-
         // If the terminal window is already visible, nothing to do.
-        if NSApp.windows.contains(where: { $0.isVisible && isTerminalWindow($0) }) {
+        if let cached = mainWindow, cached.isVisible {
+            return
+        }
+        // No cached pointer yet (terminal window never became main): fall back
+        // to the old non-panel visibility check to avoid re-fronting needlessly.
+        if mainWindow == nil, NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
             return
         }
 
-        // Prefer the tagged terminal window; fall back to the cached pointer
-        // (e.g. before it has first become main and been stamped).
-        let target = NSApp.windows.first { !$0.isVisible && isTerminalWindow($0) } ?? mainWindow
+        // Prefer the cached terminal window; only if it's absent fall back to
+        // the first hidden non-panel window.
+        let target = mainWindow ?? NSApp.windows.first { !$0.isVisible && !($0 is NSPanel) }
         guard let target else { return }
         target.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        // Only adopt a freshly-discovered window as `mainWindow` when it really
-        // is the terminal window — never let a discovered Settings window
-        // hijack the cached pointer (and the responder's key-window gate).
-        if mainWindow !== target, isTerminalWindow(target) {
+        // Adopt a freshly-discovered window as the cached pointer only when we
+        // had none — never overwrite a live cached terminal window with some
+        // other discovered window (e.g. Settings).
+        if mainWindow == nil {
             mainWindow = target
             mainAppResponder?.mainWindow = target
         }
