@@ -215,17 +215,27 @@ final class TerminalTab: Identifiable {
     }
 
     /// Remove a pane from the tree. Returns `.onlyPaneLeft` if the caller should
-    /// close the whole tab (the pane was the last one), otherwise `.removed`.
-    /// The pane's surface is destroyed in both cases.
+    /// close the whole tab (the pane was the last one), otherwise `.removed`;
+    /// `.notFound` when the pane isn't in this tab. The pane's surface is
+    /// destroyed for both `.onlyPaneLeft` and `.removed` — callers rely on that
+    /// (the quick terminal drops the whole tab on `.onlyPaneLeft` without its
+    /// own teardown) — but NOT for `.notFound`.
     @discardableResult
     func removePane(_ paneID: UUID) -> PaneRemovalResult {
         guard let pane = splitRoot.findPane(id: paneID) else { return .notFound }
-        pane.destroySurface()
+        // Decide the outcome BEFORE the irreversible surface teardown, so a
+        // `.notFound`-shaped precondition can't destroy a surface first.
+        // `removing` can only return nil when the pane isn't in the tree, which
+        // `findPane` already ruled out — but check it before destroying rather
+        // than after (the old order destroyed, then could still return
+        // `.notFound` with a dead surface).
         let panes = splitRoot.allPanes()
         if panes.count <= 1 {
+            pane.destroySurface()
             return .onlyPaneLeft
         }
         guard let newRoot = splitRoot.removing(paneID: paneID) else { return .notFound }
+        pane.destroySurface()
         splitRoot = newRoot
         if zoomedPaneID == paneID { zoomedPaneID = nil }
         paneFocusHistory.remove(paneID)
