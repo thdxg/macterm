@@ -1,8 +1,27 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum SidebarItem: Hashable {
     case project(UUID)
     case tab(projectID: UUID, tabID: UUID)
+}
+
+/// In-app drag payload for a sidebar tab row. Carries the tab's identity plus
+/// its source project so a drop can tell a same-project reorder from a
+/// cross-project move. `TerminalTab` itself is a live reference type (owns
+/// surfaces) and must never be encoded/serialized — only these two UUIDs
+/// travel, and the drop looks the tab back up by id.
+struct MovableTab: Codable, Transferable {
+    let tabID: UUID
+    let sourceProjectID: UUID
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .mactermTab)
+    }
+}
+
+extension UTType {
+    static let mactermTab = UTType(exportedAs: "com.thdxg.macterm.tab-move")
 }
 
 struct SidebarContent: View {
@@ -20,53 +39,7 @@ struct SidebarContent: View {
     var body: some View {
         List(selection: $selection) {
             ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
-                let ws = appState.workspaces[project.id]
-                let tabs = ws?.tabs ?? []
-
-                DisclosureGroup(isExpanded: Binding(
-                    get: { expandedProjects.contains(project.id) },
-                    set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
-                )) {
-                    ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
-                        SidebarTabRow(
-                            tab: tab,
-                            index: tabIndex + 1,
-                            isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id,
-                            moveTargets: projectStore.projects.filter { $0.id != project.id },
-                            onClose: { appState.requestCloseTab(tab.id, projectID: project.id) },
-                            onRename: { newName in
-                                tab.customTitle = newName.isEmpty ? nil : newName
-                                appState.saveWorkspaces()
-                            },
-                            onMoveToProject: { destination in
-                                appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
-                                expandedProjects.insert(destination.id)
-                            }
-                        )
-                        .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
-                    }
-                    .onMove { source, destination in
-                        appState.workspaces[project.id]?.reorderTabs(fromOffsets: source, toOffset: destination)
-                        appState.saveWorkspaces()
-                    }
-                } label: {
-                    SidebarProjectRow(project: project, index: projectIndex + 1) {
-                        appState.selectProject(project)
-                        appState.createTab(projectID: project.id, projectPath: project.path)
-                        expandedProjects.insert(project.id)
-                    } onRename: {
-                        projectStore.rename(id: project.id, to: $0)
-                    } onUnload: {
-                        appState.requestUnloadProject(project.id)
-                    } onRemove: {
-                        appState.requestRemoveProject(project.id) {
-                            expandedProjects.remove(project.id)
-                            appState.removeProject(project.id)
-                            projectStore.remove(id: project.id)
-                        }
-                    }
-                    .tag(SidebarItem.project(project.id))
-                }
+                projectSection(index: projectIndex, project: project)
             }
             .onMove { source, destination in
                 projectStore.reorder(fromOffsets: source, toOffset: destination)
@@ -128,9 +101,115 @@ struct SidebarContent: View {
         }
     }
 
+    /// One project's disclosure section: its tab rows (draggable + a drop
+    /// target that reorders/moves at the insertion offset) under a header that
+    /// itself accepts drops (the append path for a collapsed/empty project).
+    /// Extracted from `body` so each drag/drop closure type-checks in its own
+    /// scope — inlined, the whole `List` blew the solver's time budget.
+    @ViewBuilder
+    private func projectSection(index projectIndex: Int, project: Project) -> some View {
+        let ws = appState.workspaces[project.id]
+        let tabs = ws?.tabs ?? []
+        DisclosureGroup(isExpanded: Binding(
+            get: { expandedProjects.contains(project.id) },
+            set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
+        )) {
+            ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
+                tabRow(tab: tab, index: tabIndex, activeTabID: ws?.activeTabID, project: project)
+            }
+            // Single drop mechanism for both cases: SwiftUI reports the
+            // insertion `offset` within THIS project's tab list. A drop from
+            // the same project reorders to that slot; a drop from another
+            // project moves the tab in at that slot. Replaces the old `.onMove`
+            // (which is per-section and can't express a cross-project move).
+            .dropDestination(for: MovableTab.self) { items, offset in
+                receiveTabDrop(items, into: project, at: offset)
+            }
+        } label: {
+            projectHeader(index: projectIndex, project: project)
+        }
+    }
+
+    private func tabRow(tab: TerminalTab, index tabIndex: Int, activeTabID: UUID?, project: Project) -> some View {
+        SidebarTabRow(
+            tab: tab,
+            index: tabIndex + 1,
+            isActive: activeTabID == tab.id && appState.activeProjectID == project.id,
+            moveTargets: projectStore.projects.filter { $0.id != project.id },
+            onClose: { appState.requestCloseTab(tab.id, projectID: project.id) },
+            onRename: { newName in
+                tab.customTitle = newName.isEmpty ? nil : newName
+                appState.saveWorkspaces()
+            },
+            onMoveToProject: { destination in
+                appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
+                expandedProjects.insert(destination.id)
+            }
+        )
+        .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
+        // Drag a tab out to another project (or reorder within this one). The
+        // payload is just IDs — the live tab is looked up on drop, never
+        // serialized.
+        .draggable(MovableTab(tabID: tab.id, sourceProjectID: project.id))
+    }
+
+    private func projectHeader(index projectIndex: Int, project: Project) -> some View {
+        SidebarProjectRow(project: project, index: projectIndex + 1) {
+            appState.selectProject(project)
+            appState.createTab(projectID: project.id, projectPath: project.path)
+            expandedProjects.insert(project.id)
+        } onRename: {
+            projectStore.rename(id: project.id, to: $0)
+        } onUnload: {
+            appState.requestUnloadProject(project.id)
+        } onRemove: {
+            appState.requestRemoveProject(project.id) {
+                expandedProjects.remove(project.id)
+                appState.removeProject(project.id)
+                projectStore.remove(id: project.id)
+            }
+        }
+        .tag(SidebarItem.project(project.id))
+        // Dropping onto the project header appends to that project. This is the
+        // only drop path for a collapsed or empty project, whose tab ForEach
+        // renders no rows to target.
+        .dropDestination(for: MovableTab.self) { items, _ in
+            receiveTabDrop(items, into: project, at: nil)
+            return true
+        } isTargeted: { targeted in
+            // Spring-open a collapsed project while hovering a drag over it, so
+            // the user can see where the tab will land.
+            if targeted { expandedProjects.insert(project.id) }
+        }
+    }
+
     private var activeTabID: UUID? {
         guard let pid = appState.activeProjectID else { return nil }
         return appState.workspaces[pid]?.activeTabID
+    }
+
+    /// Apply a tab drag-and-drop. `index` is the insertion slot within the
+    /// destination project's tab list (nil = append, used by header drops). A
+    /// drop from the same project reorders; a drop from another project moves
+    /// the live tab (surfaces and shells intact) into this one. SwiftUI can
+    /// deliver more than one payload, so each is applied in order.
+    private func receiveTabDrop(_ items: [MovableTab], into project: Project, at index: Int?) {
+        for item in items {
+            if item.sourceProjectID == project.id {
+                if let index {
+                    appState.reorderTab(item.tabID, inProject: project.id, toIndex: index)
+                }
+            } else {
+                appState.moveTab(
+                    item.tabID,
+                    from: item.sourceProjectID,
+                    to: project.id,
+                    destPath: project.path,
+                    toIndex: index
+                )
+            }
+        }
+        expandedProjects.insert(project.id)
     }
 
     private func syncSelection() {

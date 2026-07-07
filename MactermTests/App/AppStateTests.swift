@@ -1126,6 +1126,46 @@ struct AppStateTests {
         #expect(Set(tab.splitRoot.allPanes().map(\.projectPath)) == originalPaths)
     }
 
+    @Test
+    func moveTab_toIndex_inserts_at_slot_in_destination() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        // Give p2 two tabs so there's a middle slot to drop into.
+        let dest = try #require(state.workspaces[p2.id])
+        let d0 = dest.tabs[0].id
+        let d1 = dest.createTab(projectPath: p2.path).id
+        let moving = try #require(state.workspaces[p1.id]?.activeTab)
+
+        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.path, toIndex: 1)
+
+        #expect(dest.tabs.map(\.id) == [d0, moving.id, d1])
+        #expect(dest.activeTabID == moving.id)
+        #expect(state.workspaces[p1.id]?.tabs.contains { $0.id == moving.id } == false)
+    }
+
+    @Test
+    func reorderTab_moves_within_project_and_persists() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let state = makeAppState(store: WorkspaceStore(fileURL: storeURL))
+        let p = seedProject(state, name: "p", path: "/tmp")
+        let ws = try #require(state.workspaces[p.id])
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: p.path).id
+
+        state.reorderTab(t1, inProject: p.id, toIndex: 2)
+        #expect(ws.tabs.map(\.id) == [t2, t1])
+
+        // The reorder persisted: a fresh store reading the same file sees it.
+        let reloaded = WorkspaceStore(fileURL: storeURL).load()
+        let saved = try #require(reloaded.first { $0.projectID == p.id })
+        #expect(saved.tabs.map(\.id) == [t2, t1])
+    }
+
     // MARK: - Busy-close confirmations
 
     @Test

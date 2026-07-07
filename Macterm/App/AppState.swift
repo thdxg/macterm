@@ -806,9 +806,16 @@ final class AppState {
     /// project's workspace into another's. The `TerminalTab` object is reused
     /// as-is, so its surfaces stay valid (both workspaces live in the same
     /// window). The destination becomes the active project with the moved tab
-    /// selected, so the user lands where they meant to be. No-op for a
-    /// same-project move or an unknown source/tab.
-    func moveTab(_ tabID: UUID, from sourceProjectID: UUID, to destProjectID: UUID, destPath: String) {
+    /// selected, so the user lands where they meant to be. `toIndex` positions
+    /// the tab within the destination (a sidebar drop lands at a slot); nil
+    /// appends. No-op for a same-project move or an unknown source/tab.
+    func moveTab(
+        _ tabID: UUID,
+        from sourceProjectID: UUID,
+        to destProjectID: UUID,
+        destPath: String,
+        toIndex: Int? = nil
+    ) {
         guard sourceProjectID != destProjectID,
               let source = workspaces[sourceProjectID],
               let tab = source.tabs.first(where: { $0.id == tabID })
@@ -819,7 +826,7 @@ final class AppState {
         ensureWorkspace(projectID: destProjectID, path: destPath)
         guard let dest = workspaces[destProjectID] else { return }
         source.closeTab(tabID)
-        dest.adoptTab(tab)
+        dest.adoptTab(tab, at: toIndex)
         // Restamp the moved panes' routing identity to the destination project.
         // Without this they keep the SOURCE projectID, so a later
         // notification-click navigates to the old project and can't find the
@@ -831,6 +838,15 @@ final class AppState {
         activeProjectID = destProjectID
         recordProjectVisit(destProjectID)
         saveWorkspaces()
+    }
+
+    /// Reorder a tab within its own project to an absolute drop index (the
+    /// offset a sidebar drag-and-drop reports). Persists on a real move.
+    func reorderTab(_ tabID: UUID, inProject projectID: UUID, toIndex destination: Int) {
+        guard let ws = workspaces[projectID] else { return }
+        let before = ws.tabs.map(\.id)
+        ws.moveTab(tabID, toIndex: destination)
+        if ws.tabs.map(\.id) != before { saveWorkspaces() }
     }
 
     func selectNextTab(projectID: UUID) {

@@ -305,12 +305,17 @@ final class Workspace: Identifiable {
         return tab
     }
 
-    /// Append an existing tab — moved in from another workspace — and make it
+    /// Adopt an existing tab — moved in from another workspace — and make it
     /// active. Unlike `createTab` the `TerminalTab` (and its live panes/surfaces)
     /// is reused as-is; the caller is responsible for having removed it from its
-    /// previous workspace first.
-    func adoptTab(_ tab: TerminalTab) {
-        tabs.append(tab)
+    /// previous workspace first. `index` positions the tab in the list (a
+    /// sidebar drop lands at a specific slot); nil / out-of-range appends.
+    func adoptTab(_ tab: TerminalTab, at index: Int? = nil) {
+        if let index, index >= 0, index <= tabs.count {
+            tabs.insert(tab, at: index)
+        } else {
+            tabs.append(tab)
+        }
         if let current = activeTabID { tabHistory.push(current) }
         activeTabID = tab.id
     }
@@ -385,5 +390,21 @@ final class Workspace: Identifiable {
 
     func reorderTabs(fromOffsets source: IndexSet, toOffset destination: Int) {
         tabs.move(fromOffsets: source, toOffset: destination)
+    }
+
+    /// Move an existing tab to an absolute index (the shape a drag-and-drop
+    /// insertion offset comes in, as opposed to `reorderTabs`' `IndexSet`/offset
+    /// from `List.onMove`). `destination` is interpreted in the pre-removal
+    /// coordinate space — the offset SwiftUI's `dropDestination` reports — so it
+    /// is adjusted down by one when the tab is dragged toward the end. A no-op
+    /// destination (same slot) leaves the array and selection untouched.
+    func moveTab(_ tabID: UUID, toIndex destination: Int) {
+        guard let from = tabs.firstIndex(where: { $0.id == tabID }) else { return }
+        let clamped = max(0, min(destination, tabs.count))
+        var to = clamped > from ? clamped - 1 : clamped
+        to = max(0, min(to, tabs.count - 1))
+        guard to != from else { return }
+        let tab = tabs.remove(at: from)
+        tabs.insert(tab, at: to)
     }
 }
