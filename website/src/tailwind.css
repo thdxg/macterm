@@ -344,10 +344,16 @@
     color: var(--color-ink);
     font-weight: 600;
   }
+  /* The sidebar stays pinned left (flex:none); .docs-main fills the rest of the
+     row and centers its 760px reading column within that space (via the auto
+     side margins on the inline-size track), so the content sits centered in the
+     area to the right of the sidebar rather than hugging it. */
   .docs-main {
     flex: 1;
     min-width: 0;
-    max-width: 760px;
+    display: grid;
+    grid-template-columns: minmax(0, 760px);
+    justify-content: center;
     padding: 40px 0 120px;
   }
   @media (max-width: 768px) {
