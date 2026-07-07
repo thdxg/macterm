@@ -293,10 +293,19 @@
   .docs-shell {
     display: flex;
     gap: clamp(28px, 5vw, 64px);
+    width: 100%;
     max-width: 1180px;
     margin: 0 auto;
     padding: 0 var(--site-gutter);
     align-items: flex-start;
+    /* The shell is a flex item of the <body> column; without min-width:0 its
+       flex min-content floor (fixed sidebar + main's max-width) keeps it from
+       shrinking to the viewport, so a wide code block would push the whole
+       shell — and the sticky nav — sideways. width:100% + min-width:0 pins it
+       to the viewport and lets .docs-main shrink; wide code scrolls inside its
+       own pre (overflow-x:auto) instead of shifting the page. */
+    min-width: 0;
+    box-sizing: border-box;
   }
   .docs-sidebar {
     position: sticky;
@@ -428,6 +437,34 @@
     border: none;
     border-top: 1px solid rgba(23, 21, 15, 0.14);
     margin: 52px 0;
+  }
+  /* Tables: never wider than the content column. A table whose cells don't fit
+     scrolls horizontally within its own box (like code blocks) instead of
+     pushing the page sideways — the mobile-overflow bug. `display:block` on the
+     table makes overflow-x:auto take effect (an unwrapped table ignores it). */
+  .prose-docs table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 0 0 20px;
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .prose-docs th,
+  .prose-docs td {
+    text-align: left;
+    vertical-align: top;
+    padding: 8px 14px 8px 0;
+    border-bottom: 1px solid rgba(23, 21, 15, 0.1);
+  }
+  .prose-docs th {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .prose-docs td {
+    color: var(--color-body);
   }
   .prose-docs blockquote {
     border-left: 2px solid rgba(23, 21, 15, 0.35);
