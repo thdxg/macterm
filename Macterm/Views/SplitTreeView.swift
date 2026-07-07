@@ -136,8 +136,9 @@ private struct SplitLeafView: View {
             .overlay {
                 if !isFocused, isSplit {
                     // Theme-derived dim (not fixed black) so an unfocused pane
-                    // dims correctly on light themes too.
-                    MactermTheme.dimOverlay
+                    // dims correctly on light themes too, at the user-configured
+                    // opacity (#156).
+                    MactermTheme.dimOverlay(opacity: Preferences.shared.paneDimOpacity)
                         .allowsHitTesting(false)
                 }
             }

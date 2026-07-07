@@ -3,7 +3,14 @@ name: Benchmark
 # Window-state resource benchmark (scripts/benchmark.py). Pushes to main
 # publish a `benchmark-results` artifact that becomes the baseline; PR runs
 # download the latest main baseline and post a comparison table to the job
-# summary and a (single, updated-in-place) PR comment.
+# summary.
+#
+# PR runs can't label or comment directly: `pull_request` from a fork gets a
+# read-only GITHUB_TOKEN (the `permissions:` block is capped at read regardless
+# of what it declares), so any write 403s. Instead the PR job renders the report
+# and uploads it as an artifact; the `benchmark-report.yml` companion, triggered
+# via `workflow_run`, runs in the base repo with a read/write token and does the
+# label + comment writes. See that file for the trusted-side half.
 
 on:
   push:
@@ -82,11 +89,12 @@ jobs:
       && needs.baseline.result != 'cancelled'
     runs-on: macos-26
     timeout-minutes: 30
+    # Read-only: the label/comment writes live in benchmark-report.yml, which
+    # runs with a read/write token because a fork PR can't get one here. This
+    # job just renders the report and hands it off as an artifact.
     permissions:
       contents: read
       actions: read # download the baseline artifact
-      pull-requests: write # upsert the comparison comment
-      issues: write # create/apply the benchmark:regression / benchmark:improvement labels
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -172,49 +180,21 @@ jobs:
           python3 scripts/benchmark.py report "${args[@]}" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Label PR on significant deltas
+      # Hand the rendered report + verdict + PR number to benchmark-report.yml.
+      # That companion runs on `workflow_run` with a read/write token (this job
+      # can't get one for fork PRs) and does the label + comment writes. The PR
+      # number must ride along: `github.event.workflow_run.pull_requests` is
+      # empty for forked PRs, so the reporting side has no other way to find it.
+      - name: Stage report bundle
         if: github.event_name == 'pull_request'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          verdict=build/benchmark/verdict.json
-          regression=$(jq -r '.regression' "$verdict" 2>/dev/null || echo false)
-          improvement=$(jq -r '.improvement' "$verdict" 2>/dev/null || echo false)
-          repo='${{ github.repository }}'
-          pr='${{ github.event.pull_request.number }}'
-          gh label create benchmark:regression --repo "$repo" --force \
-            --color D93F0B --description "CI benchmark: significant resource regression vs main"
-          gh label create benchmark:improvement --repo "$repo" --force \
-            --color 0E8A16 --description "CI benchmark: significant resource improvement vs main"
-          # Keep labels in sync with the latest run: apply when the verdict
-          # says so, remove a stale one when a newer push clears it.
-          if [ "$regression" = "true" ]; then
-            gh pr edit "$pr" --repo "$repo" --add-label benchmark:regression
-          else
-            gh pr edit "$pr" --repo "$repo" --remove-label benchmark:regression || true
-          fi
-          if [ "$improvement" = "true" ]; then
-            gh pr edit "$pr" --repo "$repo" --add-label benchmark:improvement
-          else
-            gh pr edit "$pr" --repo "$repo" --remove-label benchmark:improvement || true
-          fi
+          mkdir -p report-bundle
+          cp report.md build/benchmark/verdict.json report-bundle/
+          echo '${{ github.event.pull_request.number }}' > report-bundle/pr-number
 
-      - name: Comment on PR
+      - name: Upload report bundle
         if: github.event_name == 'pull_request'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          marker='<!-- macterm-benchmark -->'
-          printf '%s\n\n' "$marker" > comment.md
-          cat report.md >> comment.md
-          repo='${{ github.repository }}'
-          pr='${{ github.event.pull_request.number }}'
-          comment_id=$(gh api "repos/$repo/issues/$pr/comments" --paginate \
-            --jq "[.[] | select(.body | startswith(\"$marker\"))][0].id // empty")
-          if [ -n "$comment_id" ]; then
-            gh api -X PATCH "repos/$repo/issues/comments/$comment_id" -F body=@comment.md --silent
-          else
-            gh api "repos/$repo/issues/$pr/comments" -F body=@comment.md --silent
-          fi
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-report
+          path: report-bundle/

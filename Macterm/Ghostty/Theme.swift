@@ -48,11 +48,15 @@ enum MactermTheme {
         GhosttyApp.shared.paletteColor(at: 2).map { Color(nsColor: $0) } ?? .green
     }
 
-    /// A translucent overlay that dims an unfocused pane. Derived from the
-    /// theme foreground (inverted vs the terminal bg) rather than a fixed
-    /// black, so it reads correctly on light themes too.
+    /// A translucent overlay that dims an unfocused pane, at the user-configured
+    /// `opacity` (#156). Derived from the theme rather than a fixed black so it
+    /// reads correctly on light themes too: on a light theme, dimming toward the
+    /// (dark) foreground reduces contrast the way black does on a dark theme;
+    /// on a dark theme, black is correct.
     @MainActor
-    static var dimOverlay: Color { colorScheme == .light ? fgAlpha(0.12) : Color.black.opacity(0.2) }
+    static func dimOverlay(opacity: Double) -> Color {
+        colorScheme == .light ? fgAlpha(opacity) : Color.black.opacity(opacity)
+    }
 
     @MainActor
     static var colorScheme: ColorScheme {
