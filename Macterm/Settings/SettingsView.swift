@@ -248,6 +248,8 @@ private struct AppearanceSettings: View {
     private var liquidGlass: Bool = Preferences.shared.windowGlassEnabled
     @State
     private var liquidGlassStyle: WindowGlassStyle = Preferences.shared.windowGlassStyle
+    @State
+    private var paneDimOpacity: Double = Preferences.shared.paneDimOpacity
 
     var body: some View {
         Form {
@@ -292,6 +294,23 @@ private struct AppearanceSettings: View {
                 .disabled(backgroundOpacity >= 0.999 || liquidGlass)
 
                 Text(blurFootnote)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Split Panes") {
+                HStack {
+                    Text("Unfocused dimming")
+                        .frame(width: sliderLabelWidth, alignment: .leading)
+                    Slider(value: $paneDimOpacity, in: 0.0 ... Preferences.maxPaneDimOpacity)
+                    Text("\(Int((paneDimOpacity / Preferences.maxPaneDimOpacity * 100).rounded()))%")
+                        .monospacedDigit()
+                        .frame(width: 42, alignment: .trailing)
+                }
+                .onChange(of: paneDimOpacity) { _, v in
+                    Preferences.shared.paneDimOpacity = v
+                }
+                Text("How dark unfocused panes get in a split layout.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

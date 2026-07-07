@@ -75,6 +75,12 @@ final class Preferences {
         didSet { defaults.set(terminalScrollSpeed, forKey: Keys.terminalScrollSpeed) }
     }
 
+    /// How dark the overlay on an unfocused split pane gets (0–0.8, 0 = no dimming).
+    /// Capped below 1 so an unfocused pane is never fully black.
+    var paneDimOpacity: Double {
+        didSet { defaults.set(paneDimOpacity, forKey: Keys.paneDimOpacity) }
+    }
+
     // MARK: - Sidebar icons
 
     var projectIconSymbol: String {
@@ -128,6 +134,9 @@ final class Preferences {
         numberIconSquare,
         numberIconPlain,
     ]
+
+    /// Upper bound for `paneDimOpacity` — a fully black overlay reads as broken, not dim.
+    static let maxPaneDimOpacity: Double = 0.8
 
     /// Curated SF Symbols offered in Settings — keeps users from typing invalid names.
     static let projectIconChoices: [String] = [
@@ -291,6 +300,9 @@ final class Preferences {
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
         eagerlyStartProjectTabs = (defaults.object(forKey: Keys.eagerlyStartProjectTabs) as? Bool) ?? true
         terminalScrollSpeed = Self.clampScrollSpeed(defaults.double(forKey: Keys.terminalScrollSpeed), fallback: 1.0)
+        paneDimOpacity = Self.clampPaneDimOpacity(
+            (defaults.object(forKey: Keys.paneDimOpacity) as? Double) ?? 0.2
+        )
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
         windowBlurRadius = defaults.integer(forKey: Keys.windowBlurRadius)
         windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
@@ -314,6 +326,10 @@ final class Preferences {
     private static func clampFraction(_ v: Double, fallback: Double) -> Double {
         guard v > 0 else { return fallback }
         return max(0.2, min(1.0, v))
+    }
+
+    private static func clampPaneDimOpacity(_ v: Double) -> Double {
+        max(0.0, min(maxPaneDimOpacity, v))
     }
 
     private static func clampScrollSpeed(_ v: Double, fallback: Double) -> Double {
@@ -342,6 +358,7 @@ final class Preferences {
         static let autoTiling = "macterm.autoTiling.enabled"
         static let eagerlyStartProjectTabs = "macterm.eagerlyStartProjectTabs.enabled"
         static let terminalScrollSpeed = "macterm.terminal.scrollSpeed"
+        static let paneDimOpacity = "macterm.pane.dimOpacity"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"
         static let windowGlassEnabled = "macterm.window.glassEnabled"
