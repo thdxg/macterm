@@ -20,8 +20,22 @@ struct MovableTab: Codable, Transferable {
     }
 }
 
+/// In-app drag payload for a sidebar project header — the project's id.
+/// Project reordering is driven by this drag rather than `List`'s `.onMove`,
+/// because `.onMove` puts the whole List in reorder mode and hijacks the tab
+/// rows' `.draggable` gesture (so tab drag-and-drop never fired). With both
+/// projects and tabs on the Transferable path, they coexist.
+struct MovableProject: Codable, Transferable {
+    let projectID: UUID
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .mactermProject)
+    }
+}
+
 extension UTType {
     static let mactermTab = UTType(exportedAs: "com.thdxg.macterm.tab-move")
+    static let mactermProject = UTType(exportedAs: "com.thdxg.macterm.project-move")
 }
 
 struct SidebarContent: View {
@@ -41,9 +55,11 @@ struct SidebarContent: View {
             ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
                 projectSection(index: projectIndex, project: project)
             }
-            .onMove { source, destination in
-                projectStore.reorder(fromOffsets: source, toOffset: destination)
-            }
+            // No `.onMove`: it puts the List in reorder mode and hijacks the tab
+            // rows' `.draggable`, so tab drag-and-drop never fired. Project
+            // reordering is instead driven by dragging the project header (a
+            // `MovableProject` payload) so both drags share the Transferable
+            // path and coexist. See `projectHeader`.
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
@@ -170,9 +186,11 @@ struct SidebarContent: View {
             }
         }
         .tag(SidebarItem.project(project.id))
-        // Dropping onto the project header appends to that project. This is the
-        // only drop path for a collapsed or empty project, whose tab ForEach
-        // renders no rows to target.
+        // Drag the header to reorder projects (replaces the removed `.onMove`).
+        .draggable(MovableProject(projectID: project.id))
+        // Dropping a TAB onto the header appends it to that project — the only
+        // drop path for a collapsed or empty project, whose tab ForEach renders
+        // no rows to target.
         .dropDestination(for: MovableTab.self) { items, _ in
             receiveTabDrop(items, into: project, at: nil)
             return true
@@ -180,6 +198,13 @@ struct SidebarContent: View {
             // Spring-open a collapsed project while hovering a drag over it, so
             // the user can see where the tab will land.
             if targeted { expandedProjects.insert(project.id) }
+        }
+        // Dropping a PROJECT onto this header reorders it to this project's
+        // slot. Stacked as a second `.dropDestination` because each accepts a
+        // single payload type.
+        .dropDestination(for: MovableProject.self) { items, _ in
+            receiveProjectDrop(items, before: project)
+            return true
         }
     }
 
@@ -210,6 +235,25 @@ struct SidebarContent: View {
             }
         }
         expandedProjects.insert(project.id)
+    }
+
+    /// Apply a project drag-and-drop: move the dragged project to the target
+    /// project's slot. Uses `move(fromOffsets:toOffset:)` semantics — `toOffset`
+    /// is the index in the CURRENT array where the item inserts (SwiftUI's
+    /// convention), so a downward move lands after the target.
+    private func receiveProjectDrop(_ items: [MovableProject], before target: Project) {
+        let projects = projectStore.projects
+        guard let targetIndex = projects.firstIndex(where: { $0.id == target.id }) else { return }
+        for item in items {
+            guard let fromIndex = projects.firstIndex(where: { $0.id == item.projectID }),
+                  fromIndex != targetIndex
+            else { continue }
+            // Dropping onto a project means "land at its slot": inserting above
+            // when dragging up, and (via move's toOffset convention) at the
+            // target's position when dragging down.
+            let toOffset = fromIndex < targetIndex ? targetIndex + 1 : targetIndex
+            projectStore.reorder(fromOffsets: IndexSet(integer: fromIndex), toOffset: toOffset)
+        }
     }
 
     private func syncSelection() {
