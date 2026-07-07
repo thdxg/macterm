@@ -137,6 +137,66 @@ final class MainAppResponder: KeyResponder {
         // into the palette would fire Cmd+T's New Tab action.
         if appState.isCommandPaletteVisible { return .passThrough }
 
+        // Sidebar keyboard navigation. Both modes are fed by this global monitor
+        // so they work regardless of which view holds first responder. Stand down
+        // while a sidebar rename field is open so its TextField owns Return/ESC.
+        let renaming = appState.renamingTabID != nil || appState.renamingProjectID != nil
+        // Any keystroke that matches a real app shortcut keeps working while the
+        // sidebar is focused — fall through to its handler below instead of
+        // treating it as ring/list navigation.
+        let isAppShortcut = HotkeyAction.allCases.contains { HotkeyRegistry.matches(event, action: $0) }
+        if !renaming, !isAppShortcut, appState.sidebarFocusMode {
+            // Hotkey Focus Sidebar: a tentative ring; the terminal keeps first
+            // responder. Bare ↑/↓ move the ring; shift+↑/↓ reorder the ringed
+            // tab within its project; Enter/ESC choose/cancel.
+            let shift = event.modifierFlags.contains(.shift)
+            switch HotkeyRegistry.eventToken(event) ?? "" {
+            case "up":
+                if shift {
+                    appState.moveSidebarFocusTab(by: -1)
+                } else {
+                    appState.moveSidebarFocus(by: -1, projects: projectStore.projects)
+                }
+                return .handled
+            case "down":
+                if shift {
+                    appState.moveSidebarFocusTab(by: 1)
+                } else {
+                    appState.moveSidebarFocus(by: 1, projects: projectStore.projects)
+                }
+                return .handled
+            case "return",
+                 "enter":
+                appState.commitSidebarFocus(projects: projectStore.projects)
+                return .handled
+            case "escape":
+                appState.exitSidebarFocus()
+                return .handled
+            default:
+                // Swallow other bare keys so they don't leak into the terminal.
+                return .handled
+            }
+        }
+        if !renaming, !isAppShortcut, appState.sidebarListFocused {
+            // Click-into-sidebar: the native List has keyboard focus and handles
+            // bare ↑/↓ itself (live tab switch). We only flag arrow-driven
+            // switches so focus stays in the list, and route Enter/ESC into the
+            // terminal.
+            switch HotkeyRegistry.eventToken(event) ?? "" {
+            case "up",
+                 "down":
+                appState.sidebarArrowSwitch = true
+                return .passThrough
+            case "return",
+                 "enter",
+                 "escape":
+                appState.restoreFocusToActivePane()
+                return .handled
+            default:
+                return .passThrough
+            }
+        }
+
         // Everything below acts on the main terminal window's workspace.
         // When a different window is key — Settings, an alert sheet — none of
         // it may fire: Cmd+W would close a terminal tab behind the window the
@@ -148,7 +208,12 @@ final class MainAppResponder: KeyResponder {
         // quick-terminal panel is exempt: QuickTerminalResponder has already
         // claimed its slice, and the app-wide keys that fall through (project
         // nav, new tab, …) intentionally keep working while the panel is up.
-        if let keyWindow = NSApp.keyWindow, keyWindow !== mainWindow,
+        // Only retarget when we actually know the main window. If `mainWindow`
+        // is nil (not yet wired), we can't tell "a different window is key" from
+        // "the main window is key", and returning here would swallow every
+        // routed-loop hotkey (Focus Sidebar, tab-nav, rename) — which have no
+        // menu-bar fallback — before they're ever reached.
+        if let mainWindow, let keyWindow = NSApp.keyWindow, keyWindow !== mainWindow,
            !(keyWindow is QuickTerminalPanel)
         {
             if HotkeyRegistry.matches(event, action: .closePane)
@@ -281,11 +346,23 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        // Rename routes through AppCommand.action(in:) — the single source of
-        // truth shared with the palette and menu bar — so the three paths can't
-        // drift. The action defers begin-editing a tick (see AppCommandActions)
-        // so the sidebar row's TextField exists before it takes first responder.
-        for action in [HotkeyAction.renameTab, .renameProject] {
+        // These actions route through AppCommand.action(in:) — the single source
+        // of truth shared with the palette and menu bar — so the paths can't
+        // drift. (Rename defers begin-editing a tick, see AppCommandActions, so
+        // the sidebar row's TextField exists before it takes first responder;
+        // Save/Apply Layout default to unbound and only match once the user binds
+        // them.)
+        for action in [
+            HotkeyAction.previousTabInProject,
+            .nextTabInProject,
+            .moveTabUp,
+            .moveTabDown,
+            .focusSidebar,
+            .saveLayout,
+            .applyLayout,
+            .renameTab,
+            .renameProject,
+        ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
             else { continue }

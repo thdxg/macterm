@@ -1,10 +1,5 @@
 import SwiftUI
 
-private enum SidebarItem: Hashable {
-    case project(UUID)
-    case tab(projectID: UUID, tabID: UUID)
-}
-
 struct SidebarContent: View {
     @Environment(AppState.self)
     private var appState
@@ -13,66 +8,100 @@ struct SidebarContent: View {
     @AppStorage(Preferences.Keys.showNewProjectButton)
     private var showNewProjectButton = true
     @State
-    private var expandedProjects: Set<UUID> = []
+    private var selection: SidebarFocusItem?
+    /// Tracks whether the sidebar List actually holds keyboard focus (the user
+    /// clicked into it). Mirrored to `appState.sidebarListFocused` so the
+    /// terminal won't steal first responder during live arrow navigation.
+    @FocusState
+    private var listFocused: Bool
+    /// Set right before `syncSelection()` assigns `selection`, so the resulting
+    /// `onChange` is recognized as programmatic (no commit, no focus change).
     @State
-    private var selection: SidebarItem?
+    private var programmaticSelection = false
 
     var body: some View {
-        List(selection: $selection) {
-            ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
-                let ws = appState.workspaces[project.id]
-                let tabs = ws?.tabs ?? []
+        ScrollViewReader { proxy in
+            List(selection: $selection) {
+                ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
+                    let ws = appState.workspaces[project.id]
+                    let tabs = ws?.tabs ?? []
 
-                DisclosureGroup(isExpanded: Binding(
-                    get: { expandedProjects.contains(project.id) },
-                    set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
-                )) {
-                    ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
-                        SidebarTabRow(
-                            tab: tab,
-                            index: tabIndex + 1,
-                            isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id,
-                            moveTargets: projectStore.projects.filter { $0.id != project.id },
-                            onClose: { appState.requestCloseTab(tab.id, projectID: project.id) },
-                            onRename: { newName in
-                                tab.customTitle = newName.isEmpty ? nil : newName
-                                appState.saveWorkspaces()
-                            },
-                            onMoveToProject: { destination in
-                                appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
-                                expandedProjects.insert(destination.id)
+                    DisclosureGroup(isExpanded: Binding(
+                        get: { appState.expandedProjects.contains(project.id) },
+                        set: { isExpanded in
+                            if isExpanded {
+                                appState.expandedProjects.insert(project.id)
+                            } else {
+                                appState.expandedProjects.remove(project.id)
                             }
-                        )
-                        .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
-                    }
-                    .onMove { source, destination in
-                        appState.workspaces[project.id]?.reorderTabs(fromOffsets: source, toOffset: destination)
-                        appState.saveWorkspaces()
-                    }
-                } label: {
-                    SidebarProjectRow(project: project, index: projectIndex + 1) {
-                        appState.selectProject(project)
-                        appState.createTab(projectID: project.id, projectPath: project.path)
-                        expandedProjects.insert(project.id)
-                    } onRename: {
-                        projectStore.rename(id: project.id, to: $0)
-                    } onUnload: {
-                        appState.requestUnloadProject(project.id)
-                    } onRemove: {
-                        appState.requestRemoveProject(project.id) {
-                            expandedProjects.remove(project.id)
-                            appState.removeProject(project.id)
-                            projectStore.remove(id: project.id)
                         }
+                    )) {
+                        ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
+                            SidebarTabRow(
+                                tab: tab,
+                                index: tabIndex + 1,
+                                isActive: ws?.activeTabID == tab.id && appState.activeProjectID == project.id,
+                                moveTargets: projectStore.projects.filter { $0.id != project.id },
+                                onClose: { appState.requestCloseTab(tab.id, projectID: project.id) },
+                                onRename: { newName in
+                                    tab.customTitle = newName.isEmpty ? nil : newName
+                                    appState.saveWorkspaces()
+                                },
+                                onMoveToProject: { destination in
+                                    appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
+                                    appState.expandedProjects.insert(destination.id)
+                                }
+                            )
+                            .tag(SidebarFocusItem.tab(projectID: project.id, tabID: tab.id))
+                        }
+                        .onMove { source, destination in
+                            appState.workspaces[project.id]?.reorderTabs(fromOffsets: source, toOffset: destination)
+                            appState.saveWorkspaces()
+                        }
+                    } label: {
+                        SidebarProjectRow(
+                            project: project,
+                            index: projectIndex + 1
+                        ) {
+                            appState.selectProject(project)
+                            appState.createTab(projectID: project.id, projectPath: project.path)
+                            appState.expandedProjects.insert(project.id)
+                        } onRename: {
+                            projectStore.rename(id: project.id, to: $0)
+                        } onUnload: {
+                            appState.requestUnloadProject(project.id)
+                        } onRemove: {
+                            appState.requestRemoveProject(project.id) {
+                                appState.expandedProjects.remove(project.id)
+                                appState.removeProject(project.id)
+                                projectStore.remove(id: project.id)
+                            }
+                        }
+                        .tag(SidebarFocusItem.project(project.id))
                     }
-                    .tag(SidebarItem.project(project.id))
+                }
+                .onMove { source, destination in
+                    projectStore.reorder(fromOffsets: source, toOffset: destination)
                 }
             }
-            .onMove { source, destination in
-                projectStore.reorder(fromOffsets: source, toOffset: destination)
+            .onChange(of: appState.sidebarFocusItem) { _, item in
+                if let item {
+                    // Show the tentative ring as the native full-row selection
+                    // highlight (without committing), and scroll it into view.
+                    if selection != item {
+                        programmaticSelection = true
+                        selection = item
+                    }
+                    withAnimation { proxy.scrollTo(item.scrollID) }
+                } else {
+                    // Left Focus Sidebar mode — restore the highlight to the
+                    // active tab.
+                    syncSelection()
+                }
             }
         }
         .listStyle(.sidebar)
+        .focused($listFocused)
         .scrollContentBackground(.hidden)
         // No background here: the window's NSWindow.backgroundColor (set by
         // WindowAppearance) provides the translucent fill uniformly. Adding
@@ -103,28 +132,78 @@ struct SidebarContent: View {
             }
         }
         .onChange(of: selection) { _, item in
+            // Ignore programmatic syncs that just keep `selection` on the active
+            // tab — only a genuine user click commits.
+            if programmaticSelection {
+                programmaticSelection = false
+                return
+            }
             guard let item else { return }
-            switch item {
-            case let .project(projectID):
-                guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return }
-                appState.selectProject(project)
-            case let .tab(projectID, tabID):
-                if let project = projectStore.projects.first(where: { $0.id == projectID }) {
-                    appState.selectProject(project)
-                    appState.selectTab(tabID, projectID: projectID)
-                }
+            commitSelection(item)
+            // A click on a tab moves focus into its pane; an arrow-driven live
+            // switch (flagged by the key responder) keeps focus in the list so
+            // the user can keep arrowing. Clicking a project keeps list focus too.
+            let wasArrow = appState.sidebarArrowSwitch
+            appState.sidebarArrowSwitch = false
+            if !wasArrow, case .tab = item {
+                appState.restoreFocusToActivePane()
+            }
+        }
+        .onChange(of: listFocused) { _, focused in
+            appState.sidebarListFocused = focused
+            // Leaving the sidebar while in Focus Sidebar mode (e.g. clicking
+            // away) exits the mode, which returns keyboard focus to the active
+            // tab's pane. ESC does the same via the key responder.
+            if !focused, appState.sidebarFocusMode {
+                appState.exitSidebarFocus()
             }
         }
         .onChange(of: appState.activeProjectID) { _, newID in
-            if let newID { expandedProjects.insert(newID) }
+            if let newID { appState.expandedProjects.insert(newID) }
             syncSelection()
         }
         .onChange(of: activeTabID) {
             syncSelection()
         }
-        .onAppear {
-            if let id = appState.activeProjectID { expandedProjects.insert(id) }
+        .onChange(of: appState.sidebarFocusMode) { _, on in
+            // Grab first-responder when entering the mode (already open case);
+            // release it when leaving (AppState restores terminal focus).
+            listFocused = on
+        }
+        .onKeyPress(.return) {
+            guard appState.sidebarFocusMode else { return .ignored }
+            if let item = selection { commitSelection(item) }
+            appState.exitSidebarFocus()
+            return .handled
+        }
+        .onExitCommand {
+            guard appState.sidebarFocusMode else { return }
+            // Cancel: drop the tentative ring back onto the still-active tab,
+            // then restore the sidebar's prior open/closed state and terminal focus.
             syncSelection()
+            appState.exitSidebarFocus()
+        }
+        .onAppear {
+            if let id = appState.activeProjectID { appState.expandedProjects.insert(id) }
+            syncSelection()
+            // The sidebar may have been collapsed when Focus Sidebar was invoked;
+            // it mounts only once forced open, so claim focus here too.
+            if appState.sidebarFocusMode { listFocused = true }
+        }
+    }
+
+    /// Commit a sidebar selection to the workspace (select the project, and the
+    /// tab if one was chosen). Shared by click-selection and live arrow nav.
+    private func commitSelection(_ item: SidebarFocusItem) {
+        switch item {
+        case let .project(projectID):
+            guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return }
+            appState.selectProject(project)
+        case let .tab(projectID, tabID):
+            if let project = projectStore.projects.first(where: { $0.id == projectID }) {
+                appState.selectProject(project)
+                appState.selectTab(tabID, projectID: projectID)
+            }
         }
     }
 
@@ -138,16 +217,23 @@ struct SidebarContent: View {
               let ws = appState.workspaces[pid],
               let tabID = ws.activeTabID
         else {
-            selection = appState.activeProjectID.map { .project($0) }
+            let desired = appState.activeProjectID.map { SidebarFocusItem.project($0) }
+            if selection != desired {
+                programmaticSelection = true
+                selection = desired
+            }
             return
         }
-        let desired = SidebarItem.tab(projectID: pid, tabID: tabID)
-        if selection != desired { selection = desired }
+        let desired = SidebarFocusItem.tab(projectID: pid, tabID: tabID)
+        if selection != desired {
+            programmaticSelection = true
+            selection = desired
+        }
     }
 
     private func openProject() {
         if let project = appState.openProject(store: projectStore) {
-            expandedProjects.insert(project.id)
+            appState.expandedProjects.insert(project.id)
         }
     }
 }
