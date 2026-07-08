@@ -142,8 +142,11 @@ enum RemoteSpawn {
     /// (optional) is used verbatim. nil for a local path.
     static func opArgv(remote: ProjectPath, zmxArguments: [String], zmxPath: String? = nil) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
-        let op = assertSingleQuoteFree(remoteEnvPreamble + "exec \(zmxInvocation(zmxPath: zmxPath)) "
-            + zmxArguments.map(posixDoubleQuote).joined(separator: " "))
+        let op = assertSingleQuoteFree(
+            remoteEnvPreamble + "exec \(zmxInvocation(zmxPath: zmxPath)) "
+                + zmxArguments.map(posixDoubleQuote).joined(separator: " "),
+            onViolation: .failNonZero
+        )
         return [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
@@ -189,8 +192,11 @@ enum RemoteSpawn {
     /// verbatim. nil for a local path.
     static func foregroundProbeArgv(remote: ProjectPath, zmxPath: String? = nil) -> [String]? {
         guard case let .remote(user, host, _) = remote else { return nil }
-        let script = assertSingleQuoteFree(remoteEnvPreamble
-            + foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath)))
+        let script = assertSingleQuoteFree(
+            remoteEnvPreamble
+                + foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: zmxInvocation(zmxPath: zmxPath)),
+            onViolation: .failNonZero
+        )
         return [
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
@@ -228,18 +234,37 @@ enum RemoteSpawn {
         return "\"\(escaped)\""
     }
 
+    /// What a script does when the single-quote-free invariant is violated.
+    enum QuoteViolationFallback {
+        /// Interactive pane: drop into a shell so the pane stays usable and the
+        /// user sees the diagnostic (a bare exit would vanish the pane).
+        case dropToShell
+        /// Background op (kill / probe): exit NON-zero so the caller sees an
+        /// honest failure instead of a silent no-op that reports success.
+        case failNonZero
+    }
+
     /// The wire-format invariant: an assembled remote script must contain NO
     /// single quotes, so `sh -c '<script>'` tokenizes identically under every
     /// login shell (bash/zsh/fish/nu). Returns the script unchanged when it
     /// holds, or a safe diagnostic script (never nil, never a `'`) when a
-    /// user-supplied field smuggled one in — so the pane surfaces the problem
+    /// user-supplied field smuggled one in — so the caller surfaces the problem
     /// instead of mistokenizing on a non-POSIX login shell.
-    static func assertSingleQuoteFree(_ script: String) -> String {
+    static func assertSingleQuoteFree(
+        _ script: String,
+        onViolation fallback: QuoteViolationFallback = .dropToShell
+    ) -> String {
         guard script.contains("'") else { return script }
         // Keep the replacement itself single-quote-free.
-        return remoteEnvPreamble
-            + "echo \"macterm: remote path contains an unsupported single quote\" >&2; "
-            + "exec ${SHELL:-/bin/sh}"
+        let diagnostic = "echo \"macterm: remote path contains an unsupported single quote\" >&2; "
+        switch fallback {
+        case .dropToShell:
+            return remoteEnvPreamble + diagnostic + "exec ${SHELL:-/bin/sh}"
+        case .failNonZero:
+            // No shell exec — a kill/probe with a bad path should FAIL, not
+            // land in an interactive shell that exits 0.
+            return diagnostic + "exit 1"
+        }
     }
 
     /// Quote a remote directory for the `cd` inside the `sh -c` script,

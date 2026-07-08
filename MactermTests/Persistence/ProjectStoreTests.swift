@@ -110,4 +110,25 @@ struct ProjectStoreTests {
         #expect(reader.projects.map(\.path) == ["/tmp/alpha", "/tmp/beta"])
         #expect(reader.projects.map(\.id) == [a.id, b.id])
     }
+
+    // MARK: - Corrupt-file save refusal (data-loss regression, #4.6)
+
+    @Test
+    func save_refuses_after_corrupt_load_so_a_mutation_cannot_clobber() throws {
+        // A present-but-undecodable projects.json must NOT be overwritten by the
+        // first subsequent mutation — that would wipe the user's project list.
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-project-store-corrupt-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let garbage = Data("{ not valid json".utf8)
+        try garbage.write(to: fileURL)
+
+        // init loads (and latches the failure); a mutation then triggers save().
+        let store = makeStore(fileURL: fileURL)
+        #expect(store.projects.isEmpty)
+        store.add(Project(name: "alpha", path: "/tmp/alpha", sortOrder: 0))
+
+        // The corrupt file is preserved, not clobbered with the empty/new state.
+        #expect(try Data(contentsOf: fileURL) == garbage)
+    }
 }

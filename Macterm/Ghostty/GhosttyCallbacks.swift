@@ -273,19 +273,52 @@ final class GhosttyCallbacks: @unchecked Sendable {
         NSPasteboard.general.setString(string, forType: .string)
     }
 
+    /// Guards against a program spamming OSC 52 to stack unbounded modal
+    /// alerts: while one confirm dialog is up, further confirm-required writes
+    /// are dropped rather than queued. `@MainActor`-isolated (accessed only on
+    /// the main queue) so it's concurrency-safe under Swift 6.
+    @MainActor
+    private static var clipboardConfirmInFlight = false
+
     /// Prompt before applying a confirm-required OSC 52 clipboard write, so a
     /// remote/TUI program can't silently overwrite the user's clipboard.
     private func confirmAndWriteClipboard(_ string: String) {
         DispatchQueue.main.async {
-            let alert = NSAlert()
-            alert.messageText = "Allow clipboard write?"
-            alert.informativeText = "A terminal program wants to copy text to your clipboard."
-            alert.addButton(withTitle: "Allow")
-            alert.addButton(withTitle: "Deny")
-            if alert.runModal() == .alertFirstButtonReturn {
-                Self.setPasteboardString(string)
+            // We're on the main queue (the dispatch above), so it's safe to
+            // touch the @MainActor-isolated guard and present the alert.
+            MainActor.assumeIsolated {
+                // A looping TUI could emit OSC 52 repeatedly; only ever show
+                // one prompt at a time, and drop the rest instead of stacking
+                // modal dialogs (each `runModal` blocks the main loop).
+                guard !Self.clipboardConfirmInFlight else { return }
+                Self.clipboardConfirmInFlight = true
+                defer { Self.clipboardConfirmInFlight = false }
+                let alert = NSAlert()
+                alert.messageText = "Allow clipboard write?"
+                alert.informativeText = """
+                A terminal program wants to replace your clipboard with:
+
+                \(Self.clipboardPreview(string))
+                """
+                alert.addButton(withTitle: "Allow")
+                alert.addButton(withTitle: "Deny")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    Self.setPasteboardString(string)
+                }
             }
         }
+    }
+
+    /// A short, single-line-ish preview of what would be written, so the user
+    /// can judge the prompt instead of allowing blind. Truncated and with
+    /// newlines flattened so a huge or multi-line payload can't blow up the
+    /// alert.
+    private static func clipboardPreview(_ string: String) -> String {
+        let flattened = string
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+        let limit = 200
+        return flattened.count > limit ? String(flattened.prefix(limit)) + "…" : flattened
     }
 
     func closeSurface(ud: UnsafeMutableRawPointer?) {

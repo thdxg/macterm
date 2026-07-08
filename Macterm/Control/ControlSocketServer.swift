@@ -38,6 +38,12 @@ final class ControlSocketServer: @unchecked Sendable {
         label: "com.thdxg.macterm.control-connection",
         attributes: .concurrent
     )
+    /// Caps concurrent in-flight connections. Each stalled client parks a
+    /// worker in a blocking `read()` for up to the 10s `SO_RCVTIMEO`; without a
+    /// cap, a runaway local script could accept faster than they drain and
+    /// exhaust the GCD thread pool. Over-cap connections are refused fast
+    /// (closed immediately) rather than queued behind the stalled ones.
+    private let connectionSlots = DispatchSemaphore(value: 16)
 
     init(socketPath: String) {
         self.socketPath = socketPath
@@ -191,9 +197,13 @@ final class ControlSocketServer: @unchecked Sendable {
     }
 
     private func acceptLoop() {
-        // The accept thread OWNS the listen fd's final close (see `stop()`):
-        // closing it here, on the thread that issues accept() on it, removes the
-        // cross-thread close-vs-syscall race entirely.
+        // The accept thread normally OWNS the listen fd's final close (see
+        // `stop()`): closing it here, on the thread that issues accept() on it,
+        // avoids the cross-thread close-vs-syscall race in the common path.
+        // `stop()` retains a bounded fallback close (after a 1s deadline) for
+        // the rare case where this thread wedges and never reaches the defer —
+        // so the race is narrowed to that wedged-thread window, not eliminated
+        // outright.
         defer {
             lock.lock()
             if listenFD >= 0 {
@@ -234,9 +244,27 @@ final class ControlSocketServer: @unchecked Sendable {
             // sending, so a stalled read means a broken client.
             var timeout = timeval(tv_sec: 10, tv_usec: 0)
             setsockopt(clientFD, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+            // Backstop SEND timeout too. The response is written on the main
+            // actor (see `handleConnection`), and Darwin's AF_UNIX send buffer
+            // is small (~8 KB); a client that sends a valid request then stops
+            // reading (Ctrl-Z'd CLI, stalled pipe) would otherwise block
+            // `write(2)` on the main actor indefinitely for any response larger
+            // than the buffer — a whole-app hang. With this, the write loop's
+            // EAGAIN branch terminates the send (a truncated response to a
+            // client that isn't reading anyway — far better than beachballing).
+            setsockopt(clientFD, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+            // Bound concurrent in-flight connections: acquire a slot without
+            // blocking the accept loop. If all slots are busy (many stalled
+            // clients), refuse this one fast instead of queuing a worker behind
+            // them — a full pool would otherwise starve legitimate requests.
+            guard connectionSlots.wait(timeout: .now()) == .success else {
+                logger.error("control connection refused: all slots busy")
+                close(clientFD)
+                continue
+            }
             // Read + dispatch OFF the accept thread so a slow client doesn't
             // stall accepting the next connection. The queue closure owns the
-            // fd from here.
+            // fd (and the slot) from here.
             connectionQueue.async { [weak self] in self?.handleConnection(clientFD) }
         }
     }
@@ -245,14 +273,21 @@ final class ControlSocketServer: @unchecked Sendable {
 
     /// Read the request on the connection queue (off the accept thread), then
     /// hand the fd to a `@MainActor` task for dispatch and response. The task
-    /// owns the fd from then on.
+    /// owns the fd from then on. Releases the connection slot exactly once, on
+    /// whichever path closes the fd.
     private func handleConnection(_ fd: Int32) {
+        /// Close the fd and release the concurrency slot together, so every exit
+        /// path frees exactly one slot no matter where it returns.
+        func finish() {
+            close(fd)
+            connectionSlots.signal()
+        }
         guard let raw = Self.readAll(fd: fd), !raw.isEmpty else {
             Self.write(fd: fd, data: ControlProtocol.encode(.failure(
                 id: "",
                 error: ControlError(code: .badRequest, message: "empty or unreadable request")
             )))
-            close(fd)
+            finish()
             return
         }
         guard let handler = currentHandler else {
@@ -266,13 +301,13 @@ final class ControlSocketServer: @unchecked Sendable {
                     action: "retry in a moment"
                 )
             )))
-            close(fd)
+            finish()
             return
         }
         Task { @MainActor in
             let response = await handler(raw)
             Self.write(fd: fd, data: response)
-            close(fd)
+            finish()
         }
     }
 
@@ -320,6 +355,15 @@ final class ControlSocketServer: @unchecked Sendable {
                     offset += n
                 } else {
                     if errno == EINTR { continue }
+                    // EAGAIN/EWOULDBLOCK here means SO_SNDTIMEO fired: the client
+                    // stopped reading and the send buffer stayed full past the
+                    // timeout. Stop rather than block the main actor — the
+                    // response is truncated, but only to a client that isn't
+                    // reading it. Any other errno is a dead socket. Log so a
+                    // truncated response is diagnosable.
+                    if errno == EAGAIN || errno == EWOULDBLOCK {
+                        logger.error("control response send timed out; truncated at \(offset, privacy: .public)B")
+                    }
                     break
                 }
             }

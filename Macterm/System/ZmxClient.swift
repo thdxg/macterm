@@ -291,21 +291,30 @@ extension ZmxClient {
         // would deadlock on write while we await termination. Drain captured
         // stdout continuously, or send it to /dev/null when unneeded.
         let stdoutBuffer = OSAllocatedUnfairLock(initialState: Data())
-        var stdoutReadHandle: FileHandle?
+        // Signals stdout EOF: the readabilityHandler yields once it sees the
+        // empty chunk (pipe write-end fully closed). We await THIS (bounded) to
+        // know the buffer holds the complete output — never a manual blocking
+        // `availableData` drain, which has no timeout and would wedge this
+        // cooperative-pool thread forever if a zmx descendant kept the write
+        // end open past the parent's exit.
+        let stdoutEOF: AsyncStream<Void>
         if captureStdout {
             let stdoutPipe = Pipe()
             process.standardOutput = stdoutPipe
-            stdoutReadHandle = stdoutPipe.fileHandleForReading
-            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-                let chunk = handle.availableData
-                if chunk.isEmpty {
-                    handle.readabilityHandler = nil
-                    return
+            stdoutEOF = AsyncStream<Void> { continuation in
+                stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                    let chunk = handle.availableData
+                    if chunk.isEmpty {
+                        handle.readabilityHandler = nil
+                        continuation.finish()
+                        return
+                    }
+                    stdoutBuffer.withLock { $0.append(chunk) }
                 }
-                stdoutBuffer.withLock { $0.append(chunk) }
             }
         } else {
             process.standardOutput = FileHandle.nullDevice
+            stdoutEOF = AsyncStream { $0.finish() }
         }
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
@@ -371,15 +380,18 @@ extension ZmxClient {
         }
         guard captureStdout else { return nil }
         // `terminationHandler` can fire before the final `readabilityHandler`
-        // chunk (and EOF) have been delivered, so the buffer may be missing the
-        // tail of the output. The process has exited, so nothing more will be
-        // written: detach the async handler and synchronously drain whatever
-        // remains in the pipe to EOF before reading the buffer.
-        if let handle = stdoutReadHandle {
-            handle.readabilityHandler = nil
-            while case let remaining = handle.availableData, !remaining.isEmpty {
-                stdoutBuffer.withLock { $0.append(remaining) }
-            }
+        // chunk (and its EOF) have been delivered, so the buffer may still be
+        // missing the tail. Wait for the handler's own empty-chunk EOF signal
+        // rather than draining by hand — but bound the wait: if a zmx
+        // descendant inherited and kept the stdout write end open, EOF never
+        // arrives, and we must not block this thread forever. On timeout we
+        // return whatever was buffered (the common case is tiny `zmx ls`
+        // output already fully delivered before termination).
+        _ = await withTaskGroup(of: Void.self) { group in
+            group.addTask { for await _ in stdoutEOF {} }
+            group.addTask { try? await Task.sleep(for: .seconds(1)) }
+            defer { group.cancelAll() }
+            await group.next()
         }
         return stdoutBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
     }

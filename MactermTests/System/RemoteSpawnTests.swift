@@ -219,6 +219,19 @@ struct RemoteSpawnTests {
     }
 
     @Test
+    func assert_single_quote_free_op_path_exits_nonzero_not_a_shell() {
+        // A kill/probe (background op) with a `'`-carrying path must FAIL
+        // honestly (exit 1), not drop into an interactive shell that exits 0 —
+        // otherwise killRemoteSession would report a silent no-op success.
+        let dirty = "exec zmx kill \"it's\""
+        let result = RemoteSpawn.assertSingleQuoteFree(dirty, onViolation: .failNonZero)
+        #expect(!result.contains("'"))
+        #expect(result.contains("unsupported single quote"))
+        #expect(result.contains("exit 1"))
+        #expect(!result.contains("exec ${SHELL")) // no interactive shell on the op path
+    }
+
+    @Test
     func pane_command_with_single_quote_in_directory_stays_quote_free() {
         // End-to-end: a `'` in the remote directory must not survive into the
         // shipped `sh -c '<script>'` (its `'` would break the outer quoting).
