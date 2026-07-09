@@ -1,6 +1,9 @@
 import AppKit
 import Carbon
+import os
 import SwiftUI
+
+private let hotkeyLogger = Logger(subsystem: appBundleID, category: "QuickTerminalHotkey")
 
 @MainActor
 final class QuickTerminalService: NSObject {
@@ -129,9 +132,12 @@ final class QuickTerminalService: NSObject {
     // MARK: - Hot key
 
     private func registerHotKey() {
-        // Idempotent: skip if already registered. Without this, toggling the
-        // preference repeatedly would leak event handlers and double-fire.
-        guard carbonHotKeyRef == nil else { return }
+        // Idempotent: skip if EITHER Carbon resource is already installed.
+        // Guarding only on `carbonHotKeyRef` (the LAST resource acquired) left
+        // a window where a prior failed registration had installed the handler
+        // but not the hotkey — re-entry would then install a SECOND handler and
+        // orphan the first. Guarding on the handler too closes that.
+        guard carbonHotKeyRef == nil, carbonEventHandler == nil else { return }
         guard let shortcut = HotkeyRegistry.selectedShortcut(for: .toggleQuickTerminal) else {
             // User cleared the binding — nothing to register. The shortcut
             // is also unavailable in-app; toggling via the palette or menu
@@ -145,7 +151,7 @@ final class QuickTerminalService: NSObject {
 
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
+        let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
             guard let userData else { return OSStatus(eventNotHandledErr) }
             var id = EventHotKeyID()
             GetEventParameter(
@@ -163,8 +169,13 @@ final class QuickTerminalService: NSObject {
             }
             return noErr
         }, 1, &spec, selfPtr, &carbonEventHandler)
+        guard installStatus == noErr else {
+            hotkeyLogger.error("InstallEventHandler failed: \(installStatus, privacy: .public)")
+            carbonEventHandler = nil
+            return
+        }
 
-        RegisterEventHotKey(
+        let registerStatus = RegisterEventHotKey(
             UInt32(shortcut.keyCode),
             Self.carbonModifiers(from: shortcut.modifiers),
             hotKeyID,
@@ -172,6 +183,18 @@ final class QuickTerminalService: NSObject {
             0,
             &carbonHotKeyRef
         )
+        guard registerStatus == noErr else {
+            // Roll back the handler so state stays all-or-nothing — otherwise a
+            // later re-entry would orphan this handler. (The shortcut may be
+            // owned by another app; the palette/menu toggle still works.)
+            hotkeyLogger.error("RegisterEventHotKey failed: \(registerStatus, privacy: .public)")
+            if let handler = carbonEventHandler {
+                RemoveEventHandler(handler)
+                carbonEventHandler = nil
+            }
+            carbonHotKeyRef = nil
+            return
+        }
         lastRegisteredShortcutID = shortcut.id
     }
 
@@ -201,9 +224,12 @@ final class QuickTerminalService: NSObject {
     // MARK: - Show / Hide
 
     private func show() {
+        // Acquire the screen BEFORE creating/assigning the panel: on a no-screen
+        // bail we'd otherwise leave `panel` non-nil while `isVisible == false`,
+        // so a later toggle would create a second panel and orphan this one.
+        guard let screen = NSScreen.main else { return }
         let panel = makePanel()
         self.panel = panel
-        guard let screen = NSScreen.main else { return }
         let sf = screen.visibleFrame
         let wFrac = Preferences.shared.quickTerminalWidthFraction
         let hFrac = Preferences.shared.quickTerminalHeightFraction
@@ -344,10 +370,11 @@ final class QuickTerminalSplitState {
         }
         if let panel = QuickTerminalService.shared.panelRef {
             panel.makeKeyAndOrderFront(nil)
-            if let focusedID = focusedPaneID,
-               let view = tab.splitRoot.findPane(id: focusedID)?.nsView
-            {
-                panel.makeFirstResponder(view)
+            // Tearing down the modal alert is a key/window transition — the
+            // race FocusRestoration exists for. A bare makeFirstResponder here
+            // can beat the panel regaining key status.
+            if let focusedID = focusedPaneID {
+                FocusRestoration.restoreFocus(to: focusedID, in: tab.splitRoot, window: panel)
             }
         }
         DispatchQueue.main.async {

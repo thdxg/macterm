@@ -48,6 +48,11 @@ struct ZmxClient {
     /// can see past the `zmx attach` client to the real foreground process.
     /// Empty when the probe fails or no sessions exist.
     var sessionLeaderPIDs: @Sendable () async -> [String: pid_t]
+    /// Both projections of a SINGLE `zmx ls`: the client-count entries (nil =
+    /// probe failed) and the leader-pid map. Callers that need both (the
+    /// control CLI's `session list`) use this instead of running `zmx ls`
+    /// twice via `listSessionsWithClients` + `sessionLeaderPIDs`.
+    var sessionListSnapshot: @Sendable () async -> (entries: [ZmxSessionListParser.Entry], leaders: [String: pid_t])?
 }
 
 extension ZmxClient {
@@ -140,6 +145,17 @@ extension ZmxClient {
                 )
                 else { return [:] }
                 return ZmxForegroundResolver.parseLeaderPIDs(stdout)
+            },
+            sessionListSnapshot: {
+                // Single `zmx ls`, both projections — no second fork/exec.
+                guard let stdout = await runZmx(
+                    ["ls"], executable: bundledExecutable(), captureStdout: true
+                )
+                else { return nil }
+                return (
+                    entries: ZmxSessionListParser.parse(stdout),
+                    leaders: ZmxForegroundResolver.parseLeaderPIDs(stdout)
+                )
             }
         )
     }()
@@ -152,7 +168,8 @@ extension ZmxClient {
         killRemoteSession: { _, _, _ in },
         remoteForegroundComms: { _, _ in nil },
         listSessionsWithClients: { [] },
-        sessionLeaderPIDs: { [:] }
+        sessionLeaderPIDs: { [:] },
+        sessionListSnapshot: { (entries: [], leaders: [:]) }
     )
 
     private enum ProbeOutcome: Equatable { case allow, bypass }
@@ -274,19 +291,30 @@ extension ZmxClient {
         // would deadlock on write while we await termination. Drain captured
         // stdout continuously, or send it to /dev/null when unneeded.
         let stdoutBuffer = OSAllocatedUnfairLock(initialState: Data())
+        // Signals stdout EOF: the readabilityHandler yields once it sees the
+        // empty chunk (pipe write-end fully closed). We await THIS (bounded) to
+        // know the buffer holds the complete output — never a manual blocking
+        // `availableData` drain, which has no timeout and would wedge this
+        // cooperative-pool thread forever if a zmx descendant kept the write
+        // end open past the parent's exit.
+        let stdoutEOF: AsyncStream<Void>
         if captureStdout {
             let stdoutPipe = Pipe()
             process.standardOutput = stdoutPipe
-            stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-                let chunk = handle.availableData
-                if chunk.isEmpty {
-                    handle.readabilityHandler = nil
-                    return
+            stdoutEOF = AsyncStream<Void> { continuation in
+                stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                    let chunk = handle.availableData
+                    if chunk.isEmpty {
+                        handle.readabilityHandler = nil
+                        continuation.finish()
+                        return
+                    }
+                    stdoutBuffer.withLock { $0.append(chunk) }
                 }
-                stdoutBuffer.withLock { $0.append(chunk) }
             }
         } else {
             process.standardOutput = FileHandle.nullDevice
+            stdoutEOF = AsyncStream { $0.finish() }
         }
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
@@ -347,10 +375,24 @@ extension ZmxClient {
         }
         if exitStatus != 0 {
             let stderr = stderrBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
-            logger.warning("\(commandDesc, privacy: .public) exit=\(exitStatus) stderr=\(stderr, privacy: .public)")
+            logger.warning("\(commandDesc, privacy: .public) exit=\(exitStatus, privacy: .public) stderr=\(stderr, privacy: .public)")
             return nil
         }
         guard captureStdout else { return nil }
+        // `terminationHandler` can fire before the final `readabilityHandler`
+        // chunk (and its EOF) have been delivered, so the buffer may still be
+        // missing the tail. Wait for the handler's own empty-chunk EOF signal
+        // rather than draining by hand — but bound the wait: if a zmx
+        // descendant inherited and kept the stdout write end open, EOF never
+        // arrives, and we must not block this thread forever. On timeout we
+        // return whatever was buffered (the common case is tiny `zmx ls`
+        // output already fully delivered before termination).
+        _ = await withTaskGroup(of: Void.self) { group in
+            group.addTask { for await _ in stdoutEOF {} }
+            group.addTask { try? await Task.sleep(for: .seconds(1)) }
+            defer { group.cancelAll() }
+            await group.next()
+        }
         return stdoutBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
     }
 }
@@ -411,6 +453,38 @@ enum ZmxSessionName {
     }
 }
 
+/// Shared lexer for zmx's full (`ls`, non-`--short`) tab-delimited listing.
+/// Each line is `[→ |  ]name=<name>\tk=v\t...`. Both `ZmxSessionListParser`
+/// (client counts) and `ZmxForegroundResolver.parseLeaderPIDs` (leader pids)
+/// consume this — one grammar, one tokenizer, so the two projections can't
+/// drift.
+enum ZmxListLexer {
+    /// Parse one `ls` line into its `key=value` field map, or nil for lines
+    /// that carry no fields. Strips the leading `→ ` current-session marker
+    /// and any indentation before splitting on tabs.
+    static func fields(in line: Substring) -> [Substring: Substring]? {
+        var trimmed = line
+        if trimmed.hasPrefix("→ ") { trimmed = trimmed.dropFirst(2) }
+        while trimmed.first?.isWhitespace == true {
+            trimmed = trimmed.dropFirst()
+        }
+        var values: [Substring: Substring] = [:]
+        for field in trimmed.split(separator: "\t") {
+            guard let separator = field.firstIndex(of: "=") else { continue }
+            values[field[field.startIndex ..< separator]] = field[field.index(after: separator)...]
+        }
+        return values.isEmpty ? nil : values
+    }
+
+    /// Map each line's field map over the whole listing.
+    static func forEachLine(_ stdout: String, _ body: ([Substring: Substring]) -> Void) {
+        for line in stdout.split(whereSeparator: \.isNewline) {
+            guard let values = fields(in: Substring(line)) else { continue }
+            body(values)
+        }
+    }
+}
+
 /// Pure parser for zmx's full (`ls`, non-`--short`) tab-delimited listing.
 /// Each line is `[→ |  ]name=<name>\tk=v\t...`; a healthy session carries
 /// `clients=<n>`, an unreachable one carries `err=`/`status=` (no count).
@@ -422,25 +496,14 @@ enum ZmxSessionListParser {
     }
 
     static func parse(_ stdout: String) -> [Entry] {
-        stdout
-            .split(whereSeparator: \.isNewline)
-            .compactMap { line -> Entry? in
-                var trimmed = Substring(line)
-                if trimmed.hasPrefix("→ ") { trimmed = trimmed.dropFirst(2) }
-                while trimmed.first?.isWhitespace == true {
-                    trimmed = trimmed.dropFirst()
-                }
-                let fields = trimmed.split(separator: "\t")
-                var values: [Substring: Substring] = [:]
-                for field in fields {
-                    guard let separator = field.firstIndex(of: "=") else { continue }
-                    values[field[field.startIndex ..< separator]] = field[field.index(after: separator)...]
-                }
-                guard let name = values["name"], name.hasPrefix(ZmxSessionName.prefix) else { return nil }
-                // Absent `clients=` (err/status line) → nil = unknown, not zero.
-                let clients = values["clients"].flatMap { Int($0) }
-                return Entry(name: String(name), clients: clients)
-            }
+        var entries: [Entry] = []
+        ZmxListLexer.forEachLine(stdout) { values in
+            guard let name = values["name"], name.hasPrefix(ZmxSessionName.prefix) else { return }
+            // Absent `clients=` (err/status line) → nil = unknown, not zero.
+            let clients = values["clients"].flatMap { Int($0) }
+            entries.append(Entry(name: String(name), clients: clients))
+        }
+        return entries
     }
 }
 

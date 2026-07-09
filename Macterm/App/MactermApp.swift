@@ -220,12 +220,13 @@ struct MactermApp: App {
 /// chrome would freeze at its launch appearance, since `MactermTheme.colorScheme`
 /// reads `NSApp`/theme files rather than observable state (issue #38).
 private struct AppColorScheme: ViewModifier {
-    @State private var ghostty = GhosttyApp.shared
-
     func body(content: Content) -> some View {
         // Touch configVersion so SwiftUI tracks it as a dependency and
         // re-evaluates the color scheme when the resolved theme changes.
-        _ = ghostty.configVersion
+        // Read the shared @Observable singleton directly — @State bought
+        // nothing here (it doesn't own the object; read-tracking comes from
+        // reading `configVersion`) and misleadingly implied view-local ownership.
+        _ = GhosttyApp.shared.configVersion
         return content.preferredColorScheme(MactermTheme.colorScheme)
     }
 }
@@ -340,6 +341,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // responder must track that same pointer; assigning `window`
                 // unconditionally handed it the Settings window whenever
                 // Settings was frontmost, defeating its key-window gate.
+                // The first window to become main is the terminal window;
+                // cache that pointer as the authoritative identity. Do NOT
+                // stamp `window.identifier` — this is a SwiftUI `WindowGroup`
+                // window, and forcing an identifier on it interferes with
+                // SwiftUI's own window management (it can recreate the window,
+                // nilling the responder's weak `mainWindow` and breaking the
+                // key-window gate that guards every hotkey).
                 if self.mainWindow == nil { self.mainWindow = window }
                 self.mainAppResponder?.mainWindow = self.mainWindow
             }
@@ -491,30 +499,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    /// Bring our (possibly ordered-out) main window back. Robust to cases
-    /// where `self.mainWindow` got stale: walks NSApp.windows for the first
-    /// terminal-bearing window, falling back to the cached pointer.
-    /// Bring our (possibly ordered-out) main window back. Robust to cases
-    /// where `self.mainWindow` got stale: walks NSApp.windows for the first
-    /// terminal-bearing window, falling back to the cached pointer.
+    /// Bring our (possibly ordered-out) terminal window back. The terminal
+    /// window is identified by the pointer `didBecomeMain` cached (the first
+    /// window to become main) — NOT by "not an NSPanel", which also matches the
+    /// Settings window (a plain NSWindow). We never stamp a SwiftUI window's
+    /// identifier (that breaks its window management), so identity is the cached
+    /// pointer; the non-panel heuristic is only a last-resort fallback for
+    /// before the terminal window has ever become main.
     func reopenIfNeeded() {
-        // If a non-panel window is already visible, nothing to do.
-        if NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
+        // If the terminal window is already visible, nothing to do.
+        if let cached = mainWindow, cached.isVisible {
+            return
+        }
+        // No cached pointer yet (terminal window never became main): fall back
+        // to the old non-panel visibility check to avoid re-fronting needlessly.
+        if mainWindow == nil, NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
             return
         }
 
-        // Find the hidden main window. Don't filter on `canBecomeMain` — AppKit
-        // reports that as false for ordered-out SwiftUI windows (which is
-        // exactly the case we're handling). Filter on class instead: skip
-        // panels (quick terminal, settings).
-        let target = NSApp.windows.first { window in
-            !window.isVisible && !(window is NSPanel)
-        } ?? mainWindow
-
+        // Prefer the cached terminal window; only if it's absent fall back to
+        // the first hidden non-panel window.
+        let target = mainWindow ?? NSApp.windows.first { !$0.isVisible && !($0 is NSPanel) }
         guard let target else { return }
         target.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        if mainWindow !== target {
+        // Adopt a freshly-discovered window as the cached pointer only when we
+        // had none — never overwrite a live cached terminal window with some
+        // other discovered window (e.g. Settings).
+        if mainWindow == nil {
             mainWindow = target
             mainAppResponder?.mainWindow = target
         }

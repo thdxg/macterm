@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Detection for the external ghostty CLI binary (shipped inside Ghostty.app).
 ///
@@ -49,6 +50,39 @@ struct GhosttyCLI {
 
     /// Whether any `ghostty` CLI is installed (regardless of version).
     var isInstalled: Bool { resolveBinDir() != nil }
+}
+
+/// Process-lifetime cache of the standard CLI probe. `resolveSSHWrapperBinDir`
+/// spawns a blocking `ghostty +help` subprocess, and both `MactermConfig`
+/// (before every config reload) and `SettingsView.body` (every render) ask for
+/// it — but the installed CLI can't change in any way Macterm reacts to within
+/// a launch, so the answer is computed once and reused. This keeps the blocking
+/// spawn off the config-reload hot path (#3.2) and out of SwiftUI `body` (#3.1).
+enum GhosttyCLIProbe {
+    private struct Result {
+        let binDir: String?
+        let sshWrapperBinDir: String?
+        var isInstalled: Bool { binDir != nil }
+    }
+
+    private static let cache = OSAllocatedUnfairLock<Result?>(initialState: nil)
+
+    private static func resolve() -> Result {
+        cache.withLock { current in
+            if let current { return current }
+            let cli = GhosttyCLI.standard
+            let result = Result(
+                binDir: cli.resolveBinDir(),
+                sshWrapperBinDir: cli.resolveSSHWrapperBinDir()
+            )
+            current = result
+            return result
+        }
+    }
+
+    static var binDir: String? { resolve().binDir }
+    static var sshWrapperBinDir: String? { resolve().sshWrapperBinDir }
+    static var isInstalled: Bool { resolve().isInstalled }
 }
 
 extension GhosttyCLI {

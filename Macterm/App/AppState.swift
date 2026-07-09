@@ -118,6 +118,13 @@ final class AppState {
     /// event-bounded, not interval-bounded, and an idle app costs nothing.
     @ObservationIgnored
     private var pollTimer: Timer?
+    /// The delay `pollTimer` was scheduled with, so `reschedulePoll` can skip
+    /// tearing down and rebuilding an identical timer — `.terminalPollEvent`
+    /// fires often under a busy workload (every keystroke, output transition,
+    /// OSC title), and each fire recomputed the same cadence and churned a new
+    /// `Timer` + RunLoop registration for no behavior change.
+    @ObservationIgnored
+    private var pollTimerDelay: TimeInterval?
 
     @ObservationIgnored
     private var pollCadence = PollCadence()
@@ -130,6 +137,13 @@ final class AppState {
 
     @ObservationIgnored
     private var pollEventObservers: [Any] = []
+
+    /// Every block-based observer token paired with the center it was added to,
+    /// so `deinit` can remove them from the correct center. `nonisolated(unsafe)`
+    /// so the nonisolated deinit can read it — the object is being destroyed, so
+    /// there is no concurrent access. Tokens are `NSObjectProtocol` (what
+    /// `addObserver(forName:…)` returns).
+    nonisolated(unsafe) private var observerTokens: [(center: NotificationCenter, token: NSObjectProtocol)] = []
 
     /// Injectable for tests (`PollCadence.Context` inputs). `NSApp` is nil
     /// while the SwiftUI `App` struct (and thus AppState) is constructed —
@@ -204,39 +218,42 @@ final class AppState {
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
-        autoTileObserver = NotificationCenter.default.addObserver(
+        let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebalanceAllWorkspacesIfEnabled() }
         }
+        autoTileObserver = autoTileToken
+        observerTokens.append((NotificationCenter.default, autoTileToken))
         let restored = (Preferences.defaults.stringArray(forKey: recencyKey) ?? [])
             .compactMap { UUID(uuidString: $0) }
         projectRecency = RecencyStack<UUID>(limit: 50, items: restored)
 
         let center = NotificationCenter.default
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
         let onEvent: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.notePollEvent() }
         }
-        pollEventObservers = [
-            center.addObserver(forName: .terminalPollEvent, object: nil, queue: .main, using: onEvent),
-            center.addObserver(
+        let tokens: [(NotificationCenter, NSObjectProtocol)] = [
+            (center, center.addObserver(forName: .terminalPollEvent, object: nil, queue: .main, using: onEvent)),
+            (center, center.addObserver(
                 forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: onEvent
-            ),
-            center.addObserver(
+            )),
+            (center, center.addObserver(
                 forName: NSApplication.didResignActiveNotification, object: nil, queue: .main, using: onEvent
-            ),
-            center.addObserver(
+            )),
+            (center, center.addObserver(
                 forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main, using: onEvent
-            ),
+            )),
             // Wake is on NSWorkspace's own center, not the default one. A
             // timer whose fire date passed during sleep also fires once on
             // wake; `noteEvent` coalescing absorbs the double tick.
-            NSWorkspace.shared.notificationCenter.addObserver(
+            (workspaceCenter, workspaceCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: onEvent
-            ),
-            center.addObserver(
+            )),
+            (center, center.addObserver(
                 forName: .zmxSessionsChanged, object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
@@ -244,9 +261,24 @@ final class AppState {
                     self?.zmxRetryBudget = 8
                     self?.notePollEvent()
                 }
-            },
+            }),
         ]
+        pollEventObservers = tokens.map(\.1)
+        observerTokens.append(contentsOf: tokens.map { (center: $0.0, token: $0.1) })
         pollNow()
+    }
+
+    deinit {
+        // Remove every block-based observer from the center each was added to.
+        // Production runs one app-lifetime instance, but tests build fresh
+        // AppStates — without this, their observers accumulate on the shared
+        // centers and dead instances' blocks keep firing into a nil weak self.
+        // Only nonisolated-safe calls here (observerTokens is nonisolated).
+        // The poll timer self-cleans: it's non-repeating with a `[weak self]`
+        // closure, so a dead instance's timer fires once into nil and stops.
+        for entry in observerTokens {
+            entry.center.removeObserver(entry.token)
+        }
     }
 
     // MARK: - Poll scheduling
@@ -306,20 +338,31 @@ final class AppState {
     }
 
     private func reschedulePoll() {
-        pollTimer?.invalidate()
-        pollTimer = nil
         let context = PollCadence.Context(
             isAppActive: isAppActive(),
             isAnyWindowVisible: isAnyWindowVisible(),
             isAnyPaneBusy: lastPollSawBusyPane
         )
-        guard let delay = pollCadence.nextDelay(at: Date(), context: context) else { return }
+        guard let delay = pollCadence.nextDelay(at: Date(), context: context) else {
+            pollTimer?.invalidate()
+            pollTimer = nil
+            pollTimerDelay = nil
+            return
+        }
+        // A running timer with the same cadence needs no change — rebuilding it
+        // (invalidate + new Timer + RunLoop.add) on every `.terminalPollEvent`
+        // is pure churn under a busy workload. Only rebuild when the delay
+        // actually changed (or no timer is scheduled). The one-shot timer
+        // clears `pollTimer` when it fires, so a nil timer here always rebuilds.
+        if let existing = pollTimer, existing.isValid, pollTimerDelay == delay { return }
+        pollTimer?.invalidate()
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollNow() }
         }
         timer.tolerance = delay * 0.1
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
+        pollTimerDelay = delay
     }
 
     /// Re-read the foreground process name of every live pane across all
@@ -781,9 +824,16 @@ final class AppState {
     /// project's workspace into another's. The `TerminalTab` object is reused
     /// as-is, so its surfaces stay valid (both workspaces live in the same
     /// window). The destination becomes the active project with the moved tab
-    /// selected, so the user lands where they meant to be. No-op for a
-    /// same-project move or an unknown source/tab.
-    func moveTab(_ tabID: UUID, from sourceProjectID: UUID, to destProjectID: UUID, destPath: String) {
+    /// selected, so the user lands where they meant to be. `toIndex` positions
+    /// the tab within the destination (a sidebar drop lands at a slot); nil
+    /// appends. No-op for a same-project move or an unknown source/tab.
+    func moveTab(
+        _ tabID: UUID,
+        from sourceProjectID: UUID,
+        to destProjectID: UUID,
+        destPath: String,
+        toIndex: Int? = nil
+    ) {
         guard sourceProjectID != destProjectID,
               let source = workspaces[sourceProjectID],
               let tab = source.tabs.first(where: { $0.id == tabID })
@@ -794,10 +844,27 @@ final class AppState {
         ensureWorkspace(projectID: destProjectID, path: destPath)
         guard let dest = workspaces[destProjectID] else { return }
         source.closeTab(tabID)
-        dest.adoptTab(tab)
+        dest.adoptTab(tab, at: toIndex)
+        // Restamp the moved panes' routing identity to the destination project.
+        // Without this they keep the SOURCE projectID, so a later
+        // notification-click navigates to the old project and can't find the
+        // tab. Only the routing key changes — session identity (name/host)
+        // stays put, so a moved remote pane still tears down over ssh.
+        for pane in tab.splitRoot.allPanes() {
+            pane.rebind(projectID: destProjectID)
+        }
         activeProjectID = destProjectID
         recordProjectVisit(destProjectID)
         saveWorkspaces()
+    }
+
+    /// Reorder a tab within its own project to an absolute drop index (the
+    /// offset a sidebar drag-and-drop reports). Persists on a real move.
+    func reorderTab(_ tabID: UUID, inProject projectID: UUID, toIndex destination: Int) {
+        guard let ws = workspaces[projectID] else { return }
+        let before = ws.tabs.map(\.id)
+        ws.moveTab(tabID, toIndex: destination)
+        if ws.tabs.map(\.id) != before { saveWorkspaces() }
     }
 
     func selectNextTab(projectID: UUID) {
@@ -1220,8 +1287,16 @@ final class AppState {
         }
         NSApp.activate()
         if let tab = workspaces[projectID]?.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) {
-            let window = NSApp.keyWindow ?? NSApp.mainWindow
+            // Resolve the target window INSIDE the deferred continuation:
+            // `NSApp.activate()` is asynchronous, so reading keyWindow/mainWindow
+            // synchronously here (the common caller is a notification click while
+            // Macterm is inactive) returns nil and makes restoreFocus no-op. Fall
+            // back to the AppDelegate's cached terminal window when both are still
+            // nil (an ordered-out/unfocused SwiftUI window reports neither).
             DispatchQueue.main.async {
+                let window = NSApp.keyWindow
+                    ?? NSApp.mainWindow
+                    ?? (NSApp.delegate as? AppDelegate)?.mainWindow
                 FocusRestoration.restoreFocus(to: paneID, in: tab.splitRoot, window: window)
             }
         }
@@ -1310,7 +1385,10 @@ final class AppState {
         // non-focused split pane that finished a command stays `.done` under the
         // hood, gets persisted, and reappears as a checkmark after restart even
         // though the user saw an empty circle.
-        guard NSApp.isActive,
+        // Route through the injected `isAppActive` seam (not `NSApp.isActive`
+        // directly): NSApp is nil during construction and unset in tests, and
+        // this path is reachable from init via pollNow().
+        guard isAppActive(),
               projectID == activeProjectID,
               let tab = workspaces[projectID]?.activeTab,
               tab.splitRoot.findPane(id: paneID) != nil

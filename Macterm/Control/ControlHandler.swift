@@ -135,14 +135,17 @@ final class ControlHandler {
     }
 
     private func sessionList() async throws -> ControlData {
-        guard let entries = await zmx.listSessionsWithClients() else {
+        // One `zmx ls` for both the client counts and the leader pids, instead
+        // of two separate fork/execs.
+        guard let snapshot = await zmx.sessionListSnapshot() else {
             throw ControlError(
                 code: .internalError,
                 message: "zmx session listing unavailable",
                 action: "check Settings → session persistence for details"
             )
         }
-        let leaders = await zmx.sessionLeaderPIDs()
+        let entries = snapshot.entries
+        let leaders = snapshot.leaders
         let paneBySession = paneIDsBySessionName()
         let infos = entries.map { entry in
             ControlSessionInfo(

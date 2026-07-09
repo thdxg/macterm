@@ -133,9 +133,13 @@ enum BenchmarkControl {
         appState.selectProject(project)
     }
 
-    /// Same filter as `AppDelegate.reopenIfNeeded`: the single main window is
-    /// the only non-panel window (panels: quick terminal, settings).
+    /// The terminal window: the pointer `AppDelegate` cached when the first
+    /// window became main — NOT identified by "not an NSPanel", which also
+    /// matches the Settings window (a plain NSWindow). Falls back to the first
+    /// non-panel window only before that pointer is set (no benchmark command
+    /// arrives before the window exists in practice).
     private static var mainWindow: NSWindow? {
-        NSApp.windows.first { !($0 is NSPanel) }
+        (NSApp.delegate as? AppDelegate)?.mainWindow
+            ?? NSApp.windows.first { !($0 is NSPanel) }
     }
 }

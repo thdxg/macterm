@@ -234,7 +234,8 @@ struct ControlHandlerTests {
             killRemoteSession: { _, _, _ in },
             remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { entries },
-            sessionLeaderPIDs: { leaders }
+            sessionLeaderPIDs: { leaders },
+            sessionListSnapshot: { entries.map { (entries: $0, leaders: leaders) } }
         )
     }
 
@@ -528,7 +529,8 @@ struct ControlHandlerTests {
             killRemoteSession: { _, _, _ in },
             remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { [.init(name: "macterm-x-000011112222", clients: 0)] },
-            sessionLeaderPIDs: { [:] }
+            sessionLeaderPIDs: { [:] },
+            sessionListSnapshot: { (entries: [.init(name: "macterm-x-000011112222", clients: 0)], leaders: [:]) }
         )
 
         let miss = await handler.handle(request("session.kill", args: ControlArgs(session: "macterm-y-000011112222")))

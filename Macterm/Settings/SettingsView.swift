@@ -25,13 +25,13 @@ struct SettingsView: View {
 // MARK: - General
 
 private struct GeneralSettings: View {
-    @AppStorage(Preferences.Keys.autoTiling)
-    private var autoTilingEnabled = false
-
-    @AppStorage(Preferences.Keys.eagerlyStartProjectTabs)
-    private var eagerlyStartProjectTabs = true
-    @AppStorage(Preferences.Keys.terminateSessionsOnQuit)
-    private var terminateSessionsOnQuit = false
+    // Seeded from and written back through `Preferences` (the single
+    // UserDefaults seam that redirects to a wiped side-suite under XCTest).
+    // NOT `@AppStorage`, which binds to `UserDefaults.standard` — banned by the
+    // project, and it diverged from the `.onChange` write-through under test.
+    @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
+    @State private var eagerlyStartProjectTabs: Bool = Preferences.shared.eagerlyStartProjectTabs
+    @State private var terminateSessionsOnQuit: Bool = Preferences.shared.terminateSessionsOnQuit
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -48,13 +48,15 @@ private struct GeneralSettings: View {
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
-    private let ghosttyCLI = GhosttyCLI.standard
-
     var body: some View {
         Form {
-            if !ghosttyCLI.isInstalled {
+            // Read the CLI probe from the process-lifetime cache — never spawn
+            // `ghostty +help` from inside `body` (it re-ran on every @State
+            // change, e.g. each scroll-speed slider tick, blocking the main
+            // thread on `waitUntilExit`; #3.1).
+            if !GhosttyCLIProbe.isInstalled {
                 GhosttyCLIBanner(reason: .notInstalled)
-            } else if ghosttyCLI.resolveSSHWrapperBinDir() == nil {
+            } else if GhosttyCLIProbe.sshWrapperBinDir == nil {
                 GhosttyCLIBanner(reason: .tooOldForSSH)
             }
 
@@ -137,7 +139,7 @@ private struct GeneralSettings: View {
                         Image(systemName: "exclamationmark.triangle")
                     }
                     .font(.system(size: 11))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(MactermTheme.warning)
                 }
             }
         }
@@ -218,7 +220,7 @@ private struct GhosttyCLIBanner: View {
                 }
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(MactermTheme.warning)
             }
             .padding(.vertical, 2)
         }
@@ -230,16 +232,13 @@ private struct GhosttyCLIBanner: View {
 private struct AppearanceSettings: View {
     private let sliderLabelWidth: CGFloat = 126
 
-    @AppStorage(Preferences.Keys.projectIconSymbol)
-    private var projectIconSymbol = "folder"
-    @AppStorage(Preferences.Keys.tabIconSymbol)
-    private var tabIconSymbol = "terminal"
-    @AppStorage(Preferences.Keys.showTabStatusIndicator)
-    private var showTabStatusIndicator = false
-    @AppStorage(Preferences.Keys.showNewProjectButton)
-    private var showNewProjectButton = true
-    @AppStorage(Preferences.Keys.tabSwitcherVisibility)
-    private var tabSwitcherVisibility = TabSwitcherVisibility.whenMultiple.rawValue
+    // Seeded from / written back through `Preferences` (see GeneralSettings) —
+    // not `@AppStorage`, which would bind to the banned `UserDefaults.standard`.
+    @State private var projectIconSymbol: String = Preferences.shared.projectIconSymbol
+    @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
+    @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
+    @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
+    @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
     @State
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
     @State
@@ -423,8 +422,10 @@ private struct AppearanceSettings: View {
 private struct QuickTerminalSettings: View {
     private let sliderLabelWidth: CGFloat = 44
 
-    @AppStorage(Preferences.Keys.quickTerminalEnabled)
-    private var enabled = true
+    /// Seeded from / written back through `Preferences` — not `@AppStorage`
+    /// (banned `UserDefaults.standard`), and previously `enabled` wrote no
+    /// Preferences value at all, so the observable stayed stale.
+    @State private var enabled: Bool = Preferences.shared.quickTerminalEnabled
     @State
     private var qtWidth: Double = Preferences.shared.quickTerminalWidthFraction
     @State
@@ -434,6 +435,9 @@ private struct QuickTerminalSettings: View {
         Form {
             Section("Quick Terminal") {
                 Toggle("Enable Quick Terminal", isOn: $enabled)
+                    .onChange(of: enabled) { _, v in
+                        Preferences.shared.quickTerminalEnabled = v
+                    }
 
                 HStack {
                     Text("Width")
@@ -483,13 +487,6 @@ private struct KeymapSettings: View {
     private var values: [String: String] = [:]
     @State
     private var capturingActionID: String?
-    @State
-    private var invalidActions: Set<String> = []
-
-    /// Action IDs whose current binding collides with another action's.
-    private var conflictingActions: Set<String> {
-        HotkeyRegistry.conflictingActionIDs(in: values)
-    }
 
     /// Titles of the *other* actions that share `action`'s binding, for the
     /// inline conflict message.
@@ -535,7 +532,6 @@ private struct KeymapSettings: View {
                 else { return }
                 values[action.id] = shortcut
                 HotkeyRegistry.setShortcutString(shortcut, for: action)
-                invalidActions.remove(action.id)
                 capturingActionID = nil
                 HotkeyCaptureState.shared.isCapturing = false
             }
@@ -582,7 +578,6 @@ private struct KeymapSettings: View {
                 Button("Clear") {
                     values[action.id] = "disabled"
                     HotkeyRegistry.setShortcutString("disabled", for: action)
-                    invalidActions.remove(action.id)
                     if capturingActionID == action.id {
                         capturingActionID = nil
                         HotkeyCaptureState.shared.isCapturing = false
@@ -590,28 +585,18 @@ private struct KeymapSettings: View {
                 }
                 .buttonStyle(.borderless)
 
-                if invalidActions.contains(action.id) || !partners.isEmpty {
+                if !partners.isEmpty {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(MactermTheme.warning)
                 }
             }
 
             if !partners.isEmpty {
                 Text("Conflicts with \(partners.joined(separator: ", "))")
                     .font(.system(size: 11))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(MactermTheme.warning)
             }
         }
-    }
-
-    private func commit(_ action: HotkeyAction) {
-        let input = (values[action.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard HotkeyRegistry.isValidShortcutString(input) else {
-            invalidActions.insert(action.id)
-            return
-        }
-        invalidActions.remove(action.id)
-        HotkeyRegistry.setShortcutString(input, for: action)
     }
 }
 
@@ -632,6 +617,15 @@ private struct HotkeyCaptureView: NSViewRepresentable {
         Coordinator(onCapture: onCapture)
     }
 
+    /// Every `addLocalMonitorForEvents` needs a paired `removeMonitor`, or each
+    /// visit to the Keymaps tab leaks a monitor (and one closure call per
+    /// keyDown) for the process lifetime. Removal happens here — a `@MainActor`
+    /// teardown hook — rather than in `deinit`, which is `nonisolated` under
+    /// Swift 6 and can't touch the coordinator's non-Sendable `monitor`.
+    static func dismantleNSView(_: NSView, coordinator: Coordinator) {
+        coordinator.tearDown()
+    }
+
     @MainActor
     final class Coordinator: NSObject {
         let view: NSView
@@ -645,7 +639,7 @@ private struct HotkeyCaptureView: NSViewRepresentable {
             super.init()
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self, let actionID = self.capturingActionID else { return event }
-                if event.keyCode == 53 {
+                if Int(event.keyCode) == kVK_Escape {
                     self.capturingActionID = nil
                     HotkeyCaptureState.shared.isCapturing = false
                     return nil
@@ -654,14 +648,20 @@ private struct HotkeyCaptureView: NSViewRepresentable {
                 return nil
             }
         }
+
+        func tearDown() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
     }
 }
 
 // MARK: - Updates
 
 private struct UpdatesSettings: View {
-    @ObservedObject
-    private var updater: Updater = .shared
+    /// `Updater` is `@Observable`; read the singleton directly (Observation
+    /// tracks `canCheckForUpdates`/`updateAvailable` reads in `body`).
+    private var updater: Updater { .shared }
     @State
     private var automaticallyChecks: Bool = Updater.shared.automaticallyChecksForUpdates
     @State

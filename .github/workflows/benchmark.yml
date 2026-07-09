@@ -119,9 +119,11 @@ jobs:
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
+          # NO restore-keys fallback: pairing a time-rolling key with a prefix
+          # restore-key re-saves last week's stale content under the fresh key
+          # forever (see checks.yml for the full rationale). Without it, a new
+          # week starts empty and setup re-downloads the current `latest`.
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
-          restore-keys: |
-            ghosttykit-${{ hashFiles('scripts/setup.sh') }}-
 
       # Release build products. Separate key prefix from the test workflow's
       # Debug cache: same on-disk path (build/DerivedData), different cache

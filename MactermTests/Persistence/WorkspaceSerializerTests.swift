@@ -240,6 +240,79 @@ struct WorkspaceSerializerTests {
         let store = WorkspaceStore(fileURL: tmp)
         #expect(store.load().isEmpty)
     }
+
+    // MARK: - Remote-pane persistence (data-loss regression, #4.1)
+
+    @Test
+    func snapshot_persists_remote_spec_verbatim_with_nil_working_directory() {
+        // A remote pane's projectPath is an scp-style spec. It MUST be
+        // persisted verbatim (so restore parses it as .remote and reattaches
+        // over ssh), and workingDirectory MUST be nil — a remote pane's live
+        // cwd is a remote-filesystem path with no host prefix that would parse
+        // as a bogus LOCAL dir and orphan the remote session.
+        let spec = "devbox:~/dev/api"
+        let ws = Workspace(projectID: UUID(), projectPath: spec)
+        #expect(ws.tabs[0].splitRoot.allPanes().first?.isRemote == true)
+
+        let snaps = WorkspaceSerializer.snapshot([ws.projectID: ws])
+        guard case let .pane(p) = snaps[0].tabs[0].splitRoot else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(p.projectPath == spec)
+        #expect(p.workingDirectory == nil)
+    }
+
+    @Test
+    func remote_pane_round_trips_as_remote() {
+        // End-to-end: a restored remote pane must still be remote (drives the
+        // ssh/zmx spawn path), not silently downgraded to a local shell.
+        let spec = "user@host:/srv/app"
+        let ws = Workspace(projectID: UUID(), projectPath: spec)
+        let restored = roundTrip([ws.projectID: ws])
+        let pane = restored.first?.tabs.first?.splitRoot.allPanes().first
+        #expect(pane?.isRemote == true)
+        #expect(pane?.projectPath == spec)
+    }
+
+    // MARK: - Corrupt-file save refusal (data-loss regression, #4.4)
+
+    @Test
+    func save_refuses_after_corrupt_load_so_autosave_cannot_clobber() throws {
+        // A present-but-undecodable file must NOT be overwritten by the next
+        // autosave — that would permanently destroy the user's persisted tabs.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-corrupt-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let garbage = Data("{ corrupt not json".utf8)
+        try garbage.write(to: tmp)
+
+        let store = WorkspaceStore(fileURL: tmp)
+        #expect(store.load().isEmpty) // present-but-undecodable → empty + latch
+
+        // The next mutation's autosave must be refused, leaving the file intact.
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
+        store.save(WorkspaceSerializer.snapshot([ws.projectID: ws]))
+
+        #expect(try Data(contentsOf: tmp) == garbage)
+    }
+
+    @Test
+    func save_proceeds_after_clean_load() {
+        // The refusal must be scoped to a FAILED load — a store that loaded
+        // cleanly (or from absent) still saves normally.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-clean-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = WorkspaceStore(fileURL: tmp) // absent file → clean load
+        _ = store.load()
+
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
+        store.save(WorkspaceSerializer.snapshot([ws.projectID: ws]))
+
+        #expect(FileManager.default.fileExists(atPath: tmp.path))
+        #expect(WorkspaceStore(fileURL: tmp).load().count == 1)
+    }
 }
 
 @MainActor

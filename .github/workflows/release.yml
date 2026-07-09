@@ -40,9 +40,10 @@ jobs:
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
+          # NO restore-keys fallback: pairing a time-rolling key with a prefix
+          # restore-key re-saves stale content under the fresh key forever (see
+          # checks.yml). Without it a new week re-downloads the current `latest`.
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
-          restore-keys: |
-            ghosttykit-${{ hashFiles('scripts/setup.sh') }}-
 
       - name: Setup GhosttyKit
         run: mise run setup --verbose
@@ -53,7 +54,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            VERSION="0.0.0"
+            echo "error: tag '$GITHUB_REF_NAME' is not vX.Y.Z; refusing to build a placeholder release" >&2
+            exit 1
           fi
           # Release builds invoke the build script directly to skip the
           # format/lint/test deps on `mise run build` — main is already
@@ -94,7 +96,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            VERSION="0.0.0"
+            echo "error: tag '$GITHUB_REF_NAME' is not vX.Y.Z; refusing to publish a placeholder release" >&2
+            exit 1
           fi
           TAG="v${VERSION}"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Macterm $TAG" --generate-notes

@@ -178,7 +178,7 @@ final class Preferences {
     var windowOpacity: Double {
         didSet {
             defaults.set(windowOpacity, forKey: Keys.windowOpacity)
-            notifyConfigChanged()
+            notifyWindowAppearanceChanged()
         }
     }
 
@@ -186,7 +186,7 @@ final class Preferences {
     var windowBlurRadius: Int {
         didSet {
             defaults.set(windowBlurRadius, forKey: Keys.windowBlurRadius)
-            notifyConfigChanged()
+            notifyWindowAppearanceChanged()
         }
     }
 
@@ -199,7 +199,7 @@ final class Preferences {
     var windowGlassEnabled: Bool {
         didSet {
             defaults.set(windowGlassEnabled, forKey: Keys.windowGlassEnabled)
-            notifyConfigChanged()
+            notifyWindowAppearanceChanged()
         }
     }
 
@@ -209,7 +209,7 @@ final class Preferences {
     var windowGlassStyle: WindowGlassStyle {
         didSet {
             defaults.set(windowGlassStyle.rawValue, forKey: Keys.windowGlassStyle)
-            notifyConfigChanged()
+            notifyWindowAppearanceChanged()
         }
     }
 
@@ -241,6 +241,18 @@ final class Preferences {
     private func notifyConfigChanged() {
         MactermConfig.shared.regenerate()
         GhosttyApp.shared.reloadConfig()
+    }
+
+    /// Notify observers that a WINDOW-APPEARANCE pref (opacity/blur/glass)
+    /// changed, WITHOUT regenerating the ghostty config or reloading libghostty.
+    /// Those values don't appear in the regenerated files (`background-opacity`
+    /// is pinned to 0 unconditionally) — `WindowAppearance.sync` reads them
+    /// straight from Preferences. Previously these setters ran the full
+    /// `notifyConfigChanged()` (two file writes + a whole-config libghostty
+    /// reload) purely to piggy-back on the `.mactermConfigDidChange` post it
+    /// ends with — heavyweight, and fired continuously while dragging a slider.
+    private func notifyWindowAppearanceChanged() {
+        NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
     }
 
     // MARK: - Quick terminal

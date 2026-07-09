@@ -674,4 +674,56 @@ struct HotkeysTests {
         ])
         #expect(conflicts.isEmpty)
     }
+
+    // MARK: - HotkeyRegistry.matches (the static cache path)
+
+    //
+    // The static `matches(event:action:)` runs the parsed-shortcut cache — the
+    // path `KeyRouter`/`isAppShortcut` actually use per keystroke. It was
+    // previously untested, which let a cache regression (every hotkey silently
+    // failing) ship. These lock the default bindings AND the cache invalidation.
+
+    private func keyEvent(_ chars: String, _ mods: NSEvent.ModifierFlags, keyCode: UInt16) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: mods, timestamp: 0,
+            windowNumber: 0, context: nil, characters: chars,
+            charactersIgnoringModifiers: chars, isARepeat: false, keyCode: keyCode
+        ))
+    }
+
+    @Test
+    func registry_matches_default_bindings_through_the_cache() throws {
+        // cmd+d = splitRight, cmd+w = closePane — the bindings the user reported
+        // as broken. Call twice each: the second call is a cache HIT and must
+        // still match (a broken cache returns a stale/nil shortcut → no match).
+        let cmdD = try keyEvent("d", [.command], keyCode: 2)
+        #expect(HotkeyRegistry.matches(cmdD, action: .splitRight))
+        #expect(HotkeyRegistry.matches(cmdD, action: .splitRight))
+        #expect(!HotkeyRegistry.matches(cmdD, action: .closePane))
+
+        let cmdW = try keyEvent("w", [.command], keyCode: 13)
+        #expect(HotkeyRegistry.matches(cmdW, action: .closePane))
+        #expect(HotkeyRegistry.matches(cmdW, action: .closePane))
+    }
+
+    @Test
+    func registry_matches_reflects_a_rebind_after_cache_invalidation() throws {
+        // Rebinding must invalidate the cached parse so the next match uses the
+        // new binding. Save/restore the (test-suite) defaults to avoid leakage.
+        let action = HotkeyAction.splitRight
+        let prior = Preferences.defaults.string(forKey: action.defaultsKey)
+        defer {
+            HotkeyRegistry.setShortcutString(prior ?? action.defaultShortcut, for: action)
+        }
+
+        // Prime the cache with the default (cmd+d).
+        let cmdD = try keyEvent("d", [.command], keyCode: 2)
+        #expect(HotkeyRegistry.matches(cmdD, action: action))
+
+        // Rebind to cmd+e; the old key must stop matching and the new one start.
+        HotkeyRegistry.setShortcutString("cmd+e", for: action)
+        let cmdE = try keyEvent("e", [.command], keyCode: 14)
+        #expect(!HotkeyRegistry.matches(cmdD, action: action))
+        #expect(HotkeyRegistry.matches(cmdE, action: action))
+    }
 }

@@ -1000,7 +1000,8 @@ struct AppStateTests {
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
             remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { [] },
-            sessionLeaderPIDs: { [:] }
+            sessionLeaderPIDs: { [:] },
+            sessionListSnapshot: { (entries: [], leaders: [:]) }
         )
     }
 
@@ -1019,7 +1020,7 @@ struct AppStateTests {
         _ = state.workspaces[p.id]?.createTab(projectPath: "/tmp")
         state.closeTab(tab.id, projectID: p.id)
 
-        await killed.settle()
+        await killed.settle(expecting: names.count)
         #expect(await killed.names == names)
     }
 
@@ -1039,7 +1040,7 @@ struct AppStateTests {
 
         state.closePane(target, projectID: p.id)
 
-        await remoteKilled.settle()
+        await remoteKilled.settle(expecting: 1)
         #expect(await remoteKilled.names == [targetName])
         #expect(await killed.names.isEmpty)
     }
@@ -1057,7 +1058,7 @@ struct AppStateTests {
 
         state.closePane(target, projectID: p.id)
 
-        await killed.settle()
+        await killed.settle(expecting: 1)
         #expect(await killed.names == [targetName])
     }
 
@@ -1077,7 +1078,7 @@ struct AppStateTests {
 
         state.unloadProject(p.id)
 
-        await killed.settle()
+        await killed.settle(expecting: names.count)
         // Sessions die (unload = stop the project's shells)…
         #expect(await killed.names == names)
         // …but the layout survives for the next open.
@@ -1097,8 +1098,72 @@ struct AppStateTests {
 
         state.moveTab(moving, from: p1.id, to: p2.id, destPath: p2.path)
 
-        await killed.settle()
+        await killed.settleExpectingNone()
         #expect(await killed.names.isEmpty)
+    }
+
+    @Test
+    func moveTab_restamps_pane_routing_identity_but_not_session() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let tab = try #require(state.workspaces[p1.id]?.activeTab)
+        // Split so the moved tab carries more than one pane to restamp.
+        state.splitPane(direction: .horizontal, projectID: p1.id)
+        let panes = tab.splitRoot.allPanes()
+        #expect(panes.count == 2)
+        let originalSessionNames = Set(panes.map(\.sessionName))
+        let originalPaths = Set(panes.map(\.projectPath))
+
+        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.path)
+
+        // Routing identity (projectID) is restamped to the destination so a
+        // notification click navigates to the right workspace.
+        #expect(tab.splitRoot.allPanes().allSatisfy { $0.projectID == p2.id })
+        // Session identity is untouched — the shells keep running under their
+        // original names and paths (a remote pane would still kill over ssh).
+        #expect(Set(tab.splitRoot.allPanes().map(\.sessionName)) == originalSessionNames)
+        #expect(Set(tab.splitRoot.allPanes().map(\.projectPath)) == originalPaths)
+    }
+
+    @Test
+    func moveTab_toIndex_inserts_at_slot_in_destination() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        // Give p2 two tabs so there's a middle slot to drop into.
+        let dest = try #require(state.workspaces[p2.id])
+        let d0 = dest.tabs[0].id
+        let d1 = dest.createTab(projectPath: p2.path).id
+        let moving = try #require(state.workspaces[p1.id]?.activeTab)
+
+        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.path, toIndex: 1)
+
+        #expect(dest.tabs.map(\.id) == [d0, moving.id, d1])
+        #expect(dest.activeTabID == moving.id)
+        #expect(state.workspaces[p1.id]?.tabs.contains { $0.id == moving.id } == false)
+    }
+
+    @Test
+    func reorderTab_moves_within_project_and_persists() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let state = makeAppState(store: WorkspaceStore(fileURL: storeURL))
+        let p = seedProject(state, name: "p", path: "/tmp")
+        let ws = try #require(state.workspaces[p.id])
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: p.path).id
+
+        state.reorderTab(t1, inProject: p.id, toIndex: 2)
+        #expect(ws.tabs.map(\.id) == [t2, t1])
+
+        // The reorder persisted: a fresh store reading the same file sees it.
+        let reloaded = WorkspaceStore(fileURL: storeURL).load()
+        let saved = try #require(reloaded.first { $0.projectID == p.id })
+        #expect(saved.tabs.map(\.id) == [t2, t1])
     }
 
     // MARK: - Busy-close confirmations
@@ -1156,10 +1221,21 @@ private actor KilledSessions {
         names.insert(name)
     }
 
-    /// Give the detached kill Tasks a beat to run.
-    func settle() async {
-        for _ in 0 ..< 20 where names.isEmpty {
-            try? await Task.sleep(for: .milliseconds(10))
+    /// Wait until at least `count` distinct names have been recorded (or a
+    /// generous timeout elapses). Waiting for the EXPECTED count — not merely
+    /// "anything arrived" — means a slow second kill can't make a positive
+    /// assertion pass before all kills have landed.
+    func settle(expecting count: Int) async {
+        for _ in 0 ..< 200 where names.count < count {
+            try? await Task.sleep(for: .milliseconds(5))
         }
+    }
+
+    /// For negative assertions ("nothing should have been killed"): wait a
+    /// deterministic window so a late kill would have shown up, then the caller
+    /// asserts emptiness. Named distinctly so its intent (and its inherent
+    /// fixed-wait limitation) is explicit at the call site.
+    func settleExpectingNone() async {
+        try? await Task.sleep(for: .milliseconds(200))
     }
 }

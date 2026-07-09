@@ -9,16 +9,10 @@ struct CommandSource: PaletteSource {
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
         allItems(context).compactMap { item in
             guard let score = fuzzyScore(query: query, target: item.title) else { return nil }
-            return PaletteItem(
-                id: item.id,
-                title: item.title,
-                subtitle: item.subtitle,
-                category: item.category,
-                keybind: item.keybind,
-                keybindSymbols: item.keybindSymbols,
-                score: score,
-                action: item.action
-            )
+            // Carry every field forward (notably `isEnabled`) so a disabled
+            // hint row stays muted/unselectable when it matches a search — a
+            // hand-copied initializer would silently reset it to the default.
+            return item.with(score: score)
         }
     }
 

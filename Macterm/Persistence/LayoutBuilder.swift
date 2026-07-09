@@ -28,11 +28,30 @@ enum LayoutBuilder {
             let userPrefix = user.map { "\($0)@" } ?? ""
             return "\(userPrefix)\(host):\(resolved)"
         }
-        let expanded = (cwd as NSString).expandingTildeInPath
-        if expanded.hasPrefix("/") { return expanded }
+        let expanded = expandTilde(cwd)
+        if expanded.hasPrefix("/") { return canonicalizeLocal(expanded) }
         return URL(fileURLWithPath: projectRoot)
             .appendingPathComponent(expanded)
             .standardizedFileURL.path
+    }
+
+    /// Expand a leading `~`/`~/` against `$HOME` (env-first, honoring the
+    /// benchmark's throwaway home — unlike `expandingTildeInPath`, which
+    /// resolves via the user record and ignores `$HOME`). `~user` is left to
+    /// `expandingTildeInPath` since only the password DB can resolve it.
+    private static func expandTilde(_ path: String) -> String {
+        if path == "~" { return ProjectPath.currentHome }
+        if path.hasPrefix("~/") { return ProjectPath.currentHome + path.dropFirst(1) }
+        return (path as NSString).expandingTildeInPath
+    }
+
+    /// Standardize a local absolute path the same way `resolveCwd` produces its
+    /// relative-join output, so a live pane's raw OSC-7 `currentPwd` and a
+    /// declared cwd compare equal in `LayoutReconciler` (e.g. `/a/b/` == `/a/b`).
+    /// Remote specs pass through untouched (no local filesystem semantics).
+    static func canonicalizeLocal(_ path: String) -> String {
+        guard !ProjectPath.isRemote(path) else { return path }
+        return URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
     /// Construct a `Pane` for a declared leaf, resolving cwd. The pane's `shell`

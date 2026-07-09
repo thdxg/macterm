@@ -248,7 +248,15 @@ struct TerminalExecutionTracker {
 final class Pane: Identifiable {
     let id = UUID()
     let projectPath: String
-    let projectID: UUID
+    /// The workspace this pane currently belongs to — the ROUTING identity used
+    /// to locate the pane's tab (notification-click navigation bakes this into
+    /// `userInfo`; the quit sweep groups panes by it). Restampable because a tab
+    /// can be moved between projects (`AppState.moveTab`); `rebind(projectID:)`
+    /// updates it. Distinct from SESSION identity (`sessionName`/`sessionSlug`/
+    /// `projectPath`/`remoteSpec`), which stays tied to where the session was
+    /// created and must NOT change on a move — the shell keeps running on its
+    /// original host under its original name.
+    private(set) var projectID: UUID
     /// Stable session id for zmx-backed persistence, distinct from `id` (which
     /// is regenerated on every restore). Fresh for a new pane; the restore
     /// path will pass the saved one.
@@ -271,6 +279,12 @@ final class Pane: Identifiable {
     /// The remote host name for display fallback (`processTitle` shows it
     /// while no remote process name is known). nil for local panes.
     let remoteHost: String?
+    /// The parsed scp-style spec for a remote pane (`.remote(user,host,dir)`),
+    /// or nil for a local pane. Cached at init so the spawn (`ensureNSView`)
+    /// and teardown (`killPersistentSession`) paths don't re-parse
+    /// `projectPath` — they read this instead.
+    @ObservationIgnored
+    let remoteSpec: ProjectPath?
     /// Optional explicit remote zmx path (#104), from the pane's `Project`.
     /// Not part of pane identity and not persisted — `AppState` stamps it from
     /// the project each time the workspace is built (it's a host property,
@@ -354,7 +368,15 @@ final class Pane: Identifiable {
         let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
-            foregroundPID: nsView?.foregroundPID,
+            // The RESOLVED foreground pid (daemon-side shell/program for a
+            // wrapped pane), NOT the raw `nsView.foregroundPID` (the zmx attach
+            // client). `programTitlePID` is pinned to this resolved pid, so the
+            // expiry compare in `applyForegroundRefresh` must use the same
+            // source — otherwise a wrapped pane's client pid never matches and
+            // every adopted OSC title (e.g. Claude Code's "✳ Claude Code")
+            // expires on the very next 250ms poll, snapping back to the process
+            // name.
+            foregroundPID: ProcessInspector.resolvedForegroundPID(forPane: self),
             foregroundIsShell: track ? ProcessInspector.foregroundProcessIsShell(forPane: self) : false,
             terminalInputIsRaw: track ? ProcessInspector.terminalInputIsRaw(forPane: self) : false,
             applyExecutionState: track
@@ -486,6 +508,9 @@ final class Pane: Identifiable {
         guard executionState == .running else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // Discard a bare version number (see the local path) — e.g. remote
+        // Claude Code emitting `2.1.202` as its title.
+        guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
         if trimmed != programTitle { programTitle = trimmed }
         programTitlePID = nil
     }
@@ -525,6 +550,12 @@ final class Pane: Identifiable {
         guard let programPID else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // A bare version number is not a useful display title — Claude Code
+        // emits its version (`2.1.202`) as an OSC 2 title at its prompt. Discard
+        // it so `displayTitle` falls back to the process name instead of pinning
+        // the version. (Its real status titles aren't version-shaped, so they
+        // still adopt normally.)
+        guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
         if trimmed != programTitle { programTitle = trimmed }
         programTitlePID = programPID
     }
@@ -555,7 +586,7 @@ final class Pane: Identifiable {
             command: command,
             shell: shell,
             env: mergedEnv,
-            remoteSpec: ProjectPath.remote(from: projectPath),
+            remoteSpec: remoteSpec,
             remoteZmxPath: remoteZmxPath
         )
         _nsView = view
@@ -675,9 +706,11 @@ final class Pane: Identifiable {
         if case let .remote(_, host, _)? = ProjectPath.parse(projectPath) {
             isRemote = true
             remoteHost = host
+            remoteSpec = ProjectPath.remote(from: projectPath)
         } else {
             isRemote = false
             remoteHost = nil
+            remoteSpec = nil
         }
         if let persistedSessionName {
             // Restore path: the snapshot's name is authoritative and used
@@ -699,6 +732,19 @@ final class Pane: Identifiable {
         executionTracker = TerminalExecutionTracker(hasUserInteraction: command != nil)
     }
 
+    /// Re-point this pane at a new workspace after its tab is moved between
+    /// projects (`AppState.moveTab`). Updates ONLY the routing identity — the
+    /// `projectID` that notification navigation and the quit sweep key on — so a
+    /// notification click after a move finds the tab in its new project.
+    ///
+    /// Session identity (`sessionName`, `sessionSlug`, `projectPath`,
+    /// `remoteSpec`, `remoteZmxPath`) is deliberately NOT touched: the shell
+    /// keeps running on its original host under its original name, so a
+    /// remote pane moved into a local project still tears down over ssh.
+    func rebind(projectID: UUID) {
+        self.projectID = projectID
+    }
+
     /// Permanently kill this pane's zmx session. Call ONLY when the pane is
     /// gone for good (closed, tab/project removed, dropped by a layout apply)
     /// — NOT on transient teardown (window hide, tab-switch churn), where the
@@ -707,13 +753,20 @@ final class Pane: Identifiable {
     /// a parameter so AppState's injectable instance flows through in tests.
     func killPersistentSession(using zmx: ZmxClient) {
         let name = sessionName
-        NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
-        if let remote = ProjectPath.remote(from: projectPath) {
+        if let remote = remoteSpec {
             let zmxPath = remoteZmxPath
-            Task { await zmx.killRemoteSession(remote, name, zmxPath) }
+            Task {
+                await zmx.killRemoteSession(remote, name, zmxPath)
+                // Post AFTER the kill so observers that re-list sessions see
+                // the post-kill state instead of racing the still-alive one.
+                NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+            }
             return
         }
-        Task { await zmx.killSession(name) }
+        Task {
+            await zmx.killSession(name)
+            NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        }
     }
 }
 

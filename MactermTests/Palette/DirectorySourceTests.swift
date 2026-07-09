@@ -97,4 +97,88 @@ struct DirectorySourceTests {
         let item = try #require(DirectorySource().items(query: "devbox:~", context: ctx).first)
         #expect(item.title == "devbox")
     }
+
+    // MARK: - Local directory listing
+
+    /// Build a tempdir with the given child directories (and optional files).
+    private func makeListingDir(children: [String]) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-listing-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for child in children {
+            try FileManager.default.createDirectory(
+                at: dir.appendingPathComponent(child, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+        return dir
+    }
+
+    /// The child rows a query returns. Excludes the exact-match row that a
+    /// trailing-slash directory query surfaces at the top for the directory
+    /// itself — that row alone has `score == 0`; children score `offset + 1`.
+    private func childTitles(_ query: String, in ctx: PaletteContext) -> [String] {
+        DirectorySource().items(query: query, context: ctx)
+            .filter { $0.score > 0 }
+            .map(\.title)
+    }
+
+    @Test
+    func local_listing_completes_children_of_a_directory() throws {
+        let (ctx, _, _) = makeContext()
+        let dir = try makeListingDir(children: ["alpha", "beta", "gamma"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Trailing slash → dir itself is the browse target; all children match.
+        let titles = childTitles(dir.path + "/", in: ctx)
+        #expect(Set(titles) == ["alpha", "beta", "gamma"])
+    }
+
+    @Test
+    func local_listing_filters_by_typed_prefix_case_insensitively() throws {
+        let (ctx, _, _) = makeContext()
+        let dir = try makeListingDir(children: ["Alpha", "album", "beta"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let titles = childTitles(dir.path + "/al", in: ctx)
+        #expect(Set(titles) == ["Alpha", "album"])
+    }
+
+    @Test
+    func local_listing_hides_dotdirs_by_default() throws {
+        let (ctx, _, _) = makeContext()
+        let dir = try makeListingDir(children: [".hidden", "visible"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let titles = childTitles(dir.path + "/", in: ctx)
+        #expect(titles == ["visible"])
+    }
+
+    /// Regression for 6.4: a typed prefix that itself opts into the hidden
+    /// namespace (`.co…`) must complete dotdirs.
+    @Test
+    func local_listing_reveals_dotdirs_when_prefix_starts_with_dot() throws {
+        let (ctx, _, _) = makeContext()
+        let dir = try makeListingDir(children: [".config", ".cache", "visible"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let titles = childTitles(dir.path + "/.co", in: ctx)
+        #expect(titles == [".config"])
+    }
+
+    @Test
+    func local_listing_caps_at_ten_children() throws {
+        let (ctx, _, _) = makeContext()
+        let dir = try makeListingDir(children: (0 ..< 20).map { String(format: "d%02d", $0) })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(childTitles(dir.path + "/", in: ctx).count == 10)
+    }
+
+    /// Regression for 6.3: the listing is deterministic (sorted), so both which
+    /// 10 survive the cap and their order are stable across runs.
+    @Test
+    func local_listing_is_deterministic_and_sorted() throws {
+        let (ctx, _, _) = makeContext()
+        let dir = try makeListingDir(children: (0 ..< 20).map { String(format: "d%02d", $0) })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let titles = childTitles(dir.path + "/", in: ctx)
+        // Sorted ascending → the first ten are d00…d09, in order.
+        #expect(titles == (0 ..< 10).map { String(format: "d%02d", $0) })
+    }
 }

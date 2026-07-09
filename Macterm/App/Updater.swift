@@ -11,21 +11,28 @@ import SwiftUI
 /// downloads updates via its own networking path, so installed updates do
 /// not pick up the `com.apple.quarantine` attribute and launch cleanly
 /// without `xattr -cr`.
-@MainActor
-final class Updater: ObservableObject {
+/// `@Observable` (not `ObservableObject`/`@Published`) to match the project's
+/// Observation convention. The Sparkle KVO/delegate bridge below writes into
+/// plain observable `var`s, so nothing forces the legacy stack here.
+@MainActor @Observable
+final class Updater {
     static let shared = Updater()
 
+    @ObservationIgnored
     private let controller: SPUStandardUpdaterController
+    @ObservationIgnored
     private let updaterDelegate = UpdaterDelegate()
+    @ObservationIgnored
     private let userDriverDelegate = UserDriverDelegate()
 
     /// Exposes `canCheckForUpdates` for menu/UI disabled state.
-    @Published var canCheckForUpdates = false
+    var canCheckForUpdates = false
 
     /// `true` once Sparkle has found a valid update for the current version.
     /// Flips back to `false` after the user installs, skips, or dismisses it.
-    @Published var updateAvailable = false
+    var updateAvailable = false
 
+    @ObservationIgnored
     private var cancellable: AnyCancellable?
 
     private init() {
@@ -45,23 +52,35 @@ final class Updater: ObservableObject {
             return !BenchmarkControl.isEnabled
             #endif
         }()
-        let updaterDelegate = updaterDelegate
-        let userDriverDelegate = userDriverDelegate
+
+        // Construct the controller WITHOUT starting the updater, so we can wire
+        // the delegate callbacks before any check can fire. Referencing `self`
+        // in a closure requires all stored properties initialized first, so the
+        // controller must exist before the closures — but `startingUpdater:
+        // false` means it won't invoke a delegate yet. We start it explicitly
+        // below, after the closures are set, so a scheduled check on a release
+        // build can't fire an update-found signal before its closure exists.
         controller = SPUStandardUpdaterController(
-            startingUpdater: startUpdater,
+            startingUpdater: false,
             updaterDelegate: updaterDelegate,
             userDriverDelegate: userDriverDelegate
         )
         cancellable = controller.updater.publisher(for: \.canCheckForUpdates)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.canCheckForUpdates = $0 }
-        // `didFindValidUpdate` only fires for *user-initiated* checks. Scheduled
-        // background checks route through the user-driver delegate instead, so
-        // we wire both paths to the same flag.
+
+        // `didFindValidUpdate` only fires for *user-initiated* checks; scheduled
+        // background checks route through the user-driver delegate — wire both.
         updaterDelegate.onUpdateFound = { [weak self] in self?.updateAvailable = true }
         updaterDelegate.onUpdateCleared = { [weak self] in self?.updateAvailable = false }
         userDriverDelegate.onUpdateFound = { [weak self] in self?.updateAvailable = true }
         userDriverDelegate.onUpdateCleared = { [weak self] in self?.updateAvailable = false }
+
+        // Now that callbacks are wired, actually start the updater (release,
+        // non-benchmark). Debug/benchmark skip it (see `startUpdater` above).
+        if startUpdater {
+            controller.startUpdater()
+        }
     }
 
     var updater: SPUUpdater { controller.updater }
@@ -131,7 +150,9 @@ private final class UserDriverDelegate: NSObject, SPUStandardUserDriverDelegate,
 
 /// Menu item that stays disabled while an update check is already in flight.
 struct CheckForUpdatesMenuItem: View {
-    @ObservedObject var updater: Updater = .shared
+    /// `@Observable` singleton read directly — Observation tracks the
+    /// `canCheckForUpdates` read in `body`, no `@ObservedObject` needed.
+    private var updater: Updater { .shared }
 
     var body: some View {
         Button("Check for Updates…") {
@@ -144,7 +165,7 @@ struct CheckForUpdatesMenuItem: View {
 /// Toolbar button shown in the main window's title bar only when Sparkle has
 /// found a valid update. Clicking surfaces the standard Sparkle prompt.
 struct UpdateAvailableToolbarButton: View {
-    @ObservedObject var updater: Updater = .shared
+    private var updater: Updater { .shared }
 
     var body: some View {
         if updater.updateAvailable {

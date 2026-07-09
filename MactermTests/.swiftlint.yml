@@ -1,0 +1,12 @@
+# Test-target rule relaxations, merged over the repo-root .swiftlint.yml.
+# Tests are held to the same style as app code, but two rules are inappropriate
+# for test code specifically:
+disabled_rules:
+  # A force-unwrap in a test is an assertion: if the value is nil the test
+  # fails loudly at that line, which is exactly what you want. Requiring
+  # `#require`/guard for every fixture unwrap adds noise without adding safety.
+  - force_unwrapping
+  # Test helpers legitimately return small labeled tuples of collaborators
+  # (e.g. `(PaletteContext, AppState, ProjectStore)`) instead of a one-off
+  # struct per helper. Three members is fine for a test-local return.
+  - large_tuple

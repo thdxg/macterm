@@ -1,5 +1,8 @@
 import AppKit
+import os
 import SwiftUI
+
+private let styleLogger = Logger(subsystem: appBundleID, category: "WindowStyler")
 
 struct MainWindow: View {
     @Environment(AppState.self)
@@ -12,7 +15,10 @@ struct MainWindow: View {
     private var detailWidth: CGFloat = .infinity
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        // Derive bindings to the @Observable AppState via @Bindable (the
+        // Observation-era idiom) rather than a hand-rolled Binding(get:set:).
+        @Bindable var appState = appState
+        return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarContent()
                 .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 280)
         } detail: {
@@ -56,10 +62,7 @@ struct MainWindow: View {
                 CommandPaletteOverlay()
             }
         }
-        .sheet(isPresented: Binding(
-            get: { appState.isNewRemoteProjectSheetPresented },
-            set: { appState.isNewRemoteProjectSheetPresented = $0 }
-        )) {
+        .sheet(isPresented: $appState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }
         .task {
@@ -280,8 +283,25 @@ private struct WindowStyler: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        // Retry across run-loop ticks until the view is attached to its window.
+        // A single fire-and-forget async that ran before attachment used to
+        // silently skip `interceptClose`, leaving the red close button to
+        // actually close the window (killing surfaces) — the exact invariant
+        // this styler enforces. Bounded so a never-attached view can't spin.
+        styleWhenAttached(view: view, coordinator: context.coordinator, attempts: 0)
+        return view
+    }
+
+    private func styleWhenAttached(view: NSView, coordinator: Coordinator, attempts: Int) {
         DispatchQueue.main.async {
-            guard let window = view.window else { return }
+            guard let window = view.window else {
+                guard attempts < 30 else {
+                    styleLogger.error("WindowStyler: view never attached to a window; close interception not installed")
+                    return
+                }
+                styleWhenAttached(view: view, coordinator: coordinator, attempts: attempts + 1)
+                return
+            }
             window.titlebarAppearsTransparent = true
             window.titlebarSeparatorStyle = .none
             window.tabbingMode = .disallowed
@@ -291,12 +311,11 @@ private struct WindowStyler: NSViewRepresentable {
             // visible boundary, which is jarring when both are translucent.
             window.styleMask.insert(.fullSizeContentView)
             WindowAppearance.sync(window: window)
-            context.coordinator.observe(window: window)
+            coordinator.observe(window: window)
             // Intercept the close button to hide instead of close,
             // preserving terminal surfaces and running processes.
-            context.coordinator.interceptClose(window: window)
+            coordinator.interceptClose(window: window)
         }
-        return view
     }
 
     func updateNSView(_: NSView, context _: Context) {}

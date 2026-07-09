@@ -197,6 +197,9 @@ struct ZmxAttachTests {
     }
 }
 
+/// Touches process-global `ZMX_SESSION`; serialized so a concurrent test can't
+/// observe the mutation mid-flight, and the prior value is restored after.
+@Suite(.serialized)
 struct ZmxEnvironmentTests {
     @Test
     func scrub_removes_inherited_session_marker() {
@@ -204,6 +207,12 @@ struct ZmxEnvironmentTests {
         // ZMX_SESSION; once that session dies, every `zmx attach` for a new
         // pane aborts with `session "…" does not exist` instead of creating
         // it. The scrub must remove the marker from this process.
+        // Save/restore the process-global env so the mutation doesn't leak to
+        // other tests in the shared hosted process.
+        let prior = getenv("ZMX_SESSION").map { String(cString: $0) }
+        defer {
+            if let prior { setenv("ZMX_SESSION", prior, 1) } else { unsetenv("ZMX_SESSION") }
+        }
         setenv("ZMX_SESSION", "macterm-test-deadbeefcafe", 1)
         ZmxEnvironment.scrubInheritedSession()
         #expect(getenv("ZMX_SESSION") == nil)
@@ -226,7 +235,8 @@ struct ZmxReapOrphansDriverTests {
             killRemoteSession: { _, _, _ in },
             remoteForegroundComms: { _, _ in nil },
             listSessionsWithClients: { entries },
-            sessionLeaderPIDs: { [:] }
+            sessionLeaderPIDs: { [:] },
+            sessionListSnapshot: { entries.map { (entries: $0, leaders: [:]) } }
         )
     }
 

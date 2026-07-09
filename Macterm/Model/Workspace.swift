@@ -104,15 +104,23 @@ final class TerminalTab: Identifiable {
     /// (the layout `run:` path — typed into the fresh shell verbatim).
     @discardableResult
     func split(paneID: UUID, direction: SplitDirection, command: String? = nil) -> UUID? {
-        let pane = splitRoot.findPane(id: paneID)
-        // Inherit the source pane's cwd. Prefer the shell's OSC 7-reported pwd
-        // (most accurate when shell integration is active), then fall back to
-        // the foreground process's actual cwd read from the kernel (works
-        // without shell integration / when a program holds the foreground),
-        // and only then to the pane's original project path.
-        let livePwd = pane.flatMap { p in p.nsView?.currentPwd ?? ProcessInspector.foregroundWorkingDirectory(forPane: p) }
-        let sourcePath = livePwd ?? pane?.projectPath ?? NSHomeDirectory()
-        let sourceProjectID = pane?.projectID ?? UUID()
+        // Bail before any side effect if the pane isn't in this tab — otherwise
+        // an unknown ID would clear the user's zoom and rebalance ratios for a
+        // split that never happens (mirrors toggleZoom/makeGrid's guard).
+        guard let pane = splitRoot.findPane(id: paneID) else { return nil }
+        // Inherit the source pane's cwd. For a LOCAL pane, prefer the shell's
+        // OSC 7-reported pwd (most accurate when shell integration is active),
+        // then the foreground process's actual kernel cwd (works without shell
+        // integration), and only then the pane's original project path. For a
+        // REMOTE pane, `currentPwd` is a remote-filesystem path with no host
+        // prefix — inheriting it would spawn the sibling as a LOCAL shell in a
+        // bogus dir instead of a remote zmx session — so skip the live cwd and
+        // inherit the scp-style `projectPath` verbatim.
+        let livePwd = pane.isRemote
+            ? nil
+            : (pane.nsView?.currentPwd ?? ProcessInspector.foregroundWorkingDirectory(forPane: pane))
+        let sourcePath = livePwd ?? pane.projectPath
+        let sourceProjectID = pane.projectID
         let (newRoot, newID) = splitRoot.splitting(
             paneID: paneID,
             direction: direction,
@@ -207,17 +215,27 @@ final class TerminalTab: Identifiable {
     }
 
     /// Remove a pane from the tree. Returns `.onlyPaneLeft` if the caller should
-    /// close the whole tab (the pane was the last one), otherwise `.removed`.
-    /// The pane's surface is destroyed in both cases.
+    /// close the whole tab (the pane was the last one), otherwise `.removed`;
+    /// `.notFound` when the pane isn't in this tab. The pane's surface is
+    /// destroyed for both `.onlyPaneLeft` and `.removed` — callers rely on that
+    /// (the quick terminal drops the whole tab on `.onlyPaneLeft` without its
+    /// own teardown) — but NOT for `.notFound`.
     @discardableResult
     func removePane(_ paneID: UUID) -> PaneRemovalResult {
         guard let pane = splitRoot.findPane(id: paneID) else { return .notFound }
-        pane.destroySurface()
+        // Decide the outcome BEFORE the irreversible surface teardown, so a
+        // `.notFound`-shaped precondition can't destroy a surface first.
+        // `removing` can only return nil when the pane isn't in the tree, which
+        // `findPane` already ruled out — but check it before destroying rather
+        // than after (the old order destroyed, then could still return
+        // `.notFound` with a dead surface).
         let panes = splitRoot.allPanes()
         if panes.count <= 1 {
+            pane.destroySurface()
             return .onlyPaneLeft
         }
         guard let newRoot = splitRoot.removing(paneID: paneID) else { return .notFound }
+        pane.destroySurface()
         splitRoot = newRoot
         if zoomedPaneID == paneID { zoomedPaneID = nil }
         paneFocusHistory.remove(paneID)
@@ -287,12 +305,17 @@ final class Workspace: Identifiable {
         return tab
     }
 
-    /// Append an existing tab — moved in from another workspace — and make it
+    /// Adopt an existing tab — moved in from another workspace — and make it
     /// active. Unlike `createTab` the `TerminalTab` (and its live panes/surfaces)
     /// is reused as-is; the caller is responsible for having removed it from its
-    /// previous workspace first.
-    func adoptTab(_ tab: TerminalTab) {
-        tabs.append(tab)
+    /// previous workspace first. `index` positions the tab in the list (a
+    /// sidebar drop lands at a specific slot); nil / out-of-range appends.
+    func adoptTab(_ tab: TerminalTab, at index: Int? = nil) {
+        if let index, index >= 0, index <= tabs.count {
+            tabs.insert(tab, at: index)
+        } else {
+            tabs.append(tab)
+        }
         if let current = activeTabID { tabHistory.push(current) }
         activeTabID = tab.id
     }
@@ -367,5 +390,21 @@ final class Workspace: Identifiable {
 
     func reorderTabs(fromOffsets source: IndexSet, toOffset destination: Int) {
         tabs.move(fromOffsets: source, toOffset: destination)
+    }
+
+    /// Move an existing tab to an absolute index (the shape a drag-and-drop
+    /// insertion offset comes in, as opposed to `reorderTabs`' `IndexSet`/offset
+    /// from `List.onMove`). `destination` is interpreted in the pre-removal
+    /// coordinate space — the offset SwiftUI's `dropDestination` reports — so it
+    /// is adjusted down by one when the tab is dragged toward the end. A no-op
+    /// destination (same slot) leaves the array and selection untouched.
+    func moveTab(_ tabID: UUID, toIndex destination: Int) {
+        guard let from = tabs.firstIndex(where: { $0.id == tabID }) else { return }
+        let clamped = max(0, min(destination, tabs.count))
+        var to = clamped > from ? clamped - 1 : clamped
+        to = max(0, min(to, tabs.count - 1))
+        guard to != from else { return }
+        let tab = tabs.remove(at: from)
+        tabs.insert(tab, at: to)
     }
 }

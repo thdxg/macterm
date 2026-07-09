@@ -87,14 +87,13 @@ struct ControlClient {
     }
 
     private func tryPath(_ path: String, payload: Data) -> Attempt {
+        // Fast-fail existence check. Ownership is NOT trusted from this stat:
+        // it's a TOCTOU (the path could be swapped between here and connect),
+        // so the authoritative same-user check is LOCAL_PEERCRED on the
+        // connected fd below.
         var st = stat()
         guard stat(path, &st) == 0 else {
             return .failure("no socket file")
-        }
-        // Refuse sockets owned by another user — a planted socket at a
-        // predictable path must not receive our commands.
-        guard st.st_uid == getuid() else {
-            return .failure("not owned by the current user; refusing to connect")
         }
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -135,8 +134,17 @@ struct ControlClient {
                 return .failure(String(cString: strerror(errno)))
             }
             var pollFD = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-            guard poll(&pollFD, 1, 250) > 0, pollFD.revents & Int16(POLLERR | POLLHUP) == 0 else {
-                return .failure("connect timed out")
+            // Retry EINTR (a signal during the wait) rather than reporting it
+            // as a timeout — matching the read loop below, which already does.
+            var pollResult = poll(&pollFD, 1, 250)
+            while pollResult < 0, errno == EINTR {
+                pollFD.revents = 0
+                pollResult = poll(&pollFD, 1, 250)
+            }
+            guard pollResult > 0, pollFD.revents & Int16(POLLERR | POLLHUP) == 0 else {
+                return .failure(pollResult < 0
+                    ? "connect poll failed: \(String(cString: strerror(errno)))"
+                    : "connect timed out")
             }
             var soError: Int32 = 0
             var len = socklen_t(MemoryLayout<Int32>.size)
@@ -145,6 +153,14 @@ struct ControlClient {
                 return .failure(String(cString: strerror(soError)))
             }
         }
+        // Authoritative same-user check on the ACTUAL connected peer (not the
+        // pre-connect stat, which is racy): refuse a socket whose owning
+        // process runs as a different uid. Closes the TOCTOU where the path is
+        // swapped between the ownership stat and connect().
+        guard peerIsCurrentUser(fd: fd) else {
+            return .failure("socket peer is not the current user; refusing to connect")
+        }
+
         // Back to blocking for the write/read; bound the read instead.
         _ = fcntl(fd, F_SETFL, flags)
         var timeout = timeval(tv_sec: 10, tv_usec: 0)
@@ -176,6 +192,20 @@ struct ControlClient {
             return .failure("connection closed without a response")
         }
         return .success(data)
+    }
+
+    /// Whether the connected socket's peer runs as the current user, via
+    /// `LOCAL_PEERCRED` on the connected fd (Darwin). Unlike a path-based stat
+    /// this can't be raced — it inspects the exact endpoint we're talking to.
+    /// Conservatively rejects when the credential can't be read.
+    private func peerIsCurrentUser(fd: Int32) -> Bool {
+        var cred = xucred()
+        var len = socklen_t(MemoryLayout<xucred>.size)
+        let rc = withUnsafeMutablePointer(to: &cred) { ptr in
+            getsockopt(fd, SOL_LOCAL, LOCAL_PEERCRED, ptr, &len)
+        }
+        guard rc == 0, cred.cr_version == XUCRED_VERSION else { return false }
+        return cred.cr_uid == getuid()
     }
 
     private func writeAll(fd: Int32, data: Data) -> Bool {

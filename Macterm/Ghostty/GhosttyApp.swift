@@ -35,6 +35,17 @@ final class GhosttyApp {
     /// light side. Nil until the first surface reports its config.
     @ObservationIgnored
     private var resolvedColors: ResolvedColors?
+    /// Memoized `resolvedThemeColors()`, keyed on the `configVersion` it was
+    /// computed for. Without this, every color accessor re-reads THREE files
+    /// (defaults + user config + theme) and re-runs `ThemeResolver` — and
+    /// `MactermTheme` fans one SwiftUI render into a dozen accessor calls, so a
+    /// chrome frame did a dozen disk reads whenever `resolvedColors` was nil
+    /// (before the first CONFIG_CHANGE, and after every appearance flip). The
+    /// result is fully determined by `configVersion` (which bumps on reload and
+    /// appearance change), so caching on it is safe. `.some(nil)` distinguishes
+    /// "computed, no split theme" from "not yet computed".
+    @ObservationIgnored
+    private var themeColorsCache: (version: Int, colors: ThemeResolver.Colors?)?
 
     private init() {
         systemScheme = Self.readSystemScheme()
@@ -50,7 +61,11 @@ final class GhosttyApp {
         }
 
         var rt = ghostty_runtime_config_s()
-        rt.userdata = Unmanaged.passUnretained(self).toOpaque()
+        // No `rt.userdata`: the app-target callbacks below reach `GhosttyApp
+        // .shared` directly (safe — the singleton outlives the app and these
+        // fire only after init). The per-surface callbacks recover their owner
+        // from the SURFACE userdata instead (see `surface(from:)`), so the
+        // app-level userdata pointer was dead weight.
         rt.supports_selection_clipboard = true
         rt.wakeup_cb = { _ in GhosttyApp.shared.callbacks.wakeup() }
         rt.action_cb = { _, target, action in GhosttyApp.shared.callbacks.action(target: target, action: action) }
@@ -58,7 +73,11 @@ final class GhosttyApp {
         rt.confirm_read_clipboard_cb = { ud, content, state, _ in
             GhosttyApp.shared.callbacks.confirmReadClipboard(ud: ud, content: content, state: state)
         }
-        rt.write_clipboard_cb = { _, _, content, len, _ in GhosttyApp.shared.callbacks.writeClipboard(content: content, len: UInt(len)) }
+        rt.write_clipboard_cb = { _, loc, content, len, confirm in
+            GhosttyApp.shared.callbacks.writeClipboard(
+                content: content, len: UInt(len), location: loc, confirm: confirm
+            )
+        }
         rt.close_surface_cb = { ud, _ in GhosttyApp.shared.callbacks.closeSurface(ud: ud) }
 
         guard let createdApp = ghostty_app_new(&rt, cfg) else {
@@ -400,7 +419,19 @@ final class GhosttyApp {
     /// side matching the current OS appearance — read straight from the theme
     /// file, since libghostty's config getters always resolve a split to the
     /// light side. Nil for a plain theme (the getters handle those correctly).
+    ///
+    /// Memoized on `configVersion`: the on-disk inputs only change when the
+    /// config reloads or the appearance flips, both of which bump the version.
     private func resolvedThemeColors() -> ThemeResolver.Colors? {
+        if let cache = themeColorsCache, cache.version == configVersion {
+            return cache.colors
+        }
+        let colors = computeResolvedThemeColors()
+        themeColorsCache = (configVersion, colors)
+        return colors
+    }
+
+    private func computeResolvedThemeColors() -> ThemeResolver.Colors? {
         guard let resourcesDir else { return nil }
         // Reconstruct the effective `theme` from the layers we control, matching
         // libghostty's last-wins merge: our defaults, then the user's config.

@@ -50,6 +50,24 @@ struct PaletteItem: Identifiable {
         self.isEnabled = isEnabled
         self.action = action
     }
+
+    /// A copy with a new `score`, carrying every other field forward. Sources
+    /// that re-score a prebuilt item on query use this so a newly-added field
+    /// (e.g. `isEnabled`) can't be silently dropped to its default by a
+    /// hand-copied initializer call.
+    func with(score: Int) -> PaletteItem {
+        PaletteItem(
+            id: id,
+            title: title,
+            subtitle: subtitle,
+            category: category,
+            keybind: keybind,
+            keybindSymbols: keybindSymbols,
+            score: score,
+            isEnabled: isEnabled,
+            action: action
+        )
+    }
 }
 
 struct PaletteSection {
@@ -130,7 +148,10 @@ struct PaletteEngine {
         for source in sources {
             all += source.items(query: q.trimmed, context: context)
         }
-        all.sort { $0.score < $1.score }
+        // Total, deterministic order: score, then title, then id — Swift's
+        // `sort` isn't guaranteed stable, so equal scores need explicit
+        // tiebreakers rather than relying on incidental input order.
+        all.sort { ($0.score, $0.title, $0.id) < ($1.score, $1.title, $1.id) }
         return all.isEmpty ? [] : [PaletteSection(header: nil, items: all)]
     }
 
@@ -159,7 +180,10 @@ func fuzzyScore(query: String, target: String) -> Int? {
     guard !q.isEmpty else { return 0 }
     if t.hasPrefix(q) { return 0 }
     if let range = t.range(of: q) {
-        return 5 + t.distance(from: t.startIndex, to: range.lowerBound)
+        // Clamp to just under the subsequence floor (40) so every contiguous
+        // substring hit always outranks every scattered subsequence hit, even
+        // when the substring sits deep in a long target.
+        return min(5 + t.distance(from: t.startIndex, to: range.lowerBound), 39)
     }
     // Subsequence
     var qi = q.startIndex

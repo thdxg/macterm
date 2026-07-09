@@ -34,7 +34,14 @@ struct PreferencesTests {
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-prefs-tests-\(UUID().uuidString).json")
-        let state = AppState(workspaceStore: WorkspaceStore(fileURL: tmp))
+        let filesDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-prefs-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        // Inject a tempdir ProjectFileStore too, so this never reads/writes the
+        // developer's real ~/.config/macterm/projects/ (tempdir-injection rule).
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: tmp),
+            projectFiles: ProjectFileStore(directoryURL: filesDir)
+        )
         let project = Project(name: "throwaway", path: "/tmp", sortOrder: 0)
         state.selectProject(project)
 
