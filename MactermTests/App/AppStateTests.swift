@@ -281,6 +281,53 @@ struct AppStateTests {
         #expect(state.activeProjectID == p2.id)
     }
 
+    // MARK: - Bulk removal (sidebar multi-select)
+
+    @Test
+    func removeProjects_drops_every_listed_workspace() {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let p3 = seedProject(state, name: "p3", path: "/tmp3")
+
+        state.removeProjects([p1.id, p3.id])
+
+        #expect(state.workspaces[p1.id] == nil)
+        #expect(state.workspaces[p3.id] == nil)
+        #expect(state.workspaces[p2.id] != nil)
+    }
+
+    @Test
+    func removeProjects_empty_list_is_noop() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        state.removeProjects([])
+        #expect(state.workspaces[p.id] != nil)
+        #expect(state.activeProjectID == p.id)
+    }
+
+    @Test
+    func closeTabs_closes_each_tab_across_projects() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let ws1 = try #require(state.workspaces[p1.id])
+        let ws2 = try #require(state.workspaces[p2.id])
+        // Two tabs in each so closing one doesn't empty the workspace.
+        let close1 = ws1.createTab(projectPath: "/tmp1")
+        let keep1 = try #require(ws1.tabs.first?.id)
+        let close2 = ws2.createTab(projectPath: "/tmp2")
+        let keep2 = try #require(ws2.tabs.first?.id)
+
+        state.closeTabs([
+            (tabID: close1.id, projectID: p1.id),
+            (tabID: close2.id, projectID: p2.id),
+        ])
+
+        #expect(ws1.tabs.map(\.id) == [keep1])
+        #expect(ws2.tabs.map(\.id) == [keep2])
+    }
+
     @Test
     func selectTab_persists_cleared_completion_indicator() throws {
         let tmp = FileManager.default.temporaryDirectory

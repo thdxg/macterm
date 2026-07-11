@@ -322,6 +322,15 @@ final class AppState {
         saveWorkspaces()
     }
 
+    /// Remove several projects' workspaces at once — the bulk sidebar delete.
+    /// A thin loop over `removeProject`; the caller is responsible for pruning
+    /// the matching `ProjectStore` entries (that store lives outside AppState).
+    func removeProjects(_ projectIDs: [UUID]) {
+        for id in projectIDs {
+            removeProject(id)
+        }
+    }
+
     // MARK: - Tabs
 
     func createTab(projectID: UUID, projectPath: String) {
@@ -349,6 +358,15 @@ final class AppState {
         }
         ws.closeTab(tabID)
         saveWorkspaces()
+    }
+
+    /// Close several tabs at once — the bulk sidebar delete for tabs. Each is
+    /// identified by its owning project since a multi-selection can span
+    /// projects. A thin loop over `closeTab`.
+    func closeTabs(_ tabs: [(tabID: UUID, projectID: UUID)]) {
+        for tab in tabs {
+            closeTab(tab.tabID, projectID: tab.projectID)
+        }
     }
 
     func selectTab(_ tabID: UUID, projectID: UUID) {
