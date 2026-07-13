@@ -273,7 +273,7 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: tab.agentIcon)
                     }
                 }
                 .labelStyle(.titleAndIcon)
@@ -282,9 +282,9 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: tab.agentIcon)
                     } else {
-                        SidebarRowIcon(symbol: tabIconSymbol, index: index)
+                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: tab.agentIcon)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -355,6 +355,7 @@ private struct TabStatusGlyph: View {
     let state: TerminalExecutionState
     let symbol: String
     let index: Int
+    var agent: AgentIcon?
 
     var body: some View {
         switch state {
@@ -365,7 +366,7 @@ private struct TabStatusGlyph: View {
                 .help("Running")
                 .frame(width: 16, height: 16)
         case .done:
-            SidebarRowIcon(symbol: symbol, index: index)
+            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
                 .overlay(alignment: .bottomTrailing) {
                     // Opaque (not translucent) so it reads clearly over the
@@ -383,7 +384,7 @@ private struct TabStatusGlyph: View {
                 }
                 .help("Done")
         case .idle:
-            SidebarRowIcon(symbol: symbol, index: index)
+            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
                 .help("Idle")
         }
@@ -393,9 +394,18 @@ private struct TabStatusGlyph: View {
 private struct SidebarRowIcon: View {
     let symbol: String
     let index: Int
+    var agent: AgentIcon?
 
     var body: some View {
-        if Preferences.numberIconChoices.contains(symbol) {
+        if let agent {
+            // A live AI agent in the tab overrides the user's chosen icon —
+            // the logo is a status signal, template-tinted like an SF Symbol.
+            Image(agent.rawValue)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 15, height: 15)
+        } else if Preferences.numberIconChoices.contains(symbol) {
             NumberGlyph(index: index, variant: symbol)
         } else {
             Image(systemName: symbol)

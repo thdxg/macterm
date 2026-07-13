@@ -43,6 +43,17 @@ final class TerminalTab: Identifiable {
 
     var sidebarTitle: String { customTitle ?? autoTitle }
 
+    /// The AI-agent logo for this tab's sidebar row: the focused pane's
+    /// running agent, else the first pane running one. nil when no pane has
+    /// an agent in the foreground (the user's chosen tab icon shows instead).
+    var agentIcon: AgentIcon? {
+        if let icon = focusedPane?.agentIcon { return icon }
+        for pane in splitRoot.allPanes() {
+            if let icon = pane.agentIcon { return icon }
+        }
+        return nil
+    }
+
     var executionState: TerminalExecutionState {
         let panes = splitRoot.allPanes()
         if panes.contains(where: { $0.executionState == .running }) { return .running }

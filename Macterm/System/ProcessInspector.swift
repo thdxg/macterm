@@ -58,6 +58,19 @@ enum ProcessInspector {
         return comm
     }
 
+    /// The basename of the pane's foreground process's argv[0] (login-shell
+    /// `-` stripped), or nil. Unlike `comm` — the *executable's* basename,
+    /// which for some CLIs is an arch- or version-named binary — argv[0] is
+    /// the name the process was invoked as (`claude`, `codex`). Used as the
+    /// agent-icon fallback when `comm` doesn't identify an agent.
+    @MainActor
+    static func foregroundArgv0Basename(forPane pane: Pane) -> String? {
+        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard var first = argv(pid: pid)?.first, !first.isEmpty else { return nil }
+        if first.hasPrefix("-") { first.removeFirst() }
+        return (first as NSString).lastPathComponent
+    }
+
     /// The pid of the pane's foreground process when it's a real program, or
     /// nil when the pane is idle at a shell prompt (or unreadable). This is
     /// the provenance gate for OSC titles: a title arriving while a program
