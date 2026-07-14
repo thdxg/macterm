@@ -240,6 +240,8 @@ private struct SidebarTabRow: View {
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
     private var tabIconSymbol = "terminal"
+    @AppStorage(Preferences.Keys.showAgentIcons)
+    private var showAgentIcons = true
     @AppStorage(Preferences.Keys.showTabStatusIndicator)
     private var showTabStatusIndicator = false
     @State
@@ -266,6 +268,11 @@ private struct SidebarTabRow: View {
         }
     }
 
+    /// The tab's live agent logo, unless disabled in Settings.
+    private var agentIcon: AgentIcon? {
+        showAgentIcons ? tab.agentIcon : nil
+    }
+
     var body: some View {
         Group {
             if tabIconSymbol == Preferences.noIcon {
@@ -273,7 +280,7 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: tab.agentIcon)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
                     }
                 }
                 .labelStyle(.titleAndIcon)
@@ -282,9 +289,9 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: tab.agentIcon)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
                     } else {
-                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: tab.agentIcon)
+                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -391,6 +398,24 @@ private struct TabStatusGlyph: View {
     }
 }
 
+private extension AgentIcon {
+    /// The agent's brand tint. These are vendor identity colors, not theme
+    /// colors, so they're the one deliberate exception to "all colors come
+    /// from MactermTheme". Monochrome brands (Cursor, Grok, opencode) use
+    /// `.primary` so they stay black-on-light / white-on-dark like the brand.
+    var brandColor: Color {
+        switch self {
+        case .claude: Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255) // Anthropic coral
+        case .codex: Color(red: 0xAB / 255, green: 0xAB / 255, blue: 0xAB / 255) // OpenAI light gray
+        case .gemini: Color(red: 0x42 / 255, green: 0x85 / 255, blue: 0xF4 / 255) // Google blue
+        case .copilot: Color(red: 0x89 / 255, green: 0x57 / 255, blue: 0xE5 / 255) // GitHub purple
+        case .opencode,
+             .cursor,
+             .grok: .primary
+        }
+    }
+}
+
 private struct SidebarRowIcon: View {
     let symbol: String
     let index: Int
@@ -399,12 +424,14 @@ private struct SidebarRowIcon: View {
     var body: some View {
         if let agent {
             // A live AI agent in the tab overrides the user's chosen icon —
-            // the logo is a status signal, template-tinted like an SF Symbol.
+            // the logo is a status signal, tinted with the agent's brand color
+            // (overriding the row's .secondary tint).
             Image(agent.rawValue)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 15, height: 15)
+                .foregroundStyle(agent.brandColor)
         } else if Preferences.numberIconChoices.contains(symbol) {
             NumberGlyph(index: index, variant: symbol)
         } else {
