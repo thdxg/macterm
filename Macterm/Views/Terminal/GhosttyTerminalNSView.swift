@@ -162,7 +162,13 @@ final class GhosttyTerminalNSView: NSView {
 
     private var lastScrollbarSnapshot: ScrollbarSnapshot?
 
-    private struct ScrollbarSnapshot: Equatable {
+    /// The most recent `GHOSTTY_ACTION_SCROLLBAR` values (`total`/`offset`/`len`
+    /// rows), or nil before the first scrollbar update. Read-only introspection
+    /// for the control CLI's `pane inspect`; the same values drive the overlay
+    /// scrollbar. See #112 — the scrollback `total` was the whole diagnostic.
+    var scrollbarSnapshot: ScrollbarSnapshot? { lastScrollbarSnapshot }
+
+    struct ScrollbarSnapshot: Equatable {
         let total: UInt64
         let offset: UInt64
         let len: UInt64
@@ -1100,6 +1106,62 @@ extension GhosttyTerminalNSView {
         }
         return true
     }
+}
+
+// MARK: - Read-only introspection (control CLI `pane inspect`/`dump`)
+
+extension GhosttyTerminalNSView {
+    /// The live terminal grid + cell/surface pixel dimensions
+    /// (`ghostty_surface_size`), or nil when the surface isn't created yet.
+    var surfaceSize: ghostty_surface_size_s? {
+        guard let surface else { return nil }
+        return ghostty_surface_size(surface)
+    }
+
+    /// Whether libghostty considers the child process exited.
+    var processExited: Bool {
+        guard let surface else { return false }
+        return ghostty_surface_process_exited(surface)
+    }
+
+    /// Read cell text out of the terminal core via `ghostty_surface_read_text`.
+    /// `scrollback == false` returns the visible viewport; `true` returns the
+    /// full screen including scrollback. nil when there's no surface or the
+    /// core declines the read. This is the same API ghostty's own app uses for
+    /// its cached screen/visible contents.
+    func readText(scrollback: Bool) -> String? {
+        guard let surface else { return nil }
+        let tag = scrollback ? GHOSTTY_POINT_SCREEN : GHOSTTY_POINT_VIEWPORT
+        let sel = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+            rectangle: false
+        )
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, sel, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let ptr = text.text else { return "" }
+        return String(cString: ptr)
+    }
+
+    #if DEBUG
+    /// DEBUG-ONLY: drive `ghostty_surface_set_size` once, directly, bypassing
+    /// SwiftUI layout — so a resize/reflow transition can be reproduced in
+    /// isolation (issue #167) instead of confounded with the reparent + layout
+    /// storm the normal path fires. Converts the requested grid to backing
+    /// pixels via the live cell dimensions. Returns false if the surface isn't
+    /// ready or the cell size is unknown. Never compiled into Release.
+    @discardableResult
+    func debugResizeSurface(cols: Int, rows: Int) -> Bool {
+        guard let surface, cols > 0, rows > 0 else { return false }
+        let size = ghostty_surface_size(surface)
+        guard size.cell_width_px > 0, size.cell_height_px > 0 else { return false }
+        let widthPx = UInt32(cols) * size.cell_width_px
+        let heightPx = UInt32(rows) * size.cell_height_px
+        ghostty_surface_set_size(surface, widthPx, heightPx)
+        return true
+    }
+    #endif
 }
 
 // MARK: - NSTextInputClient
