@@ -44,33 +44,27 @@ xcodebuild \
   archive \
   | (xcbeautify --quiet 2>/dev/null || cat)
 
-# Export the .app from the archive. Use a minimal export plist that produces
-# a copy of the .app without re-signing or notarizing — we ship ad-hoc.
-EXPORT_PLIST=$(mktemp)
-cat > "$EXPORT_PLIST" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>mac-application</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-</dict>
-</plist>
-EOF
-
-xcodebuild \
-  -exportArchive \
-  -archivePath "$ARCHIVE_PATH" \
-  -exportPath "$EXPORT_PATH" \
-  -exportOptionsPlist "$EXPORT_PLIST" \
-  | (xcbeautify --quiet 2>/dev/null || cat)
-rm -f "$EXPORT_PLIST"
+# Copy the .app straight out of the archive. We ship ad-hoc-signed, so there's
+# nothing to re-sign or notarize — the archive's Products/Applications already
+# holds the fully-built, signed bundle (Sparkle and its XPC services included).
+# `ditto` (not cp) preserves the framework symlinks a valid macOS bundle needs.
+#
+# This deliberately avoids `xcodebuild -exportArchive`: its `-exportOptionsPlist`
+# `method` value is unstable across Xcode releases (Apple renamed the macOS
+# export methods in Xcode 16, breaking the old `mac-application` value — the
+# failure that motivated this). A direct copy has no version-sensitive tokens.
+ARCHIVED_APP="$ARCHIVE_PATH/Products/Applications/Macterm.app"
+if [[ ! -d "$ARCHIVED_APP" ]]; then
+  echo "ERROR: $ARCHIVED_APP not found in archive" >&2
+  exit 1
+fi
+mkdir -p "$EXPORT_PATH"
+ditto "$ARCHIVED_APP" "$EXPORT_PATH/Macterm.app"
 
 APP_BUNDLE="$EXPORT_PATH/Macterm.app"
-if [[ ! -d "$APP_BUNDLE" ]]; then
-  echo "ERROR: $APP_BUNDLE not produced by xcodebuild -exportArchive" >&2
+# Sanity-check the copy is a valid, signed bundle before building a DMG from it.
+if ! codesign --verify --deep --strict "$APP_BUNDLE" 2>/dev/null; then
+  echo "ERROR: exported $APP_BUNDLE failed code-signature verification" >&2
   exit 1
 fi
 

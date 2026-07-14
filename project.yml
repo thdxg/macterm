@@ -38,6 +38,9 @@ packages:
   Yams:
     url: https://github.com/jpsim/Yams
     from: "5.0.0"
+  ArgumentParser:
+    url: https://github.com/apple/swift-argument-parser
+    from: "1.3.0"
 
 targets:
   Macterm:
@@ -50,6 +53,7 @@ targets:
           - "Macterm.entitlements"
           - "Resources/ghostty"
           - "Resources/terminfo"
+          - "Resources/zmx"
           - "AppIcon.icon"
       # Ghostty resources (themes + shell-integration), downloaded by setup.sh.
       # Folder reference (not the default "group") because the contents are
@@ -116,6 +120,10 @@ targets:
           PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.debug
           PRODUCT_DISPLAY_NAME: Macterm Debug
     dependencies:
+      # Build ordering only: the post-build script copies the CLI binary into
+      # the bundle, so it must exist before the app target finishes.
+      - target: MactermCLI
+        embed: false
       - framework: GhosttyKit.xcframework
         embed: false
       - package: Sparkle
@@ -132,6 +140,45 @@ targets:
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework
       - sdk: UserNotifications.framework
+    postCompileScripts:
+      # Copy the prebuilt zmx binary (downloaded by setup.sh from the thdxg/zmx
+      # release, like GhosttyKit) into the app bundle at
+      # Contents/Resources/zmx/zmx — ZmxClient resolves it via Bundle.main.
+      # Runs after compile so the bundle's Resources dir exists.
+      - script: "${SRCROOT}/scripts/embed-zmx.sh"
+        name: "Embed zmx"
+        basedOnDependencyAnalysis: false
+    postBuildScripts:
+      # Bundle the control CLI at Contents/Resources/bin/macterm. The app
+      # prepends this dir to PATH for spawned shells; scripts outside the app
+      # (the CI benchmark) invoke it by bundle path.
+      - name: "Bundle macterm CLI"
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          BIN_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources/bin"
+          mkdir -p "$BIN_DIR"
+          cp "$BUILT_PRODUCTS_DIR/macterm" "$BIN_DIR/macterm"
+
+  # The bundled control CLI (`macterm`). Shares ControlProtocol.swift with the
+  # app target so the wire codec can never drift between the two.
+  MactermCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - path: CLI
+      - path: Macterm/Control/ControlProtocol.swift
+    dependencies:
+      - package: ArgumentParser
+        product: ArgumentParser
+    settings:
+      base:
+        PRODUCT_NAME: macterm
+        # The binary is `macterm` but the MODULE must not collide with the
+        # app's `Macterm` module (case-insensitive .swiftmodule paths in the
+        # shared products dir would otherwise clash).
+        PRODUCT_MODULE_NAME: MactermCLI
+        PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.cli
 
   MactermTests:
     type: bundle.unit-test

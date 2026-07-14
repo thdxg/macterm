@@ -2,6 +2,13 @@ name = "macterm"
 compatibility_date = "2026-06-20"
 main = "src/index.js"
 
+# Compile the site before deploy. Runs for both local `wrangler deploy` and
+# Cloudflare Workers Builds (Git integration), which uses this as its build
+# step. The generated public/docs.html and public/tailwind.css are gitignored,
+# so this must run or the site ships unstyled with a missing docs page.
+[build]
+command = "bun install && bun run build"
+
 [assets]
 directory = "public"
 binding = "ASSETS"

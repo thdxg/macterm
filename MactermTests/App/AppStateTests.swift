@@ -6,12 +6,26 @@ import Testing
 struct AppStateTests {
     // MARK: - Setup helpers
 
-    /// Build an AppState with a temp-file workspace store so tests don't
-    /// touch the user's real App Support data.
-    private func makeAppState(store: WorkspaceStore? = nil) -> AppState {
+    /// Build an AppState with a temp-file workspace store and a temp-dir
+    /// project-file store so tests don't touch the user's real App Support
+    /// data or `~/.config/macterm/projects`.
+    private func makeAppState(
+        store: WorkspaceStore? = nil,
+        projectFiles: ProjectFileStore? = nil
+    ) -> AppState {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
-        return AppState(workspaceStore: store ?? WorkspaceStore(fileURL: tmp))
+        return AppState(
+            workspaceStore: store ?? WorkspaceStore(fileURL: tmp),
+            projectFiles: projectFiles ?? makeProjectFileStore()
+        )
+    }
+
+    /// Fresh central project-file store rooted in a unique tempdir.
+    private func makeProjectFileStore() -> ProjectFileStore {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        return ProjectFileStore(directoryURL: dir)
     }
 
     /// Create a project + workspace inside `state` and return the project.
@@ -475,21 +489,63 @@ struct AppStateTests {
         return (p, dir.path)
     }
 
-    private func writeLayout(_ yaml: String, at root: String) {
+    /// Write a raw central project file into `store`'s directory.
+    private func writeProjectFile(_ yaml: String, in store: ProjectFileStore, filename: String = "test.yaml") {
+        try? FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
+        try? yaml.write(to: store.directoryURL.appendingPathComponent(filename), atomically: true, encoding: .utf8)
+    }
+
+    /// Write a legacy in-repo `.macterm/layout.yaml` (deprecated seed path).
+    private func writeLegacyLayout(_ yaml: String, at root: String) {
         let url = URL(fileURLWithPath: root).appendingPathComponent(".macterm/layout.yaml")
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? yaml.write(to: url, atomically: true, encoding: .utf8)
     }
 
     @Test
-    func selecting_project_with_layout_file_auto_applies_on_first_open() throws {
-        let state = makeAppState()
+    func selecting_project_with_matching_project_file_auto_applies_on_first_open() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-autoapply-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        // Layout exists *before* the project is first opened.
-        writeLayout("""
+        // A central file declaring this path exists *before* first open.
+        writeProjectFile("""
+        path: \(dir.path)
+        tabs:
+          - name: "Dev"
+            split:
+              direction: horizontal
+              first:  { run: "npm run dev" }
+              second: {}
+        """, in: files)
+
+        let project = Project(name: "auto", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+
+        // Workspace built from the file (one tab, two panes), not the default
+        // single-pane workspace. Non-destructive on first open → no prompt.
+        let ws = try #require(state.workspaces[project.id])
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs[0].customTitle == "Dev")
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingLayoutError == nil)
+    }
+
+    @Test
+    func first_open_imports_legacy_layout_into_central_store_and_applies() throws {
+        // Deprecated seed path (#114): no central file + parseable in-repo
+        // `.macterm/layout.yaml` → imported, then applied from the central
+        // store. Remove alongside the legacy path next release.
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-legacy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        writeLegacyLayout("""
         tabs:
           - name: "Dev"
             split:
@@ -498,16 +554,166 @@ struct AppStateTests {
               second: {}
         """, at: dir.path)
 
-        let project = Project(name: "auto", path: dir.path, sortOrder: 0)
+        let project = Project(name: "Legacy Proj", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        // Workspace built from the layout (one tab, two panes), not the default
-        // single-pane workspace. Non-destructive on first open → no prompt.
+        // Applied…
+        let ws = try #require(state.workspaces[project.id])
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        // …and imported: the central file now declares the project's path,
+        // named by the project-name slug, with the tabs carried over.
+        let imported = try #require(try files.loadFull(forProjectPath: dir.path))
+        #expect(imported.name == "Legacy Proj")
+        #expect(imported.tabs?.count == 1)
+        #expect(files.find(forProjectPath: dir.path)?.url.lastPathComponent == "legacy_proj.yaml")
+        // The in-repo file is left untouched (it's a seed, never deleted).
+        #expect(LayoutFile.exists(atProjectRoot: dir.path))
+    }
+
+    @Test
+    func first_open_with_unparseable_legacy_layout_surfaces_error_and_imports_nothing() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-legacybad-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        writeLegacyLayout("tabs:\n  - split: { direction: horizontal, first: {} }\n", at: dir.path)
+
+        let project = Project(name: "bad", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+
+        // Error dialog staged, nothing imported, default workspace created.
+        #expect(state.pendingLayoutError?.verb == "import")
+        #expect(files.find(forProjectPath: dir.path) == nil)
+        #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+    }
+
+    @Test
+    func first_open_with_invalid_project_file_surfaces_error_and_uses_default_workspace() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-invalid-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Header identifies the file; tabs fail the full decode.
+        writeProjectFile("""
+        path: \(dir.path)
+        tabs:
+          - split: { direction: horizontal, first: {} }
+        """, in: files)
+
+        let project = Project(name: "broken", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+
+        #expect(state.pendingLayoutError?.verb == "apply")
+        #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+    }
+
+    @Test
+    func apply_layout_imports_legacy_for_already_open_project() throws {
+        // The migration path for existing projects (#114): a restored
+        // snapshot (here, a live workspace) suppresses the first-open import,
+        // so an explicit Apply Layout must import the committed legacy file
+        // itself — otherwise it stays unreachable for the whole deprecation
+        // window. Remove alongside the legacy path next release.
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-legacylive-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let project = Project(name: "Existing", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+        #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+        writeLegacyLayout("""
+        tabs:
+          - name: "Dev"
+            split:
+              direction: horizontal
+              first:  { run: "npm run dev" }
+              second: {}
+        """, at: dir.path)
+
+        state.applyLayoutPresentingError(project)
+
+        #expect(state.pendingLayoutError == nil)
+        // Imported into the central store, named by the project-name slug…
+        #expect(files.find(forProjectPath: dir.path)?.url.lastPathComponent == "existing.yaml")
+        // …and applied to the live workspace (non-destructive: the idle pane
+        // is reused positionally, the command pane spawns).
         let ws = try #require(state.workspaces[project.id])
         #expect(ws.tabs.count == 1)
         #expect(ws.tabs[0].customTitle == "Dev")
         #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
-        #expect(state.pendingLayoutApply == nil)
+    }
+
+    @Test
+    func apply_layout_with_unparseable_legacy_surfaces_import_error() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-legacylivebad-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let project = Project(name: "Existing", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+        writeLegacyLayout("tabs:\n  - split: { direction: horizontal, first: {} }\n", at: dir.path)
+
+        state.applyLayoutPresentingError(project)
+
+        #expect(state.pendingLayoutError?.verb == "import")
+        #expect(files.find(forProjectPath: dir.path) == nil)
+    }
+
+    // MARK: - saveLayout duplicate conflicts
+
+    @Test
+    func save_layout_warns_when_a_duplicate_file_shadows_the_save() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let (project, root) = seedProjectWithDir(state)
+        // Two hand-authored duplicates. The save replaces the first (bound)
+        // one, but "bbb.yaml" survives and sorts before "proj.yaml" — so it
+        // shadows what was just saved.
+        writeProjectFile("path: \(root)", in: files, filename: "aaa.yaml")
+        writeProjectFile("path: \(root)", in: files, filename: "bbb.yaml")
+
+        state.saveLayoutPresentingError(project)
+
+        let notice = try #require(state.pendingLayoutError)
+        #expect(notice.title == "Layout saved with a conflict")
+        #expect(notice.message.contains("bbb.yaml"))
+        #expect(notice.message.contains("takes precedence"))
+    }
+
+    @Test
+    func save_layout_lists_ignored_duplicates_when_the_save_wins() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let (project, root) = seedProjectWithDir(state)
+        // "proj.yaml" (the save target) sorts before the surviving duplicate.
+        writeProjectFile("path: \(root)", in: files, filename: "aaa.yaml")
+        writeProjectFile("path: \(root)", in: files, filename: "zzz.yaml")
+
+        state.saveLayoutPresentingError(project)
+
+        let notice = try #require(state.pendingLayoutError)
+        #expect(notice.title == "Layout saved with a conflict")
+        #expect(notice.message.contains("zzz.yaml"))
+        #expect(notice.message.contains("ignored"))
+    }
+
+    @Test
+    func save_layout_stays_silent_without_duplicates() {
+        let state = makeAppState()
+        let (project, _) = seedProjectWithDir(state)
+        state.saveLayoutPresentingError(project)
+        #expect(state.pendingLayoutError == nil)
     }
 
     @Test
@@ -527,9 +733,14 @@ struct AppStateTests {
     }
 
     @Test
-    func layout_file_wins_over_restored_snapshot() throws {
+    func reopen_restores_snapshot_silently_and_ignores_project_file() throws {
+        // Reopen is always silent: a restored session snapshot wins (a
+        // project's panes must reattach their live zmx sessions, and its live
+        // layout is remembered), and the declared file is NOT applied and NOT
+        // prompted for — even when it differs. The file only seeds a genuine
+        // first open (no snapshot), covered by the next test.
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-layoutwins-\(UUID().uuidString)")
+            .appendingPathComponent("macterm-reopen-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let project = Project(name: "winner", path: dir.path, sortOrder: 0)
@@ -540,41 +751,78 @@ struct AppStateTests {
         let snapshotWS = Workspace(projectID: project.id, projectPath: dir.path)
         store.save(WorkspaceSerializer.snapshot([project.id: snapshotWS]))
 
-        // And a layout file declaring a two-pane split.
-        writeLayout("""
+        // And a central file declaring a different (two-pane) split.
+        let files = makeProjectFileStore()
+        writeProjectFile("""
+        path: \(dir.path)
         tabs:
           - name: "Dev"
             split:
               direction: horizontal
               first:  { run: "npm run dev" }
               second: {}
-        """, at: dir.path)
+        """, in: files)
 
-        // Make it the active project so restore reopens it.
         let priorActive = Preferences.shared.activeProjectID
         Preferences.shared.activeProjectID = project.id
         defer { Preferences.shared.activeProjectID = priorActive }
 
-        // Restore: the layout file must win — the project's snapshot is skipped
-        // and its workspace is rebuilt from the layout (two panes, not one).
-        let state = makeAppState(store: store)
+        let state = makeAppState(store: store, projectFiles: files)
+        state.restoreSelection(projects: [project])
+
+        // Restored snapshot wins: one pane, file NOT applied, NO prompt.
+        let ws = try #require(state.workspaces[project.id])
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
+        #expect(ws.tabs[0].customTitle != "Dev")
+        #expect(state.pendingLayoutApply == nil)
+    }
+
+    @Test
+    func project_file_auto_applies_on_genuine_first_open_without_snapshot() throws {
+        // No snapshot at all → the declared file still seeds the workspace on
+        // first open (pure-spawn, no prompt). The only auto-apply path left.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-firstopen-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let project = Project(name: "fresh", path: dir.path, sortOrder: 0)
+        let store = WorkspaceStore(fileURL: dir.appendingPathComponent("workspaces.json"))
+
+        let files = makeProjectFileStore()
+        writeProjectFile("""
+        path: \(dir.path)
+        tabs:
+          - name: "Dev"
+            split:
+              direction: horizontal
+              first:  { run: "npm run dev" }
+              second: {}
+        """, in: files)
+
+        let priorActive = Preferences.shared.activeProjectID
+        Preferences.shared.activeProjectID = project.id
+        defer { Preferences.shared.activeProjectID = priorActive }
+
+        let state = makeAppState(store: store, projectFiles: files)
         state.restoreSelection(projects: [project])
 
         let ws = try #require(state.workspaces[project.id])
         #expect(ws.tabs.count == 1)
         #expect(ws.tabs[0].customTitle == "Dev")
         #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(state.pendingLayoutApply == nil)
     }
 
     @Test
     func applyLayout_malformed_file_returns_error_and_does_not_apply() throws {
-        let state = makeAppState()
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
         let (p, root) = seedProjectWithDir(state)
         let beforeTabIDs = try #require(state.workspaces[p.id]).tabs.map(\.id)
 
         // Invalid: a `split` mapping missing its `second` child.
-        writeLayout("tabs:\n  - split: { direction: horizontal, first: {} }\n", at: root)
-        let error = state.applyLayout(projectID: p.id, projectName: "proj", projectRoot: root)
+        writeProjectFile("path: \(root)\ntabs:\n  - split: { direction: horizontal, first: {} }\n", in: files)
+        let error = state.applyLayout(project: p)
 
         #expect(error != nil)
         // Workspace is untouched — same tabs, nothing spawned or closed.
@@ -585,10 +833,10 @@ struct AppStateTests {
     @Test
     func applyLayout_missing_file_returns_error_and_does_not_apply() throws {
         let state = makeAppState()
-        let (p, root) = seedProjectWithDir(state)
+        let (p, _) = seedProjectWithDir(state)
         let beforeTabIDs = try #require(state.workspaces[p.id]).tabs.map(\.id)
 
-        let error = state.applyLayout(projectID: p.id, projectName: "proj", projectRoot: root)
+        let error = state.applyLayout(project: p)
 
         #expect(error != nil)
         #expect(state.workspaces[p.id]?.tabs.map(\.id) == beforeTabIDs)
@@ -596,31 +844,51 @@ struct AppStateTests {
     }
 
     @Test
-    func applyLayout_mismatched_project_name_prompts_confirmation() {
-        let state = makeAppState()
-        let (p, root) = seedProjectWithDir(state) // project name "proj"
+    func applyLayout_empty_tabs_returns_error_and_never_plans_destruction() throws {
+        // A bare declaration (no tabs:) must read as "nothing to apply" —
+        // planning against an empty tab list would close every live tab.
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let (p, root) = seedProjectWithDir(state)
+        let beforeTabIDs = try #require(state.workspaces[p.id]).tabs.map(\.id)
 
-        // Non-destructive layout (matches the single live pane) but saved for a
-        // different project → should stage a confirmation rather than apply.
-        writeLayout("name: OtherApp\ntabs:\n  - {}\n", at: root)
-        let error = state.applyLayout(projectID: p.id, projectName: "proj", projectRoot: root)
+        writeProjectFile("name: bare\npath: \(root)\n", in: files)
+        let error = state.applyLayout(project: p)
 
-        #expect(error == nil)
-        #expect(state.pendingLayoutApply?.mismatchedProjectName == "OtherApp")
-        #expect(state.pendingLayoutApply?.currentProjectName == "proj")
+        #expect(error != nil)
+        #expect(state.workspaces[p.id]?.tabs.map(\.id) == beforeTabIDs)
+        #expect(state.pendingLayoutApply == nil)
     }
 
     @Test
-    func applyLayout_matching_project_name_applies_without_prompt() {
-        let state = makeAppState()
+    func applyLayout_name_mismatch_applies_without_prompt() {
+        // Files are matched by path; a differing `name:` is expected drift
+        // (project renamed since last save), never a confirmation.
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
         let (p, root) = seedProjectWithDir(state) // project name "proj"
 
-        // Same project name + non-destructive → applies silently.
-        writeLayout("name: proj\ntabs:\n  - {}\n", at: root)
-        let error = state.applyLayout(projectID: p.id, projectName: "proj", projectRoot: root)
+        writeProjectFile("name: OtherApp\npath: \(root)\ntabs:\n  - {}\n", in: files)
+        let error = state.applyLayout(project: p)
 
         #expect(error == nil)
         #expect(state.pendingLayoutApply == nil)
+    }
+
+    @Test
+    func saveLayout_creates_central_file_declaring_the_project_path() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let (p, root) = seedProjectWithDir(state)
+
+        let error = state.saveLayout(project: p)
+
+        #expect(error == nil)
+        let saved = try #require(try files.loadFull(forProjectPath: root))
+        #expect(saved.name == "proj")
+        #expect(saved.path == root)
+        #expect(saved.tabs?.count == 1)
+        #expect(files.find(forProjectPath: root)?.url.lastPathComponent == "proj.yaml")
     }
 
     // MARK: - panesToWarm (eager process start for focused project)
@@ -651,5 +919,323 @@ struct AppStateTests {
         let tab = TerminalTab(id: UUID(), splitRoot: .pane(only), focusedPaneID: only.id)
         let ws = Workspace(projectID: pid, tabs: [tab], activeTabID: tab.id)
         #expect(AppState.panesToWarm(in: ws).isEmpty)
+    }
+
+    // MARK: - Occlusion-aware quiet-settle
+
+    // These drive `AppState.settleIfVisible` directly with an injected
+    // occlusion closure, rather than the full `refreshAllForegroundProcesses`
+    // tick. The tick also re-reads each pane's real foreground process (nil in
+    // a unit test with no live surface, which clears the run source) and is
+    // gated on the `Preferences.shared.showTabStatusIndicator` singleton —
+    // mutating that global races the parallel test runner. Testing the guard
+    // in isolation is both deterministic and a truer unit of what PR adds.
+
+    /// A pane whose activity went quiet long ago (past the 3s settle window),
+    /// so a visible settle resolves it to `.done` and an occluded one holds.
+    private func quietRunningPane() -> Pane {
+        let pane = Pane(projectPath: "/tmp", projectID: UUID())
+        pane.recordUserInteraction()
+        pane.markTerminalActivity(at: Date().addingTimeInterval(-10))
+        #expect(pane.executionState == .running)
+        return pane
+    }
+
+    @Test
+    func occluded_pane_does_not_quiet_settle() {
+        let state = makeAppState()
+        let pane = quietRunningPane()
+        state.paneIsOccluded = { _ in true }
+
+        state.settleIfVisible(pane)
+        // 10s of silence, but the renderer was parked — silence proves
+        // nothing, so the pane must stay running.
+        #expect(pane.executionState == .running)
+    }
+
+    @Test
+    func visible_pane_still_quiet_settles() {
+        let state = makeAppState()
+        let pane = quietRunningPane()
+        state.paneIsOccluded = { _ in false }
+
+        state.settleIfVisible(pane)
+        #expect(pane.executionState == .done)
+    }
+
+    @Test
+    func deoccluded_pane_gets_fresh_quiet_window_before_settling() {
+        let state = makeAppState()
+        let pane = quietRunningPane()
+
+        // Occluded: no settle, and the pane is marked as having been occluded.
+        state.paneIsOccluded = { _ in true }
+        state.settleIfVisible(pane)
+        #expect(pane.executionState == .running)
+
+        // Now visible. The stale 10s-old activity timestamp must not settle it
+        // instantly — a false `.done` would stick, since activity can never
+        // revive a done pane. The window restarts instead.
+        state.paneIsOccluded = { _ in false }
+        state.settleIfVisible(pane)
+        #expect(pane.executionState == .running)
+
+        // With genuine quiet now elapsing from the reset window, it settles.
+        pane.settleTerminalActivityIfQuiet(now: Date().addingTimeInterval(4))
+        #expect(pane.executionState == .done)
+    }
+
+    // MARK: - zmx session lifecycle on close paths
+
+    /// A ZmxClient that records every killed session name. Remote kills are
+    /// recorded into `remoteKilled` (when given) so a test can assert routing.
+    private func recordingZmx(
+        into killed: KilledSessions,
+        remoteInto remoteKilled: KilledSessions? = nil
+    ) -> ZmxClient {
+        ZmxClient(
+            executableURL: { nil },
+            isBundled: { true },
+            killSession: { name in await killed.append(name) },
+            killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
+            remoteForegroundComms: { _, _ in nil },
+            listSessionsWithClients: { [] },
+            sessionLeaderPIDs: { [:] },
+            sessionListSnapshot: { (entries: [], leaders: [:]) }
+        )
+    }
+
+    @Test
+    func closeTab_kills_every_panes_session() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let names = Set(tab.splitRoot.allPanes().map(\.sessionName))
+        #expect(names.count == 2)
+
+        // Second tab so the close leaves a valid workspace.
+        _ = state.workspaces[p.id]?.createTab(projectPath: "/tmp")
+        state.closeTab(tab.id, projectID: p.id)
+
+        await killed.settle(expecting: names.count)
+        #expect(await killed.names == names)
+    }
+
+    @Test
+    func closing_remote_pane_routes_kill_over_ssh() async throws {
+        // A remote pane's session lives on the remote daemon — a local kill
+        // of its name would silently no-op and strand the session (#104).
+        let killed = KilledSessions()
+        let remoteKilled = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed, remoteInto: remoteKilled)
+        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let target = try #require(tab.focusedPaneID)
+        let targetName = try #require(tab.splitRoot.findPane(id: target)?.sessionName)
+
+        state.closePane(target, projectID: p.id)
+
+        await remoteKilled.settle(expecting: 1)
+        #expect(await remoteKilled.names == [targetName])
+        #expect(await killed.names.isEmpty)
+    }
+
+    @Test
+    func closePane_kills_only_that_panes_session() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let target = try #require(tab.focusedPaneID)
+        let targetName = try #require(tab.splitRoot.findPane(id: target)?.sessionName)
+
+        state.closePane(target, projectID: p.id)
+
+        await killed.settle(expecting: 1)
+        #expect(await killed.names == [targetName])
+    }
+
+    @Test
+    func unloadProject_kills_every_session_but_keeps_layout() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let names = try Set(
+            #require(state.workspaces[p.id]).tabs
+                .flatMap { $0.splitRoot.allPanes() }
+                .map(\.sessionName)
+        )
+        #expect(names.count == 2)
+
+        state.unloadProject(p.id)
+
+        await killed.settle(expecting: names.count)
+        // Sessions die (unload = stop the project's shells)…
+        #expect(await killed.names == names)
+        // …but the layout survives for the next open.
+        let ws = try #require(state.workspaces[p.id])
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+    }
+
+    @Test
+    func moveTab_kills_nothing() async throws {
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let moving = try #require(state.workspaces[p1.id]?.tabs.first?.id)
+
+        state.moveTab(moving, from: p1.id, to: p2.id, destPath: p2.path)
+
+        await killed.settleExpectingNone()
+        #expect(await killed.names.isEmpty)
+    }
+
+    @Test
+    func moveTab_restamps_pane_routing_identity_but_not_session() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let tab = try #require(state.workspaces[p1.id]?.activeTab)
+        // Split so the moved tab carries more than one pane to restamp.
+        state.splitPane(direction: .horizontal, projectID: p1.id)
+        let panes = tab.splitRoot.allPanes()
+        #expect(panes.count == 2)
+        let originalSessionNames = Set(panes.map(\.sessionName))
+        let originalPaths = Set(panes.map(\.projectPath))
+
+        state.moveTab(tab.id, from: p1.id, to: p2.id, destPath: p2.path)
+
+        // Routing identity (projectID) is restamped to the destination so a
+        // notification click navigates to the right workspace.
+        #expect(tab.splitRoot.allPanes().allSatisfy { $0.projectID == p2.id })
+        // Session identity is untouched — the shells keep running under their
+        // original names and paths (a remote pane would still kill over ssh).
+        #expect(Set(tab.splitRoot.allPanes().map(\.sessionName)) == originalSessionNames)
+        #expect(Set(tab.splitRoot.allPanes().map(\.projectPath)) == originalPaths)
+    }
+
+    @Test
+    func moveTab_toIndex_inserts_at_slot_in_destination() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        // Give p2 two tabs so there's a middle slot to drop into.
+        let dest = try #require(state.workspaces[p2.id])
+        let d0 = dest.tabs[0].id
+        let d1 = dest.createTab(projectPath: p2.path).id
+        let moving = try #require(state.workspaces[p1.id]?.activeTab)
+
+        state.moveTab(moving.id, from: p1.id, to: p2.id, destPath: p2.path, toIndex: 1)
+
+        #expect(dest.tabs.map(\.id) == [d0, moving.id, d1])
+        #expect(dest.activeTabID == moving.id)
+        #expect(state.workspaces[p1.id]?.tabs.contains { $0.id == moving.id } == false)
+    }
+
+    @Test
+    func reorderTab_moves_within_project_and_persists() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let state = makeAppState(store: WorkspaceStore(fileURL: storeURL))
+        let p = seedProject(state, name: "p", path: "/tmp")
+        let ws = try #require(state.workspaces[p.id])
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: p.path).id
+
+        state.reorderTab(t1, inProject: p.id, toIndex: 2)
+        #expect(ws.tabs.map(\.id) == [t2, t1])
+
+        // The reorder persisted: a fresh store reading the same file sees it.
+        let reloaded = WorkspaceStore(fileURL: storeURL).load()
+        let saved = try #require(reloaded.first { $0.projectID == p.id })
+        #expect(saved.tabs.map(\.id) == [t2, t1])
+    }
+
+    // MARK: - Busy-close confirmations
+
+    @Test
+    func requestCloseTab_with_idle_panes_closes_immediately() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        _ = ws.createTab(projectPath: "/tmp")
+
+        // No live surfaces in a unit test → needsConfirmQuit is unreachable →
+        // not busy → closes without staging.
+        state.requestCloseTab(tab.id, projectID: p.id)
+        #expect(state.pendingCloseTab == nil)
+        #expect(ws.tabs.count == 1)
+    }
+
+    @Test
+    func requestRemoveProject_idle_runs_removal_immediately() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        var removed = false
+        state.requestRemoveProject(p.id) { removed = true }
+        #expect(removed)
+        #expect(state.pendingRemoveProject == nil)
+    }
+
+    @Test
+    func pendingCloseTab_confirm_and_cancel() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        _ = ws.createTab(projectPath: "/tmp")
+
+        // Stage manually (busy detection needs a live surface).
+        state.pendingCloseTab = AppState.PendingCloseTab(tabID: tab.id, projectID: p.id)
+        state.cancelPendingCloseTab()
+        #expect(state.pendingCloseTab == nil)
+        #expect(ws.tabs.count == 2)
+
+        state.pendingCloseTab = AppState.PendingCloseTab(tabID: tab.id, projectID: p.id)
+        state.confirmPendingCloseTab()
+        #expect(state.pendingCloseTab == nil)
+        #expect(ws.tabs.count == 1)
+    }
+}
+
+/// Actor recording killed session names across the fire-and-forget kill tasks.
+private actor KilledSessions {
+    private(set) var names: Set<String> = []
+    func append(_ name: String) {
+        names.insert(name)
+    }
+
+    /// Wait until at least `count` distinct names have been recorded (or a
+    /// generous timeout elapses). Waiting for the EXPECTED count — not merely
+    /// "anything arrived" — means a slow second kill can't make a positive
+    /// assertion pass before all kills have landed.
+    func settle(expecting count: Int) async {
+        for _ in 0 ..< 200 where names.count < count {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    /// For negative assertions ("nothing should have been killed"): wait a
+    /// deterministic window so a late kill would have shown up, then the caller
+    /// asserts emptiness. Named distinctly so its intent (and its inherent
+    /// fixed-wait limitation) is explicit at the call site.
+    func settleExpectingNone() async {
+        try? await Task.sleep(for: .milliseconds(200))
     }
 }

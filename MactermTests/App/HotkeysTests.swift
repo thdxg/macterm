@@ -312,6 +312,16 @@ struct HotkeysTests {
     }
 
     @Test
+    func copySessionID_is_unbound_by_default_and_titled_from_command() {
+        // Ships unbound (opt-in via Settings → Keymaps) — a copy action has no
+        // conventional shortcut, and picking one risks shadowing a user binding.
+        #expect(HotkeyAction.copySessionID.defaultShortcut == "none")
+        // Title flows from the owning AppCommand, so the two can't drift.
+        #expect(HotkeyAction.copySessionID.title == "Copy Session ID")
+        #expect(AppCommand.copySessionID.hotkeyAction == .copySessionID)
+    }
+
+    @Test
     func all_action_ids_are_unique() {
         let ids = HotkeyAction.allCases.map(\.rawValue)
         #expect(ids.count == Set(ids).count)
@@ -402,6 +412,29 @@ struct HotkeysTests {
         #expect(HotkeyRegistry.displayString(for: "cmd+right") == "⌘→")
         #expect(HotkeyRegistry.displayString(for: "cmd+up") == "⌘↑")
         #expect(HotkeyRegistry.displayString(for: "cmd+down") == "⌘↓")
+    }
+
+    /// Real hardware arrow-key NSEvents carry `.numericPad`/`.function` in
+    /// `modifierFlags` — unlike the synthetic events above, which only set the
+    /// modifiers passed in. Matching must ignore those bits (#106) or every
+    /// arrow-key binding fails against a live keypress despite passing the
+    /// hand-rolled synthetic-event tests.
+    @Test
+    func matches_arrow_key_with_real_hardware_modifier_flags() throws {
+        let shortcut = try #require(HotkeyRegistry.parseShortcut("cmd+opt+right"))
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.command, .option, .numericPad, .function],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: 124 // right arrow
+        ))
+        #expect(shortcut.matches(event))
     }
 
     // MARK: - Escape key support
@@ -650,5 +683,57 @@ struct HotkeysTests {
             "c": "cmd+t",
         ])
         #expect(conflicts.isEmpty)
+    }
+
+    // MARK: - HotkeyRegistry.matches (the static cache path)
+
+    //
+    // The static `matches(event:action:)` runs the parsed-shortcut cache — the
+    // path `KeyRouter`/`isAppShortcut` actually use per keystroke. It was
+    // previously untested, which let a cache regression (every hotkey silently
+    // failing) ship. These lock the default bindings AND the cache invalidation.
+
+    private func keyEvent(_ chars: String, _ mods: NSEvent.ModifierFlags, keyCode: UInt16) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: mods, timestamp: 0,
+            windowNumber: 0, context: nil, characters: chars,
+            charactersIgnoringModifiers: chars, isARepeat: false, keyCode: keyCode
+        ))
+    }
+
+    @Test
+    func registry_matches_default_bindings_through_the_cache() throws {
+        // cmd+d = splitRight, cmd+w = closePane — the bindings the user reported
+        // as broken. Call twice each: the second call is a cache HIT and must
+        // still match (a broken cache returns a stale/nil shortcut → no match).
+        let cmdD = try keyEvent("d", [.command], keyCode: 2)
+        #expect(HotkeyRegistry.matches(cmdD, action: .splitRight))
+        #expect(HotkeyRegistry.matches(cmdD, action: .splitRight))
+        #expect(!HotkeyRegistry.matches(cmdD, action: .closePane))
+
+        let cmdW = try keyEvent("w", [.command], keyCode: 13)
+        #expect(HotkeyRegistry.matches(cmdW, action: .closePane))
+        #expect(HotkeyRegistry.matches(cmdW, action: .closePane))
+    }
+
+    @Test
+    func registry_matches_reflects_a_rebind_after_cache_invalidation() throws {
+        // Rebinding must invalidate the cached parse so the next match uses the
+        // new binding. Save/restore the (test-suite) defaults to avoid leakage.
+        let action = HotkeyAction.splitRight
+        let prior = Preferences.defaults.string(forKey: action.defaultsKey)
+        defer {
+            HotkeyRegistry.setShortcutString(prior ?? action.defaultShortcut, for: action)
+        }
+
+        // Prime the cache with the default (cmd+d).
+        let cmdD = try keyEvent("d", [.command], keyCode: 2)
+        #expect(HotkeyRegistry.matches(cmdD, action: action))
+
+        // Rebind to cmd+e; the old key must stop matching and the new one start.
+        HotkeyRegistry.setShortcutString("cmd+e", for: action)
+        let cmdE = try keyEvent("e", [.command], keyCode: 14)
+        #expect(!HotkeyRegistry.matches(cmdD, action: action))
+        #expect(HotkeyRegistry.matches(cmdE, action: action))
     }
 }

@@ -69,12 +69,22 @@ struct PaletteEngineTests {
         }
     }
 
-    /// PaletteContext wants a real AppState + ProjectStore; supply minimal stubs.
+    /// PaletteContext wants a real AppState + ProjectStore; supply minimal
+    /// stubs backed by tempdirs so the test never reads the developer's real
+    /// `~/.config/macterm/projects/` or `projects.json` (a real project file
+    /// declaring `/tmp` would otherwise change results).
     private func makeContext() -> PaletteContext {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
-        let state = AppState(workspaceStore: WorkspaceStore(fileURL: tmp))
-        return PaletteContext(appState: state, projectStore: ProjectStore())
+        let storeTmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
+        let filesDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: tmp),
+            projectFiles: ProjectFileStore(directoryURL: filesDir)
+        )
+        return PaletteContext(appState: state, projectStore: ProjectStore(fileURL: storeTmp))
     }
 
     @Test

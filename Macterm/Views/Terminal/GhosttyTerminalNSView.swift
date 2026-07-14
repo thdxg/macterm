@@ -21,6 +21,34 @@ final class GhosttyTerminalNSView: NSView {
     private let shell: String?
     /// Extra environment variables for the spawned shell.
     private let env: [String: String]?
+    /// The pane's zmx session name. The surface's shell runs under
+    /// `zmx attach <sessionName>` (ghostty `command-wrapper`), so it survives
+    /// app quit and the same name re-attaches the live daemon on relaunch.
+    /// For a remote pane the same name identifies the session on the REMOTE
+    /// host's daemon instead.
+    private let sessionName: String
+
+    /// The parsed `[user@]host:dir` spec when this pane belongs to a remote
+    /// project (#104); nil for local panes. A remote surface runs
+    /// `ssh -t … zmx attach` directly as its command — never under the local
+    /// zmx wrapper (nested zmx is broken upstream) — so all the local
+    /// persistence machinery (wrapper, ZMX_DIR pin, `isZmxWrapped`) stays off.
+    private let remoteSpec: ProjectPath?
+
+    /// Whether this surface belongs to a remote project. Read by the poll
+    /// and title paths, which must not treat the local `ssh` client as the
+    /// pane's real foreground process.
+    var isRemote: Bool { remoteSpec != nil }
+
+    /// Optional explicit remote zmx path (#104), used verbatim in the spawn
+    /// command instead of PATH-resolving `zmx`. nil = PATH lookup.
+    private let remoteZmxPath: String?
+
+    /// Whether this surface actually spawned under the zmx wrapper (false when
+    /// zmx is unbundled or the socket-path budget forced a bypass). Read by
+    /// the resolver-cache retry: only wrapped panes are expected to appear in
+    /// `zmx ls`.
+    private(set) var isZmxWrapped = false
 
     /// Heap buffers backing the `const char*` fields of the surface config —
     /// notably `initial_input`, which libghostty writes to the pty
@@ -34,13 +62,35 @@ final class GhosttyTerminalNSView: NSView {
     /// may have reported it before the callback was wired.
     private var lastReportedTitle: String?
 
+    /// The title already delivered to a callback. The replay in `onTitleChange`'s
+    /// didSet fires ONLY when a title arrived while no callback was wired
+    /// (`lastReportedTitle != lastDeliveredTitle`) — a genuine catch-up. Without
+    /// this, `TerminalSurface.configure` re-assigning the callback on every
+    /// `updateNSView` (focus flips, divider drags) replayed the title each time,
+    /// re-running `receiveReportedTitle` → sysctl + foreground refresh +
+    /// `.terminalPollEvent`, pinning the adaptive poll in its 250ms burst.
+    private var lastDeliveredTitle: String?
+
     /// Fires on each OSC title with the reported string. Whether the string
     /// is *used* for naming is the pane's call (`Pane.receiveReportedTitle`
     /// gates on the foreground process); every arrival also marks a command
     /// boundary that drives a foreground-process refresh.
     var onTitleChange: ((String) -> Void)? {
         didSet {
-            if let title = lastReportedTitle { onTitleChange?(title) }
+            // Replay ASYNC: this setter runs inside TerminalSurface.configure,
+            // i.e. mid SwiftUI view update. A synchronous replay runs a full
+            // foreground refresh whose republishing re-invalidates SwiftUI
+            // from inside its own render transaction — with per-refresh state
+            // flaps that loop never settles (observed twice as a ~90%-CPU
+            // frozen app). Deferring one runloop turn breaks the cycle.
+            //
+            // Replay only when there's a title the current callback hasn't
+            // received yet — not on every re-wire (see `lastDeliveredTitle`).
+            guard let title = lastReportedTitle, title != lastDeliveredTitle,
+                  let callback = onTitleChange
+            else { return }
+            lastDeliveredTitle = title
+            DispatchQueue.main.async { callback(title) }
         }
     }
 
@@ -48,7 +98,15 @@ final class GhosttyTerminalNSView: NSView {
     /// Called by `GhosttyCallbacks`.
     func surfaceDidReportTitle(_ title: String) {
         lastReportedTitle = title
-        onTitleChange?(title)
+        // Only mark it delivered if a callback actually received it — otherwise
+        // a title that arrives before a callback is wired would be recorded as
+        // delivered and the catch-up replay in `onTitleChange`'s didSet would
+        // never fire for it. (Unreachable today, since the callback is wired at
+        // configure time before titles flow, but keeps the two fields honest.)
+        if let onTitleChange {
+            lastDeliveredTitle = title
+            onTitleChange(title)
+        }
     }
 
     func surfaceDidReportProgress(running: Bool) {
@@ -57,6 +115,10 @@ final class GhosttyTerminalNSView: NSView {
         } else {
             onProgressFinished?()
         }
+    }
+
+    func surfaceDidRender() {
+        onTerminalRender?()
     }
 
     func surfaceDidUpdateScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
@@ -83,6 +145,7 @@ final class GhosttyTerminalNSView: NSView {
     var onProgressStarted: (() -> Void)?
     var onProgressFinished: (() -> Void)?
     var onTerminalActivity: (() -> Void)?
+    var onTerminalRender: (() -> Void)?
     /// libghostty pushes scrollback geometry (all values in rows) whenever the
     /// viewport, scrollback size, or visible row count changes.
     /// `(total, offset, len)`: total rows including scrollback, the first
@@ -99,7 +162,13 @@ final class GhosttyTerminalNSView: NSView {
 
     private var lastScrollbarSnapshot: ScrollbarSnapshot?
 
-    private struct ScrollbarSnapshot: Equatable {
+    /// The most recent `GHOSTTY_ACTION_SCROLLBAR` values (`total`/`offset`/`len`
+    /// rows), or nil before the first scrollbar update. Read-only introspection
+    /// for the control CLI's `pane inspect`; the same values drive the overlay
+    /// scrollbar. See #112 — the scrollback `total` was the whole diagnostic.
+    var scrollbarSnapshot: ScrollbarSnapshot? { lastScrollbarSnapshot }
+
+    struct ScrollbarSnapshot: Equatable {
         let total: UInt64
         let offset: UInt64
         let len: UInt64
@@ -110,11 +179,22 @@ final class GhosttyTerminalNSView: NSView {
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
-    init(workingDirectory: String, command: String? = nil, shell: String? = nil, env: [String: String]? = nil) {
+    init(
+        workingDirectory: String,
+        sessionName: String,
+        command: String? = nil,
+        shell: String? = nil,
+        env: [String: String]? = nil,
+        remoteSpec: ProjectPath? = nil,
+        remoteZmxPath: String? = nil
+    ) {
         self.workingDirectory = workingDirectory
+        self.sessionName = sessionName
         self.command = command
         self.shell = shell
         self.env = env
+        self.remoteSpec = remoteSpec
+        self.remoteZmxPath = remoteZmxPath
         super.init(frame: .zero)
         setupTrackingArea()
         registerForDraggedTypes(Array(Self.dropTypes))
@@ -169,17 +249,50 @@ final class GhosttyTerminalNSView: NSView {
             return UnsafePointer(p)
         }
 
-        config.working_directory = cString(workingDirectory)
+        if let remoteSpec {
+            // Remote pane (#104): the surface command IS the ssh client —
+            // `ssh -t host 'cd dir && exec zmx attach <name>'`. Persistence
+            // lives in the remote daemon; the local process is disposable, so
+            // no zmx wrapper, no ZMX_DIR pin, no local working directory
+            // (ghostty defaults to home; the cd happens on the remote). The
+            // declared `shell:` doesn't apply either — the remote session
+            // spawns the remote user's login shell. Interactive auth works
+            // because there's no BatchMode: prompts render in the pane, and
+            // any connect failure surfaces on ghostty's abnormal-exit screen.
+            if let sshCommand = RemoteSpawn.paneCommand(
+                remote: remoteSpec, sessionName: sessionName, zmxPath: remoteZmxPath
+            ) {
+                config.command = cString(sshCommand)
+            }
+        } else {
+            config.working_directory = cString(workingDirectory)
 
-        // Shell binary → the surface's program. nil falls back to libghostty's
-        // own resolution (which honors the user's ghostty config / login shell).
-        if let resolvedShell = shell ?? GhosttyApp.shared.configuredShell {
-            config.command = cString(resolvedShell)
+            // Shell binary → the surface's program. nil falls back to libghostty's
+            // own resolution (which honors the user's ghostty config / login shell).
+            if let resolvedShell = shell ?? GhosttyApp.shared.configuredShell {
+                config.command = cString(resolvedShell)
+            }
         }
 
-        // Declared `run` is typed into the shell verbatim, as if the user had
-        // entered it at the prompt. No shell-syntax handling: cwd is set above,
-        // not via an injected `cd`.
+        // Wrap the resolved shell in zmx for session persistence (LOCAL panes
+        // only — a remote pane's persistence is the remote daemon's job, and
+        // nesting local zmx around the ssh client is broken upstream). The
+        // `command_wrapper` argv is prepended to ghostty's fully-resolved
+        // command (after login(1) + shell integration), so OSC 7 cwd / OSC 133
+        // framing stay intact — the shell just runs as a child of
+        // `zmx attach <sessionName>`, which upserts the session and re-attaches
+        // the live daemon on relaunch. nil executable (zmx unbundled or over
+        // the socket-path budget) → no wrapper, a plain unpersisted shell.
+        // The argv element buffers come from `cString` (freed in
+        // destroySurface); the pointer array is bound around the spawn below.
+        let wrapperArgv: [UnsafePointer<CChar>?] = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
+            executablePath: ZmxClient.live.executableURL()?.path,
+            sessionID: sessionName
+        ).map { cString($0) }
+
+        // Declared `run` is typed into the (wrapped) shell verbatim, as if the
+        // user had entered it at the prompt. No shell-syntax handling: cwd is
+        // set above, not via an injected `cd`.
         if let command, !command.isEmpty {
             config.initial_input = cString(command + "\n")
         }
@@ -192,20 +305,57 @@ final class GhosttyTerminalNSView: NSView {
                 envVars.append(ghostty_env_var_s(key: cString(key), value: cString(value)))
             }
         }
+        if !wrapperArgv.isEmpty {
+            // Pin the socket dir into the WRAPPED SHELL's env, not just our own
+            // zmx subprocesses: a user's shell rc re-exporting ZMX_DIR/TMPDIR
+            // would otherwise move where a *nested* zmx invocation resolves
+            // sockets, past what the budget probe validated — kill and attach
+            // could then target different dirs. (Same defense Supacode ships.)
+            envVars.append(ghostty_env_var_s(
+                key: cString("ZMX_DIR"),
+                value: cString(ZmxSocketBudget.socketDir())
+            ))
+        }
 
-        if envVars.isEmpty {
-            surface = ghostty_surface_new(app, &config)
-        } else {
-            envVars.withUnsafeMutableBufferPointer { buf in
-                config.env_vars = buf.baseAddress
-                config.env_var_count = buf.count
+        /// Sets env on the config and spawns. Split out so the optional
+        /// command-wrapper buffer scope (below) wraps both env-present and
+        /// env-absent paths without four-way nesting.
+        func makeSurface() {
+            if envVars.isEmpty {
                 surface = ghostty_surface_new(app, &config)
+            } else {
+                envVars.withUnsafeMutableBufferPointer { buf in
+                    config.env_vars = buf.baseAddress
+                    config.env_var_count = buf.count
+                    surface = ghostty_surface_new(app, &config)
+                }
+            }
+        }
+
+        // The command_wrapper argv (a `const char* const*`) needs the pointer
+        // array itself to have a stable base for the duration of the spawn;
+        // bind it just around `makeSurface`. Empty wrapper → no zmx (bypass).
+        if wrapperArgv.isEmpty {
+            makeSurface()
+        } else {
+            wrapperArgv.withUnsafeBufferPointer { buf in
+                config.command_wrapper = buf.baseAddress
+                config.command_wrapper_count = buf.count
+                makeSurface()
             }
         }
         guard let surface else { return }
 
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+        // A wrapped spawn created (or reattached) a zmx session — the
+        // resolver's name→leader-pid cache needs a refresh to see it. (The
+        // session registers asynchronously, so the first refresh may miss;
+        // AppState retries while a wrapped pane is absent from `zmx ls`.)
+        if !wrapperArgv.isEmpty {
+            isZmxWrapped = true
+            NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        }
+
+        syncColorScheme()
 
         if let screen = window?.screen ?? NSScreen.main,
            let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
@@ -213,6 +363,24 @@ final class GhosttyTerminalNSView: NSView {
             ghostty_surface_set_display_id(surface, displayID)
         }
         ghostty_surface_set_focus(surface, isFocused)
+        syncOcclusion()
+    }
+
+    /// Tell libghostty whether this surface's pixels are actually on screen.
+    /// An occluded surface — an off-screen tab parked in the `SurfaceIncubator`
+    /// window, or a covered/minimized/hidden main window — parks its renderer's
+    /// display link instead of drawing every frame. With many panes that idle
+    /// redraw is the dominant background CPU cost. The pty io thread keeps
+    /// running while occluded, so off-screen output stays current and the tab
+    /// is up to date the moment it's viewed.
+    ///
+    /// The bool is "visible" (matches Ghostty's own `updateOcclusionState`):
+    /// true when the surface's window reports `.visible`, false otherwise —
+    /// including when the view has no window at all.
+    private func syncOcclusion() {
+        guard let surface else { return }
+        let visible = window?.occlusionState.contains(.visible) ?? false
+        ghostty_surface_set_occlusion(surface, visible)
     }
 
     func destroySurface() {
@@ -264,7 +432,13 @@ final class GhosttyTerminalNSView: NSView {
         }
         windowObservers.removeAll()
 
-        guard let window else { return }
+        guard let window else {
+            // Detached from its window (e.g. pulled out of the incubator before
+            // re-attaching). Mark occluded so the renderer doesn't draw to an
+            // off-screen layer.
+            syncOcclusion()
+            return
+        }
         if surface == nil {
             createSurface()
         } else {
@@ -298,7 +472,18 @@ final class GhosttyTerminalNSView: NSView {
             queue: .main,
             using: handler
         )
-        windowObservers = [backing, screen]
+        // Park the renderer when this view's window is covered, minimized, or
+        // hidden; resume when it's revealed. The incubator window never reports
+        // `.visible`, so off-screen tabs stay occluded for free.
+        let occlusion = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncOcclusion() }
+        }
+        windowObservers = [backing, screen, occlusion]
+        syncOcclusion()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -314,8 +499,15 @@ final class GhosttyTerminalNSView: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        syncColorScheme()
+    }
+
+    /// Push the split-resolution scheme into libghostty — keyed off the
+    /// tracked system scheme, never this view's `effectiveAppearance`, which
+    /// our own preferredColorScheme pins (issue #144).
+    func syncColorScheme() {
         guard let surface else { return }
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let isDark = GhosttyApp.shared.systemScheme == .dark
         ghostty_surface_set_color_scheme(surface, isDark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 
@@ -524,8 +716,13 @@ final class GhosttyTerminalNSView: NSView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if isAppShortcut(event) { return false }
-        onInteraction?()
+        // Confirm this view owns keyboard focus BEFORE firing the interaction
+        // side effect: AppKit offers key equivalents to the whole hierarchy, so
+        // every visible pane in a split receives this. Running `onInteraction`
+        // before the guard cleared "needs attention" on untouched panes and
+        // posted a poll event per pane per keypress.
         guard window?.firstResponder === self || window?.firstResponder === inputContext else { return false }
+        onInteraction?()
         guard event.type == .keyDown, let surface else { return false }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard flags.contains(.command) || flags.contains(.control) || flags.contains(.option) else { return false }
@@ -646,7 +843,7 @@ final class GhosttyTerminalNSView: NSView {
         let menu = NSMenu(title: "Terminal")
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
-        paste.isEnabled = GhosttyCallbacks.readPasteboardText() != nil
+        paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
         menu.addItem(paste)
         menu.addItem(.separator())
         addSplitItem(menu, "Split Right", .horizontal, .second)
@@ -723,7 +920,8 @@ final class GhosttyTerminalNSView: NSView {
 
     func startSearch() {
         guard let surface else { return }
-        ghostty_surface_binding_action(surface, "start_search", 12)
+        let action = "start_search"
+        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
     enum SearchDirection: String { case next, previous }
@@ -885,6 +1083,87 @@ final class GhosttyTerminalNSView: NSView {
     }
 }
 
+// MARK: - Programmatic text input
+
+extension GhosttyTerminalNSView {
+    /// Write text to the terminal as if pasted — the same `ghostty_surface_key`
+    /// text path `insertText` takes outside a key event, bypassing keyboard
+    /// handling entirely. The control CLI's `pane run` uses this to type a
+    /// command (plus newline) into a live shell. Returns false when the
+    /// surface doesn't exist yet, so callers can report the miss instead of
+    /// silently dropping input.
+    @discardableResult
+    func sendText(_ text: String) -> Bool {
+        guard let surface, !text.isEmpty else { return false }
+        // Same liveness signal a keystroke sends (execution tracking + poll
+        // resume), so an injected command updates the tab title promptly.
+        onInteraction?()
+        text.withCString { ptr in
+            var ke = ghostty_input_key_s()
+            ke.action = GHOSTTY_ACTION_PRESS
+            ke.text = ptr
+            _ = ghostty_surface_key(surface, ke)
+        }
+        return true
+    }
+}
+
+// MARK: - Read-only introspection (control CLI `pane inspect`/`dump`)
+
+extension GhosttyTerminalNSView {
+    /// The live terminal grid + cell/surface pixel dimensions
+    /// (`ghostty_surface_size`), or nil when the surface isn't created yet.
+    var surfaceSize: ghostty_surface_size_s? {
+        guard let surface else { return nil }
+        return ghostty_surface_size(surface)
+    }
+
+    /// Whether libghostty considers the child process exited.
+    var processExited: Bool {
+        guard let surface else { return false }
+        return ghostty_surface_process_exited(surface)
+    }
+
+    /// Read cell text out of the terminal core via `ghostty_surface_read_text`.
+    /// `scrollback == false` returns the visible viewport; `true` returns the
+    /// full screen including scrollback. nil when there's no surface or the
+    /// core declines the read. This is the same API ghostty's own app uses for
+    /// its cached screen/visible contents.
+    func readText(scrollback: Bool) -> String? {
+        guard let surface else { return nil }
+        let tag = scrollback ? GHOSTTY_POINT_SCREEN : GHOSTTY_POINT_VIEWPORT
+        let sel = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+            rectangle: false
+        )
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, sel, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let ptr = text.text else { return "" }
+        return String(cString: ptr)
+    }
+
+    #if DEBUG
+    /// DEBUG-ONLY: drive `ghostty_surface_set_size` once, directly, bypassing
+    /// SwiftUI layout — so a resize/reflow transition can be reproduced in
+    /// isolation (issue #167) instead of confounded with the reparent + layout
+    /// storm the normal path fires. Converts the requested grid to backing
+    /// pixels via the live cell dimensions. Returns false if the surface isn't
+    /// ready or the cell size is unknown. Never compiled into Release.
+    @discardableResult
+    func debugResizeSurface(cols: Int, rows: Int) -> Bool {
+        guard let surface, cols > 0, rows > 0 else { return false }
+        let size = ghostty_surface_size(surface)
+        guard size.cell_width_px > 0, size.cell_height_px > 0 else { return false }
+        let widthPx = UInt32(cols) * size.cell_width_px
+        let heightPx = UInt32(rows) * size.cell_height_px
+        ghostty_surface_set_size(surface, widthPx, heightPx)
+        return true
+    }
+    #endif
+}
+
 // MARK: - NSTextInputClient
 
 extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
@@ -908,9 +1187,9 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         guard let surface else { return }
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
-        _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.count)
+        _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.utf16.count)
         _selectedRange = selectedRange
-        text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.count)) }
+        text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.utf8.count)) }
     }
 
     func unmarkText() {

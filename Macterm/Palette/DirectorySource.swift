@@ -8,6 +8,12 @@ import Foundation
 @MainActor
 struct DirectorySource: PaletteSource {
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
+        // A typed remote spec offers add/switch, mirroring local directories
+        // (#104). No filesystem browsing — the host isn't consulted; the
+        // exact spec is the offer.
+        if PaletteQuery.isRemoteSpecQuery(query) {
+            return [remoteItem(spec: query, context: context)]
+        }
         let expanded = (query as NSString).expandingTildeInPath
         guard expanded.hasPrefix("/") else { return [] }
 
@@ -28,10 +34,6 @@ struct DirectorySource: PaletteSource {
         }
         guard fm.fileExists(atPath: dir) else { return [] }
 
-        let existingByPath = Dictionary(
-            uniqueKeysWithValues: context.projectStore.projects.map { ($0.path, $0) }
-        )
-
         var items: [PaletteItem] = []
 
         // Exact match at the top (when the typed path is itself a directory).
@@ -40,7 +42,7 @@ struct DirectorySource: PaletteSource {
             items.append(directoryItem(
                 name: name,
                 fullPath: exact,
-                existing: existingByPath[exact],
+                existing: context.projectStore.project(matchingPath: exact),
                 context: context,
                 score: 0
             ))
@@ -52,10 +54,16 @@ struct DirectorySource: PaletteSource {
                 let full = (dir as NSString).appendingPathComponent(name)
                 var childIsDir: ObjCBool = false
                 guard fm.fileExists(atPath: full, isDirectory: &childIsDir), childIsDir.boolValue else { return false }
-                if name.hasPrefix(".") { return false }
+                // Hide dotdirs — unless the user's typed prefix itself opts into
+                // the hidden namespace (e.g. `~/.conf` should complete `.config`).
+                if !prefix.hasPrefix("."), name.hasPrefix(".") { return false }
                 if prefix.isEmpty { return true }
                 return name.lowercased().hasPrefix(prefix.lowercased())
             }
+            // `contentsOfDirectory` order is unspecified; sort so BOTH which 10
+            // children survive the cap AND their ranking are deterministic
+            // across runs and filesystems.
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             .prefix(10)
             .enumerated()
             .map { offset, name -> PaletteItem in
@@ -63,7 +71,7 @@ struct DirectorySource: PaletteSource {
                 return directoryItem(
                     name: name,
                     fullPath: full,
-                    existing: existingByPath[full],
+                    existing: context.projectStore.project(matchingPath: full),
                     context: context,
                     score: offset + 1
                 )
@@ -75,6 +83,46 @@ struct DirectorySource: PaletteSource {
 
     func emptyItems(context _: PaletteContext) -> [PaletteItem]? {
         nil
+    }
+
+    /// Add-or-switch for a typed remote spec, shaped like `directoryItem`:
+    /// an existing project matching the spec (structurally, via
+    /// `ProjectPath.matches`) switches; otherwise the item creates the
+    /// remote project. The display name is the remote directory's basename,
+    /// falling back to the host for `host:~` / `host:/`.
+    private func remoteItem(spec: String, context: PaletteContext) -> PaletteItem {
+        if let existing = context.projectStore.projects.first(where: { ProjectPath.matches($0.path, spec) }) {
+            return PaletteItem(
+                id: "remote-switch:\(spec)",
+                title: existing.name,
+                subtitle: "Switch to remote project: \(spec)",
+                category: "Directories",
+                score: 0
+            ) { [appState = context.appState] in
+                appState.selectProject(existing)
+            }
+        }
+        let base = (spec as NSString).lastPathComponent
+        let name: String = if base.isEmpty || base == "~" || base == "/" || base == spec {
+            ProjectPath.remote(from: spec).flatMap {
+                if case let .remote(_, host, _) = $0 { host } else { nil }
+            } ?? spec
+        } else {
+            base
+        }
+        return PaletteItem(
+            id: "remote-open:\(spec)",
+            title: name,
+            subtitle: "Add remote project: \(spec)",
+            category: "Directories",
+            score: 0
+        ) { [appState = context.appState, projectStore = context.projectStore] in
+            let project = projectStore.findOrCreate(
+                name: name,
+                path: spec
+            )
+            appState.selectProject(project)
+        }
     }
 
     private func directoryItem(
@@ -102,12 +150,10 @@ struct DirectorySource: PaletteSource {
             category: "Directories",
             score: score
         ) { [appState = context.appState, projectStore = context.projectStore] in
-            let project = Project(
+            let project = projectStore.findOrCreate(
                 name: name,
-                path: fullPath,
-                sortOrder: projectStore.projects.count
+                path: fullPath
             )
-            projectStore.add(project)
             appState.selectProject(project)
         }
     }

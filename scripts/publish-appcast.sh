@@ -68,7 +68,18 @@ HTML
 # Write the per-DMG <item> blocks into a temp file.
 ITEMS_FILE=$(mktemp)
 
-for dmg in "$DMG_DIR"/*.dmg; do
+# Collect DMGs into an array so an empty dir fails with a clear message rather
+# than iterating the literal `dmgs/*.dmg` glob and handing `sign_update` a
+# nonexistent path (an opaque error).
+shopt -s nullglob
+dmgs=("$DMG_DIR"/*.dmg)
+shopt -u nullglob
+if [[ ${#dmgs[@]} -eq 0 ]]; then
+  echo "error: no .dmg files found in '$DMG_DIR'" >&2
+  exit 1
+fi
+
+for dmg in "${dmgs[@]}"; do
   name=$(basename "$dmg")
   url="${REPO_URL}/releases/download/${TAG}/${name}"
   sig=$(sign_update -f <(echo "$SPARKLE_ED_PRIVATE_KEY") "$dmg")
@@ -87,9 +98,6 @@ ITEM
 done
 
 # Clone (or initialize) gh-pages.
-git config --global user.name "github-actions[bot]"
-git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
 WORKDIR=$(mktemp -d)
 CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 if ! git clone --depth=1 --branch gh-pages "$CLONE_URL" "$WORKDIR" 2>/dev/null; then
@@ -99,6 +107,11 @@ if ! git clone --depth=1 --branch gh-pages "$CLONE_URL" "$WORKDIR" 2>/dev/null; 
 fi
 
 cd "$WORKDIR"
+
+# Set the bot identity PER-CLONE (not --global): run locally, a --global config
+# would silently overwrite the maintainer's own git identity.
+git config user.name "github-actions[bot]"
+git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
 # Seed the appcast header on first publication.
 if [[ ! -f appcast.xml ]]; then
@@ -115,15 +128,22 @@ if [[ ! -f appcast.xml ]]; then
 HEADER
 fi
 
-# Insert the new <item>s before </channel>.
-awk -v items_file="$ITEMS_FILE" '
-  /<\/channel>/ {
-    while ((getline line < items_file) > 0) print line
-    close(items_file)
-  }
-  { print }
-' appcast.xml > appcast.xml.new
-mv appcast.xml.new appcast.xml
+# Insert the new <item>s before </channel> — but only if this version isn't
+# already present. Re-running the workflow for the same tag (a common recovery
+# action) would otherwise append a duplicate <item> for the version, leaving
+# Sparkle with two entries for one release.
+if grep -q "<sparkle:version>${VERSION}</sparkle:version>" appcast.xml; then
+  echo "appcast already has an entry for ${VERSION}; not inserting a duplicate"
+else
+  awk -v items_file="$ITEMS_FILE" '
+    /<\/channel>/ {
+      while ((getline line < items_file) > 0) print line
+      close(items_file)
+    }
+    { print }
+  ' appcast.xml > appcast.xml.new
+  mv appcast.xml.new appcast.xml
+fi
 
 mkdir -p notes
 cp "$NOTES_HTML_FILE" "$NOTES_REL_PATH"

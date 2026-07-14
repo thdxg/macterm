@@ -1,10 +1,14 @@
+# Lint every first-party Swift target, not just the app: CLI/ ships a real
+# binary and MactermTests/ is enforced-convention code too. (Previously only
+# `Macterm` was scanned, silently exempting both.)
 included:
   - Macterm
+  - CLI
+  - MactermTests
 
 excluded:
   - build
   - GhosttyKit
-  - Tests
 
 disabled_rules:
   - todo
@@ -15,6 +19,19 @@ disabled_rules:
   - opening_brace
   - closure_parameter_position
   - cyclomatic_complexity
+  # Trailing commas are owned by SwiftFormat's `trailingCommas` rule, which
+  # (unlike SwiftLint's `trailing_comma`) correctly omits the comma on
+  # single-element multiline collections. Running both fought each other on
+  # `[Foo(\n…\n)]` literals — one tool's fix was the other's violation. One
+  # tool per concern: SwiftFormat wins here.
+  - trailing_comma
+  # `String(decoding:as:UTF8.self)` is the modern, non-optional, LOSSLESS
+  # conversion this codebase deliberately uses (KERN_PROCARGS2 argv parsing in
+  # ProcessInspector must not drop non-UTF-8 bytes — see §5.8; CLI JSON output
+  # is already valid UTF-8). This rule pushes toward the failable
+  # `String(bytes:encoding:)`, which would reintroduce the byte-dropping the
+  # lossless form exists to avoid. Off project-wide.
+  - optional_data_string_conversion
 
 opt_in_rules:
   - closure_end_indentation
@@ -49,7 +66,6 @@ opt_in_rules:
   - redundant_type_annotation
   - sorted_first_last
   - toggle_bool
-  - trailing_comma
   - unneeded_parentheses_in_closure_argument
   - vertical_whitespace_closing_braces
   - vertical_whitespace_opening_braces
@@ -70,9 +86,12 @@ identifier_name:
   min_length: 1
   max_length: 60
   allowed_symbols: ["_"]
-
-trailing_comma:
-  mandatory_comma: true
+  # `H`/`V` are the documented TreeBuilder split-tree DSL (H(pane("a"), …)) —
+  # single-uppercase by design for terse test trees. Allow them by name rather
+  # than lower-casing a deliberately-compact DSL.
+  excluded:
+    - H
+    - V
 
 vertical_whitespace:
   max_empty_lines: 1

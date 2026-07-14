@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/project.schema.json",
+  "title": "Macterm project",
+  "description": "A Macterm project declaration. One file per project in ~/.config/macterm/projects/; declares the project's path and, optionally, its tab/pane layout. Files are matched to projects by `path` (the filename is cosmetic). Written by \"Save Layout\"; freely hand-editable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Display name recorded at save time. The app's project list keeps its own name at runtime, so drift is expected — this is informational."
+    },
+    "path": {
+      "type": "string",
+      "description": "Where the project lives, scp-style: an absolute or ~-prefixed path is a local directory (e.g. \"~/dev/api\"); \"[user@]host:dir\" is a directory on a remote host (e.g. \"devbox:~/dev/api\" — host may be an ssh-config alias; port/identity come from ~/.ssh/config; ControlMaster there makes splits fast). This is the project's identity: files are matched to projects by this value. Matching expands ~ and normalizes ./.. segments, but resolves neither symlinks (including /tmp → /private/tmp) nor letter case — write the directory exactly as the filesystem reports it. Remote paths match structurally (same user/host/directory). A remote project's panes run persistent zmx sessions on the host over ssh; zmx must be installed there."
+    },
+    "zmxPath": {
+      "type": "string",
+      "description": "Absolute path to zmx on the remote host, used verbatim instead of resolving `zmx` through PATH. Only meaningful for a remote `path`. Set this when the pane shows \"zmx not found in PATH\" — non-interactive ssh gets a bare PATH, and hosts with a network-mounted home, an exotic /bin/sh, or PATH configured only in a non-POSIX shell won't resolve zmx automatically. Example: \"~/bin/zmx\" or \"/usr/local/bin/zmx\". Omit to auto-detect via PATH."
+    },
+    "tabs": {
+      "type": "array",
+      "description": "The tabs to create, in order. Omit for a bare declaration (nothing to apply).",
+      "items": { "$ref": "#/$defs/tab" }
+    }
+  },
+  "$defs": {
+    "tab": {
+      "description": "A tab: a layout node (a leaf pane or a split) with an optional `name`. There's no `layout:` wrapper — the node's fields sit at the tab level.",
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/$defs/paneTab" },
+        { "$ref": "#/$defs/splitTab" }
+      ]
+    },
+    "node": {
+      "description": "A node in the split tree. Either a leaf pane (cwd/run/shell) or a split (a `split` mapping). A bare {} is a plain-shell pane.",
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/$defs/pane" },
+        { "$ref": "#/$defs/split" }
+      ]
+    },
+    "name": {
+      "type": "string",
+      "description": "Tab title. On apply, matched against live tabs by this name."
+    },
+    "paneProperties": {
+      "cwd": {
+        "type": "string",
+        "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through. Under a remote root, '~' and absolute paths are remote-side (never the local home)."
+      },
+      "run": {
+        "type": "string",
+        "description": "Command typed into the pane's shell on launch (e.g. \"npm run dev\"). Omit for a plain shell. The command runs inside the shell, so the prompt survives when it exits."
+      },
+      "shell": {
+        "type": "string",
+        "description": "Shell binary to launch for this pane (e.g. \"/bin/zsh\"). Omit to use the shell from your Ghostty config (else your login shell)."
+      }
+    },
+    "pane": {
+      "title": "Pane (leaf)",
+      "description": "A terminal pane. With no fields ({}) it's a plain shell.",
+      "type": "object",
+      "additionalProperties": false,
+      "not": { "required": ["split"] },
+      "properties": {
+        "cwd": { "$ref": "#/$defs/paneProperties/cwd" },
+        "run": { "$ref": "#/$defs/paneProperties/run" },
+        "shell": { "$ref": "#/$defs/paneProperties/shell" }
+      }
+    },
+    "paneTab": {
+      "title": "Pane tab (leaf)",
+      "description": "A single-pane tab. With no pane fields it's a plain shell.",
+      "type": "object",
+      "additionalProperties": false,
+      "not": { "required": ["split"] },
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "cwd": { "$ref": "#/$defs/paneProperties/cwd" },
+        "run": { "$ref": "#/$defs/paneProperties/run" },
+        "shell": { "$ref": "#/$defs/paneProperties/shell" }
+      }
+    },
+    "splitBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction", "first", "second"],
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": ["horizontal", "vertical"],
+          "description": "Split direction. 'horizontal' = side by side (first | second); 'vertical' = stacked (first / second)."
+        },
+        "ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Divider position, 0–1. Defaults to 0.5 (an even split)."
+        },
+        "first": {
+          "$ref": "#/$defs/node",
+          "description": "The left (horizontal) or top (vertical) child."
+        },
+        "second": {
+          "$ref": "#/$defs/node",
+          "description": "The right (horizontal) or bottom (vertical) child."
+        }
+      }
+    },
+    "split": {
+      "title": "Split",
+      "description": "Splits the area into two child nodes via a nested `split` mapping.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split"],
+      "properties": {
+        "split": { "$ref": "#/$defs/splitBody" }
+      }
+    },
+    "splitTab": {
+      "title": "Split tab",
+      "description": "A tab split into two child nodes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "split": { "$ref": "#/$defs/splitBody" }
+      }
+    }
+  }
+}

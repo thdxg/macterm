@@ -10,9 +10,11 @@ struct LayoutReconcilerTests {
         return Workspace(projectID: projectID, tabs: [tab], activeTabID: tab.id)
     }
 
-    /// Parse a layout from YAML, failing the test loudly on a parse error.
-    private func layout(_ yaml: String) -> LayoutFile {
-        try! LayoutFile.parse(yaml: yaml)
+    /// Parse a layout from YAML. Throws (rather than `try!`) so a malformed
+    /// fixture fails THIS test at its own line instead of crashing the whole
+    /// hosted test process.
+    private func layout(_ yaml: String) throws -> LayoutFile {
+        try LayoutFile.parse(yaml: yaml)
     }
 
     /// Run the reconciler with a stubbed live-command lookup. Unit tests have no
@@ -41,7 +43,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func identical_layout_keeps_all_panes_and_destroys_nothing() {
+    func identical_layout_keeps_all_panes_and_destroys_nothing() throws {
         let pid = UUID()
         let dev = Pane(projectPath: "/proj/api", projectID: pid, command: "npm run dev")
         let shell = Pane(projectPath: "/proj", projectID: pid)
@@ -50,7 +52,7 @@ struct LayoutReconcilerTests {
             first: .pane(dev), second: .pane(shell)
         )))
 
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - split:
               direction: horizontal
@@ -68,7 +70,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func only_ratio_differs_reuses_panes_without_destruction() {
+    func only_ratio_differs_reuses_panes_without_destruction() throws {
         let pid = UUID()
         let dev = Pane(projectPath: "/proj", projectID: pid, command: "npm run dev")
         let shell = Pane(projectPath: "/proj", projectID: pid)
@@ -77,7 +79,7 @@ struct LayoutReconcilerTests {
             first: .pane(dev), second: .pane(shell)
         )))
 
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - split:
               direction: horizontal
@@ -97,7 +99,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func changed_run_respawns_only_that_pane() {
+    func changed_run_respawns_only_that_pane() throws {
         let pid = UUID()
         let dev = Pane(projectPath: "/proj", projectID: pid, command: "npm run dev")
         let test = Pane(projectPath: "/proj", projectID: pid, command: "npm test")
@@ -107,7 +109,7 @@ struct LayoutReconcilerTests {
         )))
 
         // dev unchanged, test's command changed.
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - split:
               direction: vertical
@@ -125,7 +127,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func moved_pane_with_same_identity_survives_structural_edit() {
+    func moved_pane_with_same_identity_survives_structural_edit() throws {
         let pid = UUID()
         let dev = Pane(projectPath: "/proj/api", projectID: pid, command: "npm run dev")
         let shell = Pane(projectPath: "/proj", projectID: pid)
@@ -135,7 +137,7 @@ struct LayoutReconcilerTests {
             first: .pane(dev), second: .pane(shell)
         )))
 
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - split:
               direction: vertical
@@ -150,7 +152,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func extra_live_pane_is_flagged_for_destruction() {
+    func extra_live_pane_is_flagged_for_destruction() throws {
         let pid = UUID()
         let dev = Pane(projectPath: "/proj", projectID: pid, command: "npm run dev")
         let extra = Pane(projectPath: "/proj", projectID: pid, command: "htop")
@@ -160,7 +162,7 @@ struct LayoutReconcilerTests {
         )))
 
         // Layout only declares dev.
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - { run: "npm run dev" }
         """)
@@ -171,7 +173,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func plain_shells_match_positionally() {
+    func plain_shells_match_positionally() throws {
         let pid = UUID()
         let s1 = Pane(projectPath: "/proj", projectID: pid)
         let s2 = Pane(projectPath: "/proj", projectID: pid)
@@ -181,7 +183,7 @@ struct LayoutReconcilerTests {
         )))
 
         // Two declared plain shells → reuse the two live shells positionally.
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - split:
               direction: horizontal
@@ -195,14 +197,14 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func declared_shell_mismatch_respawns_the_pane() {
+    func declared_shell_mismatch_respawns_the_pane() throws {
         // A pane idle in `nu` against a declared `shell: /bin/zsh` is out of sync
         // — it must be destroyed and respawned, not reused.
         let pid = UUID()
         let live = Pane(projectPath: "/proj", projectID: pid)
         let ws = workspace(projectID: pid, root: .pane(live))
 
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - shell: /bin/zsh
         """)
@@ -221,13 +223,13 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func declared_shell_match_reuses_the_pane() {
+    func declared_shell_match_reuses_the_pane() throws {
         // A pane idle in the declared shell is reused, not respawned.
         let pid = UUID()
         let live = Pane(projectPath: "/proj", projectID: pid)
         let ws = workspace(projectID: pid, root: .pane(live))
 
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - shell: /bin/zsh
         """)
@@ -245,9 +247,9 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func no_live_workspace_spawns_everything_non_destructively() {
+    func no_live_workspace_spawns_everything_non_destructively() throws {
         let pid = UUID()
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - split:
               direction: horizontal
@@ -262,7 +264,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func unmatched_live_tab_is_closed() {
+    func unmatched_live_tab_is_closed() throws {
         let pid = UUID()
         let keep = Pane(projectPath: "/proj", projectID: pid, command: "npm run dev")
         let goneShell = Pane(projectPath: "/proj", projectID: pid)
@@ -271,7 +273,7 @@ struct LayoutReconcilerTests {
         let ws = Workspace(projectID: pid, tabs: [tabA, tabB], activeTabID: tabA.id)
 
         // Only the "Dev" tab is declared.
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - name: "Dev"
             run: "npm run dev"
@@ -287,7 +289,7 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func pane_idle_despite_declared_run_is_not_in_sync() {
+    func pane_idle_despite_declared_run_is_not_in_sync() throws {
         // The reported bug: a pane spawned with `btop` that the user has since
         // quit is idle. Identity is the *live* command, so an idle pane (live
         // command nil) does NOT match a declared `run: btop` — it's destroyed
@@ -296,7 +298,7 @@ struct LayoutReconcilerTests {
         let stale = Pane(projectPath: "/proj", projectID: pid, command: "btop")
         let ws = workspace(projectID: pid, root: .pane(stale))
 
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - { run: "btop" }
         """)
@@ -313,14 +315,14 @@ struct LayoutReconcilerTests {
     }
 
     @Test
-    func pane_running_declared_command_stays_in_sync() {
+    func pane_running_declared_command_stays_in_sync() throws {
         // Counterpart: a pane actually running its declared command matches and
         // is kept untouched.
         let pid = UUID()
         let live = Pane(projectPath: "/proj", projectID: pid, command: "btop")
         let ws = workspace(projectID: pid, root: .pane(live))
 
-        let file = layout("""
+        let file = try layout("""
         tabs:
           - { run: "btop" }
         """)

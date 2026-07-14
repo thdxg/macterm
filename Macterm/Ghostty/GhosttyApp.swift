@@ -22,6 +22,12 @@ final class GhosttyApp {
     private var resourcesDir: String?
     @ObservationIgnored
     private var appearanceObserver: NSKeyValueObservation?
+    @ObservationIgnored
+    private var systemAppearanceObserver: (any NSObjectProtocol)?
+    /// The OS-level light/dark scheme. Split resolution must key off this —
+    /// never an `effectiveAppearance`, which our own `.preferredColorScheme`
+    /// pins, latching the theme after one system switch (issue #144).
+    private(set) var systemScheme: ThemeResolver.Scheme = .light
     /// Chrome colors as libghostty resolved them for a live surface — the
     /// active `theme = light:X,dark:Y` side already applied. Populated from
     /// `GHOSTTY_ACTION_CONFIG_CHANGE` (see `adoptResolvedColors`) and preferred
@@ -29,8 +35,20 @@ final class GhosttyApp {
     /// light side. Nil until the first surface reports its config.
     @ObservationIgnored
     private var resolvedColors: ResolvedColors?
+    /// Memoized `resolvedThemeColors()`, keyed on the `configVersion` it was
+    /// computed for. Without this, every color accessor re-reads THREE files
+    /// (defaults + user config + theme) and re-runs `ThemeResolver` — and
+    /// `MactermTheme` fans one SwiftUI render into a dozen accessor calls, so a
+    /// chrome frame did a dozen disk reads whenever `resolvedColors` was nil
+    /// (before the first CONFIG_CHANGE, and after every appearance flip). The
+    /// result is fully determined by `configVersion` (which bumps on reload and
+    /// appearance change), so caching on it is safe. `.some(nil)` distinguishes
+    /// "computed, no split theme" from "not yet computed".
+    @ObservationIgnored
+    private var themeColorsCache: (version: Int, colors: ThemeResolver.Colors?)?
 
     private init() {
+        systemScheme = Self.readSystemScheme()
         resolveResources()
         guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == GHOSTTY_SUCCESS else {
             logger.error("ghostty_init failed")
@@ -43,7 +61,11 @@ final class GhosttyApp {
         }
 
         var rt = ghostty_runtime_config_s()
-        rt.userdata = Unmanaged.passUnretained(self).toOpaque()
+        // No `rt.userdata`: the app-target callbacks below reach `GhosttyApp
+        // .shared` directly (safe — the singleton outlives the app and these
+        // fire only after init). The per-surface callbacks recover their owner
+        // from the SURFACE userdata instead (see `surface(from:)`), so the
+        // app-level userdata pointer was dead weight.
         rt.supports_selection_clipboard = true
         rt.wakeup_cb = { _ in GhosttyApp.shared.callbacks.wakeup() }
         rt.action_cb = { _, target, action in GhosttyApp.shared.callbacks.action(target: target, action: action) }
@@ -51,7 +73,11 @@ final class GhosttyApp {
         rt.confirm_read_clipboard_cb = { ud, content, state, _ in
             GhosttyApp.shared.callbacks.confirmReadClipboard(ud: ud, content: content, state: state)
         }
-        rt.write_clipboard_cb = { _, _, content, len, _ in GhosttyApp.shared.callbacks.writeClipboard(content: content, len: UInt(len)) }
+        rt.write_clipboard_cb = { _, loc, content, len, confirm in
+            GhosttyApp.shared.callbacks.writeClipboard(
+                content: content, len: UInt(len), location: loc, confirm: confirm
+            )
+        }
         rt.close_surface_cb = { ud, _ in GhosttyApp.shared.callbacks.closeSurface(ud: ud) }
 
         guard let createdApp = ghostty_app_new(&rt, cfg) else {
@@ -62,42 +88,91 @@ final class GhosttyApp {
         app = createdApp
         config = cfg
 
-        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+        // Ticking is event-driven: libghostty's `wakeup_cb` fires whenever the
+        // core needs `ghostty_app_tick` (GhosttyCallbacks.wakeup schedules it
+        // on the main queue) — the same model as upstream Ghostty.app. A slow
+        // 1s timer remains as a safety net so a missed wakeup degrades to one
+        // extra tick per second instead of a wedged UI; it replaces a 120Hz
+        // timer that burned 120 wakeups/sec even while the app was hidden.
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        timer.tolerance = 0.5
         RunLoop.main.add(timer, forMode: .common)
         tickTimer = timer
 
-        // React to system light/dark switches. The chrome colors derive from
-        // the appearance-resolved `theme = light:X,dark:Y` side (issue #38), so
-        // they change with the OS appearance — but they read `NSApp` and theme
-        // files, not observable state, so SwiftUI won't recompute on its own.
-        // On each change we bump `configVersion` (observed by the root view) and
-        // post `.mactermConfigDidChange` so the chrome re-reads MactermTheme.
-        // Terminal surfaces handle their own switch via
-        // viewDidChangeEffectiveAppearance.
+        // React to system light/dark switches. Two triggers: the KVO goes
+        // silent once our own preferredColorScheme pins the app's appearance
+        // (issue #144); the distributed notification always fires.
         //
         // Deferred off the init stack: observing `NSApp.effectiveAppearance`
-        // (or the first callback it may fire) can re-enter `GhosttyApp.shared`
-        // while this `static let` is still initializing, deadlocking its
+        // can re-enter `GhosttyApp.shared` mid-init, deadlocking its
         // dispatch_once.
         DispatchQueue.main.async { [weak self] in
-            self?.appearanceObserver = NSApp.observe(\.effectiveAppearance, options: [.new]) { _, _ in
-                MainActor.assumeIsolated { GhosttyApp.shared.appearanceDidChange() }
+            guard let self else { return }
+            appearanceObserver = NSApp.observe(\.effectiveAppearance, options: [.new]) { _, _ in
+                MainActor.assumeIsolated { GhosttyApp.shared.systemAppearanceMayHaveChanged() }
+            }
+            systemAppearanceObserver = DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { GhosttyApp.shared.systemAppearanceMayHaveChanged() }
             }
         }
     }
 
-    /// Bump the observable version so SwiftUI re-reads appearance-derived theme
-    /// colors, and notify AppKit chrome (window tint) to re-sync.
-    private func appearanceDidChange() {
+    /// Re-resolve everything appearance-derived against the new system scheme.
+    /// Deduped — an ordinary (unpinned) switch fires both observers.
+    private func systemAppearanceMayHaveChanged() {
+        let scheme = Self.readSystemScheme()
+        guard scheme != systemScheme else { return }
+        systemScheme = scheme
+        logger.info("system appearance changed: \(scheme == .dark ? "dark" : "light", privacy: .public)")
+
+        // A window held by preferredColorScheme never delivers
+        // viewDidChangeEffectiveAppearance — push the scheme to surfaces
+        // directly; each push re-emits CONFIG_CHANGE with the new side.
+        for view in GhosttyTerminalNSView.allLiveViews() {
+            view.syncColorScheme()
+        }
+        // Stale until those re-emits land (and no surface may be alive to
+        // emit) — fall back to the theme file meanwhile.
+        resolvedColors = nil
+
         configVersion += 1
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
+    }
+
+    /// Inputs for `ThemeResolver.systemScheme` (the tested decision logic).
+    /// CFPreferences because `AppleInterfaceStyle` is OS global-domain state,
+    /// not app state.
+    private static func readSystemScheme() -> ThemeResolver.Scheme {
+        let style = CFPreferencesCopyAppValue(
+            "AppleInterfaceStyle" as CFString,
+            kCFPreferencesAnyApplication
+        ) as? String
+        return ThemeResolver.systemScheme(
+            appHasAppearanceOverride: NSApp.appearance != nil,
+            effectiveAppearanceIsDark: NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua,
+            globalInterfaceStyle: style
+        )
     }
 
     func tick() {
         guard let app else { return }
         ghostty_app_tick(app)
+    }
+
+    /// Propagate application-level focus to libghostty. When the app is not the
+    /// active app, surfaces stop blinking the cursor and running idle
+    /// animations — redraws that otherwise keep every surface's renderer busy.
+    /// Visible surfaces still draw real terminal output; this only throttles
+    /// app-focus-driven repaints (see also per-surface occlusion).
+    func setAppFocus(_ focused: Bool) {
+        guard let app else { return }
+        ghostty_app_set_focus(app, focused)
     }
 
     // MARK: - Config
@@ -344,7 +419,19 @@ final class GhosttyApp {
     /// side matching the current OS appearance — read straight from the theme
     /// file, since libghostty's config getters always resolve a split to the
     /// light side. Nil for a plain theme (the getters handle those correctly).
+    ///
+    /// Memoized on `configVersion`: the on-disk inputs only change when the
+    /// config reloads or the appearance flips, both of which bump the version.
     private func resolvedThemeColors() -> ThemeResolver.Colors? {
+        if let cache = themeColorsCache, cache.version == configVersion {
+            return cache.colors
+        }
+        let colors = computeResolvedThemeColors()
+        themeColorsCache = (configVersion, colors)
+        return colors
+    }
+
+    private func computeResolvedThemeColors() -> ThemeResolver.Colors? {
         guard let resourcesDir else { return nil }
         // Reconstruct the effective `theme` from the layers we control, matching
         // libghostty's last-wins merge: our defaults, then the user's config.
@@ -354,7 +441,7 @@ final class GhosttyApp {
             configText += "\n" + userText
         }
         guard let themeValue = ThemeResolver.themeValue(inConfigText: configText),
-              let side = ThemeResolver.resolve(themeValue: themeValue, scheme: currentScheme)
+              let side = ThemeResolver.resolve(themeValue: themeValue, scheme: systemScheme)
         else { return nil }
 
         // A theme value is either a bare name (resolved against the bundled
@@ -366,10 +453,6 @@ final class GhosttyApp {
                 : resourcesDir + "/themes/" + side
         guard let themeText = try? String(contentsOfFile: themeFile, encoding: .utf8) else { return nil }
         return ThemeResolver.colors(inThemeFile: themeText)
-    }
-
-    private var currentScheme: ThemeResolver.Scheme {
-        NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
     }
 
     // MARK: - Surface-resolved chrome colors (Ghostty's CONFIG_CHANGE pattern)

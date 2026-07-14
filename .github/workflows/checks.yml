@@ -68,6 +68,49 @@ jobs:
 
       - uses: jdx/mise-action@v4
 
+      # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
+      - name: Cache epoch
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # GhosttyKit + bundled resources + zmx: the source-independent download
+      # (setup.sh). setup.sh is a presence check, so a restored cache makes it a
+      # no-op. Keyed on setup.sh's hash + the ISO week so a new upstream ghostty
+      # release (setup.sh pulls `latest`) is actually picked up within a week.
+      #
+      # NO `restore-keys` fallback ON PURPOSE: pairing a time-rolling key with a
+      # prefix restore-key re-baptizes last week's content under the fresh key
+      # forever (the week rolls → exact key misses → prefix restores the stale
+      # cache → the presence-check setup no-ops → actions/cache saves the SAME
+      # stale bytes under the new key). Without the fallback, a new week starts
+      # empty, setup re-downloads once, and the fresh content is cached — the
+      # intended "picked up within a week" behavior. Shared verbatim with the
+      # benchmark and release workflows.
+      - name: Cache GhosttyKit
+        uses: actions/cache@v6
+        with:
+          path: |
+            GhosttyKit.xcframework
+            Macterm/Resources/ghostty
+            Macterm/Resources/terminfo
+            Macterm/Resources/zmx
+          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+
+      # Debug build products. `xcodebuild test` reuses this for a fast
+      # incremental compile; tests still run fresh regardless of what's cached,
+      # so a stale cache can never change a result — only the compile time.
+      # Separate key prefix from the benchmark's Release cache: same on-disk
+      # path (build/DerivedData), different cache namespace, so the two configs
+      # never clobber each other.
+      - name: Cache DerivedData (Debug)
+        uses: actions/cache@v6
+        with:
+          path: build/DerivedData
+          key: derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-
+
       - name: Setup GhosttyKit
         run: mise run setup --verbose
         env:
