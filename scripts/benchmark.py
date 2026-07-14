@@ -8,12 +8,14 @@ driving it with Darwin notifications (`notifyutil -p`) plus LaunchServices
 activation (`open`). Neither needs a TCC grant, so this runs on a stock CI
 runner.
 
-Per state: settle, then over a sampling window read the process's CPU-time
-delta (the primary metric — immune to sampling aliasing) and median RSS.
-When passwordless sudo is available (GitHub runners), a concurrent
-`powermetrics --samplers tasks` window adds idle-wakeups/s and CPU ms/s;
-inside virtualized runners powermetrics is best-effort and the fields are
-null when it fails.
+Per state: settle, then sample several short windows and report the
+per-metric median — each window reads the process's CPU-time delta (the
+primary metric — immune to sampling aliasing) and median RSS. Taking the
+median across windows keeps a single co-scheduled CPU spike on a shared
+runner from skewing a state. When passwordless sudo is available (GitHub
+runners), a concurrent `powermetrics --samplers tasks` window adds
+idle-wakeups/s and CPU ms/s; inside virtualized runners powermetrics is
+best-effort and the fields are null when it fails.
 
 Subcommands:
   run     launch the app, sample each state, write a results JSON
@@ -130,7 +132,12 @@ def check_alive(pid):
         sys.exit("error: app process died mid-benchmark")
 
 
-def sample_state(pid, seconds):
+def sample_window(pid, seconds):
+    """One contiguous sampling window: the process's CPU-time rate over the
+    window, its median RSS, and (best-effort) powermetrics CPU ms/s + wakeups/s.
+    A single reading — `sample_state` runs several and medians them so one
+    unlucky window (a shared-runner co-scheduled spike) can't skew the result.
+    """
     check_alive(pid)
     start = ps_sample(pid)
     if start is None:
@@ -163,6 +170,37 @@ def sample_state(pid, seconds):
         "rss_mb": round(statistics.median(rss_samples) / 1024, 1),
         "cpu_ms_per_s": cpu_ms_per_s,
         "wakeups_per_s": wakeups_per_s,
+    }
+
+
+def _median_or_none(values):
+    """Median of the non-null values, or None if none are present. Powermetrics
+    fields go null when it can't run (virtualized runners), so a state's windows
+    may have a mix — median only what we actually measured."""
+    present = [v for v in values if v is not None]
+    return round(statistics.median(present), 3) if present else None
+
+
+def sample_state(pid, seconds, samples):
+    """Sample a state over `samples` back-to-back windows of `seconds` each and
+    return the per-metric median. Splitting one long window into several short
+    ones and taking the median keeps a single co-scheduled CPU spike on a shared
+    CI runner from dominating the reading, at the same total wall-clock cost.
+    With samples == 1 this is exactly one `sample_window` call (unchanged
+    behavior for a local one-shot run)."""
+    windows = []
+    for i in range(samples):
+        window = sample_window(pid, seconds)
+        windows.append(window)
+        if samples > 1:
+            print(f"    window {i + 1}/{samples}: {window}", flush=True)
+    if samples == 1:
+        return windows[0]
+    return {
+        "cpu_pct": _median_or_none([w["cpu_pct"] for w in windows]),
+        "rss_mb": _median_or_none([w["rss_mb"] for w in windows]),
+        "cpu_ms_per_s": _median_or_none([w["cpu_ms_per_s"] for w in windows]),
+        "wakeups_per_s": _median_or_none([w["wakeups_per_s"] for w in windows]),
     }
 
 
@@ -341,8 +379,8 @@ def cmd_run(args):
         for state in state_plan:
             enter_state(app, state)
             time.sleep(args.settle)
-            print(f"sampling {state} for {args.seconds}s", flush=True)
-            results[state] = sample_state(pid, args.seconds)
+            print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
+            results[state] = sample_state(pid, args.seconds, args.samples)
             print(f"  {results[state]}", flush=True)
 
         if args.workload > 0:
@@ -355,8 +393,8 @@ def cmd_run(args):
             for state in WORKLOAD_STATES:
                 enter_state(app, state)
                 time.sleep(args.settle)
-                print(f"sampling {state} for {args.seconds}s", flush=True)
-                results[state] = sample_state(pid, args.seconds)
+                print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
+                results[state] = sample_state(pid, args.seconds, args.samples)
                 print(f"  {results[state]}", flush=True)
     finally:
         # SIGKILL: SIGTERM would hang on the quit-confirmation dialog for the
@@ -368,9 +406,15 @@ def cmd_run(args):
         shutil.rmtree(home, ignore_errors=True)
 
     payload = {
-        "schema": 1,
+        "schema": 2,
         "commit": git_sha(),
-        "seconds_per_state": args.seconds,
+        # Each state is observed for samples x seconds total, split into
+        # `samples` windows whose per-metric median is what `states` records.
+        # `seconds_per_state` stays the TOTAL observation time (back-compat with
+        # a schema-1 reader) — samples/seconds_per_window describe the split.
+        "seconds_per_state": args.seconds * args.samples,
+        "seconds_per_window": args.seconds,
+        "samples_per_state": args.samples,
         "states": results,
     }
     if args.workload > 0:
@@ -385,16 +429,23 @@ def cmd_run(args):
     print(f"wrote {args.out}")
 
 
-# A delta is significant when it clears BOTH bars: the relative threshold
-# and the metric's absolute noise floor. The floor keeps tiny absolute
-# swings (minimized CPU going 0.03 → 0.05 is "+66%") from flagging noise.
+# The relative bar: a delta must move at least this % to be flagged.
 THRESHOLD_PCT = 25
+# On top of the relative bar, each metric carries two absolute guards — a delta
+# must clear ALL THREE to be FLAGGED (labeled). The raw % still always prints in
+# the table; these only gate the 🔺/🔻 and the label:
+#   - floor: minimum absolute change. Stops "0.03 → 0.05 = +66%" on a tiny base.
+#   - min_baseline: minimum baseline VALUE. Below this the metric is dominated
+#     by shared-runner scheduling jitter, so a big relative swing off it isn't
+#     a real regression — e.g. a focused-idle app legitimately wanders 0.6–1.4%
+#     CPU depending on what the runner co-schedules. Only the CPU metrics need
+#     it (RSS/wakeups aren't noise-dominated at low values); None disables it.
 METRICS = (
-    # key, table label, format, absolute noise floor
-    ("cpu_pct", "CPU %", "{:.2f}", 0.5),
-    ("rss_mb", "Memory (RSS MB)", "{:.1f}", 25.0),
-    ("cpu_ms_per_s", "CPU ms/s (powermetrics)", "{:.1f}", 5.0),
-    ("wakeups_per_s", "Wakeups/s (powermetrics)", "{:.1f}", 50.0),
+    # key, table label, format, absolute noise floor, min baseline to flag
+    ("cpu_pct", "CPU %", "{:.2f}", 0.5, 1.5),
+    ("rss_mb", "Memory (RSS MB)", "{:.1f}", 25.0, None),
+    ("cpu_ms_per_s", "CPU ms/s (powermetrics)", "{:.1f}", 5.0, 15.0),
+    ("wakeups_per_s", "Wakeups/s (powermetrics)", "{:.1f}", 50.0, None),
 )
 
 
@@ -402,9 +453,14 @@ def fmt(value, pattern):
     return pattern.format(value) if value is not None else "—"
 
 
-def significant_pct(base, current, floor):
-    """Signed % change if significant (positive = regression), else None."""
+def significant_pct(base, current, floor, min_baseline=None):
+    """Signed % change if it clears every noise guard (positive = regression),
+    else None. A guarded-out delta still displays its raw % — this only governs
+    whether it's flagged/labeled. Guards: relative threshold, absolute floor,
+    and (when set) a minimum baseline below which the reading is noise."""
     if base is None or current is None or base == 0:
+        return None
+    if min_baseline is not None and base < min_baseline:
         return None
     diff = current - base
     pct = diff / base * 100
@@ -413,13 +469,13 @@ def significant_pct(base, current, floor):
     return None
 
 
-def delta_cell(base, current, floor):
+def delta_cell(base, current, floor, min_baseline=None):
     if base is None or current is None:
         return "—"
     diff = current - base
     if base == 0:
         return "—" if diff == 0 else f"+{diff:.2f}"
-    sig = significant_pct(base, current, floor)
+    sig = significant_pct(base, current, floor, min_baseline)
     arrow = "" if sig is None else ("🔺" if sig > 0 else "🔻")
     return f"{diff / base * 100:+.0f}% {arrow}".strip()
 
@@ -452,7 +508,7 @@ def cmd_report(args):
         if baseline and state in WORKLOAD_STATES and not base_state:
             workload_missing_baseline = True
         state_cell = state  # only label the state's first row
-        for key, label, pattern, floor in METRICS:
+        for key, label, pattern, floor, min_baseline in METRICS:
             cur = cur_state.get(key)
             if cur is None and (not baseline or base_state.get(key) is None):
                 continue
@@ -460,9 +516,9 @@ def cmd_report(args):
                 base = base_state.get(key)
                 lines.append(
                     f"| {state_cell} | {label} | {fmt(base, pattern)} "
-                    f"| {fmt(cur, pattern)} | {delta_cell(base, cur, floor)} |"
+                    f"| {fmt(cur, pattern)} | {delta_cell(base, cur, floor, min_baseline)} |"
                 )
-                sig = significant_pct(base, cur, floor)
+                sig = significant_pct(base, cur, floor, min_baseline)
                 if sig is not None:
                     bucket = regressions if sig > 0 else improvements
                     bucket.append({
@@ -499,14 +555,28 @@ def cmd_report(args):
 
     floors = ", ".join(
         f"{label.replace(' (powermetrics)', '')} ≥{floor:g}"
-        for _, label, _, floor in METRICS
+        for _, label, _, floor, _ in METRICS
     )
+    gates = ", ".join(
+        f"{label.replace(' (powermetrics)', '')} baseline ≥{min_baseline:g}"
+        for _, label, _, _, min_baseline in METRICS if min_baseline is not None
+    )
+    samples = current.get("samples_per_state", 1)
+    window = current.get("seconds_per_window", current["seconds_per_state"])
+    if samples > 1:
+        sampling = (
+            f"median of {samples}×{window}s windows per state (splitting the window "
+            "and taking the median keeps one co-scheduled spike from skewing a state)"
+        )
+    else:
+        sampling = f"{window}s window per state"
     lines += [
         "",
-        f"_{current['seconds_per_state']}s sampling window per state; CPU % is the "
-        "process CPU-time delta over the window. Runs land on different shared "
-        f"runners, so treat small deltas as noise — 🔺/🔻 marks changes ≥{THRESHOLD_PCT}% "
-        f"that also clear the metric's absolute noise floor ({floors}), and those "
+        f"_Reported value is the {sampling}; CPU % is the process CPU-time delta "
+        "over a window. Runs land on different "
+        f"shared runners, so treat small deltas as noise — 🔺/🔻 marks changes ≥{THRESHOLD_PCT}% "
+        f"that also clear the metric's absolute noise floor ({floors}); CPU deltas off a "
+        f"noise-dominated baseline aren't flagged ({gates}). Flagged changes "
         "add the `benchmark:regression` / `benchmark:improvement` label._",
     ]
     if baseline is None:
@@ -538,7 +608,13 @@ def main():
     run = sub.add_parser("run", help="launch the app and benchmark each window state")
     run.add_argument("--app", required=True, help="path to the built Macterm.app")
     run.add_argument("--out", required=True, help="path for the results JSON")
-    run.add_argument("--seconds", type=int, default=30, help="sampling window per state")
+    run.add_argument("--seconds", type=int, default=10, help="length of each sampling window")
+    run.add_argument(
+        "--samples", type=int, default=3, metavar="K",
+        help="windows sampled per state; the per-metric median is reported, so a "
+             "single co-scheduled CPU spike on a shared runner can't skew a state "
+             "(default: 3). Total wall-clock per state is samples x seconds.",
+    )
     run.add_argument("--settle", type=int, default=5, help="settle time after each state change")
     run.add_argument("--boot-settle", type=int, default=10, help="settle time after launch / project open")
     run.add_argument(
