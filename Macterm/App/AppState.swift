@@ -682,7 +682,10 @@ final class AppState {
         saveWorkspaces()
     }
 
-    func removeProject(_ projectID: UUID) {
+    /// The teardown half of `removeProject`, without the workspace save — so
+    /// a bulk removal can persist once for the whole batch instead of
+    /// re-serializing the snapshot per item.
+    private func removeProjectWithoutSaving(_ projectID: UUID) {
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
@@ -693,16 +696,22 @@ final class AppState {
         }
         workspaces.removeValue(forKey: projectID)
         if activeProjectID == projectID { activeProjectID = nil }
+    }
+
+    func removeProject(_ projectID: UUID) {
+        removeProjectWithoutSaving(projectID)
         saveWorkspaces()
     }
 
     /// Remove several projects' workspaces at once — the bulk sidebar delete.
-    /// A thin loop over `removeProject`; the caller is responsible for pruning
-    /// the matching `ProjectStore` entries (that store lives outside AppState).
+    /// The caller is responsible for pruning the matching `ProjectStore`
+    /// entries (that store lives outside AppState). Saves once for the batch.
     func removeProjects(_ projectIDs: [UUID]) {
+        guard !projectIDs.isEmpty else { return }
         for id in projectIDs {
-            removeProject(id)
+            removeProjectWithoutSaving(id)
         }
+        saveWorkspaces()
     }
 
     /// An unload staged for confirmation because one of the project's panes
@@ -837,7 +846,9 @@ final class AppState {
         createTab(projectID: projectID, projectPath: project.path)
     }
 
-    func closeTab(_ tabID: UUID, projectID: UUID) {
+    /// The teardown half of `closeTab`, without the workspace save — so a
+    /// bulk close can persist once for the whole batch.
+    private func closeTabWithoutSaving(_ tabID: UUID, projectID: UUID) {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
@@ -848,16 +859,22 @@ final class AppState {
             pane.destroySurface()
         }
         ws.closeTab(tabID)
+    }
+
+    func closeTab(_ tabID: UUID, projectID: UUID) {
+        closeTabWithoutSaving(tabID, projectID: projectID)
         saveWorkspaces()
     }
 
     /// Close several tabs at once — the bulk sidebar delete for tabs. Each is
     /// identified by its owning project since a multi-selection can span
-    /// projects. A thin loop over `closeTab`.
+    /// projects. Saves once for the batch.
     func closeTabs(_ tabs: [(tabID: UUID, projectID: UUID)]) {
+        guard !tabs.isEmpty else { return }
         for tab in tabs {
-            closeTab(tab.tabID, projectID: tab.projectID)
+            closeTabWithoutSaving(tab.tabID, projectID: tab.projectID)
         }
+        saveWorkspaces()
     }
 
     /// Close a tab, confirming first when any of its panes has a running

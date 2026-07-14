@@ -357,6 +357,23 @@ struct AppStateTests {
     }
 
     @Test
+    func pendingBulkRemove_confirm_and_cancel() {
+        let state = makeAppState()
+
+        // Stage manually (busy detection needs a live surface).
+        var ran = false
+        state.pendingBulkRemove = AppState.PendingBulkRemove { ran = true }
+        state.cancelPendingBulkRemove()
+        #expect(state.pendingBulkRemove == nil)
+        #expect(!ran)
+
+        state.pendingBulkRemove = AppState.PendingBulkRemove { ran = true }
+        state.confirmPendingBulkRemove()
+        #expect(state.pendingBulkRemove == nil)
+        #expect(ran)
+    }
+
+    @Test
     func selectTab_persists_cleared_completion_indicator() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
