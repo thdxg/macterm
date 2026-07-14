@@ -66,7 +66,10 @@ enum LayoutReconciler {
         projectRoot: String,
         projectID: UUID,
         liveCommand: @escaping (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
-        liveShellName: @escaping (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) }
+        liveShellName: @escaping (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) },
+        liveCwd: @escaping (Pane) -> String = {
+            LayoutBuilder.canonicalizeLocal($0.nsView?.currentPwd ?? $0.projectPath)
+        }
     ) -> Plan {
         let liveTabs = workspace?.tabs ?? []
         var consumedTabIDs = Set<UUID>()
@@ -85,7 +88,8 @@ enum LayoutReconciler {
             var pool = PanePool(
                 panes: liveTab?.splitRoot.allPanes() ?? [],
                 liveCommand: liveCommand,
-                liveShellName: liveShellName
+                liveShellName: liveShellName,
+                liveCwd: liveCwd
             )
 
             let ctx = BuildContext(projectRoot: projectRoot, projectID: projectID)
@@ -157,12 +161,23 @@ enum LayoutReconciler {
         /// shell, so applying a layout that swaps a pane's shell respawns it.
         private var idlePanes: [(pane: Pane, shell: String?)]
 
-        init(panes: [Pane], liveCommand: (Pane) -> String?, liveShellName: (Pane) -> String?) {
+        init(
+            panes: [Pane],
+            liveCommand: (Pane) -> String?,
+            liveShellName: (Pane) -> String?,
+            liveCwd: (Pane) -> String
+        ) {
             var buckets: [Identity: [Pane]] = [:]
             var idle: [(Pane, String?)] = []
             for pane in panes {
                 if let live = liveCommand(pane) {
-                    buckets[Identity(command: live, cwd: pane.projectPath), default: []].append(pane)
+                    // Key on the pane's LIVE cwd, not its spawn-time projectPath:
+                    // LayoutSerializer records the live cwd as the leaf's `cwd:`,
+                    // and buildTree looks up with the same resolved cwd — so a
+                    // pane that `cd`-ed must bucket on where it is now, or a
+                    // save-then-apply round-trip would fail to match its own
+                    // declaration and needlessly destroy+respawn it.
+                    buckets[Identity(command: live, cwd: liveCwd(pane)), default: []].append(pane)
                 } else {
                     idle.append((pane, liveShellName(pane)))
                 }

@@ -2,7 +2,9 @@
 --minversion 0.54
 
 # File options
---exclude build,GhosttyKit,Tests,scripts
+# (No stale `Tests` entry — the real test dir is `MactermTests`, which is
+# formatted along with the rest of the tree; `Tests` never existed.)
+--exclude build,GhosttyKit,scripts
 
 # Format options
 --indent 4

@@ -34,6 +34,70 @@ struct MactermApp: App {
                     Text("A process is still running in this pane. Close it anyway?")
                 }
                 .alert(
+                    "Close running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingCloseTab != nil },
+                        set: { if !$0 { appState.cancelPendingCloseTab() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingCloseTab()
+                    }
+                    Button("Close", role: .destructive) {
+                        appState.confirmPendingCloseTab()
+                    }
+                } message: {
+                    Text("A process is still running in this tab. Closing the tab ends it.")
+                }
+                .alert(
+                    "Unload project with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingUnloadProject != nil },
+                        set: { if !$0 { appState.cancelPendingUnloadProject() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingUnloadProject()
+                    }
+                    Button("Unload", role: .destructive) {
+                        appState.confirmPendingUnloadProject()
+                    }
+                } message: {
+                    Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
+                }
+                .alert(
+                    "Remove project with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingRemoveProject != nil },
+                        set: { if !$0 { appState.cancelPendingRemoveProject() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingRemoveProject()
+                    }
+                    Button("Remove", role: .destructive) {
+                        appState.confirmPendingRemoveProject()
+                    }
+                } message: {
+                    Text("A process is still running in this project. Removing it ends every process in its tabs.")
+                }
+                .alert(
+                    "Remove items with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingBulkRemove != nil },
+                        set: { if !$0 { appState.cancelPendingBulkRemove() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingBulkRemove()
+                    }
+                    Button("Remove", role: .destructive) {
+                        appState.confirmPendingBulkRemove()
+                    }
+                } message: {
+                    Text("A process is still running in one of the selected items. Removing them ends every process in their tabs.")
+                }
+                .alert(
                     "Apply layout?",
                     isPresented: Binding(
                         get: { appState.pendingLayoutApply != nil },
@@ -49,6 +113,21 @@ struct MactermApp: App {
                 } message: {
                     if let pending = appState.pendingLayoutApply {
                         Text(pending.confirmationMessage)
+                    }
+                }
+                .alert(
+                    appState.pendingLayoutError?.title ?? "Couldn't apply layout",
+                    isPresented: Binding(
+                        get: { appState.pendingLayoutError != nil },
+                        set: { if !$0 { appState.pendingLayoutError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        appState.pendingLayoutError = nil
+                    }
+                } message: {
+                    if let pending = appState.pendingLayoutError {
+                        Text(pending.message)
                     }
                 }
                 .onAppear {
@@ -84,6 +163,13 @@ struct MactermApp: App {
                 CheckForUpdatesMenuItem()
             }
             CommandGroup(replacing: .saveItem) {
+                AppCommandMenuItem(
+                    command: .copySessionID,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Copy Session ID"
+                )
+                Divider()
                 AppCommandMenuItem(command: .closePane, appState: appState, projectStore: projectStore, titleOverride: "Close Pane")
                 AppCommandMenuItem(command: .closeWindow, appState: appState, projectStore: projectStore, titleOverride: "Close Window")
             }
@@ -157,12 +243,13 @@ struct MactermApp: App {
 /// chrome would freeze at its launch appearance, since `MactermTheme.colorScheme`
 /// reads `NSApp`/theme files rather than observable state (issue #38).
 private struct AppColorScheme: ViewModifier {
-    @State private var ghostty = GhosttyApp.shared
-
     func body(content: Content) -> some View {
         // Touch configVersion so SwiftUI tracks it as a dependency and
         // re-evaluates the color scheme when the resolved theme changes.
-        _ = ghostty.configVersion
+        // Read the shared @Observable singleton directly — @State bought
+        // nothing here (it doesn't own the object; read-tracking comes from
+        // reading `configVersion`) and misleadingly implied view-local ownership.
+        _ = GhosttyApp.shared.configVersion
         return content.preferredColorScheme(MactermTheme.colorScheme)
     }
 }
@@ -176,8 +263,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowObserver: Any?
     private var activateObserver: Any?
+    private var appFocusObservers: [Any] = []
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
+    /// Exists from delegate init — NOT created in applicationDidFinishLaunching
+    /// — because SwiftUI can run the window's onAppear (which calls
+    /// `installResponders`, attaching the request handler) BEFORE
+    /// applicationDidFinishLaunching on some launches. Attaching to a
+    /// not-yet-started server is fine; the reverse order lost the handler and
+    /// left the socket answering `starting` forever.
+    private let controlServer = ControlSocketServer(socketPath: ControlSocketServer.defaultSocketPath())
+    private var controlHandler: ControlHandler?
 
     func applicationDidFinishLaunching(_: Notification) {
         // Skip the heavy launch path when the app is hosting unit tests.
@@ -188,8 +284,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return
         }
+        // Before anything can spawn a surface: a launcher terminal's zmx
+        // session marker must not leak into our panes (see ZmxEnvironment).
+        ZmxEnvironment.scrubInheritedSession()
+        // Control socket for the bundled `macterm` CLI. Started before any
+        // surface spawns so every shell inherits MACTERM_SOCKET and the
+        // bundled CLI on PATH (setenv mutates this process's environ, which
+        // libghostty passes to spawned shells). Requests get a `starting`
+        // error until installResponders attaches the handler.
+        controlServer.start()
+        setenv(ControlProtocol.socketEnvVar, controlServer.path, 1)
+        if let binDir = Bundle.main.resourceURL?.appendingPathComponent("bin", isDirectory: true).path,
+           FileManager.default.isExecutableFile(atPath: binDir + "/macterm")
+        {
+            let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+            setenv("PATH", existingPath.isEmpty ? binDir : "\(binDir):\(existingPath)", 1)
+        }
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
-        NotificationHandler.shared.requestAuthorization()
+        if BenchmarkControl.isEnabled {
+            // Under the CI benchmark, the notification-permission alert would
+            // steal key focus mid-measurement and nobody is there to answer it.
+            BenchmarkControl.install()
+        } else {
+            NotificationHandler.shared.requestAuthorization()
+        }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
         _ = GhosttyApp.shared
@@ -214,6 +332,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Tell libghostty when we stop/start being the active app so idle
+        // surfaces stop blinking the cursor and animating while backgrounded.
+        // Visible terminals keep rendering real output (that's gated by
+        // per-surface occlusion, not app focus), so watching a running command
+        // from another app still updates.
+        let focusCenter = NotificationCenter.default
+        appFocusObservers = [
+            focusCenter.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(true) } },
+            focusCenter.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(false) } },
+        ]
+
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeMainNotification,
             object: nil,
@@ -222,8 +359,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window = note.object as? NSWindow
             MainActor.assumeIsolated {
                 guard let self, let window else { return }
+                // Settings (and other auxiliary windows) also become main —
+                // only the first window to do so is the terminal window. The
+                // responder must track that same pointer; assigning `window`
+                // unconditionally handed it the Settings window whenever
+                // Settings was frontmost, defeating its key-window gate.
+                // The first window to become main is the terminal window;
+                // cache that pointer as the authoritative identity. Do NOT
+                // stamp `window.identifier` — this is a SwiftUI `WindowGroup`
+                // window, and forcing an identifier on it interferes with
+                // SwiftUI's own window management (it can recreate the window,
+                // nilling the responder's weak `mainWindow` and breaking the
+                // key-window gate that guards every hotkey).
                 if self.mainWindow == nil { self.mainWindow = window }
-                self.mainAppResponder?.mainWindow = window
+                self.mainAppResponder?.mainWindow = self.mainWindow
             }
         }
     }
@@ -234,6 +383,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func installResponders(appState: AppState, projectStore: ProjectStore) {
         guard !hasInstalledResponders else { return }
         hasInstalledResponders = true
+        if BenchmarkControl.isEnabled {
+            BenchmarkControl.connect(appState: appState, projectStore: projectStore)
+        }
+        let handler = ControlHandler(appState: appState, projectStore: projectStore)
+        controlHandler = handler
+        controlServer.attach { raw in await handler.handle(raw) }
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
@@ -253,10 +408,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
+        controlServer.stop()
         onTerminate?()
+        // Quit is a DETACH by default: workspace panes' sessions survive and
+        // reattach on relaunch (the snapshot saved by onTerminate carries each
+        // pane's session identity). Quick-terminal sessions are ephemeral —
+        // never persisted — so they're always killed; leaving them would only
+        // feed the next launch's reaper. The terminate-on-quit setting opts
+        // into killing everything. Kills block briefly so they land before
+        // the process exits (a detached Task is never scheduled during
+        // teardown), bounded by ZmxClient's timeouts.
+        var names = QuickTerminalService.shared.splitState.tab.splitRoot.allPanes().map(\.sessionName)
+        var remoteKills: [ZmxClient.RemoteKill] = []
+        if Preferences.shared.terminateSessionsOnQuit {
+            for pane in (appState?.workspaces.values ?? [:].values)
+                .flatMap(\.tabs)
+                .flatMap({ $0.splitRoot.allPanes() })
+            {
+                // "Kill everything" includes remote sessions — routed over
+                // ssh; a local kill of a remote name would silently no-op
+                // and strand the session running on the host.
+                if let remote = ProjectPath.remote(from: pane.projectPath) {
+                    remoteKills.append(.init(
+                        remote: remote, sessionID: pane.sessionName, zmxPath: pane.remoteZmxPath
+                    ))
+                } else {
+                    names.append(pane.sessionName)
+                }
+            }
+        }
+        (appState?.zmx ?? .live).killSessionsBlocking(names)
+        (appState?.zmx ?? .live).killRemoteSessionsBlocking(remoteKills)
     }
 
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
+        // Silent quit when persistence is active: workspace sessions detach
+        // and reattach next launch, so there's nothing to confirm for them.
+        // The full prompt returns when the user opted into terminate-on-quit,
+        // or when zmx is unavailable (sessions genuinely die with the app).
+        // Quick-terminal sessions are ephemeral and die on every quit, so a
+        // busy quick-terminal pane still confirms even on a silent quit —
+        // the confirmation follows the destruction.
+        let persistenceActive = (appState?.zmx ?? .live).isBundled()
+            && !Preferences.shared.terminateSessionsOnQuit
+        if persistenceActive {
+            let qtRows = collectQuickTerminalRows()
+            if qtRows.isEmpty || QuitConfirmation.runModal(rows: qtRows) {
+                AppTerminationState.isTerminating = true
+                return .terminateNow
+            }
+            return .terminateCancel
+        }
+
         let rows = collectRunningProcessRows()
         if rows.isEmpty {
             AppTerminationState.isTerminating = true
@@ -283,6 +486,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let projectName = project?.name ?? "Project"
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.nsView?.needsConfirmQuit() == true {
+                    // The adaptive poll may be slow or fully paused here (e.g.
+                    // quitting a minimized app), so the cached name can be
+                    // stale — re-read before showing it in the dialog.
+                    pane.refreshForegroundProcess(trackExecution: false)
                     rows.append(RunningProcessRow(
                         projectName: projectName,
                         processName: pane.processTitle
@@ -291,14 +498,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        rows += collectQuickTerminalRows()
+        return rows
+    }
+
+    /// Quick-terminal panes with a running foreground process. Split out
+    /// because a silent (persistence-active) quit still confirms these: the
+    /// quick terminal's sessions are ephemeral and die on every quit.
+    private func collectQuickTerminalRows() -> [RunningProcessRow] {
+        var rows: [RunningProcessRow] = []
         let qtTab = QuickTerminalService.shared.splitState.tab
         for pane in qtTab.splitRoot.allPanes() where pane.nsView?.needsConfirmQuit() == true {
+            pane.refreshForegroundProcess(trackExecution: false)
             rows.append(RunningProcessRow(
                 projectName: "Quick Terminal",
                 processName: pane.processTitle
             ))
         }
-
         return rows
     }
 
@@ -306,30 +522,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    /// Bring our (possibly ordered-out) main window back. Robust to cases
-    /// where `self.mainWindow` got stale: walks NSApp.windows for the first
-    /// terminal-bearing window, falling back to the cached pointer.
-    /// Bring our (possibly ordered-out) main window back. Robust to cases
-    /// where `self.mainWindow` got stale: walks NSApp.windows for the first
-    /// terminal-bearing window, falling back to the cached pointer.
+    /// Bring our (possibly ordered-out) terminal window back. The terminal
+    /// window is identified by the pointer `didBecomeMain` cached (the first
+    /// window to become main) — NOT by "not an NSPanel", which also matches the
+    /// Settings window (a plain NSWindow). We never stamp a SwiftUI window's
+    /// identifier (that breaks its window management), so identity is the cached
+    /// pointer; the non-panel heuristic is only a last-resort fallback for
+    /// before the terminal window has ever become main.
     func reopenIfNeeded() {
-        // If a non-panel window is already visible, nothing to do.
-        if NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
+        // If the terminal window is already visible, nothing to do.
+        if let cached = mainWindow, cached.isVisible {
+            return
+        }
+        // No cached pointer yet (terminal window never became main): fall back
+        // to the old non-panel visibility check to avoid re-fronting needlessly.
+        if mainWindow == nil, NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
             return
         }
 
-        // Find the hidden main window. Don't filter on `canBecomeMain` — AppKit
-        // reports that as false for ordered-out SwiftUI windows (which is
-        // exactly the case we're handling). Filter on class instead: skip
-        // panels (quick terminal, settings).
-        let target = NSApp.windows.first { window in
-            !window.isVisible && !(window is NSPanel)
-        } ?? mainWindow
-
+        // Prefer the cached terminal window; only if it's absent fall back to
+        // the first hidden non-panel window.
+        let target = mainWindow ?? NSApp.windows.first { !$0.isVisible && !($0 is NSPanel) }
         guard let target else { return }
         target.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        if mainWindow !== target {
+        // Adopt a freshly-discovered window as the cached pointer only when we
+        // had none — never overwrite a live cached terminal window with some
+        // other discovered window (e.g. Settings).
+        if mainWindow == nil {
             mainWindow = target
             mainAppResponder?.mainWindow = target
         }

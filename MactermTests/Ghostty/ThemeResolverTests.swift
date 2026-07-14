@@ -114,4 +114,39 @@ struct ThemeResolverTests {
         let text = "# background = #ffffff\nbackground = #000000\n"
         #expect(ThemeResolver.colors(inThemeFile: text).background == "#000000")
     }
+
+    // MARK: - systemScheme(appHasAppearanceOverride:effectiveAppearanceIsDark:globalInterfaceStyle:)
+
+    @Test
+    func unpinned_app_trusts_effective_appearance() {
+        #expect(ThemeResolver.systemScheme(
+            appHasAppearanceOverride: false, effectiveAppearanceIsDark: true, globalInterfaceStyle: nil
+        ) == .dark)
+        #expect(ThemeResolver.systemScheme(
+            appHasAppearanceOverride: false, effectiveAppearanceIsDark: false, globalInterfaceStyle: "Dark"
+        ) == .light)
+    }
+
+    @Test
+    func pinned_app_ignores_its_own_effective_appearance() {
+        // The latch in issue #144: the app pinned itself dark, the system went
+        // back to light. The echoed effective appearance must lose to the
+        // OS-maintained global default (absent = light).
+        #expect(ThemeResolver.systemScheme(
+            appHasAppearanceOverride: true, effectiveAppearanceIsDark: true, globalInterfaceStyle: nil
+        ) == .light)
+        #expect(ThemeResolver.systemScheme(
+            appHasAppearanceOverride: true, effectiveAppearanceIsDark: false, globalInterfaceStyle: "Dark"
+        ) == .dark)
+    }
+
+    @Test
+    func interface_style_compares_case_insensitively() {
+        #expect(ThemeResolver.systemScheme(
+            appHasAppearanceOverride: true, effectiveAppearanceIsDark: false, globalInterfaceStyle: "dark"
+        ) == .dark)
+        #expect(ThemeResolver.systemScheme(
+            appHasAppearanceOverride: true, effectiveAppearanceIsDark: false, globalInterfaceStyle: "Light"
+        ) == .light)
+    }
 }

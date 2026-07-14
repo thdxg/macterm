@@ -181,16 +181,28 @@ struct LayoutBranch: Equatable {
 enum LayoutFileError: Error, LocalizedError {
     case notFound(path: String)
     case parse(underlying: Error)
+    /// No central project file declares this project's path.
+    case noProjectFile(projectPath: String)
+    /// A central project file matches but has no/empty `tabs:` — a bare
+    /// declaration with nothing to apply.
+    case noTabs
 
     var errorDescription: String? {
         switch self {
         case let .notFound(path): "No layout file found at \(path)"
         case let .parse(underlying): "The layout file is invalid and was not applied.\n\n\(underlying.localizedDescription)"
+        case let .noProjectFile(projectPath): "No project file declares \(projectPath). Use “Save Layout” to create one."
+        case .noTabs: "The project file declares no tabs, so there is no layout to apply."
         }
     }
 }
 
 extension LayoutFile {
+    // Deprecated: the in-repo `.macterm/layout.yaml` is superseded by central
+    // project files (`~/.config/macterm/projects/`, see `ProjectFile`). The
+    // path helpers below survive only for the one-time seed import on first
+    // open (`AppState.importLegacyLayout`) — remove next release (#114).
+
     /// Default location of a project's layout file, relative to its root.
     static let relativePath = ".macterm/layout.yaml"
 

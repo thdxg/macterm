@@ -64,31 +64,31 @@ private struct ForegroundProcessKey: Equatable {
     }
 }
 
-private struct TerminalExecutionTracker {
+private enum TerminalExecutionSource: Equatable {
+    case foreground
+    case activity(Date)
+    case progress
+}
+
+struct TerminalExecutionTracker {
     init(hasUserInteraction: Bool = false) {
         self.hasUserInteraction = hasUserInteraction
     }
 
-    /// The foreground process seen on the last poll (nil = shell / none).
-    /// Transitions are driven by *changes* to this, not by re-deriving state
-    /// on every poll — so a settled idle process never flip-flops back to
-    /// running just because it's still foreground.
+    /// The foreground process seen on the last poll (nil = idle shell / none).
+    /// Transitions are driven by *changes* to this, not by re-deriving state on
+    /// every poll — so a settled process doesn't flip-flop back to running just
+    /// because it is still foreground.
     private var lastForeground: ForegroundProcessKey?
-    /// Timestamp of the most recent terminal output. nil while running is owed
-    /// to a foreground command or explicit progress (which don't quiet-settle).
-    /// Its presence/absence is the only record of whether running is
-    /// "output-sourced" (settles when quiet) or not — no separate source enum.
-    private var lastActivityAt: Date?
-    /// True while an OSC 9;4 progress report owns the pane; output and
-    /// foreground changes are ignored while it's active.
-    private var progressActive = false
+    /// Why the pane is currently considered running. Foreground and explicit
+    /// progress run until a completion/foreground transition; activity is a
+    /// render/output heartbeat and quiet-settles.
+    private var runningSource: TerminalExecutionSource?
     /// After progress clears, the foreground process that owned it is
-    /// "quiesced": its own output and re-polls are ignored until the
-    /// foreground moves away, so a settled program that reported progress
-    /// doesn't flip back to running on its own render output.
-    /// `pendingProgressQuiesce` covers the race where progress started and
-    /// cleared before any foreground poll — the first process to appear is
-    /// quiesced instead of marked running.
+    /// "quiesced": its own output and re-polls are ignored until the foreground
+    /// moves away, so a settled program that reported progress doesn't flip back
+    /// to running on its own render output. `pendingProgressQuiesce` covers the
+    /// race where progress started and cleared before any foreground poll.
     private var progressQuiesced: ForegroundProcessKey?
     private var pendingProgressQuiesce = false
     /// Output is ignored until the user has interacted with the pane, so a
@@ -101,8 +101,7 @@ private struct TerminalExecutionTracker {
 
     mutating func markProgressStarted(currentState: TerminalExecutionState) -> TerminalExecutionState {
         guard hasUserInteraction else { return currentState }
-        progressActive = true
-        lastActivityAt = nil
+        runningSource = .progress
         return .running
     }
 
@@ -114,22 +113,20 @@ private struct TerminalExecutionTracker {
         // precmd noise and must not flip the pane to `.done` (which would
         // persist as a spurious checkmark after restart).
         guard currentState == .running else { return currentState }
-        progressActive = false
+        runningSource = nil
         progressQuiesced = nil
         pendingProgressQuiesce = false
-        lastActivityAt = nil
         return .done
     }
 
     mutating func markProgressFinished(currentState: TerminalExecutionState) -> TerminalExecutionState {
-        guard hasUserInteraction || progressActive else { return currentState }
-        progressActive = false
+        guard hasUserInteraction || runningSource == .progress else { return currentState }
         if let lastForeground {
             progressQuiesced = lastForeground
         } else {
             pendingProgressQuiesce = true
         }
-        lastActivityAt = nil
+        runningSource = nil
         return currentState == .running ? .done : currentState
     }
 
@@ -137,14 +134,22 @@ private struct TerminalExecutionTracker {
         at date: Date,
         currentState: TerminalExecutionState
     ) -> TerminalExecutionState {
-        guard !progressActive else { return currentState }
+        // A render/output heartbeat can keep an already-running command active,
+        // but it must never (re)start one. From `.done` — a finished command
+        // whose checkmark is showing — output (e.g. a background job) must not
+        // flip the pane back to running; only a new foreground process or an
+        // explicit progress marker can. Pinned by TerminalExecutionTrackerTests
+        // so a refactor of the onTerminalRender closure can't silently
+        // reintroduce the "prompt redraw keeps spinning" bug.
+        guard currentState != .done else { return currentState }
+        guard runningSource != .progress else { return currentState }
         if let progressQuiesced, progressQuiesced == lastForeground { return currentState }
-        // Output only counts after user interaction (or a declarative `run:`,
-        // which seeds `hasUserInteraction`). Fresh/restored shells can emit
-        // startup banners or shell-integration redraws before the user does
+        // Output/render only counts after user interaction (or a declarative
+        // `run:`, which seeds `hasUserInteraction`). Fresh/restored shells can
+        // emit startup banners or shell-integration redraws before the user does
         // anything; those must not become persisted completion indicators.
         guard hasUserInteraction else { return currentState }
-        lastActivityAt = date
+        runningSource = .activity(date)
         return .running
     }
 
@@ -154,12 +159,21 @@ private struct TerminalExecutionTracker {
         currentState: TerminalExecutionState
     ) -> TerminalExecutionState {
         guard currentState == .running,
-              !progressActive,
-              let lastActivityAt,
+              case let .activity(lastActivityAt) = runningSource,
               now.timeIntervalSince(lastActivityAt) >= quietInterval
         else { return currentState }
-        self.lastActivityAt = nil
+        runningSource = nil
         return .done
+    }
+
+    /// Restart the quiet window of an activity-sourced run. Used on the
+    /// occluded→visible edge: a parked renderer emits no heartbeats, so the
+    /// elapsed silence says nothing about completion — and a false `.done`
+    /// would stick, because activity can never revive `.done` (see
+    /// `markTerminalActivity`).
+    mutating func refreshActivityWindow(now: Date) {
+        guard case .activity = runningSource else { return }
+        runningSource = .activity(now)
     }
 
     mutating func refreshForeground(
@@ -192,41 +206,39 @@ private struct TerminalExecutionTracker {
         let changed = newKey != lastForeground
         lastForeground = newKey
 
-        // Foreground returned to the shell: a running command exited.
+        // Foreground returned to the shell: a foreground-running command exited.
         if newKey == nil {
             guard changed, currentState == .running else { return currentState }
-            lastActivityAt = nil
+            runningSource = nil
             return .done
         }
 
-        // Non-shell foreground. Explicit progress owns the state while active.
-        if progressActive { return currentState }
+        // Explicit progress owns the state while active.
+        if runningSource == .progress { return currentState }
 
-        // A newly-created/restored plain shell can briefly look like a
-        // non-shell foreground while its startup files and shell integration
-        // settle. Do not turn that launch noise into a persisted checkmark.
-        // Once the user has interacted, foreground transitions are real user
-        // work. Declarative layout `run:` panes seed `hasUserInteraction` so
-        // their startup command is still tracked.
+        // A newly-created/restored plain shell can briefly look like a non-shell
+        // foreground while its startup files and shell integration settle. Do
+        // not turn that launch noise into a persisted checkmark. Once the user
+        // has interacted, foreground transitions are real user work.
         guard hasUserInteraction else { return currentState }
 
         if terminalInputIsRaw {
-            // A raw/cbreak-mode program (full-screen editors, multiplexers,
-            // interactive CLIs) shouldn't hold a foreground-only spinner just
-            // because it's the foreground process. If we were running only
-            // because of a prior canonical command (no recent output), settle
-            // now; output-sourced running is left to quiet-settle on its own.
-            if currentState == .running, lastActivityAt == nil {
+            // Raw/cbreak-mode programs (editors, multiplexers, interactive CLIs)
+            // should not be held running by foreground alone. If a canonical
+            // command switched the tty raw, finish that foreground-only run;
+            // activity-sourced runs still quiet-settle normally.
+            if currentState == .running, runningSource == .foreground {
+                runningSource = nil
                 return .done
             }
             return currentState
         }
 
-        // Canonical non-shell command (a build, `sleep`, …) → running until
-        // it returns to the shell. Only act on a change so a settled idle
-        // process doesn't flip back to running on every poll.
+        // Canonical non-shell command (a build, `sleep`, shell script, …) →
+        // running until it returns to the shell. Only act on a change so a
+        // settled idle process doesn't flip back to running on every poll.
         guard changed else { return currentState }
-        lastActivityAt = nil
+        runningSource = .foreground
         return .running
     }
 }
@@ -236,7 +248,50 @@ private struct TerminalExecutionTracker {
 final class Pane: Identifiable {
     let id = UUID()
     let projectPath: String
-    let projectID: UUID
+    /// The workspace this pane currently belongs to — the ROUTING identity used
+    /// to locate the pane's tab (notification-click navigation bakes this into
+    /// `userInfo`; the quit sweep groups panes by it). Restampable because a tab
+    /// can be moved between projects (`AppState.moveTab`); `rebind(projectID:)`
+    /// updates it. Distinct from SESSION identity (`sessionName`/`sessionSlug`/
+    /// `projectPath`/`remoteSpec`), which stays tied to where the session was
+    /// created and must NOT change on a move — the shell keeps running on its
+    /// original host under its original name.
+    private(set) var projectID: UUID
+    /// Stable session id for zmx-backed persistence, distinct from `id` (which
+    /// is regenerated on every restore). Fresh for a new pane; the restore
+    /// path will pass the saved one.
+    let sessionID: UUID
+    /// The pane's zmx session name (`macterm-<slug>-<hex>`), fixed at creation
+    /// and — once persistence lands — stored verbatim in the snapshot, never
+    /// re-derived: the slug embeds the project *at creation*, and a later
+    /// project rename must not orphan the session. The slug comes from the
+    /// project path's basename (which is the project's name for every project
+    /// added from a folder); callers with a better label (quick terminal)
+    /// pass `sessionSlug` explicitly, and splits inherit the source pane's.
+    let sessionName: String
+    /// The raw slug this pane's session was named under, so a split-off
+    /// sibling groups under the same project in `zmx ls`.
+    let sessionSlug: String
+    /// Whether this pane's project is remote (#104) — its `projectPath` is an
+    /// scp-style spec and its session lives on the remote host. Cached at
+    /// init: the poll and title paths read it every tick.
+    let isRemote: Bool
+    /// The remote host name for display fallback (`processTitle` shows it
+    /// while no remote process name is known). nil for local panes.
+    let remoteHost: String?
+    /// The parsed scp-style spec for a remote pane (`.remote(user,host,dir)`),
+    /// or nil for a local pane. Cached at init so the spawn (`ensureNSView`)
+    /// and teardown (`killPersistentSession`) paths don't re-parse
+    /// `projectPath` — they read this instead.
+    @ObservationIgnored
+    let remoteSpec: ProjectPath?
+    /// Optional explicit remote zmx path (#104), from the pane's `Project`.
+    /// Not part of pane identity and not persisted — `AppState` stamps it from
+    /// the project each time the workspace is built (it's a host property,
+    /// re-derivable on every open). Read by `ensureNSView` (spawn) and
+    /// `killPersistentSession` (teardown). nil = resolve `zmx` via PATH.
+    @ObservationIgnored
+    var remoteZmxPath: String?
     /// Process the pane launches on first surface creation, injected into the
     /// shell as `command + "\n"`. Set from a declarative layout; nil for an
     /// interactively-created pane (plain shell). Recorded here so a layout
@@ -274,7 +329,21 @@ final class Pane: Identifiable {
     private var programTitlePID: pid_t?
 
     let searchState = TerminalSearchState()
-    var executionState: TerminalExecutionState = .idle
+    var executionState: TerminalExecutionState = .idle {
+        didSet {
+            guard executionState != oldValue else { return }
+            // A remote pane's OSC title expires when its command ends — the
+            // execution edge is the pid-change analogue local panes get from
+            // the poll (see `receiveRemoteReportedTitle`).
+            if isRemote, oldValue == .running, programTitle != nil {
+                programTitle = nil
+            }
+            // Transitions (idle→running, running→done) are exactly when the
+            // adaptive poll should speed up; steady-state assignments and
+            // per-frame heartbeats don't reach here (value unchanged).
+            NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        }
+    }
 
     @ObservationIgnored
     private var executionTracker = TerminalExecutionTracker()
@@ -289,10 +358,25 @@ final class Pane: Identifiable {
     /// the pref is read once; the default reads `Preferences` for ad-hoc
     /// callers (OSC title, output/progress callbacks) so they stay gated too.
     func refreshForegroundProcess(trackExecution: Bool? = nil) {
+        // Remote panes (#104): the local process table only knows the ssh
+        // client — reading it would stomp the probe-derived name, expire
+        // remote OSC titles, and feed the execution tracker a perpetual
+        // "ssh is running". Names come from `RemoteForegroundResolver`,
+        // titles from `receiveRemoteReportedTitle`, execution state from
+        // OSC 133 markers and activity heartbeats.
+        guard !isRemote else { return }
         let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
-            foregroundPID: nsView?.foregroundPID,
+            // The RESOLVED foreground pid (daemon-side shell/program for a
+            // wrapped pane), NOT the raw `nsView.foregroundPID` (the zmx attach
+            // client). `programTitlePID` is pinned to this resolved pid, so the
+            // expiry compare in `applyForegroundRefresh` must use the same
+            // source — otherwise a wrapped pane's client pid never matches and
+            // every adopted OSC title (e.g. Claude Code's "✳ Claude Code")
+            // expires on the very next 250ms poll, snapping back to the process
+            // name.
+            foregroundPID: ProcessInspector.resolvedForegroundPID(forPane: self),
             foregroundIsShell: track ? ProcessInspector.foregroundProcessIsShell(forPane: self) : false,
             terminalInputIsRaw: track ? ProcessInspector.terminalInputIsRaw(forPane: self) : false,
             applyExecutionState: track
@@ -352,6 +436,10 @@ final class Pane: Identifiable {
         )
     }
 
+    func refreshTerminalActivityWindow(now: Date = Date()) {
+        executionTracker.refreshActivityWindow(now: now)
+    }
+
     @discardableResult
     func acknowledgeCommandCompletion() -> Bool {
         guard executionState == .done else { return false }
@@ -371,6 +459,10 @@ final class Pane: Identifiable {
     func recordUserInteraction() {
         executionTracker.recordUserInteraction()
         acknowledgeCommandCompletion()
+        // Keystrokes are the strongest "about to launch something" signal —
+        // and the only one available while the non-activating quick terminal
+        // has keyboard focus without app focus.
+        NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
     }
 
     private func applyForegroundExecutionState(
@@ -393,16 +485,77 @@ final class Pane: Identifiable {
     /// string as `programTitle` only when a real program — not the shell — is
     /// in the foreground (see `programTitle` for why).
     func receiveReportedTitle(_ title: String) {
+        if isRemote {
+            receiveRemoteReportedTitle(title)
+            return
+        }
         receiveReportedTitle(title, programPID: ProcessInspector.foregroundProgramPID(forPane: self))
+    }
+
+    /// Remote-pane title path (#104): there is no local foreground pid to
+    /// gate provenance on (the local process is always `ssh`), so the OSC 133
+    /// execution state stands in — a title arriving while a command runs is
+    /// the program naming itself; one arriving at the prompt is shell churn,
+    /// discarded exactly like the local gate discards it. Expiry is the
+    /// running→ended edge in `executionState.didSet`.
+    func receiveRemoteReportedTitle(_ title: String) {
+        // A title arrival is a command boundary — wake the poll (it drives
+        // the remote foreground probe). Deferred for the same render-loop
+        // reason as the local path.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        }
+        guard executionState == .running else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Discard a bare version number (see the local path) — e.g. remote
+        // Claude Code emitting `2.1.202` as its title.
+        guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
+        if trimmed != programTitle { programTitle = trimmed }
+        programTitlePID = nil
+    }
+
+    /// Tier-2 naming input for remote panes (#104): the remote resolver's
+    /// foreground `comm` for this pane's session. A macOS remote reports
+    /// `comm` as a full executable path — keep the basename, matching local
+    /// kernel-comm behavior. nil (session missing from a successful probe)
+    /// keeps the last-known name: a blip must not flap tab titles.
+    func applyRemoteForegroundName(_ comm: String?) {
+        guard let comm, !comm.isEmpty else { return }
+        let base = Self.normalizeRemoteComm(comm)
+        if !base.isEmpty, base != foregroundProcessName { foregroundProcessName = base }
+    }
+
+    /// Basename of a remote `ps -o comm=` value, minus the leading `-` a
+    /// login shell carries in its argv[0] (`-/opt/homebrew/bin/nu` → `nu`,
+    /// `-zsh` → `zsh`). Local kernel `comm` never has this dash, so the
+    /// stripping is remote-only. Pure + static for testing.
+    static func normalizeRemoteComm(_ comm: String) -> String {
+        let stripped = comm.hasPrefix("-") ? String(comm.dropFirst()) : comm
+        return (stripped as NSString).lastPathComponent
     }
 
     /// Testable core of `receiveReportedTitle`. `programPID` is the pane's
     /// foreground pid when that process is a non-shell program, nil otherwise.
     func receiveReportedTitle(_ title: String, programPID: pid_t?) {
+        // A title arrival is a command boundary — wake the adaptive poll so
+        // the other panes' names catch up too. Deferred: this path also runs
+        // from the `onTitleChange` replay inside `TerminalSurface.configure`,
+        // i.e. mid view-update — posting (and polling) synchronously there
+        // re-invalidates SwiftUI from within its own render transaction.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+        }
         refreshForegroundProcess()
         guard let programPID else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // A bare version number is not a useful display title — Claude Code
+        // emits its version (`2.1.202`) as an OSC 2 title at its prompt. Discard
+        // it so `displayTitle` falls back to the process name instead of pinning
+        // the version. (Its real status titles aren't version-shaped, so they
+        // still adopt normally.)
+        guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
         if trimmed != programTitle { programTitle = trimmed }
         programTitlePID = programPID
     }
@@ -418,7 +571,24 @@ final class Pane: Identifiable {
 
     func ensureNSView() -> GhosttyTerminalNSView {
         if let existing = _nsView { return existing }
-        let view = GhosttyTerminalNSView(workingDirectory: projectPath, command: command, shell: shell, env: env)
+        // Every pane's shell learns its own restart-stable address so
+        // `macterm` invoked inside it can self-target (`MACTERM_SESSION`).
+        // Injected at spawn, which means a zmx-reattached shell keeps the
+        // value from its original spawn — correct, because the session name
+        // is persisted verbatim and survives restarts (pane UUIDs don't).
+        // Our value wins over a layout-declared duplicate: this is identity,
+        // not configuration.
+        var mergedEnv = env ?? [:]
+        mergedEnv[ControlProtocol.sessionEnvVar] = sessionName
+        let view = GhosttyTerminalNSView(
+            workingDirectory: projectPath,
+            sessionName: sessionName,
+            command: command,
+            shell: shell,
+            env: mergedEnv,
+            remoteSpec: remoteSpec,
+            remoteZmxPath: remoteZmxPath
+        )
         _nsView = view
         return view
     }
@@ -459,6 +629,7 @@ final class Pane: Identifiable {
         view.onProgressStarted = nil
         view.onProgressFinished = nil
         view.onTerminalActivity = nil
+        view.onTerminalRender = nil
         view.onScrollbarUpdate = nil
         view.onScrollWheel = nil
         view.destroySurface()
@@ -484,8 +655,12 @@ final class Pane: Identifiable {
         // The live foreground process name (`hx`, `btop`) when a program is
         // running, else the shell name when idle. Always process-table derived
         // (never the OSC title) — the quit confirmation lists real process
-        // names, and `displayTitle` falls back here.
+        // names, and `displayTitle` falls back here. For a remote pane the
+        // name comes from the remote probe; before one lands (or when the
+        // host is unreachable) the host name is the honest fallback — the
+        // local login shell never runs in a remote pane.
         if let proc = foregroundProcessName, !proc.isEmpty { return proc }
+        if let remoteHost { return remoteHost }
         return Self.defaultShellName
     }
 
@@ -518,16 +693,80 @@ final class Pane: Identifiable {
     init(
         projectPath: String,
         projectID: UUID,
+        sessionID: UUID = UUID(),
+        sessionSlug: String? = nil,
+        sessionName persistedSessionName: String? = nil,
         command: String? = nil,
         shell: String? = nil,
         env: [String: String]? = nil
     ) {
         self.projectPath = projectPath
         self.projectID = projectID
+        self.sessionID = sessionID
+        if case let .remote(_, host, _)? = ProjectPath.parse(projectPath) {
+            isRemote = true
+            remoteHost = host
+            remoteSpec = ProjectPath.remote(from: projectPath)
+        } else {
+            isRemote = false
+            remoteHost = nil
+            remoteSpec = nil
+        }
+        if let persistedSessionName {
+            // Restore path: the snapshot's name is authoritative and used
+            // VERBATIM — the slug inside it reflects the project at creation,
+            // and re-deriving after a project rename would target a session
+            // that doesn't exist. The slug is recovered only so a split off
+            // this pane groups with it.
+            sessionName = persistedSessionName
+            self.sessionSlug = ZmxSessionName.slug(fromName: persistedSessionName)
+                ?? (projectPath as NSString).lastPathComponent
+        } else {
+            let slug = sessionSlug ?? (projectPath as NSString).lastPathComponent
+            self.sessionSlug = slug
+            sessionName = ZmxSessionName.make(projectName: slug, paneSessionID: sessionID)
+        }
         self.command = command
         self.shell = shell
         self.env = env
         executionTracker = TerminalExecutionTracker(hasUserInteraction: command != nil)
+    }
+
+    /// Re-point this pane at a new workspace after its tab is moved between
+    /// projects (`AppState.moveTab`). Updates ONLY the routing identity — the
+    /// `projectID` that notification navigation and the quit sweep key on — so a
+    /// notification click after a move finds the tab in its new project.
+    ///
+    /// Session identity (`sessionName`, `sessionSlug`, `projectPath`,
+    /// `remoteSpec`, `remoteZmxPath`) is deliberately NOT touched: the shell
+    /// keeps running on its original host under its original name, so a
+    /// remote pane moved into a local project still tears down over ssh.
+    func rebind(projectID: UUID) {
+        self.projectID = projectID
+    }
+
+    /// Permanently kill this pane's zmx session. Call ONLY when the pane is
+    /// gone for good (closed, tab/project removed, dropped by a layout apply)
+    /// — NOT on transient teardown (window hide, tab-switch churn), where the
+    /// daemon must survive. Fire-and-forget: close paths aren't blocked on it
+    /// and ZmxClient's subprocess timeout bounds a stuck daemon. The client is
+    /// a parameter so AppState's injectable instance flows through in tests.
+    func killPersistentSession(using zmx: ZmxClient) {
+        let name = sessionName
+        if let remote = remoteSpec {
+            let zmxPath = remoteZmxPath
+            Task {
+                await zmx.killRemoteSession(remote, name, zmxPath)
+                // Post AFTER the kill so observers that re-list sessions see
+                // the post-kill state instead of racing the still-alive one.
+                NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+            }
+            return
+        }
+        Task {
+            await zmx.killSession(name)
+            NotificationCenter.default.post(name: .zmxSessionsChanged, object: nil)
+        }
     }
 }
 
@@ -569,11 +808,16 @@ extension SplitNode {
         direction: SplitDirection,
         position: SplitPosition,
         projectPath: String,
-        projectID: UUID
+        projectID: UUID,
+        command: String? = nil
     ) -> (node: SplitNode, newPaneID: UUID?) {
         switch self {
         case let .pane(p) where p.id == paneID:
-            let newPane = Pane(projectPath: projectPath, projectID: projectID)
+            // Inherit the source pane's session slug so the new sibling groups
+            // under the same project in `zmx ls`.
+            let newPane = Pane(
+                projectPath: projectPath, projectID: projectID, sessionSlug: p.sessionSlug, command: command
+            )
             let first: SplitNode = position == .first ? .pane(newPane) : .pane(p)
             let second: SplitNode = position == .first ? .pane(p) : .pane(newPane)
             return (.split(SplitBranch(direction: direction, first: first, second: second)), newPane.id)
@@ -585,7 +829,8 @@ extension SplitNode {
                 direction: direction,
                 position: position,
                 projectPath: projectPath,
-                projectID: projectID
+                projectID: projectID,
+                command: command
             )
             branch.first = newFirst
             if id1 != nil { return (.split(branch), id1) }
@@ -594,7 +839,8 @@ extension SplitNode {
                 direction: direction,
                 position: position,
                 projectPath: projectPath,
-                projectID: projectID
+                projectID: projectID,
+                command: command
             )
             branch.second = newSecond
             return (.split(branch), id2)
@@ -777,6 +1023,27 @@ extension SplitNode {
         // No deeper match; if this branch matches the axis, apply here.
         if branch.direction == axis {
             branch.ratio = min(max(branch.ratio + delta, 0.15), 0.85)
+            return true
+        }
+        return false
+    }
+
+    /// Set the ratio of the nearest ancestor branch of `paneID` whose direction
+    /// matches `axis` to an absolute value (clamped to 0.15…0.85). The control
+    /// CLI's `pane resize-split` uses this for a deterministic geometry, in
+    /// contrast to `applyResize`'s relative nudge (the keybind path). Returns
+    /// true iff a matching branch was found and set.
+    @discardableResult
+    func settingRatio(paneID: UUID, axis: SplitDirection, ratio: CGFloat) -> Bool {
+        guard case let .split(branch) = self else { return false }
+        let firstHas = branch.first.contains(paneID: paneID)
+        let secondHas = branch.second.contains(paneID: paneID)
+        guard firstHas || secondHas else { return false }
+        // Deeper (closer) ancestor wins, matching applyResize.
+        let child: SplitNode = firstHas ? branch.first : branch.second
+        if child.settingRatio(paneID: paneID, axis: axis, ratio: ratio) { return true }
+        if branch.direction == axis {
+            branch.ratio = min(max(ratio, 0.15), 0.85)
             return true
         }
         return false

@@ -10,13 +10,58 @@ import Foundation
 /// Everything is best-effort: any failure yields nil rather than throwing. Only
 /// same-uid processes are readable, which the pane's foreground process is.
 enum ProcessInspector {
+    /// The pid to inspect for a pane's foreground process. When the pane's
+    /// shell is wrapped in zmx, libghostty's `foregroundPID` points at the
+    /// local `zmx attach` client (whose `comm` is just `zmx`), while the real
+    /// shell / program runs under the zmx daemon — a detached process tree
+    /// reachable only by session name. `ZmxForegroundResolver` maps the name
+    /// to the daemon's pty foreground process; use that when available, else
+    /// fall back to libghostty's pid (no zmx, over-budget bypass, or before
+    /// the first `zmx ls` populates the cache).
+    /// The resolved foreground pid for a pane — the zmx daemon-side shell/program
+    /// when wrapped, else libghostty's client pid — the SAME value the title
+    /// provenance gate (`foregroundProgramPID`) and name lookups resolve through.
+    /// Callers comparing against `Pane.programTitlePID` (the title's pin) MUST use
+    /// this, not `nsView.foregroundPID` (the raw client pid) — for a wrapped pane
+    /// the two never match, which would expire every adopted OSC title on the
+    /// next poll.
+    @MainActor
+    static func resolvedForegroundPID(forPane pane: Pane) -> pid_t? {
+        foregroundPID(forPane: pane)
+    }
+
+    @MainActor
+    private static func foregroundPID(forPane pane: Pane) -> pid_t? {
+        // Remote panes (#104): the only local process is the ssh client — no
+        // local pid ever describes what runs inside the pane. Every pane-level
+        // API returns nil/false, so layout save emits a plain leaf, reconcile
+        // matches the pane as idle, and titles come from the remote pipeline
+        // (`RemoteForegroundResolver` / execution-gated OSC titles).
+        guard !pane.isRemote else { return nil }
+        if let resolved = ZmxForegroundResolver.foregroundPID(sessionName: pane.sessionName) {
+            return resolved
+        }
+        // For a zmx-WRAPPED pane, libghostty's `foregroundPID` is the local
+        // `zmx attach` CLIENT — never the real shell (that runs under the
+        // daemon, reachable only by session name via the resolver above). If
+        // the resolver hasn't populated the cache yet (the async-registration
+        // race right after spawn/restore), returning the client pid would make
+        // the tab read `zmx` and Save Layout capture the wrapper argv as a
+        // `run:` command. Return nil instead: the pane reads as resolving
+        // (falls back to the shell name, saves no run) until the cache catches
+        // up. The client-pid fallback is only correct for UNWRAPPED panes
+        // (zmx unbundled / over the socket-path budget).
+        if pane.nsView?.isZmxWrapped == true { return nil }
+        return pane.nsView?.foregroundPID
+    }
+
     /// The command running in the pane's foreground, or nil if the pane is idle
     /// at a shell prompt, has no live surface, or the process can't be read.
     /// The string is the resolved argv joined with spaces (e.g.
     /// `node …/npm-cli.js run dev`), not necessarily what the user typed.
     @MainActor
     static func runningCommand(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), !args.isEmpty else { return nil }
         // Idle at a prompt: the foreground process is the shell itself. Nothing
         // worth recording as a `run` command.
@@ -51,11 +96,30 @@ enum ProcessInspector {
     /// pid at all (surface not yet created).
     @MainActor
     static func runningProcessName(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard var comm = comm(pid: pid), !comm.isEmpty else { return nil }
         // A login shell's comm may carry a leading `-` (e.g. `-zsh`).
         if comm.hasPrefix("-") { comm.removeFirst() }
+        // Some programs overwrite `p_comm` via `setproctitle`/`process.title` —
+        // Claude Code sets it to its bare version (`2.1.202`), which is useless
+        // as a tab name. When `comm` is version-shaped, fall back to the
+        // executable's basename (the real program name, e.g. `claude`), which
+        // `p_comm` no longer reflects but `exec_path` still does.
+        if looksLikeVersionString(comm), let exec = execPath(pid: pid) {
+            let base = (exec as NSString).lastPathComponent
+            if !base.isEmpty { return base }
+        }
         return comm
+    }
+
+    /// Whether `value` is a bare dotted version number (e.g. `2.1.202`, `1.0`) —
+    /// i.e. a `setproctitle`-clobbered `p_comm` rather than a real process name.
+    /// Digits and dots only, at least one dot, digits at both ends.
+    static func looksLikeVersionString(_ value: String) -> Bool {
+        guard value.contains(".") else { return false }
+        return value.allSatisfy { $0.isNumber || $0 == "." }
+            && (value.first?.isNumber ?? false)
+            && (value.last?.isNumber ?? false)
     }
 
     /// The pid of the pane's foreground process when it's a real program, or
@@ -65,7 +129,7 @@ enum ProcessInspector {
     /// shell holds it is prompt churn (see `Pane.receiveReportedTitle`).
     @MainActor
     static func foregroundProgramPID(forPane pane: Pane) -> pid_t? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), let first = args.first, !isShell(first) else { return nil }
         return pid
     }
@@ -76,8 +140,8 @@ enum ProcessInspector {
     /// Macterm-maintained list.
     @MainActor
     static func foregroundProcessIsShell(forPane pane: Pane) -> Bool {
-        guard let pid = pane.nsView?.foregroundPID else { return false }
-        return isShellProcess(pid: pid)
+        guard let pid = foregroundPID(forPane: pane) else { return false }
+        return isIdleShellProcess(pid: pid)
     }
 
     static func isShellProcess(pid: pid_t) -> Bool {
@@ -85,6 +149,40 @@ enum ProcessInspector {
         if let firstArg = argv(pid: pid)?.first, isShellProcessName(firstArg) { return true }
         if let name = comm(pid: pid), isShellProcessName(name) { return true }
         return false
+    }
+
+    /// Whether `pid` is a shell sitting at an interactive prompt. A shell that
+    /// is executing a script (including a shebang script like
+    /// `/tmp/spinner-test.sh`) or a `-c` command is foreground work, not idle.
+    static func isIdleShellProcess(pid: pid_t) -> Bool {
+        if let args = argv(pid: pid), let first = args.first, isShell(first) {
+            return isIdleShellInvocation(args)
+        }
+        return isShellProcess(pid: pid)
+    }
+
+    static func isIdleShellInvocation(_ argv: [String]) -> Bool {
+        guard let first = argv.first, isShell(first) else { return false }
+        return !shellInvocationRunsCommand(argv)
+    }
+
+    private static func shellInvocationRunsCommand(_ argv: [String]) -> Bool {
+        guard argv.count > 1 else { return false }
+        var index = 1
+        while index < argv.count {
+            let arg = argv[index]
+            if arg == "--" { return index + 1 < argv.count }
+            if !arg.hasPrefix("-") || arg == "-" { return true }
+            if arg == "-c" || (arg.hasPrefix("-") && !arg.hasPrefix("--") && arg.dropFirst().contains("c")) {
+                return true
+            }
+            index += shellOptionConsumesNextArgument(arg) ? 2 : 1
+        }
+        return false
+    }
+
+    private static func shellOptionConsumesNextArgument(_ option: String) -> Bool {
+        option == "--rcfile" || option == "--init-file"
     }
 
     /// Whether the pane's tty is in raw/cbreak-style input mode. Full-screen and
@@ -95,7 +193,20 @@ enum ProcessInspector {
     /// perpetual work without app-specific process-name exclusions.
     @MainActor
     static func terminalInputIsRaw(forPane pane: Pane) -> Bool {
-        terminalInputIsRaw(ttyPath: pane.nsView?.ttyName)
+        // For a zmx-wrapped pane, probe the DAEMON's pty: the `zmx attach`
+        // client keeps the client-side pty raw permanently (it forwards
+        // keystrokes), which would misread every wrapped pane as a raw-mode
+        // TUI and break the status indicator's canonical-command detection.
+        let daemonTTY = ZmxForegroundResolver.daemonTTYPath(sessionName: pane.sessionName)
+        if daemonTTY == nil, pane.nsView?.isZmxWrapped == true {
+            // A wrapped pane whose daemon tty isn't cached yet must NOT fall
+            // back to the client-side tty: the zmx attach client keeps that
+            // pty permanently raw, so the answer would flap raw/canonical
+            // across cache refreshes — each flip republishes execution state
+            // and re-renders, which is one edge of the frozen-render loop.
+            return false
+        }
+        return terminalInputIsRaw(ttyPath: daemonTTY ?? pane.nsView?.ttyName)
     }
 
     static func terminalInputIsRaw(ttyPath: String?) -> Bool {
@@ -124,7 +235,7 @@ enum ProcessInspector {
     /// program's cwd (typically launched from, and matching, the shell's).
     @MainActor
     static func foregroundWorkingDirectory(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         return workingDirectory(pid: pid)
     }
 
@@ -169,7 +280,7 @@ enum ProcessInspector {
     /// (which may be a bare `-zsh` login form).
     @MainActor
     static func runningShell(forPane pane: Pane) -> String? {
-        guard let pid = pane.nsView?.foregroundPID else { return nil }
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), let first = args.first, isShell(first) else { return nil }
         // Skip the user's default login shell — only a shell they switched to is
         // worth recording.
@@ -207,23 +318,26 @@ enum ProcessInspector {
 
     /// The argument vector of `pid` (argv[0…argc-1]) via KERN_PROCARGS2, or nil.
     static func argv(pid: pid_t) -> [String]? {
-        guard let tokens = procArgsTokens(pid: pid) else { return nil }
-        let (argc, args) = tokens
-        // args[0] is exec_path; argv follows.
-        guard args.count >= argc + 1 else { return nil }
-        return Array(args[1 ..< (1 + argc)])
+        procArgs(pid: pid)?.argv
     }
 
-    /// The kernel `exec_path` of `pid` (the first NUL-delimited token after argc
-    /// in KERN_PROCARGS2) — an absolute path to the executable — or nil.
+    /// The kernel `exec_path` of `pid` (the executable path stored ahead of
+    /// argv in KERN_PROCARGS2) — an absolute path — or nil.
     static func execPath(pid: pid_t) -> String? {
-        guard let (_, args) = procArgsTokens(pid: pid), let path = args.first else { return nil }
-        return path
+        procArgs(pid: pid)?.execPath
     }
 
-    /// Raw KERN_PROCARGS2 read: `(argc, [exec_path, argv0, argv1, …, env…])`.
-    /// Layout: `[int32 argc][exec_path\0][\0 padding][argv0\0…][env…]`.
-    private static func procArgsTokens(pid: pid_t) -> (argc: Int, tokens: [String])? {
+    /// Structured KERN_PROCARGS2 parse.
+    ///
+    /// Layout: `[int32 argc][exec_path\0][\0 padding][argv0\0 argv1\0 …][env…]`.
+    /// We parse POSITIONALLY — read `exec_path`, skip its NUL padding, then take
+    /// exactly `argc` NUL-terminated fields as argv. Crucially we do NOT use
+    /// `split(omittingEmptySubsequences:)` (which would drop a legitimately
+    /// empty argv element, sliding an env var into the argv window) and we
+    /// decode losslessly with `String(decoding:as:)` (a non-UTF-8 argument
+    /// yields replacement chars but keeps the field count correct — never
+    /// dropped, which would also shift the window).
+    private static func procArgs(pid: pid_t) -> (execPath: String, argv: [String])? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
@@ -239,11 +353,38 @@ enum ProcessInspector {
         let argc = buffer.withUnsafeBytes { $0.load(as: Int32.self) }
         guard argc > 0 else { return nil }
 
-        let rest = buffer[MemoryLayout<Int32>.size...]
-        let tokens = rest.split(separator: 0, omittingEmptySubsequences: true).compactMap {
-            String(bytes: $0, encoding: .utf8)
+        // Cursor over the bytes after the argc int.
+        var i = MemoryLayout<Int32>.size
+        let end = buffer.count
+
+        // exec_path: bytes up to the first NUL.
+        let execStart = i
+        while i < end, buffer[i] != 0 {
+            i += 1
         }
-        return (Int(argc), tokens)
+        guard i < end else { return nil } // no terminator → malformed
+        let execPath = String(decoding: buffer[execStart ..< i], as: UTF8.self)
+        i += 1 // consume the exec_path terminator
+
+        // Skip the NUL padding between exec_path and argv0.
+        while i < end, buffer[i] == 0 {
+            i += 1
+        }
+
+        // Take exactly argc NUL-terminated fields, preserving empty ones.
+        var argv: [String] = []
+        argv.reserveCapacity(Int(argc))
+        for _ in 0 ..< Int(argc) {
+            guard i < end else { break }
+            let fieldStart = i
+            while i < end, buffer[i] != 0 {
+                i += 1
+            }
+            argv.append(String(decoding: buffer[fieldStart ..< i], as: UTF8.self))
+            i += 1 // consume the field terminator (past `end` is harmless)
+        }
+        guard argv.count == Int(argc) else { return nil }
+        return (execPath, argv)
     }
 
     /// Whether `argv0` names a shell (so a foreground process matching it is an

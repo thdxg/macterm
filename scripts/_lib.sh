@@ -19,8 +19,11 @@ run_step() {
     sleep 0.08
   done
 
-  wait "$pid"
-  local status=$?
+  # Capture the child's exit status errexit-safely: a bare `wait "$pid"`
+  # followed by `$?` would trip `set -e` on a nonzero status BEFORE the
+  # log-printing failure branch below runs, so the diagnostic never appears.
+  local status=0
+  wait "$pid" || status=$?
   if [[ $status -eq 0 ]]; then
     printf "\r  ✓ %s\n" "$msg"
   else

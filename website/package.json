@@ -1,0 +1,19 @@
+{
+  "name": "macterm-website",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Marketing site and docs for Macterm, served by a Cloudflare Worker.",
+  "scripts": {
+    "build:docs": "bun build-docs.mjs",
+    "build:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --minify",
+    "build": "bun run build:docs && bun run build:css",
+    "watch:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --watch",
+    "dev": "bun run build && wrangler dev",
+    "deploy": "bun run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
+    "marked": "^18.0.5",
+    "tailwindcss": "^4.1.0"
+  }
+}

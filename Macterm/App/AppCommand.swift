@@ -29,8 +29,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case resizeRight
     case resizeUp
     case resizeDown
+    case copySessionID
     // Projects
     case openProject
+    case newRemoteProject
     case renameProject
     case unloadProject
     case removeProject
@@ -71,7 +73,9 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .resizeRight: "Resize Pane Right"
         case .resizeUp: "Resize Pane Up"
         case .resizeDown: "Resize Pane Down"
+        case .copySessionID: "Copy Session ID"
         case .openProject: "Open Project"
+        case .newRemoteProject: "New Remote Project"
         case .renameProject: "Rename Current Project"
         case .unloadProject: "Unload Current Project"
         case .removeProject: "Remove Current Project"
@@ -110,8 +114,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .resizeLeft,
              .resizeRight,
              .resizeUp,
-             .resizeDown: .panes
+             .resizeDown,
+             .copySessionID: .panes
         case .openProject,
+             .newRemoteProject,
              .renameProject,
              .unloadProject,
              .removeProject,
@@ -162,7 +168,9 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .toggleQuickTerminal: .toggleQuickTerminal
         case .renameTab: .renameTab
         case .renameProject: .renameProject
-        case .unloadProject,
+        case .copySessionID: .copySessionID
+        case .newRemoteProject,
+             .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
              .applyLayout,
@@ -181,8 +189,23 @@ enum AppCommand: String, CaseIterable, Identifiable {
 }
 
 extension HotkeyAction {
-    /// Reverse lookup: the AppCommand that owns this binding.
+    /// Memoized reverse map: `HotkeyAction` → the `AppCommand` that owns it.
+    /// Built once instead of an O(n) `allCases` scan per lookup (called per
+    /// action per Settings/palette render).
+    private static let commandByAction: [HotkeyAction: AppCommand] = Dictionary(
+        AppCommand.allCases.compactMap { command in
+            command.hotkeyAction.map { ($0, command) }
+        },
+        uniquingKeysWith: { first, _ in first }
+    )
+
+    /// Reverse lookup: the AppCommand that owns this binding. Every
+    /// `HotkeyAction` is linked to exactly one `AppCommand`, so a miss is a
+    /// construction error (a new action added without its command) — trap in
+    /// debug rather than silently mis-titling it as "New Tab".
     var appCommand: AppCommand {
-        AppCommand.allCases.first(where: { $0.hotkeyAction == self }) ?? .newTab
+        if let command = Self.commandByAction[self] { return command }
+        assertionFailure("HotkeyAction \(rawValue) has no owning AppCommand")
+        return .newTab
     }
 }

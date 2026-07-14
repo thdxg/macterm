@@ -102,12 +102,13 @@ struct LayoutSerializerTests {
     }
 
     @Test
-    func save_then_load_round_trips_topology() throws {
+    func save_then_load_round_trips_topology_through_the_central_store() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("layout-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let root = dir.path
+        let store = ProjectFileStore(directoryURL: dir.appendingPathComponent("projects"))
 
         let ws = Workspace(projectID: UUID(), projectPath: root)
         ws.tabs[0].splitRoot = .split(SplitBranch(
@@ -117,10 +118,12 @@ struct LayoutSerializerTests {
             second: .pane(Pane(projectPath: root, projectID: ws.projectID))
         ))
 
-        try LayoutSerializer.write(ws, projectName: "proj", projectRoot: root, liveCommand: { $0.command })
-        let loaded = try LayoutFile.load(fromProjectRoot: root)
+        let layout = LayoutSerializer.layout(for: ws, projectName: "proj", projectRoot: root, liveCommand: { $0.command })
+        try store.write(ProjectFile(name: "proj", path: root, tabs: layout.tabs), projectName: "proj")
+        let loaded = try #require(try store.loadFull(forProjectPath: root))
 
-        guard case let .split(b) = loaded.tabs[0].layout else {
+        #expect(loaded.path == root)
+        guard case let .split(b) = loaded.tabs?[0].layout else {
             Issue.record("expected split")
             return
         }

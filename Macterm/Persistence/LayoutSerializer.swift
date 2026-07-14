@@ -29,30 +29,6 @@ enum LayoutSerializer {
         )
     }
 
-    /// Write a workspace out to its project's `.macterm/layout.yaml`, creating
-    /// the `.macterm` directory if needed.
-    static func write(
-        _ workspace: Workspace,
-        projectName: String,
-        projectRoot: String,
-        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
-        liveShell: (Pane) -> String? = { ProcessInspector.runningShell(forPane: $0) }
-    ) throws {
-        let file = layout(
-            for: workspace,
-            projectName: projectName,
-            projectRoot: projectRoot,
-            liveCommand: liveCommand,
-            liveShell: liveShell
-        )
-        let url = LayoutFile.url(forProjectRoot: projectRoot)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try file.yaml().write(to: url, atomically: true, encoding: .utf8)
-    }
-
     // MARK: - Tree walk
 
     private static func node(
@@ -65,8 +41,11 @@ enum LayoutSerializer {
         case let .pane(p):
             // Prefer the shell's live cwd over the pane's original path, same as
             // WorkspaceSerializer.snapshotNode, so a saved layout reflects where
-            // the user actually navigated.
-            let livePath = p.nsView?.currentPwd ?? p.projectPath
+            // the user actually navigated. Remote panes (#104) record their
+            // scp-style `projectPath` verbatim — their `currentPwd` is a
+            // remote-filesystem path with no host prefix, and live-cwd capture
+            // is disabled for remote panes by design.
+            let livePath = p.isRemote ? p.projectPath : (p.nsView?.currentPwd ?? p.projectPath)
             // `run`: whatever the pane is *currently* running (its live
             // foreground command), NOT the command it was spawned with — a pane
             // launched with `btop` that the user has since quit is idle and
@@ -95,6 +74,15 @@ enum LayoutSerializer {
     /// the root; otherwise keep it absolute. The project root itself becomes
     /// nil (the builder treats nil cwd as "the project root").
     static func relativePath(_ path: String, to root: String) -> String? {
+        // A remote root (#104) is an scp-style spec, not a local filesystem
+        // path — running it through `URL(fileURLWithPath:)` standardizes it
+        // against the process cwd and yields garbage. Remote panes record
+        // their identity verbatim (see `node`), so treat any remote path as
+        // pure strings: return nil when it equals the root, else the path
+        // itself (LayoutBuilder.resolveCwd handles remote cwds symmetrically).
+        if ProjectPath.isRemote(path) || ProjectPath.isRemote(root) {
+            return path == root ? nil : path
+        }
         let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
         let standardizedRoot = URL(fileURLWithPath: root).standardizedFileURL.path
         if standardizedPath == standardizedRoot { return nil }

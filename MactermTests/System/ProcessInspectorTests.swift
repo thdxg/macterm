@@ -80,23 +80,35 @@ struct ProcessInspectorTests {
     }
 
     @Test
+    func shellScriptInvocation_isNotIdleShell() {
+        #expect(ProcessInspector.isIdleShellInvocation(["/bin/bash"]))
+        #expect(ProcessInspector.isIdleShellInvocation(["/bin/bash", "-l"]))
+        // This is only an argv shape; the script path is not opened.
+        #expect(!ProcessInspector.isIdleShellInvocation(["/bin/bash", "/path/to/script.sh"]))
+        #expect(!ProcessInspector.isIdleShellInvocation(["/bin/bash", "-c", "sleep 10"]))
+        #expect(!ProcessInspector.isIdleShellInvocation(["/bin/bash", "-lc", "sleep 10"]))
+    }
+
+    @Test
     func terminalInputIsRaw_reads_tty_input_mode() throws {
-        var master: Int32 = -1
-        var slave: Int32 = -1
-        #expect(openpty(&master, &slave, nil, nil, nil) == 0)
+        // openpty's two fds: the primary (controlling) end and the secondary
+        // (subordinate) end — the modern names for the pty pair.
+        var primary: Int32 = -1
+        var secondary: Int32 = -1
+        #expect(openpty(&primary, &secondary, nil, nil, nil) == 0)
         defer {
-            if master >= 0 { close(master) }
-            if slave >= 0 { close(slave) }
+            if primary >= 0 { close(primary) }
+            if secondary >= 0 { close(secondary) }
         }
-        let path = try String(cString: #require(ttyname(slave)))
+        let path = try String(cString: #require(ttyname(secondary)))
 
         #expect(ProcessInspector.terminalInputIsRaw(ttyPath: path) == false)
 
         var attrs = termios()
-        #expect(tcgetattr(slave, &attrs) == 0)
+        #expect(tcgetattr(secondary, &attrs) == 0)
         attrs.c_lflag &= ~tcflag_t(ICANON)
         attrs.c_lflag &= ~tcflag_t(ECHO)
-        #expect(tcsetattr(slave, TCSANOW, &attrs) == 0)
+        #expect(tcsetattr(secondary, TCSANOW, &attrs) == 0)
 
         #expect(ProcessInspector.terminalInputIsRaw(ttyPath: path) == true)
     }

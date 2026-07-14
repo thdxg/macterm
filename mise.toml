@@ -1,9 +1,12 @@
+# Pinned exactly (not "latest"): swiftformat/swiftlint output is part of the CI
+# contract — a new release can change rules and turn a green main red on
+# untouched code, and float local vs CI. Bump these in deliberate commits.
 [tools]
-gh = "latest"
-swiftformat = "latest"
-swiftlint = "latest"
-xcodegen = "latest"
-xcbeautify = "latest"
+gh = "2.95.0"
+swiftformat = "0.61.1"
+swiftlint = "0.63.3"
+xcodegen = "2.45.4"
+xcbeautify = "3.2.1"
 
 [settings]
 task.output = "quiet"
@@ -121,6 +124,18 @@ run = """
     ./scripts/test.sh
   else
     run_step "Testing..." ./scripts/test.sh
+  fi
+"""
+
+[tasks.bench]
+description = "Build the release app and run the window-state benchmark"
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
+run = """
+  source scripts/_lib.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/bench.sh
+  else
+    run_step "Benchmarking..." ./scripts/bench.sh
   fi
 """
 

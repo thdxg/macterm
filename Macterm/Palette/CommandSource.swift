@@ -9,16 +9,10 @@ struct CommandSource: PaletteSource {
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
         allItems(context).compactMap { item in
             guard let score = fuzzyScore(query: query, target: item.title) else { return nil }
-            return PaletteItem(
-                id: item.id,
-                title: item.title,
-                subtitle: item.subtitle,
-                category: item.category,
-                keybind: item.keybind,
-                keybindSymbols: item.keybindSymbols,
-                score: score,
-                action: item.action
-            )
+            // Carry every field forward (notably `isEnabled`) so a disabled
+            // hint row stays muted/unselectable when it matches a search — a
+            // hand-copied initializer would silently reset it to the default.
+            return item.with(score: score)
         }
     }
 
@@ -40,7 +34,19 @@ struct CommandSource: PaletteSource {
         if command == .toggleCommandPalette { return nil }
 
         let commandCtx = AppCommandContext(appState: ctx.appState, projectStore: ctx.projectStore)
-        guard let rawAction = command.action(in: commandCtx) else { return nil }
+        guard let rawAction = command.action(in: commandCtx) else {
+            // Most inapplicable commands hide; a few explain themselves as a
+            // muted row instead (e.g. "Apply Layout" with no project file).
+            guard let hint = command.paletteDisabledHint(in: commandCtx) else { return nil }
+            return PaletteItem(
+                title: command.title,
+                subtitle: hint,
+                category: command.category.rawValue,
+                score: 0,
+                isEnabled: false,
+                action: {}
+            )
+        }
 
         // Rename actions need to wait until the palette has dismissed so the
         // textfield in the sidebar can take first responder. Defer via
@@ -55,6 +61,7 @@ struct CommandSource: PaletteSource {
 
         return PaletteItem(
             title: command.title,
+            subtitle: command.paletteSubtitle(in: commandCtx),
             category: command.category.rawValue,
             keybind: command.hotkeyAction.flatMap(keybindDisplay),
             keybindSymbols: command.hotkeyAction.flatMap(keybindSymbols),

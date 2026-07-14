@@ -135,7 +135,10 @@ private struct SplitLeafView: View {
             )
             .overlay {
                 if !isFocused, isSplit {
-                    Color.black.opacity(0.2)
+                    // Theme-derived dim (not fixed black) so an unfocused pane
+                    // dims correctly on light themes too, at the user-configured
+                    // opacity (#156).
+                    MactermTheme.dimOverlay(opacity: Preferences.shared.paneDimOpacity)
                         .allowsHitTesting(false)
                 }
             }
@@ -180,6 +183,12 @@ struct SplitDividerView<First: View, Second: View>: View {
     let first: First
     @ViewBuilder
     let second: Second
+    /// Tracks whether the resize cursor is currently pushed, so it can be
+    /// popped on disappear. SwiftUI does not deliver `onHover(false)` when the
+    /// divider leaves the hierarchy mid-hover (pane close, zoom toggle, tab
+    /// switch), which would otherwise leave the resize cursor stuck on the
+    /// global cursor stack.
+    @State private var isHovering = false
 
     var body: some View {
         GeometryReader { geo in
@@ -208,8 +217,19 @@ struct SplitDividerView<First: View, Second: View>: View {
                             .onHover { on in
                                 if on {
                                     (h ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
+                                    isHovering = true
                                 } else {
                                     NSCursor.pop()
+                                    isHovering = false
+                                }
+                            }
+                            // Balance a push that never got its hover-exit pop
+                            // (divider removed mid-hover). Gated on `isHovering`
+                            // so a non-hovered divider doesn't over-pop.
+                            .onDisappear {
+                                if isHovering {
+                                    NSCursor.pop()
+                                    isHovering = false
                                 }
                             }
                     }

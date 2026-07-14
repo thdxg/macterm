@@ -197,4 +197,57 @@ struct WorkspaceTests {
         ws.reorderTabs(fromOffsets: IndexSet(integer: 0), toOffset: 2)
         #expect(ws.tabs.map(\.id) == [t2, t1])
     }
+
+    // MARK: - Drag-and-drop insert/move by absolute index
+
+    @Test
+    func adoptTab_inserts_at_index() {
+        let ws = makeWorkspace()
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        let incoming = TerminalTab(projectPath: "/elsewhere", projectID: UUID())
+        ws.adoptTab(incoming, at: 1)
+        #expect(ws.tabs.map(\.id) == [t1, incoming.id, t2])
+        #expect(ws.activeTabID == incoming.id)
+    }
+
+    @Test
+    func adoptTab_out_of_range_index_appends() {
+        let ws = makeWorkspace()
+        let t1 = ws.tabs[0].id
+        let incoming = TerminalTab(projectPath: "/elsewhere", projectID: UUID())
+        ws.adoptTab(incoming, at: 99)
+        #expect(ws.tabs.map(\.id) == [t1, incoming.id])
+    }
+
+    @Test
+    func moveTab_toIndex_reorders_within_project() {
+        let ws = makeWorkspace()
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        let t3 = ws.createTab(projectPath: "/tmp").id
+        // Drop t1 at the end (offset 3, pre-removal coordinates).
+        ws.moveTab(t1, toIndex: 3)
+        #expect(ws.tabs.map(\.id) == [t2, t3, t1])
+        // Drop t1 back to the front.
+        ws.moveTab(t1, toIndex: 0)
+        #expect(ws.tabs.map(\.id) == [t1, t2, t3])
+    }
+
+    @Test
+    func moveTab_toIndex_same_slot_is_noop() {
+        let ws = makeWorkspace()
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: "/tmp").id
+        ws.moveTab(t1, toIndex: 0)
+        #expect(ws.tabs.map(\.id) == [t1, t2])
+    }
+
+    @Test
+    func moveTab_toIndex_unknown_tab_is_noop() {
+        let ws = makeWorkspace()
+        let before = ws.tabs.map(\.id)
+        ws.moveTab(UUID(), toIndex: 0)
+        #expect(ws.tabs.map(\.id) == before)
+    }
 }

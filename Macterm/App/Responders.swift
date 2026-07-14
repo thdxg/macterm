@@ -137,6 +137,39 @@ final class MainAppResponder: KeyResponder {
         // into the palette would fire Cmd+T's New Tab action.
         if appState.isCommandPaletteVisible { return .passThrough }
 
+        // Everything below acts on the main terminal window's workspace.
+        // When a different window is key — Settings, an alert sheet — none of
+        // it may fire: Cmd+W would close a terminal tab behind the window the
+        // user is actually looking at. Close shortcuts retarget to the key
+        // window (the macOS convention: Cmd+W closes the key window). Pass-
+        // through alone can't provide that — the system File > Close item is
+        // replaced by our "Close Pane" (CommandGroup(replacing: .saveItem)),
+        // so the menu bar would re-route Cmd+W right back to the tab. The
+        // quick-terminal panel is exempt: QuickTerminalResponder has already
+        // claimed its slice, and the app-wide keys that fall through (project
+        // nav, new tab, …) intentionally keep working while the panel is up.
+        //
+        // This branch requires a KNOWN `mainWindow`: it only means "a DIFFERENT
+        // window is key" when we know which one is the terminal window. At
+        // launch `mainWindow` is briefly nil (set on `didBecomeMain`, after
+        // responders install), and a nil pointer is `!==` every real window —
+        // so without the `let main` guard, the terminal window itself would be
+        // treated as "different", making Cmd+W close the window and Cmd+D
+        // pass through until the first `didBecomeMain`. When `mainWindow` is
+        // unknown, fall through to normal handling (the terminal window is the
+        // only window that can be key that early).
+        if let main = mainWindow, let keyWindow = NSApp.keyWindow, keyWindow !== main,
+           !(keyWindow is QuickTerminalPanel)
+        {
+            if HotkeyRegistry.matches(event, action: .closePane)
+                || HotkeyRegistry.matches(event, action: .closeWindow)
+            {
+                keyWindow.performClose(nil)
+                return .handled
+            }
+            return .passThrough
+        }
+
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // Quick-terminal toggle. The same shortcut is also a Carbon global
@@ -150,13 +183,6 @@ final class MainAppResponder: KeyResponder {
         if HotkeyRegistry.matches(event, action: .recentTab) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
             appState.cycleRecentTab(projectID: projectID)
-            return .handled
-        }
-
-        // Block Cmd+N from opening a second window.
-        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
-            mainWindow?.makeKeyAndOrderFront(nil)
-            NSApp.activate()
             return .handled
         }
 
@@ -258,17 +284,28 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        // Rename routes through AppCommand.action(in:) — the single source of
-        // truth shared with the palette and menu bar — so the three paths can't
-        // drift. The action defers begin-editing a tick (see AppCommandActions)
-        // so the sidebar row's TextField exists before it takes first responder.
-        for action in [HotkeyAction.renameTab, .renameProject] {
+        // These route through AppCommand.action(in:) — the single source of
+        // truth shared with the palette and menu bar — so the paths can't drift.
+        // Rename defers begin-editing a tick (see AppCommandActions) so the
+        // sidebar row's TextField exists before it takes first responder;
+        // copySessionID writes the focused pane's zmx name to the pasteboard.
+        for action in [HotkeyAction.renameTab, .renameProject, .copySessionID] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
             else { continue }
             let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
             guard let run = command.action(in: ctx) else { return .passThrough }
             run()
+            return .handled
+        }
+
+        // Cmd+N re-fronts the single window (SwiftUI's "New Window" is replaced
+        // by "Show Window"). Checked AFTER the configurable hotkeys — same
+        // rationale as Cmd+1-9 below — so a user who rebinds an action to cmd+n
+        // wins over this fixed fallback instead of being silently shadowed.
+        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
+            mainWindow?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
             return .handled
         }
 

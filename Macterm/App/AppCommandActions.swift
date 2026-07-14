@@ -92,8 +92,21 @@ extension AppCommand {
         case .resizeDown:
             guard let projectID else { return nil }
             return { ctx.appState.resizePane(.down, projectID: projectID) }
+        case .copySessionID:
+            // The focused pane's zmx session name (`macterm-<slug>-<hex>`) — the
+            // id `macterm session list` prints and `zmx attach` takes. Useful for
+            // pointing an LLM at a pane's live output. Copies silently, matching
+            // the sidebar's "Copy Path".
+            guard let projectID, let pane = ctx.appState.focusedPane(for: projectID) else { return nil }
+            let sessionName = pane.sessionName
+            return {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(sessionName, forType: .string)
+            }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
+        case .newRemoteProject:
+            return { ctx.appState.isNewRemoteProjectSheetPresented = true }
         case .renameProject:
             guard let current else { return nil }
             let projectID = current.id
@@ -104,34 +117,48 @@ extension AppCommand {
             }
         case .unloadProject:
             guard let projectID, ctx.appState.isProjectLoaded(projectID) else { return nil }
-            return { ctx.appState.unloadProject(projectID) }
+            return { ctx.appState.requestUnloadProject(projectID) }
         case .removeProject:
             guard let projectID else { return nil }
             return {
-                ctx.appState.removeProject(projectID)
-                ctx.projectStore.remove(id: projectID)
+                ctx.appState.requestRemoveProject(projectID) {
+                    ctx.appState.removeProject(projectID)
+                    ctx.projectStore.remove(id: projectID)
+                }
             }
         case .replaceProjectPathWithCurrentDir:
-            guard let projectID,
-                  let pane = ctx.appState.focusedPane(for: projectID),
+            // Remote projects (#104): OSC 7 reports a directory on the REMOTE
+            // host — writing it into `Project.path` would corrupt the
+            // project's identity into a local-looking path.
+            guard let current, !current.isRemote,
+                  let pane = ctx.appState.focusedPane(for: current.id),
                   let pwd = pane.nsView?.currentPwd, !pwd.isEmpty,
-                  current?.path != pwd
+                  current.path != pwd
             else { return nil }
             return { ctx.appState.replaceProjectPathWithCurrentDir(projectStore: ctx.projectStore) }
         case .applyLayout:
-            guard let projectID, let current else { return nil }
-            return {
-                if let error = ctx.appState.applyLayout(projectID: projectID, projectName: current.name, projectRoot: current.path) {
-                    presentLayoutError(error, verb: "apply")
-                }
+            // Requires an applicable central file. `.invalid` stays enabled on
+            // purpose: invoking it surfaces the parse-error dialog instead of
+            // failing silently. `.none`/`.emptyTabs` disable the menu item and
+            // mute the palette row (see `paletteDisabledHint`) — except that a
+            // committed legacy `.macterm/layout.yaml` keeps `.none` enabled:
+            // invoking it imports the file into the central directory, then
+            // applies (deprecated seed, #114 — an existing project's snapshot
+            // suppresses the first-open import, so this is its only way in).
+            guard let current else { return nil }
+            switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
+            case .applicable,
+                 .invalid:
+                return { ctx.appState.applyLayoutPresentingError(current) }
+            case .none:
+                guard LayoutFile.exists(atProjectRoot: current.path) else { return nil }
+                return { ctx.appState.applyLayoutPresentingError(current) }
+            case .emptyTabs:
+                return nil
             }
         case .saveLayout:
-            guard let projectID, let current else { return nil }
-            return {
-                if let error = ctx.appState.saveLayout(projectID: projectID, projectName: current.name, projectRoot: current.path) {
-                    presentLayoutError(error, verb: "save")
-                }
-            }
+            guard let current else { return nil }
+            return { ctx.appState.saveLayoutPresentingError(current) }
         case .nextProject:
             return { ctx.appState.selectNextProject(projects: ctx.projectStore.projects) }
         case .previousProject:
@@ -155,15 +182,46 @@ extension AppCommand {
             }
         }
     }
-}
 
-/// Surface a layout apply/save failure (most commonly a missing or unparseable
-/// `.macterm/layout.yaml`) as a simple modal alert.
-@MainActor
-private func presentLayoutError(_ error: Error, verb: String) {
-    let alert = NSAlert()
-    alert.alertStyle = .warning
-    alert.messageText = "Couldn't \(verb) layout"
-    alert.informativeText = error.localizedDescription
-    alert.runModal()
+    /// Why this command shows muted-but-visible in the palette, or nil when it
+    /// should follow the default rule (hidden when `action(in:)` is nil).
+    /// Only "Apply Layout" opts in: a missing or tab-less project file is a
+    /// state worth *seeing* in the palette — hiding the command entirely would
+    /// read as a bug, and the hint says what's missing. The menu bar item
+    /// keeps the plain disabled look either way.
+    @MainActor
+    func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
+        guard self == .applyLayout,
+              let projectID = ctx.appState.activeProjectID,
+              let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
+        else { return nil }
+        switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
+        case .none:
+            // A legacy `.macterm/layout.yaml` keeps the command enabled
+            // (import-then-apply), so no hint for it.
+            guard !LayoutFile.exists(atProjectRoot: current.path) else { return nil }
+            return "No project file for this project — use “Save Layout” to create one"
+        case .emptyTabs:
+            return "The project file declares no tabs"
+        case .applicable,
+             .invalid:
+            return nil
+        }
+    }
+
+    /// Secondary line for an *enabled* palette row. Only "Apply Layout" uses
+    /// it: when duplicate files declare the active project's path, filename
+    /// order silently picks one — say which, so a hand-authored duplicate
+    /// doesn't read as "my edits don't apply".
+    @MainActor
+    func paletteSubtitle(in ctx: AppCommandContext) -> String? {
+        guard self == .applyLayout,
+              let projectID = ctx.appState.activeProjectID,
+              let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
+        else { return nil }
+        let matches = ctx.appState.projectFiles.matches(forProjectPath: current.path)
+        guard matches.count > 1 else { return nil }
+        let ignored = matches.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
+        return "Using \(matches[0].url.lastPathComponent) — ignoring duplicate \(ignored)"
+    }
 }

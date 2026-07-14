@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: appBundleID, category: "MactermConfig")
 
 /// Generates the two ghostty config files Macterm wraps around the user's
 /// own Ghostty config. The user is the source of truth for every Ghostty
@@ -17,7 +20,9 @@ import Foundation
 ///
 /// See the README for the full list of Ghostty config settings Macterm honors
 /// and the small set it ignores or overrides.
-@MainActor @Observable
+/// `@Observable` isn't applied: all stored state is `let` (nothing to observe),
+/// and no view tracks this type. `@MainActor` isolation is kept for the singleton.
+@MainActor
 final class MactermConfig {
     static let shared = MactermConfig()
 
@@ -51,7 +56,7 @@ final class MactermConfig {
             "window-padding-x = 16",
             "window-padding-y = 16",
         ].joined(separator: "\n") + "\n"
-        try? Data(defaults.utf8).write(to: defaultsURL, options: .atomic)
+        write(Data(defaults.utf8), to: defaultsURL)
 
         var overrides = [
             // Macterm composites window translucency at the AppKit level —
@@ -77,14 +82,17 @@ final class MactermConfig {
         // "Ghostty failed to initialize!" — worse than plain `ssh`. So we gate
         // the ssh features on `+ssh` support specifically, independent of
         // whether the binary exists for the `path` feature.
-        let cli = GhosttyCLI.standard
+        // Read the CLI probe from the process-lifetime cache: the installed
+        // ghostty CLI can't change within a launch, and `loadConfig` calls
+        // `regenerate()` before EVERY reload — a blocking `ghostty +help` spawn
+        // per reload was pure waste (#3.2).
         var disabledFeatures: [String] = []
-        if let binDir = cli.resolveBinDir() {
+        if let binDir = GhosttyCLIProbe.binDir {
             overrides.append("env = GHOSTTY_BIN_DIR=\(binDir)")
         } else {
             disabledFeatures.append("no-path")
         }
-        if cli.resolveSSHWrapperBinDir() == nil {
+        if GhosttyCLIProbe.sshWrapperBinDir == nil {
             disabledFeatures.append(contentsOf: ["no-ssh-env", "no-ssh-terminfo"])
         }
         if !disabledFeatures.isEmpty {
@@ -103,7 +111,19 @@ final class MactermConfig {
         }
 
         let body = overrides.joined(separator: "\n") + "\n"
-        try? Data(body.utf8).write(to: overridesURL, options: .atomic)
+        write(Data(body.utf8), to: overridesURL)
+    }
+
+    /// Write a wrapper-config file, logging on failure. These writes are
+    /// behavior-changing — a failed overrides write silently breaks the
+    /// translucency contract (`background-opacity = 0` never lands, causing
+    /// double-tinting) — so a swallowed `try?` would leave zero diagnostics.
+    private func write(_ data: Data, to url: URL) {
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            logger.error("failed to write \(url.lastPathComponent, privacy: .public): \(error, privacy: .public)")
+        }
     }
 
     /// The user's Ghostty config text, read for merging their
