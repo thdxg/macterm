@@ -37,7 +37,9 @@ enum AgentIcon: String {
     static func match(processName: String?) -> AgentIcon? {
         guard let name = processName?.lowercased() else { return nil }
         if let exact = processNames[name] { return exact }
-        for (key, icon) in processNames where name.hasPrefix(key) {
+        // Longest key first, so a future short alias that prefixes a longer
+        // name can't win by nondeterministic dictionary order.
+        for (key, icon) in processNames.sorted(by: { $0.key.count > $1.key.count }) where name.hasPrefix(key) {
             if let next = name.dropFirst(key.count).first, !next.isLetter, !next.isNumber {
                 return icon
             }

@@ -357,4 +357,31 @@ struct PaneTests {
         #expect(newPane.sessionName.hasPrefix("macterm-myproj-"))
         #expect(newPane.sessionName != source.sessionName)
     }
+
+    // MARK: - Agent icon
+
+    @Test
+    func pane_caches_agent_across_steady_refreshes() {
+        let pane = Pane(projectPath: "/", projectID: UUID())
+        var argvReads = 0
+        let argv0: () -> String? = { argvReads += 1
+            return "claude"
+        }
+        pane.applyForegroundRefresh(name: "2.1.207", foregroundPID: 42, argv0: argv0)
+        #expect(pane.agentIcon == .claude)
+        #expect(argvReads == 1)
+        // Same pid + comm on the next tick: cached, argv untouched.
+        pane.applyForegroundRefresh(name: "2.1.207", foregroundPID: 42, argv0: argv0)
+        #expect(argvReads == 1)
+        // Agent exits, shell takes the foreground.
+        pane.applyForegroundRefresh(name: "zsh", foregroundPID: 7, argv0: { nil })
+        #expect(pane.agentIcon == nil)
+    }
+
+    @Test
+    func pane_has_no_agent_without_a_foreground_pid() {
+        let pane = Pane(projectPath: "/", projectID: UUID())
+        pane.applyForegroundRefresh(name: nil, foregroundPID: nil, argv0: { "claude" })
+        #expect(pane.agentIcon == nil)
+    }
 }

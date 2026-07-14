@@ -420,6 +420,11 @@ private struct SidebarTabRow: View {
                 } icon: {
                     if showTabStatusIndicator {
                         TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
+                    } else if let agentIcon {
+                        // "None" suppresses the user's icon, not the agent
+                        // logo — a live status signal, like the else branch.
+                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .labelStyle(.titleAndIcon)
