@@ -193,6 +193,8 @@ private struct AppearanceSettings: View {
     private var projectIconSymbol = "folder"
     @AppStorage(Preferences.Keys.tabIconSymbol)
     private var tabIconSymbol = "terminal"
+    @AppStorage(Preferences.Keys.showAgentIcons)
+    private var showAgentIcons = true
     @AppStorage(Preferences.Keys.showTabStatusIndicator)
     private var showTabStatusIndicator = false
     @AppStorage(Preferences.Keys.showNewProjectButton)
@@ -267,6 +269,14 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
+
+                Toggle("Show AI agent icons", isOn: $showAgentIcons)
+                    .onChange(of: showAgentIcons) { _, v in
+                        Preferences.shared.showAgentIcons = v
+                    }
+                Text("Replace a tab's icon with the logo of the AI agent running in it (Claude Code, Codex, Gemini…).")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
                 Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
                     .onChange(of: showTabStatusIndicator) { _, v in
