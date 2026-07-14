@@ -284,11 +284,12 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        // Rename routes through AppCommand.action(in:) — the single source of
-        // truth shared with the palette and menu bar — so the three paths can't
-        // drift. The action defers begin-editing a tick (see AppCommandActions)
-        // so the sidebar row's TextField exists before it takes first responder.
-        for action in [HotkeyAction.renameTab, .renameProject] {
+        // These route through AppCommand.action(in:) — the single source of
+        // truth shared with the palette and menu bar — so the paths can't drift.
+        // Rename defers begin-editing a tick (see AppCommandActions) so the
+        // sidebar row's TextField exists before it takes first responder;
+        // copySessionID writes the focused pane's zmx name to the pasteboard.
+        for action in [HotkeyAction.renameTab, .renameProject, .copySessionID] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
             else { continue }

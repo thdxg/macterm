@@ -312,6 +312,16 @@ struct HotkeysTests {
     }
 
     @Test
+    func copySessionID_is_unbound_by_default_and_titled_from_command() {
+        // Ships unbound (opt-in via Settings → Keymaps) — a copy action has no
+        // conventional shortcut, and picking one risks shadowing a user binding.
+        #expect(HotkeyAction.copySessionID.defaultShortcut == "none")
+        // Title flows from the owning AppCommand, so the two can't drift.
+        #expect(HotkeyAction.copySessionID.title == "Copy Session ID")
+        #expect(AppCommand.copySessionID.hotkeyAction == .copySessionID)
+    }
+
+    @Test
     func all_action_ids_are_unique() {
         let ids = HotkeyAction.allCases.map(\.rawValue)
         #expect(ids.count == Set(ids).count)

@@ -147,6 +147,13 @@ struct MactermApp: App {
                 CheckForUpdatesMenuItem()
             }
             CommandGroup(replacing: .saveItem) {
+                AppCommandMenuItem(
+                    command: .copySessionID,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Copy Session ID"
+                )
+                Divider()
                 AppCommandMenuItem(command: .closePane, appState: appState, projectStore: projectStore, titleOverride: "Close Pane")
                 AppCommandMenuItem(command: .closeWindow, appState: appState, projectStore: projectStore, titleOverride: "Close Window")
             }

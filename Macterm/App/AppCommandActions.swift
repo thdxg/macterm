@@ -92,6 +92,17 @@ extension AppCommand {
         case .resizeDown:
             guard let projectID else { return nil }
             return { ctx.appState.resizePane(.down, projectID: projectID) }
+        case .copySessionID:
+            // The focused pane's zmx session name (`macterm-<slug>-<hex>`) — the
+            // id `macterm session list` prints and `zmx attach` takes. Useful for
+            // pointing an LLM at a pane's live output. Copies silently, matching
+            // the sidebar's "Copy Path".
+            guard let projectID, let pane = ctx.appState.focusedPane(for: projectID) else { return nil }
+            let sessionName = pane.sessionName
+            return {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(sessionName, forType: .string)
+            }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
         case .newRemoteProject:

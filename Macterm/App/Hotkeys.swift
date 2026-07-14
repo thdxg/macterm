@@ -38,6 +38,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case toggleQuickTerminal = "toggle_quick_terminal"
     case renameTab = "rename_tab"
     case renameProject = "rename_project"
+    case copySessionID = "copy_session_id"
 
     var id: String { rawValue }
 
@@ -78,6 +79,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .toggleQuickTerminal: "ctrl+`"
         case .renameTab: "cmd+r"
         case .renameProject: "none"
+        case .copySessionID: "none"
         }
     }
 }
