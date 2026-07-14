@@ -90,6 +90,22 @@ struct ProjectPathTests {
     }
 
     @Test
+    func normalized_for_storage_canonicalizes_local_paths() {
+        // A stored trailing slash reaches the spawned shell's $PWD verbatim
+        // and blanks zsh's `%c`/`%1~` prompt segment until the first `cd`.
+        let home = ProjectPath.currentHome
+        #expect(ProjectPath.normalizedForStorage("/a/b/") == "/a/b")
+        #expect(ProjectPath.normalizedForStorage("~/dev/") == "\(home)/dev")
+        #expect(ProjectPath.normalizedForStorage("/a/b") == "/a/b")
+    }
+
+    @Test
+    func normalized_for_storage_passes_remote_and_invalid_through() {
+        #expect(ProjectPath.normalizedForStorage("devbox:~/dev/api/") == "devbox:~/dev/api/")
+        #expect(ProjectPath.normalizedForStorage("relative/path") == "relative/path")
+    }
+
+    @Test
     func canonical_does_not_resolve_symlinks() throws {
         let fm = FileManager.default
         let base = fm.temporaryDirectory

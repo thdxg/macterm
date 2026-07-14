@@ -265,7 +265,12 @@ final class GhosttyTerminalNSView: NSView {
                 config.command = cString(sshCommand)
             }
         } else {
-            config.working_directory = cString(workingDirectory)
+            // Canonicalize (trailing slash stripped): libghostty exports this
+            // verbatim as the shell's $PWD, and zsh renders `%c`/`%1~` of a
+            // trailing-slash $PWD as empty — a blank prompt directory until
+            // the first `cd`. Restored panes may still carry a slashed path
+            // persisted before ProjectStore normalized on load.
+            config.working_directory = cString(ProjectPath.canonicalLocal(workingDirectory))
 
             // Shell binary → the surface's program. nil falls back to libghostty's
             // own resolution (which honors the user's ghostty config / login shell).

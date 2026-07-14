@@ -33,6 +33,8 @@ final class ProjectStore {
     }
 
     func add(_ project: Project) {
+        var project = project
+        project.path = ProjectPath.normalizedForStorage(project.path)
         projects.append(project)
         save()
     }
@@ -50,8 +52,9 @@ final class ProjectStore {
 
     func setPath(id: UUID, to newPath: String) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
-        guard projects[index].path != newPath else { return }
-        projects[index].path = newPath
+        let normalized = ProjectPath.normalizedForStorage(newPath)
+        guard projects[index].path != normalized else { return }
+        projects[index].path = normalized
         save()
     }
 
@@ -93,6 +96,12 @@ final class ProjectStore {
         do {
             projects = try JSONDecoder().decode([Project].self, from: data)
             projects.sort { $0.sortOrder < $1.sortOrder }
+            // Migrate paths stored before normalization existed (e.g. with the
+            // trailing slash `URL.path(percentEncoded:)` keeps on directories).
+            // In-memory only; the cleaned form persists on the next mutation.
+            for i in projects.indices {
+                projects[i].path = ProjectPath.normalizedForStorage(projects[i].path)
+            }
         } catch {
             // Present but undecodable — a corrupt entry or a future format.
             // Preserve the file: refuse to overwrite it until this session

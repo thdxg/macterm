@@ -98,6 +98,18 @@ enum ProjectPath: Equatable {
         return standardized
     }
 
+    /// Storage form of a raw project path: local paths canonicalized (tilde
+    /// expanded, `.`/`..` standardized, trailing slash stripped); remote specs
+    /// and unparseable strings pass through verbatim. A stored trailing slash
+    /// would otherwise reach the spawned shell's `$PWD` verbatim — zsh adopts
+    /// the inherited value when it names the cwd, and `%c`/`%1~` render the
+    /// empty last component of `/path/dir/`, blanking the prompt's directory
+    /// segment until the first `cd`.
+    static func normalizedForStorage(_ raw: String) -> String {
+        if case let .local(path)? = parse(raw) { return canonicalLocal(path) }
+        return raw
+    }
+
     /// Convenience for call sites holding a raw path string (`Project.path`,
     /// `Pane.projectPath` — the remote spec travels and persists as a string).
     static func isRemote(_ raw: String) -> Bool {
