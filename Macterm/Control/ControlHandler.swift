@@ -64,10 +64,17 @@ final class ControlHandler {
         case "tab.select": return try tabSelect(args)
         case "tab.close": return try tabClose(args)
         case "pane.list": return try paneList(args)
+        case "pane.inspect": return try paneInspect(args)
+        case "pane.dump": return try paneDump(args)
         case "pane.split": return try paneSplit(args)
         case "pane.focus": return try paneFocus(args)
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
+        case "pane.zoom": return try paneZoom(args)
+        case "pane.resize-split": return try paneResizeSplit(args)
+        #if DEBUG
+        case "pane.resize": return try paneResize(args)
+        #endif
         case "grid": return try grid(args)
         case "session.list": return try await sessionList()
         case "session.info": return try await sessionInfo(args)
@@ -132,6 +139,73 @@ final class ControlHandler {
             tab.splitRoot.allPanes().map { paneInfo($0, in: tab, workspace: workspace) }
         }
         return ControlData(panes: infos)
+    }
+
+    /// Read-only terminal-core snapshot for a single pane (#165). Needs a live
+    /// surface: a never-shown pane has no dimensions to report, so it's the
+    /// same `no_surface` contract `pane.run` uses.
+    private func paneInspect(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let pane = target.pane
+        guard let view = pane.nsView, let size = view.surfaceSize else {
+            throw ControlError(
+                code: .noSurface,
+                message: "the pane's terminal isn't live yet",
+                action: "select its tab once so the surface spawns, then retry"
+            )
+        }
+        let snap = view.scrollbarSnapshot
+        // The alt-screen heuristic mirrors SurfaceScrollView.canHandleScrollbackWheel:
+        // `total > len` means there IS scrollback (normal screen); otherwise
+        // we're on the alt screen / a fresh prompt. Undefined until a snapshot
+        // arrives, so it tracks the snapshot's own nil-ness.
+        let altScreen = snap.map { $0.total <= $0.len }
+        let pid = ProcessInspector.resolvedForegroundPID(forPane: pane)
+        let argv = pid.flatMap { ProcessInspector.argv(pid: $0) }
+        let inspect = ControlPaneInspect(
+            id: pane.id.uuidString,
+            session: pane.sessionName,
+            cols: Int(size.columns),
+            rows: Int(size.rows),
+            cellWidthPx: Int(size.cell_width_px),
+            cellHeightPx: Int(size.cell_height_px),
+            widthPx: Int(size.width_px),
+            heightPx: Int(size.height_px),
+            scrollbackTotal: snap?.total,
+            scrollbackOffset: snap?.offset,
+            scrollbackLen: snap?.len,
+            altScreen: altScreen,
+            contentScale: view.window.map { Double($0.backingScaleFactor) },
+            foregroundPID: pid,
+            foregroundArgv: argv,
+            processExited: view.processExited,
+            needsConfirmQuit: view.needsConfirmQuit()
+        )
+        return ControlData(inspect: inspect)
+    }
+
+    /// Dump a pane's terminal cell text (#165): the viewport by default, or the
+    /// full scrollback with `scrollback: true`. Needs a live surface.
+    private func paneDump(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let pane = target.pane
+        let scrollback = args.scrollback == true
+        guard let view = pane.nsView, let text = view.readText(scrollback: scrollback) else {
+            throw ControlError(
+                code: .noSurface,
+                message: "the pane's terminal isn't live yet",
+                action: "select its tab once so the surface spawns, then retry"
+            )
+        }
+        return ControlData(dump: ControlPaneDump(
+            id: pane.id.uuidString,
+            session: pane.sessionName,
+            scrollback: scrollback,
+            bytes: text.utf8.count,
+            text: text
+        ))
     }
 
     private func sessionList() async throws -> ControlData {
@@ -332,6 +406,75 @@ final class ControlHandler {
         }
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
+
+    /// Toggle zoom on the target pane (#166) — the same `TerminalTab.toggleZoom`
+    /// the Cmd+Shift+Enter keybind drives. Purely a layout-state change, so it
+    /// needs no live surface; the pane just has to exist.
+    private func paneZoom(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        target.tab.toggleZoom(paneID: target.pane.id)
+        appState.saveWorkspaces()
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    /// Set an absolute split ratio around the target pane (#166): adjusts the
+    /// nearest ancestor branch whose direction matches `axis`. Deterministic
+    /// counterpart to the keybind's relative nudge — lets scripts reproduce an
+    /// exact geometry.
+    private func paneResizeSplit(_ args: ControlArgs) throws -> ControlData {
+        let axis: SplitDirection
+        switch args.axis {
+        case "horizontal",
+             "h": axis = .horizontal
+        case "vertical",
+             "v": axis = .vertical
+        default:
+            throw ControlError(code: .badRequest, message: "axis must be horizontal or vertical")
+        }
+        guard let ratio = args.ratio else {
+            throw ControlError(code: .badRequest, message: "pane.resize-split requires a ratio")
+        }
+        // The tree clamps to 0.15…0.85; reject wilder asks up front so the
+        // caller isn't silently corrected.
+        guard ratio >= 0.15, ratio <= 0.85 else {
+            throw ControlError(code: .badRequest, message: "ratio must be between 0.15 and 0.85")
+        }
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard target.tab.setSplitRatio(paneID: target.pane.id, axis: axis, ratio: CGFloat(ratio)) else {
+            throw ControlError(
+                code: .notFound,
+                message: "no \(axis.rawValue) split around that pane to resize",
+                action: "the pane must sit inside a matching-axis split"
+            )
+        }
+        appState.saveWorkspaces()
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    #if DEBUG
+    /// DEBUG-ONLY (#167): drive a single in-place `set_size` on the pane's
+    /// surface, bypassing SwiftUI layout, so a resize/reflow transition can be
+    /// reproduced in isolation. Compiled out of Release entirely — the dispatch
+    /// case is `#if DEBUG` too, so a Release app answers `pane.resize` with
+    /// `unknown_command`.
+    private func paneResize(_ args: ControlArgs) throws -> ControlData {
+        guard let cols = args.cols, let rows = args.rows, cols >= 1, rows >= 1 else {
+            throw ControlError(code: .badRequest, message: "pane.resize requires cols and rows ≥ 1")
+        }
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard let view = target.pane.nsView, view.debugResizeSurface(cols: cols, rows: rows) else {
+            throw ControlError(
+                code: .noSurface,
+                message: "the pane's terminal isn't live yet (or its cell size is unknown)",
+                action: "select its tab once so the surface spawns, then retry"
+            )
+        }
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+    #endif
 
     private func grid(_ args: ControlArgs) throws -> ControlData {
         guard let rows = args.rows, let cols = args.cols, rows >= 1, cols >= 1, rows * cols > 1 else {

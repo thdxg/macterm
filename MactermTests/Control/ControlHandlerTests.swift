@@ -494,6 +494,138 @@ struct ControlHandlerTests {
         #expect(empty.error?.code == .badRequest)
     }
 
+    // MARK: - pane.inspect / pane.dump (#165)
+
+    @Test
+    func pane_inspect_without_surface_is_no_surface() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore)
+        // Headless panes have no surface, hence no grid to report — the same
+        // no_surface contract pane.run uses. The live payload (grid dims,
+        // scrollback totals) is covered by manual verification against the app.
+        let response = await handler.handle(request("pane.inspect"))
+        #expect(response.error?.code == .noSurface)
+    }
+
+    @Test
+    func pane_inspect_resolves_target_before_surface_check() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore)
+        // An unknown session selector must 404 (selector resolution), not fall
+        // through to no_surface.
+        let unknown = await handler.handle(request(
+            "pane.inspect", args: ControlArgs(session: "macterm-nope-000000000000")
+        ))
+        #expect(unknown.error?.code == .notFound)
+    }
+
+    @Test
+    func pane_dump_without_surface_is_no_surface() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore)
+        let viewport = await handler.handle(request("pane.dump"))
+        #expect(viewport.error?.code == .noSurface)
+
+        let scrollback = await handler.handle(request("pane.dump", args: ControlArgs(scrollback: true)))
+        #expect(scrollback.error?.code == .noSurface)
+    }
+
+    // MARK: - pane.zoom / pane.resize-split (#166)
+
+    @Test
+    func pane_zoom_toggles_tab_zoom_state() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+        #expect(tab.zoomedPaneID == nil)
+
+        let on = await handler.handle(request("pane.zoom", args: ControlArgs(pane: pane.id.uuidString)))
+        #expect(on.ok)
+        #expect(tab.zoomedPaneID == pane.id)
+
+        let off = await handler.handle(request("pane.zoom", args: ControlArgs(pane: pane.id.uuidString)))
+        #expect(off.ok)
+        #expect(tab.zoomedPaneID == nil)
+    }
+
+    @Test
+    func pane_resize_split_sets_absolute_ratio() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        // A horizontal split gives a horizontal-axis branch at the root.
+        appState.splitPane(direction: .horizontal, projectID: project.id)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let focused = try #require(tab.focusedPaneID)
+
+        let response = await handler.handle(request(
+            "pane.resize-split", args: ControlArgs(pane: focused.uuidString, axis: "horizontal", ratio: 0.3)
+        ))
+        #expect(response.ok)
+        guard case let .split(branch) = tab.splitRoot else {
+            Issue.record("root should be a split")
+            return
+        }
+        #expect(abs(branch.ratio - 0.3) < 0.0001)
+    }
+
+    @Test
+    func pane_resize_split_validates_axis_and_ratio() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        appState.splitPane(direction: .horizontal, projectID: project.id)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let focused = try #require(tab.focusedPaneID).uuidString
+
+        let badAxis = await handler.handle(request(
+            "pane.resize-split", args: ControlArgs(pane: focused, axis: "sideways", ratio: 0.3)
+        ))
+        #expect(badAxis.error?.code == .badRequest)
+
+        let missingRatio = await handler.handle(request(
+            "pane.resize-split", args: ControlArgs(pane: focused, axis: "horizontal")
+        ))
+        #expect(missingRatio.error?.code == .badRequest)
+
+        let tooBig = await handler.handle(request(
+            "pane.resize-split", args: ControlArgs(pane: focused, axis: "horizontal", ratio: 0.95)
+        ))
+        #expect(tooBig.error?.code == .badRequest)
+    }
+
+    @Test
+    func pane_resize_split_wrong_axis_is_not_found() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        // Only a horizontal split exists; asking to resize a vertical split
+        // around the pane finds no matching branch.
+        appState.splitPane(direction: .horizontal, projectID: project.id)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let focused = try #require(tab.focusedPaneID).uuidString
+
+        let response = await handler.handle(request(
+            "pane.resize-split", args: ControlArgs(pane: focused, axis: "vertical", ratio: 0.3)
+        ))
+        #expect(response.error?.code == .notFound)
+    }
+
+    // MARK: - pane.resize (debug-only, #167)
+
+    #if DEBUG
+    @Test
+    func pane_resize_debug_verb_reachable_but_needs_surface() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore)
+        // In a DEBUG test build the verb dispatches (not unknown_command); a
+        // headless pane has no surface, so it lands on no_surface.
+        let response = await handler.handle(request("pane.resize", args: ControlArgs(rows: 24, cols: 80)))
+        #expect(response.error?.code == .noSurface)
+
+        let missing = await handler.handle(request("pane.resize"))
+        #expect(missing.error?.code == .badRequest)
+    }
+    #endif
+
     // MARK: - grid
 
     @Test

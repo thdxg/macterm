@@ -74,4 +74,43 @@ struct ControlProtocolTests {
         let decoded = try ControlProtocol.decodeRequest(Data((json + "\r\n").utf8))
         #expect(decoded.command == "status")
     }
+
+    // MARK: - New verbs (#165/#166/#167)
+
+    @Test
+    func request_roundtrips_new_args_fields() throws {
+        let args = ControlArgs(pane: "pane:2", scrollback: true, axis: "vertical", ratio: 0.42)
+        let request = ControlRequest(command: "pane.resize-split", args: args)
+        let decoded = try ControlProtocol.decodeRequest(ControlProtocol.encode(request))
+        #expect(decoded.args?.scrollback == true)
+        #expect(decoded.args?.axis == "vertical")
+        #expect(decoded.args?.ratio == 0.42)
+        #expect(decoded.args == args)
+    }
+
+    @Test
+    func response_roundtrips_inspect_payload() throws {
+        let inspect = ControlPaneInspect(
+            id: "pane-id", session: "macterm-demo-abc123def456",
+            cols: 80, rows: 24, cellWidthPx: 8, cellHeightPx: 17, widthPx: 640, heightPx: 408,
+            scrollbackTotal: 204, scrollbackOffset: 0, scrollbackLen: 24,
+            altScreen: false, contentScale: 2.0,
+            foregroundPID: 4242, foregroundArgv: ["hx", "src/main.rs"],
+            processExited: false, needsConfirmQuit: true
+        )
+        let response = ControlResponse.success(id: "i1", data: ControlData(inspect: inspect))
+        let decoded = try ControlProtocol.decodeResponse(ControlProtocol.encode(response))
+        #expect(decoded.data?.inspect == inspect)
+    }
+
+    @Test
+    func response_roundtrips_dump_payload() throws {
+        let dump = ControlPaneDump(
+            id: "pane-id", session: "macterm-demo-abc123def456",
+            scrollback: true, bytes: 5, text: "hello"
+        )
+        let response = ControlResponse.success(id: "d1", data: ControlData(dump: dump))
+        let decoded = try ControlProtocol.decodeResponse(ControlProtocol.encode(response))
+        #expect(decoded.data?.dump == dump)
+    }
 }

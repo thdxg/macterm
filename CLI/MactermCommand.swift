@@ -252,10 +252,25 @@ struct TabCommand: ParsableCommand {
 struct PaneCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "pane",
-        abstract: "List, split, focus, close panes, and run commands in them.",
-        subcommands: [List.self, Split.self, Focus.self, Close.self, Run.self],
+        abstract: "List, inspect, split, focus, close panes, and run commands in them.",
+        subcommands: paneSubcommands,
         defaultSubcommand: List.self
     )
+
+    /// Assembled once so the debug-only `resize` verb is present in debug
+    /// builds of the CLI and absent in release. (The app also gates the
+    /// server-side handler behind `#if DEBUG`, which is the authoritative
+    /// boundary; this just hides the verb from `--help` in release.)
+    private static var paneSubcommands: [ParsableCommand.Type] {
+        var subs: [ParsableCommand.Type] = [
+            List.self, Inspect.self, Dump.self, Split.self, Focus.self,
+            Close.self, Run.self, Zoom.self, ResizeSplit.self,
+        ]
+        #if DEBUG
+        subs.append(Resize.self)
+        #endif
+        return subs
+    }
 
     struct List: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "List panes (active project by default).")
@@ -368,6 +383,99 @@ struct PaneCommand: ParsableCommand {
             try runControlCommand(command: "pane.run", args: args, options: options)
         }
     }
+
+    struct Inspect: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Report a pane's live terminal-core state (grid, scrollback, foreground process)."
+        )
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(command: "pane.inspect", args: target.controlArgs(), options: options)
+        }
+    }
+
+    struct Dump: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Print a pane's terminal text: the viewport, or the full scrollback with --scrollback."
+        )
+
+        @Flag(help: "Include the full scrollback, not just the visible viewport.")
+        var scrollback = false
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.scrollback = scrollback
+            try runControlCommand(command: "pane.dump", args: args, options: options)
+        }
+    }
+
+    struct Zoom: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Toggle zoom on a pane (the tab renders only that pane while zoomed)."
+        )
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(command: "pane.zoom", args: target.controlArgs(), options: options)
+        }
+    }
+
+    struct ResizeSplit: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "resize-split",
+            abstract: "Set the ratio of the nearest split around a pane (0.15–0.85)."
+        )
+
+        @Option(help: "Split axis to resize: horizontal or vertical.")
+        var axis: String
+
+        @Option(help: "Absolute ratio for the split's first child (0.15–0.85).")
+        var ratio: Double
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.axis = axis
+            args.ratio = ratio
+            try runControlCommand(command: "pane.resize-split", args: args, options: options)
+        }
+    }
+
+    #if DEBUG
+    /// DEBUG-only: isolated in-place surface resize for reflow debugging (#167).
+    /// Absent from release CLIs; a release app also rejects `pane.resize`.
+    struct Resize: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "[debug] Resize a pane's surface in place to COLS×ROWS, bypassing layout."
+        )
+
+        @Option(help: "Target columns.")
+        var cols: Int
+
+        @Option(help: "Target rows.")
+        var rows: Int
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.cols = cols
+            args.rows = rows
+            try runControlCommand(command: "pane.resize", args: args, options: options)
+        }
+    }
+    #endif
 }
 
 // MARK: - Grid

@@ -20,6 +20,8 @@ enum Output {
         if let tabs = data.tabs { renderTabs(tabs) }
         if let panes = data.panes { renderPanes(panes) }
         if let sessions = data.sessions { renderSessions(sessions) }
+        if let inspect = data.inspect { renderInspect(inspect) }
+        if let dump = data.dump { renderDump(dump) }
     }
 
     private static func renderStatus(_ status: ControlStatusInfo) {
@@ -81,6 +83,43 @@ enum Output {
             ]
         }
         printColumns(rows)
+    }
+
+    private static func renderInspect(_ i: ControlPaneInspect) {
+        func opt(_ v: (some Any)?) -> String {
+            v.map { "\($0)" } ?? "-"
+        }
+        let scrollback = (i.scrollbackTotal != nil)
+            ? "\(opt(i.scrollbackTotal)) total, \(opt(i.scrollbackOffset)) offset, \(opt(i.scrollbackLen)) len"
+            : "-"
+        let fg = i.foregroundPID.map { pid in
+            let argv = i.foregroundArgv?.joined(separator: " ") ?? ""
+            return argv.isEmpty ? "\(pid)" : "\(pid) (\(argv))"
+        } ?? "-"
+        let rows: [[String]] = [
+            ["session", i.session],
+            ["grid", "\(i.cols)×\(i.rows)"],
+            ["cell px", "\(i.cellWidthPx)×\(i.cellHeightPx)"],
+            ["surface px", "\(i.widthPx)×\(i.heightPx)"],
+            ["scrollback", scrollback],
+            ["alt-screen", opt(i.altScreen)],
+            ["content scale", opt(i.contentScale)],
+            ["foreground", fg],
+            ["process exited", "\(i.processExited)"],
+            ["needs confirm quit", "\(i.needsConfirmQuit)"],
+        ]
+        printColumns(rows)
+    }
+
+    /// Print dumped terminal text verbatim to stdout (pipeline-friendly — the
+    /// whole point is capturing it), with no framing. Ensure exactly one
+    /// trailing newline for non-empty text so the shell prompt lands cleanly on
+    /// its own line without appending a blank one to already-terminated text.
+    private static func renderDump(_ d: ControlPaneDump) {
+        if d.text.isEmpty {
+            return
+        }
+        print(d.text, terminator: d.text.hasSuffix("\n") ? "" : "\n")
     }
 
     /// Left-align columns to the widest cell in each.

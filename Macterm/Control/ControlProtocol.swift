@@ -80,9 +80,16 @@ struct ControlArgs: Codable, Equatable {
     /// Skip the busy-confirmation and destructive-plan guards
     /// (`tab.close`, `pane.close`, `layout.apply`).
     var force: Bool?
-    /// Grid shape (`grid`).
+    /// Grid shape (`grid`); also the target grid for the debug-only
+    /// `pane.resize` in-place surface resize.
     var rows: Int?
     var cols: Int?
+    /// Include the full scrollback, not just the viewport (`pane.dump`).
+    var scrollback: Bool?
+    /// Split axis to resize (`pane.resize-split`): `horizontal` or `vertical`.
+    var axis: String?
+    /// Absolute split ratio in 0.15…0.85 (`pane.resize-split`).
+    var ratio: Double?
 
     init(
         project: String? = nil,
@@ -96,7 +103,10 @@ struct ControlArgs: Codable, Equatable {
         direction: String? = nil,
         force: Bool? = nil,
         rows: Int? = nil,
-        cols: Int? = nil
+        cols: Int? = nil,
+        scrollback: Bool? = nil,
+        axis: String? = nil,
+        ratio: Double? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -110,6 +120,9 @@ struct ControlArgs: Codable, Equatable {
         self.force = force
         self.rows = rows
         self.cols = cols
+        self.scrollback = scrollback
+        self.axis = axis
+        self.ratio = ratio
     }
 }
 
@@ -162,19 +175,27 @@ struct ControlData: Codable {
     var tabs: [ControlTabInfo]?
     var panes: [ControlPaneInfo]?
     var sessions: [ControlSessionInfo]?
+    /// Read-only terminal-core snapshot (`pane.inspect`).
+    var inspect: ControlPaneInspect?
+    /// Terminal cell text (`pane.dump`).
+    var dump: ControlPaneDump?
 
     init(
         status: ControlStatusInfo? = nil,
         projects: [ControlProjectInfo]? = nil,
         tabs: [ControlTabInfo]? = nil,
         panes: [ControlPaneInfo]? = nil,
-        sessions: [ControlSessionInfo]? = nil
+        sessions: [ControlSessionInfo]? = nil,
+        inspect: ControlPaneInspect? = nil,
+        dump: ControlPaneDump? = nil
     ) {
         self.status = status
         self.projects = projects
         self.tabs = tabs
         self.panes = panes
         self.sessions = sessions
+        self.inspect = inspect
+        self.dump = dump
     }
 }
 
@@ -229,6 +250,58 @@ struct ControlSessionInfo: Codable, Equatable {
     /// The live pane currently bound to this session, if any (a session with
     /// no pane is an orphan awaiting reap or reattach).
     var paneID: String?
+}
+
+/// Read-only snapshot of a pane's terminal core (`pane.inspect`). Every field
+/// is a live libghostty read or a value derived from one — nothing persisted.
+/// The point is one-command observability for resize/reflow/scrollback bugs
+/// (#112): the scrollback totals here were the whole diagnostic signal.
+struct ControlPaneInspect: Codable, Equatable {
+    var id: String
+    var session: String
+    /// Terminal grid, from `ghostty_surface_size`.
+    var cols: Int
+    var rows: Int
+    /// Cell size in backing pixels.
+    var cellWidthPx: Int
+    var cellHeightPx: Int
+    /// Surface size in backing pixels.
+    var widthPx: Int
+    var heightPx: Int
+    /// Scrollback rows (`total`), the viewport's top row within them
+    /// (`offset`), and the viewport height in rows (`len`) — from the cached
+    /// `GHOSTTY_ACTION_SCROLLBAR` snapshot. nil before the first scrollbar
+    /// update (a never-scrolled, never-resized surface).
+    var scrollbackTotal: UInt64?
+    var scrollbackOffset: UInt64?
+    var scrollbackLen: UInt64?
+    /// Heuristic: true when there's no scrollback to speak of (`total <= len`),
+    /// which is the alt-screen / fresh-prompt condition the scroll code uses.
+    /// libghostty exposes no direct alt-screen query, so this is derived, and
+    /// nil when no scrollbar snapshot has arrived yet.
+    var altScreen: Bool?
+    /// Backing scale factor of the pane's window (points→pixels).
+    var contentScale: Double?
+    /// Foreground pid on the pty (`ghostty_surface_foreground_pid`) and its
+    /// argv (KERN_PROCARGS2), nil when idle-at-prompt/unreadable/remote.
+    var foregroundPID: Int32?
+    var foregroundArgv: [String]?
+    /// libghostty liveness flags.
+    var processExited: Bool
+    var needsConfirmQuit: Bool
+}
+
+/// Terminal cell text read out of the core (`pane.dump`) via
+/// `ghostty_surface_read_text`.
+struct ControlPaneDump: Codable, Equatable {
+    var id: String
+    var session: String
+    /// Whether `text` includes the full scrollback (`--scrollback`) or just
+    /// the visible viewport.
+    var scrollback: Bool
+    /// UTF-8 byte length of `text` (handy for scripts before they slurp it).
+    var bytes: Int
+    var text: String
 }
 
 // MARK: - Codec

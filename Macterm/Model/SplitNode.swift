@@ -1027,4 +1027,25 @@ extension SplitNode {
         }
         return false
     }
+
+    /// Set the ratio of the nearest ancestor branch of `paneID` whose direction
+    /// matches `axis` to an absolute value (clamped to 0.15…0.85). The control
+    /// CLI's `pane resize-split` uses this for a deterministic geometry, in
+    /// contrast to `applyResize`'s relative nudge (the keybind path). Returns
+    /// true iff a matching branch was found and set.
+    @discardableResult
+    func settingRatio(paneID: UUID, axis: SplitDirection, ratio: CGFloat) -> Bool {
+        guard case let .split(branch) = self else { return false }
+        let firstHas = branch.first.contains(paneID: paneID)
+        let secondHas = branch.second.contains(paneID: paneID)
+        guard firstHas || secondHas else { return false }
+        // Deeper (closer) ancestor wins, matching applyResize.
+        let child: SplitNode = firstHas ? branch.first : branch.second
+        if child.settingRatio(paneID: paneID, axis: axis, ratio: ratio) { return true }
+        if branch.direction == axis {
+            branch.ratio = min(max(ratio, 0.15), 0.85)
+            return true
+        }
+        return false
+    }
 }

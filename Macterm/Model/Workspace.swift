@@ -190,6 +190,14 @@ final class TerminalTab: Identifiable {
         splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
     }
 
+    /// Set an absolute ratio on the nearest matching-axis split around a pane
+    /// (control CLI `pane resize-split`). Returns false when the pane sits in
+    /// no split of that axis.
+    @discardableResult
+    func setSplitRatio(paneID: UUID, axis: SplitDirection, ratio: CGFloat) -> Bool {
+        splitRoot.settingRatio(paneID: paneID, axis: axis, ratio: ratio)
+    }
+
     /// Move a pane next to another pane (drag-and-drop reorganization):
     /// detach it from its current spot — the tree collapses around it — and
     /// split the destination, placing the moved pane on the `zone` side. The
