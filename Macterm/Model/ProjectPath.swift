@@ -98,6 +98,21 @@ enum ProjectPath: Equatable {
         return standardized
     }
 
+    /// Storage form of a raw project path: local paths canonicalized (tilde
+    /// expanded, `.`/`..` standardized, trailing slash stripped); remote specs
+    /// and unparseable strings pass through verbatim. A stored trailing slash
+    /// would otherwise reach the spawned shell's `$PWD` verbatim (libghostty
+    /// exports its `working_directory` string into the child env unmodified),
+    /// and that is FATAL under nushell: nu refuses to start ("$env.PWD
+    /// contains trailing slashes", nu-protocol `engine_state.rs`), so the
+    /// pane dies in ~150ms on ghostty's abnormal-exit screen. zsh survives
+    /// but renders `%c`/`%1~` of `/path/dir/` as the empty last component,
+    /// blanking the prompt's directory segment until the first `cd`.
+    static func normalizedForStorage(_ raw: String) -> String {
+        if case let .local(path)? = parse(raw) { return canonicalLocal(path) }
+        return raw
+    }
+
     /// Convenience for call sites holding a raw path string (`Project.path`,
     /// `Pane.projectPath` — the remote spec travels and persists as a string).
     static func isRemote(_ raw: String) -> Bool {

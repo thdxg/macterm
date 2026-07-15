@@ -90,6 +90,45 @@ struct ProjectStoreTests {
         #expect(store.projects.map(\.sortOrder) == [0, 1, 2])
     }
 
+    // MARK: - Path normalization (a stored trailing slash reaches $PWD verbatim: fatal under nushell — the pane fails to spawn — and blanks zsh's `%c` prompt)
+
+    @Test
+    func add_strips_trailing_slash_from_local_path() {
+        let store = makeStore()
+        store.add(Project(name: "junk", path: "/tmp/junk/", sortOrder: 0))
+        #expect(store.projects.first?.path == "/tmp/junk")
+    }
+
+    @Test
+    func add_leaves_remote_path_verbatim() {
+        let store = makeStore()
+        store.add(Project(name: "api", path: "devbox:~/dev/api/", sortOrder: 0))
+        #expect(store.projects.first?.path == "devbox:~/dev/api/")
+    }
+
+    @Test
+    func setPath_normalizes_the_new_path() {
+        let store = makeStore()
+        let p = Project(name: "x", path: "/tmp/before", sortOrder: 0)
+        store.add(p)
+        store.setPath(id: p.id, to: "/tmp/after/")
+        #expect(store.projects.first { $0.id == p.id }?.path == "/tmp/after")
+    }
+
+    @Test
+    func load_migrates_paths_stored_with_trailing_slashes() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-project-store-migrate-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        // Write the legacy on-disk form directly — the store's own mutators
+        // normalize now, so a pre-fix file has to be crafted by hand.
+        let legacy = Project(name: "legacy", path: "/tmp/legacy/", sortOrder: 0)
+        try JSONEncoder().encode([legacy]).write(to: fileURL)
+
+        let store = makeStore(fileURL: fileURL)
+        #expect(store.projects.first?.path == "/tmp/legacy")
+    }
+
     // MARK: - On-disk round-trip
 
     @Test
