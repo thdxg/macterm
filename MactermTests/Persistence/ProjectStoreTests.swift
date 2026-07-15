@@ -90,7 +90,7 @@ struct ProjectStoreTests {
         #expect(store.projects.map(\.sortOrder) == [0, 1, 2])
     }
 
-    // MARK: - Path normalization (a trailing slash in stored paths reaches $PWD and blanks zsh's `%c` prompt)
+    // MARK: - Path normalization (a stored trailing slash reaches $PWD verbatim: fatal under nushell — the pane fails to spawn — and blanks zsh's `%c` prompt)
 
     @Test
     func add_strips_trailing_slash_from_local_path() {

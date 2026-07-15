@@ -265,12 +265,19 @@ final class GhosttyTerminalNSView: NSView {
                 config.command = cString(sshCommand)
             }
         } else {
-            // Canonicalize (trailing slash stripped): libghostty exports this
-            // verbatim as the shell's $PWD, and zsh renders `%c`/`%1~` of a
-            // trailing-slash $PWD as empty — a blank prompt directory until
-            // the first `cd`. Restored panes may still carry a slashed path
-            // persisted before ProjectStore normalized on load.
-            config.working_directory = cString(ProjectPath.canonicalLocal(workingDirectory))
+            // Canonicalize before libghostty sees it: the string is exported
+            // VERBATIM as the shell's $PWD, and a trailing slash there is
+            // fatal under nushell — nu refuses to start ("$env.PWD contains
+            // trailing slashes"), killing the pane in ~150ms on ghostty's
+            // abnormal-exit screen (the chdir itself is fine; only the string
+            // in the env matters). zsh merely blanks its `%c`/`%1~` prompt
+            // segment. This is the last line of defense: it covers panes
+            // restored from snapshots persisted before ProjectStore
+            // normalized on load, and any other path source (layout `cwd:`,
+            // split inheritance). `normalizedForStorage`, not bare
+            // `canonicalLocal`, so a non-local-shaped string passes through
+            // untouched instead of being coerced relative to the app's cwd.
+            config.working_directory = cString(ProjectPath.normalizedForStorage(workingDirectory))
 
             // Shell binary → the surface's program. nil falls back to libghostty's
             // own resolution (which honors the user's ghostty config / login shell).
