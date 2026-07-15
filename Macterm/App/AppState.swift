@@ -682,7 +682,10 @@ final class AppState {
         saveWorkspaces()
     }
 
-    func removeProject(_ projectID: UUID) {
+    /// The teardown half of `removeProject`, without the workspace save — so
+    /// a bulk removal can persist once for the whole batch instead of
+    /// re-serializing the snapshot per item.
+    private func removeProjectWithoutSaving(_ projectID: UUID) {
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
             for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
@@ -693,6 +696,21 @@ final class AppState {
         }
         workspaces.removeValue(forKey: projectID)
         if activeProjectID == projectID { activeProjectID = nil }
+    }
+
+    func removeProject(_ projectID: UUID) {
+        removeProjectWithoutSaving(projectID)
+        saveWorkspaces()
+    }
+
+    /// Remove several projects' workspaces at once — the bulk sidebar delete.
+    /// The caller is responsible for pruning the matching `ProjectStore`
+    /// entries (that store lives outside AppState). Saves once for the batch.
+    func removeProjects(_ projectIDs: [UUID]) {
+        guard !projectIDs.isEmpty else { return }
+        for id in projectIDs {
+            removeProjectWithoutSaving(id)
+        }
         saveWorkspaces()
     }
 
@@ -751,6 +769,61 @@ final class AppState {
         pendingRemoveProject = nil
     }
 
+    /// A bulk sidebar delete (multi-selection) staged for confirmation because
+    /// one or more affected panes has a running foreground program. Holds the
+    /// caller's full removal so it can run on confirm — a single dialog for the
+    /// whole selection instead of one per item.
+    struct PendingBulkRemove {
+        let completeRemoval: () -> Void
+    }
+
+    var pendingBulkRemove: PendingBulkRemove?
+
+    /// Run `removal` (the caller's full bulk close/remove) immediately when no
+    /// affected pane is busy; otherwise stage it behind one confirmation alert.
+    /// Mirrors `requestRemoveProject`/`requestCloseTab`, but for a whole
+    /// multi-selection so the user confirms once rather than per item.
+    func requestRemoveSelection(
+        projectIDs: [UUID],
+        tabs: [(tabID: UUID, projectID: UUID)],
+        removal: @escaping () -> Void
+    ) {
+        if selectionHasBusyPane(projectIDs: projectIDs, tabs: tabs) {
+            pendingBulkRemove = PendingBulkRemove(completeRemoval: removal)
+            return
+        }
+        removal()
+    }
+
+    func confirmPendingBulkRemove() {
+        guard let pending = pendingBulkRemove else { return }
+        pendingBulkRemove = nil
+        pending.completeRemoval()
+    }
+
+    func cancelPendingBulkRemove() {
+        pendingBulkRemove = nil
+    }
+
+    /// True when any pane in the given projects (removed whole) or tabs has a
+    /// running foreground program needing quit-confirmation.
+    private func selectionHasBusyPane(projectIDs: [UUID], tabs: [(tabID: UUID, projectID: UUID)]) -> Bool {
+        for id in projectIDs {
+            let busy = workspaces[id]?.tabs
+                .flatMap { $0.splitRoot.allPanes() }
+                .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+            if busy { return true }
+        }
+        for tab in tabs {
+            let busy = workspaces[tab.projectID]?.tabs
+                .first { $0.id == tab.tabID }?
+                .splitRoot.allPanes()
+                .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+            if busy { return true }
+        }
+        return false
+    }
+
     // MARK: - Tabs
 
     /// A `command` spawns in the new tab's pane via `initial_input` (layout
@@ -773,7 +846,9 @@ final class AppState {
         createTab(projectID: projectID, projectPath: project.path)
     }
 
-    func closeTab(_ tabID: UUID, projectID: UUID) {
+    /// The teardown half of `closeTab`, without the workspace save — so a
+    /// bulk close can persist once for the whole batch.
+    private func closeTabWithoutSaving(_ tabID: UUID, projectID: UUID) {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
@@ -784,6 +859,21 @@ final class AppState {
             pane.destroySurface()
         }
         ws.closeTab(tabID)
+    }
+
+    func closeTab(_ tabID: UUID, projectID: UUID) {
+        closeTabWithoutSaving(tabID, projectID: projectID)
+        saveWorkspaces()
+    }
+
+    /// Close several tabs at once — the bulk sidebar delete for tabs. Each is
+    /// identified by its owning project since a multi-selection can span
+    /// projects. Saves once for the batch.
+    func closeTabs(_ tabs: [(tabID: UUID, projectID: UUID)]) {
+        guard !tabs.isEmpty else { return }
+        for tab in tabs {
+            closeTabWithoutSaving(tab.tabID, projectID: tab.projectID)
+        }
         saveWorkspaces()
     }
 
