@@ -633,12 +633,16 @@ final class GhosttyTerminalNSView: NSView {
 
         if flags.contains(.control), !flags.contains(.command), !flags.contains(.option), !hasMarkedText() {
             if isAppShortcut(event) { return }
-            // Swallow Ctrl-\ (the tty VQUIT char, 0x1C → SIGQUIT). It's trivially
-            // easy to hit by accident and kills the pane's foreground process
-            // with a core dump; forwarding it to ghostty is almost never what the
-            // user meant. Match by hardware keyCode (42 = "\") so it's layout- and
-            // shift-independent. Send SIGQUIT via `kill -QUIT` if you truly need it.
-            if event.keyCode == 42 { return }
+            // Swallow *unshifted* Ctrl-\ (the tty VQUIT char, 0x1C → SIGQUIT).
+            // It's trivially easy to hit by accident and kills the pane's
+            // foreground process with a core dump; forwarding it to ghostty is
+            // almost never what the user meant. Match by hardware keyCode (42 =
+            // "\") so it's layout-independent. Shift matters: verified that
+            // libghostty encodes Ctrl-\ as the quit byte but does NOT for
+            // Ctrl-Shift-\, so guarding the shifted chord would eat a harmless
+            // keystroke — leave it alone. SIGQUIT stays reachable via `kill
+            // -QUIT` for the rare intentional case.
+            if event.keyCode == 42, !flags.contains(.shift) { return }
             var ke = buildKeyEvent(from: event, action: action)
             let text = event.charactersIgnoringModifiers ?? event.characters ?? ""
             if text.isEmpty {
