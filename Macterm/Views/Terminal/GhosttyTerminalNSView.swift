@@ -633,6 +633,16 @@ final class GhosttyTerminalNSView: NSView {
 
         if flags.contains(.control), !flags.contains(.command), !flags.contains(.option), !hasMarkedText() {
             if isAppShortcut(event) { return }
+            // Swallow *unshifted* Ctrl-\ (the tty VQUIT char, 0x1C → SIGQUIT).
+            // It's trivially easy to hit by accident and kills the pane's
+            // foreground process with a core dump; forwarding it to ghostty is
+            // almost never what the user meant. Match by hardware keyCode (42 =
+            // "\") so it's layout-independent. Shift matters: verified that
+            // libghostty encodes Ctrl-\ as the quit byte but does NOT for
+            // Ctrl-Shift-\, so guarding the shifted chord would eat a harmless
+            // keystroke — leave it alone. SIGQUIT stays reachable via `kill
+            // -QUIT` for the rare intentional case.
+            if event.keyCode == 42, !flags.contains(.shift) { return }
             var ke = buildKeyEvent(from: event, action: action)
             let text = event.charactersIgnoringModifiers ?? event.characters ?? ""
             if text.isEmpty {
@@ -1117,6 +1127,61 @@ extension GhosttyTerminalNSView {
             _ = ghostty_surface_key(surface, ke)
         }
         return true
+    }
+
+    /// Send a single key chord through libghostty's key-*encoding* path — the
+    /// same `ghostty_surface_key` route a real `keyDown` takes, NOT the text
+    /// paste path `sendText` uses. This is what lets the control CLI deliver a
+    /// control key (`ctrl+c`, `ctrl+\`), a named key (`escape`, `tab`, `up`), or
+    /// any modified chord that has no literal text form. libghostty does the
+    /// mode-dependent encoding (control bytes, application cursor keys, Kitty
+    /// protocol) from `keycode` + `mods`, so callers pass primitives, not bytes.
+    ///
+    /// A full press→release cycle is issued so encodings that distinguish the
+    /// two (e.g. Kitty keyboard) see a complete event. Returns false when the
+    /// surface isn't created yet, so the caller can report the miss.
+    ///
+    /// `keyCode` is a hardware key code (Carbon `kVK_*`), `mods` the modifier
+    /// set — exactly what `HotkeyRegistry.parseShortcut` yields, so the CLI can
+    /// reuse that grammar (`\` → 42, `c` → 8, `escape` → 53, `up` → 126).
+    @discardableResult
+    func sendKey(keyCode: UInt16, mods flags: NSEvent.ModifierFlags) -> Bool {
+        guard let surface else { return false }
+        onInteraction?()
+        var m = GHOSTTY_MODS_NONE.rawValue
+        if flags.contains(.shift) { m |= GHOSTTY_MODS_SHIFT.rawValue }
+        if flags.contains(.control) { m |= GHOSTTY_MODS_CTRL.rawValue }
+        if flags.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
+        if flags.contains(.command) { m |= GHOSTTY_MODS_SUPER.rawValue }
+        let mods = ghostty_input_mods_e(rawValue: m)
+        // The unshifted codepoint lets libghostty compute the control byte for
+        // letter chords (`ctrl+c` → keycode 8, unshifted 0x63 → 0x03). Named /
+        // non-character keys leave it 0 and are driven by keycode alone.
+        let codepoint = Self.unshiftedCodepoint(forKeyCode: keyCode)
+        for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
+            var ke = ghostty_input_key_s()
+            ke.action = action
+            ke.keycode = UInt32(keyCode)
+            ke.mods = mods
+            ke.consumed_mods = GHOSTTY_MODS_NONE
+            ke.composing = false
+            ke.text = nil
+            ke.unshifted_codepoint = codepoint
+            _ = ghostty_surface_key(surface, ke)
+        }
+        return true
+    }
+
+    /// The unshifted Unicode scalar for a hardware key code, for the small set
+    /// of keys the control CLI can address. Mirrors what `keyDown` derives from
+    /// `NSEvent.characters(byApplyingModifiers: [])`, but from a keycode alone
+    /// since a CLI-driven key has no NSEvent. 0 for keys with no single base
+    /// character (arrows, tab, escape) — libghostty encodes those from keycode.
+    private static func unshiftedCodepoint(forKeyCode keyCode: UInt16) -> UInt32 {
+        guard let token = HotkeyRegistry.baseToken(forKeyCode: keyCode),
+              token.count == 1, let scalar = token.unicodeScalars.first
+        else { return 0 }
+        return scalar.value
     }
 }
 

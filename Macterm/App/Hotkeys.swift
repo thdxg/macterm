@@ -156,6 +156,14 @@ enum HotkeyRegistry {
         return result
     }()
 
+    /// The unshifted/base key token for a hardware key code (lowercase letter,
+    /// digit, or unshifted symbol), or nil for a code we don't map. Exposes the
+    /// private reverse map so `GhosttyTerminalNSView.sendKey` can derive a key's
+    /// base codepoint from a keycode alone (CLI-driven keys have no NSEvent).
+    static func baseToken(forKeyCode keyCode: UInt16) -> String? {
+        keyCodeToBaseToken[keyCode]
+    }
+
     private static let modifierOnlyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62]
 
     /// Characters produced by special keys → their named token form.
