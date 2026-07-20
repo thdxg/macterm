@@ -48,6 +48,17 @@ enum MactermTheme {
         GhosttyApp.shared.paletteColor(at: 2).map { Color(nsColor: $0) } ?? .green
     }
 
+    /// Scrollbar search-tick colors (NSColor: drawn by an AppKit overlay).
+    /// Plain matches use the theme's ANSI yellow; the selected match is
+    /// orange, which has no ANSI slot, so it's the one fixed system color.
+    @MainActor
+    static var nsSearchTick: NSColor {
+        GhosttyApp.shared.paletteColor(at: 3) ?? .systemYellow
+    }
+
+    @MainActor
+    static var nsSearchTickSelected: NSColor { .systemOrange }
+
     /// A translucent overlay that dims an unfocused pane, at the user-configured
     /// `opacity` (#156). Derived from the theme rather than a fixed black so it
     /// reads correctly on light themes too: on a light theme, dimming toward the

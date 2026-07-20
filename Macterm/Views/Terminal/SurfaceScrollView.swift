@@ -46,6 +46,16 @@ final class SurfaceScrollView: NSScrollView {
     /// Last row index sent to the core via `scroll_to_row`, to dedupe spam.
     private var lastSentRow: Int = -1
 
+    /// Search-match tick marks drawn over the scroller track (see #176).
+    private let searchTicks = SearchTickOverlay()
+
+    /// The needle the search core is currently matching (last one actually
+    /// sent, not the live field text) and the rows/selection recovered for it.
+    private var searchNeedle = ""
+    private var searchMatchRows: [Int] = []
+    private var searchSelectedFromEnd: Int?
+    private var searchTickScanScheduled = false
+
     /// iTerm-style vertical scroll-wheel accumulator. It turns AppKit's messy
     /// wheel/trackpad deltas into whole terminal-row movement, including
     /// momentum events, instead of trying to pixel-scroll terminal contents.
@@ -77,6 +87,7 @@ final class SurfaceScrollView: NSScrollView {
         spacer.translatesAutoresizingMaskIntoConstraints = true
         spacer.addSubview(surfaceView)
         documentView = spacer
+        addSubview(searchTicks)
 
         wireObservers()
         surfaceView.onScrollbarUpdate = { [weak self] total, offset, len in
@@ -137,6 +148,16 @@ final class SurfaceScrollView: NSScrollView {
         synchronize()
     }
 
+    override func tile() {
+        super.tile()
+        // Keep the tick overlay glued to the scroller track. `addSubview` in
+        // init put it above the scroller, so ticks stay visible even while the
+        // overlay scroller is faded out.
+        if let scroller = verticalScroller {
+            searchTicks.frame = scroller.frame
+        }
+    }
+
     /// Pin the surface to fill the currently visible rect of the document.
     private func layoutSurface() {
         let visible = contentView.documentVisibleRect
@@ -174,10 +195,75 @@ final class SurfaceScrollView: NSScrollView {
     // MARK: - Core → UI
 
     private func applyScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
+        let totalChanged = total != self.total
         self.total = total
         self.offset = offset
         self.len = len
         synchronize()
+        // Tick fractions are row/total, so a scrollback growth shifts them.
+        if totalChanged, !searchMatchRows.isEmpty {
+            pushSearchTicks()
+        }
+    }
+
+    // MARK: - Search ticks
+
+    /// Record the needle just sent to the search core. Match totals arriving
+    /// after this belong to it — the live field text may already be newer.
+    func noteSearchNeedle(_ needle: String) {
+        searchNeedle = needle
+        if needle.isEmpty { clearSearchTicks() }
+    }
+
+    /// Recompute match rows from the scrollback text. Called on every
+    /// `SEARCH_TOTAL` update; those stream while the core scans history, so
+    /// coalesce with a trailing delay rather than re-reading the full
+    /// scrollback each time.
+    func refreshSearchTicks() {
+        guard !searchTickScanScheduled else { return }
+        searchTickScanScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            searchTickScanScheduled = false
+            scanSearchTicks()
+        }
+    }
+
+    func setSearchSelected(_ indexFromEnd: Int?) {
+        searchSelectedFromEnd = indexFromEnd
+        pushSearchTicks()
+    }
+
+    func clearSearchTicks() {
+        searchMatchRows = []
+        searchSelectedFromEnd = nil
+        pushSearchTicks()
+    }
+
+    private func scanSearchTicks() {
+        guard !searchNeedle.isEmpty,
+              let size = surfaceView.surfaceSize, size.columns > 0,
+              let text = surfaceView.readText(scrollback: true)
+        else {
+            clearSearchTicks()
+            return
+        }
+        searchMatchRows = SearchTicks.matchRows(
+            text: text,
+            needle: searchNeedle,
+            cols: Int(size.columns)
+        )
+        pushSearchTicks()
+    }
+
+    private func pushSearchTicks() {
+        searchTicks.tickColor = MactermTheme.nsSearchTick
+        searchTicks.selectedColor = MactermTheme.nsSearchTickSelected
+        searchTicks.update(
+            matchRows: searchMatchRows,
+            selectedRow: SearchTicks.selectedRow(rows: searchMatchRows, selectedFromEnd: searchSelectedFromEnd),
+            totalRows: Int(min(total, UInt64(Int.max)))
+        )
     }
 
     // MARK: - UI → Core
