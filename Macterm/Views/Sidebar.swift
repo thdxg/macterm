@@ -555,7 +555,8 @@ private extension AgentIcon {
         case .copilot: Color(red: 0x89 / 255, green: 0x57 / 255, blue: 0xE5 / 255) // GitHub purple
         case .opencode,
              .cursor,
-             .grok: .primary
+             .grok,
+             .pi: .primary
         }
     }
 }
@@ -564,6 +565,10 @@ private struct SidebarRowIcon: View {
     let symbol: String
     let index: Int
     var agent: AgentIcon?
+    /// Scales with the user's text size like the sibling SF Symbols do; a
+    /// fixed 15pt would stay small next to enlarged row text.
+    @ScaledMetric(relativeTo: .body)
+    private var agentIconSize: CGFloat = 15
 
     var body: some View {
         if let agent {
@@ -574,7 +579,7 @@ private struct SidebarRowIcon: View {
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 15, height: 15)
+                .frame(width: agentIconSize, height: agentIconSize)
                 .foregroundStyle(agent.brandColor)
         } else if Preferences.numberIconChoices.contains(symbol) {
             NumberGlyph(index: index, variant: symbol)

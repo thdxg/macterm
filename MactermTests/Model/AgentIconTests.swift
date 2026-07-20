@@ -59,4 +59,35 @@ struct AgentIconTests {
         #expect(AgentIcon.match(comm: "2.1.207") { "claude" } == .claude)
         #expect(AgentIcon.match(comm: "2.1.207") { nil } == nil)
     }
+
+    @Test
+    func falls_back_to_script_name_for_interpreter_comms() {
+        // npm-installed CLIs run as `node <bin script>`: comm is the
+        // interpreter, the invoked-name fallback yields the script name.
+        #expect(AgentIcon.match(comm: "node") { "pi" } == .pi)
+        #expect(AgentIcon.match(comm: "node") { "webpack" } == nil)
+    }
+
+    @Test
+    func real_nonagent_comms_never_pay_for_an_argv_read() {
+        // The fallback exists only for comms that can't name the CLI (versions,
+        // interpreters). An ordinary process name must not cost a syscall on
+        // the default poll.
+        var argvRead = false
+        for comm in ["bash", "hx", "btop", "claudette"] {
+            #expect(AgentIcon.match(comm: comm) { argvRead = true
+                return "claude"
+            } == nil)
+        }
+        #expect(!argvRead)
+        // No comm at all still consults argv (nothing else to go on).
+        #expect(AgentIcon.match(comm: nil) { "claude" } == .claude)
+    }
+
+    @Test
+    func every_case_has_a_process_name_mapping() {
+        // `processNames` is hand-maintained; a new case + asset without a dict
+        // entry would be a silent no-op. Keep them in lockstep.
+        #expect(Set(AgentIcon.processNames.values) == Set(AgentIcon.allCases))
+    }
 }

@@ -112,18 +112,43 @@ enum ProcessInspector {
         return comm
     }
 
-    /// The basename of the pane's foreground process's argv[0] (login-shell
-    /// `-` stripped), or nil. Unlike `comm` — the *executable's* basename,
-    /// which for some CLIs is an arch- or version-named binary — argv[0] is
-    /// the name the process was invoked as (`claude`, `codex`). Used as the
-    /// agent-icon fallback when `comm` doesn't identify an agent.
-    @MainActor
-    static func foregroundArgv0Basename(forPane pane: Pane) -> String? {
-        guard let pid = foregroundPID(forPane: pane) else { return nil }
-        guard var first = argv(pid: pid)?.first, !first.isEmpty else { return nil }
-        if first.hasPrefix("-") { first.removeFirst() }
-        return (first as NSString).lastPathComponent
+    /// The name `pid` was invoked as, or nil. Unlike `comm` — the
+    /// *executable's* basename, which for some CLIs is an arch- or
+    /// version-named binary — argv names what the user actually ran
+    /// (`claude`, `codex`). Used as the agent-icon fallback when `comm`
+    /// doesn't identify an agent. See `invokedName(argv:)` for the shape.
+    static func invokedNameBasename(pid: pid_t) -> String? {
+        guard let args = argv(pid: pid) else { return nil }
+        return invokedName(argv: args)
     }
+
+    /// Testable core of `invokedNameBasename`: argv[0]'s basename (login-shell
+    /// `-` stripped) — or, when argv[0] is an interpreter (`node …/bin/pi`),
+    /// the script's basename from argv[1] with a script extension stripped,
+    /// so an npm-installed CLI still yields its command name.
+    static func invokedName(argv args: [String]) -> String? {
+        guard var first = args.first, !first.isEmpty else { return nil }
+        if first.hasPrefix("-") { first.removeFirst() }
+        let name = (first as NSString).lastPathComponent
+        if isInterpreterName(name), args.count > 1 {
+            let script = (args[1] as NSString).lastPathComponent
+            guard !script.isEmpty, !script.hasPrefix("-") else { return name }
+            let ns = script as NSString
+            return scriptExtensions.contains(ns.pathExtension.lowercased())
+                ? ns.deletingPathExtension
+                : script
+        }
+        return name
+    }
+
+    /// Whether `name` is a script interpreter — a process name that can never
+    /// identify the CLI being run (the script in argv[1] does).
+    static func isInterpreterName(_ name: String) -> Bool {
+        interpreterNames.contains(name.lowercased())
+    }
+
+    private static let interpreterNames: Set<String> = ["node", "bun", "deno", "python", "python3"]
+    private static let scriptExtensions: Set<String> = ["js", "mjs", "cjs", "ts", "py"]
 
     /// Whether `value` is a bare dotted version number (e.g. `2.1.202`, `1.0`) —
     /// i.e. a `setproctitle`-clobbered `p_comm` rather than a real process name.

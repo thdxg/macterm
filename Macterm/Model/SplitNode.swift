@@ -376,6 +376,10 @@ final class Pane: Identifiable {
         // OSC 133 markers and activity heartbeats.
         guard !isRemote else { return }
         let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
+        // Resolved ONCE and reused below, including inside the argv0 closure —
+        // re-resolving there could disagree with this frame's pid on a wrapped
+        // pane and would double the resolver work when the fallback fires.
+        let resolvedPID = ProcessInspector.resolvedForegroundPID(forPane: self)
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
             // The RESOLVED foreground pid (daemon-side shell/program for a
@@ -386,11 +390,11 @@ final class Pane: Identifiable {
             // every adopted OSC title (e.g. Claude Code's "✳ Claude Code")
             // expires on the very next 250ms poll, snapping back to the process
             // name.
-            foregroundPID: ProcessInspector.resolvedForegroundPID(forPane: self),
+            foregroundPID: resolvedPID,
             foregroundIsShell: track ? ProcessInspector.foregroundProcessIsShell(forPane: self) : false,
             terminalInputIsRaw: track ? ProcessInspector.terminalInputIsRaw(forPane: self) : false,
             applyExecutionState: track,
-            argv0: { ProcessInspector.foregroundArgv0Basename(forPane: self) }
+            argv0: { resolvedPID.flatMap(ProcessInspector.invokedNameBasename(pid:)) }
         )
     }
 
