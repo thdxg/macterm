@@ -494,6 +494,28 @@ struct ControlHandlerTests {
         #expect(empty.error?.code == .badRequest)
     }
 
+    @Test
+    func pane_key_validates_chord_then_needs_surface() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore)
+
+        // Missing chord → bad_request (before any pane resolution).
+        let empty = await handler.handle(request("pane.key"))
+        #expect(empty.error?.code == .badRequest)
+
+        // Unparseable chord → bad_request, not a silent no-op.
+        let bogus = await handler.handle(request("pane.key", args: ControlArgs(key: "ctrl+nope")))
+        #expect(bogus.error?.code == .badRequest)
+
+        // A well-formed chord parses; a headless test pane has no surface, so it
+        // lands on no_surface — the same contract pane.run uses. The live
+        // key-encoding path is covered by manual/CLI verification.
+        for chord in ["ctrl+c", "escape", "up", "ctrl+\\"] {
+            let response = await handler.handle(request("pane.key", args: ControlArgs(key: chord)))
+            #expect(response.error?.code == .noSurface, "chord \(chord) should parse and reach no_surface")
+        }
+    }
+
     // MARK: - pane.inspect / pane.dump (#165)
 
     @Test

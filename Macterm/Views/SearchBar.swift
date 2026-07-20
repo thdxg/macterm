@@ -37,10 +37,10 @@ struct TerminalSearchBar: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(MactermTheme.border, lineWidth: 1))
 
-                Button(action: onNavigatePrevious) {
+                Button(action: onNavigateNext) {
                     Image(systemName: "chevron.up").font(.system(size: 10, weight: .semibold))
                 }.buttonStyle(SearchButtonStyle())
-                Button(action: onNavigateNext) {
+                Button(action: onNavigatePrevious) {
                     Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
                 }.buttonStyle(SearchButtonStyle())
                 Button(action: onClose) {
@@ -54,6 +54,13 @@ struct TerminalSearchBar: View {
         }
         .onAppear { isFieldFocused = true }
         .onKeyPress(.escape) { onClose()
+            return .handled
+        }
+        // Ghostty search walks newest→oldest: `next` moves up the scrollback,
+        // `previous` back down. Enter = up (onSubmit above), Shift+Enter = down.
+        .onKeyPress(keys: [.return]) { press in
+            guard press.modifiers.contains(.shift) else { return .ignored }
+            onNavigatePrevious()
             return .handled
         }
         // Cmd+F again while the bar is open (and the search field has focus)
