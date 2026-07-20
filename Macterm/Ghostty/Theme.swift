@@ -48,16 +48,32 @@ enum MactermTheme {
         GhosttyApp.shared.paletteColor(at: 2).map { Color(nsColor: $0) } ?? .green
     }
 
-    /// Scrollbar search-tick colors (NSColor: drawn by an AppKit overlay).
-    /// Plain matches use the theme's ANSI yellow; the selected match is
-    /// orange, which has no ANSI slot, so it's the one fixed system color.
+    /// Scrollbar search-tick colors (NSColor: drawn by an AppKit overlay),
+    /// mirroring the renderer's search highlight backgrounds
+    /// (`search-background` / `search-selected-background`) so the ticks read
+    /// as the same yellow/orange as the highlighted text in the terminal.
     @MainActor
     static var nsSearchTick: NSColor {
-        GhosttyApp.shared.paletteColor(at: 3) ?? .systemYellow
+        nsColor(SearchHighlightColors.matchBackground(inConfigText: userGhosttyConfigText()))
     }
 
     @MainActor
-    static var nsSearchTickSelected: NSColor { .systemOrange }
+    static var nsSearchTickSelected: NSColor {
+        nsColor(SearchHighlightColors.selectedBackground(inConfigText: userGhosttyConfigText()))
+    }
+
+    /// Same read as `MactermConfig.userGhosttyConfigText` — the search
+    /// highlight keys live in the user's ghostty config, not ours.
+    @MainActor
+    private static func userGhosttyConfigText() -> String? {
+        let path = Preferences.shared.expandedUserGhosttyConfigPath
+        guard !path.isEmpty else { return nil }
+        return try? String(contentsOfFile: path, encoding: .utf8)
+    }
+
+    private static func nsColor(_ rgb: SearchHighlightColors.RGB) -> NSColor {
+        NSColor(srgbRed: CGFloat(rgb.r) / 255, green: CGFloat(rgb.g) / 255, blue: CGFloat(rgb.b) / 255, alpha: 1)
+    }
 
     /// A translucent overlay that dims an unfocused pane, at the user-configured
     /// `opacity` (#156). Derived from the theme rather than a fixed black so it

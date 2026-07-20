@@ -49,8 +49,8 @@ final class SearchTickOverlay: NSView {
     }
 
     private func tickPath(at fraction: CGFloat) -> NSBezierPath {
-        let tickHeight: CGFloat = 2
-        let inset: CGFloat = 3
+        let tickHeight: CGFloat = 4
+        let inset: CGFloat = 2
         // AppKit Y is up; fraction 0 (top of history) draws at the top.
         let y = (bounds.height - tickHeight) * (1 - fraction)
         let rect = NSRect(x: inset, y: y, width: bounds.width - inset * 2, height: tickHeight)

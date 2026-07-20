@@ -253,12 +253,14 @@ final class SurfaceScrollView: NSScrollView {
             needle: searchNeedle,
             cols: Int(size.columns)
         )
+        // Once per scan, not per push: resolving these reads the user's
+        // ghostty config file.
+        searchTicks.tickColor = MactermTheme.nsSearchTick
+        searchTicks.selectedColor = MactermTheme.nsSearchTickSelected
         pushSearchTicks()
     }
 
     private func pushSearchTicks() {
-        searchTicks.tickColor = MactermTheme.nsSearchTick
-        searchTicks.selectedColor = MactermTheme.nsSearchTickSelected
         searchTicks.update(
             matchRows: searchMatchRows,
             selectedRow: SearchTicks.selectedRow(rows: searchMatchRows, selectedFromEnd: searchSelectedFromEnd),
