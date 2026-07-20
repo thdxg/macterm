@@ -112,4 +112,33 @@ struct ProcessInspectorTests {
 
         #expect(ProcessInspector.terminalInputIsRaw(ttyPath: path) == true)
     }
+
+    // MARK: - Invoked name (agent-icon fallback)
+
+    @Test
+    func invokedName_uses_argv0_basename() {
+        #expect(ProcessInspector.invokedName(argv: ["/usr/local/bin/claude"]) == "claude")
+        #expect(ProcessInspector.invokedName(argv: ["claude", "--continue"]) == "claude")
+        #expect(ProcessInspector.invokedName(argv: ["-zsh"]) == "zsh")
+        #expect(ProcessInspector.invokedName(argv: []) == nil)
+    }
+
+    @Test
+    func invokedName_resolves_interpreter_scripts() {
+        // npm shims: `node <bin script>` — the script names the CLI.
+        #expect(ProcessInspector.invokedName(argv: ["node", "/usr/local/lib/node_modules/.bin/pi"]) == "pi")
+        #expect(ProcessInspector.invokedName(argv: ["/opt/homebrew/bin/node", "/x/gemini.js"]) == "gemini")
+        // A flag (not a script) after the interpreter falls back to the
+        // interpreter name; so does a bare interpreter REPL.
+        #expect(ProcessInspector.invokedName(argv: ["node", "--version"]) == "node")
+        #expect(ProcessInspector.invokedName(argv: ["node"]) == "node")
+    }
+
+    @Test
+    func isInterpreterName_only_matches_interpreters() {
+        #expect(ProcessInspector.isInterpreterName("node"))
+        #expect(ProcessInspector.isInterpreterName("Python3"))
+        #expect(!ProcessInspector.isInterpreterName("claude"))
+        #expect(!ProcessInspector.isInterpreterName("zsh"))
+    }
 }

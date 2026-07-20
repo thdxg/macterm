@@ -481,6 +481,8 @@ private struct SidebarTabRow: View {
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
     private var tabIconSymbol = "terminal"
+    @AppStorage(Preferences.Keys.showAgentIcons)
+    private var showAgentIcons = true
     @AppStorage(Preferences.Keys.showTabStatusIndicator)
     private var showTabStatusIndicator = false
     @State
@@ -507,6 +509,11 @@ private struct SidebarTabRow: View {
         }
     }
 
+    /// The tab's live agent logo, unless disabled in Settings.
+    private var agentIcon: AgentIcon? {
+        showAgentIcons ? tab.agentIcon : nil
+    }
+
     var body: some View {
         Group {
             if tabIconSymbol == Preferences.noIcon {
@@ -514,7 +521,12 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
+                    } else if let agentIcon {
+                        // "None" suppresses the user's icon, not the agent
+                        // logo — a live status signal, like the else branch.
+                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .labelStyle(.titleAndIcon)
@@ -523,9 +535,9 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
                     } else {
-                        SidebarRowIcon(symbol: tabIconSymbol, index: index)
+                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -584,6 +596,7 @@ private struct TabStatusGlyph: View {
     let state: TerminalExecutionState
     let symbol: String
     let index: Int
+    var agent: AgentIcon?
 
     var body: some View {
         switch state {
@@ -594,7 +607,7 @@ private struct TabStatusGlyph: View {
                 .help("Running")
                 .frame(width: 16, height: 16)
         case .done:
-            SidebarRowIcon(symbol: symbol, index: index)
+            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
                 .overlay(alignment: .bottomTrailing) {
                     // Opaque (not translucent) so it reads clearly over the
@@ -612,9 +625,28 @@ private struct TabStatusGlyph: View {
                 }
                 .help("Done")
         case .idle:
-            SidebarRowIcon(symbol: symbol, index: index)
+            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
                 .help("Idle")
+        }
+    }
+}
+
+private extension AgentIcon {
+    /// The agent's brand tint. These are vendor identity colors, not theme
+    /// colors, so they're the one deliberate exception to "all colors come
+    /// from MactermTheme". Monochrome brands (Cursor, Grok, opencode) use
+    /// `.primary` so they stay black-on-light / white-on-dark like the brand.
+    var brandColor: Color {
+        switch self {
+        case .claude: Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255) // Anthropic coral
+        case .codex: Color(red: 0xAB / 255, green: 0xAB / 255, blue: 0xAB / 255) // OpenAI light gray
+        case .gemini: Color(red: 0x42 / 255, green: 0x85 / 255, blue: 0xF4 / 255) // Google blue
+        case .copilot: Color(red: 0x89 / 255, green: 0x57 / 255, blue: 0xE5 / 255) // GitHub purple
+        case .opencode,
+             .cursor,
+             .grok,
+             .pi: .primary
         }
     }
 }
@@ -622,9 +654,24 @@ private struct TabStatusGlyph: View {
 private struct SidebarRowIcon: View {
     let symbol: String
     let index: Int
+    var agent: AgentIcon?
+    /// Scales with the user's text size like the sibling SF Symbols do; a
+    /// fixed 15pt would stay small next to enlarged row text.
+    @ScaledMetric(relativeTo: .body)
+    private var agentIconSize: CGFloat = 15
 
     var body: some View {
-        if Preferences.numberIconChoices.contains(symbol) {
+        if let agent {
+            // A live AI agent in the tab overrides the user's chosen icon —
+            // the logo is a status signal, tinted with the agent's brand color
+            // (overriding the row's .secondary tint).
+            Image(agent.rawValue)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: agentIconSize, height: agentIconSize)
+                .foregroundStyle(agent.brandColor)
+        } else if Preferences.numberIconChoices.contains(symbol) {
             NumberGlyph(index: index, variant: symbol)
         } else {
             Image(systemName: symbol)
