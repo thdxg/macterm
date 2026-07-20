@@ -609,6 +609,8 @@ final class Pane: Identifiable {
         return scroll
     }
 
+    var scrollView: SurfaceScrollView? { _scrollView }
+
     /// Tear down the ghostty surface and null out callbacks. Call when the
     /// pane is removed from the tree. Safe to call multiple times.
     func destroySurface() {
