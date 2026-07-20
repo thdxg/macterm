@@ -819,6 +819,47 @@ final class GhosttyTerminalNSView: NSView {
         }
     }
 
+    override func otherMouseDown(with event: NSEvent) {
+        onInteraction?()
+        guard let surface else { return }
+        _ = ghostty_surface_mouse_button(
+            surface,
+            GHOSTTY_MOUSE_PRESS,
+            Self.mouseButton(fromNSEventButtonNumber: event.buttonNumber),
+            mods(event)
+        )
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard let surface else { return }
+        _ = ghostty_surface_mouse_button(
+            surface,
+            GHOSTTY_MOUSE_RELEASE,
+            Self.mouseButton(fromNSEventButtonNumber: event.buttonNumber),
+            mods(event)
+        )
+    }
+
+    /// NSEvent.buttonNumber → libghostty button, mirroring the Ghostty mac
+    /// app's mapping: 0=left, 1=right, 2=middle, 3=back (button 8),
+    /// 4=forward (button 9), then the remaining extra buttons.
+    static func mouseButton(fromNSEventButtonNumber buttonNumber: Int) -> ghostty_input_mouse_button_e {
+        switch buttonNumber {
+        case 0: GHOSTTY_MOUSE_LEFT
+        case 1: GHOSTTY_MOUSE_RIGHT
+        case 2: GHOSTTY_MOUSE_MIDDLE
+        case 3: GHOSTTY_MOUSE_EIGHT
+        case 4: GHOSTTY_MOUSE_NINE
+        case 5: GHOSTTY_MOUSE_SIX
+        case 6: GHOSTTY_MOUSE_SEVEN
+        case 7: GHOSTTY_MOUSE_FOUR
+        case 8: GHOSTTY_MOUSE_FIVE
+        case 9: GHOSTTY_MOUSE_TEN
+        case 10: GHOSTTY_MOUSE_ELEVEN
+        default: GHOSTTY_MOUSE_UNKNOWN
+        }
+    }
+
     override func scrollWheel(with event: NSEvent) {
         onInteraction?()
         guard let surface else { return }
