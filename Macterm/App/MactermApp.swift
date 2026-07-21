@@ -82,6 +82,22 @@ struct MactermApp: App {
                     Text("A process is still running in this project. Removing it ends every process in its tabs.")
                 }
                 .alert(
+                    "Remove items with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingBulkRemove != nil },
+                        set: { if !$0 { appState.cancelPendingBulkRemove() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingBulkRemove()
+                    }
+                    Button("Remove", role: .destructive) {
+                        appState.confirmPendingBulkRemove()
+                    }
+                } message: {
+                    Text("A process is still running in one of the selected items. Removing them ends every process in their tabs.")
+                }
+                .alert(
                     "Apply layout?",
                     isPresented: Binding(
                         get: { appState.pendingLayoutApply != nil },

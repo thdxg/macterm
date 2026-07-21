@@ -91,6 +91,12 @@ final class Preferences {
         didSet { defaults.set(tabIconSymbol, forKey: Keys.tabIconSymbol) }
     }
 
+    /// Replace a tab's icon with the running AI agent's logo (Claude Code,
+    /// Codex, …) while one holds the pane's foreground. On by default.
+    var showAgentIcons: Bool {
+        didSet { defaults.set(showAgentIcons, forKey: Keys.showAgentIcons) }
+    }
+
     /// Show a status badge over each tab icon: a spinner while a command is
     /// running (replacing the icon) and a small status dot when a command has
     /// finished and awaits attention. Off = pure icons, no status tracking.
@@ -380,6 +386,7 @@ final class Preferences {
         activeProjectID = (defaults.string(forKey: Keys.activeProjectID)).flatMap(UUID.init)
         projectIconSymbol = defaults.string(forKey: Keys.projectIconSymbol) ?? "folder"
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
+        showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         terminateSessionsOnQuit = defaults.object(forKey: Keys.terminateSessionsOnQuit) as? Bool ?? false
@@ -438,6 +445,7 @@ final class Preferences {
         static let activeProjectID = "macterm.activeProjectID"
         static let projectIconSymbol = "macterm.sidebar.projectIcon"
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
+        static let showAgentIcons = "macterm.sidebar.showAgentIcons"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let terminateSessionsOnQuit = "macterm.session.terminateOnQuit"

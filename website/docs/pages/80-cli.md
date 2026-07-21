@@ -53,6 +53,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |
 | `pane run <command…> [target]` | Type a command (plus newline) into an **existing** live pane's shell. |
+| `pane key <chord> [target]` | Send one key chord (`ctrl+c`, `escape`, `up`, `ctrl+\`) to a live pane through the terminal's key-encoding path — control/named keys that `pane run` can't type. |
 | `pane zoom [target]` | Toggle zoom on a pane (the tab renders only that pane while zoomed) — the same action as the zoom keybind. |
 | `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split of that axis around a pane. Absolute geometry, unlike the keybind's relative nudge. |
 | `grid <RxC> [--run CMD] [target]` | Split a pane into an equal R×C grid (≤16 cells). `--run` spawns CMD in every **new** pane. |
@@ -61,7 +62,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `layout apply [--project P] [--force]` | Reconcile the workspace to the project's [layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes, unless forced. |
 | `layout save [--project P]` | Write the live workspace to `~/.config/macterm/projects/<slug>.yaml`. |
 
-> `pane run` types into a live shell — different from `--run`, which only applies to a pane at spawn time.
+> `pane run` types into a live shell — different from `--run`, which only applies to a pane at spawn time. Use `pane key` for keys with no text form: `pane run` pastes characters, `pane key` sends an encoded keypress (a control byte like `ctrl+c`, or a named key like `escape`/`up`), so libghostty applies the terminal's current mode (application cursor keys, Kitty protocol, …). Quote chords the shell would otherwise mangle: `macterm pane key 'ctrl+\'`.
 
 ## Targeting a pane
 

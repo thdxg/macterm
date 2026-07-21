@@ -47,8 +47,11 @@ struct SidebarContent: View {
     private var showNewProjectButton = true
     @State
     private var expandedProjects: Set<UUID> = []
+    /// A Set (not a lone optional) so the sidebar supports native multi-select:
+    /// Cmd/Shift-click extends the selection, and a right-click acts on every
+    /// selected row at once (see `.contextMenu(forSelectionType:)` below).
     @State
-    private var selection: SidebarItem?
+    private var selection: Set<SidebarItem> = []
 
     var body: some View {
         List(selection: $selection) {
@@ -60,6 +63,14 @@ struct SidebarContent: View {
             // reordering is instead driven by dragging the project header (a
             // `MovableProject` payload) so both drags share the Transferable
             // path and coexist. See `projectHeader`.
+        }
+        // A single list-level context menu instead of one per row: the native
+        // multi-select menu. Its closure receives the exact set the menu should
+        // act on — right-clicking inside a multi-selection yields all selected
+        // rows; right-clicking an unselected row yields just that row. This is
+        // what lets "Remove N Projects" / "Close N Tabs" work.
+        .contextMenu(forSelectionType: SidebarItem.self) { items in
+            contextMenu(for: items)
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
@@ -91,8 +102,11 @@ struct SidebarContent: View {
                 }
             }
         }
-        .onChange(of: selection) { _, item in
-            guard let item else { return }
+        .onChange(of: selection) { _, items in
+            // Navigation follows a single selection only. A multi-selection is
+            // for bulk actions (delete), so it must not yank the active project
+            // or tab around as rows are added to the selection.
+            guard items.count == 1, let item = items.first else { return }
             switch item {
             case let .project(projectID):
                 guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return }
@@ -151,15 +165,9 @@ struct SidebarContent: View {
             tab: tab,
             index: tabIndex + 1,
             isActive: activeTabID == tab.id && appState.activeProjectID == project.id,
-            moveTargets: projectStore.projects.filter { $0.id != project.id },
-            onClose: { appState.requestCloseTab(tab.id, projectID: project.id) },
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
-            },
-            onMoveToProject: { destination in
-                appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
-                expandedProjects.insert(destination.id)
             }
         )
         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
@@ -171,19 +179,7 @@ struct SidebarContent: View {
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
         SidebarProjectRow(project: project, index: projectIndex + 1) {
-            appState.selectProject(project)
-            appState.createTab(projectID: project.id, projectPath: project.path)
-            expandedProjects.insert(project.id)
-        } onRename: {
             projectStore.rename(id: project.id, to: $0)
-        } onUnload: {
-            appState.requestUnloadProject(project.id)
-        } onRemove: {
-            appState.requestRemoveProject(project.id) {
-                expandedProjects.remove(project.id)
-                appState.removeProject(project.id)
-                projectStore.remove(id: project.id)
-            }
         }
         .tag(SidebarItem.project(project.id))
         // Drag the header to reorder projects (replaces the removed `.onMove`).
@@ -261,11 +257,136 @@ struct SidebarContent: View {
               let ws = appState.workspaces[pid],
               let tabID = ws.activeTabID
         else {
-            selection = appState.activeProjectID.map { .project($0) }
+            selection = appState.activeProjectID.map { [.project($0)] } ?? []
             return
         }
-        let desired = SidebarItem.tab(projectID: pid, tabID: tabID)
+        let desired: Set<SidebarItem> = [.tab(projectID: pid, tabID: tabID)]
         if selection != desired { selection = desired }
+    }
+
+    // MARK: - Context menu
+
+    /// The native multi-select context menu. `items` is the set the menu acts
+    /// on, supplied by SwiftUI: the whole selection when the click lands inside
+    /// it, or just the clicked row otherwise.
+    @ViewBuilder
+    private func contextMenu(for items: Set<SidebarItem>) -> some View {
+        if items.count > 1 {
+            bulkMenu(for: items)
+        } else if let item = items.first {
+            switch item {
+            case let .project(id):
+                if let project = projectStore.projects.first(where: { $0.id == id }) {
+                    projectMenu(project)
+                }
+            case let .tab(projectID, tabID):
+                if let project = projectStore.projects.first(where: { $0.id == projectID }),
+                   let tab = appState.workspaces[projectID]?.tabs.first(where: { $0.id == tabID })
+                {
+                    tabMenu(project: project, tab: tab)
+                }
+            }
+        } else {
+            // Right-click on empty space.
+            Menu("New Project") {
+                Button("Local Folder…") { openProject() }
+                Button("Remote Machine…") { appState.isNewRemoteProjectSheetPresented = true }
+            }
+        }
+    }
+
+    /// Single-project menu. Destructive actions route through the same
+    /// `request*` confirmations the maintainers added for busy panes, so a
+    /// single right-click behaves exactly as before this feature.
+    @ViewBuilder
+    private func projectMenu(_ project: Project) -> some View {
+        Button("New Tab") {
+            appState.selectProject(project)
+            appState.createTab(projectID: project.id, projectPath: project.path)
+            expandedProjects.insert(project.id)
+        }
+        Button("Copy Path") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(project.path, forType: .string)
+        }
+        Divider()
+        Button("Rename Project") { appState.renamingProjectID = project.id }
+        Divider()
+        Button("Unload Project") { appState.requestUnloadProject(project.id) }
+            .disabled(!appState.isProjectLoaded(project.id))
+        Button("Remove Project", role: .destructive) {
+            appState.requestRemoveProject(project.id) { removeProject(project) }
+        }
+    }
+
+    @ViewBuilder
+    private func tabMenu(project: Project, tab: TerminalTab) -> some View {
+        Button("Rename Tab") { appState.renamingTabID = tab.id }
+        let moveTargets = projectStore.projects.filter { $0.id != project.id }
+        if !moveTargets.isEmpty {
+            Menu("Move to Project") {
+                ForEach(moveTargets) { destination in
+                    Button(destination.name) {
+                        appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
+                        expandedProjects.insert(destination.id)
+                    }
+                }
+            }
+        }
+        Divider()
+        Button("Close Tab", role: .destructive) {
+            appState.requestCloseTab(tab.id, projectID: project.id)
+        }
+    }
+
+    @ViewBuilder
+    private func bulkMenu(for items: Set<SidebarItem>) -> some View {
+        let projectCount = items.count(where: { if case .project = $0 { true } else { false } })
+        let tabCount = items.count - projectCount
+        if projectCount == 0 {
+            Button("Close \(tabCount) Tabs", role: .destructive) { removeSelection(items) }
+        } else if tabCount == 0 {
+            Button("Remove \(projectCount) Projects", role: .destructive) { removeSelection(items) }
+        } else {
+            Button("Remove \(items.count) Items", role: .destructive) { removeSelection(items) }
+        }
+    }
+
+    /// Remove a single project: drop its workspace and its `ProjectStore` entry,
+    /// and collapse its disclosure. Shared by the single-item menu and the
+    /// bulk path so both prune identically.
+    private func removeProject(_ project: Project) {
+        expandedProjects.remove(project.id)
+        appState.removeProject(project.id)
+        projectStore.remove(id: project.id)
+    }
+
+    /// Delete every item in a multi-selection, confirming once if any affected
+    /// pane is busy. Tabs whose project is also being removed are skipped —
+    /// `removeProject` already tears their surfaces down.
+    private func removeSelection(_ items: Set<SidebarItem>) {
+        var projectIDs: [UUID] = []
+        var tabRefs: [(tabID: UUID, projectID: UUID)] = []
+        for item in items {
+            switch item {
+            case let .project(id):
+                projectIDs.append(id)
+            case let .tab(projectID, tabID):
+                tabRefs.append((tabID: tabID, projectID: projectID))
+            }
+        }
+
+        let removedProjects = Set(projectIDs)
+        let tabsToClose = tabRefs.filter { !removedProjects.contains($0.projectID) }
+        let projects = projectStore.projects.filter { removedProjects.contains($0.id) }
+
+        appState.requestRemoveSelection(projectIDs: projectIDs, tabs: tabsToClose) {
+            appState.closeTabs(tabsToClose)
+            for project in projects {
+                removeProject(project)
+            }
+            selection = []
+        }
     }
 
     private func openProject() {
@@ -278,10 +399,7 @@ struct SidebarContent: View {
 private struct SidebarProjectRow: View {
     let project: Project
     let index: Int
-    let onNewTab: () -> Void
     let onRename: (String) -> Void
-    let onUnload: () -> Void
-    let onRemove: () -> Void
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.projectIconSymbol)
@@ -330,19 +448,6 @@ private struct SidebarProjectRow: View {
                 }
             }
         }
-        .contextMenu {
-            Button("New Tab", action: onNewTab)
-            Button("Copy Path") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(project.path, forType: .string)
-            }
-            Divider()
-            Button("Rename Project") { beginRename() }
-            Divider()
-            Button("Unload Project", action: onUnload)
-                .disabled(!appState.isProjectLoaded(project.id))
-            Button("Remove Project", role: .destructive, action: onRemove)
-        }
         .task(id: appState.renamingProjectID) {
             if appState.renamingProjectID == project.id { beginRename() }
         }
@@ -371,14 +476,13 @@ private struct SidebarTabRow: View {
     let tab: TerminalTab
     let index: Int
     let isActive: Bool
-    let moveTargets: [Project]
-    let onClose: () -> Void
     let onRename: (String) -> Void
-    let onMoveToProject: (Project) -> Void
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
     private var tabIconSymbol = "terminal"
+    @AppStorage(Preferences.Keys.showAgentIcons)
+    private var showAgentIcons = true
     @AppStorage(Preferences.Keys.showTabStatusIndicator)
     private var showTabStatusIndicator = false
     @State
@@ -405,6 +509,11 @@ private struct SidebarTabRow: View {
         }
     }
 
+    /// The tab's live agent logo, unless disabled in Settings.
+    private var agentIcon: AgentIcon? {
+        showAgentIcons ? tab.agentIcon : nil
+    }
+
     var body: some View {
         Group {
             if tabIconSymbol == Preferences.noIcon {
@@ -412,7 +521,12 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
+                    } else if let agentIcon {
+                        // "None" suppresses the user's icon, not the agent
+                        // logo — a live status signal, like the else branch.
+                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .labelStyle(.titleAndIcon)
@@ -421,25 +535,13 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index)
+                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
                     } else {
-                        SidebarRowIcon(symbol: tabIconSymbol, index: index)
+                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-        }
-        .contextMenu {
-            Button("Rename Tab") { beginRename() }
-            if !moveTargets.isEmpty {
-                Menu("Move to Project") {
-                    ForEach(moveTargets) { project in
-                        Button(project.name) { onMoveToProject(project) }
-                    }
-                }
-            }
-            Divider()
-            Button("Close Tab", action: onClose)
         }
         .onChange(of: appState.renamingTabID) { _, id in
             if id == tab.id { beginRename() }
@@ -494,6 +596,7 @@ private struct TabStatusGlyph: View {
     let state: TerminalExecutionState
     let symbol: String
     let index: Int
+    var agent: AgentIcon?
 
     var body: some View {
         switch state {
@@ -504,7 +607,7 @@ private struct TabStatusGlyph: View {
                 .help("Running")
                 .frame(width: 16, height: 16)
         case .done:
-            SidebarRowIcon(symbol: symbol, index: index)
+            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
                 .overlay(alignment: .bottomTrailing) {
                     // Opaque (not translucent) so it reads clearly over the
@@ -522,9 +625,28 @@ private struct TabStatusGlyph: View {
                 }
                 .help("Done")
         case .idle:
-            SidebarRowIcon(symbol: symbol, index: index)
+            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
                 .help("Idle")
+        }
+    }
+}
+
+private extension AgentIcon {
+    /// The agent's brand tint. These are vendor identity colors, not theme
+    /// colors, so they're the one deliberate exception to "all colors come
+    /// from MactermTheme". Monochrome brands (Cursor, Grok, opencode) use
+    /// `.primary` so they stay black-on-light / white-on-dark like the brand.
+    var brandColor: Color {
+        switch self {
+        case .claude: Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255) // Anthropic coral
+        case .codex: Color(red: 0xAB / 255, green: 0xAB / 255, blue: 0xAB / 255) // OpenAI light gray
+        case .gemini: Color(red: 0x42 / 255, green: 0x85 / 255, blue: 0xF4 / 255) // Google blue
+        case .copilot: Color(red: 0x89 / 255, green: 0x57 / 255, blue: 0xE5 / 255) // GitHub purple
+        case .opencode,
+             .cursor,
+             .grok,
+             .pi: .primary
         }
     }
 }
@@ -532,9 +654,24 @@ private struct TabStatusGlyph: View {
 private struct SidebarRowIcon: View {
     let symbol: String
     let index: Int
+    var agent: AgentIcon?
+    /// Scales with the user's text size like the sibling SF Symbols do; a
+    /// fixed 15pt would stay small next to enlarged row text.
+    @ScaledMetric(relativeTo: .body)
+    private var agentIconSize: CGFloat = 15
 
     var body: some View {
-        if Preferences.numberIconChoices.contains(symbol) {
+        if let agent {
+            // A live AI agent in the tab overrides the user's chosen icon —
+            // the logo is a status signal, tinted with the agent's brand color
+            // (overriding the row's .secondary tint).
+            Image(agent.rawValue)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: agentIconSize, height: agentIconSize)
+                .foregroundStyle(agent.brandColor)
+        } else if Preferences.numberIconChoices.contains(symbol) {
             NumberGlyph(index: index, variant: symbol)
         } else {
             Image(systemName: symbol)

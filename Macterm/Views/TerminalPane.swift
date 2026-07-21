@@ -163,7 +163,12 @@ private struct TerminalSurface: NSViewRepresentable {
             }
             if let needle, !needle.isEmpty { pane.searchState.needle = needle }
             pane.searchState.isVisible = true
-            pane.searchState.startPublishing { [weak view] q in view?.sendSearchQuery(q) }
+            pane.searchState.startPublishing { [weak pane, weak view] q in
+                view?.sendSearchQuery(q)
+                // The tick scan must run against the needle the core actually
+                // searched, not the live (possibly newer) field text.
+                pane?.scrollView?.noteSearchNeedle(q)
+            }
             if !pane.searchState.needle.isEmpty { pane.searchState.pushNeedle() }
         }
         view.onSearchEnd = { [weak pane] in
@@ -173,9 +178,21 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.searchState.needle = ""
             pane.searchState.total = nil
             pane.searchState.selected = nil
+            pane.scrollView?.clearSearchTicks()
         }
-        view.onSearchTotal = { [weak pane] total in pane?.searchState.total = total }
-        view.onSearchSelected = { [weak pane] sel in pane?.searchState.selected = sel }
+        view.onSearchTotal = { [weak pane] total in
+            guard let pane else { return }
+            pane.searchState.total = total
+            if total == nil {
+                pane.scrollView?.clearSearchTicks()
+            } else {
+                pane.scrollView?.refreshSearchTicks()
+            }
+        }
+        view.onSearchSelected = { [weak pane] sel in
+            pane?.searchState.selected = sel
+            pane?.scrollView?.setSearchSelected(sel)
+        }
         view.onDesktopNotification = { [weak pane, weak view] title, body in
             guard let pane else { return }
             guard !(NSApp.isActive && view?.isFocused == true) else { return }

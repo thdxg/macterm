@@ -328,6 +328,16 @@ final class Pane: Identifiable {
     @ObservationIgnored
     private var programTitlePID: pid_t?
 
+    /// The AI coding agent in this pane's foreground (claude, codex, …), for
+    /// the sidebar's agent logo. Derived in `applyForegroundRefresh` from the
+    /// foreground process's `comm`/argv[0] and cached against the pid, so the
+    /// poll's steady ticks don't re-read argv or churn `@Observable`.
+    private(set) var agentIcon: AgentIcon?
+
+    /// The foreground pid `agentIcon` was computed for.
+    @ObservationIgnored
+    private var agentIconPID: pid_t?
+
     let searchState = TerminalSearchState()
     /// Temporary full-pane fill used when a TUI owns this leaf's background in
     /// a split. It is presentation-only, never persisted, and intentionally a
@@ -370,6 +380,10 @@ final class Pane: Identifiable {
         // OSC 133 markers and activity heartbeats.
         guard !isRemote else { return }
         let track = trackExecution ?? Preferences.shared.showTabStatusIndicator
+        // Resolved ONCE and reused below, including inside the argv0 closure —
+        // re-resolving there could disagree with this frame's pid on a wrapped
+        // pane and would double the resolver work when the fallback fires.
+        let resolvedPID = ProcessInspector.resolvedForegroundPID(forPane: self)
         applyForegroundRefresh(
             name: ProcessInspector.runningProcessName(forPane: self),
             // The RESOLVED foreground pid (daemon-side shell/program for a
@@ -380,10 +394,11 @@ final class Pane: Identifiable {
             // every adopted OSC title (e.g. Claude Code's "✳ Claude Code")
             // expires on the very next 250ms poll, snapping back to the process
             // name.
-            foregroundPID: ProcessInspector.resolvedForegroundPID(forPane: self),
+            foregroundPID: resolvedPID,
             foregroundIsShell: track ? ProcessInspector.foregroundProcessIsShell(forPane: self) : false,
             terminalInputIsRaw: track ? ProcessInspector.terminalInputIsRaw(forPane: self) : false,
-            applyExecutionState: track
+            applyExecutionState: track,
+            argv0: { resolvedPID.flatMap(ProcessInspector.invokedNameBasename(pid:)) }
         )
     }
 
@@ -397,9 +412,19 @@ final class Pane: Identifiable {
         foregroundPID: pid_t?,
         foregroundIsShell: Bool = false,
         terminalInputIsRaw: Bool = false,
-        applyExecutionState: Bool = true
+        applyExecutionState: Bool = true,
+        argv0: () -> String? = { nil }
     ) {
-        if name != foregroundProcessName { foregroundProcessName = name }
+        let nameChanged = name != foregroundProcessName
+        if nameChanged { foregroundProcessName = name }
+        // A steady foreground (same pid, same comm) keeps the cached icon; a
+        // change re-matches — argv[0] is only read when comm alone doesn't
+        // identify an agent.
+        if nameChanged || foregroundPID != agentIconPID {
+            agentIconPID = foregroundPID
+            let icon = foregroundPID == nil ? nil : AgentIcon.match(comm: name, argv0: argv0)
+            if icon != agentIcon { agentIcon = icon }
+        }
         if programTitle != nil, programTitlePID != foregroundPID {
             programTitle = nil
             programTitlePID = nil
@@ -612,6 +637,8 @@ final class Pane: Identifiable {
         _scrollView = scroll
         return scroll
     }
+
+    var scrollView: SurfaceScrollView? { _scrollView }
 
     /// Tear down the ghostty surface and null out callbacks. Call when the
     /// pane is removed from the tree. Safe to call multiple times.

@@ -431,4 +431,36 @@ struct TerminalTabTests {
         #expect(tab.makeGrid(paneID: UUID(), rows: 2, columns: 2).isEmpty)
         #expect(tab.splitRoot.allPanes().count == 1)
     }
+
+    // MARK: - Agent icon
+
+    @Test
+    func tab_agentIcon_prefers_focused_pane() throws {
+        let tab = TerminalTab(projectPath: "/", projectID: UUID())
+        let firstPane = try #require(tab.splitRoot.allPanes().first)
+        firstPane.applyForegroundRefresh(name: "codex", foregroundPID: 1)
+        let newID = try #require(tab.split(paneID: firstPane.id, direction: .horizontal))
+        let newPane = try #require(tab.splitRoot.findPane(id: newID))
+        newPane.applyForegroundRefresh(name: "claude", foregroundPID: 2)
+        tab.focusPane(newID)
+        #expect(tab.agentIcon == .claude)
+    }
+
+    @Test
+    func tab_agentIcon_falls_back_to_any_pane_running_an_agent() throws {
+        let tab = TerminalTab(projectPath: "/", projectID: UUID())
+        let firstPane = try #require(tab.splitRoot.allPanes().first)
+        let newID = try #require(tab.split(paneID: firstPane.id, direction: .horizontal))
+        firstPane.applyForegroundRefresh(name: "grok", foregroundPID: 1)
+        try #require(tab.splitRoot.findPane(id: newID)).applyForegroundRefresh(name: "zsh", foregroundPID: 2)
+        tab.focusPane(newID)
+        #expect(tab.agentIcon == .grok)
+    }
+
+    @Test
+    func tab_agentIcon_is_nil_when_no_agent_runs() throws {
+        let tab = TerminalTab(projectPath: "/", projectID: UUID())
+        try #require(tab.splitRoot.allPanes().first).applyForegroundRefresh(name: "zsh", foregroundPID: 1)
+        #expect(tab.agentIcon == nil)
+    }
 }

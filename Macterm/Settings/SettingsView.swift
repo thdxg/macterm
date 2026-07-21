@@ -236,6 +236,7 @@ private struct AppearanceSettings: View {
     // not `@AppStorage`, which would bind to the banned `UserDefaults.standard`.
     @State private var projectIconSymbol: String = Preferences.shared.projectIconSymbol
     @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
+    @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
@@ -367,6 +368,14 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
+
+                Toggle("Show AI agent icons", isOn: $showAgentIcons)
+                    .onChange(of: showAgentIcons) { _, v in
+                        Preferences.shared.showAgentIcons = v
+                    }
+                Text("Replace a tab's icon with the logo of the AI agent running in it (Claude Code, Codex, Gemini…).")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
                 Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
                     .onChange(of: showTabStatusIndicator) { _, v in
