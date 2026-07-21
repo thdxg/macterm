@@ -3,6 +3,7 @@ import AppKit
 @testable import Macterm
 import Testing
 
+@MainActor
 struct AdaptiveTerminalBackgroundTests {
     private func pixel(_ red: UInt8, _ green: UInt8, _ blue: UInt8, _ alpha: UInt8 = 255)
         -> AdaptiveTerminalBackgroundDetector.Pixel

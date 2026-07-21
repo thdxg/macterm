@@ -230,6 +230,9 @@ struct WorkspaceView: View {
                 onCommandFinished: { paneID in
                     appState.acknowledgeFinishedCommandIfActive(paneID: paneID, projectID: project.id)
                 },
+                onAdaptiveBackgroundChange: { paneID, color in
+                    appState.setAdaptiveBackgroundColor(color, paneID: paneID, projectID: project.id)
+                },
                 onToggleZoom: { tab.toggleZoom(paneID: $0) },
                 onMovePane: { source, destination, zone in
                     if tab.movePane(source, onto: destination, zone: zone) {

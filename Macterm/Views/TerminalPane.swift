@@ -9,6 +9,7 @@ struct TerminalPane: View {
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
+    let onAdaptiveBackgroundChange: (CGColor?) -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
 
@@ -42,6 +43,7 @@ struct TerminalPane: View {
                 onFocus: onFocus,
                 onProcessExit: onProcessExit,
                 onCommandFinished: onCommandFinished,
+                onAdaptiveBackgroundChange: onAdaptiveBackgroundChange,
                 onSplitRequest: onSplitRequest,
                 onZoomRequest: onZoomRequest
             )
@@ -65,6 +67,7 @@ private struct TerminalSurface: NSViewRepresentable {
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
+    let onAdaptiveBackgroundChange: (CGColor?) -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
 
@@ -236,10 +239,9 @@ private struct TerminalSurface: NSViewRepresentable {
             guard let view else { return }
             AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)
         }
-        view.onAdaptiveBackgroundChange = { [weak pane] color in
+        view.onAdaptiveBackgroundChange = { color in
             let resolved = color?.usingColorSpace(.sRGB)?.cgColor
-            guard pane?.adaptiveBackgroundColor != resolved else { return }
-            pane?.adaptiveBackgroundColor = resolved
+            onAdaptiveBackgroundChange(resolved)
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }

@@ -1350,6 +1350,18 @@ final class AppState {
         workspaces[projectID]?.activeTab?.focusPane(paneID)
     }
 
+    /// Publish presentation-only renderer state through the workspace owner.
+    /// The color is transient and therefore does not trigger persistence.
+    func setAdaptiveBackgroundColor(_ color: CGColor?, paneID: UUID, projectID: UUID) {
+        guard let pane = workspaces[projectID]?.tabs
+            .lazy
+            .compactMap({ $0.splitRoot.findPane(id: paneID) })
+            .first,
+            pane.adaptiveBackgroundColor != color
+        else { return }
+        pane.adaptiveBackgroundColor = color
+    }
+
     func navigateToPane(_ paneID: UUID, projectID: UUID) {
         guard workspaces[projectID] != nil else {
             NSApp.activate()

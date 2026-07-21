@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 @testable import Macterm
 import Testing
@@ -56,6 +57,20 @@ struct AppStateTests {
         tab.focusedPaneID = nil
         state.splitPane(direction: .horizontal, projectID: p.id)
         #expect(tab.splitRoot.allPanes().count == 1)
+    }
+
+    @Test
+    func adaptiveBackgroundColor_updatesOwnedPaneOnly() throws {
+        let state = makeAppState()
+        let project = seedProject(state)
+        let pane = try #require(state.workspaces[project.id]?.activeTab?.focusedPane)
+        let color = CGColor(red: 0.1, green: 0.2, blue: 0.3, alpha: 1)
+
+        state.setAdaptiveBackgroundColor(color, paneID: pane.id, projectID: project.id)
+        #expect(pane.adaptiveBackgroundColor == color)
+
+        state.setAdaptiveBackgroundColor(nil, paneID: UUID(), projectID: project.id)
+        #expect(pane.adaptiveBackgroundColor == color)
     }
 
     // MARK: - Close pane
