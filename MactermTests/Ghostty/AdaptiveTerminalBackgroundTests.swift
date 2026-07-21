@@ -138,12 +138,28 @@ struct AdaptiveTerminalBackgroundTests {
     }
 
     @Test
-    func singlePaneColorBelongsToTheWindow() throws {
+    func stabilizerSeededWithRememberedColorTreatsItAsCurrent() {
+        let remembered = NSColor(srgbRed: 0.08, green: 0.09, blue: 0.12, alpha: 1)
+        var stabilizer = AdaptiveTerminalBackgroundStabilizer(seededWith: remembered)
+
+        // Re-observing the remembered color is a no-op (no re-detection flash)…
+        #expect(stabilizer.observe(remembered) == nil)
+        #expect(!stabilizer.hasPendingObservation)
+
+        // …while a TUI that exited off-screen still clears via two observations.
+        #expect(stabilizer.observe(nil) == nil)
+        #expect(stabilizer.observe(nil) == .clear)
+    }
+
+    @Test
+    func singlePaneColorTintsTheWindowAndFillsItsOwnPane() throws {
         let color = NSColor(srgbRed: 0.2, green: 0.3, blue: 0.4, alpha: 1)
 
         let window = try #require(AdaptiveTerminalBackgroundPresentation.windowColor(for: [color]))
         #expect(window.isVisuallyEqual(to: color))
-        #expect(AdaptiveTerminalBackgroundPresentation.paneColors(for: [color]) == [nil])
+        // The pane fill stays opaque even when the window tint is translucent,
+        // so the padding around the TUI shows no seam.
+        #expect(AdaptiveTerminalBackgroundPresentation.paneColors(for: [color]) == [color])
     }
 
     @Test

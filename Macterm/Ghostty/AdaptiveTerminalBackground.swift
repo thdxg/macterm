@@ -135,6 +135,14 @@ struct AdaptiveTerminalBackgroundStabilizer {
     private var current: Token = .clear
     private var pending: Token?
 
+    init() {}
+
+    /// Start from a previously confirmed color (e.g. remembered across a
+    /// pane's occlusion) so re-observing it is a no-op rather than a change.
+    init(seededWith color: NSColor?) {
+        current = Token(color)
+    }
+
     var hasPendingObservation: Bool { pending != nil }
 
     mutating func reset(to color: NSColor?) {
@@ -168,10 +176,11 @@ enum AdaptiveTerminalBackgroundPresentation {
         paneColors.count == 1 ? paneColors[0] : nil
     }
 
+    /// Every detected color also fills its own pane opaquely — including a
+    /// lone pane. The window-wide tint follows the user's window opacity, so
+    /// on a translucent window it alone would leave a visible seam between
+    /// the TUI's opaque pixels and the pane padding around them.
     static func paneColors(for paneColors: [NSColor?]) -> [NSColor?] {
-        guard paneColors.count > 1 else {
-            return Array(repeating: nil, count: paneColors.count)
-        }
-        return paneColors
+        paneColors
     }
 }

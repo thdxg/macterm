@@ -39,8 +39,12 @@ final class AdaptiveTerminalChrome {
         GhosttyApp.shared.adoptAdaptiveBackgroundColor(nil)
     }
 
-    func focusDidChange(to view: GhosttyTerminalNSView) {
-        guard shouldHandleEvent(from: view) else { return }
+    /// Focus changes accompany tab switches, where the view may not be
+    /// attached to its window yet mid-transition — so this cannot demand
+    /// visibility the way render events do. `sampleVisiblePanes` re-derives
+    /// the eligible set when the timer fires, one run-loop turn later.
+    func focusDidChange(to _: GhosttyTerminalNSView) {
+        guard Preferences.shared.adaptiveTerminalChromeEnabled else { return }
         startMonitoring()
         scheduleSample(delay: 0)
     }
@@ -71,7 +75,13 @@ final class AdaptiveTerminalChrome {
     }
 
     private func scheduleSample(delay: TimeInterval) {
-        guard sampleTimer == nil else { return }
+        if let sampleTimer {
+            // A tab switch asking for an immediate sample must not wait out a
+            // longer render-debounce timer that is already pending.
+            guard sampleTimer.fireDate > Date().addingTimeInterval(delay) else { return }
+            sampleTimer.invalidate()
+            self.sampleTimer = nil
+        }
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.sampleTimer = nil
@@ -118,7 +128,12 @@ final class AdaptiveTerminalChrome {
     /// observation and needs the short verification sample.
     private func sample(_ view: GhosttyTerminalNSView) -> Bool {
         let id = ObjectIdentifier(view)
-        var stabilizer = stabilizers[id] ?? AdaptiveTerminalBackgroundStabilizer()
+        // A pane returning from an occluded tab keeps its remembered color, so
+        // seed the fresh stabilizer with it: re-observing the same color is a
+        // no-op instead of a pending change, while a TUI that exited off-screen
+        // still clears through the normal two-observation path.
+        var stabilizer = stabilizers[id]
+            ?? AdaptiveTerminalBackgroundStabilizer(seededWith: view.sampledDominantBackgroundColor)
 
         if let reported = effectiveCandidate(view.reportedBackgroundColor) {
             stabilizer.reset(to: reported)
@@ -209,12 +224,13 @@ final class AdaptiveTerminalChrome {
         return color.distance(to: GhosttyApp.shared.backgroundColor) >= 0.04 ? color : nil
     }
 
+    /// Drops only the stabilizers of panes that left the monitored set. Their
+    /// remembered colors and pane fills survive occlusion on purpose: a
+    /// revisited tab presents its TUI background immediately instead of
+    /// flashing the configured theme while detection restarts from zero.
     private func pruneState(keeping views: [GhosttyTerminalNSView]) {
         let active = Set(views.map(ObjectIdentifier.init))
         stabilizers = stabilizers.filter { active.contains($0.key) }
-        for view in GhosttyTerminalNSView.allLiveViews() where !active.contains(ObjectIdentifier(view)) {
-            clearPresentation(of: view)
-        }
     }
 
     private func clearPresentation(of view: GhosttyTerminalNSView) {
