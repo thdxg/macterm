@@ -249,8 +249,10 @@ private struct AppColorScheme: ViewModifier {
         // Read the shared @Observable singleton directly — @State bought
         // nothing here (it doesn't own the object; read-tracking comes from
         // reading `configVersion`) and misleadingly implied view-local ownership.
+        // Deliberately NOT tracking `adaptiveBackgroundColor`: the app-wide
+        // scheme must never follow the transient TUI tint (see
+        // `MactermTheme.colorScheme`).
         _ = GhosttyApp.shared.configVersion
-        _ = GhosttyApp.shared.adaptiveBackgroundColor
         return content.preferredColorScheme(MactermTheme.colorScheme)
     }
 }

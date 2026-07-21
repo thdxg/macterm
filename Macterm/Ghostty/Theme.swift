@@ -92,9 +92,16 @@ enum MactermTheme {
         colorScheme == .light ? fgAlpha(opacity) : Color.black.opacity(opacity)
     }
 
+    /// Scene-level light/dark scheme. Follows ONLY the resolved config theme,
+    /// never the transient adaptive tint: `.preferredColorScheme` applies to
+    /// every scene — including the Settings window — and flapping it at
+    /// runtime destabilizes SwiftUI's window management (the closed Settings
+    /// window reopens on app activation, and the WindowGroup window loses the
+    /// cached identity that gates every hotkey). In-window chrome adapts
+    /// through `nsBg`/`nsFg` instead, which are window-scoped.
     @MainActor
     static var colorScheme: ColorScheme {
-        nsBg.prefersDarkForeground ? .light : .dark
+        GhosttyApp.shared.backgroundColor.prefersDarkForeground ? .light : .dark
     }
 
     @MainActor
