@@ -15,8 +15,9 @@ struct ThemeTests {
         let configScheme = MactermTheme.colorScheme
         let opposite: NSColor = configScheme == .dark ? .white : .black
 
+        let previous = GhosttyApp.shared.adaptiveBackgroundColor
         GhosttyApp.shared.adoptAdaptiveBackgroundColor(opposite)
-        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(nil) }
+        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous) }
 
         // The in-window chrome color follows the tint…
         #expect(MactermTheme.nsBg.isVisuallyEqual(to: opposite))
