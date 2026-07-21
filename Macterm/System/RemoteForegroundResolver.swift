@@ -23,6 +23,11 @@ final class RemoteForegroundResolver {
     private var inflight: Set<String> = []
     private var lastProbeAt: [String: Date] = [:]
 
+    /// True when no probe `Task` is outstanding. Read by tests to wait for a
+    /// probe to complete deterministically — including the failure path, whose
+    /// only effect is *not* changing a name, so there's no state edge to poll.
+    var isIdle: Bool { inflight.isEmpty }
+
     init(minInterval: TimeInterval = 3) {
         self.minInterval = minInterval
     }

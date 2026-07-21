@@ -8,11 +8,26 @@ struct RemoteForegroundResolverTests {
         Pane(projectPath: "\(host):~/dev/api", projectID: UUID())
     }
 
-    /// Let the resolver's fire-and-forget apply Task run.
-    private func flush() async {
-        for _ in 0 ..< 4 {
-            await Task.yield()
+    /// Wait for the resolver's fire-and-forget apply `Task` to reach the state
+    /// `condition` describes, sleeping between polls until it holds. A fixed
+    /// yield count is racy — 4 yields is enough on an idle machine but not on a
+    /// loaded CI runner, where the child `Task`'s `await probe(...)` may not
+    /// have resumed yet (this was the #180 flake). We *sleep* rather than
+    /// `Task.yield()` because a tight yield loop on `@MainActor` never lets the
+    /// clock advance, so it would starve a timer-based continuation; sleeping
+    /// hands the actor back long enough for pending work to run. Polling adapts
+    /// to scheduling latency; the ~2s ceiling keeps a genuine regression
+    /// failing fast instead of hanging the suite.
+    private func waitUntil(
+        _ condition: () -> Bool,
+        _ comment: Comment? = nil,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
+        for _ in 0 ..< 2000 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(1))
         }
+        #expect(condition(), comment, sourceLocation: sourceLocation)
     }
 
     // MARK: - Probe output parsing
@@ -48,12 +63,10 @@ struct RemoteForegroundResolverTests {
 
         resolver.refresh(panes: panes, probe: probe, now: t0)
         resolver.refresh(panes: panes, probe: probe, now: t0.addingTimeInterval(1))
-        await flush()
-        #expect(calls.value == ["devbox"])
+        await waitUntil { calls.value == ["devbox"] }
 
         resolver.refresh(panes: panes, probe: probe, now: t0.addingTimeInterval(4))
-        await flush()
-        #expect(calls.value == ["devbox", "devbox"])
+        await waitUntil { calls.value == ["devbox", "devbox"] }
     }
 
     @Test
@@ -64,8 +77,7 @@ struct RemoteForegroundResolverTests {
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
             return [:]
         })
-        await flush()
-        #expect(Set(calls.value) == ["alpha", "beta"])
+        await waitUntil { Set(calls.value) == ["alpha", "beta"] }
     }
 
     // MARK: - Name application
@@ -76,8 +88,7 @@ struct RemoteForegroundResolverTests {
         let resolver = RemoteForegroundResolver(minInterval: 0)
         let session = pane.sessionName
         resolver.refresh(panes: [pane], probe: { _, _ in [session: "btop"] })
-        await flush()
-        #expect(pane.foregroundProcessName == "btop")
+        await waitUntil { pane.foregroundProcessName == "btop" }
     }
 
     @Test
@@ -86,7 +97,9 @@ struct RemoteForegroundResolverTests {
         pane.applyRemoteForegroundName("btop")
         let resolver = RemoteForegroundResolver(minInterval: 0)
         resolver.refresh(panes: [pane], probe: { _, _ in nil })
-        await flush()
+        // The failure path changes no name, so there's no state edge to poll —
+        // wait for the probe Task to finish, then assert the name held.
+        await waitUntil { resolver.isIdle }
         // Silent degradation: the name froze instead of flapping to nil.
         #expect(pane.foregroundProcessName == "btop")
     }
