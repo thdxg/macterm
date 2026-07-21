@@ -65,6 +65,9 @@ struct MainWindow: View {
         .sheet(isPresented: $appState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }
+        .onAppear {
+            AdaptiveTerminalChrome.shared.mainWindowDidAppear()
+        }
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)

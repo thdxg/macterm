@@ -249,9 +249,48 @@ private struct AppearanceSettings: View {
     private var liquidGlassStyle: WindowGlassStyle = Preferences.shared.windowGlassStyle
     @State
     private var paneDimOpacity: Double = Preferences.shared.paneDimOpacity
+    @State
+    private var adaptiveTerminalChrome: Bool = Preferences.shared.adaptiveTerminalChromeEnabled
+    @State
+    private var terminalBackgroundSource: TerminalBackgroundSource = Preferences.shared.terminalBackgroundSource
+    @State
+    private var terminalBackgroundColor: Color = .init(
+        nsColor: Preferences.shared.terminalBackgroundOverrideColor.nsColor
+    )
 
     var body: some View {
         Form {
+            Section("Terminal") {
+                Picker("Background", selection: $terminalBackgroundSource) {
+                    ForEach(TerminalBackgroundSource.allCases) { source in
+                        Text(source.displayName).tag(source)
+                    }
+                }
+                .onChange(of: terminalBackgroundSource) { _, source in
+                    Preferences.shared.terminalBackgroundSource = source
+                }
+
+                if terminalBackgroundSource == .custom {
+                    ColorPicker("Custom color", selection: $terminalBackgroundColor, supportsOpacity: false)
+                        .onChange(of: terminalBackgroundColor) { _, color in
+                            guard let value = TerminalBackgroundColor(nsColor: NSColor(color)) else { return }
+                            Preferences.shared.terminalBackgroundOverrideColor = value
+                        }
+                }
+
+                Text(terminalBackgroundFootnote)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                Toggle("Match full-screen app backgrounds", isOn: $adaptiveTerminalChrome)
+                    .onChange(of: adaptiveTerminalChrome) { _, enabled in
+                        Preferences.shared.adaptiveTerminalChromeEnabled = enabled
+                    }
+                Text("Matches the whole window for a single pane; in a split, only each full-screen app's pane changes color.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Window") {
                 HStack {
                     Text("Background opacity")
@@ -394,6 +433,15 @@ private struct AppearanceSettings: View {
             return "Liquid Glass uses the macOS material (blur slider ignored). Regular is frostier; Clear is more transparent."
         }
         return "Set blur to 0 to disable."
+    }
+
+    private var terminalBackgroundFootnote: String {
+        switch terminalBackgroundSource {
+        case .ghosttyConfig:
+            "Uses the background resolved from your Ghostty theme and config."
+        case .custom:
+            "Overrides Ghostty's background and chooses black or white default text for clear contrast."
+        }
     }
 
     @ViewBuilder

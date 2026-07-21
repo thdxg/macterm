@@ -35,6 +35,10 @@ final class GhosttyApp {
     /// light side. Nil until the first surface reports its config.
     @ObservationIgnored
     private var resolvedColors: ResolvedColors?
+    /// Opt-in window-wide background inferred from a lone visible terminal
+    /// pane. Split-pane colors stay local to their panes, so nil also means
+    /// window chrome continues to use the configured Ghostty theme.
+    private(set) var adaptiveBackgroundColor: NSColor?
     /// Memoized `resolvedThemeColors()`, keyed on the `configVersion` it was
     /// computed for. Without this, every color accessor re-reads THREE files
     /// (defaults + user config + theme) and re-runs `ThemeResolver` — and
@@ -269,6 +273,10 @@ final class GhosttyApp {
         if let rgb = resolvedColors?.background { return nsColor(rgb) }
         if let hex = resolvedThemeColors()?.background, let c = nsColor(fromHex: hex) { return c }
         return configColor("background") ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1)
+    }
+
+    var effectiveBackgroundColor: NSColor {
+        adaptiveBackgroundColor ?? backgroundColor
     }
 
     var foregroundColor: NSColor {
@@ -507,6 +515,18 @@ final class GhosttyApp {
         guard resolvedColors != colors else { return }
         resolvedColors = colors
         configVersion += 1
+        NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
+    }
+
+    /// Update the temporary chrome tint without touching libghostty's config.
+    /// The terminal renderer remains authoritative for its own pixels; this
+    /// only brings the native window surfaces into visual alignment.
+    func adoptAdaptiveBackgroundColor(_ color: NSColor?) {
+        if let current = adaptiveBackgroundColor, let color, current.isVisuallyEqual(to: color) {
+            return
+        }
+        guard adaptiveBackgroundColor != nil || color != nil else { return }
+        adaptiveBackgroundColor = color
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
     }
 

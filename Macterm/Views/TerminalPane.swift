@@ -46,6 +46,11 @@ struct TerminalPane: View {
                 onZoomRequest: onZoomRequest
             )
         }
+        .background {
+            if let color = pane.adaptiveBackgroundColor {
+                Color(cgColor: color)
+            }
+        }
     }
 }
 
@@ -89,6 +94,7 @@ private struct TerminalSurface: NSViewRepresentable {
                 view.createSurface()
             }
             if focused {
+                AdaptiveTerminalChrome.shared.focusDidChange(to: view)
                 FocusRestoration.restoreFocus(to: pane.id, finder: { pane }, in: view.window)
             }
         }
@@ -110,6 +116,7 @@ private struct TerminalSurface: NSViewRepresentable {
         context.coordinator.wasFocused = focused
         view.isFocused = focused
         if focused, !wasFocused {
+            AdaptiveTerminalChrome.shared.focusDidChange(to: view)
             view.notifySurfaceFocused()
             FocusRestoration.restoreFocus(to: pane.id, finder: { [pane] in pane }, in: view.window)
         } else if !focused, wasFocused {
@@ -193,7 +200,10 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.refreshForegroundProcess()
             pane.markTerminalActivity()
         }
-        view.onTerminalRender = { [weak pane] in
+        view.onTerminalRender = { [weak pane, weak view] in
+            if let view {
+                AdaptiveTerminalChrome.shared.terminalDidRender(view)
+            }
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
             // Renders also happen for prompt redraws and input echo. Use them to
             // keep an already-detected command active (including in-place
@@ -204,6 +214,15 @@ private struct TerminalSurface: NSViewRepresentable {
             if pane.executionState == .running {
                 pane.markTerminalActivity()
             }
+        }
+        view.onBackgroundColorChange = { [weak view] color in
+            guard let view else { return }
+            AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)
+        }
+        view.onAdaptiveBackgroundChange = { [weak pane] color in
+            let resolved = color?.usingColorSpace(.sRGB)?.cgColor
+            guard pane?.adaptiveBackgroundColor != resolved else { return }
+            pane?.adaptiveBackgroundColor = resolved
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }

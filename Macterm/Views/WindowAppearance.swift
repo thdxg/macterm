@@ -182,7 +182,7 @@ enum WindowAppearance {
     static func sync(window: NSWindow) {
         let opacity = Preferences.shared.windowOpacity
         let blurRadius = Preferences.shared.windowBlurRadius
-        let bg = GhosttyApp.shared.backgroundColor
+        let bg = MactermTheme.nsBg
         let isTransparent = opacity < 1.0
 
         // Native fullscreen draws its own opaque grey background; widgets show
@@ -253,7 +253,7 @@ enum WindowAppearance {
         guard glassSupported else { return }
         if #available(macOS 26.0, *) {
             guard let glass = existingGlass(in: window) else { return }
-            glass.updateKeyStatus(window.isKeyWindow, backgroundColor: GhosttyApp.shared.backgroundColor)
+            glass.updateKeyStatus(window.isKeyWindow, backgroundColor: MactermTheme.nsBg)
         }
     }
 

@@ -329,6 +329,10 @@ final class Pane: Identifiable {
     private var programTitlePID: pid_t?
 
     let searchState = TerminalSearchState()
+    /// Temporary full-pane fill used when a TUI owns this leaf's background in
+    /// a split. It is presentation-only, never persisted, and intentionally a
+    /// CGColor so the model remains independent of AppKit and SwiftUI.
+    var adaptiveBackgroundColor: CGColor?
     var executionState: TerminalExecutionState = .idle {
         didSet {
             guard executionState != oldValue else { return }
@@ -630,6 +634,8 @@ final class Pane: Identifiable {
         view.onProgressFinished = nil
         view.onTerminalActivity = nil
         view.onTerminalRender = nil
+        view.onBackgroundColorChange = nil
+        view.onAdaptiveBackgroundChange = nil
         view.onScrollbarUpdate = nil
         view.onScrollWheel = nil
         view.destroySurface()

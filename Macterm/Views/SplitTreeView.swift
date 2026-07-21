@@ -134,10 +134,11 @@ private struct SplitLeafView: View {
                 onZoomRequest: onZoomRequest
             )
             .overlay {
-                if !isFocused, isSplit {
+                if !isFocused, isSplit, pane.adaptiveBackgroundColor == nil {
                     // Theme-derived dim (not fixed black) so an unfocused pane
                     // dims correctly on light themes too, at the user-configured
-                    // opacity (#156).
+                    // opacity (#156). A pane whose TUI supplies its own adaptive
+                    // background stays color-accurate even while unfocused.
                     MactermTheme.dimOverlay(opacity: Preferences.shared.paneDimOpacity)
                         .allowsHitTesting(false)
                 }

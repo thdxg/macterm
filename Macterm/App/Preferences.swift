@@ -37,10 +37,10 @@ enum WindowGlassStyle: String, CaseIterable, Identifiable {
 
 /// Single observable source of truth for UserDefaults-backed preferences.
 ///
-/// Macterm only stores app-shaped state here (window opacity/blur, quick
-/// terminal, hotkeys, etc.). Anything that's a ghostty config setting lives
-/// in the user's Ghostty config instead — see `MactermConfig` for the wrapper
-/// files Macterm generates around it.
+/// Macterm primarily stores app-shaped state here (window opacity/blur, quick
+/// terminal, hotkeys, etc.). The optional terminal-background override is the
+/// one user-requested Ghostty setting Macterm owns; `MactermConfig` writes it
+/// into the last-wins wrapper only while that mode is selected.
 @MainActor @Observable
 final class Preferences {
     static let shared = Preferences(defaults: defaults)
@@ -213,7 +213,43 @@ final class Preferences {
         }
     }
 
+    /// Match an opaque color painted across most of a terminal surface. A lone
+    /// pane may tint the window; split panes are adapted independently. Off by
+    /// default: the user's Ghostty theme remains the source of truth unless
+    /// they explicitly opt in.
+    var adaptiveTerminalChromeEnabled: Bool {
+        didSet {
+            defaults.set(adaptiveTerminalChromeEnabled, forKey: Keys.adaptiveTerminalChromeEnabled)
+            if adaptiveTerminalChromeEnabled {
+                AdaptiveTerminalChrome.shared.preferenceDidEnable()
+            } else {
+                AdaptiveTerminalChrome.shared.preferenceDidDisable()
+            }
+            notifyWindowAppearanceChanged()
+        }
+    }
+
     // MARK: - Ghostty config
+
+    /// Keep the user's Ghostty background as the source of truth, or replace
+    /// it with Macterm's persisted custom color in the last-wins config layer.
+    var terminalBackgroundSource: TerminalBackgroundSource {
+        didSet {
+            defaults.set(terminalBackgroundSource.rawValue, forKey: Keys.terminalBackgroundSource)
+            notifyConfigChanged()
+        }
+    }
+
+    /// The remembered override color. It remains persisted when Ghostty config
+    /// mode is selected so switching away and back does not discard the user's
+    /// choice. Color-picker updates are debounced to avoid reloading every live
+    /// terminal surface for every intermediate drag event.
+    var terminalBackgroundOverrideColor: TerminalBackgroundColor {
+        didSet {
+            defaults.set(terminalBackgroundOverrideColor.hex, forKey: Keys.terminalBackgroundOverrideColor)
+            scheduleConfigChanged()
+        }
+    }
 
     /// Path to the user's Ghostty config. Empty string = don't load any user
     /// config (Macterm-defaults only). Tilde-expand via
@@ -239,8 +275,19 @@ final class Preferences {
     /// Window-level appearance + libghostty reload. Both happen on the same
     /// notification so the renderer and the window chrome stay in sync.
     private func notifyConfigChanged() {
+        pendingConfigReload?.cancel()
+        pendingConfigReload = nil
         MactermConfig.shared.regenerate()
         GhosttyApp.shared.reloadConfig()
+    }
+
+    private func scheduleConfigChanged() {
+        pendingConfigReload?.cancel()
+        pendingConfigReload = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            self?.notifyConfigChanged()
+        }
     }
 
     /// Notify observers that a WINDOW-APPEARANCE pref (opacity/blur/glass)
@@ -306,6 +353,7 @@ final class Preferences {
     }
 
     private let defaults: UserDefaults
+    @ObservationIgnored private var pendingConfigReload: Task<Void, Never>?
 
     private init(defaults: UserDefaults) {
         self.defaults = defaults
@@ -320,6 +368,11 @@ final class Preferences {
         windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
         windowGlassStyle = (defaults.string(forKey: Keys.windowGlassStyle))
             .flatMap(WindowGlassStyle.init(rawValue:)) ?? .regular
+        adaptiveTerminalChromeEnabled = defaults.object(forKey: Keys.adaptiveTerminalChromeEnabled) as? Bool ?? false
+        terminalBackgroundSource = defaults.string(forKey: Keys.terminalBackgroundSource)
+            .flatMap(TerminalBackgroundSource.init(rawValue:)) ?? .ghosttyConfig
+        terminalBackgroundOverrideColor = defaults.string(forKey: Keys.terminalBackgroundOverrideColor)
+            .flatMap(TerminalBackgroundColor.init(hex:)) ?? .defaultValue
         userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
         quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
@@ -375,6 +428,9 @@ final class Preferences {
         static let windowBlurRadius = "macterm.window.blurRadius"
         static let windowGlassEnabled = "macterm.window.glassEnabled"
         static let windowGlassStyle = "macterm.window.glassStyle"
+        static let adaptiveTerminalChromeEnabled = "macterm.window.adaptiveTerminalChromeEnabled"
+        static let terminalBackgroundSource = "macterm.terminal.backgroundSource"
+        static let terminalBackgroundOverrideColor = "macterm.terminal.backgroundOverrideColor"
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let quickTerminalEnabled = "macterm.quickTerminal.enabled"
         static let quickTerminalWidth = "macterm.quickTerminal.width"

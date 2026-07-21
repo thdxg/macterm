@@ -234,6 +234,7 @@ private struct AppColorScheme: ViewModifier {
         // nothing here (it doesn't own the object; read-tracking comes from
         // reading `configVersion`) and misleadingly implied view-local ownership.
         _ = GhosttyApp.shared.configVersion
+        _ = GhosttyApp.shared.adaptiveBackgroundColor
         return content.preferredColorScheme(MactermTheme.colorScheme)
     }
 }
