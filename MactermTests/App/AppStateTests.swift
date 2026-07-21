@@ -69,8 +69,15 @@ struct AppStateTests {
         state.setAdaptiveBackgroundColor(color, paneID: pane.id, projectID: project.id)
         #expect(pane.adaptiveBackgroundColor == color)
 
+        let otherProject = seedProject(state, name: "other", path: "/tmp/other")
+        state.setAdaptiveBackgroundColor(nil, paneID: pane.id, projectID: otherProject.id)
+        #expect(pane.adaptiveBackgroundColor == color)
+
         state.setAdaptiveBackgroundColor(nil, paneID: UUID(), projectID: project.id)
         #expect(pane.adaptiveBackgroundColor == color)
+
+        state.setAdaptiveBackgroundColor(nil, paneID: pane.id, projectID: project.id)
+        #expect(pane.adaptiveBackgroundColor == nil)
     }
 
     // MARK: - Close pane
