@@ -4,20 +4,20 @@ import SwiftUI
 /// All UI colors derived from the ghostty config. No hardcoded colors.
 enum MactermTheme {
     @MainActor
-    static var bg: Color { Color(nsColor: GhosttyApp.shared.backgroundColor) }
+    static var bg: Color { Color(nsColor: nsBg) }
     @MainActor
-    static var nsBg: NSColor { GhosttyApp.shared.backgroundColor }
+    static var nsBg: NSColor { GhosttyApp.shared.effectiveBackgroundColor }
     /// Background tinted by `Preferences.shared.windowOpacity`. Use for
     /// SwiftUI chrome that should follow window transparency (sidebar,
     /// palette, search bar). `bg`/`nsBg` stay opaque for callers that need
     /// a known-solid base color.
     @MainActor
     static var bgWithOpacity: Color {
-        Color(nsColor: GhosttyApp.shared.backgroundColor.withAlphaComponent(Preferences.shared.windowOpacity))
+        Color(nsColor: nsBg.withAlphaComponent(Preferences.shared.windowOpacity))
     }
 
     @MainActor
-    static var fg: Color { Color(nsColor: GhosttyApp.shared.foregroundColor) }
+    static var fg: Color { Color(nsColor: nsFg) }
     @MainActor
     static var fgMuted: Color { fgAlpha(0.65) }
     @MainActor
@@ -34,6 +34,13 @@ enum MactermTheme {
     static var accentSoft: Color { Color(nsColor: GhosttyApp.shared.accentColor.withAlphaComponent(0.1)) }
     @MainActor
     static var terminalBg: Color { bg }
+
+    @MainActor
+    static var nsFg: NSColor {
+        let preferred = GhosttyApp.shared.foregroundColor
+        guard preferred.contrastRatio(with: nsBg) < 4.5 else { return preferred }
+        return nsBg.contrastingMonochromeColor
+    }
 
     /// Semantic status colors, mapped from the ghostty terminal palette so they
     /// track the user's theme instead of the fixed system `.yellow`/`.green`.
@@ -85,16 +92,20 @@ enum MactermTheme {
         colorScheme == .light ? fgAlpha(opacity) : Color.black.opacity(opacity)
     }
 
+    /// Scene-level light/dark scheme. Follows ONLY the resolved config theme,
+    /// never the transient adaptive tint: `.preferredColorScheme` applies to
+    /// every scene — including the Settings window — and flapping it at
+    /// runtime destabilizes SwiftUI's window management (the closed Settings
+    /// window reopens on app activation, and the WindowGroup window loses the
+    /// cached identity that gates every hotkey). In-window chrome adapts
+    /// through `nsBg`/`nsFg` instead, which are window-scoped.
     @MainActor
     static var colorScheme: ColorScheme {
-        let bg = GhosttyApp.shared.backgroundColor
-        guard let srgb = bg.usingColorSpace(.sRGB) else { return .dark }
-        let luminance = 0.2126 * srgb.redComponent + 0.7152 * srgb.greenComponent + 0.0722 * srgb.blueComponent
-        return luminance > 0.5 ? .light : .dark
+        GhosttyApp.shared.backgroundColor.prefersDarkForeground ? .light : .dark
     }
 
     @MainActor
     private static func fgAlpha(_ alpha: CGFloat) -> Color {
-        Color(nsColor: GhosttyApp.shared.foregroundColor.withAlphaComponent(alpha))
+        Color(nsColor: nsFg.withAlphaComponent(alpha))
     }
 }

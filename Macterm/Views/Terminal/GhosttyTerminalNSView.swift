@@ -121,6 +121,25 @@ final class GhosttyTerminalNSView: NSView {
         onTerminalRender?()
     }
 
+    /// The most recent OSC 11 background reported by this surface. It is
+    /// stronger evidence than pixel inference and stays active until the
+    /// surface config changes or the terminal restores its configured color.
+    private(set) var reportedBackgroundColor: NSColor?
+    var sampledDominantBackgroundColor: NSColor?
+
+    func surfaceDidChangeBackgroundColor(_ color: NSColor) {
+        reportedBackgroundColor = color
+        onBackgroundColorChange?(color)
+    }
+
+    func surfaceConfigDidChange(backgroundColor: NSColor?) {
+        guard let reportedBackgroundColor,
+              backgroundColor?.isVisuallyEqual(to: reportedBackgroundColor) != true
+        else { return }
+        self.reportedBackgroundColor = nil
+        AdaptiveTerminalChrome.shared.terminalBackgroundDidReset(in: self)
+    }
+
     func surfaceDidUpdateScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
         let snapshot = ScrollbarSnapshot(total: total, offset: offset, len: len)
         if let lastScrollbarSnapshot, total > lastScrollbarSnapshot.total {
@@ -146,6 +165,8 @@ final class GhosttyTerminalNSView: NSView {
     var onProgressFinished: (() -> Void)?
     var onTerminalActivity: (() -> Void)?
     var onTerminalRender: (() -> Void)?
+    var onBackgroundColorChange: ((NSColor) -> Void)?
+    var onAdaptiveBackgroundChange: ((NSColor?) -> Void)?
     /// libghostty pushes scrollback geometry (all values in rows) whenever the
     /// viewport, scrollback size, or visible row count changes.
     /// `(total, offset, len)`: total rows including scrollback, the first
@@ -158,6 +179,11 @@ final class GhosttyTerminalNSView: NSView {
     /// false to let libghostty handle the event directly.
     var onScrollWheel: ((NSEvent) -> Bool)?
     var isFocused: Bool = false
+
+    func presentAdaptivePaneBackground(_ color: NSColor?) {
+        onAdaptiveBackgroundChange?(color)
+    }
+
     var currentPwd: String?
 
     private var lastScrollbarSnapshot: ScrollbarSnapshot?

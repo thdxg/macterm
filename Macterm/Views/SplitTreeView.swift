@@ -13,6 +13,7 @@ struct SplitTreeView: View {
     let onSplit: (UUID, SplitDirection) -> Void
     let onClosePane: (UUID) -> Void
     let onCommandFinished: (UUID) -> Void
+    let onAdaptiveBackgroundChange: (UUID, CGColor?) -> Void
     let onToggleZoom: (UUID) -> Void
     let onMovePane: @MainActor (UUID, UUID, PaneDropZone) -> Void
 
@@ -27,6 +28,7 @@ struct SplitTreeView: View {
         onSplit: @escaping (UUID, SplitDirection) -> Void,
         onClosePane: @escaping (UUID) -> Void,
         onCommandFinished: @escaping (UUID) -> Void = { _ in },
+        onAdaptiveBackgroundChange: @escaping (UUID, CGColor?) -> Void = { _, _ in },
         onToggleZoom: @escaping (UUID) -> Void = { _ in },
         onMovePane: @escaping @MainActor (UUID, UUID, PaneDropZone) -> Void = { _, _, _ in }
     ) {
@@ -40,6 +42,7 @@ struct SplitTreeView: View {
         self.onSplit = onSplit
         self.onClosePane = onClosePane
         self.onCommandFinished = onCommandFinished
+        self.onAdaptiveBackgroundChange = onAdaptiveBackgroundChange
         self.onToggleZoom = onToggleZoom
         self.onMovePane = onMovePane
     }
@@ -55,6 +58,7 @@ struct SplitTreeView: View {
                 onFocus: { onFocusPane(pane.id) },
                 onProcessExit: { onClosePane(pane.id) },
                 onCommandFinished: { onCommandFinished(pane.id) },
+                onAdaptiveBackgroundChange: { onAdaptiveBackgroundChange(pane.id, $0) },
                 onSplitRequest: { dir in onSplit(pane.id, dir) },
                 onZoomRequest: { onToggleZoom(pane.id) },
                 onMovePane: onMovePane
@@ -73,6 +77,7 @@ struct SplitTreeView: View {
                     onSplit: onSplit,
                     onClosePane: onClosePane,
                     onCommandFinished: onCommandFinished,
+                    onAdaptiveBackgroundChange: onAdaptiveBackgroundChange,
                     onToggleZoom: onToggleZoom,
                     onMovePane: onMovePane
                 )
@@ -89,6 +94,7 @@ struct SplitTreeView: View {
                     onSplit: onSplit,
                     onClosePane: onClosePane,
                     onCommandFinished: onCommandFinished,
+                    onAdaptiveBackgroundChange: onAdaptiveBackgroundChange,
                     onToggleZoom: onToggleZoom,
                     onMovePane: onMovePane
                 )
@@ -109,6 +115,7 @@ private struct SplitLeafView: View {
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
+    let onAdaptiveBackgroundChange: (CGColor?) -> Void
     let onSplitRequest: (SplitDirection) -> Void
     let onZoomRequest: () -> Void
     let onMovePane: @MainActor (UUID, UUID, PaneDropZone) -> Void
@@ -130,14 +137,16 @@ private struct SplitLeafView: View {
                 onFocus: onFocus,
                 onProcessExit: onProcessExit,
                 onCommandFinished: onCommandFinished,
+                onAdaptiveBackgroundChange: onAdaptiveBackgroundChange,
                 onSplitRequest: { dir, _ in onSplitRequest(dir) },
                 onZoomRequest: onZoomRequest
             )
             .overlay {
-                if !isFocused, isSplit {
+                if !isFocused, isSplit, pane.adaptiveBackgroundColor == nil {
                     // Theme-derived dim (not fixed black) so an unfocused pane
                     // dims correctly on light themes too, at the user-configured
-                    // opacity (#156).
+                    // opacity (#156). A pane whose TUI supplies its own adaptive
+                    // background stays color-accurate even while unfocused.
                     MactermTheme.dimOverlay(opacity: Preferences.shared.paneDimOpacity)
                         .allowsHitTesting(false)
                 }

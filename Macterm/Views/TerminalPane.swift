@@ -9,6 +9,7 @@ struct TerminalPane: View {
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
+    let onAdaptiveBackgroundChange: (CGColor?) -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
 
@@ -42,9 +43,15 @@ struct TerminalPane: View {
                 onFocus: onFocus,
                 onProcessExit: onProcessExit,
                 onCommandFinished: onCommandFinished,
+                onAdaptiveBackgroundChange: onAdaptiveBackgroundChange,
                 onSplitRequest: onSplitRequest,
                 onZoomRequest: onZoomRequest
             )
+        }
+        .background {
+            if let color = pane.adaptiveBackgroundColor {
+                Color(cgColor: color)
+            }
         }
     }
 }
@@ -60,6 +67,7 @@ private struct TerminalSurface: NSViewRepresentable {
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
+    let onAdaptiveBackgroundChange: (CGColor?) -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
 
@@ -89,6 +97,7 @@ private struct TerminalSurface: NSViewRepresentable {
                 view.createSurface()
             }
             if focused {
+                AdaptiveTerminalChrome.shared.focusDidChange(to: view)
                 FocusRestoration.restoreFocus(to: pane.id, finder: { pane }, in: view.window)
             }
         }
@@ -110,6 +119,7 @@ private struct TerminalSurface: NSViewRepresentable {
         context.coordinator.wasFocused = focused
         view.isFocused = focused
         if focused, !wasFocused {
+            AdaptiveTerminalChrome.shared.focusDidChange(to: view)
             view.notifySurfaceFocused()
             FocusRestoration.restoreFocus(to: pane.id, finder: { [pane] in pane }, in: view.window)
         } else if !focused, wasFocused {
@@ -210,7 +220,10 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.refreshForegroundProcess()
             pane.markTerminalActivity()
         }
-        view.onTerminalRender = { [weak pane] in
+        view.onTerminalRender = { [weak pane, weak view] in
+            if let view {
+                AdaptiveTerminalChrome.shared.terminalDidRender(view)
+            }
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
             // Renders also happen for prompt redraws and input echo. Use them to
             // keep an already-detected command active (including in-place
@@ -221,6 +234,14 @@ private struct TerminalSurface: NSViewRepresentable {
             if pane.executionState == .running {
                 pane.markTerminalActivity()
             }
+        }
+        view.onBackgroundColorChange = { [weak view] color in
+            guard let view else { return }
+            AdaptiveTerminalChrome.shared.terminalBackgroundDidChange(color, in: view)
+        }
+        view.onAdaptiveBackgroundChange = { color in
+            let resolved = color?.usingColorSpace(.sRGB)?.cgColor
+            onAdaptiveBackgroundChange(resolved)
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }

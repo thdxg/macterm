@@ -74,6 +74,19 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // Do not consume the action: keep libghostty's existing render path
             // unchanged, and use this only as an activity signal.
             return false
+        case GHOSTTY_ACTION_COLOR_CHANGE:
+            guard action.action.color_change.kind == GHOSTTY_ACTION_COLOR_KIND_BACKGROUND,
+                  let view = surfaceView(from: target)
+            else { return false }
+            let change = action.action.color_change
+            let color = NSColor(
+                srgbRed: CGFloat(change.r) / 255,
+                green: CGFloat(change.g) / 255,
+                blue: CGFloat(change.b) / 255,
+                alpha: 1
+            )
+            DispatchQueue.main.async { view.surfaceDidChangeBackgroundColor(color) }
+            return true
         case GHOSTTY_ACTION_RELOAD_CONFIG:
             // libghostty fires this (with soft = true) when a surface's
             // conditional state changes — notably on set_color_scheme, which
@@ -103,10 +116,22 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // plain values to the main actor. App-target changes carry no
             // surface conditional state, so only surface targets are useful.
             guard target.tag == GHOSTTY_TARGET_SURFACE,
+                  let view = surfaceView(from: target),
                   let cfg = action.action.config_change.config
             else { return false }
             let snapshot = GhosttyApp.readColors(from: cfg)
-            DispatchQueue.main.async { GhosttyApp.shared.adoptResolvedColors(snapshot) }
+            let background = snapshot.background.map {
+                NSColor(
+                    srgbRed: CGFloat($0.r) / 255,
+                    green: CGFloat($0.g) / 255,
+                    blue: CGFloat($0.b) / 255,
+                    alpha: 1
+                )
+            }
+            DispatchQueue.main.async {
+                view.surfaceConfigDidChange(backgroundColor: background)
+                GhosttyApp.shared.adoptResolvedColors(snapshot)
+            }
             return true
         default:
             return false

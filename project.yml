@@ -136,6 +136,7 @@ targets:
       - sdk: CoreText.framework
       - sdk: Foundation.framework
       - sdk: IOKit.framework
+      - sdk: IOSurface.framework
       - sdk: Metal.framework
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework
