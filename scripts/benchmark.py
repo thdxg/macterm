@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Window-state resource benchmark.
 
-Measures Macterm's CPU and memory across three window states — focused,
-open-but-unfocused, and minimized — by launching the app with the
-MACTERM_BENCHMARK=1 control hook (Macterm/App/BenchmarkControl.swift) and
-driving it with Darwin notifications (`notifyutil -p`) plus LaunchServices
-activation (`open`). Neither needs a TCC grant, so this runs on a stock CI
-runner.
+Measures Macterm's CPU and memory across an idle-focused sanity baseline plus
+two workload states — focused and unfocused, each with busy tabs on screen —
+by launching the app with the MACTERM_BENCHMARK=1 control hook
+(Macterm/App/BenchmarkControl.swift) and driving it with Darwin notifications
+(`notifyutil -p`) plus LaunchServices activation (`open`). Neither needs a TCC
+grant, so this runs on a stock CI runner. (The workload states carry the real
+signal; the near-redundant idle unfocused/minimized states were dropped to cut
+false-positive labels — fewer cells, fewer noise trips.)
 
 Per state: settle, then sample several short windows and report the
 per-metric median — each window reads the process's CPU-time delta (the
@@ -34,13 +36,23 @@ import sys
 import tempfile
 import time
 
-STATES = ("focused", "unfocused", "minimized")
-# With --workload, the same three states are re-sampled after spawning busy
-# tabs/panes via the bundled `macterm` CLI. Separate keys keep the idle
-# states comparable against pre-workload baselines: a baseline that lacks a
-# state simply shows no delta for it (first run after enabling), while
-# focused/unfocused/minimized keep their history.
-WORKLOAD_STATES = tuple(f"workload-{state}" for state in STATES)
+# The benchmark samples one idle state as a sanity baseline plus the two
+# workload states that carry the real signal — an app doing terminal work,
+# focused and unfocused. This deliberately drops the near-redundant idle
+# `unfocused`/`minimized` states and `workload-minimized`: 3 states × 4
+# metrics = 12 flag-chances instead of 24, which is the dominant lever on
+# false-positive labels (fewer independent cells → fewer noise trips). The
+# idle `focused` state stays as a coarse baseline but, being the noisiest
+# (idle CPU wanders with the runner's co-scheduling — see min_baseline), it
+# never drives a label on its own (see `cmd_report`'s ≥2-cells verdict).
+IDLE_STATES = ("focused",)
+# Sampled after spawning busy tabs/panes via the bundled `macterm` CLI. The
+# `workload-` prefix keeps them separate keys so the idle baseline stays
+# comparable against pre-workload history: a baseline lacking a state simply
+# shows no delta for it (first run after enabling).
+WORKLOAD_STATES = ("workload-focused", "workload-unfocused")
+# Every state the run samples and the report renders, in display order.
+STATES = IDLE_STATES + WORKLOAD_STATES
 NOTIFY_PREFIX = "com.thdxg.macterm.bench."
 # Runs in every workload pane: a real external child process emitting a line
 # a second — "logs trickling in" — without meaningful CPU of its own. Typed
@@ -218,13 +230,14 @@ def dump_diagnostics(out_path):
 
 
 def enter_state(app, state):
-    """Drive the window into a (possibly workload-prefixed) state."""
+    """Drive the window into a (possibly workload-prefixed) state. Full state
+    machine: `minimized` isn't in the sampled set today (see IDLE_STATES /
+    WORKLOAD_STATES) but is kept so a state can be re-added by name alone."""
     base = state.removeprefix("workload-")
     if base == "focused":
-        # The window may be minimized from the previous round; restore is
-        # idempotent when it isn't. `open` on the running bundle activates
-        # via LaunchServices (user-intent level, unlike cooperative
-        # NSApp.activate).
+        # `restore` is idempotent when the window isn't minimized; harmless to
+        # always send. `open` on the running bundle activates via
+        # LaunchServices (user-intent level, unlike cooperative NSApp.activate).
         notify("restore")
         sh(["open", app])
         notify("activate")
@@ -375,8 +388,7 @@ def cmd_run(args):
         time.sleep(args.boot_settle)
 
         results = {}
-        state_plan = list(STATES)
-        for state in state_plan:
+        for state in IDLE_STATES:
             enter_state(app, state)
             time.sleep(args.settle)
             print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
@@ -384,9 +396,9 @@ def cmd_run(args):
             print(f"  {results[state]}", flush=True)
 
         if args.workload > 0:
-            # Re-run the same three states with busy tabs on screen so the
-            # numbers reflect an app doing real terminal work, not an empty
-            # window. Spawn while restored (surfaces need a window).
+            # Re-run under busy tabs so the numbers reflect an app doing real
+            # terminal work, not an empty window. Spawn while focused (surfaces
+            # need a window).
             enter_state(app, "focused")
             spawn_workload(app, bench_env["MACTERM_BENCHMARK_DATA_DIR"], args.workload, args.out)
             time.sleep(args.boot_settle)
@@ -448,6 +460,32 @@ METRICS = (
     ("wakeups_per_s", "Wakeups/s (powermetrics)", "{:.1f}", 50.0, None),
 )
 
+# Corroboration rule for the PR LABEL — a separate, stricter gate than the
+# per-cell flag above. A single tripped cell still shows its 🔺/🔻 in the
+# table (honest raw data), but labeling the PR requires the whole set of
+# tripped cells to clear this bar. Two independent guards, because a genuine
+# resource regression perturbs several correlated metrics at once while
+# shared-runner noise trips one cell in isolation:
+#   1. at least MIN_LABEL_CELLS cells trip (a lone outlier can't label), and
+#   2. at least one tripped cell is a workload state — the regime that does
+#      real terminal work. The idle baseline is the noisiest state, so idle
+#      cells corroborate but can never carry a label by themselves.
+MIN_LABEL_CELLS = 2
+
+
+def is_workload_state(state):
+    return state.startswith("workload-")
+
+
+def should_label(entries):
+    """Whether a set of tripped cells (all same direction) warrants a PR label
+    under the corroboration rule: ≥ MIN_LABEL_CELLS cells, at least one under a
+    workload state. Empty or idle-only sets never label."""
+    return (
+        len(entries) >= MIN_LABEL_CELLS
+        and any(is_workload_state(e["state"]) for e in entries)
+    )
+
 
 def fmt(value, pattern):
     return pattern.format(value) if value is not None else "—"
@@ -500,7 +538,7 @@ def cmd_report(args):
 
     regressions, improvements = [], []
     workload_missing_baseline = False
-    for state in STATES + WORKLOAD_STATES:
+    for state in STATES:
         cur_state = current["states"].get(state, {})
         if not cur_state:
             continue  # e.g. a run without --workload
@@ -539,19 +577,39 @@ def cmd_report(args):
     ):
         if not entries:
             continue
-        lines += [
-            "",
-            f"### {'⚠️' if verdict_line == 'regressed' else '🎉'} Labeled `{label_name}`",
-            "",
-            f"This PR is labeled `{label_name}` because these metrics {verdict_line} "
-            f"by ≥{THRESHOLD_PCT}% vs {base_ref} (beyond each metric's absolute noise floor):",
-            "",
-        ]
-        lines += [
+        cell_lines = [
             f"- **{e['state']} — {e['metric']}**: "
             f"{fmt(e['base'], e['pattern'])} → {fmt(e['current'], e['pattern'])} ({e['pct']:+d}%)"
             for e in entries
         ]
+        if should_label(entries):
+            lines += [
+                "",
+                f"### {'⚠️' if verdict_line == 'regressed' else '🎉'} Labeled `{label_name}`",
+                "",
+                f"This PR is labeled `{label_name}` because ≥{MIN_LABEL_CELLS} metrics "
+                f"{verdict_line} by ≥{THRESHOLD_PCT}% vs {base_ref} (beyond each metric's "
+                "noise floor), at least one under workload:",
+                "",
+                *cell_lines,
+            ]
+        else:
+            # Cells tripped their per-cell flag (they show 🔺/🔻 in the table)
+            # but didn't clear the corroboration bar, so no label — say why, so
+            # the arrows don't look like an unexplained near-miss.
+            reason = (
+                "only one metric moved"
+                if len(entries) < MIN_LABEL_CELLS
+                else "the moves were confined to the idle baseline"
+            )
+            lines += [
+                "",
+                f"_Not labeled `{label_name}`: {reason}. A label needs "
+                f"≥{MIN_LABEL_CELLS} metrics past threshold with at least one under "
+                f"workload. Flagged cells ({verdict_line}):_",
+                "",
+                *cell_lines,
+            ]
 
     floors = ", ".join(
         f"{label.replace(' (powermetrics)', '')} ≥{floor:g}"
@@ -576,8 +634,10 @@ def cmd_report(args):
         "over a window. Runs land on different "
         f"shared runners, so treat small deltas as noise — 🔺/🔻 marks changes ≥{THRESHOLD_PCT}% "
         f"that also clear the metric's absolute noise floor ({floors}); CPU deltas off a "
-        f"noise-dominated baseline aren't flagged ({gates}). Flagged changes "
-        "add the `benchmark:regression` / `benchmark:improvement` label._",
+        f"noise-dominated baseline aren't flagged ({gates}). The `benchmark:regression` / "
+        f"`benchmark:improvement` label needs corroboration — ≥{MIN_LABEL_CELLS} flagged "
+        "metrics in the same direction, at least one under workload — so a lone noisy cell "
+        "shows its arrow here without tagging the PR._",
     ]
     if baseline is None:
         lines.append("")
@@ -592,10 +652,14 @@ def cmd_report(args):
     print("\n".join(lines))
 
     if args.verdict:
+        # The booleans drive the PR label (benchmark-report.yml reads them), so
+        # they apply the corroboration rule. The full cell lists ride along
+        # unfiltered — every flagged cell, label-worthy or not — so the report
+        # bundle keeps complete data.
         with open(args.verdict, "w") as f:
             json.dump({
-                "regression": bool(regressions),
-                "improvement": bool(improvements),
+                "regression": should_label(regressions),
+                "improvement": should_label(improvements),
                 "regressions": regressions,
                 "improvements": improvements,
             }, f, indent=2)
