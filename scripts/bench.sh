@@ -23,8 +23,9 @@ xcodebuild \
   build \
   | (xcbeautify --quiet 2>/dev/null || cat)
 
-# On top of the idle states, BENCH_WORKLOAD busy tabs (2x2 grids spawned via
-# the bundled macterm CLI) are sampled as workload-* states; 0 skips them.
+# On top of the idle focused baseline, BENCH_WORKLOAD busy tabs (2x2 grids
+# spawned via the bundled macterm CLI) are sampled as workload-* states (
+# workload-focused, workload-unfocused); 0 skips the workload states.
 #
 # Each state is observed for BENCH_SAMPLES x BENCH_SECONDS total, split into
 # that many windows whose per-metric median is reported — the median tames a
