@@ -349,10 +349,16 @@ private struct WindowStyler: NSViewRepresentable {
         }
 
         func windowDidBecomeKey(_ notification: Notification) {
+            if let window = notification.object as? NSWindow {
+                WindowAppearance.syncKeyStatus(window: window)
+            }
             swiftuiDelegate?.windowDidBecomeKey?(notification)
         }
 
         func windowDidResignKey(_ notification: Notification) {
+            if let window = notification.object as? NSWindow {
+                WindowAppearance.syncKeyStatus(window: window)
+            }
             swiftuiDelegate?.windowDidResignKey?(notification)
         }
 
