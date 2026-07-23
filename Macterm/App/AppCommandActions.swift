@@ -158,7 +158,7 @@ extension AppCommand {
             }
         case .saveLayout:
             guard let current else { return nil }
-            return { ctx.appState.saveLayoutPresentingError(current) }
+            return { ctx.appState.saveLayoutPresentingError(current, siblingProjects: ctx.projectStore.projects) }
         case .nextProject:
             return { ctx.appState.selectNextProject(projects: ctx.projectStore.projects) }
         case .previousProject:

@@ -616,7 +616,9 @@ final class AppState {
         panel.allowsMultipleSelection = false
         panel.message = "Select a project folder"
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        let project = store.findOrCreate(
+        // Always create: picking a folder that already backs a project makes a
+        // second, independent project for it, not a jump to the existing one.
+        let project = store.create(
             name: url.lastPathComponent,
             path: url.path(percentEncoded: false)
         )
@@ -1234,8 +1236,13 @@ final class AppState {
     /// the two ways a project file ever changes (the other is the user's own
     /// editor). Creates the file when none declares this path yet; realigns
     /// the filename to the current name slug when it drifted.
+    /// `siblingProjects` is the full project list, used only to detect another
+    /// project that shares this directory and filename slug (and would thus
+    /// share the same layout file). AppState doesn't own the `ProjectStore`, so
+    /// callers pass it; the default empty list keeps the shared-path check
+    /// inert for callers that don't have it (and for tests that don't care).
     @discardableResult
-    func saveLayout(project: Project) -> Error? {
+    func saveLayout(project: Project, siblingProjects: [Project] = []) -> Error? {
         logger.info("saveLayout: project=\(project.name, privacy: .public)")
         guard let ws = workspaces[project.id] else { return nil }
         do {
@@ -1245,7 +1252,13 @@ final class AppState {
                 projectName: project.name
             )
             logger.info("saveLayout succeeded: tabs=\(ws.tabs.count, privacy: .public)")
-            presentSaveConflictIfNeeded(project: project, savedTo: target)
+            // A duplicate-*file* conflict (two files declare this path) takes
+            // priority over the shared-*project* notice — both write
+            // `pendingLayoutError`, so only surface the latter when the former
+            // stayed quiet.
+            if !presentSaveConflictIfNeeded(project: project, savedTo: target) {
+                presentSharedPathConflictIfNeeded(project: project, savedTo: target, siblingProjects: siblingProjects)
+            }
             return nil
         } catch {
             logger.error("saveLayout failed: \(error, privacy: .public)")
@@ -1257,9 +1270,10 @@ final class AppState {
     /// visible notice, not just a log line: filename order decides which file
     /// `find` picks, so a duplicate (hand-authored, or an old file whose
     /// realign-delete failed) can silently shadow what was just saved.
-    private func presentSaveConflictIfNeeded(project: Project, savedTo target: URL) {
+    @discardableResult
+    private func presentSaveConflictIfNeeded(project: Project, savedTo target: URL) -> Bool {
         let matches = projectFiles.matches(forProjectPath: project.path)
-        guard matches.count > 1 else { return }
+        guard matches.count > 1 else { return false }
         let winner = matches[0].url
         // Compare by filename: names are unique within the directory, and the
         // URLs come from different constructions (`appendingPathComponent` vs
@@ -1278,11 +1292,37 @@ final class AppState {
             message: message,
             customTitle: "Layout saved with a conflict"
         )
+        return true
+    }
+
+    /// A directory can back several projects, and project files match by
+    /// `path:` — so a same-path project whose name yields the *same* filename
+    /// slug writes to the very file this save just wrote, and the last save
+    /// silently wins. Flag exactly that pair: same canonical path AND same
+    /// slug. Same path but distinct names is fine — those save to distinct
+    /// slug files (`api.yaml` / `api-staging.yaml`) and never collide.
+    private func presentSharedPathConflictIfNeeded(project: Project, savedTo target: URL, siblingProjects: [Project]) {
+        let slug = ProjectSlug.slug(from: project.name)
+        let colliding = siblingProjects.filter {
+            $0.id != project.id
+                && ProjectPath.matches($0.path, project.path)
+                && ProjectSlug.slug(from: $0.name) == slug
+        }
+        guard !colliding.isEmpty else { return }
+        let names = colliding.map { "“\($0.name)”" }.joined(separator: ", ")
+        pendingLayoutError = LayoutError(
+            verb: "save",
+            message: "\(names) share this directory and layout file "
+                + "“\(target.lastPathComponent)” with this project. Saving here overwrote their "
+                + "layout, and each save wins over the last. Give the projects distinct names to "
+                + "keep separate layout files.",
+            customTitle: "Layout file shared with another project"
+        )
     }
 
     /// `saveLayout` + error presentation, mirroring `applyLayoutPresentingError`.
-    func saveLayoutPresentingError(_ project: Project) {
-        if let error = saveLayout(project: project) {
+    func saveLayoutPresentingError(_ project: Project, siblingProjects: [Project] = []) {
+        if let error = saveLayout(project: project, siblingProjects: siblingProjects) {
             pendingLayoutError = LayoutError(verb: "save", message: error.localizedDescription)
         }
     }

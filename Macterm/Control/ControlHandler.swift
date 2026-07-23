@@ -273,7 +273,10 @@ final class ControlHandler {
             throw ControlError(code: .notFound, message: "no directory at \(canonical)")
         }
 
-        let project = projectStore.findOrCreate(
+        // Always create — `project create` is not idempotent: re-running adds a
+        // distinct project for the same directory. Scripts that want
+        // create-or-select must check `project list` (or `--select`) first.
+        let project = projectStore.create(
             name: args.name ?? (canonical as NSString).lastPathComponent,
             path: canonical
         )
@@ -575,7 +578,7 @@ final class ControlHandler {
 
     private func layoutSave(_ args: ControlArgs) throws -> ControlData {
         let project = try resolveProject(args.project)
-        if let error = appState.saveLayout(project: project) {
+        if let error = appState.saveLayout(project: project, siblingProjects: projectStore.projects) {
             throw ControlError(code: .internalError, message: error.localizedDescription)
         }
         return ControlData()

@@ -68,7 +68,9 @@ struct NewRemoteProjectSheet: View {
     private func add() {
         guard let path = composedPath else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        let project = projectStore.findOrCreate(
+        // Always create: a directory can back several projects, so a repeat
+        // host:dir here adds a distinct project rather than reusing the last.
+        let project = projectStore.create(
             name: trimmedName.isEmpty ? host.trimmingCharacters(in: .whitespaces) : trimmedName,
             path: path,
             zmxPath: trimmedZmxPath

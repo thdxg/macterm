@@ -295,6 +295,27 @@ struct AppStateTests {
         #expect(state.activeProjectID == p2.id)
     }
 
+    @Test
+    func two_projects_for_the_same_directory_get_independent_workspaces_and_sessions() throws {
+        // Removing the one-project-per-directory constraint: distinct projects
+        // may share a path yet keep wholly separate workspaces (keyed on
+        // Project.id) and non-colliding zmx sessions (per-pane hex entropy).
+        let state = makeAppState()
+        let a = seedProject(state, name: "a", path: "/tmp/shared")
+        let b = seedProject(state, name: "b", path: "/tmp/shared")
+
+        #expect(a.id != b.id)
+        let wsA = try #require(state.workspaces[a.id])
+        let wsB = try #require(state.workspaces[b.id])
+        #expect(wsA !== wsB)
+
+        // Session names differ despite the shared path: the slug matches but
+        // each pane's hex suffix comes from its own UUID.
+        let nameA = try #require(wsA.activeTab?.splitRoot.allPanes().first?.sessionName)
+        let nameB = try #require(wsB.activeTab?.splitRoot.allPanes().first?.sessionName)
+        #expect(nameA != nameB)
+    }
+
     // MARK: - Bulk removal (sidebar multi-select)
 
     @Test
@@ -791,6 +812,35 @@ struct AppStateTests {
         let state = makeAppState()
         let (project, _) = seedProjectWithDir(state)
         state.saveLayoutPresentingError(project)
+        #expect(state.pendingLayoutError == nil)
+    }
+
+    @Test
+    func save_layout_warns_when_a_same_named_project_shares_the_directory() throws {
+        // Two projects for one directory with the same name → same filename
+        // slug → the same layout file. The save silently overwrote the other's
+        // layout, so it must warn.
+        let state = makeAppState()
+        let (project, root) = seedProjectWithDir(state) // name "proj"
+        let sibling = Project(name: "proj", path: root, sortOrder: 1)
+
+        state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
+
+        let notice = try #require(state.pendingLayoutError)
+        #expect(notice.title == "Layout file shared with another project")
+        #expect(notice.message.contains("proj"))
+    }
+
+    @Test
+    func save_layout_stays_silent_when_same_dir_projects_have_distinct_names() {
+        // Same directory but different names → distinct slug files
+        // (`proj.yaml` / `other.yaml`), so there's no shared-file overwrite.
+        let state = makeAppState()
+        let (project, root) = seedProjectWithDir(state) // name "proj"
+        let sibling = Project(name: "other", path: root, sortOrder: 1)
+
+        state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
+
         #expect(state.pendingLayoutError == nil)
     }
 

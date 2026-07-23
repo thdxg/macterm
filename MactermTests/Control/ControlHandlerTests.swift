@@ -307,10 +307,11 @@ struct ControlHandlerTests {
         #expect(projectStore.projects.count == 1)
         #expect(appState.activeProjectID?.uuidString == info?.id)
 
-        // Idempotent: same path returns the existing project, adds nothing.
+        // Not idempotent (one-project-per-directory removed): the same path
+        // adds a distinct project rather than returning the existing one.
         let again = await handler.handle(request("project.create", args: ControlArgs(path: dir.path)))
-        #expect(again.data?.projects?.first?.id == info?.id)
-        #expect(projectStore.projects.count == 1)
+        #expect(again.data?.projects?.first?.id != info?.id)
+        #expect(projectStore.projects.count == 2)
     }
 
     @Test
