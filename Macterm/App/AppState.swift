@@ -163,16 +163,21 @@ final class AppState {
 
     /// Whether a pane's surface is occluded — its renderer parked by
     /// `ghostty_surface_set_occlusion`, so render/scrollbar heartbeats are
-    /// suppressed and silence says nothing about completion. Injectable for
-    /// tests. "No window" counts as occluded, which also covers panes
-    /// incubated off-screen (the incubator window is never visible).
+    /// suppressed and (absent an occlusion-independent output heartbeat,
+    /// see `Pane.hasOcclusionIndependentHeartbeat`) silence says nothing
+    /// about completion. Injectable for tests. "No window" counts as
+    /// occluded, which also covers panes incubated off-screen (the incubator
+    /// window is never visible).
     @ObservationIgnored
     var paneIsOccluded: (Pane) -> Bool = { pane in
         !(pane.nsView?.window?.occlusionState.contains(.visible) ?? false)
     }
 
-    /// Panes that were occluded on the previous poll tick, so the visible
-    /// transition can restart their quiet window before settling resumes.
+    /// Panes that were occluded on the previous poll tick (and lack an
+    /// occlusion-independent heartbeat), so the visible transition can
+    /// restart their quiet window before settling resumes. A pane that gains
+    /// the heartbeat is dropped from here immediately (see `settleIfVisible`)
+    /// so a later, unrelated occlusion edge can't replay stale bookkeeping.
     @ObservationIgnored
     private var previouslyOccludedPanes: Set<UUID> = []
 
@@ -236,8 +241,20 @@ final class AppState {
         let onEvent: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.notePollEvent() }
         }
+        let onQuietSettleDeadline: @Sendable (Notification) -> Void = { [weak self] _ in
+            // Do not route through notePollEvent: if another poll ran within
+            // 250ms, coalescing plus a fully occluded window would pause with
+            // no timer and never retry this deadline.
+            MainActor.assumeIsolated { self?.pollNow() }
+        }
         let tokens: [(NotificationCenter, NSObjectProtocol)] = [
             (center, center.addObserver(forName: .terminalPollEvent, object: nil, queue: .main, using: onEvent)),
+            (center, center.addObserver(
+                forName: .terminalQuietSettleDeadline,
+                object: nil,
+                queue: .main,
+                using: onQuietSettleDeadline
+            )),
             (center, center.addObserver(
                 forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: onEvent
             )),
@@ -415,16 +432,33 @@ final class AppState {
         }
     }
 
-    /// Quiet-settle only while the surface actually renders: an occluded pane
-    /// emits no activity heartbeats (its renderer is parked), so settling it
-    /// would misread suppressed output as completion. On the occluded→visible
-    /// edge the quiet window restarts, giving a still-running program time to
-    /// deliver heartbeats again before the settle can fire.
+    /// Quiet-settle a pane, working around the occluded renderer's silence
+    /// where necessary. A pane whose GhosttyKit build delivers
+    /// `OUTPUT_ACTIVITY` heartbeats (`hasOcclusionIndependentHeartbeat`)
+    /// proved those heartbeats reach it regardless of occlusion, so its
+    /// silence is meaningful even while occluded — settle it exactly like a
+    /// visible pane, with no skip and no fresh-window grant on de-occlusion.
+    ///
+    /// Absent that proof (older GhosttyKit, or no heartbeat has arrived yet),
+    /// fall back to the original #123 behavior: an occluded pane's renderer
+    /// is parked, so it emits no activity heartbeats at all, and settling it
+    /// would misread that suppressed output as completion. On the
+    /// occluded→visible edge the quiet window restarts, giving a still-running
+    /// program time to deliver heartbeats again before the settle can fire.
     ///
     /// Not private so tests can drive the guard directly (`paneIsOccluded` is
     /// injectable) without a live surface or mutating the `Preferences`
     /// singleton the poll reads.
     func settleIfVisible(_ pane: Pane) {
+        if pane.hasOcclusionIndependentHeartbeat {
+            // This pane's silence is trustworthy even while occluded — drop
+            // any bookkeeping from before the heartbeat proved that, so a
+            // later occlusion edge (if the flag were ever meaningful again)
+            // can't replay a stale grant.
+            previouslyOccludedPanes.remove(pane.id)
+            pane.settleTerminalActivityIfQuiet()
+            return
+        }
         if paneIsOccluded(pane) {
             previouslyOccludedPanes.insert(pane.id)
             return
@@ -1469,12 +1503,10 @@ final class AppState {
         projectID: UUID,
         saveImmediately: Bool = true
     ) -> Bool {
-        // The sidebar shows the *entire* active tab as idle (displayState masks
-        // `.done` for the tab the user is looking at), so every pane in that tab
-        // must actually be cleared — not just the focused one. Otherwise a
-        // non-focused split pane that finished a command stays `.done` under the
-        // hood, gets persisted, and reappears as a checkmark after restart even
-        // though the user saw an empty circle.
+        // Looking at the active tab acknowledges completion for the whole tab,
+        // not only its focused pane. Otherwise a non-focused split pane that
+        // finished a command stays `.done` under the hood, gets persisted, and
+        // reappears as a status dot after the user switches away or restarts.
         // Route through the injected `isAppActive` seam (not `NSApp.isActive`
         // directly): NSApp is nil during construction and unset in tests, and
         // this path is reachable from init via pollNow().

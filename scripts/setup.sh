@@ -14,11 +14,23 @@ RESOURCES_MARKER="Macterm/Resources/terminfo"
 # and downloaded here, mirroring GhosttyKit — never compiled locally (zig).
 # Embedded into the bundle at Contents/Resources/zmx/zmx by embed-zmx.sh.
 ZMX_BIN="Macterm/Resources/zmx/zmx"
+GHOSTTY_HEADER="$XCFRAMEWORK_DIR/macos-arm64_x86_64/Headers/ghostty.h"
+
+has_output_activity_action() {
+  [[ -f "$GHOSTTY_HEADER" ]] && grep -q 'GHOSTTY_ACTION_OUTPUT_ACTIVITY' "$GHOSTTY_HEADER"
+}
 
 need_xcframework=true
 need_resources=true
 need_zmx=true
-[[ -d "$XCFRAMEWORK_DIR" ]] && need_xcframework=false
+if [[ -d "$XCFRAMEWORK_DIR" ]]; then
+  if has_output_activity_action; then
+    need_xcframework=false
+  else
+    echo "Existing GhosttyKit lacks GHOSTTY_ACTION_OUTPUT_ACTIVITY; refreshing it"
+    rm -rf "$XCFRAMEWORK_DIR"
+  fi
+fi
 [[ -d "$RESOURCES_MARKER" ]] && need_resources=false
 [[ -x "$ZMX_BIN" ]] && need_zmx=false
 
@@ -37,6 +49,11 @@ if $need_xcframework; then
   gh release download "$LATEST_TAG" --pattern "GhosttyKit.xcframework.tar.gz" --repo "$FORK_REPO"
   tar xzf GhosttyKit.xcframework.tar.gz
   rm GhosttyKit.xcframework.tar.gz
+  if ! has_output_activity_action; then
+    echo "Error: GhosttyKit from $LATEST_TAG lacks GHOSTTY_ACTION_OUTPUT_ACTIVITY" >&2
+    echo "The thdxg/ghostty output-activity downstream patch must be released first." >&2
+    exit 1
+  fi
 fi
 
 # Fork-drift warning (macterm#168). The thdxg/ghostty fork ships prebuilt

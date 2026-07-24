@@ -1063,6 +1063,43 @@ struct AppStateTests {
         #expect(pane.executionState == .done)
     }
 
+    @Test
+    func occluded_pane_without_heartbeat_flag_keeps_pre_heartbeat_behavior() {
+        // A pane whose GhosttyKit build never delivered an OUTPUT_ACTIVITY
+        // heartbeat has no proof its silence is meaningful while occluded —
+        // must still skip settling and grant a fresh window on de-occlusion,
+        // exactly like `deoccluded_pane_gets_fresh_quiet_window_before_settling`.
+        let state = makeAppState()
+        let pane = quietRunningPane()
+        #expect(!pane.hasOcclusionIndependentHeartbeat)
+
+        state.paneIsOccluded = { _ in true }
+        state.settleIfVisible(pane)
+        #expect(pane.executionState == .running)
+
+        state.paneIsOccluded = { _ in false }
+        state.settleIfVisible(pane)
+        #expect(pane.executionState == .running)
+        pane.settleTerminalActivityIfQuiet(now: Date().addingTimeInterval(4))
+        #expect(pane.executionState == .done)
+    }
+
+    @Test
+    func occluded_pane_with_heartbeat_flag_settles_normally_while_occluded() {
+        // Once a pane has proven it receives occlusion-independent heartbeats,
+        // its silence is meaningful even while occluded: settle it exactly
+        // like a visible pane — no skip, no fresh-window grant needed.
+        let state = makeAppState()
+        let pane = quietRunningPane()
+        pane.markOutputActivity(totalRows: 1, now: Date().addingTimeInterval(-10))
+        #expect(pane.hasOcclusionIndependentHeartbeat)
+        #expect(pane.executionState == .running)
+
+        state.paneIsOccluded = { _ in true }
+        state.settleIfVisible(pane)
+        #expect(pane.executionState == .done)
+    }
+
     // MARK: - zmx session lifecycle on close paths
 
     /// A ZmxClient that records every killed session name. Remote kills are

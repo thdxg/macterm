@@ -198,6 +198,24 @@ struct ControlHandlerTests {
         #expect(panes?.last?.focused == true)
         #expect(panes?.allSatisfy { $0.session.hasPrefix("macterm-") } == true)
         #expect(panes?.allSatisfy { $0.cwd == project.path } == true)
+        #expect(panes?.allSatisfy { $0.state == "idle" } == true)
+    }
+
+    @Test
+    func pane_list_reports_running_and_done_states() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        appState.isAppActive = { false }
+        let pane = try #require(appState.workspaces[project.id]?.activeTab?.splitRoot.allPanes().first)
+
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        var response = await handler.handle(request("pane.list"))
+        #expect(response.data?.panes?.first?.state == "running")
+
+        pane.markCommandFinished()
+        response = await handler.handle(request("pane.list"))
+        #expect(response.data?.panes?.first?.state == "done")
     }
 
     @Test

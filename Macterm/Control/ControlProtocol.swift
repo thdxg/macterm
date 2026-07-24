@@ -244,6 +244,11 @@ struct ControlPaneInfo: Codable, Equatable {
     var process: String?
     var cwd: String?
     var focused: Bool
+    /// The tab activity indicator's underlying state: `idle`, `running`, or
+    /// `done` (finished while unfocused — the indicator scripts want to poll
+    /// for). Optional per the additive-field convention above — nil when
+    /// decoded from an older server that predates this field.
+    var state: String?
 }
 
 struct ControlSessionInfo: Codable, Equatable {

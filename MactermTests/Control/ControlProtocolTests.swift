@@ -75,6 +75,30 @@ struct ControlProtocolTests {
         #expect(decoded.command == "status")
     }
 
+    @Test
+    func pane_response_without_execution_state_remains_decodable() throws {
+        let json = #"""
+        {
+          "v": 1,
+          "id": "old",
+          "ok": true,
+          "data": {
+            "panes": [{
+              "index": 1,
+              "id": "p",
+              "session": "macterm-demo",
+              "tabIndex": 1,
+              "tabID": "t",
+              "title": "zsh",
+              "focused": true
+            }]
+          }
+        }
+        """#
+        let decoded = try ControlProtocol.decodeResponse(Data((json + "\n").utf8))
+        #expect(decoded.data?.panes?.first?.state == nil)
+    }
+
     // MARK: - New verbs (#165/#166/#167)
 
     @Test
