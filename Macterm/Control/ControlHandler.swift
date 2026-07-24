@@ -274,8 +274,9 @@ final class ControlHandler {
         }
 
         // Always create — `project create` is not idempotent: re-running adds a
-        // distinct project for the same directory. Scripts that want
-        // create-or-select must check `project list` (or `--select`) first.
+        // distinct project for the same directory. `--select` only activates
+        // the just-created project; scripts that want create-or-select must
+        // check `project list` first.
         let project = projectStore.create(
             name: args.name ?? (canonical as NSString).lastPathComponent,
             path: canonical
