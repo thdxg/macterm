@@ -8,10 +8,14 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectFileStore"
 /// directory, so hand-edits made while the app runs are honored without a
 /// file watcher (there is none by design — changes surface on next use).
 ///
-/// Matching is always by the `path:` declared *inside* a file (canonicalized
-/// via `ProjectPath`), never by filename. When two files declare the same
-/// path, the first in byte-lexicographic filename order wins; the duplicate
-/// is logged and ignored, never deleted.
+/// Matching is by the `path:` declared *inside* a file (canonicalized via
+/// `ProjectPath`), not by filename. A directory can back several projects, all
+/// declaring one path; when a caller passes the project's slug, its *own* file
+/// (the path-match whose filename `ProjectSlug.owns`) resolves — the slug is a
+/// per-project layout identity, not just a cosmetic name. Without a slug, or
+/// when none is owned (a single declaration, a hand-renamed file), the first
+/// in byte-lexicographic filename order wins; a genuine duplicate is logged and
+/// ignored, never deleted.
 @MainActor
 struct ProjectFileStore {
     let directoryURL: URL
@@ -72,14 +76,25 @@ struct ProjectFileStore {
         }
     }
 
-    /// The file declaring `projectPath` (first match wins; later duplicates
-    /// are logged). nil when no file declares that path.
-    func find(forProjectPath projectPath: String) -> ScannedFile? {
-        find(forProjectPath: projectPath, in: scan())
+    /// The file that resolves for `projectPath`. When several files declare it
+    /// (a directory backing multiple projects), `preferredSlug` picks the one
+    /// whose filename is that project's own (`ProjectSlug.owns`); without a
+    /// preference, or when none is owned (a single declaration, a hand-renamed
+    /// file, a legacy pre-slug file), the first in filename order wins. nil
+    /// when no file declares that path.
+    func find(forProjectPath projectPath: String, preferredSlug: String? = nil) -> ScannedFile? {
+        find(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scan())
     }
 
-    private func find(forProjectPath projectPath: String, in scanned: [ScannedFile]) -> ScannedFile? {
+    private func find(forProjectPath projectPath: String, preferredSlug: String?, in scanned: [ScannedFile]) -> ScannedFile? {
         let found = matches(forProjectPath: projectPath, in: scanned)
+        // A directory can back several projects; when it does, the project's
+        // own slug picks its file. This resolves cleanly (no ambiguity to log).
+        if let preferredSlug,
+           let owned = found.first(where: { ProjectSlug.owns(filename: $0.url.lastPathComponent, slug: preferredSlug) })
+        {
+            return owned
+        }
         if found.count > 1 {
             let ignored = found.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
             let winner = found[0].url.lastPathComponent
@@ -89,15 +104,16 @@ struct ProjectFileStore {
         return found.first
     }
 
-    /// Fully decode the file declaring `projectPath`. nil when no file
+    /// Fully decode the file that resolves for `projectPath` (see `find` for
+    /// how `preferredSlug` disambiguates a shared directory). nil when no file
     /// matches; throws `LayoutFileError.parse` when one matches but doesn't
     /// decode (surfaced to the user as the apply-error dialog).
-    func loadFull(forProjectPath projectPath: String) throws -> ProjectFile? {
-        try loadFull(forProjectPath: projectPath, in: scan())
+    func loadFull(forProjectPath projectPath: String, preferredSlug: String? = nil) throws -> ProjectFile? {
+        try loadFull(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scan())
     }
 
-    private func loadFull(forProjectPath projectPath: String, in scanned: [ScannedFile]) throws -> ProjectFile? {
-        guard let match = find(forProjectPath: projectPath, in: scanned) else { return nil }
+    private func loadFull(forProjectPath projectPath: String, preferredSlug: String?, in scanned: [ScannedFile]) throws -> ProjectFile? {
+        guard let match = find(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scanned) else { return nil }
         let text: String
         do {
             text = try String(contentsOf: match.url, encoding: .utf8)
@@ -121,15 +137,15 @@ struct ProjectFileStore {
         case invalid
     }
 
-    func applyState(forProjectPath projectPath: String) -> ApplyState {
+    func applyState(forProjectPath projectPath: String, preferredSlug: String? = nil) -> ApplyState {
         // Scan the directory ONCE and thread it through find + loadFull, rather
         // than re-scanning (and re-parsing every file's header) three times
         // within this single operation. Statelessness across DISTINCT
         // operations is intentional; the intra-operation rescans were waste.
         let scanned = scan()
-        guard find(forProjectPath: projectPath, in: scanned) != nil else { return .none }
+        guard find(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scanned) != nil else { return .none }
         do {
-            guard let file = try loadFull(forProjectPath: projectPath, in: scanned) else { return .none }
+            guard let file = try loadFull(forProjectPath: projectPath, preferredSlug: preferredSlug, in: scanned) else { return .none }
             return file.layoutFile == nil ? .emptyTabs : .applicable
         } catch {
             return .invalid
@@ -153,8 +169,14 @@ struct ProjectFileStore {
     /// these files are dotfile-syncable user config, and a hardcoded
     /// `/Users/<name>/…` breaks on the next machine. Returns the written URL
     /// so callers can tell whether their file is the one `find` will pick.
+    ///
+    /// `reservedSlugs` are the slugs of *other* projects backing this same
+    /// directory. Their files are off-limits: rebinding or realign-deleting one
+    /// would clobber another project's layout now that a directory can back
+    /// several projects. Empty (the default) keeps the single-project realign
+    /// behavior — the path-match is treated as this project's own file.
     @discardableResult
-    func write(_ file: ProjectFile, projectName: String) throws -> URL {
+    func write(_ file: ProjectFile, projectName: String, reservedSlugs: Set<String> = []) throws -> URL {
         var file = file
         if case .local = ProjectPath.parse(file.path) {
             file.path = ProjectPath.homeContracted(file.path)
@@ -165,9 +187,11 @@ struct ProjectFileStore {
             attributes: [.posixPermissions: 0o700]
         )
         let existing = scan()
+        // This project's own declaration is the path-match no sibling slug
+        // owns — never a sibling's file, which stays untouched.
         let bound = existing.first { scanned in
-            guard let declared = scanned.header?.path else { return false }
-            return ProjectPath.matches(declared, file.path)
+            guard let declared = scanned.header?.path, ProjectPath.matches(declared, file.path) else { return false }
+            return !reservedSlugs.contains { ProjectSlug.owns(filename: scanned.url.lastPathComponent, slug: $0) }
         }
 
         // Pick the target filename. When a file already declares this path,

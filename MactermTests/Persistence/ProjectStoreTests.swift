@@ -26,6 +26,24 @@ struct ProjectStoreTests {
     }
 
     @Test
+    func create_always_appends_even_for_a_matching_path() {
+        // Removing the one-project-per-directory constraint: `create` never
+        // dedups, so the same directory can back several independent projects.
+        let store = makeStore()
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-project-\(UUID().uuidString)", isDirectory: true)
+            .path
+        let first = store.create(name: "one", path: base)
+        let second = store.create(name: "two", path: base + "/./")
+
+        #expect(first.id != second.id)
+        #expect(store.projects.count == 2)
+        // Both normalize to the same canonical path — distinct projects, one dir.
+        #expect(store.projects.map(\.path) == [first.path, first.path])
+        #expect(store.projects.map(\.name) == ["one", "two"])
+    }
+
+    @Test
     func find_or_create_reuses_matching_remote_path() {
         let store = makeStore()
         let existing = Project(name: "api", path: "devbox:~/dev/api", sortOrder: 0)

@@ -70,11 +70,16 @@ extension ProjectFile {
     }
 }
 
-/// Filename slugs for project files. The slug is presentation only — loading
-/// never keys off it — so the rules just optimize for a browsable directory:
-/// lowercase (APFS is case-insensitive; "API" and "api" must not fight over
-/// one file), whitespace → `_`, unicode letters/digits and `-`/`_` kept,
-/// everything else stripped.
+/// Filename slugs for project files. The rules optimize for a browsable
+/// directory: lowercase (APFS is case-insensitive; "API" and "api" must not
+/// fight over one file), whitespace → `_`, unicode letters/digits and `-`/`_`
+/// kept, everything else stripped.
+///
+/// A single declaration still loads by `path:` alone regardless of filename (a
+/// hand-rename survives). But when one directory backs several projects — each
+/// declaring the same `path:` — the slug is the tiebreaker that gives each a
+/// stable layout-file identity: a project's own file is the path-match whose
+/// filename `owns` its slug (see `owns(filename:slug:)`).
 enum ProjectSlug {
     static func slug(from name: String) -> String {
         var out = ""
@@ -93,5 +98,17 @@ enum ProjectSlug {
     /// `slug.yaml`, attempt 2 `slug_2.yaml`, and so on.
     static func filename(slug: String, attempt: Int) -> String {
         attempt <= 1 ? "\(slug).yaml" : "\(slug)_\(attempt).yaml"
+    }
+
+    /// Whether `filename` is one `slug` produces: `<slug>.yaml`, or a numeric
+    /// collision variant `<slug>_N.yaml` (extension and case ignored) — the
+    /// inverse of `filename(slug:attempt:)`. Lets a lookup pick a project's own
+    /// declaration among several files that share one `path:`.
+    static func owns(filename: String, slug: String) -> Bool {
+        let base = (filename as NSString).deletingPathExtension.lowercased()
+        let slug = slug.lowercased()
+        if base == slug { return true }
+        guard base.hasPrefix(slug + "_") else { return false }
+        return Int(base.dropFirst(slug.count + 1)) != nil
     }
 }

@@ -22,11 +22,26 @@ final class ProjectStore {
         projects.first { ProjectPath.matches($0.path, path) }
     }
 
+    /// Return the first project whose path matches, else add a new one. The
+    /// create-or-select entry point for idempotent callers — the benchmark
+    /// harness (which may replay `open-project`) and any script that expects
+    /// re-running to be a no-op. Interactive project creation goes through
+    /// `create` instead, so the same directory can back several projects.
     @discardableResult
     func findOrCreate(name: String, path: String, zmxPath: String? = nil) -> Project {
         if let existing = project(matchingPath: path) {
             return existing
         }
+        return create(name: name, path: path, zmxPath: zmxPath)
+    }
+
+    /// Always add a new project, even when one already backs this directory.
+    /// A directory is not an identity: two projects may share a `path` and
+    /// keep wholly independent workspaces (keyed on `Project.id`) and zmx
+    /// sessions (named with per-pane entropy). This is the entry point for
+    /// user-initiated creation (folder picker, remote sheet, `project create`).
+    @discardableResult
+    func create(name: String, path: String, zmxPath: String? = nil) -> Project {
         let project = Project(name: name, path: path, sortOrder: projects.count, zmxPath: zmxPath)
         add(project)
         return project
