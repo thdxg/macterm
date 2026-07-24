@@ -208,11 +208,12 @@ struct ControlHandlerTests {
         appState.isAppActive = { false }
         let pane = try #require(appState.workspaces[project.id]?.activeTab?.splitRoot.allPanes().first)
 
-        pane.executionState = .running
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
         var response = await handler.handle(request("pane.list"))
         #expect(response.data?.panes?.first?.state == "running")
 
-        pane.executionState = .done
+        pane.markCommandFinished()
         response = await handler.handle(request("pane.list"))
         #expect(response.data?.panes?.first?.state == "done")
     }
