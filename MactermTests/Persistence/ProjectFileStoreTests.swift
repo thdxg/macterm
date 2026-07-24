@@ -205,4 +205,42 @@ struct ProjectFileStoreTests {
         #expect(store.find(forProjectPath: "/a")?.url.lastPathComponent == "good.yaml")
         #expect(store.scan().count == 2)
     }
+
+    // MARK: - Multiple projects per directory (per-project slug identity)
+
+    @Test
+    func owns_matches_slug_file_and_numeric_variants() {
+        #expect(ProjectSlug.owns(filename: "api.yaml", slug: "api"))
+        #expect(ProjectSlug.owns(filename: "API.YAML", slug: "api")) // extension + case ignored
+        #expect(ProjectSlug.owns(filename: "api_2.yaml", slug: "api")) // collision variant
+        #expect(!ProjectSlug.owns(filename: "api-staging.yaml", slug: "api")) // a different slug
+        #expect(!ProjectSlug.owns(filename: "api_x.yaml", slug: "api")) // "_x" is not a numeric suffix
+        #expect(!ProjectSlug.owns(filename: "web.yaml", slug: "api"))
+    }
+
+    @Test
+    func find_prefers_the_projects_own_slug_among_same_path_files() throws {
+        let store = makeStore()
+        try writeRaw(store, filename: "api.yaml", yaml: "name: api\npath: /repo")
+        try writeRaw(store, filename: "web.yaml", yaml: "name: web\npath: /repo")
+        // Path alone is ambiguous; the slug picks each project's own file.
+        #expect(store.find(forProjectPath: "/repo", preferredSlug: "api")?.url.lastPathComponent == "api.yaml")
+        #expect(store.find(forProjectPath: "/repo", preferredSlug: "web")?.url.lastPathComponent == "web.yaml")
+        // No preference (or one that matches nothing) falls back to filename order.
+        #expect(store.find(forProjectPath: "/repo")?.url.lastPathComponent == "api.yaml")
+        #expect(store.find(forProjectPath: "/repo", preferredSlug: "gone")?.url.lastPathComponent == "api.yaml")
+    }
+
+    @Test
+    func write_leaves_a_siblings_same_path_file_untouched() throws {
+        let store = makeStore()
+        // "api" already backs /repo.
+        try store.write(ProjectFile(name: "api", path: "/repo"), projectName: "api")
+        // Saving sibling "web" (a distinct project on the same directory) adds
+        // its own file rather than realign-deleting api's.
+        try store.write(ProjectFile(name: "web", path: "/repo"), projectName: "web", reservedSlugs: ["api"])
+        #expect(filenames(store) == ["api.yaml", "web.yaml"])
+        #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "api")?.name == "api")
+        #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "web")?.name == "web")
+    }
 }

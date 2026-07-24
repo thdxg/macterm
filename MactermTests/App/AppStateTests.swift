@@ -772,22 +772,21 @@ struct AppStateTests {
     // MARK: - saveLayout duplicate conflicts
 
     @Test
-    func save_layout_warns_when_a_duplicate_file_shadows_the_save() throws {
+    func save_layout_does_not_flag_a_sibling_projects_file() throws {
+        // A distinct-name sibling on the same directory owns its own file.
+        // Saving this project must neither report that file as a stray nor
+        // realign-delete it.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
-        let (project, root) = seedProjectWithDir(state)
-        // Two hand-authored duplicates. The save replaces the first (bound)
-        // one, but "bbb.yaml" survives and sorts before "proj.yaml" — so it
-        // shadows what was just saved.
-        writeProjectFile("path: \(root)", in: files, filename: "aaa.yaml")
-        writeProjectFile("path: \(root)", in: files, filename: "bbb.yaml")
+        let (project, root) = seedProjectWithDir(state) // name "proj" → proj.yaml
+        let sibling = Project(name: "other", path: root, sortOrder: 1)
+        writeProjectFile("name: other\npath: \(root)", in: files, filename: "other.yaml")
 
-        state.saveLayoutPresentingError(project)
+        state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
 
-        let notice = try #require(state.pendingLayoutError)
-        #expect(notice.title == "Layout saved with a conflict")
-        #expect(notice.message.contains("bbb.yaml"))
-        #expect(notice.message.contains("takes precedence"))
+        #expect(state.pendingLayoutError == nil)
+        #expect(files.find(forProjectPath: root, preferredSlug: "other")?.url.lastPathComponent == "other.yaml")
+        #expect(files.find(forProjectPath: root, preferredSlug: "proj")?.url.lastPathComponent == "proj.yaml")
     }
 
     @Test
@@ -842,6 +841,37 @@ struct AppStateTests {
         state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
 
         #expect(state.pendingLayoutError == nil)
+    }
+
+    @Test
+    func each_same_directory_project_saves_and_loads_its_own_layout() throws {
+        // The core guarantee of per-project layout identity: two distinct-name
+        // projects on one directory each save to and load from their own file —
+        // saving one never clobbers the other's, and neither resolves the
+        // other's on load (path alone can't tell them apart; the slug does).
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-shared-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let alpha = Project(name: "alpha", path: dir.path, sortOrder: 0)
+        let bravo = Project(name: "bravo", path: dir.path, sortOrder: 1)
+        state.selectProject(alpha)
+        state.selectProject(bravo)
+        let siblings = [alpha, bravo]
+
+        state.saveLayoutPresentingError(alpha, siblingProjects: siblings)
+        state.saveLayoutPresentingError(bravo, siblingProjects: siblings)
+
+        #expect(state.pendingLayoutError == nil)
+        // Both files coexist — saving bravo didn't realign-delete alpha's.
+        #expect(files.find(forProjectPath: dir.path, preferredSlug: "alpha")?.url.lastPathComponent == "alpha.yaml")
+        #expect(files.find(forProjectPath: dir.path, preferredSlug: "bravo")?.url.lastPathComponent == "bravo.yaml")
+        // Each resolves the file it wrote, identified by the stored name.
+        #expect(try files.loadFull(forProjectPath: dir.path, preferredSlug: "alpha")?.name == "alpha")
+        #expect(try files.loadFull(forProjectPath: dir.path, preferredSlug: "bravo")?.name == "bravo")
     }
 
     @Test

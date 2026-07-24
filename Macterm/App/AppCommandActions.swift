@@ -146,7 +146,7 @@ extension AppCommand {
             // applies (deprecated seed, #114 — an existing project's snapshot
             // suppresses the first-open import, so this is its only way in).
             guard let current else { return nil }
-            switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
+            switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
             case .applicable,
                  .invalid:
                 return { ctx.appState.applyLayoutPresentingError(current) }
@@ -195,7 +195,7 @@ extension AppCommand {
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
         else { return nil }
-        switch ctx.appState.projectFiles.applyState(forProjectPath: current.path) {
+        switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
         case .none:
             // A legacy `.macterm/layout.yaml` keeps the command enabled
             // (import-then-apply), so no hint for it.
@@ -210,18 +210,22 @@ extension AppCommand {
     }
 
     /// Secondary line for an *enabled* palette row. Only "Apply Layout" uses
-    /// it: when duplicate files declare the active project's path, filename
-    /// order silently picks one — say which, so a hand-authored duplicate
-    /// doesn't read as "my edits don't apply".
+    /// it: when several files that are *this project's own* (its slug owns the
+    /// filename) declare its path, the lookup picks one — say which, so a
+    /// hand-authored duplicate doesn't read as "my edits don't apply". A
+    /// sibling project's file on the same directory is not a duplicate and is
+    /// left out.
     @MainActor
     func paletteSubtitle(in ctx: AppCommandContext) -> String? {
         guard self == .applyLayout,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
         else { return nil }
-        let matches = ctx.appState.projectFiles.matches(forProjectPath: current.path)
-        guard matches.count > 1 else { return nil }
-        let ignored = matches.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
-        return "Using \(matches[0].url.lastPathComponent) — ignoring duplicate \(ignored)"
+        let slug = ProjectSlug.slug(from: current.name)
+        let mine = ctx.appState.projectFiles.matches(forProjectPath: current.path)
+            .filter { ProjectSlug.owns(filename: $0.url.lastPathComponent, slug: slug) }
+        guard mine.count > 1 else { return nil }
+        let ignored = mine.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
+        return "Using \(mine[0].url.lastPathComponent) — ignoring duplicate \(ignored)"
     }
 }
