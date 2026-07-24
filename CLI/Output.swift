@@ -67,6 +67,7 @@ enum Output {
                 pane.session,
                 pane.process ?? "-",
                 pane.cwd ?? "-",
+                pane.state ?? "-",
             ]
         }
         printColumns(rows)

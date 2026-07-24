@@ -46,7 +46,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
 | `tab select <tab>` | Activate a tab (`tab:3`, index, UUID, or exact title). |
 | `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. |
-| `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker. |
+| `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |
 | `pane inspect [target]` | Read-only snapshot of a pane's terminal core: grid, cell/surface pixels, scrollback totals, content scale, foreground pid + argv. Needs a live surface. |
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text — the viewport, or the full scrollback with `--scrollback`. Pipeline-friendly (text only). |
 | `pane split [--direction right\|down\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the source's cwd. `auto` picks the longer on-screen axis. |

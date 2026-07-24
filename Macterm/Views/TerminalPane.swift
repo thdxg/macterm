@@ -131,6 +131,9 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onInteraction = { [weak pane] in
             pane?.recordUserInteraction()
         }
+        view.onCommandSubmitted = { [weak pane] hasContent in
+            pane?.recordCommandSubmission(hasContent: hasContent)
+        }
         view.onProcessExit = onProcessExit
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest
@@ -210,17 +213,18 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.refreshForegroundProcess()
             pane.markTerminalActivity()
         }
-        view.onTerminalRender = { [weak pane] in
+        view.onOutputActivity = { [weak pane] total in
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
-            // Renders also happen for prompt redraws and input echo. Use them to
-            // keep an already-detected command active (including in-place
-            // spinners), but don't let a render alone start the status spinner.
-            if pane.executionState != .running {
-                pane.refreshForegroundProcess()
-            }
-            if pane.executionState == .running {
-                pane.markTerminalActivity()
-            }
+            // Output heartbeats fire from the pty IO path regardless of
+            // occlusion, so they also reach background tabs — unlike the
+            // scrollbar-growth path above, which only fires while the
+            // surface is actually rendered. Always refresh foreground/raw
+            // state first: a running canonical command can switch to a raw TUI
+            // while normal polling is paused behind a fully occluded window.
+            // The heartbeat is throttled to ~2 Hz, and the tracker preserves
+            // foreground/progress authority until that raw transition occurs.
+            pane.refreshForegroundProcess()
+            pane.markOutputActivity(totalRows: total)
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }

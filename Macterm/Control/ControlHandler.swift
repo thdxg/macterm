@@ -769,8 +769,19 @@ final class ControlHandler {
             title: pane.displayTitle,
             process: pane.foregroundProcessName,
             cwd: pane.nsView?.currentPwd ?? pane.projectPath,
-            focused: tab.id == workspace.activeTabID && pane.id == tab.focusedPaneID
+            focused: tab.id == workspace.activeTabID && pane.id == tab.focusedPaneID,
+            state: controlState(for: pane.executionState)
         )
+    }
+
+    /// Wire representation of `TerminalExecutionState` — a plain string keeps
+    /// the protocol's JSON stable even if the enum's cases are renamed.
+    private func controlState(for state: TerminalExecutionState) -> String {
+        switch state {
+        case .idle: "idle"
+        case .running: "running"
+        case .done: "done"
+        }
     }
 
     private func paneIDsBySessionName() -> [String: String] {

@@ -145,7 +145,7 @@ struct SidebarContent: View {
             set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
         )) {
             ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
-                tabRow(tab: tab, index: tabIndex, activeTabID: ws?.activeTabID, project: project)
+                tabRow(tab: tab, index: tabIndex, project: project)
             }
             // Single drop mechanism for both cases: SwiftUI reports the
             // insertion `offset` within THIS project's tab list. A drop from
@@ -160,11 +160,10 @@ struct SidebarContent: View {
         }
     }
 
-    private func tabRow(tab: TerminalTab, index tabIndex: Int, activeTabID: UUID?, project: Project) -> some View {
+    private func tabRow(tab: TerminalTab, index tabIndex: Int, project: Project) -> some View {
         SidebarTabRow(
             tab: tab,
             index: tabIndex + 1,
-            isActive: activeTabID == tab.id && appState.activeProjectID == project.id,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
@@ -475,7 +474,6 @@ private struct SidebarProjectRow: View {
 private struct SidebarTabRow: View {
     let tab: TerminalTab
     let index: Int
-    let isActive: Bool
     let onRename: (String) -> Void
     @Environment(AppState.self)
     private var appState
@@ -521,7 +519,7 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
+                        TabStatusGlyph(state: tab.executionState, symbol: tabIconSymbol, index: index, agent: agentIcon)
                     } else if let agentIcon {
                         // "None" suppresses the user's icon, not the agent
                         // logo — a live status signal, like the else branch.
@@ -535,7 +533,7 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: displayState, symbol: tabIconSymbol, index: index, agent: agentIcon)
+                        TabStatusGlyph(state: tab.executionState, symbol: tabIconSymbol, index: index, agent: agentIcon)
                     } else {
                         SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
                             .foregroundStyle(.secondary)
@@ -563,17 +561,6 @@ private struct SidebarTabRow: View {
         }
         isRenaming = false
         appState.restoreFocusToActivePane()
-    }
-
-    private var displayState: TerminalExecutionState {
-        if tab.executionState == .running { return .running }
-        // The tab the user is already looking at never needs an attention
-        // indicator; a background tab's `done` checkmark is shown until it's
-        // acknowledged. Visiting the tab clears all of its panes via the poll's
-        // `acknowledgeFinishedCommandIfActive` (which acknowledges the whole
-        // active tab, not just the focused pane, so the persisted state matches
-        // what's displayed).
-        return isActive ? .idle : tab.executionState
     }
 
     private func cancelRename() {
