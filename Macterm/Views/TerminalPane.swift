@@ -208,17 +208,12 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.markProgressFinished()
             onCommandFinished()
         }
-        view.onTerminalActivity = { [weak pane] in
-            guard let pane, Preferences.shared.showTabStatusIndicator else { return }
-            pane.refreshForegroundProcess()
-            pane.markTerminalActivity()
-        }
         view.onOutputActivity = { [weak pane] total in
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
-            // Output heartbeats fire from the pty IO path regardless of
-            // occlusion, so they also reach background tabs — unlike the
-            // scrollbar-growth path above, which only fires while the
-            // surface is actually rendered. Always refresh foreground/raw
+            // The single activity source. Output heartbeats fire from the pty
+            // IO path regardless of occlusion, so they also reach background
+            // tabs, and they carry the row total so the tracker can tell
+            // growth from an in-place redraw. Always refresh foreground/raw
             // state first: a running canonical command can switch to a raw TUI
             // while normal polling is paused behind a fully occluded window.
             // The heartbeat is throttled to ~2 Hz, and the tracker preserves

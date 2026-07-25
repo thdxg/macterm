@@ -283,14 +283,6 @@ struct TerminalExecutionTracker {
         return .done
     }
 
-    /// Restart the quiet window of an activity-sourced run. Used only by the
-    /// compatibility path for surfaces that have not proven they receive the
-    /// occlusion-independent heartbeat.
-    mutating func refreshActivityWindow(now: Date) {
-        guard case .activity = runningSource else { return }
-        runningSource = .activity(now)
-    }
-
     mutating func refreshForeground(
         name: String?,
         pid: pid_t?,
@@ -586,6 +578,9 @@ final class Pane: Identifiable {
         cancelActivityQuietPollIfNeeded()
     }
 
+    /// The row-growth activity primitive that `markOutputActivity` delegates
+    /// to on a growing heartbeat. Exposed directly so tests can seed an
+    /// activity-sourced run at a chosen instant without a growth baseline.
     func markTerminalActivity(at date: Date = Date()) {
         executionState = executionTracker.markTerminalActivity(
             at: date,
@@ -602,24 +597,13 @@ final class Pane: Identifiable {
         cancelActivityQuietPollIfNeeded()
     }
 
-    func refreshTerminalActivityWindow(now: Date = Date()) {
-        executionTracker.refreshActivityWindow(now: now)
-    }
-
-    /// Set on the first `OUTPUT_ACTIVITY` heartbeat delivered by libghostty
-    /// for this surface. Its presence proves the running GhosttyKit build
-    /// delivers occlusion-independent heartbeats (they fire from the pty IO
-    /// path, not the renderer), so `AppState`'s quiet-settle no longer needs
-    /// the occluded-pane exemption for this pane — silence while occluded is
-    /// now a meaningful signal instead of an artifact of a parked renderer.
-    private(set) var hasOcclusionIndependentHeartbeat = false
-
-    /// Handle a throttled `OUTPUT_ACTIVITY` heartbeat (see
-    /// `TerminalExecutionTracker.markOutputActivity`). Unlike
-    /// `markTerminalActivity` (scrollbar-growth, visible surfaces only), this
-    /// also reaches occluded/background panes.
+    /// Handle a throttled `OUTPUT_ACTIVITY` heartbeat — the pane's sole source
+    /// of terminal activity. It fires from the pty IO path (not the renderer),
+    /// so unlike the scrollbar it also reaches occluded/background panes and
+    /// its silence is always meaningful. `setup.sh` requires the GhosttyKit
+    /// ABI that emits it, so the quiet-settle needs no occluded-pane exemption.
+    /// Growth-vs-keepalive is decided in `TerminalExecutionTracker`.
     func markOutputActivity(totalRows: UInt64, now: Date = Date()) {
-        hasOcclusionIndependentHeartbeat = true
         executionState = executionTracker.markOutputActivity(totalRows: totalRows, at: now, currentState: executionState)
         scheduleActivityQuietPollIfNeeded()
     }
@@ -860,7 +844,6 @@ final class Pane: Identifiable {
         view.onCommandFinished = nil
         view.onProgressStarted = nil
         view.onProgressFinished = nil
-        view.onTerminalActivity = nil
         view.onOutputActivity = nil
         view.onScrollbarUpdate = nil
         view.onScrollWheel = nil

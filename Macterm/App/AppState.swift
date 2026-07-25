@@ -161,26 +161,6 @@ final class AppState {
         (NSApp?.windows ?? []).contains { $0.isVisible && $0.occlusionState.contains(.visible) }
     }
 
-    /// Whether a pane's surface is occluded — its renderer parked by
-    /// `ghostty_surface_set_occlusion`, so render/scrollbar heartbeats are
-    /// suppressed and (absent an occlusion-independent output heartbeat,
-    /// see `Pane.hasOcclusionIndependentHeartbeat`) silence says nothing
-    /// about completion. Injectable for tests. "No window" counts as
-    /// occluded, which also covers panes incubated off-screen (the incubator
-    /// window is never visible).
-    @ObservationIgnored
-    var paneIsOccluded: (Pane) -> Bool = { pane in
-        !(pane.nsView?.window?.occlusionState.contains(.visible) ?? false)
-    }
-
-    /// Panes that were occluded on the previous poll tick (and lack an
-    /// occlusion-independent heartbeat), so the visible transition can
-    /// restart their quiet window before settling resumes. A pane that gains
-    /// the heartbeat is dropped from here immediately (see `settleIfVisible`)
-    /// so a later, unrelated occlusion edge can't replay stale bookkeeping.
-    @ObservationIgnored
-    private var previouslyOccludedPanes: Set<UUID> = []
-
     /// zmx session-persistence client. Injectable so tests can observe
     /// session kills without a real daemon.
     @ObservationIgnored
@@ -392,13 +372,11 @@ final class AppState {
         // this feature.
         let trackExecution = Preferences.shared.showTabStatusIndicator
         var didAcknowledgeCompletion = false
-        var seenPanes: Set<UUID> = []
         var sawBusyPane = false
         var activeRemotePanes: [Pane] = []
         for (projectID, ws) in workspaces {
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() {
-                    seenPanes.insert(pane.id)
                     if pane.isRemote {
                         // The local process table only knows `ssh` here — a
                         // local refresh would stomp the probe-derived name
@@ -412,8 +390,12 @@ final class AppState {
                     } else {
                         pane.refreshForegroundProcess(trackExecution: trackExecution)
                     }
+                    // An activity-sourced run whose output has been quiet past
+                    // the window settles to `.done`. The output heartbeat is
+                    // occlusion-independent, so silence is meaningful whether or
+                    // not the pane is on screen — no occlusion special-casing.
                     if trackExecution {
-                        settleIfVisible(pane)
+                        pane.settleTerminalActivityIfQuiet()
                     }
                     if pane.executionState == .running { sawBusyPane = true }
                     didAcknowledgeCompletion = acknowledgeFinishedCommandIfActive(
@@ -424,49 +406,11 @@ final class AppState {
                 }
             }
         }
-        previouslyOccludedPanes.formIntersection(seenPanes)
         lastPollSawBusyPane = sawBusyPane
         if didAcknowledgeCompletion { saveWorkspaces() }
         if !activeRemotePanes.isEmpty, isAnyWindowVisible() {
             remoteForegroundResolver.refresh(panes: activeRemotePanes, probe: zmx.remoteForegroundComms)
         }
-    }
-
-    /// Quiet-settle a pane, working around the occluded renderer's silence
-    /// where necessary. A pane whose GhosttyKit build delivers
-    /// `OUTPUT_ACTIVITY` heartbeats (`hasOcclusionIndependentHeartbeat`)
-    /// proved those heartbeats reach it regardless of occlusion, so its
-    /// silence is meaningful even while occluded — settle it exactly like a
-    /// visible pane, with no skip and no fresh-window grant on de-occlusion.
-    ///
-    /// Absent that proof (older GhosttyKit, or no heartbeat has arrived yet),
-    /// fall back to the original #123 behavior: an occluded pane's renderer
-    /// is parked, so it emits no activity heartbeats at all, and settling it
-    /// would misread that suppressed output as completion. On the
-    /// occluded→visible edge the quiet window restarts, giving a still-running
-    /// program time to deliver heartbeats again before the settle can fire.
-    ///
-    /// Not private so tests can drive the guard directly (`paneIsOccluded` is
-    /// injectable) without a live surface or mutating the `Preferences`
-    /// singleton the poll reads.
-    func settleIfVisible(_ pane: Pane) {
-        if pane.hasOcclusionIndependentHeartbeat {
-            // This pane's silence is trustworthy even while occluded — drop
-            // any bookkeeping from before the heartbeat proved that, so a
-            // later occlusion edge (if the flag were ever meaningful again)
-            // can't replay a stale grant.
-            previouslyOccludedPanes.remove(pane.id)
-            pane.settleTerminalActivityIfQuiet()
-            return
-        }
-        if paneIsOccluded(pane) {
-            previouslyOccludedPanes.insert(pane.id)
-            return
-        }
-        if previouslyOccludedPanes.remove(pane.id) != nil {
-            pane.refreshTerminalActivityWindow()
-        }
-        pane.settleTerminalActivityIfQuiet()
     }
 
     private func recordProjectVisit(_ projectID: UUID) {

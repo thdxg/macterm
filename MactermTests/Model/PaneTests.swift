@@ -332,17 +332,6 @@ struct PaneTests {
     }
 
     @Test
-    func markOutputActivity_setsOcclusionIndependentHeartbeatFlag() {
-        // The flag records that this surface's build actually delivers
-        // OUTPUT_ACTIVITY heartbeats, which `AppState.settleIfVisible` uses
-        // to decide whether an occluded pane's silence is trustworthy.
-        let p = Pane(projectPath: "/", projectID: UUID())
-        #expect(!p.hasOcclusionIndependentHeartbeat)
-        p.markOutputActivity(totalRows: 10)
-        #expect(p.hasOcclusionIndependentHeartbeat)
-    }
-
-    @Test
     func outputActivitySchedulesQuietPollWake() async {
         let p = Pane(
             projectPath: "/",

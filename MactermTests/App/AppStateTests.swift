@@ -999,18 +999,18 @@ struct AppStateTests {
         #expect(AppState.panesToWarm(in: ws).isEmpty)
     }
 
-    // MARK: - Occlusion-aware quiet-settle
+    // MARK: - Quiet-settle
 
-    // These drive `AppState.settleIfVisible` directly with an injected
-    // occlusion closure, rather than the full `refreshAllForegroundProcesses`
-    // tick. The tick also re-reads each pane's real foreground process (nil in
-    // a unit test with no live surface, which clears the run source) and is
-    // gated on the `Preferences.shared.showTabStatusIndicator` singleton —
-    // mutating that global races the parallel test runner. Testing the guard
-    // in isolation is both deterministic and a truer unit of what PR adds.
+    // The poll calls `pane.settleTerminalActivityIfQuiet()` directly (no
+    // occlusion special-casing): the OUTPUT_ACTIVITY heartbeat that sources
+    // activity is occlusion-independent, so a quiet pane settles the same
+    // whether or not it is on screen. These drive the settle in isolation —
+    // deterministic (no live surface, no `Preferences` global) and a truer
+    // unit than the full `refreshAllForegroundProcesses` tick, which re-reads
+    // each pane's real foreground process (nil under test, clearing the run
+    // source).
 
-    /// A pane whose activity went quiet long ago (past the 3s settle window),
-    /// so a visible settle resolves it to `.done` and an occluded one holds.
+    /// A pane whose activity went quiet long ago (past the 3s settle window).
     private func quietRunningPane() -> Pane {
         let pane = Pane(projectPath: "/tmp", projectID: UUID())
         pane.recordUserInteraction()
@@ -1020,83 +1020,22 @@ struct AppStateTests {
     }
 
     @Test
-    func occluded_pane_does_not_quiet_settle() {
-        let state = makeAppState()
+    func quiet_activity_run_settles_to_done() {
         let pane = quietRunningPane()
-        state.paneIsOccluded = { _ in true }
-
-        state.settleIfVisible(pane)
-        // 10s of silence, but the renderer was parked — silence proves
-        // nothing, so the pane must stay running.
-        #expect(pane.executionState == .running)
-    }
-
-    @Test
-    func visible_pane_still_quiet_settles() {
-        let state = makeAppState()
-        let pane = quietRunningPane()
-        state.paneIsOccluded = { _ in false }
-
-        state.settleIfVisible(pane)
+        // 10s of silence is past the window — occluded or not, it's done.
+        pane.settleTerminalActivityIfQuiet()
         #expect(pane.executionState == .done)
     }
 
     @Test
-    func deoccluded_pane_gets_fresh_quiet_window_before_settling() {
-        let state = makeAppState()
-        let pane = quietRunningPane()
-
-        // Occluded: no settle, and the pane is marked as having been occluded.
-        state.paneIsOccluded = { _ in true }
-        state.settleIfVisible(pane)
+    func activity_run_holds_until_the_quiet_window_elapses() {
+        let pane = Pane(projectPath: "/tmp", projectID: UUID())
+        pane.recordUserInteraction()
+        let start = Date()
+        pane.markTerminalActivity(at: start)
+        pane.settleTerminalActivityIfQuiet(now: start.addingTimeInterval(2), quietInterval: 3)
         #expect(pane.executionState == .running)
-
-        // Now visible. The stale 10s-old activity timestamp must not settle it
-        // instantly — a false `.done` would stick, since activity can never
-        // revive a done pane. The window restarts instead.
-        state.paneIsOccluded = { _ in false }
-        state.settleIfVisible(pane)
-        #expect(pane.executionState == .running)
-
-        // With genuine quiet now elapsing from the reset window, it settles.
-        pane.settleTerminalActivityIfQuiet(now: Date().addingTimeInterval(4))
-        #expect(pane.executionState == .done)
-    }
-
-    @Test
-    func occluded_pane_without_heartbeat_flag_keeps_pre_heartbeat_behavior() {
-        // A pane whose GhosttyKit build never delivered an OUTPUT_ACTIVITY
-        // heartbeat has no proof its silence is meaningful while occluded —
-        // must still skip settling and grant a fresh window on de-occlusion,
-        // exactly like `deoccluded_pane_gets_fresh_quiet_window_before_settling`.
-        let state = makeAppState()
-        let pane = quietRunningPane()
-        #expect(!pane.hasOcclusionIndependentHeartbeat)
-
-        state.paneIsOccluded = { _ in true }
-        state.settleIfVisible(pane)
-        #expect(pane.executionState == .running)
-
-        state.paneIsOccluded = { _ in false }
-        state.settleIfVisible(pane)
-        #expect(pane.executionState == .running)
-        pane.settleTerminalActivityIfQuiet(now: Date().addingTimeInterval(4))
-        #expect(pane.executionState == .done)
-    }
-
-    @Test
-    func occluded_pane_with_heartbeat_flag_settles_normally_while_occluded() {
-        // Once a pane has proven it receives occlusion-independent heartbeats,
-        // its silence is meaningful even while occluded: settle it exactly
-        // like a visible pane — no skip, no fresh-window grant needed.
-        let state = makeAppState()
-        let pane = quietRunningPane()
-        pane.markOutputActivity(totalRows: 1, now: Date().addingTimeInterval(-10))
-        #expect(pane.hasOcclusionIndependentHeartbeat)
-        #expect(pane.executionState == .running)
-
-        state.paneIsOccluded = { _ in true }
-        state.settleIfVisible(pane)
+        pane.settleTerminalActivityIfQuiet(now: start.addingTimeInterval(3), quietInterval: 3)
         #expect(pane.executionState == .done)
     }
 
