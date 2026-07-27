@@ -1,7 +1,44 @@
 import Foundation
 
 enum TerminalCommandSubmission {
-    private static let returnKeyCodes: Set<UInt16> = [36, 76]
+    /// Hardware key codes (Carbon `kVK_*`). Named rather than written inline:
+    /// a transposed literal silently changes which keys count as a submission
+    /// or wipe the evidence, and nothing downstream would notice. These mirror
+    /// `HotkeyRegistry`'s vocabulary — pinned to it by
+    /// `TerminalCommandSubmissionTests.keyCodesMatchHotkeyRegistry` rather than
+    /// read from it directly, since that registry is `@MainActor` and this
+    /// helper is deliberately isolation-free.
+    private enum KeyCode {
+        static let selectAll: UInt16 = 0 // A
+        static let cut: UInt16 = 7 // X
+        static let backspaceChord: UInt16 = 4 // H — ^H
+        static let cancel: UInt16 = 8 // C — ^C
+        static let killWord: UInt16 = 13 // W — ^W
+        static let killLine: UInt16 = 32 // U — ^U
+        static let killToEnd: UInt16 = 40 // K — ^K
+        static let `return`: UInt16 = 36
+        static let keypadEnter: UInt16 = 76
+        static let delete: UInt16 = 51 // Backspace
+        static let escape: UInt16 = 53
+        static let forwardDelete: UInt16 = 117
+    }
+
+    private static let returnKeyCodes: Set<UInt16> = [KeyCode.return, KeyCode.keypadEnter]
+
+    /// Keys that discard the line outright, no modifier needed.
+    private static let discardingKeyCodes: Set<UInt16> = [
+        KeyCode.escape, KeyCode.delete, KeyCode.forwardDelete,
+    ]
+
+    /// Control chords that destroy the current line or word, after which the
+    /// recorded text no longer describes what is in the prompt buffer.
+    private static let discardingControlKeyCodes: Set<UInt16> = [
+        KeyCode.backspaceChord, KeyCode.cancel, KeyCode.killWord,
+        KeyCode.killLine, KeyCode.killToEnd,
+    ]
+
+    /// Command chords that replace or remove the buffer wholesale.
+    private static let discardingCommandKeyCodes: Set<UInt16> = [KeyCode.selectAll, KeyCode.cut]
 
     /// Best-effort evidence that the next Return submits actual prompt text.
     /// Terminal protocols do not expose a TUI's editor buffer, so the view
@@ -51,9 +88,9 @@ enum TerminalCommandSubmission {
         hasControl: Bool,
         hasCommand: Bool
     ) -> Bool {
-        if keyCode == 53 || keyCode == 51 || keyCode == 117 { return true } // Escape / delete
-        if hasControl, [4, 8, 13, 32, 40].contains(keyCode) { return true } // H/C/W/U/K
-        if hasCommand, [0, 7].contains(keyCode) { return true } // Select-all / cut
+        if discardingKeyCodes.contains(keyCode) { return true }
+        if hasControl, discardingControlKeyCodes.contains(keyCode) { return true }
+        if hasCommand, discardingCommandKeyCodes.contains(keyCode) { return true }
         return false
     }
 

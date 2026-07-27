@@ -121,13 +121,17 @@ final class GhosttyCallbacks: @unchecked Sendable {
         // `ghostty_surface_complete_clipboard_request`'s surface parameter is
         // non-null on the Zig side; a request completing during surface
         // teardown (nil `surface`) is UB, not a graceful no-op. Guard it.
-        guard let ud else { return false }
-        let view = Unmanaged<GhosttyTerminalNSView>.fromOpaque(ud).takeUnretainedValue()
-        guard let surface = view.surface else { return false }
+        guard let view = surfaceView(from: ud), let surface = view.surface else { return false }
         let text = Self.readPasteboardText() ?? ""
         // Record the resolved payload, not just the Command-V key code: an
         // empty/whitespace clipboard must not make a later blank Return look
         // like a nonempty agent submission.
+        //
+        // Dispatched async BEFORE the synchronous completion below, which is
+        // the ordering the evidence depends on: the main queue runs the record
+        // after this callback returns — so after the paste has reached the
+        // surface — but still before any Return the user types next. Moving it
+        // after the completion call, or making it synchronous, breaks that.
         DispatchQueue.main.async { view.surfaceDidPasteText(text) }
         text.withCString { ghostty_surface_complete_clipboard_request(surface, $0, state, false) }
         return true
@@ -345,8 +349,15 @@ final class GhosttyCallbacks: @unchecked Sendable {
         return Unmanaged<GhosttyTerminalNSView>.fromOpaque(ud).takeUnretainedValue()
     }
 
-    private func surface(from ud: UnsafeMutableRawPointer?) -> ghostty_surface_t? {
+    /// Recover the view from a libghostty userdata pointer. Every callback that
+    /// needs one goes through here so the unmanaged pointer cast lives in a
+    /// single place.
+    private func surfaceView(from ud: UnsafeMutableRawPointer?) -> GhosttyTerminalNSView? {
         guard let ud else { return nil }
-        return Unmanaged<GhosttyTerminalNSView>.fromOpaque(ud).takeUnretainedValue().surface
+        return Unmanaged<GhosttyTerminalNSView>.fromOpaque(ud).takeUnretainedValue()
+    }
+
+    private func surface(from ud: UnsafeMutableRawPointer?) -> ghostty_surface_t? {
+        surfaceView(from: ud)?.surface
     }
 }

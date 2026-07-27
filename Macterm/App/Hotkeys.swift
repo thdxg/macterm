@@ -164,6 +164,15 @@ enum HotkeyRegistry {
         keyCodeToBaseToken[keyCode]
     }
 
+    /// The hardware key code for a base key token (`"c"` → 8), or nil for a
+    /// token we don't map — the inverse of `baseToken(forKeyCode:)`. Lets code
+    /// that carries its own key codes (`TerminalCommandSubmission`, which stays
+    /// isolation-free and so can't read this `@MainActor` map at runtime) pin
+    /// them to this vocabulary in a test.
+    static func keyCode(forToken token: String) -> UInt16? {
+        keyCodes[token]
+    }
+
     private static let modifierOnlyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62]
 
     /// Characters produced by special keys → their named token form.

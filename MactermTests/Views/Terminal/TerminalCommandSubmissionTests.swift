@@ -124,6 +124,35 @@ struct TerminalCommandSubmissionTests {
         ))
     }
 
+    /// `TerminalCommandSubmission` carries its own key codes (it stays free of
+    /// actor isolation, so it can't read the `@MainActor` registry at runtime).
+    /// Pin them to that shared vocabulary here so the two can't drift.
+    @Test @MainActor
+    func keyCodesMatchHotkeyRegistry() throws {
+        func code(_ token: String) throws -> UInt16 {
+            try #require(HotkeyRegistry.keyCode(forToken: token))
+        }
+
+        #expect(try TerminalCommandSubmission.isReturn(
+            keyCode: code("return"), isRepeat: false, hasMarkedText: false, hasUserModifiers: false
+        ))
+        #expect(try TerminalCommandSubmission.clearsInputEvidence(
+            keyCode: code("escape"), hasControl: false, hasCommand: false
+        ))
+        // ^H / ^C / ^W / ^U / ^K all destroy the line or a word.
+        for token in ["h", "c", "w", "u", "k"] {
+            #expect(try TerminalCommandSubmission.clearsInputEvidence(
+                keyCode: code(token), hasControl: true, hasCommand: false
+            ))
+        }
+        // ⌘A (select all) and ⌘X (cut) replace the buffer wholesale.
+        for token in ["a", "x"] {
+            #expect(try TerminalCommandSubmission.clearsInputEvidence(
+                keyCode: code(token), hasControl: false, hasCommand: true
+            ))
+        }
+    }
+
     @Test
     func optionAsAltTextDoesNotCountAsLiteralContent() {
         #expect(!TerminalCommandSubmission.shouldRecordLiteralText(hasOption: true))
