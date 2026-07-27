@@ -23,6 +23,7 @@ jobs:
               - "project.yml"
               - "mise.toml"
               - "scripts/**"
+              - "e2e/**"
               - ".swiftformat"
               - ".swiftlint.yml"
               - ".github/workflows/checks.yml"
@@ -118,3 +119,67 @@ jobs:
 
       - name: Test
         run: mise run test --verbose
+
+  # End-to-end: build the Debug app, launch it hermetically (the benchmark's
+  # TCC-free recipe — Darwin notifications + LaunchServices activation, see
+  # scripts/_harness.py), and drive it through the bundled `macterm` CLI's
+  # control socket, asserting on libghostty's own state (`pane dump`/`list`).
+  # A separate job from `test` so the slower GUI run never delays the fast
+  # unit signal and failures are attributable at a glance.
+  e2e:
+    name: End-to-end
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: jdx/mise-action@v4
+
+      # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
+      - name: Cache epoch
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # Same key as the test job (see its comment for the no-restore-keys
+      # rationale), so all three consumers feed one GhosttyKit cache entry.
+      - name: Cache GhosttyKit
+        uses: actions/cache@v6
+        with:
+          path: |
+            GhosttyKit.xcframework
+            Macterm/Resources/ghostty
+            Macterm/Resources/terminfo
+            Macterm/Resources/zmx
+          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+      # Shares the test job's Debug DerivedData namespace — same configuration,
+      # same on-disk path. Both jobs save the same exact key per run; the
+      # loser's save is a harmless "cache already exists" warning.
+      - name: Cache DerivedData (Debug)
+        uses: actions/cache@v6
+        with:
+          path: build/DerivedData
+          key: derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-
+
+      - name: Setup GhosttyKit
+        run: mise run setup --verbose
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: End-to-end tests
+        run: mise run e2e --verbose
+
+      # Screenshot, unified log, and per-pane terminal text captured by the
+      # suite's failure fixtures (e2e/conftest.py).
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-diagnostics
+          path: build/e2e/diagnostics/
+          if-no-files-found: ignore
