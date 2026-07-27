@@ -247,19 +247,39 @@ struct CommandSourceTests {
 
     @Test
     func applyLayout_subtitle_names_duplicate_project_files() throws {
+        // Both files are ones the "proj" slug OWNS (`proj.yaml`, `proj_2.yaml`)
+        // — a genuine duplicate of this project's own declaration, which is
+        // what the subtitle warns about.
         let (ctx, state) = makeContext()
         let dir = state.projectFiles.directoryURL
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try "path: /tmp\ntabs:\n  - {}\n"
-            .write(to: dir.appendingPathComponent("a.yaml"), atomically: true, encoding: .utf8)
+            .write(to: dir.appendingPathComponent("proj.yaml"), atomically: true, encoding: .utf8)
         try "path: /tmp\n"
-            .write(to: dir.appendingPathComponent("b.yaml"), atomically: true, encoding: .utf8)
+            .write(to: dir.appendingPathComponent("proj_2.yaml"), atomically: true, encoding: .utf8)
 
         let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
         #expect(item.isEnabled)
         let subtitle = try #require(item.subtitle)
-        #expect(subtitle.contains("a.yaml"))
-        #expect(subtitle.contains("b.yaml"))
+        #expect(subtitle.contains("proj.yaml"))
+        #expect(subtitle.contains("proj_2.yaml"))
+    }
+
+    @Test
+    func applyLayout_subtitle_ignores_a_sibling_projects_file() throws {
+        // A distinct-name project on the same directory owns its own file.
+        // That's not a duplicate of ours, so no "ignoring duplicate" hint.
+        let (ctx, state) = makeContext()
+        let dir = state.projectFiles.directoryURL
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "path: /tmp\ntabs:\n  - {}\n"
+            .write(to: dir.appendingPathComponent("proj.yaml"), atomically: true, encoding: .utf8)
+        try "name: other\npath: /tmp\ntabs:\n  - {}\n"
+            .write(to: dir.appendingPathComponent("other.yaml"), atomically: true, encoding: .utf8)
+
+        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
+        #expect(item.isEnabled)
+        #expect(item.subtitle == nil)
     }
 
     // MARK: - items(query:) — the search path (6.7)

@@ -1170,7 +1170,8 @@ final class AppState {
             guard let file = try projectFiles.loadFull(
                 forProjectPath: project.path,
                 preferredSlug: ProjectSlug.slug(from: project.name)
-            ) else {
+            )
+            else {
                 return LayoutFileError.noProjectFile(projectPath: project.path)
             }
             guard let bridged = file.layoutFile else {

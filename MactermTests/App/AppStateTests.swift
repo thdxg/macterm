@@ -772,7 +772,7 @@ struct AppStateTests {
     // MARK: - saveLayout duplicate conflicts
 
     @Test
-    func save_layout_does_not_flag_a_sibling_projects_file() throws {
+    func save_layout_does_not_flag_a_sibling_projects_file() {
         // A distinct-name sibling on the same directory owns its own file.
         // Saving this project must neither report that file as a stray nor
         // realign-delete it.
