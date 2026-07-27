@@ -170,11 +170,14 @@ struct ProjectFileStore {
     /// `/Users/<name>/…` breaks on the next machine. Returns the written URL
     /// so callers can tell whether their file is the one `find` will pick.
     ///
-    /// `reservedSlugs` are the slugs of *other* projects backing this same
-    /// directory. Their files are off-limits: rebinding or realign-deleting one
-    /// would clobber another project's layout now that a directory can back
-    /// several projects. Empty (the default) keeps the single-project realign
-    /// behavior — the path-match is treated as this project's own file.
+    /// The file treated as "already ours" is picked the same way `find`
+    /// resolves one: the path-match this project's own slug owns, falling back
+    /// to the first path-match no sibling owns (the rebind-through-a-rename
+    /// case). `reservedSlugs` are the slugs of *other* projects backing this
+    /// same directory. Their files are off-limits: rebinding or
+    /// realign-deleting one would clobber another project's layout now that a
+    /// directory can back several projects. Empty (the default) keeps the
+    /// single-project realign behavior.
     @discardableResult
     func write(_ file: ProjectFile, projectName: String, reservedSlugs: Set<String> = []) throws -> URL {
         var file = file
@@ -187,12 +190,24 @@ struct ProjectFileStore {
             attributes: [.posixPermissions: 0o700]
         )
         let existing = scan()
-        // This project's own declaration is the path-match no sibling slug
-        // owns — never a sibling's file, which stays untouched.
-        let bound = existing.first { scanned in
-            guard let declared = scanned.header?.path, ProjectPath.matches(declared, file.path) else { return false }
-            return !reservedSlugs.contains { ProjectSlug.owns(filename: scanned.url.lastPathComponent, slug: $0) }
+        let slug = ProjectSlug.slug(from: projectName)
+        let pathMatches = existing.filter { scanned in
+            guard let declared = scanned.header?.path else { return false }
+            return ProjectPath.matches(declared, file.path)
         }
+        // This project's own declaration — the same preference order `find`
+        // resolves with, so a save rewrites exactly the file an apply reads.
+        // The slug-owned match comes first: falling straight to "first
+        // path-match no sibling owns" let an unowned stray (a hand-authored
+        // file declaring this path) win the filename race and then get
+        // realign-deleted below, destroying a file this project never owned.
+        // Only when nothing is slug-owned does the unowned first match bind —
+        // that's the rebind-through-a-hand-rename case. A *sibling's* file is
+        // never bound, so it stays untouched.
+        let bound = pathMatches.first { ProjectSlug.owns(filename: $0.url.lastPathComponent, slug: slug) }
+            ?? pathMatches.first { scanned in
+                !reservedSlugs.contains { ProjectSlug.owns(filename: scanned.url.lastPathComponent, slug: $0) }
+            }
 
         // Pick the target filename. When a file already declares this path,
         // compute the fresh slug candidate; if it names the SAME file the bound
@@ -206,7 +221,6 @@ struct ProjectFileStore {
                 .filter { $0.url != bound?.url }
                 .map { $0.url.lastPathComponent.lowercased() }
         )
-        let slug = ProjectSlug.slug(from: projectName)
         var attempt = 1
         while takenNames.contains(ProjectSlug.filename(slug: slug, attempt: attempt).lowercased()) {
             attempt += 1

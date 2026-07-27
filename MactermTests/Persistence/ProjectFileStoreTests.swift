@@ -243,4 +243,20 @@ struct ProjectFileStoreTests {
         #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "api")?.name == "api")
         #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "web")?.name == "web")
     }
+
+    @Test
+    func write_rewrites_its_own_file_rather_than_deleting_an_unowned_stray() throws {
+        let store = makeStore()
+        // "api" owns api.yaml. An unrelated hand-authored file declares the
+        // same path and sorts FIRST — no slug owns it, so it isn't reserved.
+        try store.write(ProjectFile(name: "api", path: "/repo"), projectName: "api")
+        try writeRaw(store, filename: "aaa.yaml", yaml: "name: stray\npath: /repo")
+
+        try store.write(ProjectFile(name: "api", path: "/repo"), projectName: "api")
+
+        // The save binds to api.yaml (slug-owned) and rewrites it in place. It
+        // must NOT bind aaa.yaml and then realign-delete it.
+        #expect(filenames(store) == ["aaa.yaml", "api.yaml"])
+        #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "api")?.name == "api")
+    }
 }
