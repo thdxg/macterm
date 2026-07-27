@@ -736,4 +736,26 @@ struct HotkeysTests {
         #expect(!HotkeyRegistry.matches(cmdD, action: action))
         #expect(HotkeyRegistry.matches(cmdE, action: action))
     }
+
+    @Test
+    func rebinding_bumps_the_observable_hotkey_version() {
+        // Hotkey bindings live in raw defaults keys, invisible to SwiftUI, so
+        // the shortcut hints in WelcomeView/EmptyProjectView only refresh when
+        // this version bumps. (The menu bar can't be fixed this way — see
+        // HotkeyMenuSyncTests.)
+        let action = HotkeyAction.splitRight
+        let prior = Preferences.defaults.string(forKey: action.defaultsKey)
+        defer {
+            HotkeyRegistry.setShortcutString(prior ?? action.defaultShortcut, for: action)
+        }
+
+        let before = Preferences.shared.hotkeyVersion
+        HotkeyRegistry.setShortcutString("cmd+e", for: action)
+        #expect(Preferences.shared.hotkeyVersion != before)
+
+        // Clearing a binding is the reported bug's exact path — it must bump too.
+        let afterRebind = Preferences.shared.hotkeyVersion
+        HotkeyRegistry.setShortcutString("disabled", for: action)
+        #expect(Preferences.shared.hotkeyVersion != afterRebind)
+    }
 }

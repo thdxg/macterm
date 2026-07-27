@@ -17,17 +17,32 @@ struct AppCommandMenuItem: View {
     var body: some View {
         let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
         let action = command.action(in: ctx)
-        Button(titleOverride ?? command.title) {
+        let title = titleOverride ?? command.title
+        Button(title) {
             action?()
         }
         .disabled(action == nil)
         .modifier(KeyboardShortcutForCommand(command: command))
+        // Record the rendered title so `HotkeyMenuSync` can find this item's
+        // NSMenuItem later. Registering the same string that titles the Button
+        // is what keeps the two from drifting — a `titleOverride` added at a
+        // call site can't silently orphan the sync.
+        .task {
+            if let hotkeyAction = command.hotkeyAction {
+                HotkeyMenuSync.register(title: title, action: hotkeyAction)
+            }
+        }
     }
 }
 
-/// Reads the current keyboard shortcut for `command` (if any) and applies it
-/// to the menu item. Pulls from `HotkeyRegistry`, so a user's rebind in
-/// Settings flows through here on the next view rebuild.
+/// Applies the command's keyboard shortcut as it stands *at launch*.
+///
+/// This only ever runs when SwiftUI builds the menu, which happens once —
+/// a `.commands` tree is not re-evaluated from observable state the way an
+/// ordinary view body is. Keeping a rebind in sync is therefore not possible
+/// here; `HotkeyMenuSync` patches the live `NSMenuItem`s instead. Setting the
+/// shortcut here still matters: it's what gives the item its correct initial
+/// key equivalent before any rebind happens.
 private struct KeyboardShortcutForCommand: ViewModifier {
     let command: AppCommand
 
