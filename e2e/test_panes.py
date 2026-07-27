@@ -1,6 +1,8 @@
 """Tab and split-tree semantics over the control plane: creation, splits,
 grids, focus, and the busy-close contract."""
 
+import uuid
+
 from _harness import wait_for
 
 
@@ -45,23 +47,44 @@ def test_focus_moves_between_panes(app, fresh_tab, live_pane):
         assert focused == [target["session"]]
 
 
-def test_idle_tab_closes_without_force(app):
+def test_tab_close_follows_the_running_program_signal(app):
+    """`tab close` without --force succeeds iff libghostty reports no running
+    program (needsConfirmQuit) — the exact signal the close guard reads.
+    Which branch runs is environment-dependent BY DESIGN: where shell
+    integration reaches the zmx session shell (dev machines) an idle pane
+    reads false and closes freely; where it can't (CI's bash 3.2 login shell
+    gets no integration through the zmx daemon) the signal is pessimistically
+    always-true and even an idle tab demands --force."""
     tab = app.cli_json("tab", "new")["tabs"][0]
     pane = wait_for(lambda: app.panes(tab=tab["id"]), message="the new tab's pane")[0]
     wait_for(lambda: app.pane_text(pane=pane["id"]), timeout=60, message="an idle prompt")
-    app.cli("tab", "close", tab["id"])
+
+    if app.pane_inspect(pane=pane["id"])["needsConfirmQuit"]:
+        refused = app.cli("tab", "close", tab["id"], check=False)
+        assert refused.returncode == 1
+        assert "running program" in refused.stderr
+        app.cli("tab", "close", tab["id"], "--force")
+    else:
+        app.cli("tab", "close", tab["id"])
     assert tab["id"] not in {t["id"] for t in app.cli_json("tab", "list")["tabs"]}
 
 
-def test_busy_tab_close_refused_then_forced(app, fresh_tab, live_pane, running_program):
+def test_busy_tab_close_refused_then_forced(app, fresh_tab, live_pane):
     """The typed `busy` error is API surface: headless callers get it instead
-    of the UI's confirmation dialog, and `--force` is the override. The wait
-    reads the same needsConfirmQuit signal the close guard consults."""
-    app.pane_run('/bin/sh -c "sleep 300"', pane=live_pane["id"])
+    of the UI's confirmation dialog, and `--force` is the override. Sync via
+    an output marker (see test_terminal_io for why not needsConfirmQuit);
+    the refusal itself holds in every environment — with shell integration
+    ghostty knows a program is running, and without it the signal is
+    pessimistically true anyway."""
+    nonce = uuid.uuid4().hex[:12]
+    app.pane_run(
+        f'/bin/sh -c "printf started-%s {nonce}; echo; sleep 300"',
+        pane=live_pane["id"],
+    )
     wait_for(
-        running_program,
+        lambda: f"started-{nonce}" in (app.pane_text(pane=live_pane["id"], scrollback=True) or ""),
         timeout=60,
-        message="the sleep to register as a running program",
+        message="the sleep to start",
     )
 
     refused = app.cli("tab", "close", fresh_tab["id"], check=False)

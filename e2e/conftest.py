@@ -114,14 +114,3 @@ def live_pane(app, fresh_tab):
     return pane
 
 
-@pytest.fixture
-def running_program(app, live_pane):
-    """Callable reading libghostty's running-program signal for the fresh
-    tab's pane (`pane inspect` needsConfirmQuit — see MactermHarness
-    .pane_inspect for why this, and not the foreground-name poll, is the
-    sync point for 'a program is running')."""
-
-    def read():
-        return app.pane_inspect(pane=live_pane["id"])["needsConfirmQuit"]
-
-    return read

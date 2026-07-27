@@ -275,12 +275,16 @@ class MactermHarness:
 
     def pane_inspect(self, pane=None, session=None):
         """`pane inspect`'s live terminal-core snapshot (needs a live
-        surface). `needsConfirmQuit` here is libghostty's own running-program
-        signal — the exact predicate the busy-close guard reads, and the
-        right sync point for "a program is running": unlike the
-        foreground-NAME poll it doesn't depend on the zmx leader cache, which
-        falls back to a 30s reconcile TTL when a freshly spawned session
-        misses the registration retry window."""
+        surface). Caveat on `needsConfirmQuit`: it's the exact predicate the
+        busy-close guard reads, but it's only an accurate idle/running signal
+        where ghostty's shell integration reaches the zmx session shell (the
+        fork's command-wrapper injects it per shell — nushell/zsh/fish get
+        it; CI's bash 3.2 login shell has no integration and reads as
+        perpetually busy). Tests that need "a program is running/idle"
+        should sync on output markers via pane_text instead. The
+        foreground-NAME poll (`pane list` .process) is no better a sync
+        point: its zmx leader cache falls back to a 30s reconcile TTL when a
+        fresh session misses the registration retry window."""
         args = ["pane", "inspect"]
         if pane:
             args += ["--pane", pane]
