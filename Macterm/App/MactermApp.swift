@@ -276,6 +276,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controlHandler: ControlHandler?
 
     func applicationDidFinishLaunching(_: Notification) {
+        // Log-only and cheap, so installed even when hosting tests (before the
+        // xctest early-return below): an uncaught ObjC exception otherwise
+        // kills the app with its reason redacted and no crash report.
+        ExceptionReporting.install()
         // Skip the heavy launch path when the app is hosting unit tests.
         // Without this, libghostty boots, the key router installs, etc. —
         // which times out the xctest runner that just wants to load our

@@ -5,6 +5,24 @@ import SwiftUI
 
 private let hotkeyLogger = Logger(subsystem: appBundleID, category: "QuickTerminalHotkey")
 
+/// Orders the quick-terminal panel key + front, absorbing any Objective-C
+/// exception AppKit raises mid-ordering, and reports whether the panel made it
+/// on screen. Ordering can genuinely throw: ViewBridge's NSRemoteView (the
+/// text-input cursor UI hosted inside our windows) raised
+/// NSInternalInconsistencyException out of `makeKeyAndOrderFront` on a macOS
+/// beta, and uncaught it killed the whole app with no crash report. Callers
+/// must skip follow-up work that assumes a visible panel when this returns
+/// false.
+@MainActor
+private func orderPanelFront(_ panel: NSPanel) -> Bool {
+    guard let exception = catchingObjCException({ panel.makeKeyAndOrderFront(nil) }) else { return true }
+    hotkeyLogger
+        .error(
+            "makeKeyAndOrderFront raised \(exception.name.rawValue, privacy: .public): \(exception.reason ?? "no reason", privacy: .public)"
+        )
+    return false
+}
+
 @MainActor
 final class QuickTerminalService: NSObject {
     static let shared = QuickTerminalService()
@@ -120,8 +138,7 @@ final class QuickTerminalService: NSObject {
     func showPanel() {
         guard isEnabled else { return }
         if isVisible {
-            panel?.makeKeyAndOrderFront(nil)
-            if let focusedID = splitState.focusedPaneID {
+            if let panel, orderPanelFront(panel), let focusedID = splitState.focusedPaneID {
                 FocusRestoration.restoreFocus(to: focusedID, in: splitState.splitRoot, window: panel)
             }
         } else {
@@ -254,7 +271,17 @@ final class QuickTerminalService: NSObject {
         if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousFrontmostApp = frontmost
         }
-        panel.makeKeyAndOrderFront(nil)
+        guard orderPanelFront(panel) else {
+            // The panel never made it on screen. Tear back down to the hidden
+            // steady state (as hide() would) so the next toggle starts from a
+            // fresh panel instead of finding this one orphaned behind
+            // isVisible == false.
+            hostingView?.removeFromSuperview()
+            hostingView = nil
+            self.panel = nil
+            previousFrontmostApp = nil
+            return
+        }
         // Apply the current blur radius (0 = no blur) for this panel session.
         setWindowBackgroundBlur(panel, radius: Preferences.shared.windowBlurRadius)
         if let focusedID = splitState.focusedPaneID {
@@ -368,8 +395,7 @@ final class QuickTerminalSplitState {
         } else {
             cancelPendingClose()
         }
-        if let panel = QuickTerminalService.shared.panelRef {
-            panel.makeKeyAndOrderFront(nil)
+        if let panel = QuickTerminalService.shared.panelRef, orderPanelFront(panel) {
             // Tearing down the modal alert is a key/window transition — the
             // race FocusRestoration exists for. A bare makeFirstResponder here
             // can beat the panel regaining key status.
