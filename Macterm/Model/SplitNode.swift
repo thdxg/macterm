@@ -70,6 +70,27 @@ private enum TerminalExecutionSource: Equatable {
     case progress
 }
 
+/// Single source of truth for the two activity timings that must agree: how
+/// long an activity-owned run may stay silent before it settles, and when the
+/// dedicated wake that performs that settle fires. They are derived from one
+/// constant so an edit can't drift them apart.
+enum TerminalActivityTiming {
+    /// Silence after which an activity-owned run settles to `.done`.
+    static let quietInterval: TimeInterval = 3
+
+    /// Slack added to `quietInterval` for the scheduled wake. The settle
+    /// requires `now - lastActivityAt >= quietInterval`, so a wake targeting
+    /// exactly the threshold only works while timer jitter runs positive — and
+    /// the failure is bad: with every window occluded the ordinary poll is
+    /// stopped, so a marginally early wake would no-op the settle with no timer
+    /// left to retry, stranding the run at `.running` indefinitely. The margin
+    /// makes the wake land strictly after the threshold instead.
+    static let quietPollMargin: TimeInterval = 0.25
+
+    /// Delay for the dedicated quiet-settle wake.
+    static let quietPollDelay: TimeInterval = quietInterval + quietPollMargin
+}
+
 struct TerminalExecutionTracker {
     private enum PendingOutputStart {
         case armed(Date)
@@ -120,6 +141,12 @@ struct TerminalExecutionTracker {
         return false
     }
 
+    /// ORDERING CONTRACT: this CLEARS the in-place start arming, so a caller
+    /// that reports both an interaction and a submission for the same event
+    /// must call this FIRST — `recordCommandSubmission` arms, and an
+    /// interaction recorded after it would silently disarm the Pi path. The
+    /// `keyDown` / `sendText` / `sendKey` paths all fire `onInteraction` before
+    /// `onCommandSubmitted` for exactly this reason.
     mutating func recordUserInteraction() {
         hasUserInteraction = true
         // Typing, scrolling, or any other interaction after Return means later
@@ -484,8 +511,8 @@ final class Pane: Identifiable {
     /// Keep one lightweight wake scheduled from the final IO heartbeat so an
     /// occluded activity-owned run can still quiet-settle.
     @ObservationIgnored
-    private var activityQuietPollTask: Task<Void, Never>?
-    private let activityQuietPollDelay: Duration
+    private var activityQuietPollWork: DispatchWorkItem?
+    private let activityQuietPollDelay: TimeInterval
 
     /// Re-read the foreground process name from the process table and publish it
     /// only when it changed (so a steady poll doesn't churn `@Observable` and
@@ -588,7 +615,10 @@ final class Pane: Identifiable {
         )
     }
 
-    func settleTerminalActivityIfQuiet(now: Date = Date(), quietInterval: TimeInterval = 3) {
+    func settleTerminalActivityIfQuiet(
+        now: Date = Date(),
+        quietInterval: TimeInterval = TerminalActivityTiming.quietInterval
+    ) {
         executionState = executionTracker.settleIfQuiet(
             now: now,
             quietInterval: quietInterval,
@@ -613,28 +643,28 @@ final class Pane: Identifiable {
             cancelActivityQuietPollIfNeeded()
             return
         }
-        activityQuietPollTask?.cancel()
-        let delay = activityQuietPollDelay
-        activityQuietPollTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: delay)
-            } catch {
-                return
-            }
+        // Rescheduled on every heartbeat (~2 Hz per live pane), so this uses a
+        // plain work item rather than spawning and cancelling a `Task` each
+        // time — the same idiom the view's `commandSubmissionEvidenceReset`
+        // uses.
+        activityQuietPollWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            activityQuietPollTask = nil
+            activityQuietPollWork = nil
             // This dedicated deadline bypasses ordinary event coalescing: if
             // every window is occluded there may be no timer left to retry.
             // AppState still performs the settle so acknowledgement and
             // persistence stay central.
             NotificationCenter.default.post(name: .terminalQuietSettleDeadline, object: self)
         }
+        activityQuietPollWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + activityQuietPollDelay, execute: work)
     }
 
     private func cancelActivityQuietPollIfNeeded() {
         guard !executionTracker.isActivitySourced else { return }
-        activityQuietPollTask?.cancel()
-        activityQuietPollTask = nil
+        activityQuietPollWork?.cancel()
+        activityQuietPollWork = nil
     }
 
     @discardableResult
@@ -662,12 +692,20 @@ final class Pane: Identifiable {
         NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
     }
 
+    /// True when a recognized AI agent holds the foreground. Two things key off
+    /// it: the two-heartbeat in-place start heuristic (below), and the view's
+    /// decision to carry a programmatic payload's content evidence forward —
+    /// both are only meaningful in a raw-mode agent TUI, where a bracketed
+    /// paste can leave the payload sitting unsubmitted in the editor buffer.
+    var allowsInPlaceOutputStart: Bool {
+        agentIcon != nil || AgentIcon.match(processName: foregroundProcessName) != nil
+    }
+
     func recordCommandSubmission(hasContent: Bool, at date: Date = Date()) {
         // Plain Return is ambiguous in editors and menus. Only a nonempty
         // submission in a recognized AI agent gets the two-heartbeat in-place
         // start heuristic; ordinary programs still use process/row evidence.
-        let allowInPlaceOutputStart = agentIcon != nil
-            || AgentIcon.match(processName: foregroundProcessName) != nil
+        let allowInPlaceOutputStart = allowsInPlaceOutputStart
         executionTracker.recordCommandSubmission(
             at: date,
             allowInPlaceOutputStart: allowInPlaceOutputStart,
@@ -914,7 +952,7 @@ final class Pane: Identifiable {
         command: String? = nil,
         shell: String? = nil,
         env: [String: String]? = nil,
-        activityQuietPollDelay: Duration = .seconds(3)
+        activityQuietPollDelay: TimeInterval = TerminalActivityTiming.quietPollDelay
     ) {
         self.projectPath = projectPath
         self.projectID = projectID

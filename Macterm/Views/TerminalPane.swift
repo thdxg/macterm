@@ -131,9 +131,13 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onInteraction = { [weak pane] in
             pane?.recordUserInteraction()
         }
+        // Order matters: `onInteraction` clears the tracker's in-place start
+        // arming that `onCommandSubmitted` sets, and the view calls them in
+        // that order. See `GhosttyTerminalNSView.onCommandSubmitted`.
         view.onCommandSubmitted = { [weak pane] hasContent in
             pane?.recordCommandSubmission(hasContent: hasContent)
         }
+        view.canCarryCommandInput = { [weak pane] in pane?.allowsInPlaceOutputStart ?? false }
         view.onProcessExit = onProcessExit
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest

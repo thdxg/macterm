@@ -152,7 +152,17 @@ final class GhosttyTerminalNSView: NSView {
     var onFocus: (() -> Void)?
     var onInteraction: (() -> Void)?
     /// Bool is best-effort evidence that the submitted prompt contained text.
+    ///
+    /// CALL ORDER: every path that reports a submission fires `onInteraction`
+    /// FIRST. `Pane.recordUserInteraction` clears the tracker's in-place start
+    /// arming that `recordCommandSubmission` then sets, so the reverse order
+    /// silently disarms the agent path. Keep the two calls in this order.
     var onCommandSubmitted: ((Bool) -> Void)?
+    /// Whether a programmatic payload's content evidence may be carried past
+    /// the submission that consumed it — true only for a raw-mode agent
+    /// foreground, where a bracketed paste can leave it unsubmitted. See
+    /// `preserveProgrammaticCommandInput`.
+    var canCarryCommandInput: (() -> Bool)?
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
@@ -671,7 +681,17 @@ final class GhosttyTerminalNSView: NSView {
     /// bracketed-pasted into a raw TUI and need a following encoded Return.
     /// Preserve its content briefly for the latter without leaving stale
     /// evidence behind indefinitely in the former.
+    ///
+    /// Gated on `canCarryCommandInput`, because the two cases are
+    /// indistinguishable from here and the evidence only ORs in — never clears
+    /// — so an unconditional carry makes a genuinely blank Return arriving
+    /// inside the window report content it doesn't have (a `pane run "…"`
+    /// immediately followed by a bare newline is enough). The carry is only
+    /// *needed* where a bracketed paste can swallow the newline, which is the
+    /// same agent-TUI foreground the in-place heuristic requires, so scoping it
+    /// there keeps the ambiguous window out of the ordinary shell case.
     private func preserveProgrammaticCommandInput(_ text: String) {
+        guard canCarryCommandInput?() ?? false else { return }
         commandSubmissionEvidence.recordText(text)
         let reset = DispatchWorkItem { [weak self] in
             self?.commandSubmissionEvidence.clear()

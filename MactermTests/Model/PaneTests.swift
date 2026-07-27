@@ -308,6 +308,20 @@ struct PaneTests {
         #expect(p.executionState == .running)
     }
 
+    /// The view carries a programmatic payload's content evidence past the
+    /// submission that consumed it only when this is true — otherwise a
+    /// `pane run "…"` followed within the carry window by a genuinely blank
+    /// Return would report content it doesn't have.
+    @Test
+    func inPlaceOutputStartIsAllowedOnlyForAnAgentForeground() {
+        let p = Pane(projectPath: "/", projectID: UUID())
+        #expect(!p.allowsInPlaceOutputStart)
+        p.foregroundProcessName = "zsh"
+        #expect(!p.allowsInPlaceOutputStart)
+        p.foregroundProcessName = "pi"
+        #expect(p.allowsInPlaceOutputStart)
+    }
+
     @Test
     func commandSubmissionDoesNotArmInPlaceOutputForOrdinaryRawProgram() {
         let p = Pane(projectPath: "/", projectID: UUID())
@@ -333,27 +347,44 @@ struct PaneTests {
 
     @Test
     func outputActivitySchedulesQuietPollWake() async {
-        let p = Pane(
-            projectPath: "/",
-            projectID: UUID(),
-            activityQuietPollDelay: .milliseconds(20)
-        )
+        let p = Pane(projectPath: "/", projectID: UUID(), activityQuietPollDelay: 0.02)
         p.recordUserInteraction()
         p.markOutputActivity(totalRows: 10)
 
         await confirmation("quiet output wakes the paused poll") { confirm in
+            var fired = false
             let token = NotificationCenter.default.addObserver(
                 forName: .terminalQuietSettleDeadline,
                 object: p,
                 queue: .main
             ) { _ in
+                fired = true
                 confirm()
             }
             defer { NotificationCenter.default.removeObserver(token) }
 
             p.markOutputActivity(totalRows: 20)
-            try? await Task.sleep(for: .milliseconds(100))
+            // Poll rather than sleeping a fixed multiple of the delay: a
+            // co-scheduled spike on a loaded CI runner can push a 20ms timer
+            // well past any fixed margin (cf. #181). The generous ceiling only
+            // bounds a genuine failure; a healthy run exits on the first tick.
+            for _ in 0 ..< 200 where !fired {
+                try? await Task.sleep(for: .milliseconds(25))
+            }
         }
+    }
+
+    /// The scheduled wake must land strictly *after* the quiet threshold it
+    /// needs to observe as crossed — a wake at exactly the threshold only
+    /// settles while timer jitter runs positive, and an occluded window has no
+    /// other timer left to retry with.
+    @Test
+    func quietPollWakeLandsAfterTheSettleThreshold() {
+        #expect(TerminalActivityTiming.quietPollDelay > TerminalActivityTiming.quietInterval)
+        #expect(
+            TerminalActivityTiming.quietPollDelay
+                == TerminalActivityTiming.quietInterval + TerminalActivityTiming.quietPollMargin
+        )
     }
 
     @Test
