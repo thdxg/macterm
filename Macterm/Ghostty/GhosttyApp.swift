@@ -48,6 +48,17 @@ final class GhosttyApp {
     private var themeColorsCache: (version: Int, colors: ThemeResolver.Colors?)?
 
     private init() {
+        // ghostty_init captures `environ` as a pointer+length slice for the
+        // life of the process (surface spawns read it; no C API re-syncs it).
+        // Any setenv/unsetenv after that capture leaves the slice dangling —
+        // observed as a startup crash in the spawn path. App-level env
+        // mutation lives in EnvironmentSetup, which must already have run;
+        // resolveResources() below also setenvs, deliberately before the
+        // ghostty_init call on this same path.
+        precondition(
+            EnvironmentSetup.didRun,
+            "EnvironmentSetup.runOnce() must precede ghostty_init — environ is captured here"
+        )
         systemScheme = Self.readSystemScheme()
         resolveResources()
         guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == GHOSTTY_SUCCESS else {

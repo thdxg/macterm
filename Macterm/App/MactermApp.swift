@@ -11,6 +11,14 @@ struct MactermApp: App {
     @State
     private var projectStore = ProjectStore()
 
+    init() {
+        // Must precede any scene construction: SwiftUI can touch
+        // `GhosttyApp.shared` while building views, and every environment
+        // mutation has to land before `ghostty_init` captures environ.
+        // See EnvironmentSetup for the full contract.
+        EnvironmentSetup.runOnce()
+    }
+
     var body: some Scene {
         WindowGroup {
             MainWindow()
@@ -317,6 +325,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_: Notification) {
+        // Log-only and cheap, so installed even when hosting tests (before the
+        // xctest early-return below): an uncaught ObjC exception otherwise
+        // kills the app with its reason redacted and no crash report.
+        ExceptionReporting.install()
         // Skip the heavy launch path when the app is hosting unit tests.
         // Without this, libghostty boots, the key router installs, etc. —
         // which times out the xctest runner that just wants to load our
@@ -325,22 +337,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return
         }
-        // Before anything can spawn a surface: a launcher terminal's zmx
-        // session marker must not leak into our panes (see ZmxEnvironment).
-        ZmxEnvironment.scrubInheritedSession()
-        // Control socket for the bundled `macterm` CLI. Started before any
-        // surface spawns so every shell inherits MACTERM_SOCKET and the
-        // bundled CLI on PATH (setenv mutates this process's environ, which
-        // libghostty passes to spawned shells). Requests get a `starting`
-        // error until installResponders attaches the handler.
+        // MACTERM_SOCKET, PATH, and the zmx-session scrub moved to
+        // EnvironmentSetup (run from MactermApp.init): environ must not be
+        // mutated after ghostty_init captures it, and SwiftUI can trigger
+        // GhosttyApp.shared before this method runs. Binding the socket
+        // itself can stay here — only the env var needed to move. Requests
+        // get a `starting` error until installResponders attaches the
+        // handler.
         controlServer.start()
-        setenv(ControlProtocol.socketEnvVar, controlServer.path, 1)
-        if let binDir = Bundle.main.resourceURL?.appendingPathComponent("bin", isDirectory: true).path,
-           FileManager.default.isExecutableFile(atPath: binDir + "/macterm")
-        {
-            let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
-            setenv("PATH", existingPath.isEmpty ? binDir : "\(binDir):\(existingPath)", 1)
-        }
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
         if BenchmarkControl.isEnabled {
             // Under the CI benchmark, the notification-permission alert would
