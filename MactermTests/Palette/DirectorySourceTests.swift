@@ -62,6 +62,45 @@ struct DirectorySourceTests {
     }
 
     @Test
+    func local_directory_backing_a_project_also_offers_adding_another() throws {
+        // A directory is not an identity — below "Switch to project" the
+        // exact match offers creating a second, independent project there.
+        let (ctx, state, store) = makeContext()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-dir-source-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let existing = Project(name: "existing", path: dir.path, sortOrder: 0)
+        store.add(existing)
+
+        let items = DirectorySource().items(query: dir.path, context: ctx)
+        #expect(items.first?.subtitle?.contains("Switch to project") == true)
+        let addAnother = try #require(items.first { $0.subtitle?.contains("Add another project") == true })
+        // Ranked directly below the switch row, above any child listing.
+        #expect(addAnother.score == 1)
+        addAnother.action()
+
+        #expect(store.projects.count == 2)
+        let created = try #require(store.projects.last)
+        #expect(created.id != existing.id)
+        #expect(created.path == dir.path)
+        #expect(state.activeProjectID == created.id)
+    }
+
+    @Test
+    func children_backing_projects_do_not_get_add_another_rows() throws {
+        // Only the exact typed path offers the pair; child completions stay
+        // single rows so the listing doesn't double up.
+        let (ctx, _, store) = makeContext()
+        let dir = try makeListingDir(children: ["alpha", "beta"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        store.add(Project(name: "alpha", path: dir.appendingPathComponent("alpha").path, sortOrder: 0))
+
+        let items = DirectorySource().items(query: dir.path + "/", context: ctx)
+        #expect(!items.contains { $0.subtitle?.contains("Add another project") == true })
+        #expect(items.count(where: { $0.title == "alpha" }) == 1)
+    }
+
+    @Test
     func typed_remote_spec_offers_add_as_remote_project() throws {
         let (ctx, state, store) = makeContext()
         let items = DirectorySource().items(query: "devbox:~/dev/api", context: ctx)
@@ -89,6 +128,25 @@ struct DirectorySourceTests {
         item.action()
         #expect(state.activeProjectID == existing.id)
         #expect(store.projects.count == 1)
+    }
+
+    @Test
+    func typed_remote_spec_backing_a_project_also_offers_adding_another() throws {
+        let (ctx, state, store) = makeContext()
+        let existing = Project(name: "api box", path: "devbox:~/dev/api", sortOrder: 0)
+        store.add(existing)
+
+        let items = DirectorySource().items(query: "devbox:~/dev/api", context: ctx)
+        let addAnother = try #require(items.first { $0.subtitle?.contains("Add another project") == true })
+        #expect(addAnother.title == "api")
+        addAnother.action()
+
+        #expect(store.projects.count == 2)
+        let created = try #require(store.projects.last)
+        #expect(created.id != existing.id)
+        #expect(created.path == "devbox:~/dev/api")
+        #expect(created.isRemote)
+        #expect(state.activeProjectID == created.id)
     }
 
     @Test

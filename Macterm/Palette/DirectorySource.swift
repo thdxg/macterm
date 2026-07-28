@@ -4,7 +4,8 @@ import Foundation
 /// Palette source for directory completions. Consulted only when the query
 /// looks like a path. If the exact path matches a directory, it's surfaced
 /// as the top result — and if that directory is already an opened project,
-/// the item switches to it instead of creating a duplicate.
+/// the top item switches to it, with an "add another project" item below
+/// (a directory is not an identity; it can back several projects).
 @MainActor
 struct DirectorySource: PaletteSource {
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
@@ -12,7 +13,7 @@ struct DirectorySource: PaletteSource {
         // (#104). No filesystem browsing — the host isn't consulted; the
         // exact spec is the offer.
         if PaletteQuery.isRemoteSpecQuery(query) {
-            return [remoteItem(spec: query, context: context)]
+            return remoteItems(spec: query, context: context)
         }
         let expanded = (query as NSString).expandingTildeInPath
         guard expanded.hasPrefix("/") else { return [] }
@@ -37,17 +38,27 @@ struct DirectorySource: PaletteSource {
         var items: [PaletteItem] = []
 
         // Exact match at the top (when the typed path is itself a directory).
+        // When a project already backs it, switching comes first and adding
+        // another project right below — only for the exact match; child rows
+        // stay single so the listing doesn't double up.
         if let exact = exactMatch {
             let name = (exact as NSString).lastPathComponent
+            let existing = context.projectStore.project(matchingPath: exact)
             items.append(directoryItem(
                 name: name,
                 fullPath: exact,
-                existing: context.projectStore.project(matchingPath: exact),
+                existing: existing,
                 context: context,
                 score: 0
             ))
+            if existing != nil {
+                items.append(newProjectItem(name: name, fullPath: exact, context: context, score: 1))
+            }
         }
 
+        // Children rank below every exact-match row (1 without a backing
+        // project, 2 with the switch + add-another pair).
+        let childBase = max(items.count, 1)
         let entries = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
         let children = entries
             .filter { name in
@@ -73,7 +84,7 @@ struct DirectorySource: PaletteSource {
                     fullPath: full,
                     existing: context.projectStore.project(matchingPath: full),
                     context: context,
-                    score: offset + 1
+                    score: offset + childBase
                 )
             }
 
@@ -85,23 +96,13 @@ struct DirectorySource: PaletteSource {
         nil
     }
 
-    /// Add-or-switch for a typed remote spec, shaped like `directoryItem`:
-    /// an existing project matching the spec (structurally, via
-    /// `ProjectPath.matches`) switches; otherwise the item creates the
-    /// remote project. The display name is the remote directory's basename,
-    /// falling back to the host for `host:~` / `host:/`.
-    private func remoteItem(spec: String, context: PaletteContext) -> PaletteItem {
-        if let existing = context.projectStore.projects.first(where: { ProjectPath.matches($0.path, spec) }) {
-            return PaletteItem(
-                id: "remote-switch:\(spec)",
-                title: existing.name,
-                subtitle: "Switch to remote project: \(spec)",
-                category: "Directories",
-                score: 0
-            ) { [appState = context.appState] in
-                appState.selectProject(existing)
-            }
-        }
+    /// Items for a typed remote spec, shaped like the local exact match: an
+    /// existing project matching the spec (structurally, via
+    /// `ProjectPath.matches`) switches, with an add-another item below;
+    /// otherwise a single item creates the remote project. The display name
+    /// is the remote directory's basename, falling back to the host for
+    /// `host:~` / `host:/`.
+    private func remoteItems(spec: String, context: PaletteContext) -> [PaletteItem] {
         let base = (spec as NSString).lastPathComponent
         let name: String = if base.isEmpty || base == "~" || base == "/" || base == spec {
             ProjectPath.remote(from: spec).flatMap {
@@ -110,7 +111,19 @@ struct DirectorySource: PaletteSource {
         } else {
             base
         }
-        return PaletteItem(
+        if let existing = context.projectStore.projects.first(where: { ProjectPath.matches($0.path, spec) }) {
+            let switchItem = PaletteItem(
+                id: "remote-switch:\(spec)",
+                title: existing.name,
+                subtitle: "Switch to remote project: \(spec)",
+                category: "Directories",
+                score: 0
+            ) { [appState = context.appState] in
+                appState.selectProject(existing)
+            }
+            return [switchItem, newProjectItem(name: name, fullPath: spec, context: context, score: 1)]
+        }
+        let addItem = PaletteItem(
             id: "remote-open:\(spec)",
             title: name,
             subtitle: "Add remote project: \(spec)",
@@ -123,6 +136,7 @@ struct DirectorySource: PaletteSource {
             )
             appState.selectProject(project)
         }
+        return [addItem]
     }
 
     private func directoryItem(
@@ -151,6 +165,31 @@ struct DirectorySource: PaletteSource {
             score: score
         ) { [appState = context.appState, projectStore = context.projectStore] in
             let project = projectStore.findOrCreate(
+                name: name,
+                path: fullPath
+            )
+            appState.selectProject(project)
+        }
+    }
+
+    /// Offered below the switch item when a project already backs the exact
+    /// typed path (local or remote): a directory is not an identity, so a
+    /// second, independent project there is a legitimate ask. Always creates
+    /// (`ProjectStore.create`), mirroring the folder picker.
+    private func newProjectItem(
+        name: String,
+        fullPath: String,
+        context: PaletteContext,
+        score: Int
+    ) -> PaletteItem {
+        PaletteItem(
+            id: "dir-new:\(fullPath)",
+            title: name,
+            subtitle: "Add another project: \(fullPath)",
+            category: "Directories",
+            score: score
+        ) { [appState = context.appState, projectStore = context.projectStore] in
+            let project = projectStore.create(
                 name: name,
                 path: fullPath
             )
