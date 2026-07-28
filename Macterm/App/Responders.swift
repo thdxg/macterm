@@ -151,8 +151,10 @@ final class MainAppResponder: KeyResponder {
         //
         // This branch requires a KNOWN `mainWindow`: it only means "a DIFFERENT
         // window is key" when we know which one is the terminal window. At
-        // launch `mainWindow` is briefly nil (set on `didBecomeMain`, after
-        // responders install), and a nil pointer is `!==` every real window —
+        // launch `mainWindow` can still be briefly nil (its `didBecomeMain`
+        // lands after responders install when the app is launched by direct
+        // exec rather than LaunchServices), and a nil pointer is `!==` every
+        // real window —
         // so without the `let main` guard, the terminal window itself would be
         // treated as "different", making Cmd+W close the window and Cmd+D
         // pass through until the first `didBecomeMain`. When `mainWindow` is

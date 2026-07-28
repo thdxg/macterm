@@ -275,6 +275,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let controlServer = ControlSocketServer(socketPath: ControlSocketServer.defaultSocketPath())
     private var controlHandler: ControlHandler?
 
+    func applicationWillFinishLaunching(_: Notification) {
+        // The terminal window's identity is "the first window to become main"
+        // (see reopenIfNeeded and MainAppResponder's key-window gate). That
+        // observation must start HERE, not in applicationDidFinishLaunching:
+        // on a LaunchServices launch (Dock, Finder, `open`) AppKit makes the
+        // window main BEFORE applicationDidFinishLaunching runs, so an
+        // observer installed there misses it and `mainWindow` stays nil.
+        // The next window the user mains then gets adopted as "the terminal
+        // window" — typically Settings — after which every hotkey gate
+        // misfires (Cmd+W closes the window, Cmd+D goes dead) and
+        // reopenIfNeeded re-fronts the hidden Settings window on each app
+        // activation. A direct-exec launch (running the binary from a shell)
+        // reverses the order, which is why the bug only surfaced sometimes.
+        // No XCTest skip: the observer is inert without the rest of the
+        // launch path, and AppDelegateTests drives it directly.
+        windowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeMainNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let window = note.object as? NSWindow
+            MainActor.assumeIsolated {
+                guard let self, let window else { return }
+                // Settings (and other auxiliary windows) also become main —
+                // only the first window to do so is the terminal window. The
+                // responder must track that same pointer; assigning `window`
+                // unconditionally handed it the Settings window whenever
+                // Settings was frontmost, defeating its key-window gate.
+                // The first window to become main is the terminal window;
+                // cache that pointer as the authoritative identity. Do NOT
+                // stamp `window.identifier` — this is a SwiftUI `WindowGroup`
+                // window, and forcing an identifier on it interferes with
+                // SwiftUI's own window management (it can recreate the window,
+                // nilling the responder's weak `mainWindow` and breaking the
+                // key-window gate that guards every hotkey).
+                if self.mainWindow == nil { self.mainWindow = window }
+                self.mainAppResponder?.mainWindow = self.mainWindow
+            }
+        }
+    }
+
     func applicationDidFinishLaunching(_: Notification) {
         // Skip the heavy launch path when the app is hosting unit tests.
         // Without this, libghostty boots, the key router installs, etc. —
@@ -350,31 +391,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 queue: .main
             ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(false) } },
         ]
-
-        windowObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeMainNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            let window = note.object as? NSWindow
-            MainActor.assumeIsolated {
-                guard let self, let window else { return }
-                // Settings (and other auxiliary windows) also become main —
-                // only the first window to do so is the terminal window. The
-                // responder must track that same pointer; assigning `window`
-                // unconditionally handed it the Settings window whenever
-                // Settings was frontmost, defeating its key-window gate.
-                // The first window to become main is the terminal window;
-                // cache that pointer as the authoritative identity. Do NOT
-                // stamp `window.identifier` — this is a SwiftUI `WindowGroup`
-                // window, and forcing an identifier on it interferes with
-                // SwiftUI's own window management (it can recreate the window,
-                // nilling the responder's weak `mainWindow` and breaking the
-                // key-window gate that guards every hotkey).
-                if self.mainWindow == nil { self.mainWindow = window }
-                self.mainAppResponder?.mainWindow = self.mainWindow
-            }
-        }
     }
 
     /// Called from MactermApp.onAppear once the state objects exist. Registers
