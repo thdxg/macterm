@@ -139,6 +139,18 @@ run = """
   fi
 """
 
+[tasks.e2e]
+description = "Build the debug app and run the end-to-end suite against it"
+usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
+run = """
+  source scripts/_lib.sh
+  if [[ "$usage_verbose" == "true" ]]; then
+    ./scripts/e2e.sh
+  else
+    run_step "Running e2e suite..." ./scripts/e2e.sh
+  fi
+"""
+
 [tasks.clean]
 description = "Clean build artifacts"
 run = "rm -rf build Macterm.xcodeproj"
