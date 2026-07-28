@@ -108,6 +108,17 @@ struct MainWindow: View {
 }
 
 struct WelcomeView: View {
+    @State
+    private var preferences = Preferences.shared
+
+    /// Reads `hotkeyVersion` so a rebind refreshes the label. Bindings live in
+    /// raw defaults keys, so the `HotkeyRegistry` read alone is invisible to
+    /// SwiftUI and the hint would otherwise show the launch-time shortcut.
+    private func shortcutLabel(for action: HotkeyAction) -> String {
+        _ = preferences.hotkeyVersion
+        return HotkeyRegistry.displayString(for: HotkeyRegistry.selectedShortcutString(for: action))
+    }
+
     private var shortcuts: [(HotkeyAction, String)] {
         [
             (.openProject, "Open a project"),
@@ -136,7 +147,7 @@ struct WelcomeView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(MactermTheme.fgMuted)
                             .frame(width: 160, alignment: .leading)
-                        Text(HotkeyRegistry.displayString(for: HotkeyRegistry.selectedShortcutString(for: action)))
+                        Text(shortcutLabel(for: action))
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(MactermTheme.fgDim)
                     }
@@ -153,6 +164,15 @@ struct WelcomeView: View {
 
 struct EmptyProjectView: View {
     let project: Project
+
+    @State
+    private var preferences = Preferences.shared
+
+    /// See `WelcomeView.shortcutLabel` — same rebind-observability need.
+    private func shortcutLabel(for action: HotkeyAction) -> String {
+        _ = preferences.hotkeyVersion
+        return HotkeyRegistry.displayString(for: HotkeyRegistry.selectedShortcutString(for: action))
+    }
 
     private var shortcuts: [(HotkeyAction, String)] {
         [
@@ -184,7 +204,7 @@ struct EmptyProjectView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(MactermTheme.fgMuted)
                             .frame(width: 160, alignment: .leading)
-                        Text(HotkeyRegistry.displayString(for: HotkeyRegistry.selectedShortcutString(for: action)))
+                        Text(shortcutLabel(for: action))
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(MactermTheme.fgDim)
                     }

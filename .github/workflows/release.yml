@@ -42,7 +42,7 @@ jobs:
             Macterm/Resources/zmx
           # NO restore-keys fallback: pairing a time-rolling key with a prefix
           # restore-key re-saves stale content under the fresh key forever (see
-          # checks.yml). Without it a new week re-downloads the current `latest`.
+          # test.yml). Without it a new week re-downloads the current `latest`.
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
 
       - name: Setup GhosttyKit
@@ -59,8 +59,9 @@ jobs:
           fi
           # Release builds invoke the build script directly to skip the
           # format/lint/test deps on `mise run build` — main is already
-          # format/lint/test-gated by checks.yml before a tag is cut, so a
-          # release just needs the build itself. Equivalent to the old ci:build.
+          # format/lint-gated by checks.yml and test-gated by test.yml before
+          # a tag is cut, so a release just needs the build itself. Equivalent
+          # to the old ci:build.
           VERSION="$VERSION" ./scripts/build.sh
 
       - name: Upload artifact
