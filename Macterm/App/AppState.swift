@@ -1390,6 +1390,30 @@ final class AppState {
         workspaces[projectID]?.activeTab?.focusPane(paneID)
     }
 
+    /// Begin the sidebar rename flow for the tab containing `paneID` — the
+    /// ghostty `prompt_surface_title` keybind's Macterm mapping (titles live
+    /// on tabs here, not surfaces). No-op for panes outside any workspace
+    /// (the quick terminal has no tab UI to rename).
+    func renameTab(containing paneID: UUID, projectID: UUID) {
+        guard let tab = workspaces[projectID]?.tabs.first(where: { $0.splitRoot.contains(paneID: paneID) })
+        else { return }
+        sidebarVisible = true
+        let tabID = tab.id
+        // Defer a tick so the sidebar row's TextField exists before it's asked
+        // to begin editing — same reason as the Rename Tab command.
+        DispatchQueue.main.async { self.renamingTabID = tabID }
+    }
+
+    /// Set (or, with nil, clear) the custom title of the tab containing
+    /// `paneID` — the ghostty `set_tab_title` keybind's Macterm mapping,
+    /// writing the same field the sidebar rename edits.
+    func setTabTitle(containing paneID: UUID, projectID: UUID, title: String?) {
+        guard let tab = workspaces[projectID]?.tabs.first(where: { $0.splitRoot.contains(paneID: paneID) })
+        else { return }
+        tab.customTitle = title
+        saveWorkspaces()
+    }
+
     func navigateToPane(_ paneID: UUID, projectID: UUID) {
         guard workspaces[projectID] != nil else {
             NSApp.activate()

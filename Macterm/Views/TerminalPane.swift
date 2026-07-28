@@ -45,7 +45,59 @@ struct TerminalPane: View {
                 onSplitRequest: onSplitRequest,
                 onZoomRequest: onZoomRequest
             )
+            // Overlays anchor to the surface, not the VStack, so the search
+            // bar (above) never shifts them.
+            .overlay(alignment: .bottomLeading) {
+                if let url = pane.hoverURL {
+                    LinkHoverBanner(url: url)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                // Secure-input badge: the OS is shielding keystrokes for this
+                // pane's password prompt (or the global toggle). Focus-scoped,
+                // so at most one pane shows it.
+                if focused, SecureInput.shared.enabled, GhosttyApp.shared.secureInputIndication {
+                    SecureInputBadge()
+                }
+            }
         }
+    }
+}
+
+/// Safari-style link preview shown while the mouse hovers an OSC 8 / detected
+/// URL in the terminal (`GHOSTTY_ACTION_MOUSE_OVER_LINK`).
+private struct LinkHoverBanner: View {
+    let url: String
+
+    var body: some View {
+        Text(url)
+            .font(.caption)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .foregroundStyle(MactermTheme.fgMuted)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(MactermTheme.bg, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(MactermTheme.border))
+            .frame(maxWidth: 480, alignment: .leading)
+            .padding(6)
+            .allowsHitTesting(false)
+    }
+}
+
+/// Lock badge shown while secure keyboard input is active for the focused
+/// pane (`macos-secure-input-indication`).
+private struct SecureInputBadge: View {
+    var body: some View {
+        Image(systemName: "lock.fill")
+            .font(.caption)
+            .foregroundStyle(MactermTheme.fgMuted)
+            .padding(5)
+            .background(MactermTheme.bg, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(MactermTheme.border))
+            .padding(6)
+            .allowsHitTesting(false)
+            .help("Secure keyboard input is active")
     }
 }
 
@@ -62,6 +114,11 @@ private struct TerminalSurface: NSViewRepresentable {
     let onCommandFinished: () -> Void
     let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
+
+    /// Optional on purpose: the quick terminal's hosting view has no AppState
+    /// in its environment, and its ephemeral tab has no rename UI anyway —
+    /// the tab-title actions just no-op there.
+    @Environment(AppState.self) private var appState: AppState?
 
     final class Coordinator {
         var wasFocused = false
@@ -211,6 +268,18 @@ private struct TerminalSurface: NSViewRepresentable {
             pane.refreshForegroundProcess()
             pane.markProgressFinished()
             onCommandFinished()
+        }
+        view.onLinkHover = { [weak pane] url in
+            pane?.hoverURL = url
+        }
+        view.titleProvider = { [weak pane] in pane?.displayTitle }
+        view.onPromptTitle = { [weak appState, weak pane] in
+            guard let pane else { return }
+            appState?.renameTab(containing: pane.id, projectID: pane.projectID)
+        }
+        view.onSetTabTitle = { [weak appState, weak pane] title in
+            guard let pane else { return }
+            appState?.setTabTitle(containing: pane.id, projectID: pane.projectID, title: title)
         }
         view.onOutputActivity = { [weak pane] total in
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }

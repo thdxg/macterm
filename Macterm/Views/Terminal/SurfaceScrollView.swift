@@ -96,6 +96,13 @@ final class SurfaceScrollView: NSScrollView {
         surfaceView.onScrollWheel = { [weak self] event in
             self?.handleSurfaceScrollWheel(event) ?? false
         }
+        // libghostty computes the pointer shape for the grid (I-beam over
+        // text, pointing hand over links, resize arrows for TUI drags);
+        // NSScrollView applies documentCursor over the document area, which
+        // is exactly the surface. Same mechanism as Ghostty's own scroll view.
+        surfaceView.onMouseShapeChange = { [weak self] cursor in
+            self?.documentCursor = cursor
+        }
     }
 
     @available(*, unavailable)

@@ -489,6 +489,11 @@ final class Pane: Identifiable {
     private var agentIconPID: pid_t?
 
     let searchState = TerminalSearchState()
+
+    /// The OSC 8 link URL under the mouse, for the pane's hover banner
+    /// (`GHOSTTY_ACTION_MOUSE_OVER_LINK`). Live UI state only — never
+    /// persisted.
+    var hoverURL: String?
     var executionState: TerminalExecutionState = .idle {
         didSet {
             guard executionState != oldValue else { return }
@@ -885,6 +890,14 @@ final class Pane: Identifiable {
         view.onOutputActivity = nil
         view.onScrollbarUpdate = nil
         view.onScrollWheel = nil
+        view.onLinkHover = nil
+        view.onMouseShapeChange = nil
+        view.onPromptTitle = nil
+        view.onSetTabTitle = nil
+        view.titleProvider = nil
+        // Release any secure-input scope this view holds (a pane closed
+        // mid-password-prompt must not leave the OS state stuck on).
+        view.passwordInput = false
         view.destroySurface()
         let scroll = _scrollView
         _scrollView = nil
