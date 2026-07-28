@@ -13,11 +13,16 @@ struct MainWindow: View {
     private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State
     private var detailWidth: CGFloat = .infinity
+    @State
+    private var preferences = Preferences.shared
 
     var body: some View {
         // Derive bindings to the @Observable AppState via @Bindable (the
         // Observation-era idiom) rather than a hand-rolled Binding(get:set:).
         @Bindable var appState = appState
+        // Read in body, not inside the toolbar builder, so the Observation
+        // dependency is registered and a Settings change re-places the item.
+        let switcherPosition = preferences.tabSwitcherPosition
         return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarContent()
                 .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 280)
@@ -51,8 +56,20 @@ struct MainWindow: View {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    TabSwitcherToolbarItem(availableWidth: detailWidth)
+                // Structural branch, not a placement ternary: each side is its
+                // own toolbar item identity, so flipping the preference tears
+                // down and re-places the control instead of relying on AppKit
+                // migrating an existing item between toolbar slots.
+                if switcherPosition == .leading {
+                    // `.navigation` is the leading slot — AppKit puts it ahead
+                    // of the inline window title, next to the sidebar (#186).
+                    ToolbarItem(placement: .navigation) {
+                        TabSwitcherToolbarItem(availableWidth: detailWidth)
+                    }
+                } else {
+                    ToolbarItem(placement: .primaryAction) {
+                        TabSwitcherToolbarItem(availableWidth: detailWidth)
+                    }
                 }
             }
         }

@@ -19,6 +19,24 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which edge of the title bar the numbered tab switcher sits on (#186).
+/// `leading` maps to the `.navigation` toolbar slot, which AppKit places
+/// ahead of the inline window title — the switcher hugs the sidebar edge
+/// and the title shifts right of it.
+enum TabSwitcherPosition: String, CaseIterable, Identifiable {
+    case leading
+    case trailing
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .leading: "Left"
+        case .trailing: "Right"
+        }
+    }
+}
+
 /// Which `NSGlassEffectView.Style` the liquid-glass window background uses.
 /// Maps to AppKit's `.regular` / `.clear` (see `WindowAppearance`).
 enum WindowGlassStyle: String, CaseIterable, Identifiable {
@@ -141,6 +159,10 @@ final class Preferences {
 
     var tabSwitcherVisibility: TabSwitcherVisibility {
         didSet { defaults.set(tabSwitcherVisibility.rawValue, forKey: Keys.tabSwitcherVisibility) }
+    }
+
+    var tabSwitcherPosition: TabSwitcherPosition {
+        didSet { defaults.set(tabSwitcherPosition.rawValue, forKey: Keys.tabSwitcherPosition) }
     }
 
     /// Sentinel for "no icon" — sidebar rows skip the leading glyph when set.
@@ -359,6 +381,8 @@ final class Preferences {
         terminateSessionsOnQuit = defaults.object(forKey: Keys.terminateSessionsOnQuit) as? Bool ?? false
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
             .flatMap(TabSwitcherVisibility.init(rawValue:)) ?? .whenMultiple
+        tabSwitcherPosition = (defaults.string(forKey: Keys.tabSwitcherPosition))
+            .flatMap(TabSwitcherPosition.init(rawValue:)) ?? .trailing
         Self.runOneTimeMigrations(defaults: defaults)
     }
 
@@ -414,6 +438,7 @@ final class Preferences {
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let terminateSessionsOnQuit = "macterm.session.terminateOnQuit"
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
+        static let tabSwitcherPosition = "macterm.toolbar.tabSwitcherPosition"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
     }
 }

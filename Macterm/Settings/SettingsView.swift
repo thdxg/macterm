@@ -240,6 +240,7 @@ private struct AppearanceSettings: View {
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
+    @State private var tabSwitcherPosition: String = Preferences.shared.tabSwitcherPosition.rawValue
     @State
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
     @State
@@ -366,6 +367,18 @@ private struct AppearanceSettings: View {
                     Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
                 }
                 Text("Numbered control in the title bar for switching tabs by index.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                Picker("Position", selection: $tabSwitcherPosition) {
+                    ForEach(TabSwitcherPosition.allCases) { option in
+                        Text(option.displayName).tag(option.rawValue)
+                    }
+                }
+                .onChange(of: tabSwitcherPosition) { _, v in
+                    Preferences.shared.tabSwitcherPosition = TabSwitcherPosition(rawValue: v) ?? .trailing
+                }
+                Text("Left places the switcher before the window title, next to the sidebar.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
