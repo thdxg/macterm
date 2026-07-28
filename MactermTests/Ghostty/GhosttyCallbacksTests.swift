@@ -109,4 +109,29 @@ struct GhosttyCallbacksTests {
         #expect(GhosttyCallbacks.hasPasteboardContent(in: pb) == true)
         #expect(GhosttyCallbacks.imagePasteboardPath(pb) != nil)
     }
+
+    // MARK: - GHOSTTY_ACTION_OPEN_URL target resolution
+
+    @Test
+    func openTarget_schemeURLsPassThrough() {
+        let url = GhosttyCallbacks.resolvedOpenTarget("https://example.com/a?b=c")
+        #expect(url.scheme == "https")
+        #expect(url.absoluteString == "https://example.com/a?b=c")
+    }
+
+    @Test
+    func openTarget_plainPathsBecomeFileURLs() {
+        // `write_scrollback_file:open` hands over a bare temp path; a
+        // schemeless URL(string:) of it would be unopenable (ghostty#8763).
+        let url = GhosttyCallbacks.resolvedOpenTarget("/tmp/foo/history.txt")
+        #expect(url.isFileURL)
+        #expect(url.path == "/tmp/foo/history.txt")
+    }
+
+    @Test
+    func openTarget_tildeExpands() {
+        let url = GhosttyCallbacks.resolvedOpenTarget("~/notes.txt")
+        #expect(url.isFileURL)
+        #expect(url.path == NSHomeDirectory() + "/notes.txt")
+    }
 }

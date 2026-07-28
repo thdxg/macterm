@@ -1,5 +1,6 @@
 import AppKit
 import GhosttyKit
+import UniformTypeIdentifiers
 
 /// Routes libghostty runtime callbacks to the appropriate terminal views.
 final class GhosttyCallbacks: @unchecked Sendable {
@@ -112,9 +113,58 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let snapshot = GhosttyApp.readColors(from: cfg)
             DispatchQueue.main.async { GhosttyApp.shared.adoptResolvedColors(snapshot) }
             return true
+        case GHOSTTY_ACTION_OPEN_URL:
+            // Keybind actions that end in opening something — link clicks,
+            // `write_scrollback_file:open` and friends. Left unhandled,
+            // libghostty still opens the file itself (a spawned `open -t`),
+            // but logs it as an apprt failure; handling it here matches
+            // Ghostty.app. The url bytes are NOT null-terminated (`len`
+            // bounds them) and the pointer is owned by libghostty for this
+            // call only, so copy synchronously.
+            let payload = action.action.open_url
+            guard let ptr = payload.url, payload.len > 0 else { return true }
+            let urlString = String(
+                decoding: UnsafeRawBufferPointer(start: ptr, count: Int(payload.len)),
+                as: UTF8.self
+            )
+            let kind = payload.kind
+            DispatchQueue.main.async { Self.openURL(urlString, kind: kind) }
+            return true
         default:
             return false
         }
+    }
+
+    // MARK: - Open URL (GHOSTTY_ACTION_OPEN_URL)
+
+    /// The URL a `GHOSTTY_ACTION_OPEN_URL` payload string denotes. A string
+    /// without a scheme is a file path — `URL(string:)` would happily build a
+    /// schemeless URL from it that no application can open (ghostty#8763) —
+    /// so those resolve via the file-URL initializer, with `~` expanded.
+    static func resolvedOpenTarget(_ string: String) -> URL {
+        if let candidate = URL(string: string), candidate.scheme != nil {
+            return candidate
+        }
+        return URL(fileURLWithPath: (string as NSString).standardizingPath)
+    }
+
+    private static func openURL(_ string: String, kind: ghostty_action_open_url_kind_e) {
+        let url = resolvedOpenTarget(string)
+        // `.text` asks for the payload to be *viewed as text* (scrollback
+        // dumps land here): prefer the default app for the file's extension,
+        // then the system plain-text editor — same order as Ghostty.app.
+        // `.html`/`.unknown` just go to the default handler.
+        if kind == GHOSTTY_ACTION_OPEN_URL_KIND_TEXT, let editor = defaultTextEditor(for: url) {
+            NSWorkspace.shared.open([url], withApplicationAt: editor, configuration: NSWorkspace.OpenConfiguration())
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    private static func defaultTextEditor(for url: URL) -> URL? {
+        let byExtension = UTType(filenameExtension: url.pathExtension)
+            .flatMap { NSWorkspace.shared.urlForApplication(toOpen: $0) }
+        return byExtension ?? NSWorkspace.shared.urlForApplication(toOpen: .plainText)
     }
 
     func readClipboard(ud: UnsafeMutableRawPointer?, location: ghostty_clipboard_e, state: UnsafeMutableRawPointer?) -> Bool {
