@@ -87,17 +87,38 @@ struct DirectorySourceTests {
     }
 
     @Test
-    func children_backing_projects_do_not_get_add_another_rows() throws {
-        // Only the exact typed path offers the pair; child completions stay
-        // single rows so the listing doesn't double up.
+    func children_backing_projects_also_offer_add_another_rows() throws {
+        // A project-backed child completion pairs switch + add-another just
+        // like the exact typed path — a partially-typed prefix must not
+        // strand the user with switch-only (adding a second project would
+        // otherwise require typing the full path). Unbacked children stay
+        // single rows.
         let (ctx, _, store) = makeContext()
         let dir = try makeListingDir(children: ["alpha", "beta"])
         defer { try? FileManager.default.removeItem(at: dir) }
         store.add(Project(name: "alpha", path: dir.appendingPathComponent("alpha").path, sortOrder: 0))
 
         let items = DirectorySource().items(query: dir.path + "/", context: ctx)
-        #expect(!items.contains { $0.subtitle?.contains("Add another project") == true })
-        #expect(items.count(where: { $0.title == "alpha" }) == 1)
+        let switchIdx = try #require(items.firstIndex { $0.subtitle?.contains("Switch to project") == true })
+        let addIdx = try #require(items.firstIndex { $0.subtitle?.contains("Add another project") == true })
+        // The pair is adjacent, switch first; beta (unbacked) stays single.
+        #expect(addIdx == switchIdx + 1)
+        #expect(items.count(where: { $0.title == "beta" }) == 1)
+        #expect(items.count(where: { $0.subtitle?.contains("Add another project") == true }) == 1)
+    }
+
+    @Test
+    func partial_prefix_narrowing_to_a_backed_child_offers_both_actions() throws {
+        // The reported case: `~/dev/ma` narrowing to a single project-backed
+        // `macterm` child must offer add-another, not switch-only.
+        let (ctx, _, store) = makeContext()
+        let dir = try makeListingDir(children: ["alpha", "beta"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        store.add(Project(name: "alpha", path: dir.appendingPathComponent("alpha").path, sortOrder: 0))
+
+        let items = DirectorySource().items(query: dir.path + "/al", context: ctx)
+        #expect(items.contains { $0.subtitle?.contains("Switch to project") == true })
+        #expect(items.contains { $0.subtitle?.contains("Add another project") == true })
     }
 
     @Test
@@ -172,12 +193,15 @@ struct DirectorySourceTests {
         return dir
     }
 
-    /// The child rows a query returns. Excludes the exact-match row that a
+    /// The child rows a query returns. Excludes the exact-match rows that a
     /// trailing-slash directory query surfaces at the top for the directory
-    /// itself — that row alone has `score == 0`; children score `offset + 1`.
+    /// itself — identified by the item id's path (ids embed the full path),
+    /// not by score, which is a plain running counter.
     private func childTitles(_ query: String, in ctx: PaletteContext) -> [String] {
-        DirectorySource().items(query: query, context: ctx)
-            .filter { $0.score > 0 }
+        let expanded = (query as NSString).expandingTildeInPath
+        let exact = expanded.hasSuffix("/") ? String(expanded.dropLast()) : expanded
+        return DirectorySource().items(query: query, context: ctx)
+            .filter { !$0.id.hasSuffix(":\(exact)") }
             .map(\.title)
     }
 

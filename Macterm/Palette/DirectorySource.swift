@@ -37,30 +37,38 @@ struct DirectorySource: PaletteSource {
 
         var items: [PaletteItem] = []
 
-        // Exact match at the top (when the typed path is itself a directory).
-        // When a project already backs it, switching comes first and adding
-        // another project right below — only for the exact match; child rows
-        // stay single so the listing doesn't double up.
-        if let exact = exactMatch {
-            let name = (exact as NSString).lastPathComponent
-            let existing = context.projectStore.project(matchingPath: exact)
+        // Every project-backed directory row pairs switch-first with an
+        // "add another project" row directly below — the exact typed path
+        // AND child completions alike. A directory is not an identity, so
+        // adding a second project must not require typing the full path
+        // (a prefix that narrows to one child would otherwise offer only
+        // the switch). `score` is a running counter so pairs stay adjacent
+        // and ordering stays deterministic.
+        var score = 0
+        func appendRows(name: String, fullPath: String) {
+            let existing = context.projectStore.project(matchingPath: fullPath)
             items.append(directoryItem(
                 name: name,
-                fullPath: exact,
+                fullPath: fullPath,
                 existing: existing,
                 context: context,
-                score: 0
+                score: score
             ))
+            score += 1
             if existing != nil {
-                items.append(newProjectItem(name: name, fullPath: exact, context: context, score: 1))
+                items.append(newProjectItem(name: name, fullPath: fullPath, context: context, score: score))
+                score += 1
             }
         }
 
-        // Children rank below every exact-match row (1 without a backing
-        // project, 2 with the switch + add-another pair).
-        let childBase = max(items.count, 1)
+        // Exact match at the top (when the typed path is itself a directory).
+        if let exact = exactMatch {
+            appendRows(name: (exact as NSString).lastPathComponent, fullPath: exact)
+        }
+
+        // Children rank below every exact-match row.
         let entries = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
-        let children = entries
+        entries
             .filter { name in
                 let full = (dir as NSString).appendingPathComponent(name)
                 var childIsDir: ObjCBool = false
@@ -73,22 +81,14 @@ struct DirectorySource: PaletteSource {
             }
             // `contentsOfDirectory` order is unspecified; sort so BOTH which 10
             // children survive the cap AND their ranking are deterministic
-            // across runs and filesystems.
+            // across runs and filesystems. The cap counts directories, not
+            // rows — a backed child's add-another row rides along.
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             .prefix(10)
-            .enumerated()
-            .map { offset, name -> PaletteItem in
-                let full = (dir as NSString).appendingPathComponent(name)
-                return directoryItem(
-                    name: name,
-                    fullPath: full,
-                    existing: context.projectStore.project(matchingPath: full),
-                    context: context,
-                    score: offset + childBase
-                )
+            .forEach { name in
+                appendRows(name: name, fullPath: (dir as NSString).appendingPathComponent(name))
             }
 
-        items += children
         return items
     }
 
@@ -172,8 +172,8 @@ struct DirectorySource: PaletteSource {
         }
     }
 
-    /// Offered below the switch item when a project already backs the exact
-    /// typed path (local or remote): a directory is not an identity, so a
+    /// Offered directly below any switch item whose directory (local or
+    /// remote) already backs a project: a directory is not an identity, so a
     /// second, independent project there is a legitimate ask. Always creates
     /// (`ProjectStore.create`), mirroring the folder picker.
     private func newProjectItem(
