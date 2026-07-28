@@ -10,6 +10,9 @@ grant, so this runs on a stock CI runner. (The workload states carry the real
 signal; the near-redundant idle unfocused/minimized states were dropped to cut
 false-positive labels — fewer cells, fewer noise trips.)
 
+The launch/drive/teardown machinery lives in _harness.py, shared with the e2e
+suite (e2e/) — this file owns only the sampling and reporting.
+
 Per state: settle, then sample several short windows and report the
 per-metric median — each window reads the process's CPU-time delta (the
 primary metric — immune to sampling aliasing) and median RSS. Taking the
@@ -28,13 +31,12 @@ import argparse
 import json
 import os
 import re
-import shutil
-import signal
 import statistics
 import subprocess
 import sys
-import tempfile
 import time
+
+from _harness import HarnessError, MactermHarness, notify, sh
 
 # The benchmark samples one idle state as a sanity baseline plus the two
 # workload states that carry the real signal — an app doing terminal work,
@@ -53,27 +55,11 @@ IDLE_STATES = ("focused",)
 WORKLOAD_STATES = ("workload-focused", "workload-unfocused")
 # Every state the run samples and the report renders, in display order.
 STATES = IDLE_STATES + WORKLOAD_STATES
-NOTIFY_PREFIX = "com.thdxg.macterm.bench."
 # Runs in every workload pane: a real external child process emitting a line
 # a second — "logs trickling in" — without meaningful CPU of its own. Typed
 # into the pane's shell verbatim, so it must parse in POSIX shells AND
 # nushell; invoking /bin/sh with a quoted script does.
 WORKLOAD_COMMAND = '/bin/sh -c "while :; do date; sleep 1; done"'
-
-
-def sh(args, **kwargs):
-    return subprocess.run(args, capture_output=True, text=True, **kwargs)
-
-
-def notify(command):
-    sh(["notifyutil", "-p", NOTIFY_PREFIX + command])
-
-
-def read_info_plist_key(app, key):
-    result = sh(["defaults", "read", os.path.join(app, "Contents", "Info"), key])
-    if result.returncode != 0:
-        sys.exit(f"error: cannot read {key} from {app}: {result.stderr.strip()}")
-    return result.stdout.strip()
 
 
 def parse_cputime(value):
@@ -134,23 +120,21 @@ def parse_powermetrics(output, pid):
     return None
 
 
-def check_alive(pid):
-    # The app is launchd's child (launched via `open`), so it vanishes from
-    # ps on death — but guard against a lingering zombie too, which ps still
-    # reports (with rss 0 and a reset cputime).
-    result = sh(["ps", "-p", str(pid), "-o", "state="])
-    state = result.stdout.strip()
-    if result.returncode != 0 or not state or state.startswith("Z"):
+def check_alive(harness):
+    # Zombie-aware liveness (see MactermHarness.is_alive); dying mid-run is
+    # always fatal to the benchmark.
+    if not harness.is_alive():
         sys.exit("error: app process died mid-benchmark")
 
 
-def sample_window(pid, seconds):
+def sample_window(harness, seconds):
     """One contiguous sampling window: the process's CPU-time rate over the
     window, its median RSS, and (best-effort) powermetrics CPU ms/s + wakeups/s.
     A single reading — `sample_state` runs several and medians them so one
     unlucky window (a shared-runner co-scheduled spike) can't skew the result.
     """
-    check_alive(pid)
+    check_alive(harness)
+    pid = harness.pid
     start = ps_sample(pid)
     if start is None:
         sys.exit("error: app process not sampleable")
@@ -160,7 +144,7 @@ def sample_window(pid, seconds):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         time.sleep(1)
-        check_alive(pid)
+        check_alive(harness)
         sample = ps_sample(pid)
         if sample is None:
             sys.exit("error: app process died mid-sample")
@@ -193,7 +177,7 @@ def _median_or_none(values):
     return round(statistics.median(present), 3) if present else None
 
 
-def sample_state(pid, seconds, samples):
+def sample_state(harness, seconds, samples):
     """Sample a state over `samples` back-to-back windows of `seconds` each and
     return the per-metric median. Splitting one long window into several short
     ones and taking the median keeps a single co-scheduled CPU spike on a shared
@@ -202,7 +186,7 @@ def sample_state(pid, seconds, samples):
     behavior for a local one-shot run)."""
     windows = []
     for i in range(samples):
-        window = sample_window(pid, seconds)
+        window = sample_window(harness, seconds)
         windows.append(window)
         if samples > 1:
             print(f"    window {i + 1}/{samples}: {window}", flush=True)
@@ -216,17 +200,13 @@ def sample_state(pid, seconds, samples):
     }
 
 
-def dump_diagnostics(out_path):
-    """On failure, surface what the app saw: its log lines and a screenshot."""
+def dump_diagnostics(harness, out_path):
+    """On failure, surface what the app saw: its log lines and a screenshot
+    (written next to the results for the CI diagnostics artifact)."""
     diag_dir = os.path.join(os.path.dirname(os.path.abspath(out_path)), "diagnostics")
-    os.makedirs(diag_dir, exist_ok=True)
-    sh(["screencapture", "-x", os.path.join(diag_dir, "screen.png")])
-    result = sh([
-        "log", "show", "--last", "5m", "--style", "compact", "--level", "debug",
-        "--predicate", 'subsystem == "com.thdxg.macterm"',
-    ])
+    log_text = harness.dump_diagnostics(diag_dir)
     print("--- app log ---", flush=True)
-    print(result.stdout or result.stderr, flush=True)
+    print(log_text, flush=True)
 
 
 def enter_state(app, state):
@@ -248,53 +228,30 @@ def enter_state(app, state):
         notify("minimize")
 
 
-def spawn_workload(app, data_dir, tabs, out_path):
+def spawn_workload(harness, tabs):
     """Spawn `tabs` busy tabs (2×2 grid each) through the bundled CLI.
 
-    Fails hard on any miss: silently sampling a partial workload would
-    compare unlike against unlike across runs.
+    Fails hard on any miss (HarnessError → diagnostics + exit in cmd_run):
+    silently sampling a partial workload would compare unlike against unlike
+    across runs.
     """
-    cli = os.path.join(app, "Contents", "Resources", "bin", "macterm")
-    socket = os.path.join(data_dir, "control.sock")
-    if not os.path.exists(cli):
-        sys.exit("error: bundled macterm CLI missing from the app")
-
-    def cli_run(*cli_args):
-        result = sh([cli, *cli_args, "--socket", socket])
-        if result.returncode != 0:
-            dump_diagnostics(out_path)
-            sys.exit(f"error: macterm {' '.join(cli_args)} failed: {result.stderr.strip()}")
-        return result
-
     # The socket answers `starting` until AppState attaches; by this point
     # the project is open so one poll round is usually enough.
-    for _ in range(30):
-        probe = sh([cli, "status", "--socket", socket])
-        if probe.returncode == 0:
-            break
-        time.sleep(1)
-    else:
-        dump_diagnostics(out_path)
-        sys.exit(
-            "error: control socket never became ready for the workload: "
-            f"{probe.stderr.strip()}"
-        )
+    harness.wait_for_socket()
 
     print(f"spawning workload: {tabs} tabs x 4 panes", flush=True)
     for _ in range(tabs):
-        cli_run("tab", "new", "--run", WORKLOAD_COMMAND)
-        cli_run("grid", "2x2", "--run", WORKLOAD_COMMAND)
+        harness.cli("tab", "new", "--run", WORKLOAD_COMMAND)
+        harness.cli("grid", "2x2", "--run", WORKLOAD_COMMAND)
         # Pace the spawn burst: each tab is 4 shells + zmx sessions, and a
         # mass simultaneous spawn is its own pathology (PAM/memory storm),
         # not the steady state this measures.
         time.sleep(0.5)
 
-    listing = json.loads(cli_run("pane", "list", "--json").stdout)
-    panes = listing.get("panes") or []
+    panes = harness.panes()
     expected = 1 + tabs * 4  # the project's original idle pane + the grids
     if len(panes) != expected:
-        dump_diagnostics(out_path)
-        sys.exit(f"error: workload spawned {len(panes)} panes, expected {expected}")
+        raise HarnessError(f"workload spawned {len(panes)} panes, expected {expected}")
 
 
 def git_sha():
@@ -306,116 +263,54 @@ def git_sha():
 
 
 def cmd_run(args):
-    app = os.path.abspath(args.app)
-    executable = read_info_plist_key(app, "CFBundleExecutable")
-    binary = os.path.join(app, "Contents", "MacOS", executable)
-
-    # Isolate the run. A throwaway $HOME keeps the spawned shell's rc files
-    # and $HOME-derived config out of the picture, but App Support and
-    # preferences resolve via the user record, NOT $HOME — so app data
-    # isolation needs the explicit MACTERM_BENCHMARK_DATA_DIR override
-    # (FileStorage.swift). Without it, a local run reads and writes the real
-    # app's projects/workspaces.
-    #
-    # Rooted in /tmp, NOT the default $TMPDIR: the control socket lives at
-    # <data-dir>/control.sock, and a Unix socket path must fit sun_path
-    # (~104 bytes). CI runners' $TMPDIR (/var/folders/…/T/) pushes the path
-    # right past that, so the app refuses to bind and the workload can never
-    # connect. /tmp keeps it ~50 bytes with room to spare.
-    home = tempfile.mkdtemp(prefix="macterm-bench-home-", dir="/tmp")
-    bench_env = {
-        "MACTERM_BENCHMARK": "1",
-        "MACTERM_BENCHMARK_DATA_DIR": os.path.join(home, "app-data"),
-        "HOME": home,
-    }
-
-    # Launch via LaunchServices rather than exec'ing the binary: launch-time
-    # activation counts as user intent, so the app actually becomes active
-    # and SwiftUI creates its window. (A directly-exec'd app starts
-    # backgrounded, and macOS's cooperative activation can deny post-hoc
-    # activation requests indefinitely on a busy desktop — SwiftUI then
-    # never creates a window at all.)
-    print(f"launching {app}", flush=True)
-    env_args = [f"--env={key}={value}" for key, value in bench_env.items()]
-    result = sh(["open", "-n", *env_args, app])
-    if result.returncode != 0:
-        sys.exit(f"error: open failed: {result.stderr.strip()}")
-
-    # Match the launched process by its EXACT executable path, not a loose
-    # `pgrep -f <path>` (which treats the path as a regex — an unescaped `.` in
-    # the build dir matches any char — and blindly takes the first pid). Escape
-    # the path for the regex, then verify each candidate's real command line
-    # points at our binary, so a leftover instance from an aborted run can't be
-    # sampled/killed instead of the fresh launch.
-    pid = None
-    for _ in range(20):
-        pids = sh(["pgrep", "-f", "--", re.escape(binary)]).stdout.split()
-        for candidate in pids:
-            command = sh(["ps", "-p", candidate, "-o", "command="]).stdout.strip()
-            if command.startswith(binary):
-                pid = int(candidate)
-                break
-        if pid is not None:
-            break
-        time.sleep(0.5)
-    if pid is None:
-        sys.exit("error: app process did not appear after launch")
-
+    # Isolation (throwaway $HOME, MACTERM_BENCHMARK_DATA_DIR, ZMX_DIR) and the
+    # LaunchServices launch + exact-pid-match recipe live in MactermHarness,
+    # shared with the e2e suite; this function owns settling and sampling. The
+    # home prefix keeps an aborted run's leftovers identifiable in /tmp.
+    harness = MactermHarness(os.path.abspath(args.app), home_prefix="macterm-bench-home-")
     try:
-        time.sleep(args.boot_settle)
-        check_alive(pid)
-
-        # Ask the app to open a project so a real shell + surface is on
-        # screen. ProjectStore.add saves projects.json into the isolated
-        # data dir synchronously, so its existence is the readiness marker;
-        # retry (idempotently) rather than sleep-and-hope, since the window
-        # this needs only exists once activation was granted.
-        project_marker = os.path.join(bench_env["MACTERM_BENCHMARK_DATA_DIR"], "projects.json")
-        for _ in range(30):
-            notify("activate")
-            notify("open-project")
-            time.sleep(2)
-            check_alive(pid)
-            if os.path.exists(project_marker):
-                break
-        else:
-            dump_diagnostics(args.out)
-            sys.exit(
-                "error: app never opened the benchmark project — window creation "
-                "requires app activation; is someone actively using this desktop?"
-            )
-        # Let the shell spawn and the initial render burst drain.
-        time.sleep(args.boot_settle)
-
-        results = {}
-        for state in IDLE_STATES:
-            enter_state(app, state)
-            time.sleep(args.settle)
-            print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
-            results[state] = sample_state(pid, args.seconds, args.samples)
-            print(f"  {results[state]}", flush=True)
-
-        if args.workload > 0:
-            # Re-run under busy tabs so the numbers reflect an app doing real
-            # terminal work, not an empty window. Spawn while focused (surfaces
-            # need a window).
-            enter_state(app, "focused")
-            spawn_workload(app, bench_env["MACTERM_BENCHMARK_DATA_DIR"], args.workload, args.out)
+        try:
+            print(f"launching {harness.app}", flush=True)
+            harness.launch()
             time.sleep(args.boot_settle)
-            for state in WORKLOAD_STATES:
-                enter_state(app, state)
+            check_alive(harness)
+
+            # Ask the app to open a project so a real shell + surface is on
+            # screen (projects.json in the isolated data dir is the readiness
+            # marker — see MactermHarness.open_project).
+            harness.open_project()
+            # Let the shell spawn and the initial render burst drain.
+            time.sleep(args.boot_settle)
+
+            results = {}
+            for state in IDLE_STATES:
+                enter_state(harness.app, state)
                 time.sleep(args.settle)
                 print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
-                results[state] = sample_state(pid, args.seconds, args.samples)
+                results[state] = sample_state(harness, args.seconds, args.samples)
                 print(f"  {results[state]}", flush=True)
+
+            if args.workload > 0:
+                # Re-run under busy tabs so the numbers reflect an app doing real
+                # terminal work, not an empty window. Spawn while focused (surfaces
+                # need a window).
+                enter_state(harness.app, "focused")
+                spawn_workload(harness, args.workload)
+                time.sleep(args.boot_settle)
+                for state in WORKLOAD_STATES:
+                    enter_state(harness.app, state)
+                    time.sleep(args.settle)
+                    print(f"sampling {state}: {args.samples}x{args.seconds}s", flush=True)
+                    results[state] = sample_state(harness, args.seconds, args.samples)
+                    print(f"  {results[state]}", flush=True)
+        except HarnessError as exc:
+            dump_diagnostics(harness, args.out)
+            sys.exit(f"error: {exc}")
     finally:
-        # SIGKILL: SIGTERM would hang on the quit-confirmation dialog for the
-        # running shell.
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        shutil.rmtree(home, ignore_errors=True)
+        # Kills the workload's zmx sessions (their shells would otherwise
+        # outlive the run), SIGKILLs the app (SIGTERM would hang on the
+        # quit-confirmation dialog), and removes the throwaway home.
+        harness.cleanup()
 
     payload = {
         "schema": 2,
