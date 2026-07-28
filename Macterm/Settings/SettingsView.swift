@@ -370,7 +370,7 @@ private struct AppearanceSettings: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
 
-                Picker("Position", selection: $tabSwitcherPosition) {
+                Picker("Tab switcher position", selection: $tabSwitcherPosition) {
                     ForEach(TabSwitcherPosition.allCases) { option in
                         Text(option.displayName).tag(option.rawValue)
                     }
