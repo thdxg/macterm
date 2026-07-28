@@ -117,6 +117,26 @@ final class Preferences {
         didSet { defaults.set(terminateSessionsOnQuit, forKey: Keys.terminateSessionsOnQuit) }
     }
 
+    // MARK: - Hotkeys
+
+    /// Bumped by `HotkeyRegistry.setShortcutString` on every rebind. Hotkey
+    /// bindings live in raw UserDefaults keys (`macterm.hotkey.<action_id>`),
+    /// not in a `Preferences` property, so SwiftUI has nothing to observe when
+    /// one changes. Ordinary views that render a binding (the shortcut hints in
+    /// `WelcomeView`/`EmptyProjectView`) read this to register a dependency and
+    /// refresh on rebind.
+    ///
+    /// This does *not* reach the menu bar: a SwiftUI `.commands` tree is built
+    /// once and never re-evaluated from observable state, so no amount of
+    /// invalidation updates a `.keyboardShortcut`. `HotkeyMenuSync` patches the
+    /// live `NSMenuItem`s for that.
+    private(set) var hotkeyVersion = 0
+
+    /// Not persisted — the version only orders rebuilds within a launch.
+    func bumpHotkeyVersion() {
+        hotkeyVersion &+= 1
+    }
+
     // MARK: - Toolbar
 
     var tabSwitcherVisibility: TabSwitcherVisibility {

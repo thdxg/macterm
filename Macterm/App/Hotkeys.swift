@@ -351,11 +351,21 @@ enum HotkeyRegistry {
         }
     }
 
+    @MainActor
     static func setShortcutString(_ shortcut: String, for action: HotkeyAction) {
         Preferences.defaults.set(shortcut, forKey: action.defaultsKey)
         // A rebind is the only thing that changes a parsed shortcut — drop the
         // stale cache entry so the next `matches` re-parses it once.
         shortcutCache.withLock { $0[action] = nil }
+        // Bindings live in raw defaults keys, so SwiftUI can't see this write.
+        // Bump the observable version so views that render a binding (the
+        // shortcut hints in WelcomeView/EmptyProjectView) refresh.
+        Preferences.shared.bumpHotkeyVersion()
+        // The menu bar can't be fixed that way — a SwiftUI `.commands` tree is
+        // built once and never re-evaluated — so patch the live NSMenuItems.
+        // Skipping this leaves a cleared shortcut still firing from the menu,
+        // which beats KeyRouter to the event.
+        HotkeyMenuSync.sync()
     }
 
     static func isValidShortcutString(_ shortcut: String) -> Bool {

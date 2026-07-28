@@ -108,6 +108,12 @@ targets:
         OTHER_SWIFT_FLAGS:
           - "-Xcc"
           - "-Wno-incomplete-umbrella"
+        # Exposes the ObjC exception trampoline (System/ObjCExceptionCatcher.h)
+        # to Swift — @try/@catch has no Swift equivalent, and an uncaught
+        # NSException kills the app without a crash report. ARC is pinned on
+        # explicitly since the target now compiles an .m file.
+        SWIFT_OBJC_BRIDGING_HEADER: Macterm/Macterm-Bridging-Header.h
+        CLANG_ENABLE_OBJC_ARC: YES
         # Display name (Dock / menu bar / Finder) — wired into Info.plist's
         # CFBundleDisplayName. The bundle *name* (PRODUCT_NAME) stays "Macterm"
         # in every config so TEST_HOST and on-disk layout don't shift.

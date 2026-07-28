@@ -20,4 +20,20 @@ xcodebuild \
   | (xcbeautify --quiet 2>/dev/null || cat)
 
 APP="$DERIVED_DATA/Build/Products/Debug/Macterm.app"
-open "$APP"
+
+# `-n` forces a new instance of the bundle AT THIS PATH. Without it, `open`
+# resolves through LaunchServices, which on a dev machine has many bundles
+# registered under the same `com.thdxg.macterm.debug` ID — this checkout, every
+# `.claude/worktrees/*` copy, stray `~/Library/Developer/Xcode/DerivedData`
+# trees. It usually still picks the path given, but when a stale copy is already
+# running it can reactivate THAT instance instead: observed launching a
+# two-week-old worktree build, which even inherited the argv of the earlier
+# launch record. The freshly built app then never runs, which reads as "the
+# build worked but the app didn't start".
+#
+# Still LaunchServices rather than exec'ing Contents/MacOS/Macterm directly:
+# launch-time activation counts as user intent, so the app becomes active and
+# SwiftUI creates its window. A directly-exec'd app starts backgrounded and can
+# be denied activation indefinitely, never getting a window — the same reason
+# scripts/benchmark.py launches with `open -n`.
+open -n "$APP"
