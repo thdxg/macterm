@@ -126,6 +126,11 @@ struct TerminalExecutionTracker {
     private var hasUserInteraction = false
     /// Geometry baseline carried by the IO-path output heartbeat. Growth is
     /// strong activity evidence; equal totals describe an in-place redraw.
+    /// Completion edges (OSC 133;D, the poll's return-to-shell) reset it to
+    /// nil: the heartbeat throttle (500ms, leading-edge, drops — never defers)
+    /// means a fast command's output often surfaces only on a LATER heartbeat,
+    /// and growth measured across a completion must rebase rather than start a
+    /// fresh activity run for a command that already ended.
     private var lastOutputRows: UInt64?
     /// A narrowly-armed path for work nested inside a recognized AI agent. The
     /// first in-place output heartbeat is only a candidate; a second within the
@@ -186,6 +191,11 @@ struct TerminalExecutionTracker {
         // empty Return. Always cancel its submission candidate, but only show a
         // completion when a command was genuinely running.
         pendingOutputStart = nil
+        // Rebase row growth even when the completion lands while idle: a fast
+        // command's output can be dropped by the heartbeat throttle, so the
+        // next emitted heartbeat carries its growth AFTER this edge and must
+        // not restart the finished command as an activity run.
+        lastOutputRows = nil
         // OSC 133;D for an empty Return may arrive before its redraw/output.
         // Keep blank suppression while idle so that later callback cannot flash
         // the spinner; a genuine running completion no longer needs it.
@@ -326,9 +336,15 @@ struct TerminalExecutionTracker {
         lastTerminalInputWasRaw = newKey == nil ? nil : terminalInputIsRaw
         // An authoritative process transition supersedes output heuristics. A
         // steady raw Pi pid deliberately preserves the submission candidate.
+        // The row baseline rebases too: growth accumulated under the previous
+        // foreground (possibly dropped by the heartbeat throttle) must not be
+        // claimed as new activity after the transition — notably by the first
+        // heartbeat after a command's process returned the foreground to the
+        // shell.
         if changed {
             pendingOutputStart = nil
             blankSubmissionAt = nil
+            lastOutputRows = nil
         }
 
         // Resolve the race where progress cleared before a foreground poll: the

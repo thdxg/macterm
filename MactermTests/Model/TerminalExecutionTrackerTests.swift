@@ -291,6 +291,65 @@ struct TerminalExecutionTrackerTests {
     }
 
     @Test
+    func commandFinishWhileIdleRebasesRowGrowth_lateHeartbeatCannotStartRun() {
+        var tracker = TerminalExecutionTracker()
+        let submittedAt = Date(timeIntervalSince1970: 100)
+        var state = tracker.markOutputActivity(
+            totalRows: 10, at: submittedAt.addingTimeInterval(-1), currentState: .idle
+        )
+        tracker.recordUserInteraction()
+        tracker.recordCommandSubmission(at: submittedAt, allowInPlaceOutputStart: false, hasContent: true)
+
+        // A fast command (`ls`) whose output chunks were all dropped by the
+        // 500ms leading-edge heartbeat throttle: OSC 133;D arrives while the
+        // pane still reads idle, so the completion itself shows nothing.
+        state = tracker.markCommandFinished(currentState: state)
+        #expect(state == .idle)
+
+        // The next emitted heartbeat carries the finished command's row
+        // growth. It must rebase, not start a quiet-settle activity run for a
+        // command that already ended.
+        state = tracker.markOutputActivity(
+            totalRows: 30, at: submittedAt.addingTimeInterval(0.6), currentState: state
+        )
+        #expect(state == .idle)
+
+        // Genuinely new growth after the rebase still starts a run.
+        state = tracker.markOutputActivity(
+            totalRows: 40, at: submittedAt.addingTimeInterval(1.2), currentState: state
+        )
+        #expect(state == .running)
+    }
+
+    @Test
+    func foregroundReturnToShellRebasesRowGrowth() {
+        var tracker = TerminalExecutionTracker()
+        tracker.recordUserInteraction()
+        let start = Date(timeIntervalSince1970: 100)
+        var state = tracker.markOutputActivity(totalRows: 10, at: start, currentState: .idle)
+        state = tracker.refreshForeground(
+            name: "find", pid: 42, foregroundIsShell: false, terminalInputIsRaw: false,
+            currentState: state
+        )
+        #expect(state == .running)
+
+        // The command's output tail was dropped by the heartbeat throttle
+        // before the poll saw its process exit.
+        state = tracker.refreshForeground(
+            name: "zsh", pid: 7, foregroundIsShell: true, terminalInputIsRaw: false,
+            currentState: state
+        )
+        #expect(state == .done)
+
+        // After the completion is acknowledged, the late heartbeat carrying
+        // that tail must rebase instead of restarting the finished command.
+        state = tracker.markOutputActivity(
+            totalRows: 30, at: start.addingTimeInterval(1), currentState: .idle
+        )
+        #expect(state == .idle)
+    }
+
+    @Test
     func progressTransitionCancelsSubmissionCandidate() {
         var tracker = TerminalExecutionTracker()
         let submittedAt = Date(timeIntervalSince1970: 100)
