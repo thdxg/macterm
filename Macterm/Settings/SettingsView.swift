@@ -688,6 +688,8 @@ private struct UpdatesSettings: View {
     private var automaticallyChecks: Bool = Updater.shared.automaticallyChecksForUpdates
     @State
     private var automaticallyDownloads: Bool = Updater.shared.automaticallyDownloadsUpdates
+    @State
+    private var receivesPrereleases: Bool = Updater.shared.receivesPrereleaseUpdates
 
     var body: some View {
         Form {
@@ -713,6 +715,27 @@ private struct UpdatesSettings: View {
 
                 Text(
                     "Updates are verified with an EdDSA signature. Macterm does not collect analytics."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            // Deliberately its own section, and NOT disabled when automatic
+            // checks are off: the channel governs which updates are visible to
+            // any check, including a manual "Check for Updates Now".
+            Section("Beta Updates") {
+                Toggle("Receive beta updates", isOn: $receivesPrereleases)
+                    .onChange(of: receivesPrereleases) { _, v in
+                        updater.receivesPrereleaseUpdates = v
+                    }
+
+                Text(
+                    """
+                    Beta builds ship ahead of stable releases and may be \
+                    unstable. Turning this off stops future beta updates, but \
+                    does not downgrade a beta you already installed — the next \
+                    stable release above your version will replace it.
+                    """
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

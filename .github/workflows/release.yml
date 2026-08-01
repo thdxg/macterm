@@ -51,10 +51,21 @@ jobs:
       - name: Build universal release artifact
         env:
           SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "error: tag '$GITHUB_REF_NAME' is not vX.Y.Z; refusing to build a placeholder release" >&2
+          # A `-beta.N` suffix is accepted ONLY on a release flagged prerelease,
+          # so a stable release can never ship a beta version string (and a beta
+          # tag can't sneak into the stable channel by forgetting the flag).
+          if [[ "$PRERELEASE" == "true" ]]; then
+            PATTERN='^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$'
+            EXPECTED="vX.Y.Z or vX.Y.Z-beta.N"
+          else
+            PATTERN='^[0-9]+\.[0-9]+\.[0-9]+$'
+            EXPECTED="vX.Y.Z"
+          fi
+          if ! [[ "$VERSION" =~ $PATTERN ]]; then
+            echo "error: tag '$GITHUB_REF_NAME' is not $EXPECTED; refusing to build a placeholder release" >&2
             exit 1
           fi
           # Release builds invoke the build script directly to skip the
@@ -79,6 +90,9 @@ jobs:
       id-token: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Job-level so both the version gate and the appcast step read the same
+      # flag. GitHub renders the boolean as the string "true"/"false".
+      PRERELEASE: ${{ github.event.release.prerelease }}
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
@@ -96,15 +110,26 @@ jobs:
         id: release
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "error: tag '$GITHUB_REF_NAME' is not vX.Y.Z; refusing to publish a placeholder release" >&2
+          # Mirrors the build job's gate (see the comment there).
+          if [[ "$PRERELEASE" == "true" ]]; then
+            PATTERN='^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$'
+            EXPECTED="vX.Y.Z or vX.Y.Z-beta.N"
+          else
+            PATTERN='^[0-9]+\.[0-9]+\.[0-9]+$'
+            EXPECTED="vX.Y.Z"
+          fi
+          if ! [[ "$VERSION" =~ $PATTERN ]]; then
+            echo "error: tag '$GITHUB_REF_NAME' is not $EXPECTED; refusing to publish a placeholder release" >&2
             exit 1
           fi
           TAG="v${VERSION}"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Macterm $TAG" --generate-notes
           gh release upload "$TAG" dmgs/*.dmg --clobber
-          # Ensure the release is published (not left as draft).
-          gh release edit "$TAG" --draft=false
+          # Ensure the release is published (not left as draft), and re-assert
+          # the prerelease flag explicitly: publishing a draft in the same call
+          # would otherwise be a chance to drop it, which would leak a beta
+          # into the stable channel on a re-run.
+          gh release edit "$TAG" --draft=false --prerelease="$PRERELEASE"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
@@ -112,10 +137,13 @@ jobs:
       # Sparkle's `sign_update` produces an EdDSA signature for each DMG.
       # We then append a new <item> to the appcast on the gh-pages branch,
       # which is served as https://thdxg.github.io/macterm/appcast.xml.
+      #
+      # BOTH stable and prerelease publish here now — one feed, two channels.
+      # A prerelease's <item> carries <sparkle:channel>beta</sparkle:channel>,
+      # which Sparkle hides from any updater that hasn't opted into the `beta`
+      # channel. What still stays stable-only is the Homebrew tap (below).
 
       - name: Install Sparkle tools
-        # Prereleases don't touch the stable auto-update feed.
-        if: ${{ !github.event.release.prerelease }}
         run: |
           SPARKLE_VERSION="2.9.1"
           curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
@@ -123,7 +151,6 @@ jobs:
           echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
 
       - name: Publish appcast to gh-pages
-        if: ${{ !github.event.release.prerelease }}
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           VERSION: ${{ steps.release.outputs.version }}

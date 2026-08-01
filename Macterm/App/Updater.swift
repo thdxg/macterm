@@ -98,13 +98,46 @@ final class Updater {
         get { updater.automaticallyDownloadsUpdates }
         set { updater.automaticallyDownloadsUpdates = newValue }
     }
+
+    /// Opt in/out of the `beta` appcast channel. Sparkle asks the delegate for
+    /// `allowedChannels` on each check, so a flip here lands on the next check
+    /// without restarting. Writing the pref is enough — but when turning the
+    /// channel *off* we also reset the update-available flag, since a beta
+    /// already found is no longer an update this app should offer.
+    var receivesPrereleaseUpdates: Bool {
+        get { Preferences.shared.receivePrereleaseUpdates }
+        set {
+            Preferences.shared.receivePrereleaseUpdates = newValue
+            if !newValue { updateAvailable = false }
+        }
+    }
 }
+
+/// Sparkle's channel name for pre-release builds. Must match the
+/// `<sparkle:channel>` value written by `scripts/publish-appcast.sh`; the two
+/// are a wire contract, so `UpdaterChannelTests` pins the literal.
+let betaUpdateChannel = "beta"
 
 /// Receives callbacks for *user-initiated* checks (the "Check for Updates…"
 /// menu item / Settings button).
 private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     var onUpdateFound: (() -> Void)?
     var onUpdateCleared: (() -> Void)?
+
+    /// Gates the `beta` channel on the user's preference. Sparkle calls this on
+    /// every check (scheduled and user-initiated alike), so the toggle needs no
+    /// restart. Returning an empty set means "default channel only" — items
+    /// carrying `<sparkle:channel>beta</sparkle:channel>` stay invisible.
+    ///
+    /// `nonisolated` + a `MainActor.assumeIsolated` read: Sparkle declares this
+    /// delegate method non-isolated and calls it on the main thread, while
+    /// `Preferences.shared` is `@MainActor`. Asserting the isolation we're
+    /// already on beats caching a copy that could go stale mid-session.
+    nonisolated func allowedChannels(for _: SPUUpdater) -> Set<String> {
+        MainActor.assumeIsolated {
+            Preferences.shared.receivePrereleaseUpdates ? [betaUpdateChannel] : []
+        }
+    }
 
     func updater(_: SPUUpdater, didFindValidUpdate _: SUAppcastItem) {
         DispatchQueue.main.async { self.onUpdateFound?() }

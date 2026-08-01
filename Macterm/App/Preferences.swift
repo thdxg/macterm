@@ -135,6 +135,18 @@ final class Preferences {
         didSet { defaults.set(terminateSessionsOnQuit, forKey: Keys.terminateSessionsOnQuit) }
     }
 
+    /// Opt in to pre-release (beta) auto-updates. Read by `Updater`'s
+    /// `allowedChannelsForUpdater` to add Sparkle's `beta` channel, so betas
+    /// published to the appcast become visible to both the scheduled check and
+    /// "Check for Updates…". Default off: the stable channel is the only one a
+    /// fresh install ever sees.
+    ///
+    /// Sparkle reads `allowedChannels` fresh on every check, so flipping this
+    /// takes effect on the next check with no restart.
+    var receivePrereleaseUpdates: Bool {
+        didSet { defaults.set(receivePrereleaseUpdates, forKey: Keys.receivePrereleaseUpdates) }
+    }
+
     // MARK: - Hotkeys
 
     /// Bumped by `HotkeyRegistry.setShortcutString` on every rebind. Hotkey
@@ -379,6 +391,7 @@ final class Preferences {
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         terminateSessionsOnQuit = defaults.object(forKey: Keys.terminateSessionsOnQuit) as? Bool ?? false
+        receivePrereleaseUpdates = defaults.object(forKey: Keys.receivePrereleaseUpdates) as? Bool ?? false
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
             .flatMap(TabSwitcherVisibility.init(rawValue:)) ?? .whenMultiple
         tabSwitcherPosition = (defaults.string(forKey: Keys.tabSwitcherPosition))
@@ -437,6 +450,7 @@ final class Preferences {
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let terminateSessionsOnQuit = "macterm.session.terminateOnQuit"
+        static let receivePrereleaseUpdates = "macterm.updates.receivePrereleases"
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let tabSwitcherPosition = "macterm.toolbar.tabSwitcherPosition"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"

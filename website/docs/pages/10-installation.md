@@ -25,3 +25,11 @@ xattr -cr /Applications/Macterm.app
 ```
 
 Sparkle handles updates from there — Macterm checks daily in the background and verifies an EdDSA signature on each update, so you won't need `xattr` again.
+
+## Beta updates
+
+Betas ship ahead of stable releases and may be unstable. To receive them, turn on **Receive beta updates** in Settings → Updates. Macterm then offers beta builds on both the daily background check and **Check for Updates…**; with it off you only ever see stable releases.
+
+Turning it back off stops future beta updates but doesn't downgrade a beta you already have — the next stable release above your version replaces it.
+
+Homebrew always tracks stable releases. `brew upgrade` never installs a beta, so opting in only affects Macterm's own updater.
