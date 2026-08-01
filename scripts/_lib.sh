@@ -38,3 +38,32 @@ run_step() {
 step() {
   printf "  → %s\n" "$1"
 }
+
+# Map a marketing version to the 4-component version Sparkle ORDERS updates by
+# (CFBundleVersion / <sparkle:version>). Display strings keep the human form via
+# CFBundleShortVersionString / <sparkle:shortVersionString>.
+#
+#   1.8.0         -> 1.8.0.9999   (stable)
+#   0.9.0-beta.1  -> 0.9.0.1      (beta)
+#
+# WHY, measured against the real SUStandardVersionComparator (not assumed): it
+# splits on character-type boundaries and treats a `-` suffix as insignificant,
+# so `0.9.0-beta.1 == 0.9.0 == 0.9.0-beta.2`. Feeding the raw beta string to
+# Sparkle would mean beta→beta updates never appear ("You're up to date") and
+# the eventual stable 0.9.0 never lands for testers. Encoding the beta number as
+# a 4th component fixes both, and the 9999 sentinel keeps every beta of Z below
+# stable Z while preserving X.Y.Z ordering across versions.
+#
+# The sentinel is NOT ".0": the comparator ranks `0.9.0.0.9 > 0.9.0`, so padding
+# a stable version with fewer components than a beta inverts the order.
+#
+# Both scripts that emit a version MUST use this — a mismatch between the app's
+# CFBundleVersion and the appcast's sparkle:version silently breaks updates.
+sparkle_comparison_version() {
+  local version="$1"
+  if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
+    printf '%s.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  else
+    printf '%s.9999\n' "$version"
+  fi
+}
