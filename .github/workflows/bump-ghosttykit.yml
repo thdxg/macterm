@@ -1,0 +1,122 @@
+name: Bump GhosttyKit
+
+# GhosttyKit is pinned to one thdxg/ghostty release (GHOSTTYKIT_TAG in
+# scripts/setup.sh) so a Macterm build can't silently pick up whatever
+# libghostty landed that morning. A pin needs a way back off it, or it rots:
+# this opens the PR, weekly, and CI is the gate.
+#
+# The PR is a real test, not a rubber stamp. Changing setup.sh changes the
+# GhosttyKit cache key (every workflow keys on hashFiles('scripts/setup.sh')),
+# so the run downloads the NEW pin from scratch and puts it through Unit,
+# End-to-end, and the benchmark. That is the check that would have caught the
+# sentry-init crash before it shipped in a release.
+#
+# Dependabot can't do this — a GitHub release asset is not a package ecosystem —
+# but the cadence, labels, and commit prefix match .github/dependabot.yml so
+# these land in the same review lane as the actions bumps.
+on:
+  schedule:
+    # Mondays, same as dependabot's actions group.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+# A second run while a bump PR is open would just recompute the same branch.
+concurrency:
+  group: bump-ghosttykit
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # A PR opened by the default GITHUB_TOKEN does NOT trigger workflows, which
+      # would defeat the entire point — the bump would arrive untested. GH_PAT is
+      # already a repo secret (release.yml uses it for the private ghostty fork)
+      # and, as a user token, its pushes do trigger CI.
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve latest and compare with the pin
+        id: check
+        run: |
+          CURRENT=$(grep -oE 'GHOSTTYKIT_TAG:-[^}]+' scripts/setup.sh | cut -d- -f2- | sed 's/^://')
+          if [[ -z "$CURRENT" ]]; then
+            echo "error: could not parse GHOSTTYKIT_TAG out of scripts/setup.sh" >&2
+            exit 1
+          fi
+          LATEST=$(gh release list --repo thdxg/ghostty --limit 1 --json tagName -q '.[0].tagName')
+          if [[ -z "$LATEST" ]]; then
+            echo "error: could not resolve the latest thdxg/ghostty release" >&2
+            exit 1
+          fi
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          if [[ "$CURRENT" == "$LATEST" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Pin is already at $LATEST — nothing to do."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Pin $CURRENT is behind $LATEST."
+          fi
+
+      # One branch per target tag, so a re-run while the PR is open is a no-op
+      # instead of a duplicate. `gh pr create` on an existing branch would fail,
+      # so check first.
+      - name: Open or update the bump PR
+        if: steps.check.outputs.changed == 'true'
+        env:
+          CURRENT: ${{ steps.check.outputs.current }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          BRANCH="chore/ghosttykit-${LATEST}"
+          if gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q .; then
+            echo "PR for $BRANCH is already open — leaving it alone."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+
+          # Rewrite only the default in the parameter expansion, so the
+          # GHOSTTYKIT_TAG override still works.
+          sed -i -E "s/(GHOSTTYKIT_TAG:-)[^}]+/\1${LATEST}/" scripts/setup.sh
+          if git diff --quiet scripts/setup.sh; then
+            echo "error: sed matched nothing; the GHOSTTYKIT_TAG line must have changed shape" >&2
+            exit 1
+          fi
+          # Confirm the file now actually reads as the new tag rather than
+          # trusting the substitution.
+          APPLIED=$(grep -oE 'GHOSTTYKIT_TAG:-[^}]+' scripts/setup.sh | cut -d- -f2- | sed 's/^://')
+          if [[ "$APPLIED" != "$LATEST" ]]; then
+            echo "error: pin reads '$APPLIED' after rewrite, expected '$LATEST'" >&2
+            exit 1
+          fi
+
+          git add scripts/setup.sh
+          git commit -m "chore(deps): bump GhosttyKit to ${LATEST}
+
+          Moves the pinned thdxg/ghostty release from ${CURRENT} to ${LATEST}.
+          Opened by .github/workflows/bump-ghosttykit.yml."
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main --head "$BRANCH" \
+            --title "chore(deps): bump GhosttyKit to ${LATEST}" \
+            --label dependencies --label area:ci \
+            --body "Moves the pinned \`thdxg/ghostty\` release (\`GHOSTTYKIT_TAG\` in \`scripts/setup.sh\`).
+
+          | | tag |
+          |---|---|
+          | from | \`${CURRENT}\` |
+          | to | \`${LATEST}\` |
+
+          Opened by the weekly \`bump-ghosttykit.yml\`.
+
+          **CI on this PR is the gate.** Editing \`scripts/setup.sh\` changes the GhosttyKit cache key, so this run downloads the new pin from scratch and exercises it through Unit, End-to-end, and the benchmark — rather than a release being the first thing to try it.
+
+          Before merging, skim [thdxg/ghostty](https://github.com/thdxg/ghostty/compare/${CURRENT}...${LATEST}) for anything that needs a Macterm-side change (an ABI addition, a config-key rename, a behaviour change the wrapper depends on). A green run means it builds and the suites pass, not that no behaviour moved."
