@@ -23,6 +23,27 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 /// `leading` maps to the `.navigation` toolbar slot, which AppKit places
 /// ahead of the inline window title — the switcher hugs the sidebar edge
 /// and the title shifts right of it.
+/// Which Sparkle appcast channel the updater draws from.
+///
+/// `stable` maps to Sparkle's default channel (items with no
+/// `<sparkle:channel>`); `beta` additionally allows items tagged
+/// `<sparkle:channel>beta</sparkle:channel>`. The raw values are persisted, so
+/// renaming a case is a stored-preference migration — and `beta`'s raw value is
+/// the channel name sent to Sparkle, matching `betaUpdateChannel`.
+enum UpdateChannel: String, CaseIterable, Identifiable {
+    case stable
+    case beta
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .stable: "Stable"
+        case .beta: "Beta"
+        }
+    }
+}
+
 enum TabSwitcherPosition: String, CaseIterable, Identifiable {
     case leading
     case trailing
@@ -133,6 +154,17 @@ final class Preferences {
     /// ghostty config pipeline.
     var terminateSessionsOnQuit: Bool {
         didSet { defaults.set(terminateSessionsOnQuit, forKey: Keys.terminateSessionsOnQuit) }
+    }
+
+    /// Which appcast channel auto-updates come from. Read by `Updater`'s
+    /// `allowedChannelsForUpdater`, so `.beta` makes prerelease items visible to
+    /// both the scheduled check and "Check for Updates…". Defaults to `.stable`:
+    /// the only channel a fresh install ever sees.
+    ///
+    /// Sparkle reads `allowedChannels` fresh on every check, so changing this
+    /// takes effect on the next check with no restart.
+    var updateChannel: UpdateChannel {
+        didSet { defaults.set(updateChannel.rawValue, forKey: Keys.updateChannel) }
     }
 
     // MARK: - Hotkeys
@@ -379,6 +411,8 @@ final class Preferences {
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         terminateSessionsOnQuit = defaults.object(forKey: Keys.terminateSessionsOnQuit) as? Bool ?? false
+        updateChannel = (defaults.string(forKey: Keys.updateChannel))
+            .flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
             .flatMap(TabSwitcherVisibility.init(rawValue:)) ?? .whenMultiple
         tabSwitcherPosition = (defaults.string(forKey: Keys.tabSwitcherPosition))
@@ -437,6 +471,7 @@ final class Preferences {
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let terminateSessionsOnQuit = "macterm.session.terminateOnQuit"
+        static let updateChannel = "macterm.updates.channel"
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let tabSwitcherPosition = "macterm.toolbar.tabSwitcherPosition"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"

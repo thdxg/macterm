@@ -4,16 +4,35 @@
 #
 # Required env:
 #   SPARKLE_ED_PRIVATE_KEY — EdDSA private key (Sparkle format)
-#   VERSION                — e.g. 1.8.0
+#   VERSION                — e.g. 1.8.0, or 0.9.0-beta.1 for a prerelease
 #   TAG                    — e.g. v1.8.0
 #   GH_TOKEN               — token with contents:write on this repo
 #   GITHUB_REPOSITORY      — provided by GitHub Actions (owner/repo)
+#
+# Optional env:
+#   PRERELEASE             — "true" to tag items with <sparkle:channel>beta.
+#                            Only updaters whose allowedChannels includes
+#                            "beta" (Settings → Updates → Channel: Beta)
+#                            can see them; everyone else keeps getting stable.
+#
+# ONE feed, two channels — deliberately not a second appcast file. Sparkle
+# filters channels client-side, so a beta tester's app and a stable user's app
+# read the same URL and diverge only on the delegate's allowedChannels. That
+# also means a tester who opts back out immediately sees stable again, with no
+# feed-URL migration.
 #
 # Usage: publish-appcast.sh <dmg_dir>
 
 set -euo pipefail
 
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
 DMG_DIR="${1:-dmgs}"
+PRERELEASE="${PRERELEASE:-false}"
+# MUST match the app's CFBundleVersion, which build.sh derives with the same
+# helper — Sparkle orders updates by this, not by the display string.
+COMPARISON_VERSION="$(sparkle_comparison_version "$VERSION")"
 PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
 REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
 PAGES_URL="https://thdxg.github.io/macterm"
@@ -79,15 +98,26 @@ if [[ ${#dmgs[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# Prereleases carry <sparkle:channel>beta</sparkle:channel>; stable items carry
+# no channel element at all (Sparkle's default channel, visible to everyone).
+# The literal "beta" is a wire contract with `betaUpdateChannel` in
+# Macterm/App/Updater.swift — UpdaterChannelTests pins it on the Swift side.
+CHANNEL_LINE=""
+TITLE_SUFFIX=""
+if [[ "$PRERELEASE" == "true" ]]; then
+  CHANNEL_LINE=$'\n      <sparkle:channel>beta</sparkle:channel>'
+  TITLE_SUFFIX=" (beta)"
+fi
+
 for dmg in "${dmgs[@]}"; do
   name=$(basename "$dmg")
   url="${REPO_URL}/releases/download/${TAG}/${name}"
   sig=$(sign_update -f <(echo "$SPARKLE_ED_PRIVATE_KEY") "$dmg")
   cat >> "$ITEMS_FILE" <<ITEM
     <item>
-      <title>Macterm ${VERSION}</title>
-      <pubDate>${PUB_DATE}</pubDate>
-      <sparkle:version>${VERSION}</sparkle:version>
+      <title>Macterm ${VERSION}${TITLE_SUFFIX}</title>
+      <pubDate>${PUB_DATE}</pubDate>${CHANNEL_LINE}
+      <sparkle:version>${COMPARISON_VERSION}</sparkle:version>
       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>${NOTES_URL}</sparkle:releaseNotesLink>
@@ -132,7 +162,7 @@ fi
 # already present. Re-running the workflow for the same tag (a common recovery
 # action) would otherwise append a duplicate <item> for the version, leaving
 # Sparkle with two entries for one release.
-if grep -q "<sparkle:version>${VERSION}</sparkle:version>" appcast.xml; then
+if grep -q "<sparkle:version>${COMPARISON_VERSION}</sparkle:version>" appcast.xml; then
   echo "appcast already has an entry for ${VERSION}; not inserting a duplicate"
 else
   awk -v items_file="$ITEMS_FILE" '

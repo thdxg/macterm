@@ -737,6 +737,8 @@ private struct UpdatesSettings: View {
     private var automaticallyChecks: Bool = Updater.shared.automaticallyChecksForUpdates
     @State
     private var automaticallyDownloads: Bool = Updater.shared.automaticallyDownloadsUpdates
+    @State
+    private var updateChannel: String = Updater.shared.updateChannel.rawValue
 
     var body: some View {
         Form {
@@ -762,6 +764,20 @@ private struct UpdatesSettings: View {
 
                 Text("Updates are verified with an EdDSA signature. No analytics are collected.")
                     .settingsCaption()
+            }
+
+            // Deliberately its own section, and NOT disabled when automatic
+            // checks are off: the channel governs which updates are visible to
+            // any check, including a manual "Check for Updates Now".
+            Section("Channel") {
+                Picker("Update channel", selection: $updateChannel) {
+                    ForEach(UpdateChannel.allCases) { option in
+                        Text(option.displayName).tag(option.rawValue)
+                    }
+                }
+                .onChange(of: updateChannel) { _, v in
+                    updater.updateChannel = UpdateChannel(rawValue: v) ?? .stable
+                }
             }
 
             Section("Version") {
