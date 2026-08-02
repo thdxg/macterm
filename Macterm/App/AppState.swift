@@ -1298,8 +1298,13 @@ final class AppState {
             // Confirm the clean save only. Either conflict check above raises a
             // dialog that says the file landed *and* what's wrong with it — a
             // cheerful "Layout saved" stacked on top would undercut it.
+            //
+            // The subtitle is the full path, home-contracted: the projects
+            // directory isn't somewhere the user necessarily has in mind, so a
+            // bare filename doesn't tell them where to go look. `~` keeps it
+            // readable (and keeps the username out of a screenshot).
             if pendingLayoutError == nil {
-                presentToast("Layout saved", subtitle: target.lastPathComponent)
+                presentToast("Layout saved", subtitle: ProjectPath.homeContracted(target.path))
             }
             return nil
         } catch {

@@ -816,7 +816,7 @@ struct AppStateTests {
     // MARK: - Action toasts
 
     @Test
-    func save_layout_toasts_with_the_file_it_wrote() {
+    func save_layout_toasts_with_the_full_path_it_wrote() throws {
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let (project, _) = seedProjectWithDir(state) // name "proj" → proj.yaml
@@ -825,9 +825,26 @@ struct AppStateTests {
 
         #expect(state.pendingLayoutError == nil)
         #expect(state.activeToast?.title == "Layout saved")
-        // The filename is the point: it's what tells the user *which* file a
-        // save with several same-path candidates actually landed in.
-        #expect(state.activeToast?.subtitle == "proj.yaml")
+        // The full path, not just the filename: the projects directory isn't
+        // somewhere the user necessarily has in mind, so the subtitle has to
+        // say where to go look — while still naming *which* file a save with
+        // several same-path candidates landed in.
+        let subtitle = try #require(state.activeToast?.subtitle)
+        #expect(subtitle.hasSuffix("proj.yaml"))
+        #expect(subtitle.contains("/"))
+        #expect(subtitle == ProjectPath.homeContracted(files.directoryURL.appendingPathComponent("proj.yaml").path))
+    }
+
+    @Test
+    func save_layout_toast_contracts_the_home_prefix() {
+        // A path under home renders as `~/…` — readable, and it keeps the
+        // username out of screenshots. `homeContracted` is the same helper the
+        // written file's own `path:` uses, so the two can't drift.
+        let home = ProjectPath.currentHome
+        #expect(ProjectPath.homeContracted("\(home)/.config/macterm/projects/a.yaml")
+            == "~/.config/macterm/projects/a.yaml")
+        // Outside home, it passes through rather than mangling the path.
+        #expect(ProjectPath.homeContracted("/etc/macterm/a.yaml") == "/etc/macterm/a.yaml")
     }
 
     @Test

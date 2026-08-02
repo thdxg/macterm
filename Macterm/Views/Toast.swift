@@ -50,8 +50,12 @@ struct ToastOverlay: View {
                             appState.dismissToast(toast.id)
                         }
                     }
+                    // A short drop rather than `.move(edge: .top)`, which
+                    // travels the toast's whole height (and further on a
+                    // two-line one) — enough motion to read as arriving from
+                    // above without a long slide over the terminal.
                     .transition(
-                        .move(edge: .top)
+                        .offset(y: -8)
                             .combined(with: .opacity)
                     )
             }
@@ -61,7 +65,9 @@ struct ToastOverlay: View {
         // Purely informational: it must never intercept a click meant for the
         // terminal underneath, and there's nothing here to interact with.
         .allowsHitTesting(false)
-        .animation(.spring(duration: 0.3), value: appState.activeToast)
+        // No bounce: over an 8pt travel a spring's overshoot is most of the
+        // motion, which reads as a wobble rather than a settle.
+        .animation(.easeOut(duration: 0.22), value: appState.activeToast)
     }
 
     private func content(_ toast: Toast) -> some View {
@@ -73,8 +79,20 @@ struct ToastOverlay: View {
                 Text(subtitle)
                     .font(.system(size: 12))
                     .foregroundStyle(MactermTheme.fgMuted)
+                    // A file path is the long case. Truncate the *middle* so
+                    // both ends survive — the leading `~/…` says where it is
+                    // and the filename says which one, while eliding the
+                    // predictable directory in between. The cap applies to the
+                    // subtitle alone, so it bounds the one line that can run
+                    // long without padding out a short toast.
+                    .truncationMode(.middle)
+                    .lineLimit(1)
+                    .frame(maxWidth: 420, alignment: .leading)
             }
         }
+        // Hug the content: without this the stack accepts whatever width the
+        // overlay offers and the panel floats far past its text.
+        .fixedSize()
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .toastBackground(cornerRadius: Self.cornerRadius)
