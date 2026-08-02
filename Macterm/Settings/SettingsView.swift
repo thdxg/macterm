@@ -29,27 +29,24 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
 }
 
 /// Sidebar-style preferences window, mirroring the macOS System Settings
-/// shape: a source list of panes on the left, the selected pane's `Form` on the
-/// right. `NavigationSplitView` is the native container for that — no custom
-/// list/selection plumbing.
+/// shape: a source list of panes on the left, the selected pane's `Form` on
+/// the right. `NavigationSplitView` is the native container — it also places
+/// the pane title over the detail column, which nothing else does (see
+/// `PinnedSidebar`).
 struct SettingsView: View {
     @State private var selection: SettingsPane = .general
 
-    /// Sidebar width. A single value for min/ideal/max pins the column: the
-    /// divider stops being draggable, because there's no range to drag within.
-    private static let sidebarWidth: CGFloat = 190
+    /// Sidebar width — the pane list is six short labels, so there's nothing to
+    /// gain from resizing it, and dragging it narrow just truncates them.
+    static let sidebarWidth: CGFloat = 190
 
     /// Floor for the content column — enough for the widest pane's controls
     /// (the Keymaps rows) without horizontal clipping.
-    private static let detailMinWidth: CGFloat = 520
+    static let detailMinWidth: CGFloat = 440
+
+    static let windowMinHeight: CGFloat = 520
 
     var body: some View {
-        // Pinning `columnVisibility` drops the collapse toolbar button — System
-        // Settings has no such control, and there's nothing to reveal when the
-        // pane list is the only way to navigate. It does NOT by itself stop
-        // AppKit from auto-collapsing the sidebar when the window gets narrow;
-        // the window's own `minWidth` (sidebar + detail floor) is what
-        // guarantees both columns always fit.
         NavigationSplitView(columnVisibility: .constant(.all)) {
             List(SettingsPane.allCases, selection: $selection) { pane in
                 NavigationLink(value: pane) {
@@ -61,16 +58,14 @@ struct SettingsView: View {
         } detail: {
             detail
                 .navigationTitle(selection.title)
-                // The detail column drives the window width; without a floor it
-                // collapses to the widest intrinsic row when a pane's content
-                // is narrow (Updates), snapping the window on every switch.
                 .frame(minWidth: Self.detailMinWidth)
         }
-        // Extra window width goes to the content, not the fixed pane list.
-        .navigationSplitViewStyle(.prominentDetail)
+        .background(PinnedSidebar(width: Self.sidebarWidth))
         .frame(
             minWidth: Self.sidebarWidth + Self.detailMinWidth,
-            minHeight: 560
+            idealWidth: Self.sidebarWidth + Self.detailMinWidth,
+            minHeight: Self.windowMinHeight,
+            idealHeight: 600
         )
     }
 
@@ -87,6 +82,275 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Pinned sidebar + window chrome
+
+/// Fixes the sidebar's width, stops it collapsing, and applies the main
+/// window's titlebar chrome.
+///
+/// None of this is expressible in SwiftUI: `navigationSplitViewColumnWidth`
+/// and `columnVisibility` are documented *preferences* the framework may
+/// override ("SwiftUI may use a different width for your column"). The
+/// properties that bind live on `NSSplitViewItem`, reached through the
+/// `NSSplitViewController` SwiftUI builds.
+///
+/// Finding that controller is the trick: it's not in this probe's responder
+/// chain (the probe sits in a `.background`, a sibling subtree) and not a child
+/// of the window's root view controller. It *owns* the split view, so the route
+/// is a view-tree walk down to the `NSSplitView`, then a responder walk up.
+/// Replacing the split view's delegate is not an option — AppKit raises
+/// "a SplitView managed by a SplitViewController cannot have its delegate
+/// modified" and the app dies.
+///
+/// The pin is re-applied from two notifications, not just SwiftUI updates.
+/// `NSWindow.didResizeNotification` covers a window resize. The important one
+/// is `NSSplitView.didResizeSubviewsNotification`, which covers a **divider
+/// drag** — dragging never resizes the window, so without it a drag to the far
+/// left collapsed the sidebar to zero and nothing put it back. SwiftUI's split
+/// view controller can collapse the column from its own state even with
+/// `canCollapse` false, so restoring it there is the backstop.
+///
+/// **Why a shield rather than constraints alone.** The constraints above do
+/// lock the column — with every re-assert disabled, drags left, right, and past
+/// the window edge all left it at exactly its pinned width. But they don't
+/// *stay* applied: SwiftUI re-applies its own column metrics on events we can't
+/// enumerate (a window move fires neither a resize nor an `updateNSView`), and
+/// once it does the drag affordance returns and the column can collapse until
+/// the next re-assert. Observed directly: no handle on a freshly opened window,
+/// handle back after moving the window or switching panes, and a collapsed
+/// sidebar springing back on the next focus change.
+///
+/// `DividerShield` doesn't depend on any of that — it sits over the divider and
+/// takes the mouse before AppKit sees it, so it holds no matter what SwiftUI
+/// resets underneath. The constraints stay as the underlying truth; the shield
+/// makes the behavior deterministic.
+///
+/// Alternatives that don't work: the split view's delegate owns the divider's
+/// effective rect, and AppKit raises rather than let a controller-managed
+/// delegate be replaced; a plain (non-`.sidebar`) item drops the affordance but
+/// moves the pane title off the detail column, and
+/// `NSTrackingSeparatorToolbarItem` doesn't move it back — it aligns toolbar
+/// item groups, not the window title.
+private struct PinnedSidebar: NSViewRepresentable {
+    let width: CGFloat
+
+    func makeNSView(context _: Context) -> NSView {
+        // Zero-size and hidden: a handle into the hierarchy, never visible
+        // chrome.
+        let probe = NSView(frame: .zero)
+        probe.isHidden = true
+        return probe
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // The split view doesn't exist on the first pass; a later update lands
+        // once it does. Every call is idempotent.
+        DispatchQueue.main.async {
+            guard let window = nsView.window else { return }
+            SettingsWindowChrome.apply(to: window)
+            context.coordinator.pin(window: window, width: width)
+        }
+    }
+
+    func makeCoordinator() -> Pinner {
+        Pinner()
+    }
+
+    /// Pairs the resize observer with a removal. Teardown lives here, a
+    /// `@MainActor` hook, rather than in `deinit` — which is `nonisolated`
+    /// under Swift 6 and can't touch the coordinator's non-Sendable observer
+    /// (the same reason `HotkeyCaptureView` tears down this way).
+    static func dismantleNSView(_: NSView, coordinator: Pinner) {
+        coordinator.tearDown()
+    }
+
+    @MainActor
+    final class Pinner {
+        private var observers: [any NSObjectProtocol] = []
+        private var width: CGFloat = 0
+        /// Guards the re-assert: un-collapsing inside a resize notification
+        /// posts another one, which would recurse.
+        private var isReasserting = false
+
+        func pin(window: NSWindow, width: CGFloat) {
+            self.width = width
+            apply(in: window)
+            guard observers.isEmpty else { return }
+            let center = NotificationCenter.default
+            // A window resize.
+            observers.append(center.addObserver(
+                forName: NSWindow.didResizeNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] note in
+                guard let window = note.object as? NSWindow else { return }
+                MainActor.assumeIsolated { self?.apply(in: window) }
+            })
+            // A divider drag. This is the one that matters for the snap-to-zero:
+            // dragging the divider never resizes the WINDOW, so the window
+            // notification above doesn't fire and nothing undoes the collapse.
+            guard let split = window.contentView?.firstSplitView else { return }
+            observers.append(center.addObserver(
+                forName: NSSplitView.didResizeSubviewsNotification,
+                object: split,
+                queue: .main
+            ) { [weak self, weak window] _ in
+                guard let window else { return }
+                MainActor.assumeIsolated { self?.apply(in: window) }
+            })
+        }
+
+        func tearDown() {
+            for observer in observers {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            observers.removeAll()
+        }
+
+        private func apply(in window: NSWindow) {
+            guard !isReasserting,
+                  let split = window.contentView?.firstSplitView,
+                  let controller = split.owningSplitViewController,
+                  let sidebar = controller.splitViewItems.first
+            else { return }
+            isReasserting = true
+            defer { isReasserting = false }
+            // Equal min and max leave no range for a drag to land in, and a
+            // high holding priority makes a window resize take width from the
+            // detail column instead of this one.
+            sidebar.canCollapse = false
+            sidebar.minimumThickness = width
+            sidebar.maximumThickness = width
+            sidebar.holdingPriority = .required
+            // Undo a collapse that slipped through anyway. SwiftUI's split view
+            // controller can collapse the column from its own state even with
+            // `canCollapse` false, so this is the backstop — reached from the
+            // divider-drag notification, which is when it actually happens.
+            if sidebar.isCollapsed { sidebar.isCollapsed = false }
+            // And restore the width if the drag left it anywhere else.
+            let current = sidebar.viewController.view.frame.width
+            if abs(current - width) > 0.5 {
+                split.setPosition(width, ofDividerAt: 0)
+            }
+            positionShield(over: split)
+        }
+
+        /// Keeps an invisible shield over the divider so it shows no resize
+        /// cursor and starts no drag — the affordance stock Settings' sidebar
+        /// doesn't have either.
+        ///
+        /// The shield is a sibling of the split view, never a subview:
+        /// `NSSplitView` treats its subviews as panes, so adding it there would
+        /// create a third column.
+        private func positionShield(over split: NSSplitView) {
+            guard let host = split.superview else { return }
+            let shield = self.shield ?? {
+                let view = DividerShield()
+                self.shield = view
+                return view
+            }()
+            if shield.superview !== host { host.addSubview(shield) }
+            // Cover the divider plus a hair on each side: AppKit's drag region
+            // is slightly wider than the drawn hairline.
+            let padding: CGFloat = 3
+            let dividerInSplit = NSRect(
+                x: width,
+                y: 0,
+                width: max(split.dividerThickness, 1),
+                height: split.bounds.height
+            )
+            shield.frame = host.convert(dividerInSplit, from: split).insetBy(dx: -padding, dy: 0)
+            // Stay above the split view so the divider never sees the mouse.
+            if host.subviews.last !== shield {
+                shield.removeFromSuperview()
+                host.addSubview(shield, positioned: .above, relativeTo: nil)
+            }
+            shield.window?.invalidateCursorRects(for: shield)
+        }
+
+        private var shield: DividerShield?
+    }
+}
+
+/// Invisible cover over the split view's divider. The divider itself can't be
+/// made non-interactive — that lives on the split view's delegate, and AppKit
+/// forbids replacing a controller-managed one — so the mouse is intercepted
+/// before it reaches the divider instead. Drawing nothing, it changes only the
+/// cursor and the drag, not the look.
+private final class DividerShield: NSView {
+    /// Claim every point in bounds, so the divider underneath never receives a
+    /// hover or a click.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let superview else { return nil }
+        return frame.contains(superview.convert(point, from: superview.superview)) ? self : nil
+    }
+
+    override func resetCursorRects() {
+        // Plain arrow: no resize affordance.
+        addCursorRect(bounds, cursor: .arrow)
+    }
+
+    // Swallow clicks so no drag ever begins.
+    override func mouseDown(with _: NSEvent) {}
+    override func mouseDragged(with _: NSEvent) {}
+    override func mouseUp(with _: NSEvent) {}
+}
+
+private extension NSView {
+    /// First `NSSplitView` at or below this view. The probe sits in a
+    /// `.background` beside the split view rather than inside a column, so the
+    /// search runs down from the window's content view.
+    var firstSplitView: NSSplitView? {
+        if let split = self as? NSSplitView { return split }
+        for subview in subviews {
+            if let found = subview.firstSplitView { return found }
+        }
+        return nil
+    }
+
+    /// The `NSSplitViewController` whose root view this is. A view controller
+    /// inserts itself into its root view's responder chain, so walking up from
+    /// the split view reaches it.
+    var owningSplitViewController: NSSplitViewController? {
+        var responder: NSResponder? = nextResponder
+        while let current = responder {
+            if let controller = current as? NSSplitViewController { return controller }
+            responder = current.nextResponder
+        }
+        return nil
+    }
+}
+
+/// The main window's titlebar chrome, applied to the settings window so the two
+/// match: transparent and separator-less, content extending underneath, and an
+/// empty unified toolbar. Having a toolbar at all is what makes AppKit lay out
+/// the taller titlebar and inset the traffic lights (~23pt, measured identical
+/// to the main window; without one they sit at ~16pt).
+@MainActor
+private enum SettingsWindowChrome {
+    static func apply(to window: NSWindow) {
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.styleMask.insert(.fullSizeContentView)
+        // `.unified`, not `.unifiedCompact` — compact shrinks the titlebar back
+        // to its toolbar-less height, losing the spacing the toolbar buys.
+        if window.toolbar == nil {
+            window.toolbar = NSToolbar(identifier: "SettingsToolbar")
+        }
+        // Icon-only, matching the main window's locked display mode — the
+        // default reserves an extra label row, which reads as unexplained
+        // padding under the titlebar.
+        window.toolbar?.displayMode = .iconOnly
+        window.toolbarStyle = .unified
+        // A hard floor at the AppKit level. SwiftUI's `.frame(minWidth:)` is a
+        // layout preference the split view can satisfy by collapsing the
+        // sidebar instead of refusing to shrink.
+        window.minSize = NSSize(
+            width: SettingsView.sidebarWidth + SettingsView.detailMinWidth,
+            height: SettingsView.windowMinHeight
+        )
+    }
+}
+
 // MARK: - Shared styling
 
 extension View {
@@ -98,9 +362,6 @@ extension View {
             .foregroundStyle(.secondary)
     }
 
-    /// Drops the sidebar collapse button. The API landed in macOS 15; on 14 the
-    /// pinned `columnVisibility` already makes the button inert, so the older
-    /// system just keeps a harmless no-op control rather than a broken one.
     @ViewBuilder
     func hidingSidebarToggle() -> some View {
         if #available(macOS 15.0, *) {
@@ -109,6 +370,12 @@ extension View {
             self
         }
     }
+
+    // Drops the sidebar collapse button — there's nothing to reveal when the
+    // pane list is the only way to navigate, and the sidebar can't collapse.
+    // The API landed in macOS 15; on 14 the pinned `columnVisibility` already
+    // makes the button inert, so the older system keeps a harmless no-op
+    // control rather than a broken one.
 }
 
 // MARK: - General
