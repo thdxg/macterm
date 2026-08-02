@@ -29,4 +29,4 @@ Run **Save layout** from the palette to write your current workspace out, or **A
 
 A `path` can also be a remote spec (`devbox:~/dev/api`), declaring a [remote project](/docs/remote-projects) whose tabs spawn on that host — with an optional top-level `zmxPath` when zmx needs an explicit location there.
 
-> The older in-project `.macterm/layout.yaml` still seeds a project on first open, but it's deprecated in favor of the central files above.
+> The older in-project `.macterm/layout.yaml` was removed in v1.22.0, after being deprecated since v1.20.0. If you still have one, recreate the layout with **Save layout** — it writes the central file for you.

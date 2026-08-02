@@ -473,7 +473,7 @@ final class AppState {
         // Restore every project's snapshot — including layout-file projects.
         // The snapshot carries each pane's persisted zmx session identity, so
         // panes REATTACH their still-running shells; force-applying the
-        // committed `.macterm/layout.yaml` here would silently destroy them
+        // project file's declared layout here would silently destroy them
         // on every launch. The layout now only seeds a genuine first open
         // (no snapshot) — `autoApplyLayoutOnFirstOpen` guards on
         // `workspaces[id] == nil`, so a restored snapshot disables it.
@@ -589,27 +589,10 @@ final class AppState {
         case .invalid:
             // Surface the parse error; the default workspace is created after.
             applyLayoutPresentingError(project)
-        case .emptyTabs:
+        case .emptyTabs,
+             .none:
             break
-        case .none:
-            // Legacy seed: `applyLayoutPresentingError` imports a committed
-            // `.macterm/layout.yaml` before applying.
-            guard LayoutFile.exists(atProjectRoot: project.path) else { break }
-            applyLayoutPresentingError(project)
         }
-    }
-
-    /// Deprecated seed path — remove next release (#114): a parseable in-repo
-    /// `.macterm/layout.yaml` is imported into the central directory, to then
-    /// be applied from there. Throws when the legacy file doesn't parse — the
-    /// caller surfaces it; nothing is imported.
-    private func importLegacyLayout(_ project: Project) throws {
-        let legacy = try LayoutFile.load(fromProjectRoot: project.path)
-        try projectFiles.write(
-            ProjectFile(name: project.name, path: project.path, tabs: legacy.tabs),
-            projectName: project.name
-        )
-        logger.info("Imported legacy layout for \(project.name, privacy: .public)")
     }
 
     /// Shows an open panel, adds or finds the selected directory as a project,
@@ -1209,29 +1192,11 @@ final class AppState {
     /// `pendingLayoutError` (the alert in `MactermApp`). The shared entry
     /// point for the palette/menu command and the first-open auto-apply.
     ///
-    /// When no central file declares the project's path but a committed
-    /// legacy `.macterm/layout.yaml` exists, it's imported first (deprecated
-    /// seed, #114). Explicit apply needs this as much as first open does:
-    /// an existing project always has a restored snapshot, so first-open
-    /// never fires for it — without this, its legacy file would be
-    /// unreachable for the whole deprecation window.
-    ///
     /// `confirming` marks the *user-invoked* command (palette, menu, keybind),
     /// which gets a success toast. The first-open seed passes false: it fires
     /// unbidden on every project's first open, where a confirmation would be
     /// noise for something the user never asked for.
     func applyLayoutPresentingError(_ project: Project, confirming: Bool = false) {
-        if projectFiles.find(forProjectPath: project.path, preferredSlug: ProjectSlug.slug(from: project.name)) == nil,
-           LayoutFile.exists(atProjectRoot: project.path)
-        {
-            do {
-                try importLegacyLayout(project)
-            } catch {
-                logger.error("Legacy layout import failed: \(error, privacy: .public)")
-                pendingLayoutError = LayoutError(verb: "import", message: error.localizedDescription)
-                return
-            }
-        }
         if let error = applyLayout(project: project) {
             pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription)
             return

@@ -140,20 +140,14 @@ extension AppCommand {
             // Requires an applicable central file. `.invalid` stays enabled on
             // purpose: invoking it surfaces the parse-error dialog instead of
             // failing silently. `.none`/`.emptyTabs` disable the menu item and
-            // mute the palette row (see `paletteDisabledHint`) — except that a
-            // committed legacy `.macterm/layout.yaml` keeps `.none` enabled:
-            // invoking it imports the file into the central directory, then
-            // applies (deprecated seed, #114 — an existing project's snapshot
-            // suppresses the first-open import, so this is its only way in).
+            // mute the palette row (see `paletteDisabledHint`).
             guard let current else { return nil }
             switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
             case .applicable,
                  .invalid:
                 return { ctx.appState.applyLayoutPresentingError(current, confirming: true) }
-            case .none:
-                guard LayoutFile.exists(atProjectRoot: current.path) else { return nil }
-                return { ctx.appState.applyLayoutPresentingError(current, confirming: true) }
-            case .emptyTabs:
+            case .emptyTabs,
+                 .none:
                 return nil
             }
         case .saveLayout:
@@ -200,9 +194,6 @@ extension AppCommand {
         else { return nil }
         switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
         case .none:
-            // A legacy `.macterm/layout.yaml` keeps the command enabled
-            // (import-then-apply), so no hint for it.
-            guard !LayoutFile.exists(atProjectRoot: current.path) else { return nil }
             return "No project file for this project — use “Save Layout” to create one"
         case .emptyTabs:
             return "The project file declares no tabs"

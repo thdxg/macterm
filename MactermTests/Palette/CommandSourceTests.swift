@@ -6,10 +6,7 @@ import Testing
 struct CommandSourceTests {
     // MARK: - Helpers
 
-    private func makeContext(
-        seedProject: Bool = true,
-        projectPath: String = "/tmp"
-    ) -> (PaletteContext, AppState) {
+    private func makeContext(seedProject: Bool = true) -> (PaletteContext, AppState) {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
         let storeTmp = FileManager.default.temporaryDirectory
@@ -22,7 +19,7 @@ struct CommandSourceTests {
         )
         let store = ProjectStore(fileURL: storeTmp)
         if seedProject {
-            let p = Project(name: "proj", path: projectPath, sortOrder: 0)
+            let p = Project(name: "proj", path: "/tmp", sortOrder: 0)
             store.add(p)
             state.selectProject(p)
         }
@@ -219,30 +216,6 @@ struct CommandSourceTests {
     func applyLayout_is_hidden_without_active_project() {
         let (ctx, _) = makeContext(seedProject: false)
         #expect(findItem(title: AppCommand.applyLayout.title, in: ctx) == nil)
-    }
-
-    @Test
-    func applyLayout_is_enabled_when_only_a_legacy_layout_exists() throws {
-        // Deprecated migration path (#114): no central file, but the project
-        // carries a committed `.macterm/layout.yaml` — invoking the command
-        // imports it, so it must not be muted. The legacy file lands *after*
-        // the project is open (as for any pre-central-directory project,
-        // whose snapshot suppresses the first-open import).
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-cmdlegacy-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let (ctx, _) = makeContext(projectPath: dir.path)
-
-        let legacy = dir.appendingPathComponent(".macterm/layout.yaml")
-        try FileManager.default.createDirectory(
-            at: legacy.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try "tabs:\n  - {}\n".write(to: legacy, atomically: true, encoding: .utf8)
-
-        let item = try #require(findItem(title: AppCommand.applyLayout.title, in: ctx))
-        #expect(item.isEnabled)
     }
 
     @Test

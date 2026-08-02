@@ -203,8 +203,8 @@ struct ProjectFileStore {
     // MARK: - Write
 
     /// Write `file` as the declaration for its `path`, named by the slug of
-    /// `projectName`. The one mutation path (explicit "Save Layout" / legacy
-    /// import) — nothing else in the app writes or deletes project files.
+    /// `projectName`. The one mutation path (explicit "Save Layout") — nothing
+    /// else in the app writes or deletes project files.
     ///
     /// If a different file already declared this path, it's replaced (its
     /// name may have drifted from the current project name — the filename

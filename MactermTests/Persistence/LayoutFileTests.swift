@@ -22,7 +22,7 @@ struct LayoutFileTests {
                   first:  { cwd: "./api", run: "npm test" }
                   second: { }
         """
-        let file = try LayoutFile.parse(yaml: yaml)
+        let file = try LayoutFixture.parse(yaml)
         #expect(file.tabs.count == 1)
 
         guard case let .split(outer) = file.tabs[0].layout else {
@@ -57,7 +57,7 @@ struct LayoutFileTests {
               first: { }
               second: { }
         """
-        let file = try LayoutFile.parse(yaml: yaml)
+        let file = try LayoutFixture.parse(yaml)
         guard case let .split(b) = file.tabs[0].layout else {
             Issue.record("expected split")
             return
@@ -76,7 +76,7 @@ struct LayoutFileTests {
               direction: horizontal
               first: { run: "npm run dev" }
         """
-        #expect(throws: (any Error).self) { try LayoutFile.parse(yaml: yaml) }
+        #expect(throws: (any Error).self) { try LayoutFixture.parse(yaml) }
     }
 
     @Test
@@ -89,7 +89,7 @@ struct LayoutFileTests {
               first:  { cwd: "api", run: "npm run dev" }
               second: { }
         """
-        let file = try LayoutFile.parse(yaml: yaml)
+        let file = try LayoutFixture.parse(yaml)
         // Build via the reconciler (the live apply path) against no workspace,
         // so every leaf is freshly spawned from the declaration.
         let plan = LayoutReconciler.plan(layout: file, workspace: nil, projectRoot: "/proj", projectID: UUID())
@@ -132,15 +132,18 @@ struct LayoutFileTests {
               first:  { run: "npm run dev" }
               second: { }
         """
-        let file = try LayoutFile.parse(yaml: yaml)
+        let file = try LayoutFixture.parse(yaml)
         let plan = LayoutReconciler.plan(layout: file, workspace: nil, projectRoot: "/proj", projectID: UUID())
         #expect(plan.tabs[0].focusedPaneID == plan.tabs[0].root.allPanes().first?.id)
     }
 
     @Test
-    func yaml_round_trips_through_encode_decode() throws {
-        let original = LayoutFile(
+    func split_tree_round_trips_through_yaml() throws {
+        // A nested split with every leaf field set — the deep shape that
+        // `ProjectFileTests`' round-trip (a single leaf tab) doesn't reach.
+        let original = ProjectFile(
             name: "MyApp",
+            path: "~/dev/myapp",
             tabs: [LayoutTab(name: "Dev", layout: .split(LayoutBranch(
                 direction: .horizontal,
                 ratio: 0.6,
@@ -152,6 +155,6 @@ struct LayoutFileTests {
         // Saved files carry the schema modeline for editor support; it's a YAML
         // comment, so it must not affect the round-trip.
         #expect(yaml.hasPrefix("# yaml-language-server: $schema="))
-        #expect(try LayoutFile.parse(yaml: yaml) == original)
+        #expect(try ProjectFile.parse(yaml: yaml) == original)
     }
 }

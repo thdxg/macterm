@@ -1,14 +1,15 @@
 import Foundation
-import Yams
 
-/// A hand-authored, committable declaration of a project's pane layout and the
-/// processes each pane should run. Distinct from `WorkspaceSnapshot` (the
-/// machine-written restore state): a layout file is an *input* the user writes
-/// and commits, applied on demand to produce a live workspace.
+/// A hand-authored declaration of a project's pane layout and the processes
+/// each pane should run. Distinct from `WorkspaceSnapshot` (the machine-written
+/// restore state): a layout is an *input* the user writes, applied on demand to
+/// produce a live workspace.
 ///
-/// Lives at `.macterm/layout.yaml` relative to the project root. Each tab is
-/// itself a node (no `layout:` wrapper) with an optional `name:`: a leaf carries
-/// the pane fields (`cwd`/`run`/`shell`) directly, and a split carries
+/// Never a file of its own — it is the `tabs:` of a central project file
+/// (`ProjectFile`, `~/.config/macterm/projects/*.yaml`), reached through
+/// `ProjectFile.layoutFile`. Each tab is itself a node (no `layout:` wrapper)
+/// with an optional `name:`: a leaf carries the pane fields
+/// (`cwd`/`run`/`shell`) directly, and a split carries
 /// `{ split: { direction: <dir>, ratio: <0..1>, first: <node>, second: <node> } }`.
 /// See `LayoutNode` for the node wire form and an example.
 struct LayoutFile: Codable, Equatable {
@@ -179,7 +180,6 @@ struct LayoutBranch: Equatable {
 // MARK: - Parsing
 
 enum LayoutFileError: Error, LocalizedError {
-    case notFound(path: String)
     case parse(underlying: Error)
     /// No central project file declares this project's path.
     case noProjectFile(projectPath: String)
@@ -192,63 +192,10 @@ enum LayoutFileError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case let .notFound(path): "No layout file found at \(path)"
         case let .parse(underlying): "The layout file is invalid and was not applied.\n\n\(underlying.localizedDescription)"
         case let .noProjectFile(projectPath): "No project file declares \(projectPath). Use “Save Layout” to create one."
         case .noTabs: "The project file declares no tabs, so there is no layout to apply."
         case let .outsideProjectsDirectory(filename): "“\(filename)” is not in the projects directory."
         }
-    }
-}
-
-extension LayoutFile {
-    // Deprecated: the in-repo `.macterm/layout.yaml` is superseded by central
-    // project files (`~/.config/macterm/projects/`, see `ProjectFile`). The
-    // path helpers below survive only for the one-time seed import on first
-    // open (`AppState.importLegacyLayout`) — remove next release (#114).
-
-    /// Default location of a project's layout file, relative to its root.
-    static let relativePath = ".macterm/layout.yaml"
-
-    /// Absolute path to a project's layout file.
-    static func url(forProjectRoot root: String) -> URL {
-        URL(fileURLWithPath: root).appendingPathComponent(relativePath)
-    }
-
-    /// Whether a project has a layout file on disk.
-    static func exists(atProjectRoot root: String) -> Bool {
-        FileManager.default.fileExists(atPath: url(forProjectRoot: root).path)
-    }
-
-    /// Decode a layout from YAML text.
-    static func parse(yaml: String) throws -> LayoutFile {
-        do {
-            return try YAMLDecoder().decode(LayoutFile.self, from: yaml)
-        } catch {
-            throw LayoutFileError.parse(underlying: error)
-        }
-    }
-
-    /// Load and decode a project's layout file from disk.
-    static func load(fromProjectRoot root: String) throws -> LayoutFile {
-        let url = url(forProjectRoot: root)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw LayoutFileError.notFound(path: url.path)
-        }
-        let text = try String(contentsOf: url, encoding: .utf8)
-        return try parse(yaml: text)
-    }
-
-    /// Modeline the YAML Language Server reads to attach our JSON schema, so a
-    /// saved `.macterm/layout.yaml` gets completion/validation in editors with
-    /// no per-user setup. Hand-authored files can add the same line.
-    static let schemaModeline =
-        "# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/layout.schema.json"
-
-    /// Serialize to YAML text, prefixed with the schema modeline.
-    func yaml() throws -> String {
-        let encoder = YAMLEncoder()
-        encoder.options.sortKeys = false
-        return try "\(Self.schemaModeline)\n\(encoder.encode(self))"
     }
 }

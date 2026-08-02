@@ -10,11 +10,11 @@ struct LayoutReconcilerTests {
         return Workspace(projectID: projectID, tabs: [tab], activeTabID: tab.id)
     }
 
-    /// Parse a layout from YAML. Throws (rather than `try!`) so a malformed
-    /// fixture fails THIS test at its own line instead of crashing the whole
-    /// hosted test process.
+    /// Parse a layout from a `tabs:` fixture. Throws (rather than `try!`) so a
+    /// malformed fixture fails THIS test at its own line instead of crashing
+    /// the whole hosted test process.
     private func layout(_ yaml: String) throws -> LayoutFile {
-        try LayoutFile.parse(yaml: yaml)
+        try LayoutFixture.parse(yaml)
     }
 
     /// Run the reconciler with a stubbed live-command lookup. Unit tests have no

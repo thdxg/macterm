@@ -638,13 +638,6 @@ struct AppStateTests {
         try? yaml.write(to: store.directoryURL.appendingPathComponent(filename), atomically: true, encoding: .utf8)
     }
 
-    /// Write a legacy in-repo `.macterm/layout.yaml` (deprecated seed path).
-    private func writeLegacyLayout(_ yaml: String, at root: String) {
-        let url = URL(fileURLWithPath: root).appendingPathComponent(".macterm/layout.yaml")
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? yaml.write(to: url, atomically: true, encoding: .utf8)
-    }
-
     @Test
     func selecting_project_with_matching_project_file_auto_applies_on_first_open() throws {
         let files = makeProjectFileStore()
@@ -678,59 +671,24 @@ struct AppStateTests {
     }
 
     @Test
-    func first_open_imports_legacy_layout_into_central_store_and_applies() throws {
-        // Deprecated seed path (#114): no central file + parseable in-repo
-        // `.macterm/layout.yaml` → imported, then applied from the central
-        // store. Remove alongside the legacy path next release.
+    func first_open_without_a_project_file_uses_the_default_workspace() throws {
+        // No central file declares this path, so first open is a plain
+        // single-pane workspace — nothing to seed it from now that the
+        // in-repo `.macterm/layout.yaml` path is gone.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-legacy-\(UUID().uuidString)")
+            .appendingPathComponent("macterm-nofile-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        writeLegacyLayout("""
-        tabs:
-          - name: "Dev"
-            split:
-              direction: horizontal
-              first:  { run: "npm run dev" }
-              second: {}
-        """, at: dir.path)
 
-        let project = Project(name: "Legacy Proj", path: dir.path, sortOrder: 0)
+        let project = Project(name: "No File", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        // Applied…
-        let ws = try #require(state.workspaces[project.id])
-        #expect(ws.tabs.count == 1)
-        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
-        // …and imported: the central file now declares the project's path,
-        // named by the project-name slug, with the tabs carried over.
-        let imported = try #require(try files.loadFull(forProjectPath: dir.path))
-        #expect(imported.name == "Legacy Proj")
-        #expect(imported.tabs?.count == 1)
-        #expect(files.find(forProjectPath: dir.path)?.url.lastPathComponent == "legacy_proj.yaml")
-        // The in-repo file is left untouched (it's a seed, never deleted).
-        #expect(LayoutFile.exists(atProjectRoot: dir.path))
-    }
-
-    @Test
-    func first_open_with_unparseable_legacy_layout_surfaces_error_and_imports_nothing() throws {
-        let files = makeProjectFileStore()
-        let state = makeAppState(projectFiles: files)
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-legacybad-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        writeLegacyLayout("tabs:\n  - split: { direction: horizontal, first: {} }\n", at: dir.path)
-
-        let project = Project(name: "bad", path: dir.path, sortOrder: 0)
-        state.selectProject(project)
-
-        // Error dialog staged, nothing imported, default workspace created.
-        #expect(state.pendingLayoutError?.verb == "import")
-        #expect(files.find(forProjectPath: dir.path) == nil)
+        #expect(state.pendingLayoutError == nil)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+        // Nothing is written on open — files appear only on explicit Save Layout.
+        #expect(files.find(forProjectPath: dir.path) == nil)
     }
 
     @Test
@@ -756,61 +714,26 @@ struct AppStateTests {
     }
 
     @Test
-    func apply_layout_imports_legacy_for_already_open_project() throws {
-        // The migration path for existing projects (#114): a restored
-        // snapshot (here, a live workspace) suppresses the first-open import,
-        // so an explicit Apply Layout must import the committed legacy file
-        // itself — otherwise it stays unreachable for the whole deprecation
-        // window. Remove alongside the legacy path next release.
+    func apply_layout_without_a_project_file_surfaces_an_error() throws {
+        // An already-open project with no central declaration: Apply Layout has
+        // nothing to read and says so, rather than silently doing nothing.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-legacylive-\(UUID().uuidString)")
+            .appendingPathComponent("macterm-applynofile-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let project = Project(name: "Existing", path: dir.path, sortOrder: 0)
         state.selectProject(project)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
-        writeLegacyLayout("""
-        tabs:
-          - name: "Dev"
-            split:
-              direction: horizontal
-              first:  { run: "npm run dev" }
-              second: {}
-        """, at: dir.path)
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingLayoutError == nil)
-        // Imported into the central store, named by the project-name slug…
-        #expect(files.find(forProjectPath: dir.path)?.url.lastPathComponent == "existing.yaml")
-        // …and applied to the live workspace (non-destructive: the idle pane
-        // is reused positionally, the command pane spawns).
-        let ws = try #require(state.workspaces[project.id])
-        #expect(ws.tabs.count == 1)
-        #expect(ws.tabs[0].customTitle == "Dev")
-        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
-    }
-
-    @Test
-    func apply_layout_with_unparseable_legacy_surfaces_import_error() throws {
-        let files = makeProjectFileStore()
-        let state = makeAppState(projectFiles: files)
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-legacylivebad-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-
-        let project = Project(name: "Existing", path: dir.path, sortOrder: 0)
-        state.selectProject(project)
-        writeLegacyLayout("tabs:\n  - split: { direction: horizontal, first: {} }\n", at: dir.path)
-
-        state.applyLayoutPresentingError(project)
-
-        #expect(state.pendingLayoutError?.verb == "import")
+        #expect(state.pendingLayoutError?.verb == "apply")
         #expect(files.find(forProjectPath: dir.path) == nil)
+        // The live workspace is untouched by a failed apply.
+        #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
     }
 
     // MARK: - Action toasts

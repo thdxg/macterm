@@ -2,9 +2,8 @@ import Foundation
 import Yams
 
 /// A hand-authorable project declaration in the central directory
-/// (`~/.config/macterm/projects/*.yaml`) — the successor to the in-repo
-/// `.macterm/layout.yaml` (deprecated; see `LayoutFile`). One file per
-/// project:
+/// (`~/.config/macterm/projects/*.yaml`) — the one place a project's layout is
+/// declared. One file per project:
 ///
 ///     name: API server           # optional, display only
 ///     path: devbox:~/dev/api     # required — the project's identity
@@ -46,7 +45,8 @@ struct ProjectFileHeader: Codable, Equatable {
 
 extension ProjectFile {
     /// Modeline the YAML Language Server reads to attach the project-file JSON
-    /// schema, mirroring `LayoutFile.schemaModeline`.
+    /// schema, so a saved file gets completion/validation in editors with no
+    /// per-user setup. Hand-authored files can add the same line.
     static let schemaModeline =
         "# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/project.schema.json"
 
