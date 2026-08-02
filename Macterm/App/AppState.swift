@@ -88,6 +88,24 @@ final class AppState {
 
     var pendingLayoutError: LayoutError?
 
+    /// The transient success confirmation showing in `ToastOverlay`, if any.
+    /// Only for outcomes that leave no visible trace — failures still raise a
+    /// dialog, which a toast must never replace.
+    private(set) var activeToast: Toast?
+
+    /// Show `toast`, replacing any toast already up (the newest outcome is the
+    /// one worth reading).
+    func presentToast(_ title: String, subtitle: String? = nil) {
+        activeToast = Toast(title: title, subtitle: subtitle)
+    }
+
+    /// Dismiss the toast with `id` — a no-op if it was already replaced by a
+    /// newer one, so a stale auto-dismiss can't cut the new toast short.
+    func dismissToast(_ id: UUID) {
+        guard activeToast?.id == id else { return }
+        activeToast = nil
+    }
+
     /// Presents the "New Remote Project" sheet (#104) — set by the palette
     /// command and the sidebar's New Project menu, consumed by `MainWindow`.
     var isNewRemoteProjectSheetPresented = false
@@ -1187,7 +1205,12 @@ final class AppState {
     /// an existing project always has a restored snapshot, so first-open
     /// never fires for it — without this, its legacy file would be
     /// unreachable for the whole deprecation window.
-    func applyLayoutPresentingError(_ project: Project) {
+    ///
+    /// `confirming` marks the *user-invoked* command (palette, menu, keybind),
+    /// which gets a success toast. The first-open seed passes false: it fires
+    /// unbidden on every project's first open, where a confirmation would be
+    /// noise for something the user never asked for.
+    func applyLayoutPresentingError(_ project: Project, confirming: Bool = false) {
         if projectFiles.find(forProjectPath: project.path, preferredSlug: ProjectSlug.slug(from: project.name)) == nil,
            LayoutFile.exists(atProjectRoot: project.path)
         {
@@ -1201,6 +1224,13 @@ final class AppState {
         }
         if let error = applyLayout(project: project) {
             pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription)
+            return
+        }
+        // A destructive plan is staged, not applied — its confirmation dialog is
+        // up, and the toast belongs to whatever the user chooses there
+        // (`confirmPendingLayoutApply`), not to merely opening the prompt.
+        if confirming, pendingLayoutApply == nil {
+            presentToast("Layout applied")
         }
     }
 
@@ -1208,6 +1238,9 @@ final class AppState {
         guard let pending = pendingLayoutApply else { return }
         pendingLayoutApply = nil
         executeLayoutPlan(pending.plan, projectID: pending.projectID)
+        // Always user-invoked: reaching here means they clicked through the
+        // destructive-apply confirmation.
+        presentToast("Layout applied")
     }
 
     func cancelPendingLayoutApply() {
@@ -1247,6 +1280,12 @@ final class AppState {
             // stayed quiet.
             if !presentSaveConflictIfNeeded(project: project, savedTo: target, siblingProjects: siblingProjects) {
                 presentSharedPathConflictIfNeeded(project: project, savedTo: target, siblingProjects: siblingProjects)
+            }
+            // Confirm the clean save only. Either conflict check above raises a
+            // dialog that says the file landed *and* what's wrong with it — a
+            // cheerful "Layout saved" stacked on top would undercut it.
+            if pendingLayoutError == nil {
+                presentToast("Layout saved", subtitle: target.lastPathComponent)
             }
             return nil
         } catch {

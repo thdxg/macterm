@@ -281,11 +281,6 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        if HotkeyRegistry.matches(event, action: .reloadGhosttyConfig) {
-            GhosttyApp.shared.reloadAndReport()
-            return .handled
-        }
-
         // These route through AppCommand.action(in:) — the single source of
         // truth shared with the palette and menu bar — so the paths can't drift.
         // Rename defers begin-editing a tick (see AppCommandActions) so the
@@ -294,7 +289,18 @@ final class MainAppResponder: KeyResponder {
         // the layout pair inherits the same enablement guards (no applicable
         // project file → nil action → the keystroke falls through) and the same
         // error-presenting wrappers the palette and menu bar get.
-        for action in [HotkeyAction.renameTab, .renameProject, .copySessionID, .applyLayout, .saveLayout] {
+        //
+        // reloadGhosttyConfig joins them rather than calling GhosttyApp
+        // directly: the command action also raises the success toast, and a
+        // second call site would silently skip it.
+        for action in [
+            HotkeyAction.renameTab,
+            .renameProject,
+            .copySessionID,
+            .applyLayout,
+            .saveLayout,
+            .reloadGhosttyConfig,
+        ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
             else { continue }

@@ -79,6 +79,11 @@ struct MainWindow: View {
                 CommandPaletteOverlay()
             }
         }
+        // Above the palette overlay so a toast fired by a palette command isn't
+        // covered by the palette's own dismissal animation.
+        .overlay {
+            ToastOverlay()
+        }
         .sheet(isPresented: $appState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }

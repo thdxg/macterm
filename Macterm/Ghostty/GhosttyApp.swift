@@ -245,9 +245,15 @@ final class GhosttyApp {
     }
 
     /// Reload and surface any user-visible errors (missing file, parse errors)
-    /// as a modal alert. Silent on success. Used by both the Settings reload
-    /// button and the rebindable "Reload Ghostty config" hotkey.
-    func reloadAndReport() {
+    /// as a modal alert. Used by both the Settings reload button and the
+    /// rebindable "Reload Ghostty config" hotkey.
+    ///
+    /// Returns whether the reload was clean. A successful reload is invisible
+    /// unless the config happened to change a color, so the command path uses
+    /// this to confirm with a toast; Settings ignores it (its own window is
+    /// front, and an alert already covers the failure case).
+    @discardableResult
+    func reloadAndReport() -> Bool {
         let result = reloadConfig()
         var lines: [String] = []
         if let missing = result.missingUserConfigPath {
@@ -256,7 +262,7 @@ final class GhosttyApp {
         if !result.diagnostics.isEmpty {
             lines.append(contentsOf: result.diagnostics)
         }
-        guard !lines.isEmpty else { return }
+        guard !lines.isEmpty else { return true }
 
         let alert = NSAlert()
         alert.messageText =
@@ -267,6 +273,7 @@ final class GhosttyApp {
         alert.alertStyle = result.missingUserConfigPath != nil ? .warning : .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
+        return false
     }
 
     /// Color accessors prefer the colors libghostty resolved for a live surface

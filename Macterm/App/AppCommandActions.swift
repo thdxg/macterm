@@ -149,10 +149,10 @@ extension AppCommand {
             switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
             case .applicable,
                  .invalid:
-                return { ctx.appState.applyLayoutPresentingError(current) }
+                return { ctx.appState.applyLayoutPresentingError(current, confirming: true) }
             case .none:
                 guard LayoutFile.exists(atProjectRoot: current.path) else { return nil }
-                return { ctx.appState.applyLayoutPresentingError(current) }
+                return { ctx.appState.applyLayoutPresentingError(current, confirming: true) }
             case .emptyTabs:
                 return nil
             }
@@ -170,7 +170,10 @@ extension AppCommand {
         case .toggleCommandPalette:
             return { ctx.appState.isCommandPaletteVisible.toggle() }
         case .reloadGhosttyConfig:
-            return { GhosttyApp.shared.reloadAndReport() }
+            return {
+                guard GhosttyApp.shared.reloadAndReport() else { return }
+                ctx.appState.presentToast("Ghostty config reloaded")
+            }
         case .toggleQuickTerminal:
             return { QuickTerminalService.shared.toggle() }
         case .checkForUpdate:

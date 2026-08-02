@@ -564,6 +564,7 @@ final class ControlHandler {
         // dialog must never dangle waiting for a click that won't come.
         if appState.pendingLayoutApply != nil {
             if args.force == true {
+                // Raises its own toast.
                 appState.confirmPendingLayoutApply()
             } else {
                 appState.cancelPendingLayoutApply()
@@ -573,6 +574,12 @@ final class ControlHandler {
                     action: "re-run with --force to apply anyway"
                 )
             }
+        } else {
+            // Non-destructive path applied immediately. The window is on screen
+            // and its panes just changed, so confirm it the same way the
+            // palette command does — `layout save` already toasts, and the two
+            // verbs shouldn't disagree about whether a CLI apply is visible.
+            appState.presentToast("Layout applied")
         }
         return ControlData()
     }
