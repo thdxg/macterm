@@ -35,17 +35,28 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @State private var selection: SettingsPane = .general
 
+    /// Sidebar width. A single value for min/ideal/max pins the column: the
+    /// divider stops being draggable, because there's no range to drag within.
+    private static let sidebarWidth: CGFloat = 190
+
+    /// Floor for the content column — enough for the widest pane's controls
+    /// (the Keymaps rows) without horizontal clipping.
+    private static let detailMinWidth: CGFloat = 520
+
     var body: some View {
-        // Pinning the sidebar's visibility drops the collapse toolbar button —
-        // System Settings has no such control, and there's nothing to reveal
-        // when the pane list is the only way to navigate.
+        // Pinning `columnVisibility` drops the collapse toolbar button — System
+        // Settings has no such control, and there's nothing to reveal when the
+        // pane list is the only way to navigate. It does NOT by itself stop
+        // AppKit from auto-collapsing the sidebar when the window gets narrow;
+        // the window's own `minWidth` (sidebar + detail floor) is what
+        // guarantees both columns always fit.
         NavigationSplitView(columnVisibility: .constant(.all)) {
             List(SettingsPane.allCases, selection: $selection) { pane in
                 NavigationLink(value: pane) {
                     Label(pane.title, systemImage: pane.symbol)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 190, max: 240)
+            .navigationSplitViewColumnWidth(Self.sidebarWidth)
             .hidingSidebarToggle()
         } detail: {
             detail
@@ -53,9 +64,14 @@ struct SettingsView: View {
                 // The detail column drives the window width; without a floor it
                 // collapses to the widest intrinsic row when a pane's content
                 // is narrow (Updates), snapping the window on every switch.
-                .frame(minWidth: 460)
+                .frame(minWidth: Self.detailMinWidth)
         }
-        .frame(minWidth: 700, minHeight: 560)
+        // Extra window width goes to the content, not the fixed pane list.
+        .navigationSplitViewStyle(.prominentDetail)
+        .frame(
+            minWidth: Self.sidebarWidth + Self.detailMinWidth,
+            minHeight: 560
+        )
     }
 
     @ViewBuilder
