@@ -13,9 +13,12 @@ import Foundation
 /// `{ split: { direction: <dir>, ratio: <0..1>, first: <node>, second: <node> } }`.
 /// See `LayoutNode` for the node wire form and an example.
 struct LayoutFile: Codable, Equatable {
-    /// Name of the project this layout was authored for. Written by `save`;
-    /// on `apply`, a mismatch against the active project prompts a confirmation.
-    /// Optional — a file without it applies to any project without warning.
+    /// Mirrors the owning `ProjectFile.name` when bridged through
+    /// `ProjectFile.layoutFile`. Display only — and in practice vestigial:
+    /// nothing reads it. `apply` never compares it against the active project
+    /// (tab matching keys on `LayoutTab.name`), and Save Layout writes the
+    /// project file's `name:` straight from the live project rather than from
+    /// here. Drift after a project rename is expected and harmless.
     var name: String?
     var tabs: [LayoutTab]
 }
