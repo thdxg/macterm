@@ -2,23 +2,96 @@ import AppKit
 import Carbon
 import SwiftUI
 
-struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            AppearanceSettings()
-                .tabItem { Label("Appearance", systemImage: "paintpalette") }
-            QuickTerminalSettings()
-                .tabItem {
-                    Label("Quick Terminal", systemImage: "rectangle.bottomthird.inset.filled")
-                }
-            KeymapSettings()
-                .tabItem { Label("Keymaps", systemImage: "keyboard") }
-            UpdatesSettings()
-                .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+/// The panes of the settings window, in sidebar order. Titles are the
+/// user-visible sidebar labels — Title Case, matching the macOS convention the
+/// rest of the app's menus follow.
+private enum SettingsPane: String, CaseIterable, Identifiable {
+    case general = "General"
+    case projects = "Projects"
+    case appearance = "Appearance"
+    case quickTerminal = "Quick Terminal"
+    case keymaps = "Keymaps"
+    case updates = "Updates"
+
+    var id: String { rawValue }
+    var title: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .projects: "folder"
+        case .appearance: "paintpalette"
+        case .quickTerminal: "rectangle.bottomthird.inset.filled"
+        case .keymaps: "keyboard"
+        case .updates: "arrow.triangle.2.circlepath"
         }
-        .frame(width: 520, height: 540)
+    }
+}
+
+/// Sidebar-style preferences window, mirroring the macOS System Settings
+/// shape: a source list of panes on the left, the selected pane's `Form` on the
+/// right. `NavigationSplitView` is the native container for that — no custom
+/// list/selection plumbing.
+struct SettingsView: View {
+    @State private var selection: SettingsPane = .general
+
+    var body: some View {
+        // Pinning the sidebar's visibility drops the collapse toolbar button —
+        // System Settings has no such control, and there's nothing to reveal
+        // when the pane list is the only way to navigate.
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            List(SettingsPane.allCases, selection: $selection) { pane in
+                NavigationLink(value: pane) {
+                    Label(pane.title, systemImage: pane.symbol)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 190, max: 240)
+            .hidingSidebarToggle()
+        } detail: {
+            detail
+                .navigationTitle(selection.title)
+                // The detail column drives the window width; without a floor it
+                // collapses to the widest intrinsic row when a pane's content
+                // is narrow (Updates), snapping the window on every switch.
+                .frame(minWidth: 460)
+        }
+        .frame(minWidth: 700, minHeight: 560)
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch selection {
+        case .general: GeneralSettings()
+        case .projects: ProjectsSettings()
+        case .appearance: AppearanceSettings()
+        case .quickTerminal: QuickTerminalSettings()
+        case .keymaps: KeymapSettings()
+        case .updates: UpdatesSettings()
+        }
+    }
+}
+
+// MARK: - Shared styling
+
+extension View {
+    /// The one style for a control's explanatory line. Every pane's
+    /// descriptions went through this by hand before (one had drifted to
+    /// `.footnote`), so it lives in a modifier now.
+    func settingsCaption() -> some View {
+        font(.system(size: 11))
+            .foregroundStyle(.secondary)
+    }
+
+    /// Drops the sidebar collapse button. The API landed in macOS 15; on 14 the
+    /// pinned `columnVisibility` already makes the button inert, so the older
+    /// system just keeps a harmless no-op control rather than a broken one.
+    @ViewBuilder
+    func hidingSidebarToggle() -> some View {
+        if #available(macOS 15.0, *) {
+            toolbar(removing: .sidebarToggle)
+        } else {
+            self
+        }
     }
 }
 
@@ -74,13 +147,8 @@ private struct GeneralSettings: View {
                     }
                     .help("Re-read your Ghostty config. Click after saving external edits.")
                 }
-                Text(
-                    "Your Ghostty config controls theme, font, palette, keybinds, and most other terminal settings. "
-                        + "Macterm provides defaults; anything in your Ghostty config overrides them. "
-                        + "Macterm does not auto-detect external edits — click Reload after saving."
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                Text("Controls theme, font, palette, and keybinds. Click Reload after editing it elsewhere.")
+                    .settingsCaption()
             }
 
             Section("Terminal") {
@@ -94,9 +162,8 @@ private struct GeneralSettings: View {
                 .onChange(of: terminalScrollSpeed) { _, v in
                     Preferences.shared.terminalScrollSpeed = v
                 }
-                Text("Controls terminal scrollback speed for trackpads and mouse wheels.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                Text("Scrollback speed for trackpads and mouse wheels.")
+                    .settingsCaption()
             }
 
             Section("Layout") {
@@ -105,16 +172,14 @@ private struct GeneralSettings: View {
                         Preferences.shared.autoTilingEnabled = v
                     }
                 Text("Distributes pane sizes evenly on split and close.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
 
                 Toggle("Start all tabs of the focused project", isOn: $eagerlyStartProjectTabs)
                     .onChange(of: eagerlyStartProjectTabs) { _, v in
                         Preferences.shared.eagerlyStartProjectTabs = v
                     }
-                Text("Runs every tab's processes when a project opens, not just the active tab. Other projects still load when focused.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                Text("Runs every tab's processes when a project opens, not just the active tab.")
+                    .settingsCaption()
             }
 
             Section("Session Persistence") {
@@ -122,12 +187,8 @@ private struct GeneralSettings: View {
                     .onChange(of: terminateSessionsOnQuit) { _, v in
                         Preferences.shared.terminateSessionsOnQuit = v
                     }
-                Text(
-                    "Off (default): shells keep running in the background after you quit and reattach on next launch. "
-                        + "On: quitting stops every terminal's processes."
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                Text("Off: shells keep running after you quit and reattach on next launch.")
+                    .settingsCaption()
 
                 // Persistence can be silently unavailable (Supacode shipped the
                 // same probe and users only noticed via a buried log line) —
@@ -211,8 +272,7 @@ private struct GhosttyCLIBanner: View {
                     Text("Some features are disabled")
                         .font(.system(size: 13, weight: .semibold))
                     Text(reason.message)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                     if let url = Self.detailsURL {
                         Link("Learn more", destination: url)
                             .font(.system(size: 11))
@@ -272,7 +332,7 @@ private struct AppearanceSettings: View {
                 // inert rather than show a dead picker. "None" off / a style on
                 // are folded into one picker over the two underlying prefs.
                 if WindowAppearance.glassSupported {
-                    Picker("Liquid glass", selection: glassSelection) {
+                    Picker("Liquid Glass", selection: glassSelection) {
                         Text("None").tag(WindowGlassStyle?.none)
                         ForEach(WindowGlassStyle.allCases) { style in
                             Text(style.displayName).tag(WindowGlassStyle?.some(style))
@@ -295,8 +355,7 @@ private struct AppearanceSettings: View {
                 .disabled(backgroundOpacity >= 0.999 || liquidGlass)
 
                 Text(blurFootnote)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             }
 
             Section("Split Panes") {
@@ -312,8 +371,7 @@ private struct AppearanceSettings: View {
                     Preferences.shared.paneDimOpacity = v
                 }
                 Text("How dark unfocused panes get in a split layout.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             }
 
             Section("Sidebar") {
@@ -335,26 +393,20 @@ private struct AppearanceSettings: View {
                     .onChange(of: showAgentIcons) { _, v in
                         Preferences.shared.showAgentIcons = v
                     }
-                Text("Replace a tab's icon with the logo of the AI agent running in it (Claude Code, Codex, Gemini…).")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Text("Uses the logo of the AI agent running in a tab as its icon.")
+                    .settingsCaption()
 
                 Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
                     .onChange(of: showTabStatusIndicator) { _, v in
                         Preferences.shared.showTabStatusIndicator = v
                     }
-                Text(
-                    "Replaces a tab’s icon with a spinner while a command is running, " +
-                        "and adds a small status dot when it finishes and awaits attention."
-                )
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                Text("Shows a spinner while a command runs, and a dot when it finishes.")
+                    .settingsCaption()
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
                 Text("When hidden, create projects via the command palette or context menu.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             }
 
             Section("Toolbar") {
@@ -367,8 +419,7 @@ private struct AppearanceSettings: View {
                     Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
                 }
                 Text("Numbered control in the title bar for switching tabs by index.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
 
                 Picker("Tab switcher position", selection: $tabSwitcherPosition) {
                     ForEach(TabSwitcherPosition.allCases) { option in
@@ -379,8 +430,7 @@ private struct AppearanceSettings: View {
                     Preferences.shared.tabSwitcherPosition = TabSwitcherPosition(rawValue: v) ?? .trailing
                 }
                 Text("Left places the switcher before the window title, next to the sidebar.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             }
         }
         .formStyle(.grouped)
@@ -456,7 +506,7 @@ private struct QuickTerminalSettings: View {
     var body: some View {
         Form {
             Section("Quick Terminal") {
-                Toggle("Enable Quick Terminal", isOn: $enabled)
+                Toggle("Enable quick terminal", isOn: $enabled)
                     .onChange(of: enabled) { _, v in
                         Preferences.shared.quickTerminalEnabled = v
                     }
@@ -493,9 +543,8 @@ private struct QuickTerminalSettings: View {
                         for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
                     )
                 )
-                Text("Rebind in Settings → Keymaps. Works globally, even when Macterm isn't the active app.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps.")
+                    .settingsCaption()
             }
         }
         .formStyle(.grouped)
@@ -711,11 +760,8 @@ private struct UpdatesSettings: View {
                     .disabled(!updater.canCheckForUpdates)
                 }
 
-                Text(
-                    "Updates are verified with an EdDSA signature. Macterm does not collect analytics."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text("Updates are verified with an EdDSA signature. No analytics are collected.")
+                    .settingsCaption()
             }
 
             Section("Version") {

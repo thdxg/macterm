@@ -238,6 +238,79 @@ struct MactermApp: App {
 
         Settings {
             SettingsView()
+                // The Projects pane drives real project/layout mutations, so
+                // the settings window needs the same state the main window has
+                // — and its own copies of the confirmation/error alerts, since
+                // the ones above are attached to `MainWindow` and would fire
+                // behind (or without) the settings window.
+                .environment(appState)
+                .environment(projectStore)
+                .modifier(AppColorScheme())
+                .alert(
+                    "Unload project with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingUnloadProject != nil },
+                        set: { if !$0 { appState.cancelPendingUnloadProject() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingUnloadProject()
+                    }
+                    Button("Unload", role: .destructive) {
+                        appState.confirmPendingUnloadProject()
+                    }
+                } message: {
+                    Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
+                }
+                .alert(
+                    "Remove project with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingRemoveProject != nil },
+                        set: { if !$0 { appState.cancelPendingRemoveProject() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingRemoveProject()
+                    }
+                    Button("Remove", role: .destructive) {
+                        appState.confirmPendingRemoveProject()
+                    }
+                } message: {
+                    Text("A process is still running in this project. Removing it ends every process in its tabs.")
+                }
+                .alert(
+                    "Apply layout?",
+                    isPresented: Binding(
+                        get: { appState.pendingLayoutApply != nil },
+                        set: { if !$0 { appState.cancelPendingLayoutApply() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingLayoutApply()
+                    }
+                    Button("Apply", role: .destructive) {
+                        appState.confirmPendingLayoutApply()
+                    }
+                } message: {
+                    if let pending = appState.pendingLayoutApply {
+                        Text(pending.confirmationMessage)
+                    }
+                }
+                .alert(
+                    appState.pendingLayoutError?.title ?? "Couldn't apply layout",
+                    isPresented: Binding(
+                        get: { appState.pendingLayoutError != nil },
+                        set: { if !$0 { appState.pendingLayoutError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        appState.pendingLayoutError = nil
+                    }
+                } message: {
+                    if let pending = appState.pendingLayoutError {
+                        Text(pending.message)
+                    }
+                }
         }
     }
 }

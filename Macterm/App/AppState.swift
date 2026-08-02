@@ -88,6 +88,16 @@ final class AppState {
 
     var pendingLayoutError: LayoutError?
 
+    /// Bumped whenever the app itself writes a project file, so an open
+    /// Projects settings pane can re-read the directory. There's no file
+    /// watcher by design (hand-edits surface on next use); this covers only
+    /// the changes Macterm makes, which the user does expect to see land.
+    private(set) var layoutFilesVersion = 0
+
+    func noteLayoutFilesChanged() {
+        layoutFilesVersion &+= 1
+    }
+
     /// Presents the "New Remote Project" sheet (#104) — set by the palette
     /// command and the sidebar's New Project menu, consumed by `MainWindow`.
     var isNewRemoteProjectSheetPresented = false
