@@ -152,6 +152,54 @@ struct ProjectFileStore {
         }
     }
 
+    // MARK: - Manage
+
+    /// One layout file as the Projects settings pane lists it: its filename,
+    /// the path it declares, and how many tabs it lays out. `declaredPath` is
+    /// nil when the file has no `path:` (or doesn't parse at all) — such a file
+    /// matches no project and can only be removed or hand-fixed.
+    struct Listing: Identifiable, Equatable {
+        let url: URL
+        let declaredName: String?
+        let declaredPath: String?
+        let tabCount: Int
+        /// The file couldn't be decoded past its header.
+        let isInvalid: Bool
+
+        var id: URL { url }
+        var filename: String { url.lastPathComponent }
+    }
+
+    /// Every layout file in the directory, in filename order — including ones
+    /// declaring a path no project in the list backs. Those orphans are the
+    /// reason this listing exists: without it they're invisible outside a
+    /// terminal, which is exactly what the settings pane replaces.
+    func listAll() -> [Listing] {
+        scan().map { file in
+            let full = try? ProjectFile.parse(yaml: (try? String(contentsOf: file.url, encoding: .utf8)) ?? "")
+            return Listing(
+                url: file.url,
+                declaredName: file.header?.name,
+                declaredPath: file.header?.path,
+                tabCount: full?.tabs?.count ?? 0,
+                isInvalid: full == nil
+            )
+        }
+    }
+
+    /// Delete a layout file. The one path that removes a declaration — every
+    /// other operation here only ever reads or rewrites, and `write`'s
+    /// realign-delete drops a file it has just superseded. Callers confirm
+    /// first; the project itself is untouched (files and the runtime list are
+    /// decoupled).
+    func delete(at url: URL) throws {
+        guard url.deletingLastPathComponent() == directoryURL else {
+            throw LayoutFileError.outsideProjectsDirectory(filename: url.lastPathComponent)
+        }
+        try FileManager.default.removeItem(at: url)
+        logger.info("Deleted project file \(url.lastPathComponent, privacy: .public)")
+    }
+
     // MARK: - Write
 
     /// Write `file` as the declaration for its `path`, named by the slug of
