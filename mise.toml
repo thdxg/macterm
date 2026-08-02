@@ -35,6 +35,26 @@ run = """
 description = "Build release app and DMG"
 depends = ["format", "lint", "test"]
 usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
+# The DMG name embeds $VERSION, so it can't be listed as a static output —
+# `auto` tracks a hash of the task definition instead. Inputs are everything
+# that reaches the archive: Swift sources, the xcodegen spec, the Info.plist /
+# entitlements / icon that project.yml references, and the build + embed
+# scripts. GhosttyKit and Macterm/Resources/{ghostty,terminfo,zmx} are
+# setup.sh-downloaded gitignored artifacts, refreshed by deleting them, so
+# their absence is caught by setup.sh rather than by this check.
+sources = [
+  "Macterm/**/*.swift",
+  "CLI/**/*.swift",
+  "Macterm/Info.plist",
+  "Macterm/Macterm.entitlements",
+  "Macterm/AppIcon.icon/**/*",
+  "project.yml",
+  "scripts/build.sh",
+  "scripts/setup.sh",
+  "scripts/embed-zmx.sh",
+  "scripts/_lib.sh",
+]
+outputs = { auto = true }
 run = """
   source scripts/_lib.sh
   if [[ "$usage_verbose" == "true" ]]; then
@@ -88,6 +108,11 @@ usage = '''
 flag "-v --verbose" help="Stream raw output instead of the spinner"
 flag "--check" help="Verify formatting without modifying files (CI mode)"
 '''
+# swiftformat walks the repo root minus `build,GhosttyKit,scripts`
+# (.swiftformat), which in practice is these three Swift dirs. `auto` outputs:
+# formatting rewrites its own inputs, so there's no separate artifact to stat.
+sources = ["Macterm/**/*.swift", "CLI/**/*.swift", "MactermTests/**/*.swift", ".swiftformat"]
+outputs = { auto = true }
 run = """
   source scripts/_lib.sh
   args=()
@@ -106,6 +131,17 @@ run = """
 [tasks.lint]
 description = "Run swiftlint"
 usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
+# Mirrors .swiftlint.yml's `included:` list, plus both configs (the nested
+# MactermTests one relaxes rules for test code). Lint writes nothing, so `auto`
+# stands in for a real output artifact.
+sources = [
+  "Macterm/**/*.swift",
+  "CLI/**/*.swift",
+  "MactermTests/**/*.swift",
+  ".swiftlint.yml",
+  "MactermTests/.swiftlint.yml",
+]
+outputs = { auto = true }
 run = """
   source scripts/_lib.sh
   if [[ "$usage_verbose" == "true" ]]; then
@@ -118,6 +154,19 @@ run = """
 [tasks.test]
 description = "Run the test suite"
 usage = 'flag "-v --verbose" help="Stream raw output instead of the spinner"'
+# Tests are hosted inside the debug app, so the app and CLI sources are inputs
+# too, as is project.yml (test.sh regenerates the Xcode project from it).
+# DerivedData is a build dir, not a stable artifact to stat, hence `auto`.
+sources = [
+  "Macterm/**/*.swift",
+  "CLI/**/*.swift",
+  "MactermTests/**/*.swift",
+  "Macterm/Info.plist",
+  "project.yml",
+  "scripts/test.sh",
+  "scripts/setup.sh",
+]
+outputs = { auto = true }
 run = """
   source scripts/_lib.sh
   if [[ "$usage_verbose" == "true" ]]; then
