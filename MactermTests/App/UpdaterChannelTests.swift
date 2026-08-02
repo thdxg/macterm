@@ -36,27 +36,49 @@ struct UpdaterChannelTests {
         #expect(betaUpdateChannel.unicodeScalars.allSatisfy { allowed.contains($0) })
     }
 
-    /// Default off: a fresh install must never see a beta. This is the single
-    /// most important behavior here — a wrong default would push every user
-    /// onto prereleases at the next background check.
+    /// Defaults to stable: a fresh install must never see a beta. This is the
+    /// single most important behavior here — a wrong default would push every
+    /// user onto prereleases at the next background check.
     @Test
-    func prerelease_updates_are_off_by_default() throws {
+    func update_channel_defaults_to_stable() throws {
         let defaults = try #require(UserDefaults(suiteName: "macterm.updater-channel-tests.\(UUID().uuidString)"))
-        #expect(defaults.object(forKey: Preferences.Keys.receivePrereleaseUpdates) == nil)
+        #expect(defaults.string(forKey: Preferences.Keys.updateChannel) == nil)
         // Mirrors Preferences.init's read for an unset key.
-        let value = defaults.object(forKey: Preferences.Keys.receivePrereleaseUpdates) as? Bool ?? false
-        #expect(value == false)
+        let value = defaults.string(forKey: Preferences.Keys.updateChannel)
+            .flatMap(UpdateChannel.init(rawValue:)) ?? .stable
+        #expect(value == .stable)
+    }
+
+    /// An unrecognized persisted value (hand-edited defaults, or a case removed
+    /// in a later version) must fall back to stable rather than stranding the
+    /// user on a channel that no longer exists.
+    @Test
+    func unknown_persisted_channel_falls_back_to_stable() {
+        let value = UpdateChannel(rawValue: "nightly") ?? .stable
+        #expect(value == .stable)
     }
 
     @Test
-    func toggling_the_preference_round_trips() {
-        let prior = Preferences.shared.receivePrereleaseUpdates
-        defer { Preferences.shared.receivePrereleaseUpdates = prior }
+    func selecting_a_channel_round_trips() {
+        let prior = Preferences.shared.updateChannel
+        defer { Preferences.shared.updateChannel = prior }
 
-        Preferences.shared.receivePrereleaseUpdates = true
-        #expect(Preferences.shared.receivePrereleaseUpdates)
-        Preferences.shared.receivePrereleaseUpdates = false
-        #expect(!Preferences.shared.receivePrereleaseUpdates)
+        Preferences.shared.updateChannel = .beta
+        #expect(Preferences.shared.updateChannel == .beta)
+        Preferences.shared.updateChannel = .stable
+        #expect(Preferences.shared.updateChannel == .stable)
+    }
+
+    /// The picker persists `rawValue`, and `beta`'s raw value doubles as the
+    /// Sparkle channel name — so a case rename would silently change both the
+    /// stored preference and the wire value.
+    @Test
+    func channel_raw_values_are_the_persisted_and_wire_contract() {
+        #expect(UpdateChannel.stable.rawValue == "stable")
+        #expect(UpdateChannel.beta.rawValue == "beta")
+        #expect(betaUpdateChannel == UpdateChannel.beta.rawValue)
+        // Exactly two channels ship; adding one needs an appcast change too.
+        #expect(UpdateChannel.allCases.count == 2)
     }
 
     /// Stable items must carry NO channel element — an item tagged with any

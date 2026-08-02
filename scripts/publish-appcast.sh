@@ -12,7 +12,7 @@
 # Optional env:
 #   PRERELEASE             — "true" to tag items with <sparkle:channel>beta.
 #                            Only updaters whose allowedChannels includes
-#                            "beta" (Settings → Updates → Receive beta updates)
+#                            "beta" (Settings → Updates → Channel: Beta)
 #                            can see them; everyone else keeps getting stable.
 #
 # ONE feed, two channels — deliberately not a second appcast file. Sparkle

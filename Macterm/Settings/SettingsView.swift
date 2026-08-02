@@ -689,7 +689,7 @@ private struct UpdatesSettings: View {
     @State
     private var automaticallyDownloads: Bool = Updater.shared.automaticallyDownloadsUpdates
     @State
-    private var receivesPrereleases: Bool = Updater.shared.receivesPrereleaseUpdates
+    private var updateChannel: String = Updater.shared.updateChannel.rawValue
 
     var body: some View {
         Form {
@@ -723,22 +723,15 @@ private struct UpdatesSettings: View {
             // Deliberately its own section, and NOT disabled when automatic
             // checks are off: the channel governs which updates are visible to
             // any check, including a manual "Check for Updates Now".
-            Section("Beta Updates") {
-                Toggle("Receive beta updates", isOn: $receivesPrereleases)
-                    .onChange(of: receivesPrereleases) { _, v in
-                        updater.receivesPrereleaseUpdates = v
+            Section("Channel") {
+                Picker("Update channel", selection: $updateChannel) {
+                    ForEach(UpdateChannel.allCases) { option in
+                        Text(option.displayName).tag(option.rawValue)
                     }
-
-                Text(
-                    """
-                    Beta builds ship ahead of stable releases and may be \
-                    unstable. Turning this off stops future beta updates, but \
-                    does not downgrade a beta you already installed — the next \
-                    stable release above your version will replace it.
-                    """
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                }
+                .onChange(of: updateChannel) { _, v in
+                    updater.updateChannel = UpdateChannel(rawValue: v) ?? .stable
+                }
             }
 
             Section("Version") {
