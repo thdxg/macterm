@@ -7,6 +7,10 @@
 GhosttyKit.xcframework
 Macterm/Resources/*
 !Macterm/Resources/.gitkeep
+# Records which pinned release the two artifacts above came from, so bumping
+# GHOSTTYKIT_TAG in setup.sh refreshes them instead of the presence checks
+# silently keeping the old copy. Per-checkout state, not source.
+.ghosttykit-tag
 
 build/
 __pycache__/

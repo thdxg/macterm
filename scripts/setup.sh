@@ -4,6 +4,25 @@ set -euo pipefail
 FORK_REPO="thdxg/ghostty"
 ZMX_REPO="thdxg/zmx"
 XCFRAMEWORK_DIR="GhosttyKit.xcframework"
+# The pinned thdxg/ghostty release supplying BOTH GhosttyKit and the bundled
+# ghostty resources (one release, two assets).
+#
+# This used to track `latest`, and thdxg/ghostty publishes a build-YYYY-MM-DD
+# release EVERY day — so every Macterm build, tagged releases included, silently
+# picked up whatever libghostty landed that morning. Two builds of the same
+# Macterm commit could ship different terminal cores, and a release could carry
+# an upstream change nobody had run. Bumping the terminal core is now an
+# explicit, reviewable commit instead of a side effect of the calendar.
+#
+# Set GHOSTTYKIT_TAG to another tag (or `latest`) to try one without committing:
+#   GHOSTTYKIT_TAG=latest mise run setup
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-02}"
+# Which tag the on-disk artifacts actually came from. Without this the presence
+# checks below would keep a stale copy forever after a pin bump — the same
+# silent-staleness trap that makes symlinking these artifacts a bad idea. Absent
+# on checkouts predating the pin, which is read as "matches" so introducing the
+# pin doesn't force a re-download on everyone.
+TAG_STAMP=".ghosttykit-tag"
 # Marker for the downloaded upstream resources. The tarball mirrors a real
 # Ghostty.app Resources layout: ghostty/{themes,shell-integration} plus a
 # sibling terminfo/. All come from the tarball — nothing is committed — so its
@@ -29,10 +48,32 @@ has_output_activity_action() {
   return 1
 }
 
+# Resolve the pin up front: the presence checks below need it to spot a bumped
+# pin. A literal tag costs nothing; only an explicit `latest` hits the network.
+if [[ "$GHOSTTYKIT_TAG" == "latest" ]]; then
+  GHOSTTY_TAG=$(gh release list --repo "$FORK_REPO" --limit 1 --json tagName -q ".[0].tagName")
+  if [[ -z "$GHOSTTY_TAG" ]]; then
+    echo "Error: No releases found in $FORK_REPO" >&2
+    exit 1
+  fi
+  echo "GHOSTTYKIT_TAG=latest resolved to $GHOSTTY_TAG"
+else
+  GHOSTTY_TAG="$GHOSTTYKIT_TAG"
+fi
+
+stamped_tag=""
+[[ -f "$TAG_STAMP" ]] && stamped_tag=$(cat "$TAG_STAMP")
+# Only a stamp that exists AND disagrees forces a refresh (see $TAG_STAMP).
+tag_changed=false
+if [[ -n "$stamped_tag" && "$stamped_tag" != "$GHOSTTY_TAG" ]]; then
+  tag_changed=true
+  echo "Pinned GhosttyKit release changed ($stamped_tag -> $GHOSTTY_TAG); refreshing"
+fi
+
 need_xcframework=true
 need_resources=true
 need_zmx=true
-if [[ -d "$XCFRAMEWORK_DIR" ]]; then
+if [[ -d "$XCFRAMEWORK_DIR" ]] && ! $tag_changed; then
   if has_output_activity_action "$XCFRAMEWORK_DIR"; then
     need_xcframework=false
   else
@@ -43,18 +84,16 @@ if [[ -d "$XCFRAMEWORK_DIR" ]]; then
     echo "Existing GhosttyKit lacks GHOSTTY_ACTION_OUTPUT_ACTIVITY; refreshing it"
   fi
 fi
-[[ -d "$RESOURCES_MARKER" ]] && need_resources=false
+# Resources ship in the same release as the xcframework, so they move together —
+# a pin bump must not leave a new libghostty beside the old release's terminfo.
+if [[ -d "$RESOURCES_MARKER" ]] && ! $tag_changed; then
+  need_resources=false
+fi
 [[ -x "$ZMX_BIN" ]] && need_zmx=false
 
 if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
   echo "GhosttyKit, resources, and zmx already present"
   exit 0
-fi
-
-LATEST_TAG=$(gh release list --repo "$FORK_REPO" --limit 1 --json tagName -q ".[0].tagName")
-if [[ -z "$LATEST_TAG" ]]; then
-  echo "Error: No releases found" >&2
-  exit 1
 fi
 
 if $need_xcframework; then
@@ -64,10 +103,10 @@ if $need_xcframework; then
   # re-run repeats the failure. Staging keeps a bad release a no-op.
   staging="$(mktemp -d "${TMPDIR:-/tmp}/macterm-ghosttykit.XXXXXX")"
   trap 'rm -rf "$staging"' EXIT
-  gh release download "$LATEST_TAG" --pattern "GhosttyKit.xcframework.tar.gz" --repo "$FORK_REPO" --dir "$staging"
+  gh release download "$GHOSTTY_TAG" --pattern "GhosttyKit.xcframework.tar.gz" --repo "$FORK_REPO" --dir "$staging"
   tar xzf "$staging/GhosttyKit.xcframework.tar.gz" -C "$staging"
   if ! has_output_activity_action "$staging/$XCFRAMEWORK_DIR"; then
-    echo "Error: GhosttyKit from $LATEST_TAG lacks GHOSTTY_ACTION_OUTPUT_ACTIVITY" >&2
+    echo "Error: GhosttyKit from $GHOSTTY_TAG lacks GHOSTTY_ACTION_OUTPUT_ACTIVITY" >&2
     echo "The thdxg/ghostty output-activity downstream patch must be released first." >&2
     echo "" >&2
     echo "Note: Macterm has required this ABI since the reliable-activity-detection" >&2
@@ -149,12 +188,20 @@ if $need_resources; then
   # must sit beside the ghostty/ dir, not inside it. Extracted into
   # Macterm/Resources/ (all gitignored — none committed). Clear any prior
   # extraction first so a stale flat layout can't linger beside the new one.
-  gh release download "$LATEST_TAG" --pattern "ghostty-resources.tar.gz" --repo "$FORK_REPO"
+  gh release download "$GHOSTTY_TAG" --pattern "ghostty-resources.tar.gz" --repo "$FORK_REPO"
   rm -rf Macterm/Resources/ghostty Macterm/Resources/terminfo \
     Macterm/Resources/themes Macterm/Resources/shell-integration
   mkdir -p Macterm/Resources
   tar xzf ghostty-resources.tar.gz -C Macterm/Resources
   rm ghostty-resources.tar.gz
+fi
+
+# Stamp last, and only once both fork artifacts are actually on disk: an early
+# stamp would make a half-finished setup (network failure between the two
+# downloads) look complete to the next run. Any `exit 1` above leaves the old
+# stamp — and therefore the refresh — in place.
+if [[ -d "$XCFRAMEWORK_DIR" && -d "$RESOURCES_MARKER" ]]; then
+  printf '%s\n' "$GHOSTTY_TAG" > "$TAG_STAMP"
 fi
 
 if $need_zmx; then
