@@ -4,11 +4,17 @@ set -euo pipefail
 PROJECT_ROOT="$PWD"
 BUILD_DIR="$PROJECT_ROOT/build"
 VERSION="${VERSION:-0.0.0}"
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
 # Sparkle compares CFBundleVersion against the appcast's sparkle:version when
-# deciding whether an update is newer. Use the marketing string for both so a
-# new tag always wins — a raw commit count can stay equal across two
-# consecutive tags built from the same commit and trip "You're up to date".
-BUILD_NUMBER="$VERSION"
+# deciding whether an update is newer, so the two must agree exactly — both go
+# through `sparkle_comparison_version` (see _lib.sh for why a raw `-beta.N`
+# string can't be used, and why a commit count can't either: it can stay equal
+# across two tags built from the same commit and trip "You're up to date").
+# CFBundleShortVersionString keeps the human-readable $VERSION for display.
+BUILD_NUMBER="$(sparkle_comparison_version "$VERSION")"
 GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 SPARKLE_ED_PUBLIC_KEY="${SPARKLE_ED_PUBLIC_KEY:-SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER}"
 DMG_NAME="Macterm-${VERSION}.dmg"
