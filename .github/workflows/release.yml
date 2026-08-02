@@ -9,7 +9,51 @@ on:
     types: [published]
 
 jobs:
+  # Resolve the prerelease flag ONCE, live, from the release itself — never from
+  # `github.event.release.prerelease`.
+  #
+  # The payload is a snapshot frozen when the event was dispatched, and editing a
+  # release does not re-fire `published`. Promote a prerelease to stable in the
+  # same breath as publishing it and every job reads the STALE value: v1.21.0
+  # shipped that way (2026-08-01, run 30699334224) — the release record said
+  # `prerelease: false`, the payload said true, so `bump-cask` skipped and the
+  # appcast never got an item. The giveaway was the run's display title, still
+  # showing the pre-edit release name ("Macterm v1.20.11") against tag v1.21.0.
+  #
+  # `gh release view` asks the API for current truth, so this is correct no matter
+  # which activity type fired or how the release was edited beforehand. Preferred
+  # over adding `released` to `types:` because that only patches the one path we
+  # happened to hit, and GitHub's own docs don't state whether `released` fires on
+  # an edit-to-promote at all — the guess that "the event surely reflects the
+  # release" is what caused this bug, so don't re-make it in a new spot.
+  flag:
+    runs-on: ubuntu-latest
+    # Explicit: reading a release only needs contents:read, and declaring it
+    # keeps the job working if the repo's default workflow token is ever
+    # tightened.
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      prerelease: ${{ steps.read.outputs.prerelease }}
+    steps:
+      - name: Read live prerelease flag
+        id: read
+        run: |
+          PRERELEASE=$(gh release view "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease')
+          # Fail loudly rather than defaulting: a silent "false" would leak a
+          # beta into the stable channel and the Homebrew tap.
+          if [[ "$PRERELEASE" != "true" && "$PRERELEASE" != "false" ]]; then
+            echo "error: could not read prerelease flag for '$GITHUB_REF_NAME' (got '$PRERELEASE')" >&2
+            exit 1
+          fi
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Live prerelease flag for $GITHUB_REF_NAME: $PRERELEASE"
+
   build:
+    needs: flag
     runs-on: macos-26
     permissions:
       contents: write
@@ -51,7 +95,7 @@ jobs:
       - name: Build universal release artifact
         env:
           SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
-          PRERELEASE: ${{ github.event.release.prerelease }}
+          PRERELEASE: ${{ needs.flag.outputs.prerelease }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           # A `-beta.N` suffix is accepted ONLY on a release flagged prerelease,
@@ -82,7 +126,7 @@ jobs:
           path: build/*.dmg
 
   release:
-    needs: build
+    needs: [flag, build]
     runs-on: macos-26
     permissions:
       contents: write
@@ -91,8 +135,9 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Job-level so both the version gate and the appcast step read the same
-      # flag. GitHub renders the boolean as the string "true"/"false".
-      PRERELEASE: ${{ github.event.release.prerelease }}
+      # flag. Sourced from the `flag` job's live API read, not the event payload
+      # (see the comment there). Renders as the string "true"/"false".
+      PRERELEASE: ${{ needs.flag.outputs.prerelease }}
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
@@ -158,9 +203,17 @@ jobs:
         run: scripts/publish-appcast.sh dmgs
 
   bump-cask:
-    needs: release
+    needs: [flag, release]
     # Prereleases never bump the Homebrew tap — stable installs stay stable.
-    if: ${{ !github.event.release.prerelease }}
+    #
+    # Compared as an explicit string, NOT `!needs.flag.outputs.prerelease`. Job
+    # outputs are always strings, and every non-empty string is truthy in a
+    # GitHub expression — so `!'false'` is `false` and the negation form would
+    # skip this job on EVERY release, stable ones included. (The old
+    # `!github.event.release.prerelease` was safe only because the event payload
+    # carries a real JSON boolean; that property is lost the moment the value
+    # comes from a job output.)
+    if: ${{ needs.flag.outputs.prerelease == 'false' }}
     runs-on: macos-26
     env:
       GH_TOKEN: ${{ secrets.HOMEBREW_TAP_PAT }}
