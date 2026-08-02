@@ -88,6 +88,16 @@ final class AppState {
 
     var pendingLayoutError: LayoutError?
 
+    /// Bumped whenever the app itself writes a project file, so an open
+    /// Projects settings pane can re-read the directory. There's no file
+    /// watcher by design (hand-edits surface on next use); this covers only
+    /// the changes Macterm makes, which the user does expect to see land.
+    private(set) var layoutFilesVersion = 0
+
+    func noteLayoutFilesChanged() {
+        layoutFilesVersion &+= 1
+    }
+
     /// The transient success confirmation showing in `ToastOverlay`, if any.
     /// Only for outcomes that leave no visible trace — failures still raise a
     /// dialog, which a toast must never replace.
@@ -1274,6 +1284,10 @@ final class AppState {
                 reservedSlugs: reservedSlugs
             )
             logger.info("saveLayout succeeded: tabs=\(ws.tabs.count, privacy: .public)")
+            // This is the app writing a project file — an open Projects
+            // settings pane must re-read the directory or it shows the
+            // pre-save state.
+            noteLayoutFilesChanged()
             // A stray-*file* conflict (an unrelated file declares this path)
             // takes priority over the shared-*project* notice — both write
             // `pendingLayoutError`, so only surface the latter when the former

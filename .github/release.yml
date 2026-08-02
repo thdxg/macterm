@@ -1,0 +1,37 @@
+# Native GitHub release-notes config, used by `gh release create --generate-notes`
+# and by the "Generate release notes" button in the release UI. Replaces
+# release-drafter (see PR that removed .github/workflows/release-drafter.yml):
+# the categories and exclusions below are ports of that config.
+#
+# What is deliberately NOT carried over: release-drafter's `version-resolver`,
+# which computed the next version from PR labels. GitHub has no equivalent —
+# native notes only ever describe a tag you already chose — so the version is
+# now picked by hand when cutting the release. That is also what makes
+# `vX.Y.Z-beta.N` prerelease tags straightforward: nothing tries to derive them.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+
+  categories:
+    - title: What's New
+      labels:
+        - enhancement
+
+    - title: Fixes
+      labels:
+        - bug
+
+    - title: Maintenance
+      labels:
+        - chore
+        - dependencies
+        - documentation
+
+    # Catch-all — anything unlabeled or labeled only with `area:*` still shows
+    # up instead of being dropped. release-drafter listed uncategorized changes
+    # at the top of its template; this is the native equivalent, and it must
+    # stay LAST since GitHub assigns each PR to the first matching category.
+    - title: Other Changes
+      labels:
+        - "*"
