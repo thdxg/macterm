@@ -33,16 +33,22 @@ struct ProjectsSettings: View {
                 } else {
                     // `.onMove` is safe here, unlike the sidebar's list — this
                     // one has no tab rows or keyboard routing to hijack.
+                    // `.plain` + a clear row background keeps every row on the
+                    // section's own material: the default styles paint their
+                    // own (alternating, in the case of the inset list), which
+                    // reads as a second surface floating inside the group.
                     List {
                         ForEach(projectStore.projects) { project in
                             ProjectRow(project: project)
+                                .listRowBackground(Color.clear)
                         }
                         .onMove { source, destination in
                             projectStore.reorder(fromOffsets: source, toOffset: destination)
                         }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .frame(minHeight: 120, maxHeight: 220)
-                    .alternatingRowBackgrounds()
                 }
                 Text("Drag to reorder.")
                     .settingsCaption()
@@ -78,9 +84,11 @@ struct ProjectsSettings: View {
                             onCreateProject: { createProject(from: layout) },
                             onRemove: { layoutPendingDeletion = layout }
                         )
+                        .listRowBackground(Color.clear)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .frame(minHeight: 120, maxHeight: 220)
-                    .alternatingRowBackgrounds()
                 }
                 LabeledContent("Folder") {
                     Button(ProjectFileStore.defaultDirectory().path(percentEncoded: false)) {
