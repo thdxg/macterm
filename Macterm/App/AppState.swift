@@ -541,12 +541,9 @@ final class AppState {
     /// active one — so a multi-tab project (e.g. from a declarative layout) has
     /// all its processes running on open. Other projects stay lazy. The active
     /// tab is created by SwiftUI as usual; the rest are warmed off-screen via
-    /// `SurfaceIncubator`. No-op when the toggle is off.
+    /// `SurfaceIncubator`.
     func warmFocusedProject() {
-        guard Preferences.shared.eagerlyStartProjectTabs,
-              let projectID = activeProjectID,
-              let ws = workspaces[projectID]
-        else { return }
+        guard let projectID = activeProjectID, let ws = workspaces[projectID] else { return }
         // Stagger the spawns: each warm is a login shell (PAM, rc files) and —
         // when restoring — a `zmx attach` reattaching a daemon. Firing them all
         // in one tick multiplies launch pressure with tab count (cmux hit a

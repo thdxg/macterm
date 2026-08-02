@@ -386,7 +386,6 @@ private struct GeneralSettings: View {
     // NOT `@AppStorage`, which binds to `UserDefaults.standard` — banned by the
     // project, and it diverged from the `.onChange` write-through under test.
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
-    @State private var eagerlyStartProjectTabs: Bool = Preferences.shared.eagerlyStartProjectTabs
     @State private var terminateSessionsOnQuit: Bool = Preferences.shared.terminateSessionsOnQuit
 
     /// Why session persistence is inactive, when it is. Missing binary is a
@@ -455,13 +454,6 @@ private struct GeneralSettings: View {
                         Preferences.shared.autoTilingEnabled = v
                     }
                 Text("Distributes pane sizes evenly on split and close.")
-                    .settingsCaption()
-
-                Toggle("Start all tabs of the focused project", isOn: $eagerlyStartProjectTabs)
-                    .onChange(of: eagerlyStartProjectTabs) { _, v in
-                        Preferences.shared.eagerlyStartProjectTabs = v
-                    }
-                Text("Runs every tab's processes when a project opens, not just the active tab.")
                     .settingsCaption()
             }
 

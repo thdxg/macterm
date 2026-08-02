@@ -103,12 +103,6 @@ final class Preferences {
         }
     }
 
-    /// Start every tab of the focused project immediately (off-screen) rather
-    /// than only the active tab. Defaults to on.
-    var eagerlyStartProjectTabs: Bool {
-        didSet { defaults.set(eagerlyStartProjectTabs, forKey: Keys.eagerlyStartProjectTabs) }
-    }
-
     /// Multiplier applied to terminal scroll wheel / trackpad row deltas.
     var terminalScrollSpeed: Double {
         didSet { defaults.set(terminalScrollSpeed, forKey: Keys.terminalScrollSpeed) }
@@ -390,7 +384,6 @@ final class Preferences {
     private init(defaults: UserDefaults) {
         self.defaults = defaults
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
-        eagerlyStartProjectTabs = (defaults.object(forKey: Keys.eagerlyStartProjectTabs) as? Bool) ?? true
         terminalScrollSpeed = Self.clampScrollSpeed(defaults.double(forKey: Keys.terminalScrollSpeed), fallback: 1.0)
         paneDimOpacity = Self.clampPaneDimOpacity(
             (defaults.object(forKey: Keys.paneDimOpacity) as? Double) ?? 0.2
@@ -447,13 +440,19 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.input.optionAsAlt")
             defaults.set(true, forKey: Keys.migrationV2GhosttyConfigOwned)
         }
+        // Eager tab start is unconditional now, so its key is dead. Drop a
+        // stored `false` rather than leave it to silently take effect again if
+        // anything is ever wired back onto that key.
+        if !defaults.bool(forKey: Keys.migrationEagerTabStartAlways) {
+            defaults.removeObject(forKey: "macterm.eagerlyStartProjectTabs.enabled")
+            defaults.set(true, forKey: Keys.migrationEagerTabStartAlways)
+        }
     }
 
     // MARK: - UserDefaults keys
 
     enum Keys {
         static let autoTiling = "macterm.autoTiling.enabled"
-        static let eagerlyStartProjectTabs = "macterm.eagerlyStartProjectTabs.enabled"
         static let terminalScrollSpeed = "macterm.terminal.scrollSpeed"
         static let paneDimOpacity = "macterm.pane.dimOpacity"
         static let windowOpacity = "macterm.window.opacity"
@@ -475,5 +474,6 @@ final class Preferences {
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let tabSwitcherPosition = "macterm.toolbar.tabSwitcherPosition"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
+        static let migrationEagerTabStartAlways = "macterm.migration.eager_tab_start_always"
     }
 }
