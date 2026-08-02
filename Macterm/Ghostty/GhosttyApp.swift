@@ -332,6 +332,66 @@ final class GhosttyApp {
         return String(bytes: UnsafeRawBufferPointer(start: ptr, count: Int(str.len)), encoding: .utf8)
     }
 
+    private func configBool(_ key: String, default defaultValue: Bool) -> Bool {
+        guard let config else { return defaultValue }
+        var value = defaultValue
+        guard ghostty_config_get(config, &value, key, UInt(key.utf8.count)) else { return defaultValue }
+        return value
+    }
+
+    // MARK: - Bell & secure input config (read by GhosttyCallbacks)
+
+    /// The user's `bell-features` set. Same bit layout as Ghostty.app's
+    /// `BellFeatures`; `title` and `border` exist in the config but Macterm
+    /// implements only the app-level features (see `GhosttyCallbacks`'s
+    /// `RING_BELL` case).
+    struct BellFeatures: OptionSet {
+        let rawValue: CUnsignedInt
+        static let system = BellFeatures(rawValue: 1 << 0)
+        static let audio = BellFeatures(rawValue: 1 << 1)
+        static let attention = BellFeatures(rawValue: 1 << 2)
+        static let title = BellFeatures(rawValue: 1 << 3)
+        static let border = BellFeatures(rawValue: 1 << 4)
+    }
+
+    var bellFeatures: BellFeatures {
+        guard let config else { return [] }
+        var raw: CUnsignedInt = 0
+        let key = "bell-features"
+        guard ghostty_config_get(config, &raw, key, UInt(key.utf8.count)) else { return [] }
+        return BellFeatures(rawValue: raw)
+    }
+
+    /// Absolute path of the user's `bell-audio-path`, or nil when unset.
+    var bellAudioPath: String? {
+        guard let config else { return nil }
+        var value = ghostty_config_path_s()
+        let key = "bell-audio-path"
+        guard ghostty_config_get(config, &value, key, UInt(key.utf8.count)), let ptr = value.path else { return nil }
+        let path = String(cString: ptr)
+        return path.isEmpty ? nil : path
+    }
+
+    var bellAudioVolume: Float {
+        guard let config else { return 0.5 }
+        var value = 0.5
+        let key = "bell-audio-volume"
+        _ = ghostty_config_get(config, &value, key, UInt(key.utf8.count))
+        return Float(value)
+    }
+
+    /// `macos-auto-secure-input`: gate for enabling secure keyboard input
+    /// automatically while a surface reports a password prompt.
+    var autoSecureInput: Bool {
+        configBool("macos-auto-secure-input", default: true)
+    }
+
+    /// `macos-secure-input-indication`: whether to show the per-pane lock
+    /// badge while secure input is active.
+    var secureInputIndication: Bool {
+        configBool("macos-secure-input-indication", default: true)
+    }
+
     private func loadConfig() -> (ghostty_config_t?, ReloadResult) {
         var result = ReloadResult(diagnostics: [])
         guard let cfg = ghostty_config_new() else { return (nil, result) }

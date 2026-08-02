@@ -528,6 +528,50 @@ struct AppStateTests {
     }
 
     @Test
+    func renameTabContaining_targets_the_panes_tab() async throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let paneID = try #require(tab.splitRoot.allPanes().first?.id)
+        state.sidebarVisible = false
+
+        state.renameTab(containing: paneID, projectID: p.id)
+
+        #expect(state.sidebarVisible)
+        // The rename target lands a runloop tick later (the sidebar row's
+        // TextField must exist before it's asked to edit) — poll with sleeps.
+        for _ in 0 ..< 100 where state.renamingTabID == nil {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(state.renamingTabID == tab.id)
+    }
+
+    @Test
+    func renameTabContaining_unknown_pane_is_noop() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        state.sidebarVisible = false
+        state.renameTab(containing: UUID(), projectID: p.id)
+        #expect(!state.sidebarVisible)
+    }
+
+    @Test
+    func setTabTitleContaining_sets_and_clears_customTitle() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let paneID = try #require(tab.splitRoot.allPanes().first?.id)
+
+        state.setTabTitle(containing: paneID, projectID: p.id, title: "deploy")
+        #expect(tab.customTitle == "deploy")
+
+        // Empty/nil restores the automatic title, same contract as the
+        // ghostty keybind.
+        state.setTabTitle(containing: paneID, projectID: p.id, title: nil)
+        #expect(tab.customTitle == nil)
+    }
+
+    @Test
     func renamingProjectID_defaults_to_nil() {
         let state = makeAppState()
         #expect(state.renamingProjectID == nil)

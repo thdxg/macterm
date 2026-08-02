@@ -1,5 +1,9 @@
 import AppKit
 import GhosttyKit
+import os
+import UniformTypeIdentifiers
+
+private let logger = Logger(subsystem: appBundleID, category: "GhosttyCallbacks")
 
 /// Routes libghostty runtime callbacks to the appropriate terminal views.
 final class GhosttyCallbacks: @unchecked Sendable {
@@ -112,9 +116,228 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let snapshot = GhosttyApp.readColors(from: cfg)
             DispatchQueue.main.async { GhosttyApp.shared.adoptResolvedColors(snapshot) }
             return true
+        case GHOSTTY_ACTION_OPEN_URL:
+            // Keybind actions that end in opening something — link clicks,
+            // `write_scrollback_file:open` and friends. Left unhandled,
+            // libghostty still opens the file itself (a spawned `open -t`),
+            // but logs it as an apprt failure; handling it here matches
+            // Ghostty.app. The url bytes are NOT null-terminated (`len`
+            // bounds them) and the pointer is owned by libghostty for this
+            // call only, so copy synchronously.
+            let payload = action.action.open_url
+            guard let ptr = payload.url, payload.len > 0 else { return true }
+            let urlString = String(
+                decoding: UnsafeRawBufferPointer(start: ptr, count: Int(payload.len)),
+                as: UTF8.self
+            )
+            let kind = payload.kind
+            DispatchQueue.main.async { Self.openURL(urlString, kind: kind) }
+            return true
+        case GHOSTTY_ACTION_MOUSE_SHAPE:
+            // The pointer shape for the current mouse position — I-beam over
+            // text, pointing hand over an OSC 8 link, resize arrows for TUI
+            // drags. Applied as the scroll view's documentCursor.
+            guard let view = surfaceView(from: target) else { return true }
+            let shape = action.action.mouse_shape
+            DispatchQueue.main.async { view.surfaceDidChangeMouseShape(shape) }
+            return true
+        case GHOSTTY_ACTION_MOUSE_VISIBILITY:
+            // mouse-hide-while-typing. Hidden-until-move matches Ghostty.app:
+            // any physical mouse movement reveals the cursor again, so we
+            // never need to balance hide/unhide pairs.
+            guard surfaceView(from: target) != nil else { return true }
+            let hidden = action.action.mouse_visibility == GHOSTTY_MOUSE_HIDDEN
+            DispatchQueue.main.async { NSCursor.setHiddenUntilMouseMoves(hidden) }
+            return true
+        case GHOSTTY_ACTION_MOUSE_OVER_LINK:
+            // The URL under the pointer, for the pane's hover banner. Zero
+            // length means the pointer left the link. Bytes are len-bounded
+            // (not null-terminated) and owned by libghostty for this call.
+            guard let view = surfaceView(from: target) else { return true }
+            let link = action.action.mouse_over_link
+            var url: String?
+            if let ptr = link.url, link.len > 0 {
+                url = String(
+                    decoding: UnsafeRawBufferPointer(start: ptr, count: Int(link.len)),
+                    as: UTF8.self
+                )
+            }
+            DispatchQueue.main.async { view.surfaceDidHoverLink(url) }
+            return true
+        case GHOSTTY_ACTION_SECURE_INPUT:
+            // App target: the user's `toggle_secure_input` keybind. Surface
+            // target: libghostty detected a password prompt — honored only
+            // when `macos-auto-secure-input` allows (checked on the main
+            // queue: config access is main-actor).
+            let mode = action.action.secure_input
+            switch target.tag {
+            case GHOSTTY_TARGET_APP:
+                DispatchQueue.main.async {
+                    switch mode {
+                    case GHOSTTY_SECURE_INPUT_ON: SecureInput.shared.setGlobal(true)
+                    case GHOSTTY_SECURE_INPUT_OFF: SecureInput.shared.setGlobal(false)
+                    default: SecureInput.shared.toggleGlobal()
+                    }
+                }
+                return true
+            case GHOSTTY_TARGET_SURFACE:
+                guard let view = surfaceView(from: target) else { return true }
+                DispatchQueue.main.async {
+                    guard GhosttyApp.shared.autoSecureInput else { return }
+                    switch mode {
+                    case GHOSTTY_SECURE_INPUT_ON: view.passwordInput = true
+                    case GHOSTTY_SECURE_INPUT_OFF: view.passwordInput = false
+                    default: view.passwordInput.toggle()
+                    }
+                }
+                return true
+            default:
+                return false
+            }
+        case GHOSTTY_ACTION_RING_BELL:
+            // BEL. The `title`/`border` bell-features are per-tab UI Macterm
+            // doesn't implement; the app-level features (beep, custom sound,
+            // dock attention) are handled here for any surface.
+            guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
+            DispatchQueue.main.async { Self.ringBell() }
+            return true
+        case GHOSTTY_ACTION_OPEN_CONFIG:
+            // The `open_config` keybind. Macterm's source of truth is the
+            // user's own ghostty config file, so open that — created empty
+            // first if it doesn't exist yet, matching Ghostty.app.
+            DispatchQueue.main.async { Self.openUserConfig() }
+            return true
+        case GHOSTTY_ACTION_CHECK_FOR_UPDATES:
+            // Same guard as the Check for Update command: no-op while a
+            // Sparkle check is already in flight.
+            DispatchQueue.main.async {
+                guard Updater.shared.canCheckForUpdates else { return }
+                Updater.shared.checkForUpdates()
+            }
+            return true
+        case GHOSTTY_ACTION_COPY_TITLE_TO_CLIPBOARD:
+            // The pane owns title state (program title / process name), so it
+            // supplies the string via `titleProvider`.
+            guard let view = surfaceView(from: target) else { return true }
+            DispatchQueue.main.async {
+                guard let title = view.titleProvider?(), !title.isEmpty else { return }
+                Self.setPasteboardString(title)
+            }
+            return true
+        case GHOSTTY_ACTION_PROMPT_TITLE:
+            // `prompt_surface_title`. Macterm titles live on tabs (a surface
+            // has no separate title UI), so both the surface and tab variants
+            // route to the containing tab's rename flow.
+            guard let view = surfaceView(from: target) else { return true }
+            DispatchQueue.main.async { view.onPromptTitle?() }
+            return true
+        case GHOSTTY_ACTION_SET_TAB_TITLE:
+            // The `set_tab_title` keybind: an explicit user-driven title, so
+            // it maps to the tab's customTitle (what rename-tab sets). Empty
+            // restores the automatic title, same contract as Ghostty.app.
+            guard let view = surfaceView(from: target) else { return true }
+            let title = action.action.set_tab_title.title.flatMap { String(cString: $0) } ?? ""
+            DispatchQueue.main.async { view.onSetTabTitle?(title.isEmpty ? nil : title) }
+            return true
+        case GHOSTTY_ACTION_RENDERER_HEALTH:
+            // No recovery UI (Ghostty.app shows a banner); surfacing the
+            // transition in the log is what makes a black pane diagnosable.
+            let health = action.action.renderer_health
+            if health == GHOSTTY_RENDERER_HEALTH_UNHEALTHY {
+                logger.error("renderer reported unhealthy for a surface")
+            } else {
+                logger.info("renderer recovered for a surface")
+            }
+            return true
         default:
+            // Deliberately unhandled: window/tab/split management actions
+            // (NEW_TAB, NEW_SPLIT, GOTO_*, TOGGLE_FULLSCREEN, QUIT, …) —
+            // those concepts are Macterm-owned via AppCommand/hotkeys, not
+            // ghostty keybinds; GTK/iOS-only actions (SHOW_GTK_INSPECTOR,
+            // SHOW_ON_SCREEN_KEYBOARD); the imgui INSPECTOR; sizing hints
+            // (CELL_SIZE, SIZE_LIMIT, INITIAL_SIZE, RESET_WINDOW_SIZE) that
+            // don't map onto a single shared window of splits; UNDO/REDO
+            // (no app-level undo stack); COLOR_CHANGE (OSC 4/10/11 recolors
+            // the grid core-side; Macterm's chrome follows the resolved
+            // theme via CONFIG_CHANGE, not per-surface dynamic colors);
+            // SELECTION_CHANGED (accessibility text APIs not implemented);
+            // and KEY_SEQUENCE/KEY_TABLE progress UI (sequences themselves
+            // still work core-side). SHOW_CHILD_EXITED stays unhandled on
+            // purpose: returning false makes the core render its own
+            // abnormal-exit overlay, which is the error UI Macterm relies on.
             return false
         }
+    }
+
+    /// Ring the terminal bell per the user's `bell-features`: the system
+    /// beep, an optional custom sound, and a dock-bounce attention request
+    /// (which macOS shows only while the app is inactive).
+    @MainActor
+    private static func ringBell() {
+        let features = GhosttyApp.shared.bellFeatures
+        if features.contains(.system) {
+            NSSound.beep()
+        }
+        if features.contains(.audio),
+           let path = GhosttyApp.shared.bellAudioPath,
+           let sound = NSSound(contentsOfFile: path, byReference: false)
+        {
+            sound.volume = GhosttyApp.shared.bellAudioVolume
+            sound.play()
+        }
+        if features.contains(.attention) {
+            NSApp.requestUserAttention(.informationalRequest)
+        }
+    }
+
+    /// Open the user's ghostty config in their text editor, creating an empty
+    /// file (and its directory) first so a fresh setup gets an editable file
+    /// rather than a silent no-op.
+    @MainActor
+    private static func openUserConfig() {
+        let path = Preferences.shared.expandedUserGhosttyConfigPath
+        guard !path.isEmpty else { return }
+        if !FileManager.default.fileExists(atPath: path) {
+            let url = URL(fileURLWithPath: path)
+            try? FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            FileManager.default.createFile(atPath: path, contents: nil)
+        }
+        openURL(path, kind: GHOSTTY_ACTION_OPEN_URL_KIND_TEXT)
+    }
+
+    // MARK: - Open URL (GHOSTTY_ACTION_OPEN_URL)
+
+    /// The URL a `GHOSTTY_ACTION_OPEN_URL` payload string denotes. A string
+    /// without a scheme is a file path — `URL(string:)` would happily build a
+    /// schemeless URL from it that no application can open (ghostty#8763) —
+    /// so those resolve via the file-URL initializer, with `~` expanded.
+    static func resolvedOpenTarget(_ string: String) -> URL {
+        if let candidate = URL(string: string), candidate.scheme != nil {
+            return candidate
+        }
+        return URL(fileURLWithPath: (string as NSString).standardizingPath)
+    }
+
+    private static func openURL(_ string: String, kind: ghostty_action_open_url_kind_e) {
+        let url = resolvedOpenTarget(string)
+        // `.text` asks for the payload to be *viewed as text* (scrollback
+        // dumps land here): prefer the default app for the file's extension,
+        // then the system plain-text editor — same order as Ghostty.app.
+        // `.html`/`.unknown` just go to the default handler.
+        if kind == GHOSTTY_ACTION_OPEN_URL_KIND_TEXT, let editor = defaultTextEditor(for: url) {
+            NSWorkspace.shared.open([url], withApplicationAt: editor, configuration: NSWorkspace.OpenConfiguration())
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    private static func defaultTextEditor(for url: URL) -> URL? {
+        let byExtension = UTType(filenameExtension: url.pathExtension)
+            .flatMap { NSWorkspace.shared.urlForApplication(toOpen: $0) }
+        return byExtension ?? NSWorkspace.shared.urlForApplication(toOpen: .plainText)
     }
 
     func readClipboard(ud: UnsafeMutableRawPointer?, location: ghostty_clipboard_e, state: UnsafeMutableRawPointer?) -> Bool {

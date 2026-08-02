@@ -137,6 +137,57 @@ final class GhosttyTerminalNSView: NSView {
         onOutputActivity?(total)
     }
 
+    /// Apply the pointer shape libghostty computed for the current mouse
+    /// position. Unknown shapes are ignored (keep the last cursor) — same
+    /// policy as Ghostty.app.
+    func surfaceDidChangeMouseShape(_ shape: ghostty_action_mouse_shape_e) {
+        guard let cursor = Self.cursor(for: shape) else { return }
+        onMouseShapeChange?(cursor)
+    }
+
+    /// The NSCursor for a libghostty mouse shape, or nil for shapes with no
+    /// macOS counterpart. Mirrors Ghostty.app's mapping (Cursor.swift),
+    /// including the macOS 15 directional resize variants.
+    static func cursor(for shape: ghostty_action_mouse_shape_e) -> NSCursor? {
+        switch shape {
+        case GHOSTTY_MOUSE_SHAPE_DEFAULT: return .arrow
+        case GHOSTTY_MOUSE_SHAPE_TEXT: return .iBeam
+        case GHOSTTY_MOUSE_SHAPE_VERTICAL_TEXT: return .iBeamCursorForVerticalLayout
+        case GHOSTTY_MOUSE_SHAPE_POINTER: return .pointingHand
+        case GHOSTTY_MOUSE_SHAPE_GRAB: return .openHand
+        case GHOSTTY_MOUSE_SHAPE_GRABBING: return .closedHand
+        case GHOSTTY_MOUSE_SHAPE_CONTEXT_MENU: return .contextualMenu
+        case GHOSTTY_MOUSE_SHAPE_CROSSHAIR: return .crosshair
+        case GHOSTTY_MOUSE_SHAPE_NOT_ALLOWED: return .operationNotAllowed
+        case GHOSTTY_MOUSE_SHAPE_W_RESIZE:
+            if #available(macOS 15.0, *) { return .columnResize(directions: .left) }
+            return .resizeLeft
+        case GHOSTTY_MOUSE_SHAPE_E_RESIZE:
+            if #available(macOS 15.0, *) { return .columnResize(directions: .right) }
+            return .resizeRight
+        case GHOSTTY_MOUSE_SHAPE_N_RESIZE:
+            if #available(macOS 15.0, *) { return .rowResize(directions: .up) }
+            return .resizeUp
+        case GHOSTTY_MOUSE_SHAPE_S_RESIZE:
+            if #available(macOS 15.0, *) { return .rowResize(directions: .down) }
+            return .resizeDown
+        case GHOSTTY_MOUSE_SHAPE_NS_RESIZE:
+            if #available(macOS 15.0, *) { return .rowResize }
+            return .resizeUpDown
+        case GHOSTTY_MOUSE_SHAPE_EW_RESIZE:
+            if #available(macOS 15.0, *) { return .columnResize }
+            return .resizeLeftRight
+        default:
+            return nil
+        }
+    }
+
+    /// Forward a link-hover change (`GHOSTTY_ACTION_MOUSE_OVER_LINK`). An
+    /// empty URL means the pointer left the link.
+    func surfaceDidHoverLink(_ url: String?) {
+        onLinkHover?(url?.isEmpty == true ? nil : url)
+    }
+
     /// Record the actual payload resolved for a libghostty clipboard request.
     /// Unlike key-code inference, this distinguishes real content from an
     /// empty/whitespace clipboard or a remapped Command-V binding.
@@ -190,8 +241,46 @@ final class GhosttyTerminalNSView: NSView {
     /// like less/vim fall through to libghostty for mouse reporting). Return
     /// false to let libghostty handle the event directly.
     var onScrollWheel: ((NSEvent) -> Bool)?
+    /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
+    /// when the pointer leaves it. Drives the pane's hover-URL banner.
+    var onLinkHover: ((String?) -> Void)?
+    /// The pointer cursor libghostty wants over the grid
+    /// (`GHOSTTY_ACTION_MOUSE_SHAPE`) — I-beam over text, a pointing hand
+    /// over links. The hosting `SurfaceScrollView` applies it as its
+    /// `documentCursor`.
+    var onMouseShapeChange: ((NSCursor) -> Void)?
+    /// The `prompt_surface_title` keybind: ask the user for a title. Macterm
+    /// titles live on tabs, so this routes to the tab-rename flow.
+    var onPromptTitle: (() -> Void)?
+    /// The `set_tab_title` keybind: set (or, with nil, clear) the containing
+    /// tab's custom title.
+    var onSetTabTitle: ((String?) -> Void)?
+    /// The pane's current display title, for `copy_title_to_clipboard`. The
+    /// title is pane-derived state (program title / process name), so the
+    /// pane supplies it.
+    var titleProvider: (() -> String?)?
     var isFocused: Bool = false
     var currentPwd: String?
+
+    /// True while libghostty reports the surface is at a password prompt
+    /// (surface-target `GHOSTTY_ACTION_SECURE_INPUT`). Registers this view
+    /// with the `SecureInput` manager so keystrokes are shielded from event
+    /// taps exactly while the prompt is focused.
+    var passwordInput: Bool = false {
+        didSet {
+            guard passwordInput != oldValue else { return }
+            let id = ObjectIdentifier(self)
+            if passwordInput {
+                SecureInput.shared.setScoped(id, focused: hasKeyboardFocus)
+            } else {
+                SecureInput.shared.removeScoped(id)
+            }
+        }
+    }
+
+    private var hasKeyboardFocus: Bool {
+        window?.firstResponder === self
+    }
 
     private var lastScrollbarSnapshot: ScrollbarSnapshot?
     private var commandSubmissionEvidence = TerminalCommandSubmission.Evidence()
@@ -628,13 +717,23 @@ final class GhosttyTerminalNSView: NSView {
             ghostty_surface_set_focus(surface, true)
             onFocus?()
         }
+        if result { syncSecureInputFocus(true) }
         return result
     }
 
     override func resignFirstResponder() -> Bool {
         let result = super.resignFirstResponder()
         if result, let surface { ghostty_surface_set_focus(surface, false) }
+        if result { syncSecureInputFocus(false) }
         return result
+    }
+
+    /// Secure input for a password prompt applies only while this view holds
+    /// keyboard focus — a prompt sitting in a background pane must not shield
+    /// (and so break) typing that's going elsewhere.
+    private func syncSecureInputFocus(_ focused: Bool) {
+        guard passwordInput else { return }
+        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: focused)
     }
 
     // MARK: - Tracking area
