@@ -169,12 +169,12 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .renameTab: .renameTab
         case .renameProject: .renameProject
         case .copySessionID: .copySessionID
+        case .applyLayout: .applyLayout
+        case .saveLayout: .saveLayout
         case .newRemoteProject,
              .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
-             .applyLayout,
-             .saveLayout,
              .checkForUpdate: nil
         }
     }

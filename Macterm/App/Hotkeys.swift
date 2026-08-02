@@ -39,6 +39,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case renameTab = "rename_tab"
     case renameProject = "rename_project"
     case copySessionID = "copy_session_id"
+    case applyLayout = "apply_layout"
+    case saveLayout = "save_layout"
 
     var id: String { rawValue }
 
@@ -80,6 +82,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .renameTab: "cmd+r"
         case .renameProject: "none"
         case .copySessionID: "none"
+        // Unbound by default: both rewrite or replace the live pane tree, so a
+        // stray keystroke on a stock binding would be destructive.
+        case .applyLayout: "none"
+        case .saveLayout: "none"
         }
     }
 }

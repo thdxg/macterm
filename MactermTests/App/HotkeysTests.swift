@@ -322,6 +322,18 @@ struct HotkeysTests {
     }
 
     @Test
+    func layout_actions_are_unbound_by_default_and_titled_from_command() {
+        // Both ship unbound: applying or saving a layout rewrites the live pane
+        // tree, so a stock binding would make a mistyped chord destructive.
+        #expect(HotkeyAction.applyLayout.defaultShortcut == "none")
+        #expect(HotkeyAction.saveLayout.defaultShortcut == "none")
+        #expect(HotkeyAction.applyLayout.title == "Apply Layout")
+        #expect(HotkeyAction.saveLayout.title == "Save Layout")
+        #expect(AppCommand.applyLayout.hotkeyAction == .applyLayout)
+        #expect(AppCommand.saveLayout.hotkeyAction == .saveLayout)
+    }
+
+    @Test
     func all_action_ids_are_unique() {
         let ids = HotkeyAction.allCases.map(\.rawValue)
         #expect(ids.count == Set(ids).count)
