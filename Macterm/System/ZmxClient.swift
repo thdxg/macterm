@@ -220,29 +220,6 @@ extension ZmxClient {
         runKillsBlocking(sessionIDs.map { id in { await kill(id) } }, timeout: timeout)
     }
 
-    /// Remote counterpart of `killSessionsBlocking`, for the quit path's
-    /// terminate-on-quit sweep. Longer default cap: each kill is an ssh
-    /// round-trip (BatchMode, so it fails fast rather than prompting — an
-    /// unreachable host just forfeits its kills when the cap lands).
-    /// One remote session to tear down on quit: its host spec, session name,
-    /// and the project's optional explicit zmx path.
-    struct RemoteKill {
-        let remote: ProjectPath
-        let sessionID: String
-        let zmxPath: String?
-    }
-
-    nonisolated func killRemoteSessionsBlocking(
-        _ kills: [RemoteKill],
-        timeout: Duration = .seconds(12)
-    ) {
-        let kill = killRemoteSession
-        runKillsBlocking(
-            kills.map { k in { await kill(k.remote, k.sessionID, k.zmxPath) } },
-            timeout: timeout
-        )
-    }
-
     nonisolated private func runKillsBlocking(
         _ kills: [@Sendable () async -> Void],
         timeout: Duration

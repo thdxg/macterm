@@ -141,15 +141,6 @@ final class Preferences {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
     }
 
-    /// When true, quitting Macterm kills every pane's zmx session so nothing
-    /// keeps running in the background. Default off — session persistence
-    /// (shells survive quit and reattach on relaunch) is the point, so quit
-    /// detaches rather than terminates. Macterm-side only; never touches the
-    /// ghostty config pipeline.
-    var terminateSessionsOnQuit: Bool {
-        didSet { defaults.set(terminateSessionsOnQuit, forKey: Keys.terminateSessionsOnQuit) }
-    }
-
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
     /// `allowedChannelsForUpdater`, so `.beta` makes prerelease items visible to
     /// both the scheduled check and "Check for Updates…". Defaults to `.stable`:
@@ -403,7 +394,6 @@ final class Preferences {
         showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
-        terminateSessionsOnQuit = defaults.object(forKey: Keys.terminateSessionsOnQuit) as? Bool ?? false
         updateChannel = (defaults.string(forKey: Keys.updateChannel))
             .flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
@@ -440,12 +430,14 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.input.optionAsAlt")
             defaults.set(true, forKey: Keys.migrationV2GhosttyConfigOwned)
         }
-        // Eager tab start is unconditional now, so its key is dead. Drop a
-        // stored `false` rather than leave it to silently take effect again if
-        // anything is ever wired back onto that key.
-        if !defaults.bool(forKey: Keys.migrationEagerTabStartAlways) {
+        // Eager tab start and session persistence are both unconditional now,
+        // so their keys are dead. Drop the stored values rather than leave them
+        // to silently take effect again if anything is ever wired back onto
+        // those keys.
+        if !defaults.bool(forKey: Keys.migrationRetiredToggleKeys) {
             defaults.removeObject(forKey: "macterm.eagerlyStartProjectTabs.enabled")
-            defaults.set(true, forKey: Keys.migrationEagerTabStartAlways)
+            defaults.removeObject(forKey: "macterm.session.terminateOnQuit")
+            defaults.set(true, forKey: Keys.migrationRetiredToggleKeys)
         }
     }
 
@@ -469,11 +461,10 @@ final class Preferences {
         static let showAgentIcons = "macterm.sidebar.showAgentIcons"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
-        static let terminateSessionsOnQuit = "macterm.session.terminateOnQuit"
         static let updateChannel = "macterm.updates.channel"
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let tabSwitcherPosition = "macterm.toolbar.tabSwitcherPosition"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
-        static let migrationEagerTabStartAlways = "macterm.migration.eager_tab_start_always"
+        static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"
     }
 }
