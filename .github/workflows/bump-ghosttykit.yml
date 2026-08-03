@@ -33,11 +33,37 @@ jobs:
       pull-requests: write
     env:
       # A PR opened by the default GITHUB_TOKEN does NOT trigger workflows, which
-      # would defeat the entire point — the bump would arrive untested. GH_PAT is
-      # already a repo secret (release.yml uses it for the private ghostty fork)
-      # and, as a user token, its pushes do trigger CI.
+      # would defeat the entire point — the bump would arrive untested. So the
+      # `gh pr create` below has to run as a user (or app) token: every CI
+      # workflow triggers on `pull_request`, and only that event has to escape
+      # the suppression. The branch push can stay on the checkout's GITHUB_TOKEN,
+      # since nothing triggers on a push to a non-main branch.
+      #
+      # GH_PAT exists for this workflow ALONE — nothing else here needs a PAT.
+      # `thdxg/ghostty` is public, so setup.sh's release downloads work under
+      # GITHUB_TOKEN in every other workflow (release.yml's build job included);
+      # the only other PAT in the repo is HOMEBREW_TAP_PAT, for writing the tap.
       GH_TOKEN: ${{ secrets.GH_PAT }}
     steps:
+      # An absent secret interpolates to empty, and gh's own complaint about that
+      # is "To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN
+      # environment variable" — which reads as a workflow bug, not a missing
+      # secret. The first scheduled run (30802571959) died that way in 8s. Name
+      # the real cause before spending a step on it.
+      - name: Check the bump token
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            {
+              echo "error: the GH_PAT repo secret is unset or empty."
+              echo "  This workflow needs a token that is NOT GITHUB_TOKEN, because a PR"
+              echo "  opened by GITHUB_TOKEN triggers no workflows — and CI on the bump PR"
+              echo "  is the only thing that tests the new pin."
+              echo "  Fix: add a fine-grained PAT scoped to this repo, with Contents"
+              echo "  read+write and Pull requests read+write, as the GH_PAT secret."
+            } >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@v7
 
       - name: Resolve latest, compare with the pin
