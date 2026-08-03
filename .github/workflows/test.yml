@@ -73,28 +73,75 @@ jobs:
             Macterm/Resources/zmx
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
 
-      # Debug build products. `xcodebuild test` reuses this for a fast
-      # incremental compile; tests still run fresh regardless of what's cached,
-      # so a stale cache can never change a result — only the compile time.
-      # Separate key prefix from the benchmark's Release cache: same on-disk
-      # path (build/DerivedData), different cache namespace, so the two configs
-      # never clobber each other.
-      - name: Cache DerivedData (Debug)
-        uses: actions/cache@v6
-        with:
-          path: build/DerivedData
-          key: derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
-          restore-keys: |
-            derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-
-            derived-debug-
-
+      # Runs BEFORE the DerivedData cache, which keys on what this installs.
       - name: Setup GhosttyKit
         run: mise run setup --verbose
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Debug build products, keyed on the GhosttyKit ACTUALLY INSTALLED above,
+      # so they can never be paired with a framework they weren't compiled
+      # against. Separate key prefix from the benchmark's Release cache: same
+      # on-disk path (build/DerivedData), different namespace, so the two
+      # configs never clobber each other.
+      #
+      # A PINNED RELEASE IS NOT IMMUTABLE — that's what makes the framework hash
+      # load-bearing rather than belt-and-braces. thdxg/ghostty replaced
+      # build-2026-08-02's assets at 08:32Z, hours after CI had cached the
+      # earlier bytes under that same tag. The GhosttyKit key rolls weekly with
+      # no restore-keys, so when the ISO week turned over the next run
+      # re-downloaded the identical tag and got DIFFERENT bytes, while a broad
+      # `derived-debug-` restore-key handed the build a GhosttyKit .pcm
+      # precompiled against the old header (macterm#208, run 30790705828):
+      #
+      #   error: file '.../include/ghostty.h' has been modified since the module
+      #   file '.../GhosttyKit-<hash>.pcm' was built
+      #   note: precompiled file '...pcm' needs to be rebuilt
+      #
+      # Two properties of that failure are worth keeping in mind here. Only the
+      # test target broke — the app target got rebuilt, so the e2e job in the
+      # same run passed and the signal looked like a test-only problem. And the
+      # poisoned .pcm was restored *and re-saved* on every attempt, so
+      # `gh run rerun` reproduced it exactly; clearing it took deleting every
+      # derived-debug-* entry by hand. So a stale cache can break the build
+      # outright, not merely slow it down (this step used to claim otherwise),
+      # and the fallback keys must never reach across a framework change.
+      #
+      # The hash can only be taken after setup — it's the *downloaded*
+      # framework — which is why this is a restore/save split instead of one
+      # `cache` step. It also can't be hoisted into a job-level `env`: that
+      # evaluates before any step runs and would hash nothing. The glob stays
+      # slice-agnostic for the reason setup.sh globs rather than naming a slice.
+      #
+      # Header only, not the whole xcframework: ghostty.h is the input a .pcm
+      # records and therefore the one whose change hard-fails the build, while
+      # hashing the per-slice static archives would add hundreds of MB of
+      # hashing to every job to catch a stale *relink* — which xcodebuild
+      # already handles, tracking the archives as link inputs.
+      - name: Restore DerivedData (Debug)
+        id: derived
+        uses: actions/cache/restore@v6
+        with:
+          path: build/DerivedData
+          key: derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
+
       - name: Test
         run: mise run test --verbose
+
+      # Saves under the key resolved at restore time, NOT a re-evaluated
+      # expression — `**/*.swift` would otherwise pick up whatever the build
+      # just wrote under build/DerivedData. Success-only (the default `if`), so
+      # a failed build never persists its products for the next run to inherit.
+      # The sibling e2e job saves this same key; the loser of that race gets a
+      # harmless "cache already exists" warning.
+      - name: Save DerivedData (Debug)
+        uses: actions/cache/save@v6
+        with:
+          path: build/DerivedData
+          key: ${{ steps.derived.outputs.cache-primary-key }}
 
   # End-to-end: build the Debug app, launch it hermetically (the benchmark's
   # TCC-free recipe — Darwin notifications + LaunchServices activation, see
@@ -130,22 +177,27 @@ jobs:
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
-      # Shares the unit job's Debug DerivedData namespace — same configuration,
-      # same on-disk path. Both jobs save the same exact key per run; the
-      # loser's save is a harmless "cache already exists" warning.
-      - name: Cache DerivedData (Debug)
-        uses: actions/cache@v6
-        with:
-          path: build/DerivedData
-          key: derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
-          restore-keys: |
-            derived-debug-${{ hashFiles('**/*.swift', 'project.yml') }}-
-            derived-debug-
-
+      # Runs BEFORE the DerivedData cache, which keys on what this installs.
       - name: Setup GhosttyKit
         run: mise run setup --verbose
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Shares the unit job's Debug DerivedData namespace — same configuration,
+      # same on-disk path, so the same framework-hash key (see the unit job for
+      # why that hash is load-bearing and why it has to be read after setup).
+      # This job is how the incident spread: it builds only the app target, so
+      # it succeeded while carrying forward the stale test-target .pcm it never
+      # touched, and its save re-published the poison under a fresh key.
+      - name: Restore DerivedData (Debug)
+        id: derived
+        uses: actions/cache/restore@v6
+        with:
+          path: build/DerivedData
+          key: derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
 
       - name: End-to-end tests
         run: mise run e2e --verbose
@@ -159,3 +211,9 @@ jobs:
           name: e2e-diagnostics
           path: build/e2e/diagnostics/
           if-no-files-found: ignore
+
+      - name: Save DerivedData (Debug)
+        uses: actions/cache/save@v6
+        with:
+          path: build/DerivedData
+          key: ${{ steps.derived.outputs.cache-primary-key }}

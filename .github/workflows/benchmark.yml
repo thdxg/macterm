@@ -125,28 +125,41 @@ jobs:
           # week starts empty and setup re-downloads the current `latest`.
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
 
-      # Release build products. Separate key prefix from the test workflow's
-      # Debug cache: same on-disk path (build/DerivedData), different cache
-      # namespace, so the two configs never clobber each other. Release
-      # incremental caching is less reliable than Debug, but the benchmark
-      # measures runtime resource use, not build correctness, so a partial
-      # recompile only costs time.
-      - name: Cache DerivedData (Release)
-        uses: actions/cache@v6
-        with:
-          path: build/DerivedData
-          key: derived-release-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
-          restore-keys: |
-            derived-release-${{ hashFiles('**/*.swift', 'project.yml') }}-
-            derived-release-
-
+      # Runs BEFORE the DerivedData cache, which keys on what this installs.
       - name: Setup GhosttyKit
         run: mise run setup --verbose
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Release build products, keyed on the GhosttyKit actually installed above
+      # — see test.yml's unit job for why that hash is load-bearing (a pinned
+      # release is not immutable) and why it can only be read after setup.
+      # Separate key prefix from the test workflow's Debug cache: same on-disk
+      # path (build/DerivedData), different namespace, so the two configs never
+      # clobber each other. Release incremental caching is less reliable than
+      # Debug, but the benchmark measures runtime resource use, not build
+      # correctness, so a partial recompile only costs time — whereas a .pcm
+      # from a different framework fails the build outright, which is what the
+      # framework hash rules out.
+      - name: Restore DerivedData (Release)
+        id: derived
+        uses: actions/cache/restore@v6
+        with:
+          path: build/DerivedData
+          key: derived-release-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            derived-release-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-release-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
+
       - name: Build and benchmark
         run: mise run bench --verbose
+
+      # Under the restore-time key, success-only — see test.yml's unit job.
+      - name: Save DerivedData (Release)
+        uses: actions/cache/save@v6
+        with:
+          path: build/DerivedData
+          key: ${{ steps.derived.outputs.cache-primary-key }}
 
       - name: Upload results
         uses: actions/upload-artifact@v7
