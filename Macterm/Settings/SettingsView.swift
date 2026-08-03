@@ -853,9 +853,9 @@ private struct KeymapSettings: View {
     /// checkbox's tooltip rather than a description line under every row.
     private static let passthroughTitle = "Pass to TUI"
     private static let passthroughHelp = """
-    While a full-screen program (nvim, helix, less) owns this pane's keyboard, \
-    send the chord to it instead of running the action. At a shell prompt the \
-    action still runs.
+    When one of the programs listed at the top of this tab is running in the \
+    focused pane, send this chord to it instead of running the action. \
+    Everywhere else the action still runs.
     """
 
     /// Titles of the *other* actions that share `action`'s binding, for the
@@ -886,6 +886,22 @@ private struct KeymapSettings: View {
 
     var body: some View {
         Form {
+            Section("Passthrough Programs") {
+                TextField(
+                    "Programs",
+                    text: Binding(
+                        get: { Preferences.shared.passthroughPrograms },
+                        set: { Preferences.shared.passthroughPrograms = $0 }
+                    ),
+                    prompt: Text(verbatim: "nvim, hx")
+                )
+                Text(
+                    "Keybinds checked below yield to these programs instead of running "
+                        + "their action. Match the name shown in the tab title; separate with commas."
+                )
+                .settingsCaption()
+            }
+
             ForEach(actionsByCategory, id: \.category) { group in
                 Section(group.category.rawValue) {
                     columnHeader

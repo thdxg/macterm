@@ -301,6 +301,19 @@ final class Preferences {
         return (userGhosttyConfigPath as NSString).expandingTildeInPath
     }
 
+    /// Programs a passthrough-flagged keybind yields to, as the user typed them
+    /// (`nvim, hx`). Stored raw so the Settings field round-trips their spacing
+    /// verbatim; `KeybindPassthrough.programNames` does the parsing and is the
+    /// only thing that should read this for matching.
+    ///
+    /// Empty by default: a name list is the user's to author, and until they
+    /// name something a flagged keybind simply keeps firing its action.
+    var passthroughPrograms: String {
+        didSet {
+            defaults.set(passthroughPrograms, forKey: Keys.passthroughPrograms)
+        }
+    }
+
     /// Window-level appearance + libghostty reload. Both happen on the same
     /// notification so the renderer and the window chrome stay in sync.
     private func notifyConfigChanged() {
@@ -385,6 +398,7 @@ final class Preferences {
         windowGlassStyle = (defaults.string(forKey: Keys.windowGlassStyle))
             .flatMap(WindowGlassStyle.init(rawValue:)) ?? .regular
         userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
+        passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
         quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
@@ -452,6 +466,7 @@ final class Preferences {
         static let windowGlassEnabled = "macterm.window.glassEnabled"
         static let windowGlassStyle = "macterm.window.glassStyle"
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
+        static let passthroughPrograms = "macterm.hotkey.passthroughPrograms"
         static let quickTerminalEnabled = "macterm.quickTerminal.enabled"
         static let quickTerminalWidth = "macterm.quickTerminal.width"
         static let quickTerminalHeight = "macterm.quickTerminal.height"
