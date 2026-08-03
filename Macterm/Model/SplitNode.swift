@@ -165,6 +165,17 @@ struct TerminalExecutionTracker {
         return false
     }
 
+    /// Whether the shell is sitting at a prompt — see `shellIsAtPrompt`. Read by
+    /// the naming path so a prompt hook can't rename the tab.
+    var isShellAtPrompt: Bool { shellIsAtPrompt }
+
+    /// Record that the shell returned to a prompt, WITHOUT touching run state.
+    /// The status-indicator pref gates `markCommandFinished`, but the naming
+    /// path needs the prompt fact regardless of whether the spinner is shown.
+    mutating func notePromptReturned() {
+        shellIsAtPrompt = true
+    }
+
     /// ORDERING CONTRACT: this CLEARS the in-place start arming, so a caller
     /// that reports both an interaction and a submission for the same event
     /// must call this FIRST — `recordCommandSubmission` arms, and an
@@ -611,6 +622,34 @@ final class Pane: Identifiable {
         )
     }
 
+    /// Whether a foreground sample must be ignored for this pane's IDENTITY
+    /// (its name and agent icon).
+    ///
+    /// A hook-heavy shell forks a REAL process every time it draws a prompt —
+    /// `starship prompt`, `mise hook-env`, `zoxide` — and each is briefly the
+    /// pane's foreground. Publishing one renamed the tab to `starship`, and
+    /// because the poll STOPS while the window is occluded and the app is
+    /// inactive (`PollCadence.mode` → `.paused`), that wrong name then stuck
+    /// until something re-sampled: clicking the app, or any keystroke.
+    ///
+    /// While the shell sits at a prompt nothing the user launched is running,
+    /// so a non-shell foreground there can only be such a hook. A shell name
+    /// (and `nil`) is always allowed through, so returning to the prompt
+    /// restores the shell name at once. Shell-ness is decided by basename
+    /// (`/etc/shells` + login shell + `$SHELL` — a set lookup, no syscall)
+    /// rather than the caller's `foregroundIsShell`, which is only computed
+    /// when the status-indicator pref turns the expensive path on.
+    ///
+    /// This gates the name and icon only. `programTitle` expiry stays keyed on
+    /// the foreground pid, so a title can never be misattributed. A long-lived
+    /// program (claude, hx) reports no completion while it runs, so the gate is
+    /// never armed underneath it, and a shell with no OSC 133 integration never
+    /// arms it at all — those panes keep exactly today's naming behavior.
+    private func ignoresForegroundIdentity(_ name: String?) -> Bool {
+        guard executionTracker.isShellAtPrompt, let name else { return false }
+        return !ProcessInspector.isShellProcessName(name)
+    }
+
     /// Testable core of `refreshForegroundProcess`: publish a changed process
     /// name, and expire `programTitle` when the pid that set it no longer
     /// holds the foreground. When `applyExecutionState` is false (the status
@@ -624,15 +663,20 @@ final class Pane: Identifiable {
         applyExecutionState: Bool = true,
         argv0: () -> String? = { nil }
     ) {
-        let nameChanged = name != foregroundProcessName
-        if nameChanged { foregroundProcessName = name }
-        // A steady foreground (same pid, same comm) keeps the cached icon; a
-        // change re-matches — argv[0] is only read when comm alone doesn't
-        // identify an agent.
-        if nameChanged || foregroundPID != agentIconPID {
-            agentIconPID = foregroundPID
-            let icon = foregroundPID == nil ? nil : AgentIcon.match(comm: name, argv0: argv0)
-            if icon != agentIcon { agentIcon = icon }
+        // A prompt hook must not rename the tab. Title expiry below is NOT
+        // gated: a changed pid means the title's owner lost the foreground, and
+        // a title must never be misattributed to a different process.
+        if !ignoresForegroundIdentity(name) {
+            let nameChanged = name != foregroundProcessName
+            if nameChanged { foregroundProcessName = name }
+            // A steady foreground (same pid, same comm) keeps the cached icon; a
+            // change re-matches — argv[0] is only read when comm alone doesn't
+            // identify an agent.
+            if nameChanged || foregroundPID != agentIconPID {
+                agentIconPID = foregroundPID
+                let icon = foregroundPID == nil ? nil : AgentIcon.match(comm: name, argv0: argv0)
+                if icon != agentIcon { agentIcon = icon }
+            }
         }
         if programTitle != nil, programTitlePID != foregroundPID {
             programTitle = nil
@@ -655,6 +699,13 @@ final class Pane: Identifiable {
     func markCommandFinished() {
         executionState = executionTracker.markCommandFinished(currentState: executionState)
         cancelActivityQuietPollIfNeeded()
+    }
+
+    /// The shell returned to a prompt (OSC 133;D) — recorded even when the
+    /// status indicator is off, because the naming path uses it to reject
+    /// prompt-hook processes.
+    func notePromptReturned() {
+        executionTracker.notePromptReturned()
     }
 
     func markProgressFinished() {

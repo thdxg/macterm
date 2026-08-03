@@ -105,7 +105,8 @@ struct PaneTitleTests {
         let pane = makePane()
         pane.receiveReportedTitle("session", programPID: 42)
         // claude exits and btop starts between two polls: the pid changed,
-        // so claude's title must not be attributed to btop.
+        // so claude's title must not be attributed to btop. Expiry is
+        // immediate — it is keyed on the pid, NOT on the debounced name.
         pane.applyForegroundRefresh(name: "btop", foregroundPID: 43)
         #expect(pane.programTitle == nil)
         #expect(pane.displayTitle == "btop")
@@ -117,6 +118,67 @@ struct PaneTitleTests {
         pane.receiveReportedTitle("session", programPID: 42)
         pane.applyForegroundRefresh(name: nil, foregroundPID: nil)
         #expect(pane.programTitle == nil)
+    }
+
+    // MARK: - Prompt-hook debounce (transient foreground processes)
+
+    private func loginShellName() throws -> String {
+        try (String(cString: #require(getpwuid(getuid())?.pointee.pw_shell)) as NSString).lastPathComponent
+    }
+
+    /// A hook-heavy shell forks `starship`/`mise`/`zoxide` on every prompt.
+    /// Publishing one renamed the tab to `starship`, and because the poll stops
+    /// while the window is occluded and the app is inactive, that wrong name
+    /// stuck until a click or keystroke re-sampled.
+    @Test
+    func promptHookNeverBecomesTheTabName() throws {
+        let pane = makePane()
+        let shell = try loginShellName()
+
+        pane.applyForegroundRefresh(name: shell, foregroundPID: 10)
+        #expect(pane.foregroundProcessName == shell)
+
+        // The shell reports its command finished, so it is now at a prompt.
+        pane.notePromptReturned()
+
+        // A poll lands inside a prompt hook's ~64ms lifetime.
+        pane.applyForegroundRefresh(name: "starship", foregroundPID: 11)
+        #expect(pane.foregroundProcessName == shell)
+        #expect(pane.displayTitle == shell)
+
+        // Another hook, next prompt — still never adopted.
+        pane.applyForegroundRefresh(name: "mise", foregroundPID: 12)
+        #expect(pane.foregroundProcessName == shell)
+
+        // The shell itself is always allowed through, so no lag returning.
+        pane.applyForegroundRefresh(name: shell, foregroundPID: 10)
+        #expect(pane.foregroundProcessName == shell)
+    }
+
+    /// The gate must not swallow the user's actual command: submitting one
+    /// means the shell is no longer at a prompt, so the name lands on the very
+    /// first poll — no added latency.
+    @Test
+    func submittedCommandIsNamedImmediately() throws {
+        let pane = makePane()
+        let shell = try loginShellName()
+        pane.applyForegroundRefresh(name: shell, foregroundPID: 10)
+        pane.notePromptReturned()
+
+        pane.recordCommandSubmission(hasContent: true)
+        pane.applyForegroundRefresh(name: "hx", foregroundPID: 20)
+        #expect(pane.foregroundProcessName == "hx")
+    }
+
+    /// A shell with no OSC 133 integration never reports a prompt, so the gate
+    /// never arms and naming is exactly as it was before it existed.
+    @Test
+    func withoutShellIntegration_namingIsUnchanged() {
+        let pane = makePane()
+        pane.applyForegroundRefresh(name: "npm", foregroundPID: 30)
+        #expect(pane.foregroundProcessName == "npm")
+        pane.applyForegroundRefresh(name: "node", foregroundPID: 31)
+        #expect(pane.foregroundProcessName == "node")
     }
 
     // MARK: - Remote panes (#104): execution-gated titles, probe-fed names

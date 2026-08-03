@@ -296,6 +296,17 @@ private struct TerminalSurface: NSViewRepresentable {
         }
         view.onCommandFinished = { [weak pane, weak view] exitCode, durationNs in
             guard let pane else { return }
+            // A command boundary is exactly when the pane's identity changes —
+            // the program that just exited (claude, hx) is gone and the shell
+            // owns the foreground again. Refresh from the process table HERE
+            // rather than waiting for the next poll tick: the adaptive poll
+            // slows to 2s when the app is inactive and stops entirely once no
+            // window is visible, which is why a finished agent's icon and name
+            // used to linger until the user clicked or typed. Unconditional —
+            // names and agent icons are shown whether or not the status
+            // indicator is on, and `notePromptReturned` feeds the naming gate.
+            pane.notePromptReturned()
+            pane.refreshForegroundProcess()
             if Preferences.shared.showTabStatusIndicator {
                 pane.markCommandFinished()
                 onCommandFinished()
