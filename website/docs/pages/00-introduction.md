@@ -14,4 +14,4 @@ A native macOS terminal with a vertical project sidebar and persistent multiplex
 
 Macterm requires macOS 14 or later and is MIT licensed.
 
-New here? Start with [Installation](/docs/install), then point Macterm at your [Ghostty config](/docs/configuration). Automating something? There's a [CLI](/docs/cli).
+New here? Start with [Installation](/docs/install), then point Macterm at your [Ghostty config](/docs/configuration). Automating something? There's a [CLI](/docs/cli). For workflows other people run, browse the [Cookbook](/docs/cookbook).
