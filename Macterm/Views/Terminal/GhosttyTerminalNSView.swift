@@ -214,6 +214,12 @@ final class GhosttyTerminalNSView: NSView {
     /// foreground, where a bracketed paste can leave it unsubmitted. See
     /// `preserveProgrammaticCommandInput`.
     var canCarryCommandInput: (() -> Bool)?
+    /// Whether a key event matching a passthrough-flagged binding should reach
+    /// the program instead of being claimed as an app shortcut. Injected rather
+    /// than computed here because the decision needs the PANE: a zmx-wrapped
+    /// pane's program runs behind the daemon's pty, not this view's, and this
+    /// view has no back-reference to its pane. See `KeybindPassthrough`.
+    var yieldsToProgram: ((NSEvent) -> Bool)?
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
@@ -675,6 +681,12 @@ final class GhosttyTerminalNSView: NSView {
         if flags == .command, Self.systemKeys.contains(key) { return true }
         // Cmd+1-9 for tab selection
         if flags == .command, let n = Int(key), (1 ... 9).contains(n) { return true }
+        // A binding the user flagged for passthrough is NOT an app shortcut
+        // while a program owns this pane's keyboard — otherwise the key would
+        // die here even though the responder deliberately let it fall through.
+        // The two paths must agree; they read the same policy microseconds
+        // apart, off the same live tty state.
+        if yieldsToProgram?(event) == true { return false }
         // Check all configurable hotkey actions
         if HotkeyAction.allCases.contains(where: { HotkeyRegistry.matches(event, action: $0) }) { return true }
         return false

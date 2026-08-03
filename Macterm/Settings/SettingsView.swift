@@ -826,7 +826,37 @@ private struct KeymapSettings: View {
     @State
     private var values: [String: String] = [:]
     @State
+    private var passthrough: [String: Bool] = [:]
+    @State
     private var capturingActionID: String?
+
+    /// Column geometry, shared by the header and every row so the three columns
+    /// actually line up. The keybind width lives on the *button*, not on its
+    /// label, so the header measures the same box the border draws.
+    ///
+    /// Alignment holds only because the header and every row are built as the
+    /// SAME four children — title, flexible spacer, then three fixed-width
+    /// boxes — with an explicit `columnGap`. Both are load-bearing: SwiftUI's
+    /// default `HStack` spacing varies with the *types* of the adjacent views
+    /// (two Texts space differently than a Text and a Button), and because the
+    /// spacer pins everything after it to the trailing edge, one extra child or
+    /// one wider trailing view shifts that row's columns out of line with the
+    /// header. Don't add a control to a row without giving it a box here.
+    private static let columnGap: CGFloat = 8
+    private static let passthroughColumn: CGFloat = 92
+    private static let keybindColumn: CGFloat = 140
+    private static let clearColumn: CGFloat = 20
+    private static let warningColumn: CGFloat = 16
+    private static let trailingColumn: CGFloat = clearColumn + warningColumn
+
+    /// Short enough for a column header; the precise rule lives in the
+    /// checkbox's tooltip rather than a description line under every row.
+    private static let passthroughTitle = "Pass to TUI"
+    private static let passthroughHelp = """
+    While a full-screen program (nvim, helix, less) owns this pane's keyboard, \
+    send the chord to it instead of running the action. At a shell prompt the \
+    action still runs.
+    """
 
     /// Titles of the *other* actions that share `action`'s binding, for the
     /// inline conflict message.
@@ -858,6 +888,7 @@ private struct KeymapSettings: View {
         Form {
             ForEach(actionsByCategory, id: \.category) { group in
                 Section(group.category.rawValue) {
+                    columnHeader
                     ForEach(group.actions) { action in
                         hotkeyRow(action)
                     }
@@ -878,10 +909,13 @@ private struct KeymapSettings: View {
         )
         .onAppear {
             var map: [String: String] = [:]
+            var flags: [String: Bool] = [:]
             for action in HotkeyAction.allCases {
                 map[action.id] = HotkeyRegistry.selectedShortcutString(for: action)
+                flags[action.id] = HotkeyRegistry.passesThroughToPrograms(for: action)
             }
             values = map
+            passthrough = flags
         }
         .onDisappear {
             capturingActionID = nil
@@ -889,20 +923,56 @@ private struct KeymapSettings: View {
         }
     }
 
+    /// Names the three columns once per section. Repeated per section rather
+    /// than once per pane because each section scrolls independently in a long
+    /// list, and a header that has scrolled away explains nothing.
+    private var columnHeader: some View {
+        HStack(spacing: Self.columnGap) {
+            Text("Action")
+            Spacer(minLength: 0)
+            Text(Self.passthroughTitle)
+                .frame(width: Self.passthroughColumn, alignment: .center)
+            Text("Keybind")
+                .frame(width: Self.keybindColumn, alignment: .leading)
+            // Stands in for each row's trailing block (clear button + warning
+            // slot) as ONE box of the same width, so the two columns to its
+            // left land in the same place in the header as in every row.
+            Spacer().frame(width: Self.trailingColumn)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private func passthroughBinding(_ action: HotkeyAction) -> Binding<Bool> {
+        Binding(
+            get: { passthrough[action.id] ?? false },
+            set: { enabled in
+                passthrough[action.id] = enabled
+                HotkeyRegistry.setPassesThroughToPrograms(enabled, for: action)
+            }
+        )
+    }
+
     @ViewBuilder
     private func hotkeyRow(_ action: HotkeyAction) -> some View {
         let partners = conflictPartners(for: action)
+        let isCapturing = capturingActionID == action.id
+        let isUnmapped = HotkeyRegistry.displaySymbols(for: values[action.id] ?? "disabled").isEmpty
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(spacing: Self.columnGap) {
                 Text(action.title)
-                Spacer()
+                Spacer(minLength: 0)
+
+                Toggle("", isOn: passthroughBinding(action))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .frame(width: Self.passthroughColumn, alignment: .center)
+                    .help(Self.passthroughHelp)
+
                 Button {
                     HotkeyCaptureState.shared.isCapturing = true
                     capturingActionID = action.id
                 } label: {
-                    let isCapturing = capturingActionID == action.id
-                    let isUnmapped = HotkeyRegistry
-                        .displaySymbols(for: values[action.id] ?? "disabled").isEmpty
                     Text(
                         isCapturing
                             ? "Press keys..."
@@ -911,24 +981,43 @@ private struct KeymapSettings: View {
                     )
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                    .frame(width: 140, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.bordered)
+                .frame(width: Self.keybindColumn)
 
-                Button("Clear") {
-                    values[action.id] = "disabled"
-                    HotkeyRegistry.setShortcutString("disabled", for: action)
-                    if capturingActionID == action.id {
-                        capturingActionID = nil
-                        HotkeyCaptureState.shared.isCapturing = false
+                // Both trailing controls in ONE box of `trailingColumn`, spaced
+                // zero: as two siblings they added an extra inter-child gap and
+                // the clear button's own intrinsic width, which is what pushed
+                // every row's columns left of the header labels.
+                HStack(spacing: 0) {
+                    Button {
+                        values[action.id] = "disabled"
+                        HotkeyRegistry.setShortcutString("disabled", for: action)
+                        if capturingActionID == action.id {
+                            capturingActionID = nil
+                            HotkeyCaptureState.shared.isCapturing = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
                     }
-                }
-                .buttonStyle(.borderless)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    // Nothing to clear on an already-unmapped action, and a
+                    // live control that does nothing reads as broken.
+                    .disabled(isUnmapped)
+                    .help("Clear this keybind")
+                    .frame(width: Self.clearColumn)
 
-                if !partners.isEmpty {
+                    // Space is always reserved: shown conditionally, a conflict
+                    // would shift that row's columns out of line with every
+                    // other row — in exactly the row asking to be read closely.
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(MactermTheme.warning)
+                        .opacity(partners.isEmpty ? 0 : 1)
+                        .frame(width: Self.warningColumn)
                 }
+                .frame(width: Self.trailingColumn)
             }
 
             if !partners.isEmpty {

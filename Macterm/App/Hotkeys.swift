@@ -50,6 +50,12 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
 
     var defaultsKey: String { "macterm.hotkey.\(rawValue)" }
 
+    /// Per-action opt-in (default off): while a full-screen program owns the
+    /// focused pane's keyboard, hand this binding's chord to the program
+    /// instead of firing the action. Separate key from `defaultsKey` so a
+    /// rebind and a passthrough change don't clobber each other.
+    var passthroughDefaultsKey: String { "macterm.hotkey.\(rawValue).passthrough" }
+
     var defaultShortcut: String {
         switch self {
         case .newTab: "cmd+t"
@@ -372,6 +378,38 @@ enum HotkeyRegistry {
         // Skipping this leaves a cleared shortcut still firing from the menu,
         // which beats KeyRouter to the event.
         HotkeyMenuSync.sync()
+    }
+
+    /// Actions the user flagged to pass through to a running program.
+    ///
+    /// Cached for the same reason `shortcutCache` exists, and it matters more
+    /// here: the passthrough gate runs on EVERY keystroke, ahead of the action
+    /// branches, and matching an action costs an `eventToken` string
+    /// normalization per candidate. Scanning only the flagged actions keeps the
+    /// default configuration — nothing flagged — at one `isEmpty` check instead
+    /// of a second full 32-action scan per typed character. `nil` means "not yet
+    /// built"; an empty array is a real (and typical) answer.
+    private static let passthroughCache = OSAllocatedUnfairLock<[HotkeyAction]?>(initialState: nil)
+
+    static func passthroughActions() -> [HotkeyAction] {
+        passthroughCache.withLock { cache in
+            if let cache { return cache }
+            let flagged = HotkeyAction.allCases.filter {
+                Preferences.defaults.bool(forKey: $0.passthroughDefaultsKey)
+            }
+            cache = flagged
+            return flagged
+        }
+    }
+
+    static func passesThroughToPrograms(for action: HotkeyAction) -> Bool {
+        Preferences.defaults.bool(forKey: action.passthroughDefaultsKey)
+    }
+
+    @MainActor
+    static func setPassesThroughToPrograms(_ enabled: Bool, for action: HotkeyAction) {
+        Preferences.defaults.set(enabled, forKey: action.passthroughDefaultsKey)
+        passthroughCache.withLock { $0 = nil }
     }
 
     static func isValidShortcutString(_ shortcut: String) -> Bool {

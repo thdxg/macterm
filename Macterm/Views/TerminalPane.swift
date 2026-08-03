@@ -195,6 +195,13 @@ private struct TerminalSurface: NSViewRepresentable {
             pane?.recordCommandSubmission(hasContent: hasContent)
         }
         view.canCarryCommandInput = { [weak pane] in pane?.allowsInPlaceOutputStart ?? false }
+        // The surface half of the passthrough gate. The key responders decline
+        // the event first; without this, `isAppShortcut` would still swallow it
+        // here. Both consult `KeybindPassthrough` so they can't disagree.
+        view.yieldsToProgram = { [weak pane] event in
+            guard let pane else { return false }
+            return KeybindPassthrough.yields(event: event, pane: pane)
+        }
         view.onProcessExit = onProcessExit
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest

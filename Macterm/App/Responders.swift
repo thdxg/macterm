@@ -49,6 +49,15 @@ final class QuickTerminalResponder: KeyResponder {
         guard qt.isVisible else { return .passThrough }
         let state = qt.splitState
 
+        // Passthrough gate, ahead of every branch: a binding the user flagged
+        // yields to the program running in the focused pane (see
+        // KeybindPassthrough). Returning `.passThrough` is only half the job —
+        // `isAppShortcut` would otherwise swallow the chord once the event
+        // reaches the surface's `keyDown`, so it consults the same policy.
+        if KeybindPassthrough.yields(event: event, pane: state.tab.focusedPane) {
+            return .passThrough
+        }
+
         // Quick-terminal toggle keystroke arrived while Macterm itself is
         // active. The same shortcut is also registered as a Carbon global
         // hot key (see QuickTerminalService.registerHotKey) for when other
@@ -173,6 +182,18 @@ final class MainAppResponder: KeyResponder {
         }
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // Passthrough gate, ahead of every action branch: a binding the user
+        // flagged yields to the program running in the focused pane (see
+        // KeybindPassthrough). Placed AFTER the different-window branch above —
+        // when another window is key the terminal isn't receiving keys at all,
+        // so that branch's Cmd+W retarget must keep working regardless of what
+        // the terminal's focused pane is running.
+        if let projectID = appState.activeProjectID,
+           KeybindPassthrough.yields(event: event, pane: appState.focusedPane(for: projectID))
+        {
+            return .passThrough
+        }
 
         // Quick-terminal toggle. The same shortcut is also a Carbon global
         // hot key (see QuickTerminalService) for when Macterm isn't active;
