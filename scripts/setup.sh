@@ -16,7 +16,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 #
 # Set GHOSTTYKIT_TAG to another tag (or `latest`) to try one without committing:
 #   GHOSTTYKIT_TAG=latest mise run setup
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-02}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-03}"
 # Which tag the on-disk artifacts actually came from. Without this the presence
 # checks below would keep a stale copy forever after a pin bump — the same
 # silent-staleness trap that makes symlinking these artifacts a bad idea. Absent
