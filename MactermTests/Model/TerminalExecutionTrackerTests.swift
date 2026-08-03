@@ -156,6 +156,80 @@ struct TerminalExecutionTrackerTests {
         #expect(state == .done)
     }
 
+    /// The reported case, end to end: `ls` completes, then a prompt hook forks.
+    /// The hook must not start a run at all — once started it can strand
+    /// indefinitely, because a foreground-owned run has no self-settling wake
+    /// and `PollCadence` stops the timer entirely for an occluded, inactive app
+    /// ("it refreshes state when I click on the app").
+    @Test
+    func promptHookAfterCompletion_cannotStartForegroundRun() {
+        var tracker = TerminalExecutionTracker()
+        let submittedAt = Date(timeIntervalSince1970: 100)
+        tracker.recordUserInteraction()
+        tracker.recordCommandSubmission(at: submittedAt, allowInPlaceOutputStart: false, hasContent: true)
+
+        // `ls` is a nushell builtin: no process ever holds the foreground, and
+        // OSC 133;D lands while the pane still reads idle.
+        var state = tracker.markCommandFinished(currentState: .idle)
+        #expect(state == .idle)
+
+        // Now the prompt hooks fork, exactly as `starship`/`mise`/`zoxide` do.
+        state = tracker.refreshForeground(
+            name: "starship", pid: 2, foregroundIsShell: false, terminalInputIsRaw: false,
+            at: submittedAt.addingTimeInterval(0.25), currentState: state
+        )
+        #expect(state == .idle)
+        state = tracker.refreshForeground(
+            name: "mise", pid: 3, foregroundIsShell: false, terminalInputIsRaw: false,
+            at: submittedAt.addingTimeInterval(0.5), currentState: state
+        )
+        #expect(state == .idle)
+
+        // A blank Return launches nothing, so it must not re-open the gate.
+        tracker.recordCommandSubmission(
+            at: submittedAt.addingTimeInterval(1), allowInPlaceOutputStart: false, hasContent: false
+        )
+        state = tracker.refreshForeground(
+            name: "starship", pid: 4, foregroundIsShell: false, terminalInputIsRaw: false,
+            at: submittedAt.addingTimeInterval(1.25), currentState: state
+        )
+        #expect(state == .idle)
+
+        // The next real submission does, and a genuine command still runs.
+        tracker.recordCommandSubmission(
+            at: submittedAt.addingTimeInterval(2), allowInPlaceOutputStart: false, hasContent: true
+        )
+        state = tracker.refreshForeground(
+            name: "sleep", pid: 5, foregroundIsShell: false, terminalInputIsRaw: false,
+            at: submittedAt.addingTimeInterval(2.25), currentState: state
+        )
+        #expect(state == .running)
+        state = tracker.markCommandFinished(currentState: state)
+        #expect(state == .done)
+    }
+
+    /// A shell with no OSC 133 integration (CI's bash 3.2) never reports a
+    /// completion, so the prompt gate must never arm and foreground detection
+    /// has to behave exactly as it did before it existed.
+    @Test
+    func withoutShellIntegration_foregroundDetectionIsUnchanged() {
+        var tracker = TerminalExecutionTracker()
+        tracker.recordUserInteraction()
+        var state = tracker.refreshForeground(
+            name: "sleep", pid: 42, foregroundIsShell: false, terminalInputIsRaw: false, currentState: .idle
+        )
+        #expect(state == .running)
+        state = tracker.refreshForeground(
+            name: "bash", pid: 7, foregroundIsShell: true, terminalInputIsRaw: false, currentState: state
+        )
+        #expect(state == .done)
+        // Still no D anywhere in this timeline: the next command runs normally.
+        state = tracker.refreshForeground(
+            name: "find", pid: 43, foregroundIsShell: false, terminalInputIsRaw: false, currentState: .idle
+        )
+        #expect(state == .running)
+    }
+
     /// The reported "spinner lingers ~3s after `ls`" sequence, replayed exactly.
     ///
     /// In a hook-heavy shell (starship / mise / zoxide), returning to the prompt

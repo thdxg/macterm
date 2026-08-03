@@ -140,6 +140,25 @@ struct TerminalExecutionTracker {
     /// redraw or grow rows. Suppress those start signals briefly so an empty
     /// submission cannot flash the spinner.
     private var blankSubmissionAt: Date?
+    /// True while the shell has reported a command finished (OSC 133;D) and has
+    /// not been handed a new submission — i.e. it is sitting at a prompt.
+    ///
+    /// Returning to a prompt is not quiet: a hook-heavy shell forks a REAL
+    /// external process per prompt (`starship prompt`, `mise hook-env`,
+    /// `zoxide`), and the poll cannot tell one from a user command — same
+    /// canonical tty, same non-shell foreground. Attributing one to the user is
+    /// worse than a brief wrong glyph, because such a process is typically
+    /// already dead when the poll spots it: nothing remains to observe a
+    /// transition on, and a foreground-owned run has no self-settling wake of
+    /// its own (unlike activity-owned runs). With the window occluded and the
+    /// app inactive `PollCadence` returns `.paused` — no timer at all — so the
+    /// phantom spinner stays up until something wakes the poll, which is why it
+    /// looked like it "refreshed when I clicked on the app".
+    ///
+    /// Only foreground *starts* are gated. Output/progress evidence still
+    /// applies, and a shell with no OSC 133 integration (bash 3.2) never sets
+    /// this, so it keeps exactly today's foreground behavior.
+    private var shellIsAtPrompt = false
 
     var isActivitySourced: Bool {
         if case .activity = runningSource { return true }
@@ -175,12 +194,20 @@ struct TerminalExecutionTracker {
         progressQuiesced = nil
         pendingProgressQuiesce = false
         blankSubmissionAt = nil
+        // The shell has been handed work, so a foreground process from here on
+        // is that work rather than prompt-hook noise. A BLANK submission
+        // deliberately does not clear this (it launches nothing), which is why
+        // this sits after the `hasContent` guard.
+        shellIsAtPrompt = false
         pendingOutputStart = allowInPlaceOutputStart ? .armed(date) : nil
     }
 
     mutating func markProgressStarted(currentState: TerminalExecutionState) -> TerminalExecutionState {
         pendingOutputStart = nil
         blankSubmissionAt = nil
+        // A program reporting progress is positive evidence that work is
+        // running, so the shell is no longer idling at a prompt.
+        shellIsAtPrompt = false
         guard hasUserInteraction else { return currentState }
         runningSource = .progress
         return .running
@@ -196,6 +223,11 @@ struct TerminalExecutionTracker {
         // next emitted heartbeat carries its growth AFTER this edge and must
         // not restart the finished command as an activity run.
         lastOutputRows = nil
+        // D means the shell is back at a prompt, whatever the run state was.
+        // Set unconditionally, ahead of the `.running` guard below: the prompt
+        // hooks that follow a FAST command arrive on this path while the pane
+        // still reads idle, and those are exactly the ones to suppress.
+        shellIsAtPrompt = true
         // OSC 133;D for an empty Return may arrive before its redraw/output.
         // Keep blank suppression while idle so that later callback cannot flash
         // the spinner; a genuine running completion no longer needs it.
@@ -404,6 +436,10 @@ struct TerminalExecutionTracker {
         // A canonical non-shell command is foreground-owned until its process
         // changes. Re-polls of the same pid must not restart settled state.
         guard changed else { return currentState }
+        // A process appearing while the shell sits at a prompt is a prompt hook,
+        // not the user's command (see `shellIsAtPrompt`). Suppress the START
+        // only — a run already owned by anything keeps its own rules.
+        guard !shellIsAtPrompt else { return currentState }
         runningSource = .foreground
         return .running
     }
