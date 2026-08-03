@@ -481,6 +481,47 @@ struct ControlHandlerTests {
         #expect(firstTab.focusedPaneID == firstPane.id)
     }
 
+    /// The direction makes the resolved pane the ORIGIN. The edge case is the
+    /// contract a vim-tmux-navigator-style keymap depends on: no neighbour that
+    /// way reports the origin unchanged and stays `ok`, so the caller can tell
+    /// "didn't move" from "failed" without parsing an error.
+    @Test
+    func pane_focus_direction_moves_from_the_target_and_no_ops_at_the_edge() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let left = try #require(tab.splitRoot.allPanes().first)
+        appState.splitPane(direction: .horizontal, projectID: project.id)
+        let panes = tab.splitRoot.allPanes()
+        #expect(panes.count == 2)
+        let right = try #require(panes.last)
+        #expect(tab.focusedPaneID == right.id)
+
+        // From the right pane (the focused one, so no selector needed) leftward.
+        let moved = await handler.handle(request("pane.focus", args: ControlArgs(direction: "left")))
+        #expect(moved.ok)
+        #expect(tab.focusedPaneID == left.id)
+        #expect(moved.data?.panes?.first?.id == left.id.uuidString)
+
+        // Already leftmost: ok, focus unchanged, and the reported pane is the
+        // origin — that identity is how a caller detects the edge.
+        let edge = await handler.handle(request("pane.focus", args: ControlArgs(direction: "left")))
+        #expect(edge.ok)
+        #expect(tab.focusedPaneID == left.id)
+        #expect(edge.data?.panes?.first?.id == left.id.uuidString)
+
+        // An explicit origin overrides the focused-pane default.
+        let fromLeft = await handler.handle(request(
+            "pane.focus", args: ControlArgs(pane: left.id.uuidString, direction: "right")
+        ))
+        #expect(fromLeft.ok)
+        #expect(tab.focusedPaneID == right.id)
+
+        // `auto` is split's vocabulary, not focus's.
+        let bogus = await handler.handle(request("pane.focus", args: ControlArgs(direction: "auto")))
+        #expect(bogus.error?.code == .badRequest)
+    }
+
     @Test
     func pane_close_requires_explicit_target() async throws {
         let (handler, appState, projectStore) = makeHandler()

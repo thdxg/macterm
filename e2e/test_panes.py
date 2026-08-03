@@ -47,6 +47,35 @@ def test_focus_moves_between_panes(app, fresh_tab, live_pane):
         assert focused == [target["session"]]
 
 
+def test_focus_direction_moves_from_the_origin_and_no_ops_at_the_edge(app, fresh_tab, live_pane):
+    """`pane focus --direction` is the half of a vim-tmux-navigator-style keymap
+    that lives outside the editor: the plugin calls it only after failing to
+    move within its own splits, so the edge case is API surface. No neighbour
+    that way must exit 0 and report the origin unchanged — a plugin tells
+    "didn't move" from "failed" by comparing the reported session, not by
+    parsing an error."""
+    app.cli("pane", "split", "--direction", "down", "--session", live_pane["session"])
+    panes = app.panes(tab=fresh_tab["id"])
+    assert len(panes) == 2
+    top, bottom = panes[0], panes[1]
+
+    # Up from the bottom pane lands on the top one, and says so.
+    moved = app.cli_json("pane", "focus", "--direction", "up", "--session", bottom["session"])
+    assert moved["panes"][0]["session"] == top["session"]
+    focused = [pane["session"] for pane in app.panes(tab=fresh_tab["id"]) if pane["focused"]]
+    assert focused == [top["session"]]
+
+    # Already topmost: still ok, focus unchanged, origin reported back.
+    edge = app.cli_json("pane", "focus", "--direction", "up", "--session", top["session"])
+    assert edge["panes"][0]["session"] == top["session"]
+    focused = [pane["session"] for pane in app.panes(tab=fresh_tab["id"]) if pane["focused"]]
+    assert focused == [top["session"]]
+
+    # Down from the top pane goes back — the direction isn't one-way.
+    back = app.cli_json("pane", "focus", "--direction", "down", "--session", top["session"])
+    assert back["panes"][0]["session"] == bottom["session"]
+
+
 def test_tab_close_follows_the_running_program_signal(app):
     """`tab close` without --force succeeds iff libghostty reports no running
     program (needsConfirmQuit) — the exact signal the close guard reads.

@@ -51,6 +51,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text — the viewport, or the full scrollback with `--scrollback`. Pipeline-friendly (text only). |
 | `pane split [--direction right\|down\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the source's cwd. `auto` picks the longer on-screen axis. |
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
+| `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way *from* the target — the same geometry the focus keybinds use. At the outermost edge it's a no-op, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |
 | `pane run <command…> [target]` | Type a command (plus newline) into an **existing** live pane's shell. |
 | `pane key <chord> [target]` | Send one key chord (`ctrl+c`, `escape`, `up`, `ctrl+\`) to a live pane through the terminal's key-encoding path — control/named keys that `pane run` can't type. |
@@ -76,6 +77,8 @@ Pane verbs (`split`, `focus`, `close`, `run`, `grid`) resolve their target in th
 4. Otherwise, the focused pane of the active tab.
 
 `pane close` never uses the `MACTERM_SESSION` fallback — destroying "whatever pane I'm in" because no target was given is a footgun, so it always demands an explicit `--pane` or `--session`.
+
+`pane focus --direction` treats the resolved target as the **origin**, not the destination — so a bare `macterm pane focus --direction left` run inside a pane moves left from *that* pane. It reports the pane that ended up focused, and at the outermost edge it reports the origin unchanged rather than failing, so a caller can tell whether it moved by comparing the reported session to its own `$MACTERM_SESSION`.
 
 ## Introspecting a pane
 

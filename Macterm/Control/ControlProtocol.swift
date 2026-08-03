@@ -75,7 +75,9 @@ struct ControlArgs: Codable, Equatable {
     /// (`tab.new`, `pane.split`, `grid`), typed into the live shell for
     /// `pane.run`.
     var run: String?
-    /// Split direction: `right`, `down`, or `auto`.
+    /// Direction, with a per-command vocabulary: `right`/`down`/`auto` for
+    /// `pane.split`, `left`/`down`/`up`/`right` for `pane.focus` (where it
+    /// makes the resolved pane the origin and focuses its neighbour).
     var direction: String?
     /// Skip the busy-confirmation and destructive-plan guards
     /// (`tab.close`, `pane.close`, `layout.apply`).

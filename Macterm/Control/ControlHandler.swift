@@ -372,10 +372,37 @@ final class ControlHandler {
     private func paneFocus(_ args: ControlArgs) throws -> ControlData {
         let (project, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
+        // With a direction the resolved pane is the ORIGIN, not the
+        // destination: move to its nearest neighbour that way. Same
+        // `nearestPane` primitive the focus keybinds use, so a CLI move and a
+        // keybind move can't pick different panes.
+        var pane = target.pane
+        if let raw = args.direction {
+            let direction: PaneFocusDirection
+            switch raw {
+            case "left": direction = .left
+            case "down": direction = .down
+            case "up": direction = .up
+            case "right": direction = .right
+            default:
+                throw ControlError(code: .badRequest, message: "direction must be left, down, up, or right")
+            }
+            // No neighbour that way is a successful no-op, NOT an error. The
+            // caller is typically a program that already failed to move within
+            // its own splits (a vim-tmux-navigator-style keymap) and is asking
+            // whether Macterm can go further; at the outermost edge the answer
+            // is simply "no". Returning the unchanged pane lets the caller see
+            // that by comparing the reported session against its own.
+            if let neighbour = target.tab.splitRoot.nearestPane(from: pane.id, direction: direction),
+               let resolved = target.tab.splitRoot.findPane(id: neighbour)
+            {
+                pane = resolved
+            }
+        }
         // navigateToPane selects the containing tab, fronts the window, and
         // restores first responder — everything "focus" means for a human.
-        appState.navigateToPane(target.pane.id, projectID: project.id)
-        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+        appState.navigateToPane(pane.id, projectID: project.id)
+        return ControlData(panes: [paneInfo(pane, in: target.tab, workspace: workspace)])
     }
 
     private func paneClose(_ args: ControlArgs) throws -> ControlData {

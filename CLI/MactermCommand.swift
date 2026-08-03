@@ -316,14 +316,19 @@ struct PaneCommand: ParsableCommand {
 
     struct Focus: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Focus a pane (selects its tab and fronts the window)."
+            abstract: "Focus a pane, or its neighbour in a direction (selects its tab and fronts the window)."
         )
+
+        @Option(help: "Move to the nearest pane this way from the target instead: left, down, up, or right.")
+        var direction: String?
 
         @OptionGroup var target: PaneTarget
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
-            try runControlCommand(command: "pane.focus", args: target.controlArgs(), options: options)
+            var args = target.controlArgs()
+            args.direction = direction
+            try runControlCommand(command: "pane.focus", args: args, options: options)
         }
     }
 
