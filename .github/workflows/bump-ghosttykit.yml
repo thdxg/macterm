@@ -177,7 +177,15 @@ jobs:
           git add scripts/setup.sh
           git commit -m "chore(deps): bump GhosttyKit to ${LATEST}" \
                      -m "Moves the pinned thdxg/ghostty release from ${CURRENT} to ${LATEST}. Opened by .github/workflows/bump-ghosttykit.yml."
-          git push origin "$BRANCH"
+          # --force, because anything that fails AFTER this push leaves the branch
+          # on the remote and wedges every later run: the next one rebuilds the
+          # same one-line change as a new commit (new timestamp, new SHA) on the
+          # same base, and a plain push is then rejected non-fast-forward — which
+          # is what happened once `gh pr create` started failing. The branch is
+          # safe to overwrite: it is named per target tag and owned entirely by
+          # this workflow, and the check step already returned early if a PR for
+          # it is open, so this can never clobber a branch under review.
+          git push --force origin "$BRANCH"
 
           # Built as a file, not an inline string: a multi-line --body inside a
           # YAML block scalar is indentation-fragile, and markdown turns a stray
@@ -198,8 +206,21 @@ jobs:
             fi
           } > pr-body.md
 
-          gh pr create \
+          # gh reports a PAT that can't open PRs as a bare "Resource not accessible
+          # by personal access token", naming neither the token nor the permission.
+          # Say both, and say that the push succeeding proves nothing about it —
+          # that push used the checkout's GITHUB_TOKEN, not GH_PAT.
+          if ! gh pr create \
             --base main --head "$BRANCH" \
             --title "chore(deps): bump GhosttyKit to ${LATEST}" \
             --label dependencies --label area:ci \
             --body-file pr-body.md
+          then
+            {
+              echo "error: the bump commit is pushed to $BRANCH, but opening its PR failed."
+              echo "  If the message above is 'Resource not accessible by personal access"
+              echo "  token', GH_PAT is missing Pull requests: read+write on this repo."
+              echo "  Grant it and re-run — the branch is reused, not duplicated."
+            } >&2
+            exit 1
+          fi
