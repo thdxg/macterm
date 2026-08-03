@@ -84,6 +84,9 @@ jobs:
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
+            .ghosttykit-tag
+          # The tag stamp is cached with the artifacts it describes (test.yml).
+          #
           # NO restore-keys fallback: pairing a time-rolling key with a prefix
           # restore-key re-saves stale content under the fresh key forever (see
           # test.yml). Without it a new week re-downloads the current `latest`.

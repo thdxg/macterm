@@ -71,6 +71,12 @@ jobs:
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
+            .ghosttykit-tag
+          # The tag stamp is cached WITH the artifacts it describes. setup.sh
+          # reads a missing stamp as "provenance unknown" and warns, which a
+          # restored tree is not — this key hashes setup.sh, so the pin these
+          # artifacts came from is exactly the one it names. Without the stamp
+          # in here that warning would fire on every cache hit.
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
 
       # Runs BEFORE the DerivedData cache, which keys on what this installs.
@@ -176,6 +182,7 @@ jobs:
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
+            .ghosttykit-tag
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
       # Runs BEFORE the DerivedData cache, which keys on what this installs.
       - name: Setup GhosttyKit

@@ -17,11 +17,25 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # Set GHOSTTYKIT_TAG to another tag (or `latest`) to try one without committing:
 #   GHOSTTYKIT_TAG=latest mise run setup
 GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-02}"
-# Which tag the on-disk artifacts actually came from. Without this the presence
-# checks below would keep a stale copy forever after a pin bump — the same
-# silent-staleness trap that makes symlinking these artifacts a bad idea. Absent
-# on checkouts predating the pin, which is read as "matches" so introducing the
-# pin doesn't force a re-download on everyone.
+# Which tag the on-disk fork artifacts actually came from. Without this the
+# presence checks below would keep a stale copy forever after a pin bump — the
+# same silent-staleness trap that makes symlinking these artifacts a bad idea.
+#
+# Written ONLY by a run that downloaded BOTH fork artifacts (see the stamp block
+# at the bottom). It is a single scalar, so it can only honestly describe a tree
+# where both came from one release. Gating it on the two dirs merely EXISTING
+# laundered a stale tree as pinned: a run that downloaded neither (say only zmx
+# was missing) or just one of the two still wrote the current pin over whatever
+# was already there, and from then on every run saw a stamp agreeing with
+# GHOSTTYKIT_TAG and never refreshed. A real tree hit this — resources from one
+# release beside a framework from another, stamped as if both were pinned.
+#
+# So absent means "provenance unknown", NOT "matches the pin". It still forces
+# no re-download (introducing the pin churned nobody, and see
+# warn_unstamped_artifacts for why refreshing here is worse than warning), but
+# such a tree is a dead end for the refresh: `tag_changed` needs a stamp to
+# compare against, so an unstamped tree never adopts a bumped pin on its own.
+# That is what the warning is for.
 TAG_STAMP=".ghosttykit-tag"
 # Marker for the downloaded upstream resources. The tarball mirrors a real
 # Ghostty.app Resources layout: ghostty/{themes,shell-integration} plus a
@@ -121,6 +135,28 @@ else
   GHOSTTY_TAG="$GHOSTTYKIT_TAG"
 fi
 
+# Fork artifacts on disk that no run ever stamped: they came from a release
+# nobody recorded, and nothing here will refresh them, since spotting a bumped
+# pin means comparing against a stamp. Deliberately advisory rather than a forced
+# re-download — CI restores exactly this state from its GhosttyKit cache and
+# already records provenance in that cache's key (it hashes this script), so
+# refreshing on a missing stamp would re-download on every hit for no gain.
+# Silence is the one option ruled out: it is what let a stale core look pinned.
+warn_unstamped_artifacts() {
+  # `:-` because the definition precedes the assignment: under `set -u` an
+  # earlier call site added later would otherwise abort setup outright.
+  [[ -z "${stamped_tag:-}" ]] || return 0
+  [[ -d "$XCFRAMEWORK_DIR" || -d "$RESOURCES_MARKER" ]] || return 0
+  echo "" >&2
+  echo "note: the GhosttyKit/resources on disk carry no tag stamp, so which release" >&2
+  echo "      they came from is unknown — possibly two different ones. Nothing will" >&2
+  echo "      refresh them: a bumped pin is detected by disagreeing with a stamp, so" >&2
+  echo "      an unstamped tree keeps building against the core it already has." >&2
+  echo "      To install $GHOSTTY_TAG for certain:" >&2
+  echo "        rm -rf $XCFRAMEWORK_DIR $RESOURCES_MARKER && ./scripts/setup.sh" >&2
+  echo "" >&2
+}
+
 stamped_tag=""
 [[ -f "$TAG_STAMP" ]] && stamped_tag=$(cat "$TAG_STAMP")
 # Only a stamp that exists AND disagrees forces a refresh (see $TAG_STAMP).
@@ -153,6 +189,9 @@ fi
 
 if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
   echo "GhosttyKit, resources, and zmx already present"
+  # This is the path a settled checkout takes every time, so it is also where an
+  # unstamped tree would otherwise sit unnoticed forever.
+  warn_unstamped_artifacts
   # Warn on the no-op path too. This used to run only after a download, which
   # made it dead code on a settled checkout — tolerable while the tag was
   # `latest` (any fresh checkout pulled current anyway), but now that nothing
@@ -207,12 +246,23 @@ if $need_resources; then
   rm ghostty-resources.tar.gz
 fi
 
-# Stamp last, and only once both fork artifacts are actually on disk: an early
-# stamp would make a half-finished setup (network failure between the two
-# downloads) look complete to the next run. Any `exit 1` above leaves the old
-# stamp — and therefore the refresh — in place.
-if [[ -d "$XCFRAMEWORK_DIR" && -d "$RESOURCES_MARKER" ]]; then
+# Stamp last, and only for what THIS run actually installed — both need_* flags,
+# not just the dirs existing, or the stamp launders artifacts it never fetched
+# (see $TAG_STAMP). A pin bump sets both flags, so the case the stamp exists for
+# still records itself; a run that replaced only one of the two leaves the tree
+# honestly unstamped rather than claiming a release only half of it came from.
+#
+# The dir checks stay as belt-and-braces for the property that a partial setup
+# never stamps: a network failure between the two downloads aborts under `set -e`
+# long before here, and this keeps that true if a future edit ever softens it.
+# Any `exit 1` above likewise leaves the old stamp — and the refresh — in place.
+if $need_xcframework && $need_resources &&
+  [[ -d "$XCFRAMEWORK_DIR" && -d "$RESOURCES_MARKER" ]]; then
   printf '%s\n' "$GHOSTTY_TAG" > "$TAG_STAMP"
+else
+  # No-op when a stamp already exists and agrees: re-fetching one artifact from
+  # the same pin leaves that stamp true, so there is nothing to correct.
+  warn_unstamped_artifacts
 fi
 
 if $need_zmx; then
