@@ -89,6 +89,29 @@ struct ProcessInspectorTests {
         #expect(!ProcessInspector.isIdleShellInvocation(["/bin/bash", "-lc", "sleep 10"]))
     }
 
+    /// Every nushell pane runs the exact argv below — ghostty's command-wrapper
+    /// injects `--execute 'use ghostty *'` to load shell integration. Unlike
+    /// `-c`, nushell's `--execute` runs its code and THEN enters the
+    /// interactive REPL, so the invocation is an idle shell. Reading it as
+    /// foreground work costs the execution tracker its return-to-prompt
+    /// completion edge, which stranded the tab spinner for the whole
+    /// quiet-settle window after fast commands.
+    @Test
+    func shellIntegrationExecuteInvocation_isIdleShell() throws {
+        // Resolved from the host's own login shell, not a hardcoded `nu` path:
+        // shell names come from `/etc/shells`, so a literal nushell argv would
+        // not even parse as a shell on a runner without nushell installed.
+        let loginShellPtr = try #require(getpwuid(getuid())?.pointee.pw_shell)
+        let shell = String(cString: loginShellPtr)
+        let loginName = (shell as NSString).lastPathComponent
+
+        #expect(ProcessInspector.isIdleShellInvocation([shell, "--execute", "use ghostty *"]))
+        #expect(ProcessInspector.isIdleShellInvocation(["-\(loginName)", "--execute", "use ghostty *"]))
+        // The value is skipped, not scanned — a real command after it still counts.
+        #expect(!ProcessInspector.isIdleShellInvocation([shell, "--execute", "use ghostty *", "-c", "sleep 10"]))
+        #expect(!ProcessInspector.isIdleShellInvocation([shell, "--execute", "use ghostty *", "script.sh"]))
+    }
+
     @Test
     func terminalInputIsRaw_reads_tty_input_mode() throws {
         // openpty's two fds: the primary (controlling) end and the secondary

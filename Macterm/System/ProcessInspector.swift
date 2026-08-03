@@ -219,8 +219,22 @@ enum ProcessInspector {
         return false
     }
 
+    /// Options that take a separate value argument, so the scan above must skip
+    /// that value instead of mistaking it for a command word.
+    ///
+    /// `--execute` is nushell's "run this, THEN drop into the interactive REPL"
+    /// flag — unlike `-c`, the shell stays at a prompt afterwards, so an
+    /// invocation carrying it is still an idle shell. This matters for every
+    /// nushell pane: ghostty's command-wrapper injects
+    /// `nu --execute 'use ghostty *'` to load shell integration, and without
+    /// this entry the scan reads `use ghostty *` as a command word and reports
+    /// the pane's idle prompt as foreground work. `TerminalExecutionTracker`
+    /// then never sees the shell (`newKey == nil`), so it loses its
+    /// authoritative return-to-prompt completion edge and instead demotes the
+    /// run to activity ownership on the prompt's raw-mode switch — leaving a
+    /// spinner up for the full quiet-settle window after a fast command.
     private static func shellOptionConsumesNextArgument(_ option: String) -> Bool {
-        option == "--rcfile" || option == "--init-file"
+        option == "--rcfile" || option == "--init-file" || option == "--execute"
     }
 
     /// Whether the pane's tty is in raw/cbreak-style input mode. Full-screen and
