@@ -703,17 +703,26 @@ private struct SidebarTabRow: View {
     /// split-tab look from #227, drawn without container chrome (no fill, no
     /// border, no inset) so a segment is just its icon (the pane's live agent
     /// logo when it has one, else the user's tab icon) and the pane's title.
+    /// Each segment is a real `Label`, not a hand-rolled HStack: the List's
+    /// sidebar styling sizes Label icons, so anything else renders the icon
+    /// smaller than a single-tab row's.
     private var splitContainers: some View {
         HStack(spacing: 10) {
             ForEach(tab.splitRoot.allPanes()) { pane in
-                HStack(spacing: 4) {
-                    let agent = showAgentIcons ? pane.agentIcon : nil
+                let agent = showAgentIcons ? pane.agentIcon : nil
+                Group {
                     if tabIconSymbol != Preferences.noIcon || agent != nil {
-                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agent)
-                            .foregroundStyle(.secondary)
+                        Label {
+                            Text(pane.sidebarSegmentTitle)
+                                .lineLimit(1)
+                        } icon: {
+                            SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agent)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(pane.sidebarSegmentTitle)
+                            .lineLimit(1)
                     }
-                    Text(pane.sidebarSegmentTitle)
-                        .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
