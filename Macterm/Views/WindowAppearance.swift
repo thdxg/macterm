@@ -345,8 +345,22 @@ enum WindowAppearance {
         return window.value(forKey: "_cornerRadius") as? CGFloat
     }
 
+    /// Hide or restore the titlebar container for the Hide Title Bar option
+    /// (#226). Hiding the window toolbar collapses the visible chrome, but the
+    /// collapsed titlebar still tracks its old rect and drags the window from
+    /// an invisible strip over the terminal's top rows. Hiding the container
+    /// itself — as Ghostty's hidden titlebar style does — lets those events
+    /// reach the content. Runs on every `sync` so AppKit rebuilding the
+    /// titlebar subviews (becomeMain, fullscreen transitions) re-asserts it;
+    /// `WindowStyler.updateNSView` calls it directly for live setting flips.
+    static func syncTitleBarHidden(window: NSWindow) {
+        titlebarContainer(in: window)?.isHidden = Preferences.shared.hideTitleBar
+    }
+
     private static func syncTitlebar(window: NSWindow, isTransparent: Bool) {
         guard let container = titlebarContainer(in: window) else { return }
+
+        syncTitleBarHidden(window: window)
 
         if let titlebarView = container.firstDescendant(withClassName: "NSTitlebarView") {
             titlebarView.wantsLayer = true

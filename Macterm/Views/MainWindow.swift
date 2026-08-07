@@ -384,7 +384,9 @@ private struct WindowStyler: NSViewRepresentable {
         // mutation from inside the update pass.
         let hide = hideTitle
         DispatchQueue.main.async {
-            view.window?.titleVisibility = hide ? .hidden : .visible
+            guard let window = view.window else { return }
+            window.titleVisibility = hide ? .hidden : .visible
+            WindowAppearance.syncTitleBarHidden(window: window)
         }
     }
 
