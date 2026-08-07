@@ -6,6 +6,13 @@ private enum SidebarItem: Hashable {
     case tab(projectID: UUID, tabID: UUID)
 }
 
+/// A sidebar row's content region extends past the selection highlight's
+/// trailing edge. A short label never reaches out there, but content that
+/// fills the row — split segments, the merge drop slot, a fading title —
+/// does, and reads as overflowing the highlight. Every row applies this
+/// trailing inset at its root so all of them stop at the same edge.
+private let rowTrailingInset: CGFloat = 10
+
 /// In-app drag payload for a sidebar tab row. Carries the tab's identity plus
 /// its source project so a drop can tell a same-project reorder from a
 /// cross-project move. `TerminalTab` itself is a live reference type (owns
@@ -181,6 +188,7 @@ struct SidebarContent: View {
         SidebarProjectRow(project: project, index: projectIndex + 1) {
             projectStore.rename(id: project.id, to: $0)
         }
+        .padding(.trailing, rowTrailingInset)
         .tag(SidebarItem.project(project.id))
         // Drag the header to reorder projects (replaces the removed `.onMove`).
         .draggable(MovableProject(projectID: project.id))
@@ -430,6 +438,7 @@ private struct MergeableTabRow: View {
 
     var body: some View {
         rowContent
+            .padding(.trailing, rowTrailingInset)
             // Stretch to the full row and make every point hit-testable:
             // without this, the drag grab area and the merge drop target hug
             // the label's intrinsic width instead of covering the whole row.
@@ -512,8 +521,7 @@ private struct SidebarProjectRow: View {
                 .onAppear { focused = true }
         } else {
             HStack(spacing: 4) {
-                Text(project.name)
-                    .lineLimit(1)
+                FadingText(project.name)
                 if project.isRemote {
                     // Remote project (#104): panes live on this host over ssh.
                     Image(systemName: "network")
@@ -592,9 +600,18 @@ private struct SidebarTabRow: View {
                 .onSubmit { commit() }
                 .onExitCommand { cancelRename() }
                 .onAppear { focused = true }
+        } else if tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
+            // #227: a split tab reads as multiple tabs sharing one row — one
+            // chromeless title segment per pane instead of one tab
+            // concatenating the titles with a pipe. A custom title still
+            // wins: the user named the whole tab. Four or more panes won't
+            // fit legibly, so that row collapses back to a single tab titled
+            // with the pane count (see `sidebarRowTitle`). The segments are
+            // a TITLE variant, not their own labels: the row carries one tab
+            // icon regardless of how it is named.
+            splitSegments
         } else {
-            Text(tab.sidebarRowTitle)
-                .lineLimit(1)
+            FadingText(tab.sidebarRowTitle)
         }
     }
 
@@ -603,50 +620,21 @@ private struct SidebarTabRow: View {
         showAgentIcons ? tab.agentIcon : nil
     }
 
-    /// One segment per pane, sharing the row in equal widths — the Arc-style
-    /// split-tab look from #227, drawn without container chrome (no fill, no
-    /// border, no inset) so a segment is just its icon (the pane's live agent
-    /// logo when it has one, else the user's tab icon) and the pane's title.
-    /// Each segment is a real `Label`, not a hand-rolled HStack: the List's
-    /// sidebar styling sizes Label icons, so anything else renders the icon
-    /// smaller than a single-tab row's.
-    private var splitContainers: some View {
+    /// One title segment per pane, sharing the row in equal widths, divided
+    /// by hairlines so adjacent titles don't read as one run-on name.
+    private var splitSegments: some View {
         HStack(spacing: 10) {
-            ForEach(tab.splitRoot.allPanes()) { pane in
-                let agent = showAgentIcons ? pane.agentIcon : nil
-                Group {
-                    if tabIconSymbol != Preferences.noIcon || agent != nil {
-                        Label {
-                            FadingTitle(text: pane.sidebarSegmentTitle)
-                        } icon: {
-                            SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agent)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        FadingTitle(text: pane.sidebarSegmentTitle)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(tab.splitRoot.allPanes().enumerated()), id: \.element.id) { i, pane in
+                if i > 0 { Divider() }
+                FadingText(pane.sidebarSegmentTitle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        // The row's content region extends past the selection highlight's
-        // trailing edge; a plain Label never reaches out there, but the
-        // segments fill the row, so without this inset the last title reads
-        // as overflowing the highlight.
-        .padding(.trailing, 10)
     }
 
     var body: some View {
         Group {
-            if !isRenaming, tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
-                // #227: a split tab reads as multiple tabs sharing one row —
-                // each pane gets its own chromeless segment (icon + title)
-                // instead of one tab concatenating the titles with a pipe. A
-                // custom title still wins: the user named the whole tab. Four
-                // or more panes won't fit legibly, so that row collapses back
-                // to a single tab titled with the pane count (see `rowTitle`).
-                splitContainers
-            } else if tabIconSymbol == Preferences.noIcon {
+            if tabIconSymbol == Preferences.noIcon {
                 Label {
                     titleContent
                 } icon: {
@@ -717,67 +705,6 @@ private struct SidebarTabRow: View {
 ///   dot reads as "done/positive" without competing with the icon's identity,
 ///   and it avoids the heavy, off-platform look of a checkmark glyph badge.
 /// - `idle`: the icon as-is.
-/// A one-line title that handles overflow by fading out at its trailing edge
-/// instead of truncating — an ellipsis burns several characters of a split
-/// segment's already-narrow title.
-///
-/// Two copies of the text, because the fade needs glyphs the layout system
-/// would otherwise truncate, yet the layout must never see their full width:
-/// the LAYOUT element is a normal truncating `Text` rendered invisibly, so
-/// the title stays compressible and the segments keep dividing the row
-/// equally (a `fixedSize` text in the layout makes every segment demand its
-/// full title width — segments stop re-balancing as panes come and go, and
-/// an overflowing title gets hard-clipped by the row edge outside its own
-/// mask). The VISIBLE copy draws at intrinsic width inside a layout-neutral
-/// overlay, clipped to the slot by the mask, whose gradient ramp only
-/// engages when the text actually overflows — a short title masked
-/// unconditionally would fade its own last letters.
-private struct FadingTitle: View {
-    let text: String
-    /// Width of the fade-out ramp at the trailing edge.
-    private static let fadeWidth: CGFloat = 18
-    @State
-    private var textWidth: CGFloat = 0
-    @State
-    private var containerWidth: CGFloat = 0
-
-    private var overflows: Bool { textWidth > containerWidth + 0.5 }
-
-    var body: some View {
-        Text(text)
-            .lineLimit(1)
-            .opacity(0)
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { containerWidth = $0 }
-            .overlay(alignment: .leading) {
-                // Color.clear adopts exactly the slot's size, so the mask —
-                // and with it the clip — is bound to the slot, not to the
-                // rigid text.
-                Color.clear
-                    .overlay(alignment: .leading) {
-                        Text(text)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { textWidth = $0 }
-                    }
-                    .mask(alignment: .leading) {
-                        if overflows {
-                            HStack(spacing: 0) {
-                                Rectangle()
-                                LinearGradient(
-                                    gradient: Gradient(colors: [.black, .clear]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                                .frame(width: Self.fadeWidth)
-                            }
-                        } else {
-                            Rectangle()
-                        }
-                    }
-            }
-    }
-}
-
 private struct TabStatusGlyph: View {
     let state: TerminalExecutionState
     let symbol: String
