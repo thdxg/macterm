@@ -617,20 +617,23 @@ private struct SidebarTabRow: View {
                 Group {
                     if tabIconSymbol != Preferences.noIcon || agent != nil {
                         Label {
-                            Text(pane.sidebarSegmentTitle)
-                                .lineLimit(1)
+                            FadingTitle(text: pane.sidebarSegmentTitle)
                         } icon: {
                             SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agent)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
-                        Text(pane.sidebarSegmentTitle)
-                            .lineLimit(1)
+                        FadingTitle(text: pane.sidebarSegmentTitle)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        // The row's content region extends past the selection highlight's
+        // trailing edge; a plain Label never reaches out there, but the
+        // segments fill the row, so without this inset the last title reads
+        // as overflowing the highlight.
+        .padding(.trailing, 10)
     }
 
     var body: some View {
@@ -714,6 +717,67 @@ private struct SidebarTabRow: View {
 ///   dot reads as "done/positive" without competing with the icon's identity,
 ///   and it avoids the heavy, off-platform look of a checkmark glyph badge.
 /// - `idle`: the icon as-is.
+/// A one-line title that handles overflow by fading out at its trailing edge
+/// instead of truncating — an ellipsis burns several characters of a split
+/// segment's already-narrow title.
+///
+/// Two copies of the text, because the fade needs glyphs the layout system
+/// would otherwise truncate, yet the layout must never see their full width:
+/// the LAYOUT element is a normal truncating `Text` rendered invisibly, so
+/// the title stays compressible and the segments keep dividing the row
+/// equally (a `fixedSize` text in the layout makes every segment demand its
+/// full title width — segments stop re-balancing as panes come and go, and
+/// an overflowing title gets hard-clipped by the row edge outside its own
+/// mask). The VISIBLE copy draws at intrinsic width inside a layout-neutral
+/// overlay, clipped to the slot by the mask, whose gradient ramp only
+/// engages when the text actually overflows — a short title masked
+/// unconditionally would fade its own last letters.
+private struct FadingTitle: View {
+    let text: String
+    /// Width of the fade-out ramp at the trailing edge.
+    private static let fadeWidth: CGFloat = 18
+    @State
+    private var textWidth: CGFloat = 0
+    @State
+    private var containerWidth: CGFloat = 0
+
+    private var overflows: Bool { textWidth > containerWidth + 0.5 }
+
+    var body: some View {
+        Text(text)
+            .lineLimit(1)
+            .opacity(0)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { containerWidth = $0 }
+            .overlay(alignment: .leading) {
+                // Color.clear adopts exactly the slot's size, so the mask —
+                // and with it the clip — is bound to the slot, not to the
+                // rigid text.
+                Color.clear
+                    .overlay(alignment: .leading) {
+                        Text(text)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { textWidth = $0 }
+                    }
+                    .mask(alignment: .leading) {
+                        if overflows {
+                            HStack(spacing: 0) {
+                                Rectangle()
+                                LinearGradient(
+                                    gradient: Gradient(colors: [.black, .clear]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                                .frame(width: Self.fadeWidth)
+                            }
+                        } else {
+                            Rectangle()
+                        }
+                    }
+            }
+    }
+}
+
 private struct TabStatusGlyph: View {
     let state: TerminalExecutionState
     let symbol: String
