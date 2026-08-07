@@ -387,13 +387,21 @@ enum WindowAppearance {
         // flipping the setting mid-fullscreen) restores it.
         window.toolbar?.isVisible = !hidden
         // Even toolbar-less, the overlay hosts a bare titlebar that the system
-        // slides down when the pointer hits the top of the fullscreen space,
-        // and its gray background is system-painted — it ignores
-        // `titlebarAppearsTransparent`, and AppKit rebuilds its subviews on
-        // reveal, undoing any view-level hide. The window's own alpha survives
-        // both, so the reveal animates an invisible window; the menu bar is a
+        // slides down alongside the menu bar when the pointer pushes past the
+        // top of the fullscreen space, and its gray background is
+        // system-painted — it ignores `titlebarAppearsTransparent`. A plain
+        // `alphaValue = 0` did not survive either: the reveal animates the
+        // overlay's alpha back in (observed live — the bar returned
+        // translucent, mid-animation). So blank the window's whole view tree
+        // from the root: the slide can animate whatever alpha it likes over a
+        // window that renders nothing. The root survives the reveal's subview
+        // rebuilds, and every sync re-asserts anyway. The menu bar is a
         // separate system window and still slides in for menu access.
-        fullscreenToolbarOverlay(for: window)?.alphaValue = hidden ? 0 : 1
+        if let overlay = fullscreenToolbarOverlay(for: window) {
+            overlay.alphaValue = hidden ? 0 : 1
+            let root = overlay.contentView?.superview ?? overlay.contentView
+            root?.isHidden = hidden
+        }
         // The macOS 26+ scroll-edge-effect pocket: AppKit hosts it in the
         // titlebar area (moved there on macOS 27, ghostty#13390) where it sits
         // over the terminal's top rows and blocks clicks/selection once the
