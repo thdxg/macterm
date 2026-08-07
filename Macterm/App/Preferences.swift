@@ -278,6 +278,19 @@ final class Preferences {
         }
     }
 
+    /// Hide the window's title bar entirely: the toolbar (sidebar toggle, tab
+    /// switcher, update button), the title text, and — a side effect of
+    /// SwiftUI removing the window toolbar — the traffic lights. The sidebar
+    /// and terminal surface extend to the window's top edge. Tab switching
+    /// stays available via the sidebar and Cmd+1…9; close/minimize/zoom stay
+    /// available from the Window menu. No AppKit private API involved: the
+    /// window keeps its normal style mask, so edge-resizing still works.
+    var hideTitleBar: Bool {
+        didSet {
+            defaults.set(hideTitleBar, forKey: Keys.hideTitleBar)
+        }
+    }
+
     // MARK: - Ghostty config
 
     /// Path to the user's Ghostty config. Empty string = don't load any user
@@ -397,6 +410,7 @@ final class Preferences {
         windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
         windowGlassStyle = (defaults.string(forKey: Keys.windowGlassStyle))
             .flatMap(WindowGlassStyle.init(rawValue:)) ?? .regular
+        hideTitleBar = defaults.object(forKey: Keys.hideTitleBar) as? Bool ?? false
         userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
         passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
         quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
@@ -465,6 +479,7 @@ final class Preferences {
         static let windowBlurRadius = "macterm.window.blurRadius"
         static let windowGlassEnabled = "macterm.window.glassEnabled"
         static let windowGlassStyle = "macterm.window.glassStyle"
+        static let hideTitleBar = "macterm.window.hideTitleBar"
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let passthroughPrograms = "macterm.hotkey.passthroughPrograms"
         static let quickTerminalEnabled = "macterm.quickTerminal.enabled"

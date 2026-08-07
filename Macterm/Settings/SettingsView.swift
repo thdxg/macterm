@@ -580,10 +580,19 @@ private struct AppearanceSettings: View {
     private var liquidGlassStyle: WindowGlassStyle = Preferences.shared.windowGlassStyle
     @State
     private var paneDimOpacity: Double = Preferences.shared.paneDimOpacity
+    @State
+    private var hideTitleBar: Bool = Preferences.shared.hideTitleBar
 
     var body: some View {
         Form {
             Section("Window") {
+                Toggle("Hide title bar", isOn: $hideTitleBar)
+                    .onChange(of: hideTitleBar) { _, v in
+                        Preferences.shared.hideTitleBar = v
+                    }
+                Text("Removes the toolbar and window buttons so the terminal reaches the top edge; switch tabs via the sidebar or ⌘1–9.")
+                    .settingsCaption()
+
                 HStack {
                     Text("Background opacity")
                         .frame(width: sliderLabelWidth, alignment: .leading)
