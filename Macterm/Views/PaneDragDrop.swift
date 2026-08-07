@@ -290,6 +290,12 @@ struct PaneDropContext {
     let root: SplitNode
     let resolution: Binding<TabDropResolution?>
     let draggedPaneID: UUID?
+    /// The tab whose split tree this workspace is rendering. A sidebar drag
+    /// of that tab over its own workspace could only self-merge — a no-op in
+    /// `AppState.mergeTab` — so the leaves refuse it instead of previewing a
+    /// split that won't happen. nil (the quick terminal) skips the check; it
+    /// refuses tab payloads entirely anyway.
+    var renderedTabID: UUID?
     let onMovePane: @MainActor (UUID, TabDropResolution.Target) -> Void
     /// nil (the quick terminal) refuses sidebar-tab payloads entirely.
     var onMergeTab: (@MainActor (MovableTab, TabDropResolution.Target) -> Void)?
@@ -346,7 +352,7 @@ struct LeafDropDelegate: DropDelegate {
     let viewSize: CGSize
 
     func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: context.acceptedTypes)
+        info.hasItemsConforming(to: context.acceptedTypes) && !isRenderedTabDrag()
     }
 
     func dropEntered(info: DropInfo) {
@@ -406,8 +412,21 @@ struct LeafDropDelegate: DropDelegate {
         return true
     }
 
+    /// True when the drag is the sidebar row of the tab this workspace is
+    /// already rendering — the one tab payload whose drop could only
+    /// self-merge, which `AppState.mergeTab` refuses. Falls open when the
+    /// Transferable payload isn't on the drag pasteboard yet; the preview
+    /// then shows and the drop lands on that same mergeTab guard (the same
+    /// degradation the row-level merge delegate documents).
+    private func isRenderedTabDrag() -> Bool {
+        guard let renderedTabID = context.renderedTabID,
+              let movable = MovableTab.fromDragPasteboard()
+        else { return false }
+        return movable.tabID == renderedTabID
+    }
+
     private func update(_ info: DropInfo) {
-        guard viewSize.width > 0, viewSize.height > 0 else {
+        guard viewSize.width > 0, viewSize.height > 0, !isRenderedTabDrag() else {
             context.resolution.wrappedValue = nil
             return
         }

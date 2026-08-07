@@ -282,6 +282,7 @@ struct WorkspaceView: View {
                     root: renderedNode,
                     resolution: $dropResolution,
                     draggedPaneID: draggedPaneID,
+                    renderedTabID: tab.id,
                     onMovePane: { paneID, target in
                         if tab.movePane(paneID, to: target) {
                             appState.saveWorkspaces()
