@@ -168,15 +168,20 @@ struct SidebarContent: View {
     }
 
     private func tabRow(tab: TerminalTab, index tabIndex: Int, project: Project) -> some View {
-        MergeableTabRow(
+        SidebarTabRow(
             tab: tab,
             index: tabIndex + 1,
-            project: project,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
             }
         )
+        .padding(.trailing, rowTrailingInset)
+        // Stretch to the full row and make every point hit-testable: without
+        // this, the drag grab area hugs the label's intrinsic width instead
+        // of covering the whole row.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
         // Drag a tab out to another project (or reorder within this one). The
         // payload is just IDs — the live tab is looked up on drop, never
@@ -406,122 +411,6 @@ struct SidebarContent: View {
         if let project = appState.openProject(store: projectStore) {
             expandedProjects.insert(project.id)
         }
-    }
-}
-
-// MARK: - Tab merge drop target (#227)
-
-/// A sidebar tab row that also accepts another tab dropped onto it, merging
-/// the two into a split (#227): the merged tab always lands on the right
-/// (`.second`). The target is a row-level `dropDestination` — the native
-/// List drop-on-row path, which owns the session and cancels a refused drop
-/// with the system animation. Dropping between rows still reorders via the
-/// ForEach-level `dropDestination` in `projectSection`, and a row refuses
-/// its own tab (the action returns false and the drag animates back).
-///
-/// The hover preview is structural and identical for every destination —
-/// single- or multi-pane — sliding the row's content aside to show the slot
-/// the merged tab will take (see `rowContent`). The original one-pane-only
-/// variant let the hovered half pick the landing side, but that needed a
-/// raw drop delegate for the cursor location and made one-pane and
-/// multi-pane destinations feel like two different interactions for what
-/// is the same drop.
-private struct MergeableTabRow: View {
-    let tab: TerminalTab
-    let index: Int
-    let project: Project
-    let onRename: (String) -> Void
-    @Environment(AppState.self)
-    private var appState
-    @State
-    private var isDropTargeted = false
-    @State
-    private var rowWidth: CGFloat = 0
-    /// Pane count of the tab being dragged over this row (see `isTargeted`).
-    @State
-    private var incomingShares = 1
-
-    var body: some View {
-        rowContent
-            .padding(.trailing, rowTrailingInset)
-            // Stretch to the full row and make every point hit-testable:
-            // without this, the drag grab area and the merge drop target hug
-            // the label's intrinsic width instead of covering the whole row.
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Measured outside the hover branch so the drop slot has its
-            // width the moment a drag enters, not a frame later.
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidth = $0 }
-            .contentShape(Rectangle())
-            .dropDestination(for: MovableTab.self) { items, _ in
-                var merged = false
-                for movable in items where movable.tabID != tab.id {
-                    appState.mergeTab(
-                        movable.tabID,
-                        from: movable.sourceProjectID,
-                        intoTab: tab.id,
-                        inProject: project.id,
-                        side: .second
-                    )
-                    merged = true
-                }
-                return merged
-            } isTargeted: { targeted in
-                if targeted, let movable = MovableTab.fromDragPasteboard() {
-                    // No preview for the row's own tab — that drop is refused.
-                    if movable.tabID == tab.id { return }
-                    // The dragged tab brings its whole split tree, so its
-                    // panes each claim a share of the previewed row.
-                    incomingShares = max(
-                        1,
-                        appState.workspaces[movable.sourceProjectID]?.tabs
-                            .first(where: { $0.id == movable.tabID })?
-                            .splitRoot.allPanes().count ?? 1
-                    )
-                }
-                isDropTargeted = targeted
-            }
-            .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
-    }
-
-    /// The structural hover preview: while a tab drag hovers, the row's
-    /// content slides aside and a drop slot marks the trailing end — the
-    /// side the merged tab actually lands on (`.second`). macOS draws
-    /// nothing of its own for a row-level drop target, so this is the
-    /// `isTargeted` feedback, previewing the outcome instead of merely
-    /// highlighting the row.
-    @ViewBuilder
-    private var rowContent: some View {
-        if isDropTargeted {
-            // Same spacing and hairline the title segments use, so the slot
-            // reads as the row's next segment and the destination's own
-            // content compresses to exactly its post-drop share.
-            HStack(spacing: 10) {
-                SidebarTabRow(tab: tab, index: index, onRename: onRename)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Divider()
-                dropSlot
-                    .frame(width: incomingSlotWidth)
-            }
-        } else {
-            SidebarTabRow(tab: tab, index: index, onRename: onRename)
-        }
-    }
-
-    /// Both tabs hold one segment per pane, so the slot takes the incoming
-    /// panes' share of the combined row — a 1-pane tab over a 3-pane
-    /// destination claims a quarter, a 2-pane tab over a 2-pane destination
-    /// claims half — and the preview matches the row after the drop.
-    private var incomingSlotWidth: CGFloat {
-        let shares = CGFloat(tab.splitRoot.allPanes().count + incomingShares)
-        return max(0, (rowWidth - rowTrailingInset) * CGFloat(incomingShares) / shares)
-    }
-
-    /// The empty container the dragged tab will land in.
-    private var dropSlot: some View {
-        RoundedRectangle(cornerRadius: 5)
-            .fill(MactermTheme.accent.opacity(0.2))
-            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(MactermTheme.accent.opacity(0.5)))
-            .frame(maxHeight: .infinity)
     }
 }
 

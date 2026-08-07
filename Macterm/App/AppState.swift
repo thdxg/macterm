@@ -936,27 +936,6 @@ final class AppState {
         saveWorkspaces()
     }
 
-    /// Merge a tab into another tab as a split (#227 — dragging a sidebar tab
-    /// onto another tab row): the source tab is removed from its workspace and
-    /// its whole split tree lands beside the destination tab's tree, on `side`
-    /// of a horizontal split. Panes, surfaces, and running shells are reused
-    /// as-is. No-op when either tab is missing or source and destination are
-    /// the same tab.
-    func mergeTab(
-        _ tabID: UUID,
-        from sourceProjectID: UUID,
-        intoTab destTabID: UUID,
-        inProject destProjectID: UUID,
-        side: SplitPosition
-    ) {
-        guard tabID != destTabID,
-              let destTab = workspaces[destProjectID]?.tabs.first(where: { $0.id == destTabID }),
-              let sourceTab = detachTabForMerge(tabID, from: sourceProjectID, to: destProjectID)
-        else { return }
-        destTab.adoptTree(sourceTab.splitRoot, side: side)
-        finishMerge(intoTab: destTabID, inProject: destProjectID)
-    }
-
     /// Merge a tab into the destination project's ACTIVE tab at a resolved
     /// workspace drop target (#227 — dragging a sidebar tab into the
     /// workspace, where the cursor picks a level: whole-edge, divider, or

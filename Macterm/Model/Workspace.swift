@@ -256,20 +256,6 @@ final class TerminalTab: Identifiable {
         return true
     }
 
-    /// Merge another tab's whole split tree into this tab as a horizontal
-    /// split, with the adopted tree on `side` (#227 — dragging a sidebar tab
-    /// onto another tab row). The adopted panes are reused as-is: surfaces and
-    /// running shells are untouched. Focus lands on the adopted tree's first
-    /// pane so the user follows the tab they dragged.
-    func adoptTree(_ node: SplitNode, side: SplitPosition) {
-        let first: SplitNode = side == .first ? node : splitRoot
-        let second: SplitNode = side == .first ? splitRoot : node
-        splitRoot = .split(SplitBranch(direction: .horizontal, first: first, second: second))
-        zoomedPaneID = nil
-        if let paneID = node.allPanes().first?.id { focusPane(paneID) }
-        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
-    }
-
     /// Merge another tab's split tree at a resolved workspace drop target
     /// (#227). Local pane drops keep the halving behavior of a normal split;
     /// divider and root-edge drops ALWAYS equalize the tree, because their
