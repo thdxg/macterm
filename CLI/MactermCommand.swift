@@ -163,8 +163,8 @@ struct ProjectCommand: ParsableCommand {
 struct TabCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tab",
-        abstract: "List, create, select, and close tabs.",
-        subcommands: [List.self, New.self, Select.self, Close.self],
+        abstract: "List, create, select, reorder, and close tabs.",
+        subcommands: [List.self, New.self, Select.self, Move.self, Close.self],
         defaultSubcommand: List.self
     )
 
@@ -216,6 +216,31 @@ struct TabCommand: ParsableCommand {
             try runControlCommand(
                 command: "tab.select",
                 args: ControlArgs(project: project, tab: tab),
+                options: options
+            )
+        }
+    }
+
+    struct Move: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Move a tab to a slot — its final 1-based position in `tab list` order."
+        )
+
+        @Argument(help: "Tab title, UUID, or index (tab:3).")
+        var tab: String
+
+        @Argument(help: "Destination slot: the 1-based position the tab ends up in.")
+        var slot: Int
+
+        @Option(help: "Project scope. Defaults to the active project.")
+        var project: String?
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(
+                command: "tab.move",
+                args: ControlArgs(project: project, tab: tab, slot: slot),
                 options: options
             )
         }

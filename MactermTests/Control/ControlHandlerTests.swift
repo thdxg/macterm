@@ -412,6 +412,78 @@ struct ControlHandlerTests {
         #expect(empty.error?.code == .badRequest)
     }
 
+    // MARK: - tab.move (#224)
+
+    /// `slot` is the tab's FINAL position, in both directions — the toward-end
+    /// case is the one that would regress if the handler ever passed the slot
+    /// straight into `Workspace.moveTab`'s pre-removal drop-offset coordinates
+    /// (the tab would land one slot short).
+    @Test
+    func tab_move_places_tab_at_final_slot_in_both_directions() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        let workspace = try #require(appState.workspaces[project.id])
+        let ids = workspace.tabs.map(\.id)
+        #expect(ids.count == 3)
+
+        // Toward the front: third tab to slot 1.
+        let front = await handler.handle(request("tab.move", args: ControlArgs(tab: "tab:3", slot: 1)))
+        #expect(front.ok)
+        #expect(front.data?.tabs?.first?.index == 1)
+        #expect(workspace.tabs.map(\.id) == [ids[2], ids[0], ids[1]])
+
+        // Toward the end: first tab (the just-moved one) to the last slot.
+        let back = await handler.handle(request("tab.move", args: ControlArgs(tab: "tab:1", slot: 3)))
+        #expect(back.ok)
+        #expect(back.data?.tabs?.first?.index == 3)
+        #expect(workspace.tabs.map(\.id) == ids)
+
+        // Selection keys on the tab's UUID, so it follows the tab, not the slot.
+        #expect(workspace.activeTabID == ids[2])
+    }
+
+    @Test
+    func tab_move_same_slot_is_an_ok_noop() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        let workspace = try #require(appState.workspaces[project.id])
+        let before = workspace.tabs.map(\.id)
+
+        let response = await handler.handle(request("tab.move", args: ControlArgs(tab: "tab:2", slot: 2)))
+        #expect(response.ok)
+        #expect(response.data?.tabs?.first?.index == 2)
+        #expect(workspace.tabs.map(\.id) == before)
+    }
+
+    @Test
+    func tab_move_validates_selector_and_slot() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        let workspace = try #require(appState.workspaces[project.id])
+        let before = workspace.tabs.map(\.id)
+
+        let noTab = await handler.handle(request("tab.move", args: ControlArgs(slot: 1)))
+        #expect(noTab.error?.code == .badRequest)
+
+        let noSlot = await handler.handle(request("tab.move", args: ControlArgs(tab: "tab:1")))
+        #expect(noSlot.error?.code == .badRequest)
+
+        // Out-of-range slots are rejected, never silently clamped.
+        for slot in [0, 3] {
+            let outOfRange = await handler.handle(request("tab.move", args: ControlArgs(tab: "tab:1", slot: slot)))
+            #expect(outOfRange.error?.code == .badRequest, "slot \(slot)")
+        }
+
+        let unknown = await handler.handle(request("tab.move", args: ControlArgs(tab: "tab:9", slot: 1)))
+        #expect(unknown.error?.code == .notFound)
+
+        #expect(workspace.tabs.map(\.id) == before)
+    }
+
     // MARK: - pane.split / pane.focus / pane.close / pane.run
 
     @Test

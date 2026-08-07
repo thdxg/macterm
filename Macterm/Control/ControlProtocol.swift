@@ -96,6 +96,9 @@ struct ControlArgs: Codable, Equatable {
     /// `ctrl+c`, `escape`, `up`, or `ctrl+\` — delivered through libghostty's
     /// key-encoding path, not the text-paste path `run` uses.
     var key: String?
+    /// Destination slot for `tab.move`: the tab's FINAL 1-based position in
+    /// `tab list` order, not a drag-and-drop insertion offset.
+    var slot: Int?
 
     init(
         project: String? = nil,
@@ -113,7 +116,8 @@ struct ControlArgs: Codable, Equatable {
         scrollback: Bool? = nil,
         axis: String? = nil,
         ratio: Double? = nil,
-        key: String? = nil
+        key: String? = nil,
+        slot: Int? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -131,6 +135,7 @@ struct ControlArgs: Codable, Equatable {
         self.axis = axis
         self.ratio = ratio
         self.key = key
+        self.slot = slot
     }
 }
 
