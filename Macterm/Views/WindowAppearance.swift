@@ -418,32 +418,21 @@ enum WindowAppearance {
 
         syncTitleBarHidden(window: window)
 
-        let isFullScreen = window.styleMask.contains(.fullScreen)
         if let titlebarView = container.firstDescendant(withClassName: "NSTitlebarView") {
             titlebarView.wantsLayer = true
-            // Windowed, on Tahoe: the NavigationSplitView's sidebar is a
-            // liquid-glass surface that extends behind the titlebar by design.
-            // Painting any flat color on the titlebar layer draws a band over
-            // that glass and creates a visible seam, so keep the layer clear
+            // On Tahoe, the NavigationSplitView's sidebar is a liquid-glass
+            // surface that extends behind the titlebar by design. Painting
+            // any flat color on the titlebar layer draws a band over that
+            // glass and creates a visible seam. Keep the layer transparent
             // and let AppKit's default titlebar materials (or the content
-            // view, with `.fullSizeContentView`) show through.
-            //
-            // Fullscreen is the opposite (#24): the titlebar lives in the
-            // NSToolbarFullScreenWindow overlay, a separate window nothing of
-            // ours shows through — clear just exposes its native gray
-            // material, which ignores `titlebarAppearsTransparent`. Painting
-            // the window background here is what makes the pinned fullscreen
-            // toolbar read as part of the app.
-            titlebarView.layer?.backgroundColor = isFullScreen
-                ? window.backgroundColor.cgColor
-                : NSColor.clear.cgColor
+            // view, with `.fullSizeContentView`) show through in both modes.
+            titlebarView.layer?.backgroundColor = NSColor.clear.cgColor
         }
 
         // NSTitlebarBackgroundView has subviews that force their own background
-        // colors; hide it when transparent — and in fullscreen, where it would
-        // paint the native gray between our painted layer and the toolbar
-        // items. Windowed-opaque keeps the default chrome intact.
-        container.firstDescendant(withClassName: "NSTitlebarBackgroundView")?.isHidden = isTransparent || isFullScreen
+        // colors; hide it only when transparent, so the default opaque-mode
+        // chrome stays intact.
+        container.firstDescendant(withClassName: "NSTitlebarBackgroundView")?.isHidden = isTransparent
     }
 
     private static func titlebarContainer(in window: NSWindow) -> NSView? {
