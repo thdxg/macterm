@@ -163,7 +163,7 @@ struct ProjectCommand: ParsableCommand {
 struct TabCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tab",
-        abstract: "List, create, select, and close tabs.",
+        abstract: "List, create, select, reorder, and close tabs.",
         subcommands: tabSubcommands,
         defaultSubcommand: List.self
     )
@@ -171,7 +171,7 @@ struct TabCommand: ParsableCommand {
     /// Mirrors PaneCommand.paneSubcommands: the debug-only `merge` verb is
     /// present in debug builds of the CLI and absent in release.
     private static var tabSubcommands: [ParsableCommand.Type] {
-        var subs: [ParsableCommand.Type] = [List.self, New.self, Select.self, Close.self]
+        var subs: [ParsableCommand.Type] = [List.self, New.self, Select.self, Move.self, Close.self]
         #if DEBUG
         subs.append(Merge.self)
         #endif
@@ -257,6 +257,31 @@ struct TabCommand: ParsableCommand {
             try runControlCommand(
                 command: "tab.select",
                 args: ControlArgs(project: project, tab: tab),
+                options: options
+            )
+        }
+    }
+
+    struct Move: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Move a tab to a slot — its final 1-based position in `tab list` order."
+        )
+
+        @Argument(help: "Tab title, UUID, or index (tab:3).")
+        var tab: String
+
+        @Argument(help: "Destination slot: the 1-based position the tab ends up in.")
+        var slot: Int
+
+        @Option(help: "Project scope. Defaults to the active project.")
+        var project: String?
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(
+                command: "tab.move",
+                args: ControlArgs(project: project, tab: tab, slot: slot),
                 options: options
             )
         }

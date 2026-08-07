@@ -62,6 +62,7 @@ final class ControlHandler {
         case "tab.list": return try tabList(args)
         case "tab.new": return try tabNew(args)
         case "tab.select": return try tabSelect(args)
+        case "tab.move": return try tabMove(args)
         case "tab.close": return try tabClose(args)
         case "pane.list": return try paneList(args)
         case "pane.inspect": return try paneInspect(args)
@@ -321,6 +322,35 @@ final class ControlHandler {
         let (index, tab) = try resolveTab(args, in: workspace)
         appState.selectTab(tab.id, projectID: project.id)
         return ControlData(tabs: [tabInfo(tab, index: index, in: workspace)])
+    }
+
+    /// Reorder a tab within its project to an absolute slot (#224). `slot` is
+    /// the tab's FINAL 1-based position — `tab move tab:4 2` makes it second —
+    /// which `Workspace.moveTab` doesn't speak: it takes a drag-and-drop
+    /// insertion offset in the pre-removal coordinate space, where a drop past
+    /// the origin lands one slot earlier. So a downward move passes `slot`
+    /// (final position + the removed tab's own vacated slot) and any other
+    /// passes `slot - 1` (0-based conversion only).
+    private func tabMove(_ args: ControlArgs) throws -> ControlData {
+        guard args.tab != nil else {
+            throw ControlError(code: .badRequest, message: "tab.move requires a tab selector")
+        }
+        guard let slot = args.slot else {
+            throw ControlError(code: .badRequest, message: "tab.move requires a destination slot")
+        }
+        let (project, workspace) = try resolveWorkspace(args)
+        let (fromIndex, tab) = try resolveTab(args, in: workspace)
+        // Reject out-of-range slots up front so the caller isn't silently
+        // clamped — same contract as pane.resize-split's ratio bounds.
+        guard slot >= 1, slot <= workspace.tabs.count else {
+            throw ControlError(
+                code: .badRequest,
+                message: "slot must be between 1 and \(workspace.tabs.count)",
+                action: "run `macterm tab list` for the current order"
+            )
+        }
+        appState.reorderTab(tab.id, inProject: project.id, toIndex: slot > fromIndex ? slot : slot - 1)
+        return ControlData(tabs: [tabInfo(tab, index: slot, in: workspace)])
     }
 
     private func tabClose(_ args: ControlArgs) throws -> ControlData {

@@ -76,6 +76,33 @@ def test_focus_direction_moves_from_the_origin_and_no_ops_at_the_edge(app, fresh
     assert back["panes"][0]["session"] == bottom["session"]
 
 
+def test_tab_move_places_tab_at_its_final_slot(app, fresh_tab):
+    """`tab move` speaks final positions: the slot argument is where the tab
+    ends up in `tab list` order, in both directions — no drag-and-drop offset
+    arithmetic leaks to the caller."""
+    second = app.cli_json("tab", "new")["tabs"][0]
+    tabs = app.cli_json("tab", "list")["tabs"]
+    fresh_slot = next(t["index"] for t in tabs if t["id"] == fresh_tab["id"])
+
+    # Move the newest tab up into the fresh tab's slot; the pair swaps.
+    moved = app.cli_json("tab", "move", second["id"], str(fresh_slot))["tabs"][0]
+    assert moved["index"] == fresh_slot
+    after = app.cli_json("tab", "list")["tabs"]
+    assert [t["id"] for t in after[fresh_slot - 1 : fresh_slot + 1]] == [second["id"], fresh_tab["id"]]
+
+    # And back down toward the end — the direction that needs the coordinate
+    # conversion server-side.
+    restored = app.cli_json("tab", "move", second["id"], str(fresh_slot + 1))["tabs"][0]
+    assert restored["index"] == fresh_slot + 1
+    after = app.cli_json("tab", "list")["tabs"]
+    assert [t["id"] for t in after[fresh_slot - 1 : fresh_slot + 1]] == [fresh_tab["id"], second["id"]]
+
+    # Out-of-range slots are a typed error, never a silent clamp.
+    refused = app.cli("tab", "move", second["id"], str(len(after) + 1), check=False)
+    assert refused.returncode == 1
+    assert refused.stdout == ""  # safe-fail contract: stdout only on success
+
+
 def test_tab_close_follows_the_running_program_signal(app):
     """`tab close` without --force succeeds iff libghostty reports no running
     program (needsConfirmQuit) — the exact signal the close guard reads.

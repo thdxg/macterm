@@ -101,6 +101,9 @@ struct ControlArgs: Codable, Equatable {
     /// Destination pane selector for `pane.move` (same tab); nil = the
     /// workspace edge (a root-level move).
     var dest: String?
+    /// Destination slot for `tab.move`: the tab's FINAL 1-based position in
+    /// `tab list` order, not a drag-and-drop insertion offset.
+    var slot: Int?
 
     init(
         project: String? = nil,
@@ -120,7 +123,8 @@ struct ControlArgs: Codable, Equatable {
         ratio: Double? = nil,
         key: String? = nil,
         zone: String? = nil,
-        dest: String? = nil
+        dest: String? = nil,
+        slot: Int? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -140,6 +144,7 @@ struct ControlArgs: Codable, Equatable {
         self.key = key
         self.zone = zone
         self.dest = dest
+        self.slot = slot
     }
 }
 
