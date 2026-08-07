@@ -76,6 +76,14 @@ final class SurfaceScrollView: NSScrollView {
         autohidesScrollers = false
         usesPredominantAxisScrolling = true
         verticalScrollElasticity = .none
+        // Never inset content or the scroller by the window's titlebar
+        // overlap. With Hide Title Bar on (#226) the pane extends into the old
+        // titlebar band, and the automatic adjustment pushed the scroller's
+        // track down so it started below the window top. With the chrome
+        // visible the pane sits below the titlebar and the automatic insets
+        // are zero anyway, so this is a no-op there.
+        automaticallyAdjustsContentInsets = false
+        contentInsets = NSEdgeInsets()
         // The window composites its own translucency (see WindowAppearance);
         // drawing a background here would double-tint.
         drawsBackground = false

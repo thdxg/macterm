@@ -17,6 +17,18 @@ extension NSView {
         }
         return nil
     }
+
+    /// Every descendant whose class name matches `name` — for private views
+    /// that can exist once per scroll view (e.g. `NSScrollPocket`), where
+    /// hiding only the first would leave the rest in place.
+    func forEachDescendant(withClassName name: String, _ body: (NSView) -> Void) {
+        for subview in subviews {
+            if String(describing: type(of: subview)) == name {
+                body(subview)
+            }
+            subview.forEachDescendant(withClassName: name, body)
+        }
+    }
 }
 
 // MARK: - Color helpers (for the inactive-glass tint)
@@ -366,6 +378,15 @@ enum WindowAppearance {
         let hidden = Preferences.shared.hideTitleBar
         titlebarContainer(in: window)?.isHidden = hidden
         window.isMovable = !hidden
+        // The macOS 26+ scroll-edge-effect pocket: AppKit hosts it in the
+        // titlebar area (moved there on macOS 27, ghostty#13390) where it sits
+        // over the terminal's top rows and blocks clicks/selection once the
+        // chrome is gone. Hiding NSTitlebarBackgroundView doesn't cover it, so
+        // hide every pocket directly — one can exist per scroll view. On
+        // systems without the class the walk finds nothing.
+        window.contentView?.superview?.forEachDescendant(withClassName: "NSScrollPocket") {
+            $0.isHidden = hidden
+        }
     }
 
     private static func syncTitlebar(window: NSWindow, isTransparent: Bool) {

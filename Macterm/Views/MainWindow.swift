@@ -30,6 +30,10 @@ struct MainWindow: View {
         let chromeHidden = preferences.hideTitleBar
         return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarContent()
+                // Breathing room for the first row once the chrome is gone.
+                // Innermost, before `ignoresSafeArea`, so the padding insets
+                // the rows while the sidebar surface still reaches the edge.
+                .safeAreaPadding(.top, chromeHidden ? 8 : 0)
                 .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 280)
                 // Hiding the toolbar removes the chrome but SwiftUI keeps its
                 // titlebar safe-area inset reserved; ignoring it is what lets
