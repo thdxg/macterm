@@ -345,16 +345,27 @@ enum WindowAppearance {
         return window.value(forKey: "_cornerRadius") as? CGFloat
     }
 
-    /// Hide or restore the titlebar container for the Hide Title Bar option
-    /// (#226). Hiding the window toolbar collapses the visible chrome, but the
-    /// collapsed titlebar still tracks its old rect and drags the window from
-    /// an invisible strip over the terminal's top rows. Hiding the container
-    /// itself — as Ghostty's hidden titlebar style does — lets those events
-    /// reach the content. Runs on every `sync` so AppKit rebuilding the
-    /// titlebar subviews (becomeMain, fullscreen transitions) re-asserts it;
-    /// `WindowStyler.updateNSView` calls it directly for live setting flips.
+    /// Apply the Hide Title Bar option (#226) to the window: hide the titlebar
+    /// container, and disable click-dragging while the option is on.
+    ///
+    /// Hiding the window toolbar collapses the visible chrome, but two drag
+    /// paths survive it. The collapsed titlebar container still tracks its old
+    /// rect and swallows events over an invisible strip — hiding the container
+    /// (as Ghostty's hidden titlebar style does) lets those reach the content.
+    /// Even then, a `.fullSizeContentView` window keeps a titlebar-height drag
+    /// band (the area above `contentLayoutRect`) that moves the window from any
+    /// hit view answering `mouseDownCanMoveWindow` — Ghostty removes it by
+    /// overriding `contentLayoutRect` on its NSWindow subclass, but SwiftUI
+    /// owns our window class, so the public equivalent is `isMovable = false`:
+    /// no user drags anywhere while hidden (programmatic moves, including
+    /// window managers driving Accessibility, still work). Runs on every
+    /// `sync` so AppKit rebuilding the titlebar subviews (becomeMain,
+    /// fullscreen transitions) re-asserts it; `WindowStyler.updateNSView`
+    /// calls it directly for live setting flips.
     static func syncTitleBarHidden(window: NSWindow) {
-        titlebarContainer(in: window)?.isHidden = Preferences.shared.hideTitleBar
+        let hidden = Preferences.shared.hideTitleBar
+        titlebarContainer(in: window)?.isHidden = hidden
+        window.isMovable = !hidden
     }
 
     private static func syncTitlebar(window: NSWindow, isTransparent: Bool) {

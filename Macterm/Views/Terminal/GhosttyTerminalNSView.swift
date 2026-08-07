@@ -3,6 +3,18 @@ import GhosttyKit
 import QuartzCore
 
 final class GhosttyTerminalNSView: NSView {
+    /// In a `.fullSizeContentView` window AppKit keeps a titlebar-height drag
+    /// band at the top (the area above `contentLayoutRect`), and a click there
+    /// moves the window whenever the hit-tested view answers true — NSView's
+    /// default for non-opaque views. With Hide Title Bar on (#226) the
+    /// terminal's top rows sit inside that band, so the default turned clicks
+    /// there into window drags and the surface never saw them. Ghostty solves
+    /// this by overriding `contentLayoutRect` on its NSWindow subclass; we
+    /// don't own SwiftUI's window class, so we answer per-view instead — same
+    /// idea as Ghostty's `NonDraggableHostingView`. Unconditional: a click on
+    /// the terminal should always be terminal input, never a window drag.
+    override var mouseDownCanMoveWindow: Bool { false }
+
     /// Weak registry of every live instance so global operations (e.g. config
     /// reload) can iterate without a central cache.
     @MainActor private static let liveViews = NSHashTable<GhosttyTerminalNSView>.weakObjects()

@@ -590,7 +590,7 @@ private struct AppearanceSettings: View {
                     .onChange(of: hideTitleBar) { _, v in
                         Preferences.shared.hideTitleBar = v
                     }
-                Text("Removes the toolbar and window buttons so the terminal reaches the top edge; switch tabs via the sidebar or ⌘1–9.")
+                Text("Removes the toolbar, window buttons, and drag area; switch tabs via the sidebar or ⌘1–9.")
                     .settingsCaption()
 
                 HStack {
