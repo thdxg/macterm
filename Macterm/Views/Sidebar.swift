@@ -403,28 +403,21 @@ struct SidebarContent: View {
 
 // MARK: - Tab merge drop target (#227)
 
-/// What the merge drop hovering over a tab row would do, driving the row's
-/// highlight: merge the dragged tab into this row's tab (whole-row
-/// highlight), or nothing because the drag IS this row's tab.
-private enum TabMergeState: Equatable {
-    case idle
-    /// The drag is this row's own tab — a self-merge is meaningless, so the
-    /// row shows nothing and the drop is cancelled.
-    case rejected
-    case whole
-}
-
 /// A sidebar tab row that also accepts another tab dropped onto it, merging
-/// the two into a split (#227). Wraps `SidebarTabRow` so each row owns its
-/// hover state; dropping between rows still reorders via the ForEach-level
-/// `dropDestination` in `projectSection`.
+/// the two into a split (#227): the merged tab always lands on the right
+/// (`.second`). The target is a row-level `dropDestination` — the native
+/// List drop-on-row path, which owns the session and cancels a refused drop
+/// with the system animation. Dropping between rows still reorders via the
+/// ForEach-level `dropDestination` in `projectSection`, and a row refuses
+/// its own tab (the action returns false and the drag animates back).
 ///
-/// Every destination gets the same hover treatment — a plain whole-row
-/// highlight — and the merged tab always lands on the right (`.second`).
-/// Single-pane rows used to preview the split structurally, sliding the
-/// row's content aside with the hovered half picking the landing side, but
-/// that made one-pane and multi-pane destinations feel like two different
-/// interactions for what is the same drop.
+/// The hover preview is structural and identical for every destination —
+/// single- or multi-pane — sliding the row's content aside to show the slot
+/// the merged tab will take (see `rowContent`). The original one-pane-only
+/// variant let the hovered half pick the landing side, but that needed a
+/// raw drop delegate for the cursor location and made one-pane and
+/// multi-pane destinations feel like two different interactions for what
+/// is the same drop.
 private struct MergeableTabRow: View {
     let tab: TerminalTab
     let index: Int
@@ -433,105 +426,63 @@ private struct MergeableTabRow: View {
     @Environment(AppState.self)
     private var appState
     @State
-    private var mergeState: TabMergeState = .idle
+    private var isDropTargeted = false
 
     var body: some View {
-        SidebarTabRow(tab: tab, index: index, onRename: onRename)
+        rowContent
             // Stretch to the full row and make every point hit-testable:
             // without this, the drag grab area and the merge drop target hug
             // the label's intrinsic width instead of covering the whole row.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .background {
-                // Same shape as SplitLeafView's drop target: a clear layer
-                // covering the whole row.
-                Color.clear.onDrop(of: [.mactermTab], delegate: TabMergeDropDelegate(
-                    mergeState: $mergeState,
-                    destinationTabID: tab.id,
-                    onMerge: { movable in
-                        appState.mergeTab(
-                            movable.tabID,
-                            from: movable.sourceProjectID,
-                            intoTab: tab.id,
-                            inProject: project.id,
-                            side: .second
-                        )
-                    }
-                ))
-            }
-            .overlay {
-                if mergeState == .whole {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(MactermTheme.accent.opacity(0.3))
-                        .allowsHitTesting(false)
+            .dropDestination(for: MovableTab.self) { items, _ in
+                var merged = false
+                for movable in items where movable.tabID != tab.id {
+                    appState.mergeTab(
+                        movable.tabID,
+                        from: movable.sourceProjectID,
+                        intoTab: tab.id,
+                        inProject: project.id,
+                        side: .second
+                    )
+                    merged = true
                 }
+                return merged
+            } isTargeted: { targeted in
+                // No preview for the row's own tab — that drop is refused.
+                if targeted, let movable = MovableTab.fromDragPasteboard(), movable.tabID == tab.id {
+                    return
+                }
+                isDropTargeted = targeted
             }
-            .animation(.easeInOut(duration: 0.15), value: mergeState)
-    }
-}
-
-/// Per-row drop delegate for the tab-onto-tab merge. A `DropDelegate` (not
-/// `dropDestination`) so it can read the drag pasteboard synchronously and
-/// reject the row's own tab — `.rejected` cancels the drop, so the drag
-/// image animates back instead of pretending a self-merge would land.
-private struct TabMergeDropDelegate: DropDelegate {
-    @Binding var mergeState: TabMergeState
-    let destinationTabID: UUID
-    let onMerge: @MainActor (MovableTab) -> Void
-
-    func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.mactermTab])
+            .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
     }
 
-    func dropEntered(info _: DropInfo) {
-        // A row can't merge with itself. The payload is usually readable
-        // synchronously off the drag pasteboard (in-app drag); when it isn't,
-        // the highlight shows and `AppState.mergeTab`'s guard makes the drop
-        // a no-op.
-        if let movable = MovableTab.fromDragPasteboard(), movable.tabID == destinationTabID {
-            mergeState = .rejected
-            return
-        }
-        mergeState = .whole
-    }
-
-    func dropUpdated(info _: DropInfo) -> DropProposal? {
-        guard mergeState != .rejected else { return DropProposal(operation: .cancel) }
-        // dropUpdated can fire after performDrop; without this guard it would
-        // re-show the merge highlight on a completed drop (same race the pane
-        // drop delegate guards against).
-        guard mergeState != .idle else { return DropProposal(operation: .forbidden) }
-        return DropProposal(operation: .move)
-    }
-
-    func dropExited(info _: DropInfo) {
-        mergeState = .idle
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        let rejected = mergeState == .rejected
-        mergeState = .idle
-        guard !rejected else { return false }
-
-        if let movable = MovableTab.fromDragPasteboard() {
-            guard movable.tabID != destinationTabID else { return false }
-            MainActor.assumeIsolated { onMerge(movable) }
-            return true
-        }
-        // Fallback when the Transferable payload wasn't rendered onto the
-        // pasteboard yet: the item provider's async loader.
-        guard let provider = info.itemProviders(for: [.mactermTab]).first else { return false }
-        // Locally-named copy (not a `let onMerge = onMerge` shadow, which
-        // hoists over the whole scope and breaks the capture above) so the
-        // @Sendable loader closure doesn't capture non-Sendable self.
-        let merge = onMerge
-        provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermTab.identifier) { data, _ in
-            guard let data, let movable = try? JSONDecoder().decode(MovableTab.self, from: data) else { return }
-            Task { @MainActor in
-                merge(movable)
+    /// The structural hover preview: while a tab drag hovers, the row's
+    /// content slides into the left half and a drop slot marks the right
+    /// half — the side the merged tab actually lands on (`.second`). macOS
+    /// draws nothing of its own for a row-level drop target, so this is the
+    /// `isTargeted` feedback, previewing the outcome instead of merely
+    /// highlighting the row.
+    @ViewBuilder
+    private var rowContent: some View {
+        if isDropTargeted {
+            HStack(spacing: 4) {
+                SidebarTabRow(tab: tab, index: index, onRename: onRename)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                dropSlot
             }
+        } else {
+            SidebarTabRow(tab: tab, index: index, onRename: onRename)
         }
-        return true
+    }
+
+    /// The empty container the dragged tab will land in.
+    private var dropSlot: some View {
+        RoundedRectangle(cornerRadius: 5)
+            .fill(MactermTheme.accent.opacity(0.2))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(MactermTheme.accent.opacity(0.5)))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
