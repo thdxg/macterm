@@ -580,19 +580,14 @@ private struct AppearanceSettings: View {
     private var liquidGlassStyle: WindowGlassStyle = Preferences.shared.windowGlassStyle
     @State
     private var paneDimOpacity: Double = Preferences.shared.paneDimOpacity
+    /// Inverted view of `Preferences.hideTitleBar`: the control reads as
+    /// "Show toolbar" (on by default), the preference stores the hide.
     @State
-    private var hideTitleBar: Bool = Preferences.shared.hideTitleBar
+    private var showToolbar: Bool = !Preferences.shared.hideTitleBar
 
     var body: some View {
         Form {
             Section("Window") {
-                Toggle("Hide title bar", isOn: $hideTitleBar)
-                    .onChange(of: hideTitleBar) { _, v in
-                        Preferences.shared.hideTitleBar = v
-                    }
-                Text("Removes the toolbar, window buttons, and drag area; switch tabs via the sidebar or ⌘1–9.")
-                    .settingsCaption()
-
                 HStack {
                     Text("Background opacity")
                         .frame(width: sliderLabelWidth, alignment: .leading)
@@ -688,27 +683,37 @@ private struct AppearanceSettings: View {
             }
 
             Section("Toolbar") {
-                Picker("Tab switcher", selection: $tabSwitcherVisibility) {
-                    ForEach(TabSwitcherVisibility.allCases) { option in
-                        Text(option.displayName).tag(option.rawValue)
+                Toggle("Show toolbar", isOn: $showToolbar)
+                    .onChange(of: showToolbar) { _, v in
+                        Preferences.shared.hideTitleBar = !v
                     }
-                }
-                .onChange(of: tabSwitcherVisibility) { _, v in
-                    Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
-                }
-                Text("Numbered control in the title bar for switching tabs by index.")
+                Text("Hiding it removes the title bar, window buttons, and drag area; switch tabs via the sidebar or ⌘1–9.")
                     .settingsCaption()
 
-                Picker("Tab switcher position", selection: $tabSwitcherPosition) {
-                    ForEach(TabSwitcherPosition.allCases) { option in
-                        Text(option.displayName).tag(option.rawValue)
+                Group {
+                    Picker("Tab switcher", selection: $tabSwitcherVisibility) {
+                        ForEach(TabSwitcherVisibility.allCases) { option in
+                            Text(option.displayName).tag(option.rawValue)
+                        }
                     }
+                    .onChange(of: tabSwitcherVisibility) { _, v in
+                        Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
+                    }
+                    Text("Numbered control in the title bar for switching tabs by index.")
+                        .settingsCaption()
+
+                    Picker("Tab switcher position", selection: $tabSwitcherPosition) {
+                        ForEach(TabSwitcherPosition.allCases) { option in
+                            Text(option.displayName).tag(option.rawValue)
+                        }
+                    }
+                    .onChange(of: tabSwitcherPosition) { _, v in
+                        Preferences.shared.tabSwitcherPosition = TabSwitcherPosition(rawValue: v) ?? .trailing
+                    }
+                    Text("Left places the switcher before the window title, next to the sidebar.")
+                        .settingsCaption()
                 }
-                .onChange(of: tabSwitcherPosition) { _, v in
-                    Preferences.shared.tabSwitcherPosition = TabSwitcherPosition(rawValue: v) ?? .trailing
-                }
-                Text("Left places the switcher before the window title, next to the sidebar.")
-                    .settingsCaption()
+                .disabled(!showToolbar)
             }
         }
         .formStyle(.grouped)
