@@ -699,12 +699,12 @@ private struct SidebarTabRow: View {
         showAgentIcons ? tab.agentIcon : nil
     }
 
-    /// One tab-like container per pane, sharing the row in equal widths —
-    /// the Arc-style split-tab look from #227. Each container carries its own
-    /// icon (the pane's live agent logo when it has one, else the user's tab
-    /// icon) and the pane's title.
+    /// One segment per pane, sharing the row in equal widths — the Arc-style
+    /// split-tab look from #227, drawn without container chrome (no fill, no
+    /// border, no inset) so a segment is just its icon (the pane's live agent
+    /// logo when it has one, else the user's tab icon) and the pane's title.
     private var splitContainers: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 10) {
             ForEach(tab.splitRoot.allPanes()) { pane in
                 HStack(spacing: 4) {
                     let agent = showAgentIcons ? pane.agentIcon : nil
@@ -715,10 +715,7 @@ private struct SidebarTabRow: View {
                     Text(pane.sidebarSegmentTitle)
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 5).fill(MactermTheme.surface))
             }
         }
     }
@@ -727,7 +724,7 @@ private struct SidebarTabRow: View {
         Group {
             if !isRenaming, tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
                 // #227: a split tab reads as multiple tabs sharing one row —
-                // each pane gets its own tab-like container (icon + title)
+                // each pane gets its own chromeless segment (icon + title)
                 // instead of one tab concatenating the titles with a pipe. A
                 // custom title still wins: the user named the whole tab. Four
                 // or more panes won't fit legibly, so that row collapses back
