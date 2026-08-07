@@ -378,6 +378,22 @@ enum WindowAppearance {
         let hidden = Preferences.shared.hideTitleBar
         titlebarContainer(in: window)?.isHidden = hidden
         window.isMovable = !hidden
+        // SwiftUI's `.toolbar(.hidden, for: .windowToolbar)` collapses the
+        // windowed titlebar but keeps the NSToolbar object on the window, and
+        // in native fullscreen AppKit creates a 52pt NSToolbarFullScreenWindow
+        // overlay for any window that owns a toolbar — an empty bar pinned to
+        // the top of the fullscreen space. Toggling the toolbar's own
+        // visibility removes the overlay; symmetric so leaving the mode (or
+        // flipping the setting mid-fullscreen) restores it.
+        window.toolbar?.isVisible = !hidden
+        // Even toolbar-less, the overlay hosts a bare titlebar that the system
+        // slides down when the pointer hits the top of the fullscreen space,
+        // and its gray background is system-painted — it ignores
+        // `titlebarAppearsTransparent`, and AppKit rebuilds its subviews on
+        // reveal, undoing any view-level hide. The window's own alpha survives
+        // both, so the reveal animates an invisible window; the menu bar is a
+        // separate system window and still slides in for menu access.
+        fullscreenToolbarOverlay(for: window)?.alphaValue = hidden ? 0 : 1
         // The macOS 26+ scroll-edge-effect pocket: AppKit hosts it in the
         // titlebar area (moved there on macOS 27, ghostty#13390) where it sits
         // over the terminal's top rows and blocks clicks/selection once the
@@ -422,12 +438,16 @@ enum WindowAppearance {
         guard window.styleMask.contains(.fullScreen) else {
             return findTitlebarContainer(from: window.contentView)
         }
-        for other in NSApp.windows
-            where other.className == "NSToolbarFullScreenWindow" && other.parent == window
-        {
-            return findTitlebarContainer(from: other.contentView)
+        return findTitlebarContainer(from: fullscreenToolbarOverlay(for: window)?.contentView)
+    }
+
+    /// The NSToolbarFullScreenWindow AppKit parents to `window` in native
+    /// fullscreen; nil outside fullscreen or before the overlay exists.
+    private static func fullscreenToolbarOverlay(for window: NSWindow) -> NSWindow? {
+        guard window.styleMask.contains(.fullScreen) else { return nil }
+        return NSApp.windows.first {
+            $0.className == "NSToolbarFullScreenWindow" && $0.parent == window
         }
-        return nil
     }
 
     /// Root-walk then search: the container is an ancestor sibling of the
