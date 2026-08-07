@@ -435,6 +435,11 @@ private struct MergeableTabRow: View {
     private var appState
     @State
     private var isDropTargeted = false
+    @State
+    private var rowWidth: CGFloat = 0
+    /// Pane count of the tab being dragged over this row (see `isTargeted`).
+    @State
+    private var incomingShares = 1
 
     var body: some View {
         rowContent
@@ -443,6 +448,9 @@ private struct MergeableTabRow: View {
             // without this, the drag grab area and the merge drop target hug
             // the label's intrinsic width instead of covering the whole row.
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Measured outside the hover branch so the drop slot has its
+            // width the moment a drag enters, not a frame later.
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidth = $0 }
             .contentShape(Rectangle())
             .dropDestination(for: MovableTab.self) { items, _ in
                 var merged = false
@@ -458,9 +466,17 @@ private struct MergeableTabRow: View {
                 }
                 return merged
             } isTargeted: { targeted in
-                // No preview for the row's own tab — that drop is refused.
-                if targeted, let movable = MovableTab.fromDragPasteboard(), movable.tabID == tab.id {
-                    return
+                if targeted, let movable = MovableTab.fromDragPasteboard() {
+                    // No preview for the row's own tab — that drop is refused.
+                    if movable.tabID == tab.id { return }
+                    // The dragged tab brings its whole split tree, so its
+                    // panes each claim a share of the previewed row.
+                    incomingShares = max(
+                        1,
+                        appState.workspaces[movable.sourceProjectID]?.tabs
+                            .first(where: { $0.id == movable.tabID })?
+                            .splitRoot.allPanes().count ?? 1
+                    )
                 }
                 isDropTargeted = targeted
             }
@@ -468,22 +484,36 @@ private struct MergeableTabRow: View {
     }
 
     /// The structural hover preview: while a tab drag hovers, the row's
-    /// content slides into the left half and a drop slot marks the right
-    /// half — the side the merged tab actually lands on (`.second`). macOS
-    /// draws nothing of its own for a row-level drop target, so this is the
+    /// content slides aside and a drop slot marks the trailing end — the
+    /// side the merged tab actually lands on (`.second`). macOS draws
+    /// nothing of its own for a row-level drop target, so this is the
     /// `isTargeted` feedback, previewing the outcome instead of merely
     /// highlighting the row.
     @ViewBuilder
     private var rowContent: some View {
         if isDropTargeted {
-            HStack(spacing: 4) {
+            // Same spacing and hairline the title segments use, so the slot
+            // reads as the row's next segment and the destination's own
+            // content compresses to exactly its post-drop share.
+            HStack(spacing: 10) {
                 SidebarTabRow(tab: tab, index: index, onRename: onRename)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                Divider()
                 dropSlot
+                    .frame(width: incomingSlotWidth)
             }
         } else {
             SidebarTabRow(tab: tab, index: index, onRename: onRename)
         }
+    }
+
+    /// Both tabs hold one segment per pane, so the slot takes the incoming
+    /// panes' share of the combined row — a 1-pane tab over a 3-pane
+    /// destination claims a quarter, a 2-pane tab over a 2-pane destination
+    /// claims half — and the preview matches the row after the drop.
+    private var incomingSlotWidth: CGFloat {
+        let shares = CGFloat(tab.splitRoot.allPanes().count + incomingShares)
+        return max(0, (rowWidth - rowTrailingInset) * CGFloat(incomingShares) / shares)
     }
 
     /// The empty container the dragged tab will land in.
@@ -491,7 +521,7 @@ private struct MergeableTabRow: View {
         RoundedRectangle(cornerRadius: 5)
             .fill(MactermTheme.accent.opacity(0.2))
             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(MactermTheme.accent.opacity(0.5)))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxHeight: .infinity)
     }
 }
 
