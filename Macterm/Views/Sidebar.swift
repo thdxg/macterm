@@ -404,15 +404,13 @@ struct SidebarContent: View {
 // MARK: - Tab merge drop target (#227)
 
 /// What the merge drop hovering over a tab row would do, driving the row's
-/// highlight: land the dragged tab on one side of a fresh split (single-pane
-/// destination — the hovered half of the row picks the side), or append it to
-/// an already-split destination (whole-row highlight).
+/// highlight: merge the dragged tab into this row's tab (whole-row
+/// highlight), or nothing because the drag IS this row's tab.
 private enum TabMergeState: Equatable {
     case idle
     /// The drag is this row's own tab — a self-merge is meaningless, so the
     /// row shows nothing and the drop is cancelled.
     case rejected
-    case side(SplitPosition)
     case whole
 }
 
@@ -420,6 +418,13 @@ private enum TabMergeState: Equatable {
 /// the two into a split (#227). Wraps `SidebarTabRow` so each row owns its
 /// hover state; dropping between rows still reorders via the ForEach-level
 /// `dropDestination` in `projectSection`.
+///
+/// Every destination gets the same hover treatment — a plain whole-row
+/// highlight — and the merged tab always lands on the right (`.second`).
+/// Single-pane rows used to preview the split structurally, sliding the
+/// row's content aside with the hovered half picking the landing side, but
+/// that made one-pane and multi-pane destinations feel like two different
+/// interactions for what is the same drop.
 private struct MergeableTabRow: View {
     let tab: TerminalTab
     let index: Int
@@ -431,38 +436,30 @@ private struct MergeableTabRow: View {
     private var mergeState: TabMergeState = .idle
 
     var body: some View {
-        rowContent
+        SidebarTabRow(tab: tab, index: index, onRename: onRename)
             // Stretch to the full row and make every point hit-testable:
             // without this, the drag grab area and the merge drop target hug
             // the label's intrinsic width instead of covering the whole row.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .background {
-                // Same shape as SplitLeafView's drop target: `Color.clear` in
-                // a GeometryReader so the delegate knows the row width (the
-                // left/right half of a single-pane row picks the split side).
-                GeometryReader { geo in
-                    Color.clear.onDrop(of: [.mactermTab], delegate: TabMergeDropDelegate(
-                        mergeState: $mergeState,
-                        rowWidth: geo.size.width,
-                        destinationTabID: tab.id,
-                        destinationIsSplit: tab.splitRoot.allPanes().count > 1,
-                        onMerge: { movable, side in
-                            appState.mergeTab(
-                                movable.tabID,
-                                from: movable.sourceProjectID,
-                                intoTab: tab.id,
-                                inProject: project.id,
-                                side: side
-                            )
-                        }
-                    ))
-                }
+                // Same shape as SplitLeafView's drop target: a clear layer
+                // covering the whole row.
+                Color.clear.onDrop(of: [.mactermTab], delegate: TabMergeDropDelegate(
+                    mergeState: $mergeState,
+                    destinationTabID: tab.id,
+                    onMerge: { movable in
+                        appState.mergeTab(
+                            movable.tabID,
+                            from: movable.sourceProjectID,
+                            intoTab: tab.id,
+                            inProject: project.id,
+                            side: .second
+                        )
+                    }
+                ))
             }
             .overlay {
-                // The append case (already-split destination) keeps a plain
-                // whole-row highlight; the first split previews structurally
-                // via `rowContent` instead.
                 if mergeState == .whole {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(MactermTheme.accent.opacity(0.3))
@@ -471,53 +468,22 @@ private struct MergeableTabRow: View {
             }
             .animation(.easeInOut(duration: 0.15), value: mergeState)
     }
-
-    /// The issue's real-time preview: while a drag hovers a single-pane row,
-    /// the splitee's content slides into one half and a drop slot marks the
-    /// half the splitter tab will take, flipping live as the cursor crosses
-    /// the row's midpoint.
-    @ViewBuilder
-    private var rowContent: some View {
-        switch mergeState {
-        case let .side(position):
-            HStack(spacing: 4) {
-                if position == .first { dropSlot }
-                SidebarTabRow(tab: tab, index: index, onRename: onRename)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if position == .second { dropSlot }
-            }
-        case .idle,
-             .rejected,
-             .whole:
-            SidebarTabRow(tab: tab, index: index, onRename: onRename)
-        }
-    }
-
-    /// The empty container the dragged tab will land in.
-    private var dropSlot: some View {
-        RoundedRectangle(cornerRadius: 5)
-            .fill(MactermTheme.accent.opacity(0.2))
-            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(MactermTheme.accent.opacity(0.5)))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
 }
 
 /// Per-row drop delegate for the tab-onto-tab merge. A `DropDelegate` (not
-/// `dropDestination`) because the highlight follows the hover location: on a
-/// single-pane destination the hovered half of the row decides which side of
-/// the split the dragged tab lands on.
+/// `dropDestination`) so it can read the drag pasteboard synchronously and
+/// reject the row's own tab — `.rejected` cancels the drop, so the drag
+/// image animates back instead of pretending a self-merge would land.
 private struct TabMergeDropDelegate: DropDelegate {
     @Binding var mergeState: TabMergeState
-    let rowWidth: CGFloat
     let destinationTabID: UUID
-    let destinationIsSplit: Bool
-    let onMerge: @MainActor (MovableTab, SplitPosition) -> Void
+    let onMerge: @MainActor (MovableTab) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.mactermTab])
     }
 
-    func dropEntered(info: DropInfo) {
+    func dropEntered(info _: DropInfo) {
         // A row can't merge with itself. The payload is usually readable
         // synchronously off the drag pasteboard (in-app drag); when it isn't,
         // the highlight shows and `AppState.mergeTab`'s guard makes the drop
@@ -526,16 +492,15 @@ private struct TabMergeDropDelegate: DropDelegate {
             mergeState = .rejected
             return
         }
-        mergeState = state(at: info.location)
+        mergeState = .whole
     }
 
-    func dropUpdated(info: DropInfo) -> DropProposal? {
+    func dropUpdated(info _: DropInfo) -> DropProposal? {
         guard mergeState != .rejected else { return DropProposal(operation: .cancel) }
         // dropUpdated can fire after performDrop; without this guard it would
         // re-show the merge highlight on a completed drop (same race the pane
         // drop delegate guards against).
         guard mergeState != .idle else { return DropProposal(operation: .forbidden) }
-        mergeState = state(at: info.location)
         return DropProposal(operation: .move)
     }
 
@@ -544,14 +509,13 @@ private struct TabMergeDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        let side = splitSide(at: info.location)
         let rejected = mergeState == .rejected
         mergeState = .idle
         guard !rejected else { return false }
 
         if let movable = MovableTab.fromDragPasteboard() {
             guard movable.tabID != destinationTabID else { return false }
-            MainActor.assumeIsolated { onMerge(movable, side) }
+            MainActor.assumeIsolated { onMerge(movable) }
             return true
         }
         // Fallback when the Transferable payload wasn't rendered onto the
@@ -564,21 +528,10 @@ private struct TabMergeDropDelegate: DropDelegate {
         provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermTab.identifier) { data, _ in
             guard let data, let movable = try? JSONDecoder().decode(MovableTab.self, from: data) else { return }
             Task { @MainActor in
-                merge(movable, side)
+                merge(movable)
             }
         }
         return true
-    }
-
-    private func state(at location: CGPoint) -> TabMergeState {
-        destinationIsSplit ? .whole : .side(splitSide(at: location))
-    }
-
-    /// The half of the row the cursor is in — only meaningful for the first
-    /// split (an already-split destination always appends on the right).
-    private func splitSide(at location: CGPoint) -> SplitPosition {
-        guard !destinationIsSplit, rowWidth > 0 else { return .second }
-        return location.x < rowWidth / 2 ? .first : .second
     }
 }
 
