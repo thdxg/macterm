@@ -321,6 +321,8 @@ final class MainAppResponder: KeyResponder {
             .applyLayout,
             .saveLayout,
             .reloadGhosttyConfig,
+            .separateAllPanes,
+            .separateCurrentPane,
         ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })

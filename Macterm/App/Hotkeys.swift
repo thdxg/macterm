@@ -41,6 +41,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case copySessionID = "copy_session_id"
     case applyLayout = "apply_layout"
     case saveLayout = "save_layout"
+    case separateAllPanes = "separate_all_panes"
+    case separateCurrentPane = "separate_current_pane"
 
     var id: String { rawValue }
 
@@ -92,6 +94,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // stray keystroke on a stock binding would be destructive.
         case .applyLayout: "none"
         case .saveLayout: "none"
+        // Unbound by default for the same reason: both restructure the live
+        // pane tree (shells survive, but the layout doesn't).
+        case .separateAllPanes: "none"
+        case .separateCurrentPane: "none"
         }
     }
 }

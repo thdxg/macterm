@@ -14,10 +14,12 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case nextTab
     case previousTab
     case recentTab
+    case separateAllPanes
     // Panes
     case splitRight
     case splitDown
     case splitAuto
+    case separateCurrentPane
     case zoomPane
     case focusLeft
     case focusRight
@@ -59,6 +61,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextTab: "Next Tab"
         case .previousTab: "Previous Tab"
         case .recentTab: "Recent Tab"
+        case .separateAllPanes: "Separate All Panes"
+        case .separateCurrentPane: "Separate Current Pane"
         case .splitRight: "Split Right"
         case .splitDown: "Split Down"
         case .splitAuto: "Split Automatically"
@@ -100,10 +104,12 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .renameTab,
              .nextTab,
              .previousTab,
-             .recentTab: .tabs
+             .recentTab,
+             .separateAllPanes: .tabs
         case .splitRight,
              .splitDown,
              .splitAuto,
+             .separateCurrentPane,
              .zoomPane,
              .focusLeft,
              .focusRight,
@@ -144,9 +150,11 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextTab: .nextGlobalTab
         case .previousTab: .previousGlobalTab
         case .recentTab: .recentTab
+        case .separateAllPanes: .separateAllPanes
         case .splitRight: .splitRight
         case .splitDown: .splitDown
         case .splitAuto: .splitAuto
+        case .separateCurrentPane: .separateCurrentPane
         case .zoomPane: .zoomPane
         case .focusLeft: .focusPaneLeft
         case .focusRight: .focusPaneRight

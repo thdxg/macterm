@@ -19,6 +19,31 @@ extension NSPasteboard.PasteboardType {
     static let mactermPaneID = NSPasteboard.PasteboardType(UTType.mactermPaneID.identifier)
 }
 
+/// The grab-handle drag as seen by its drop targets: the pane UUID
+/// `PaneDragSource` writes as 16 raw bytes under `.mactermPaneID`.
+/// Deliberately NOT `Transferable`: the drag is an AppKit `NSDraggingSession`
+/// whose custom-type pasteboard data never reaches SwiftUI's `dropDestination`
+/// import path, so the workspace leaves read the drag pasteboard directly
+/// through a raw `DropDelegate`. (This drag also cannot target the sidebar
+/// at all — no public drop mechanism in that column ever receives the
+/// session, which is why "separate a pane into its own tab" ships as the
+/// Separate Current Pane command rather than a sidebar drop.)
+struct MovablePane {
+    let paneID: UUID
+
+    /// Decode the drag's payload synchronously off the drag pasteboard. The
+    /// pane drag never leaves the app and its bytes are written eagerly at
+    /// mouseDragged, so unlike `MovableTab` there is no async fallback to
+    /// need — nil simply means "not a pane drag".
+    static func fromDragPasteboard() -> MovablePane? {
+        guard let data = NSPasteboard(name: .drag).pasteboardItems?
+            .compactMap({ $0.data(forType: .mactermPaneID) })
+            .first, data.count == 16
+        else { return nil }
+        return MovablePane(paneID: data.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) })
+    }
+}
+
 /// Propagates the ID of the pane currently being dragged (nil when idle) from
 /// the grab handle up to its own leaf, so the source pane can disable its drop
 /// target — a drop on itself is meaningless, and an invalid drop should
@@ -382,13 +407,9 @@ struct LeafDropDelegate: DropDelegate {
         // A pane drag first: its payload is an eagerly-written UUID, readable
         // synchronously off the drag pasteboard (this drag never leaves the
         // app — sourceOperationMask is .move only within the application).
-        if let data = NSPasteboard(name: .drag).pasteboardItems?
-            .compactMap({ $0.data(forType: .mactermPaneID) })
-            .first, data.count == 16
-        {
-            let sourceID = data.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) }
+        if let movable = MovablePane.fromDragPasteboard() {
             let move = context.onMovePane
-            MainActor.assumeIsolated { move(sourceID, target) }
+            MainActor.assumeIsolated { move(movable.paneID, target) }
             return true
         }
 

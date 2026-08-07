@@ -50,6 +50,29 @@ extension AppCommand {
                 // responder. Applies to every caller (palette, menu, hotkey).
                 DispatchQueue.main.async { ctx.appState.renamingTabID = tabID }
             }
+        case .separateAllPanes:
+            // The palette/keybind form of the tab context menu's "Separate
+            // Panes": every pane of the active tab after the first opens in
+            // its own tab, shells intact. nil (hidden/fall-through) on a
+            // single-pane tab — there is nothing to separate.
+            guard let projectID,
+                  let tab = ctx.appState.workspaces[projectID]?.activeTab,
+                  tab.splitRoot.allPanes().count > 1
+            else { return nil }
+            return { ctx.appState.separateTabPanes(tab.id, projectID: projectID) }
+        case .separateCurrentPane:
+            // Split just the focused pane out of the active tab into its own
+            // tab, landing right after the source tab (mirroring where
+            // "Separate All Panes" puts them). Same single-pane guard.
+            guard let projectID, let current,
+                  let ws = ctx.appState.workspaces[projectID],
+                  let tab = ws.activeTab,
+                  tab.splitRoot.allPanes().count > 1,
+                  let paneID = tab.focusedPaneID
+            else { return nil }
+            let destPath = current.path
+            let index = ws.tabs.firstIndex(where: { $0.id == tab.id }).map { $0 + 1 }
+            return { ctx.appState.separatePane(paneID, toProject: projectID, destPath: destPath, at: index) }
         case .splitRight:
             guard let projectID else { return nil }
             return { ctx.appState.splitPane(direction: .horizontal, projectID: projectID) }

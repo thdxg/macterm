@@ -1014,6 +1014,60 @@ final class AppState {
         saveWorkspaces()
     }
 
+    /// Split a single pane out of its tab into its own fresh tab — the
+    /// per-pane sibling of `separateTabPanes` ("Separate Current Pane"). The
+    /// `Pane` object is reused as-is, so its surface and running shell
+    /// survive; the source tab keeps its remaining panes. `index` is the
+    /// slot in the destination project's tab list (nil appends). Crossing
+    /// projects rebinds the pane's routing identity, mirroring `moveTab`.
+    /// No-op when the pane isn't in any workspace or is its tab's only pane
+    /// (already its own tab).
+    func separatePane(_ paneID: UUID, toProject destProjectID: UUID, destPath: String, at index: Int? = nil) {
+        guard let (sourceProjectID, sourceTab) = locatePane(paneID),
+              sourceTab.splitRoot.allPanes().count > 1,
+              let pane = sourceTab.splitRoot.findPane(id: paneID)
+        else { return }
+        // Resolve the destination before detaching, so a failure can't leave
+        // the pane belonging to no tab.
+        ensureWorkspace(projectID: destProjectID, path: destPath)
+        guard let dest = workspaces[destProjectID],
+              let remaining = sourceTab.splitRoot.removing(paneID: paneID)
+        else { return }
+        logger.debug(
+            "separatePane: \(paneID, privacy: .public) to=\(destProjectID, privacy: .public) index=\(index ?? -1, privacy: .public)"
+        )
+        // Detach without destroying: the same tree/zoom/focus repair as
+        // `removePane`, minus the surface teardown — the pane lives on.
+        sourceTab.splitRoot = remaining
+        if sourceTab.zoomedPaneID == paneID { sourceTab.zoomedPaneID = nil }
+        sourceTab.paneFocusHistory.remove(paneID)
+        if sourceTab.focusedPaneID == paneID {
+            sourceTab.focusedPaneID = sourceTab.nextFocusAfterClose()
+        }
+        if Preferences.shared.autoTilingEnabled { sourceTab.splitRoot.rebalanced() }
+
+        if sourceProjectID != destProjectID {
+            pane.rebind(projectID: destProjectID)
+        }
+        let newTab = TerminalTab(id: UUID(), splitRoot: .pane(pane), focusedPaneID: pane.id)
+        dest.adoptTab(newTab, at: index)
+        activeProjectID = destProjectID
+        recordProjectVisit(destProjectID)
+        saveWorkspaces()
+    }
+
+    /// Find the workspace tab currently holding a pane. Scans every loaded
+    /// workspace — a sidebar pane drop only carries the pane's id, and the
+    /// quick terminal's ephemeral tab (not in `workspaces`) correctly misses.
+    private func locatePane(_ paneID: UUID) -> (projectID: UUID, tab: TerminalTab)? {
+        for (projectID, ws) in workspaces {
+            if let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) {
+                return (projectID, tab)
+            }
+        }
+        return nil
+    }
+
     /// Reorder a tab within its own project to an absolute drop index (the
     /// offset a sidebar drag-and-drop reports). Persists on a real move.
     func reorderTab(_ tabID: UUID, inProject projectID: UUID, toIndex destination: Int) {

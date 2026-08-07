@@ -292,6 +292,95 @@ struct AppStateTests {
         #expect(ws.tabs.count == 1)
     }
 
+    // MARK: - Separate one pane into its own tab (Separate Current Pane)
+
+    @Test
+    func separatePane_splits_the_pane_into_its_own_tab() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        let original = try #require(tab.focusedPaneID)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let dragged = try #require(tab.focusedPaneID)
+        tab.zoomedPaneID = dragged
+
+        state.separatePane(dragged, toProject: p.id, destPath: p.path)
+
+        // The source tab keeps its remaining pane, exits the stale zoom, and
+        // repairs focus; the dragged Pane object lives on in the new tab.
+        #expect(tab.splitRoot.allPanes().map(\.id) == [original])
+        #expect(tab.zoomedPaneID == nil)
+        #expect(tab.focusedPaneID == original)
+        #expect(ws.tabs.count == 2)
+        let newTab = try #require(ws.tabs.last)
+        #expect(newTab.splitRoot.allPanes().map(\.id) == [dragged])
+        #expect(newTab.focusedPaneID == dragged)
+        #expect(ws.activeTabID == newTab.id)
+    }
+
+    @Test
+    func separatePane_at_index_lands_at_that_slot() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let dragged = try #require(tab.focusedPaneID)
+
+        state.separatePane(dragged, toProject: p.id, destPath: p.path, at: 0)
+
+        #expect(ws.tabs.count == 2)
+        #expect(ws.tabs.first?.splitRoot.allPanes().map(\.id) == [dragged])
+        #expect(ws.tabs.last?.id == tab.id)
+    }
+
+    @Test
+    func separatePane_across_projects_rebinds_and_activates_destination() throws {
+        let state = makeAppState()
+        let p1 = seedProject(state, name: "p1", path: "/tmp1")
+        let p2 = seedProject(state, name: "p2", path: "/tmp2")
+        let ws1 = try #require(state.workspaces[p1.id])
+        let ws2 = try #require(state.workspaces[p2.id])
+        state.selectProject(p1)
+        state.splitPane(direction: .horizontal, projectID: p1.id)
+        let sourceTab = try #require(ws1.activeTab)
+        let dragged = try #require(sourceTab.focusedPaneID)
+        let ws2TabsBefore = ws2.tabs.count
+
+        state.separatePane(dragged, toProject: p2.id, destPath: p2.path)
+
+        #expect(sourceTab.splitRoot.allPanes().count == 1)
+        #expect(ws2.tabs.count == ws2TabsBefore + 1)
+        let newTab = try #require(ws2.tabs.last)
+        #expect(newTab.splitRoot.allPanes().map(\.id) == [dragged])
+        // Routing identity follows the pane, mirroring moveTab's rebind.
+        #expect(newTab.splitRoot.allPanes().allSatisfy { $0.projectID == p2.id })
+        #expect(state.activeProjectID == p2.id)
+        #expect(ws2.activeTabID == newTab.id)
+    }
+
+    @Test
+    func separatePane_only_pane_of_its_tab_is_noop() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        let onlyPane = try #require(tab.focusedPaneID)
+        state.separatePane(onlyPane, toProject: p.id, destPath: p.path)
+        #expect(ws.tabs.count == 1)
+        #expect(tab.splitRoot.allPanes().map(\.id) == [onlyPane])
+    }
+
+    @Test
+    func separatePane_unknown_pane_is_noop() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        state.separatePane(UUID(), toProject: p.id, destPath: p.path)
+        #expect(ws.tabs.count == 1)
+    }
+
     // MARK: - Focus navigation
 
     @Test
