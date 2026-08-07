@@ -696,7 +696,13 @@ private struct SidebarTabRow: View {
                 Label {
                     titleContent
                 } icon: {
-                    if showTabStatusIndicator {
+                    if showTabStatusIndicator, tab.executionState != .idle || agentIcon != nil {
+                        // Only give the label an icon while the status glyph
+                        // actually draws something (spinner, done dot, agent
+                        // logo). An idle status with "None" renders the
+                        // sentinel as an invisible Image that still reserves
+                        // the icon column, nudging the title right of every
+                        // other icon-less row.
                         TabStatusGlyph(state: tab.executionState, symbol: tabIconSymbol, index: index, agent: agentIcon)
                     } else if let agentIcon {
                         // "None" suppresses the user's icon, not the agent
