@@ -413,10 +413,27 @@ enum WindowAppearance {
 
     private static func titlebarContainer(in window: NSWindow) -> NSView? {
         // The titlebar container lives on the window's content view's root in
-        // normal mode, and on a separate NSToolbarFullScreenWindow in native
-        // fullscreen. We don't support native fullscreen tab bars, so the
-        // first path suffices for Macterm.
-        guard let contentView = window.contentView else { return nil }
+        // normal mode. In native fullscreen AppKit hosts it in a separate
+        // NSToolbarFullScreenWindow parented to ours — without following that
+        // hop, a hidden toolbar left an empty bar pinned to the top of the
+        // fullscreen space (#226). Ghostty's TerminalWindow resolves it the
+        // same way; matching on `parent` picks the right overlay when several
+        // fullscreen windows exist.
+        guard window.styleMask.contains(.fullScreen) else {
+            return findTitlebarContainer(from: window.contentView)
+        }
+        for other in NSApp.windows
+            where other.className == "NSToolbarFullScreenWindow" && other.parent == window
+        {
+            return findTitlebarContainer(from: other.contentView)
+        }
+        return nil
+    }
+
+    /// Root-walk then search: the container is an ancestor sibling of the
+    /// content view, so the lookup climbs to the theme frame first.
+    private static func findTitlebarContainer(from contentView: NSView?) -> NSView? {
+        guard let contentView else { return nil }
         var root: NSView = contentView
         while let s = root.superview {
             root = s
