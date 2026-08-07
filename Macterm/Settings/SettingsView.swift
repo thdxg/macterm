@@ -295,31 +295,6 @@ private final class DividerShield: NSView {
     override func mouseUp(with _: NSEvent) {}
 }
 
-private extension NSView {
-    /// First `NSSplitView` at or below this view. The probe sits in a
-    /// `.background` beside the split view rather than inside a column, so the
-    /// search runs down from the window's content view.
-    var firstSplitView: NSSplitView? {
-        if let split = self as? NSSplitView { return split }
-        for subview in subviews {
-            if let found = subview.firstSplitView { return found }
-        }
-        return nil
-    }
-
-    /// The `NSSplitViewController` whose root view this is. A view controller
-    /// inserts itself into its root view's responder chain, so walking up from
-    /// the split view reaches it.
-    var owningSplitViewController: NSSplitViewController? {
-        var responder: NSResponder? = nextResponder
-        while let current = responder {
-            if let controller = current as? NSSplitViewController { return controller }
-            responder = current.nextResponder
-        }
-        return nil
-    }
-}
-
 /// The main window's titlebar chrome, applied to the settings window so the two
 /// match: transparent and separator-less, content extending underneath, and an
 /// empty unified toolbar. Having a toolbar at all is what makes AppKit lay out

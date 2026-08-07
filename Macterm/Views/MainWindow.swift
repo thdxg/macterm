@@ -15,6 +15,25 @@ struct MainWindow: View {
     private var detailWidth: CGFloat = .infinity
     @State
     private var preferences = Preferences.shared
+    /// The sidebar is temporarily out because the pointer is at the leading
+    /// edge, while the user's toggle state still says hidden. Peeking drives
+    /// the same `columnVisibility` path the shortcut uses — never AppKit's
+    /// broken overlay reveal, disabled in `WindowAppearance`.
+    @State
+    private var isPeeking = false
+    /// Set when the shortcut hides the sidebar with the pointer still over it,
+    /// so the next hover event doesn't instantly peek it back out. Cleared
+    /// once the pointer leaves the trigger strip.
+    @State
+    private var suppressPeekUntilExit = false
+    /// Last open sidebar width, read-only mirror for the peek's "pointer left
+    /// the sidebar" threshold — the reopen width itself stays SwiftUI's.
+    @State
+    private var sidebarWidth: CGFloat = 180
+
+    /// Width of the hover strip at the leading edge that pops the hidden
+    /// sidebar out — a little wider than AppKit's own edge-hover band.
+    private let peekStripWidth: CGFloat = 12
 
     var body: some View {
         // Derive bindings to the @Observable AppState via @Bindable (the
@@ -26,6 +45,13 @@ struct MainWindow: View {
         return NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarContent()
                 .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 280)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.width
+                } action: { width in
+                    // Below the column's 140 minimum means mid-collapse; keep
+                    // the last open width for the peek's exit threshold.
+                    if width >= 100 { sidebarWidth = width }
+                }
         } detail: {
             ZStack {
                 // The window's NSWindow.backgroundColor (set by WindowAppearance)
@@ -91,9 +117,34 @@ struct MainWindow: View {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
         }
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            handleSidebarPeekHover(phase)
+        }
         .onChange(of: appState.sidebarVisible) { _, visible in
+            if visible {
+                // A peek promoted to pinned (toolbar button, shortcut while
+                // peeked): the column is already out, just drop the peek flag.
+                isPeeking = false
+            } else if isPeeking {
+                // Hidden by shortcut while peeked out under the pointer: don't
+                // let the very next hover event pop it straight back open.
+                isPeeking = false
+                suppressPeekUntilExit = true
+            }
             withAnimation {
                 columnVisibility = visible ? .automatic : .detailOnly
+            }
+        }
+        .onChange(of: columnVisibility) { _, visibility in
+            // The column can move without going through AppState (toolbar
+            // button, drag-out); mirror it back so the toggle shortcut acts on
+            // what's on screen — desynced, it needed two presses to re-hide.
+            // A peek is the exception: the column shows while the user's
+            // toggle state stays hidden.
+            guard !isPeeking else { return }
+            let visible = visibility != .detailOnly
+            if appState.sidebarVisible != visible {
+                appState.sidebarVisible = visible
             }
         }
         .onChange(of: appState.isCommandPaletteVisible) { _, visible in
@@ -107,6 +158,36 @@ struct MainWindow: View {
                 DispatchQueue.main.async { appState.restoreFocusToActivePane() }
             }
         }
+    }
+
+    /// Hover-peek for the hidden sidebar: pointer in the leading-edge strip
+    /// slides it out at its remembered width; pointer off the sidebar (or out
+    /// of the window) slides it back in. Runs through `columnVisibility`, the
+    /// shortcut's path, so the titlebar lays out as for a pinned sidebar.
+    private func handleSidebarPeekHover(_ phase: HoverPhase) {
+        switch phase {
+        case let .active(point):
+            guard !appState.sidebarVisible else { return }
+            if suppressPeekUntilExit {
+                if point.x > peekStripWidth { suppressPeekUntilExit = false }
+                return
+            }
+            if !isPeeking, point.x <= peekStripWidth {
+                isPeeking = true
+                withAnimation { columnVisibility = .automatic }
+            } else if isPeeking, point.x > sidebarWidth + 8 {
+                endPeek()
+            }
+        case .ended:
+            // The pointer left the window entirely.
+            if isPeeking { endPeek() }
+            suppressPeekUntilExit = false
+        }
+    }
+
+    private func endPeek() {
+        isPeeking = false
+        withAnimation { columnVisibility = .detailOnly }
     }
 
     private var activeProject: Project? {

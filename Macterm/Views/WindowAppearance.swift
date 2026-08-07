@@ -1,5 +1,8 @@
 import AppKit
+import os
 import SwiftUI
+
+private let logger = Logger(subsystem: appBundleID, category: "WindowAppearance")
 
 extension NSView {
     /// Recursively finds the first descendant view whose class name (as a string)
@@ -14,6 +17,29 @@ extension NSView {
             if let found = subview.firstDescendant(withClassName: name) {
                 return found
             }
+        }
+        return nil
+    }
+
+    /// First `NSSplitView` at or below this view. Callers sit beside the split
+    /// view (a `.background` probe, the window's content view), so the search
+    /// runs down from wherever the caller stands.
+    var firstSplitView: NSSplitView? {
+        if let split = self as? NSSplitView { return split }
+        for subview in subviews {
+            if let found = subview.firstSplitView { return found }
+        }
+        return nil
+    }
+
+    /// The `NSSplitViewController` whose root view this is. A view controller
+    /// inserts itself into its root view's responder chain, so walking up from
+    /// the split view reaches it.
+    var owningSplitViewController: NSSplitViewController? {
+        var responder: NSResponder? = nextResponder
+        while let current = responder {
+            if let controller = current as? NSSplitViewController { return controller }
+            responder = current.nextResponder
         }
         return nil
     }
@@ -249,6 +275,55 @@ enum WindowAppearance {
         syncTitlebar(window: window, isTransparent: effectiveTransparent)
 
         syncToolbar(window: window)
+
+        disableSidebarEdgeHoverReveal(window: window)
+        _ = disableProactivePeekOnce
+    }
+
+    /// Kill NSSplitView's windowed "proactive peek" of the collapsed sidebar:
+    /// it pops a minimum-width overlay that crams the traffic lights against
+    /// the toolbar, never retracts, and races `MainWindow`'s own hover peek —
+    /// when ours uncollapses the column mid-engage, the native peek's state is
+    /// freed and `mouseExited:` → `_cancelProactivePeek` crashes on it (seen
+    /// in a real crash log). There is no per-item opt-out and its tracker
+    /// views reinstall on every collapse, so the race-free kill is replacing
+    /// the one gate every engage path consults (verified by disassembly) with
+    /// a constant NO. If an OS update drops the method this no-ops — the cost
+    /// is the native peek returning, never a crash.
+    private static let disableProactivePeekOnce: Void = {
+        let gate = Selector(("_canDoSidebarProactivePeek"))
+        guard let method = class_getInstanceMethod(NSSplitView.self, gate) else {
+            logger.info("proactive-peek gate not found; native peek left as is")
+            return
+        }
+        let no: @convention(block) (NSSplitView) -> Bool = { _ in false }
+        method_setImplementation(method, imp_implementationWithBlock(no))
+        logger.info("sidebar proactive peek disabled")
+    }()
+
+    /// Stop AppKit's edge-hover reveal of the collapsed sidebar — the peek's
+    /// fullscreen sibling. Sidebar `NSSplitViewItem`s default the private
+    /// `revealsOnEdgeHoverInFullscreen` flag to true; clearing it and
+    /// re-running `_updateHasItemToRevealOnEdgeHover` (which derives "anything
+    /// to reveal" solely from that flag and `canCollapse*`, verified by
+    /// disassembly) tears the hover tracking down. `MainWindow`'s hover peek
+    /// replaces both native mechanisms. SPI, so probed with `responds(to:)`
+    /// and a silent no-op if an OS update removes it.
+    private static func disableSidebarEdgeHoverReveal(window: NSWindow) {
+        guard let split = window.contentView?.firstSplitView,
+              let controller = split.owningSplitViewController,
+              let sidebar = controller.splitViewItems.first
+        else { return }
+        let flag = "revealsOnEdgeHoverInFullscreen"
+        guard sidebar.responds(to: Selector(("setRevealsOnEdgeHoverInFullscreen:"))),
+              (sidebar.value(forKey: flag) as? Bool) == true
+        else { return }
+        sidebar.setValue(false, forKey: flag)
+        let update = Selector(("_updateHasItemToRevealOnEdgeHover"))
+        if controller.responds(to: update) {
+            controller.perform(update)
+        }
+        logger.info("sidebar edge-hover reveal disabled")
     }
 
     /// Update the inactive-glass tint when the window gains/loses key status.
