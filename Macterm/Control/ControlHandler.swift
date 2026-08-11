@@ -184,7 +184,11 @@ final class ControlHandler {
             foregroundPID: pid,
             foregroundArgv: argv,
             processExited: view.processExited,
-            needsConfirmQuit: view.needsConfirmQuit()
+            // The pane-level signal, not the raw surface one — `pane inspect`
+            // must report exactly what the close guards read, and for a
+            // remote pane the surface's own verdict is meaningless (the local
+            // ssh client reads as a perpetually running program).
+            needsConfirmQuit: pane.needsConfirmClose
         )
         return ControlData(inspect: inspect)
     }
@@ -362,7 +366,7 @@ final class ControlHandler {
         // Closing kills the panes' zmx sessions. The UI stages a confirmation
         // dialog for busy tabs; a headless caller gets a typed `busy` error
         // instead — never a dialog the CLI can't answer.
-        let busy = tab.splitRoot.allPanes().contains { $0.nsView?.needsConfirmQuit() == true }
+        let busy = tab.splitRoot.allPanes().contains(where: \.needsConfirmClose)
         if busy, args.force != true {
             throw ControlError(
                 code: .busy,
@@ -443,7 +447,7 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "pane.close requires a pane or session selector")
         }
         let target = try resolvePane(args, in: workspace)
-        let busy = target.pane.nsView?.needsConfirmQuit() == true
+        let busy = target.pane.needsConfirmClose
         if busy, args.force != true {
             throw ControlError(
                 code: .busy,

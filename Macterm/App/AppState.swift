@@ -743,7 +743,7 @@ final class AppState {
     func requestUnloadProject(_ projectID: UUID) {
         let busy = workspaces[projectID]?.tabs
             .flatMap { $0.splitRoot.allPanes() }
-            .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+            .contains(where: \.needsConfirmClose) ?? false
         if busy {
             pendingUnloadProject = PendingUnloadProject(projectID: projectID)
             return
@@ -767,7 +767,7 @@ final class AppState {
     func requestRemoveProject(_ projectID: UUID, removal: @escaping () -> Void) {
         let busy = workspaces[projectID]?.tabs
             .flatMap { $0.splitRoot.allPanes() }
-            .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+            .contains(where: \.needsConfirmClose) ?? false
         if busy {
             pendingRemoveProject = PendingRemoveProject(projectID: projectID, completeRemoval: removal)
             return
@@ -827,14 +827,14 @@ final class AppState {
         for id in projectIDs {
             let busy = workspaces[id]?.tabs
                 .flatMap { $0.splitRoot.allPanes() }
-                .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+                .contains(where: \.needsConfirmClose) ?? false
             if busy { return true }
         }
         for tab in tabs {
             let busy = workspaces[tab.projectID]?.tabs
                 .first { $0.id == tab.tabID }?
                 .splitRoot.allPanes()
-                .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+                .contains(where: \.needsConfirmClose) ?? false
             if busy { return true }
         }
         return false
@@ -899,7 +899,7 @@ final class AppState {
     func requestCloseTab(_ tabID: UUID, projectID: UUID) {
         let tab = workspaces[projectID]?.tabs.first { $0.id == tabID }
         let busy = tab?.splitRoot.allPanes()
-            .contains { $0.nsView?.needsConfirmQuit() == true } ?? false
+            .contains(where: \.needsConfirmClose) ?? false
         if busy {
             pendingCloseTab = PendingCloseTab(tabID: tabID, projectID: projectID)
             return
@@ -1282,7 +1282,7 @@ final class AppState {
         let pane = workspaces[projectID]?.tabs
             .compactMap { $0.splitRoot.findPane(id: paneID) }
             .first
-        if pane?.nsView?.needsConfirmQuit() == true {
+        if pane?.needsConfirmClose == true {
             pendingClosePane = PendingClosePane(paneID: paneID, projectID: projectID)
             return
         }

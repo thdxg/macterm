@@ -369,7 +369,7 @@ final class QuickTerminalSplitState {
     }
 
     func requestClosePane(_ paneID: UUID) {
-        let needs = tab.splitRoot.findPane(id: paneID)?.nsView?.needsConfirmQuit() ?? false
+        let needs = tab.splitRoot.findPane(id: paneID)?.needsConfirmClose ?? false
         if needs {
             pendingClosePaneID = paneID
             presentConfirmAlert()

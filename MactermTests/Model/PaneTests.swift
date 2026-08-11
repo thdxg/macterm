@@ -485,4 +485,58 @@ struct PaneTests {
         pane.applyForegroundRefresh(name: nil, foregroundPID: nil, argv0: { "claude" })
         #expect(pane.agentIcon == nil)
     }
+
+    // MARK: - Close confirmation (needsConfirmClose)
+
+    @Test
+    func needsConfirmClose_is_false_without_a_surface() {
+        // No live NSView → nothing this session spawned can be running,
+        // local or remote. (Remote leftovers from earlier state must not
+        // stage a dialog for a pane that never came on screen.)
+        let local = Pane(projectPath: "/", projectID: UUID())
+        #expect(!local.needsConfirmClose)
+        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        remote.executionState = .running
+        remote.applyRemoteForegroundName("hx")
+        #expect(!remote.needsConfirmClose)
+    }
+
+    @Test
+    func remoteCloseVerdict_running_execution_state_is_busy() {
+        // A command mid-output (OSC 133 / activity heartbeats) is busy even
+        // before any probe result lands.
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.executionState = .running
+        #expect(p.remoteNeedsConfirmClose == true)
+    }
+
+    @Test
+    func remoteCloseVerdict_shell_at_prompt_is_idle() {
+        // The probe reporting the session's shell means an idle prompt — the
+        // exact case that must NOT warn (an idle local pane doesn't). `-zsh`
+        // is the login form the probe actually returns.
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.applyRemoteForegroundName("-zsh")
+        #expect(p.remoteNeedsConfirmClose == false)
+        #expect(!p.needsConfirmClose)
+    }
+
+    @Test
+    func remoteCloseVerdict_program_foreground_is_busy() {
+        // A probe-named program is busy even when the execution tracker has
+        // quiet-settled (a silent editor produces no heartbeats).
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.applyRemoteForegroundName("hx")
+        #expect(p.executionState != .running)
+        #expect(p.remoteNeedsConfirmClose == true)
+    }
+
+    @Test
+    func remoteCloseVerdict_is_nil_before_any_probe_result() {
+        // No probe has ever landed (unreachable host, BatchMode auth failure)
+        // → no verdict; `needsConfirmClose` falls back to the conservative
+        // surface reading rather than silently killing an unknown foreground.
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        #expect(p.remoteNeedsConfirmClose == nil)
+    }
 }

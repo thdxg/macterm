@@ -972,6 +972,37 @@ final class Pane: Identifiable {
 
     var nsView: GhosttyTerminalNSView? { _nsView }
 
+    /// Whether closing this pane must be confirmed first because a foreground
+    /// program is running. This is the single signal every busy-close guard
+    /// reads (pane/tab close, project unload/remove, the CLI's `busy` error,
+    /// the quit dialog rows).
+    ///
+    /// Local panes read libghostty's own signal (`needsConfirmQuit`). A remote
+    /// pane can't: its local process is the `ssh` client, which libghostty
+    /// counts as a running program forever — an idle remote prompt would
+    /// always warn. Busyness is instead derived from the remote-side signals
+    /// we do have (`remoteNeedsConfirmClose`); only when neither has produced
+    /// a verdict yet does it fall back to the conservative surface reading.
+    var needsConfirmClose: Bool {
+        guard let view = nsView else { return false }
+        guard isRemote else { return view.needsConfirmQuit() }
+        return remoteNeedsConfirmClose ?? view.needsConfirmQuit()
+    }
+
+    /// The remote-side busy verdict: the OSC 133/heartbeat execution state
+    /// (catches a command mid-output even before a probe lands), else the
+    /// probe-derived foreground name — a shell at its prompt is idle, anything
+    /// else is a running program. nil when no probe result has ever arrived
+    /// (unreachable host, BatchMode auth failure, the first ~3s), so the
+    /// caller can fall back rather than silently kill an unknown foreground.
+    /// Split from `needsConfirmClose` so unit tests can exercise the decision
+    /// without a live NSView.
+    var remoteNeedsConfirmClose: Bool? {
+        if executionState == .running { return true }
+        guard let name = foregroundProcessName, !name.isEmpty else { return nil }
+        return !ProcessInspector.isShellProcessName(name)
+    }
+
     /// The `NSScrollView` that hosts this pane's surface and renders the native
     /// overlay scrollbar. Owned here (not by SwiftUI) for the same reason as
     /// `_nsView`: it must survive tab switches and split reshapes, and it
