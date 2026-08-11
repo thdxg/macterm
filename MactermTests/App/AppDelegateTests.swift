@@ -51,4 +51,51 @@ struct AppDelegateTests {
         )
         #expect(delegate.mainWindow === terminal)
     }
+
+    /// Issue #241: a launch that never brings the app to the front (how macOS
+    /// relaunches apps for "Reopen windows when logging back in") skips
+    /// AppKit's open-untitled step, so SwiftUI never builds the `WindowGroup`
+    /// window — leaving a running app with no window and no way back to one.
+    @Test
+    func launch_asks_swiftui_for_a_window_when_the_launch_produced_none() {
+        let delegate = AppDelegate()
+        var requests = 0
+        delegate.windowLister = { [] }
+        delegate.openInitialWindow = { requests += 1 }
+
+        delegate.repairMissingWindow(attempt: AppDelegate.windowRepairAttempts)
+
+        #expect(requests == 1)
+    }
+
+    /// The repair must stay a repair: a normal launch already has its window,
+    /// and asking again would open a second one in a single-window app.
+    @Test
+    func launch_leaves_an_existing_window_alone() {
+        let delegate = AppDelegate()
+        var requests = 0
+        let existing = makeWindow()
+        delegate.windowLister = { [existing] }
+        delegate.openInitialWindow = { requests += 1 }
+
+        delegate.repairMissingWindow(attempt: AppDelegate.windowRepairAttempts)
+
+        #expect(requests == 0)
+    }
+
+    /// SwiftUI's window appears a run-loop turn or two after the request, so
+    /// two callers racing (the launch repair and an activation landing just
+    /// before it) must not each open one.
+    @Test
+    func window_requests_are_debounced() {
+        let delegate = AppDelegate()
+        var requests = 0
+        delegate.windowLister = { [] }
+        delegate.openInitialWindow = { requests += 1 }
+
+        delegate.repairMissingWindow(attempt: AppDelegate.windowRepairAttempts)
+        delegate.showWindow()
+
+        #expect(requests == 1)
+    }
 }
