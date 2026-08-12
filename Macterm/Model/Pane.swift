@@ -61,13 +61,39 @@ final class Pane: Identifiable {
     let shell: String?
     /// Extra environment variables for the spawned shell. nil/empty → none.
     let env: [String: String]?
+    /// The latest observation of this pane's foreground — name, shell-ness,
+    /// provenance, and when it was made (`ForegroundSample`). The single
+    /// foreground truth for BOTH worlds: local samples come from the process
+    /// table via `refreshForegroundProcess()`, remote ones from the host
+    /// probe via `applyRemoteForegroundName`. nil = no observation has ever
+    /// been made (pre-surface locally; probe never landed remotely) — a
+    /// state the busy-close policy treats conservatively. Republished only
+    /// when the observation changes, so a steady poll doesn't re-render the
+    /// sidebar every tick.
+    private(set) var foregroundSample: ForegroundSample?
+
     /// The basename of the pane's live foreground process — a running command
     /// (`hx`, `btop`), or the pane's shell when idle at a prompt (so a nested
-    /// `zsh` launched inside `nu` shows `zsh`). nil only before the surface
-    /// exists. This is the tab name's default source: it's read from the
-    /// process table (`ProcessInspector`), so it's immune to the shell's
-    /// prompt-title churn. Refreshed by `refreshForegroundProcess()`.
-    var foregroundProcessName: String?
+    /// `zsh` launched inside `nu` shows `zsh`). This is the tab name's
+    /// default source. Reads through `foregroundSample`; the setter is a
+    /// seam for tests (and synthesizes a sample with origin matching the
+    /// pane's world) — production sampling goes through
+    /// `refreshForegroundProcess()` / `applyRemoteForegroundName`.
+    var foregroundProcessName: String? {
+        get { foregroundSample?.name }
+        set {
+            guard let newValue else {
+                foregroundSample = nil
+                return
+            }
+            foregroundSample = ForegroundSample(
+                name: newValue,
+                isShell: ProcessInspector.isShellProcessName(newValue),
+                origin: isRemote ? .remoteProbe : .processTable(pid: nil),
+                sampledAt: Date()
+            )
+        }
+    }
 
     /// A title a foreground *program* set via OSC 0/2 (claude's session
     /// summary, ssh's `user@host`). When present it wins over
@@ -283,7 +309,14 @@ final class Pane: Identifiable {
         // a title must never be misattributed to a different process.
         if !ignoresForegroundIdentity(name) {
             let nameChanged = name != foregroundProcessName
-            if nameChanged { foregroundProcessName = name }
+            if nameChanged {
+                foregroundSample = ForegroundSample(
+                    name: name,
+                    isShell: ProcessInspector.isShellProcessName(name),
+                    origin: .processTable(pid: foregroundPID),
+                    sampledAt: Date()
+                )
+            }
             // A steady foreground (same pid, same comm) keeps the cached icon; a
             // change re-matches — argv[0] is only read when comm alone doesn't
             // identify an agent.
@@ -497,7 +530,18 @@ final class Pane: Identifiable {
     func applyRemoteForegroundName(_ comm: String?) {
         guard let comm, !comm.isEmpty else { return }
         let base = Self.normalizeRemoteComm(comm)
-        if !base.isEmpty, base != foregroundProcessName { foregroundProcessName = base }
+        if !base.isEmpty, base != foregroundProcessName {
+            foregroundSample = ForegroundSample(
+                name: base,
+                // Judged against the LOCAL shell database for now — wrong
+                // for a remote-only login shell; the probe will carry a
+                // host-side verdict (foreground pgid == session leader) and
+                // this is the one line that swap replaces.
+                isShell: ProcessInspector.isShellProcessName(base),
+                origin: .remoteProbe,
+                sampledAt: Date()
+            )
+        }
     }
 
     /// Basename of a remote `ps -o comm=` value, minus the leading `-` a
@@ -575,30 +619,29 @@ final class Pane: Identifiable {
     /// reads (pane/tab close, project unload/remove, the CLI's `busy` error,
     /// the quit dialog rows).
     ///
-    /// Local panes read libghostty's own signal (`needsConfirmQuit`). A remote
-    /// pane can't: its local process is the `ssh` client, which libghostty
-    /// counts as a running program forever — an idle remote prompt would
-    /// always warn. Busyness is instead derived from the remote-side signals
-    /// we do have (`remoteNeedsConfirmClose`); only when neither has produced
-    /// a verdict yet does it fall back to the conservative surface reading.
+    /// The verdict itself is `ForegroundPolicy.needsConfirmClose` — a pure
+    /// function over the pane's sample, so the local/remote asymmetry lives
+    /// in exactly one tested place. This wrapper just feeds it the live
+    /// surface signal.
     var needsConfirmClose: Bool {
-        guard let view = nsView else { return false }
-        guard isRemote else { return view.needsConfirmQuit() }
-        return remoteNeedsConfirmClose ?? view.needsConfirmQuit()
+        ForegroundPolicy.needsConfirmClose(
+            sample: foregroundSample,
+            executionState: executionState,
+            isRemote: isRemote,
+            hasSurface: nsView != nil,
+            surfaceBusy: nsView?.needsConfirmQuit() == true
+        )
     }
 
-    /// The remote-side busy verdict: the OSC 133/heartbeat execution state
-    /// (catches a command mid-output even before a probe lands), else the
-    /// probe-derived foreground name — a shell at its prompt is idle, anything
-    /// else is a running program. nil when no probe result has ever arrived
-    /// (unreachable host, BatchMode auth failure, the first ~3s), so the
-    /// caller can fall back rather than silently kill an unknown foreground.
-    /// Split from `needsConfirmClose` so unit tests can exercise the decision
-    /// without a live NSView.
+    /// The remote-side busy verdict alone (see
+    /// `ForegroundPolicy.remoteNeedsConfirmClose`), nil when no probe result
+    /// has ever arrived. Kept as a pane property so tests exercise the
+    /// decision without a live NSView.
     var remoteNeedsConfirmClose: Bool? {
-        if executionState == .running { return true }
-        guard let name = foregroundProcessName, !name.isEmpty else { return nil }
-        return !ProcessInspector.isShellProcessName(name)
+        ForegroundPolicy.remoteNeedsConfirmClose(
+            sample: foregroundSample,
+            executionState: executionState
+        )
     }
 
     /// The `NSScrollView` that hosts this pane's surface and renders the native
