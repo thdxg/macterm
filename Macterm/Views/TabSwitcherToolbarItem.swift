@@ -43,6 +43,9 @@ struct TabSwitcherToolbarItem: View {
             let activeIndex = tabs.firstIndex(where: { $0.id == workspace.activeTabID }) ?? 0
             let window = slidingWindow(activeIndex: activeIndex, tabCount: tabs.count)
             let windowTabs = Array(tabs[window])
+            let labels = windowTabs.indices.map {
+                label(offset: $0, window: window, tabCount: tabs.count)
+            }
 
             Picker("Tab", selection: Binding(
                 get: { workspace.activeTabID },
@@ -51,18 +54,32 @@ struct TabSwitcherToolbarItem: View {
                     appState.selectTab(id, projectID: projectID)
                 }
             )) {
-                ForEach(Array(windowTabs.enumerated()), id: \.element.id) { offset, tab in
-                    Text(label(
-                        offset: offset,
-                        window: window,
-                        tabCount: tabs.count
-                    ))
-                    .tag(Optional(tab.id))
+                ForEach(Array(zip(windowTabs, labels)), id: \.0.id) { tab, label in
+                    Text(label)
+                        .tag(Optional(tab.id))
                 }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            // Rebuild the control whenever the rendered segments change, so
+            // its width can never lag its contents by one change.
+            //
+            // A segmented picker hosted in an `NSToolbarItem` is measured once
+            // per view identity, and `fixedSize` is what promotes that
+            // measurement to the control's width. Mutating the tab set from
+            // `KeyRouter`'s `NSEvent` monitor — Cmd+T, Cmd+W — updates the
+            // labels without prompting AppKit to re-measure the item, so the
+            // track keeps the *previous* segment count's width: growing clips
+            // the last segment, shrinking leaves the track too wide for the
+            // segments stretched across it. Paths that happen to end in an
+            // independent AppKit layout pass mask it, which is why the same
+            // edit through the menu bar or the control socket looks correct
+            // and only the keybinds show the bug.
+            //
+            // Keyed on the labels rather than `windowTabs.count`: a digit
+            // flipping to `⋯` changes the ideal width at a constant count.
+            .id(labels.joined(separator: "\u{1F}"))
             .help("Cmd+1…\(min(9, tabs.count)) to switch tabs")
         }
     }
