@@ -20,6 +20,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case previousProject = "previous_project"
     case nextGlobalTab = "next_global_tab"
     case previousGlobalTab = "previous_global_tab"
+    case nextTabInProject = "next_tab_in_project"
+    case previousTabInProject = "previous_tab_in_project"
     case focusPaneLeft = "focus_pane_left"
     case focusPaneDown = "focus_pane_down"
     case focusPaneUp = "focus_pane_up"
@@ -71,6 +73,11 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .previousProject: "cmd+["
         case .nextGlobalTab: "ctrl+]"
         case .previousGlobalTab: "ctrl+["
+        // Unbound by default: the ctrl+]/ctrl+[ pair above already covers tab
+        // cycling out of the box, and these are the opt-in variant for users
+        // who don't want a keystroke to carry them into another project.
+        case .nextTabInProject: "none"
+        case .previousTabInProject: "none"
         case .focusPaneLeft: "cmd+ctrl+h"
         case .focusPaneDown: "cmd+ctrl+j"
         case .focusPaneUp: "cmd+ctrl+k"

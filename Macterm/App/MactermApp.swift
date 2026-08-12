@@ -207,6 +207,18 @@ struct MactermApp: App {
                 Divider()
                 AppCommandMenuItem(command: .nextTab, appState: appState, projectStore: projectStore, titleOverride: "Next Tab")
                 AppCommandMenuItem(command: .previousTab, appState: appState, projectStore: projectStore, titleOverride: "Previous Tab")
+                AppCommandMenuItem(
+                    command: .nextTabInProject,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Next Tab in Project"
+                )
+                AppCommandMenuItem(
+                    command: .previousTabInProject,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Previous Tab in Project"
+                )
                 AppCommandMenuItem(command: .recentTab, appState: appState, projectStore: projectStore, titleOverride: "Recent Tab")
             }
             CommandMenu("Project") {

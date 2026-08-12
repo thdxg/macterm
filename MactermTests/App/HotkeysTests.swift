@@ -334,6 +334,21 @@ struct HotkeysTests {
     }
 
     @Test
+    func project_scoped_tab_actions_are_unbound_by_default_and_titled_from_command() {
+        // The global ctrl+]/ctrl+[ pair already ships bound; these clamp the
+        // same navigation to the active project and are opt-in via Keymaps.
+        #expect(HotkeyAction.nextTabInProject.defaultShortcut == "none")
+        #expect(HotkeyAction.previousTabInProject.defaultShortcut == "none")
+        #expect(HotkeyAction.nextTabInProject.title == "Next Tab in Project")
+        #expect(HotkeyAction.previousTabInProject.title == "Previous Tab in Project")
+        #expect(AppCommand.nextTabInProject.hotkeyAction == .nextTabInProject)
+        #expect(AppCommand.previousTabInProject.hotkeyAction == .previousTabInProject)
+        // Distinct from the cross-project pair they sit beside.
+        #expect(AppCommand.nextTab.hotkeyAction == .nextGlobalTab)
+        #expect(AppCommand.previousTab.hotkeyAction == .previousGlobalTab)
+    }
+
+    @Test
     func all_action_ids_are_unique() {
         let ids = HotkeyAction.allCases.map(\.rawValue)
         #expect(ids.count == Set(ids).count)
