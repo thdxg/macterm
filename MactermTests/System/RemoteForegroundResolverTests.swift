@@ -34,6 +34,8 @@ struct RemoteForegroundResolverTests {
 
     @Test
     func parses_session_tab_comm_lines() {
+        // Two-field lines (no idle flag — an older or degraded probe) parse
+        // with an unknown verdict; garbage and non-macterm sessions drop.
         let out = """
         macterm-api-abc123\tbtop
         macterm-api-def456\t/usr/local/bin/hx
@@ -43,8 +45,28 @@ struct RemoteForegroundResolverTests {
         """
         let map = RemoteForegroundResolver.parseProbeOutput(out)
         #expect(map == [
-            "macterm-api-abc123": "btop",
-            "macterm-api-def456": "/usr/local/bin/hx",
+            "macterm-api-abc123": RemoteForegroundObservation(comm: "btop", isIdle: nil),
+            "macterm-api-def456": RemoteForegroundObservation(comm: "/usr/local/bin/hx", isIdle: nil),
+        ])
+    }
+
+    @Test
+    func parses_the_host_idle_flag() {
+        // `1` = the session leader's group owns the tty (shell at prompt),
+        // `0` = another group holds the foreground, empty = the pgid read
+        // failed on the host — unknown, never invented.
+        let out = """
+        macterm-api-idle\t-bash\t1
+        macterm-api-busy\tbtop\t0
+        macterm-api-unknown\thx\t
+        macterm-api-garbage\tvim\tmaybe
+        """
+        let map = RemoteForegroundResolver.parseProbeOutput(out)
+        #expect(map == [
+            "macterm-api-idle": RemoteForegroundObservation(comm: "-bash", isIdle: true),
+            "macterm-api-busy": RemoteForegroundObservation(comm: "btop", isIdle: false),
+            "macterm-api-unknown": RemoteForegroundObservation(comm: "hx", isIdle: nil),
+            "macterm-api-garbage": RemoteForegroundObservation(comm: "vim", isIdle: nil),
         ])
     }
 
@@ -54,7 +76,7 @@ struct RemoteForegroundResolverTests {
     func probes_once_per_host_within_the_interval() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
-        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForegroundObservation]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
             return [:]
         }
@@ -79,9 +101,9 @@ struct RemoteForegroundResolverTests {
         // race (a listing that misses the session re-arms the request and
         // would defeat the throttled expectations below).
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForegroundObservation]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return [session: "bash"]
+            return [session: RemoteForegroundObservation(comm: "bash", isIdle: true)]
         }
         let t0 = Date()
         resolver.refresh(panes: [pane], probe: probe, now: t0)
@@ -114,10 +136,10 @@ struct RemoteForegroundResolverTests {
         let resolver = RemoteForegroundResolver(minInterval: 3)
         let pane = remotePane()
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { _, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForegroundObservation]? = { _, _ in
             calls.mutate { $0 += 1 }
             // Registered from the third probe on.
-            return calls.value >= 3 ? [session: "bash"] : [:]
+            return calls.value >= 3 ? [session: RemoteForegroundObservation(comm: "bash", isIdle: true)] : [:]
         }
         let t0 = Date()
         // Init primes the first request; each miss re-arms, bypassing the
@@ -155,7 +177,9 @@ struct RemoteForegroundResolverTests {
         let pane = remotePane()
         let resolver = RemoteForegroundResolver(minInterval: 0)
         let session = pane.sessionName
-        resolver.refresh(panes: [pane], probe: { _, _ in [session: "btop"] })
+        resolver.refresh(panes: [pane], probe: { _, _ in
+            [session: RemoteForegroundObservation(comm: "btop", isIdle: false)]
+        })
         await waitUntil { pane.foregroundProcessName == "btop" }
     }
 

@@ -41,10 +41,10 @@ final class RemoteForegroundResolver {
     /// updates now instead of on the next scheduled probe; the inflight
     /// guard still holds, and an unconsumed request survives to the next
     /// tick. `probe` is passed per call (AppState hands in the injectable
-    /// `ZmxClient.remoteForegroundComms`; tests hand in a recorder).
+    /// `ZmxClient.remoteForegroundObservations`; tests hand in a recorder).
     func refresh(
         panes: [Pane],
-        probe: @escaping @Sendable (ProjectPath, String?) async -> [String: String]?,
+        probe: @escaping @Sendable (ProjectPath, String?) async -> [String: RemoteForegroundObservation]?,
         now: Date = Date()
     ) {
         guard !panes.isEmpty else { return }
@@ -80,7 +80,7 @@ final class RemoteForegroundResolver {
         }
     }
 
-    private func finish(dest: String, map: [String: String]?, panes: [Pane]) {
+    private func finish(dest: String, map: [String: RemoteForegroundObservation]?, panes: [Pane]) {
         inflight.remove(dest)
         guard let map else {
             // Unreachable/auth/timeout: names freeze at last-known. Logged
@@ -89,8 +89,8 @@ final class RemoteForegroundResolver {
             return
         }
         for pane in panes {
-            if let comm = map[pane.sessionName] {
-                pane.applyRemoteForegroundName(comm)
+            if let observation = map[pane.sessionName] {
+                pane.applyRemoteForeground(observation)
             } else {
                 // A successful listing with no entry for this session: the
                 // probe raced the session's async registration on the host
@@ -104,17 +104,41 @@ final class RemoteForegroundResolver {
         }
     }
 
-    /// Parse `session<TAB>comm` probe lines into a name → comm map. Pure.
-    nonisolated static func parseProbeOutput(_ stdout: String) -> [String: String] {
-        var map: [String: String] = [:]
+    /// Parse `session<TAB>comm<TAB>idleflag` probe lines into a name →
+    /// observation map. The third field is the HOST's own idle verdict
+    /// (`1` = the session leader's process group owns the tty, i.e. the
+    /// shell sits at its prompt; `0` = some other group holds the
+    /// foreground) — judged where the processes actually live, so no local
+    /// shell database has to recognize a remote-only login shell. Absent or
+    /// unparseable flag → nil, and the sampling site falls back to the
+    /// local-database heuristic. Pure.
+    nonisolated static func parseProbeOutput(_ stdout: String) -> [String: RemoteForegroundObservation] {
+        var map: [String: RemoteForegroundObservation] = [:]
         for line in stdout.split(separator: "\n") {
-            let parts = line.split(separator: "\t", maxSplits: 1)
-            guard parts.count == 2 else { continue }
+            let parts = line.split(separator: "\t", maxSplits: 2)
+            guard parts.count >= 2 else { continue }
             let name = parts[0].trimmingCharacters(in: .whitespaces)
             let comm = parts[1].trimmingCharacters(in: .whitespaces)
             guard name.hasPrefix("macterm-"), !comm.isEmpty else { continue }
-            map[name] = comm
+            let flag = parts.count >= 3 ? parts[2].trimmingCharacters(in: .whitespaces) : ""
+            let isIdle: Bool? = switch flag {
+            case "1": true
+            case "0": false
+            default: nil
+            }
+            map[name] = RemoteForegroundObservation(comm: comm, isIdle: isIdle)
         }
         return map
     }
+}
+
+/// One host-side observation of a session's foreground: the comm that owns
+/// the tty and, when the probe could tell, whether that owner is the
+/// session's own shell sitting at its prompt (see `parseProbeOutput`).
+struct RemoteForegroundObservation: Equatable {
+    var comm: String
+    /// The host's idle verdict, nil when the probe couldn't compute one
+    /// (older wire format, pgid read failure) — consumers fall back to the
+    /// local shell-database heuristic.
+    var isIdle: Bool?
 }

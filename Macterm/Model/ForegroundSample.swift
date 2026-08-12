@@ -12,7 +12,7 @@ import Foundation
 ///
 /// Shell-ness is judged AT SAMPLING TIME by the origin that produced the
 /// observation, not at read time by the consumer: a policy reading
-/// `isShell` doesn't need to know which host's shell database applies (the
+/// `isIdleShell` doesn't need to know which host's shell database applies (the
 /// local /etc/shells is wrong for a remote comm — a remote-only login shell
 /// would read as a running program forever).
 struct ForegroundSample: Equatable {
@@ -34,7 +34,7 @@ struct ForegroundSample: Equatable {
     /// by the origin (locally: /etc/shells + login shell; remote: currently
     /// the same local database — moving host-side is planned, and recording
     /// the verdict here is what makes that swap a one-file change).
-    var isShell: Bool
+    var isIdleShell: Bool
 
     var origin: Origin
 
@@ -74,7 +74,7 @@ enum ForegroundPolicy {
         guard isRemote else { return surfaceBusy() }
         if executionState == .running { return true }
         guard let sample, let name = sample.name, !name.isEmpty else { return surfaceBusy() }
-        return !sample.isShell
+        return !sample.isIdleShell
     }
 
     /// The remote-side busy verdict alone, nil when no sample has ever
@@ -86,6 +86,6 @@ enum ForegroundPolicy {
     ) -> Bool? {
         if executionState == .running { return true }
         guard let sample, let name = sample.name, !name.isEmpty else { return nil }
-        return !sample.isShell
+        return !sample.isIdleShell
     }
 }

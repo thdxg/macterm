@@ -159,8 +159,14 @@ enum RemoteSpawn {
     /// every `macterm-*` session on the host to its tty's foreground process
     /// name — the same session→leader→tpgid→comm pipeline
     /// `ZmxForegroundResolver` runs locally, expressed as portable POSIX sh
-    /// (Linux, BSD, macOS remotes). Emits `session<TAB>comm` lines; parsed by
-    /// `RemoteForegroundResolver.parseProbeOutput`.
+    /// (Linux, BSD, macOS remotes). Emits `session<TAB>comm<TAB>idleflag`
+    /// lines; parsed by `RemoteForegroundResolver.parseProbeOutput`. The
+    /// idle flag is the HOST's own verdict — `1` when the tty's foreground
+    /// process group IS the session leader's (the shell owns its prompt),
+    /// `0` when some other group holds it — so busyness never depends on the
+    /// local Mac's shell database recognizing a remote-only shell. A failed
+    /// pgid read emits an empty flag, which parses as "unknown" and falls
+    /// back to the local heuristic rather than inventing a verdict.
     ///
     /// Deliberately contains NO single quotes: it ships to the host wrapped
     /// as `sh -c '<script>'`, and the outer quoting must survive any login
@@ -182,7 +188,12 @@ enum RemoteSpawn {
       [ -n "$t" ] || continue
       c=$(ps -o comm= -p "$t" 2>/dev/null)
       [ -n "$c" ] || continue
-      printf "%s\\t%s\\n" "$n" "$c"
+      g=$(ps -o pgid= -p "$p" 2>/dev/null | tr -d " ")
+      i=
+      if [ -n "$g" ]; then
+        if [ "$t" = "$g" ]; then i=1; else i=0; fi
+      fi
+      printf "%s\\t%s\\t%s\\n" "$n" "$c" "$i"
     done
     """
 

@@ -532,6 +532,34 @@ struct PaneTests {
     }
 
     @Test
+    func host_idle_verdict_beats_the_local_shell_database() {
+        // A remote-only login shell the local /etc/shells doesn't list: the
+        // host says its group owns the tty, so an idle prompt must not warn.
+        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        remote.applyRemoteForeground(
+            RemoteForegroundObservation(comm: "-exotic-shell", isIdle: true)
+        )
+        #expect(remote.foregroundProcessName == "exotic-shell")
+        #expect(remote.remoteNeedsConfirmClose == false)
+
+        // The inverse: a NESTED shell running inside the session shell reads
+        // as a shell name locally, but the host sees a different foreground
+        // group — closing kills it, so it warns (matching libghostty's
+        // local surface semantics, where a nested shell is a running child).
+        remote.applyRemoteForeground(
+            RemoteForegroundObservation(comm: "zsh", isIdle: false)
+        )
+        #expect(remote.remoteNeedsConfirmClose == true)
+
+        // No host verdict (older probe, pgid read failure): fall back to
+        // the local database heuristic.
+        remote.applyRemoteForeground(
+            RemoteForegroundObservation(comm: "zsh", isIdle: nil)
+        )
+        #expect(remote.remoteNeedsConfirmClose == false)
+    }
+
+    @Test
     func remotePanes_prime_a_probe_request_at_init() {
         // Scheduled probes cover only the frontmost project, so a restored
         // pane in a background project would otherwise never be probed —

@@ -37,7 +37,8 @@ struct ZmxClient {
     /// `RemoteSpawn.foregroundProbeArgv`. `zmxPath` (optional) is the explicit
     /// remote zmx path. nil result = probe failed (unreachable / auth /
     /// timeout) — `RemoteForegroundResolver` degrades silently.
-    var remoteForegroundComms: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> [String: String]?
+    var remoteForegroundObservations: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async
+        -> [String: RemoteForegroundObservation]?
     /// Each live Macterm session with its attached-client count, or nil when the
     /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
     /// successful empty listing. An entry's `clients == nil` marks an unknown
@@ -117,7 +118,7 @@ extension ZmxClient {
                     timeout: .seconds(10)
                 )
             },
-            remoteForegroundComms: { remote, zmxPath in
+            remoteForegroundObservations: { remote, zmxPath in
                 guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: zmxPath)
                 else { return nil }
                 guard let stdout = await runZmx(
@@ -166,7 +167,7 @@ extension ZmxClient {
         isBundled: { false },
         killSession: { _ in },
         killRemoteSession: { _, _, _ in },
-        remoteForegroundComms: { _, _ in nil },
+        remoteForegroundObservations: { _, _ in nil },
         listSessionsWithClients: { [] },
         sessionLeaderPIDs: { [:] },
         sessionListSnapshot: { (entries: [], leaders: [:]) }

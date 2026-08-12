@@ -5,10 +5,10 @@ import Testing
 struct ForegroundSampleTests {
     private func sample(
         name: String?,
-        isShell: Bool = false,
+        isIdleShell: Bool = false,
         origin: ForegroundSample.Origin = .remoteProbe
     ) -> ForegroundSample {
-        ForegroundSample(name: name, isShell: isShell, origin: origin, sampledAt: Date())
+        ForegroundSample(name: name, isIdleShell: isIdleShell, origin: origin, sampledAt: Date())
     }
 
     // MARK: - needsConfirmClose (the full verdict)
@@ -26,7 +26,7 @@ struct ForegroundSampleTests {
         // libghostty's own verdict is authoritative locally — the sample is
         // naming state, never a busy override.
         #expect(ForegroundPolicy.needsConfirmClose(
-            sample: sample(name: "zsh", isShell: true, origin: .processTable(pid: 1)),
+            sample: sample(name: "zsh", isIdleShell: true, origin: .processTable(pid: 1)),
             executionState: .idle, isRemote: false,
             hasSurface: true, surfaceBusy: true
         ))
@@ -48,7 +48,7 @@ struct ForegroundSampleTests {
     @Test
     func remote_idle_shell_sample_is_not_busy() {
         #expect(!ForegroundPolicy.needsConfirmClose(
-            sample: sample(name: "bash", isShell: true),
+            sample: sample(name: "bash", isIdleShell: true),
             executionState: .idle, isRemote: true,
             hasSurface: true, surfaceBusy: true
         ))
@@ -57,7 +57,7 @@ struct ForegroundSampleTests {
     @Test
     func remote_program_sample_is_busy() {
         #expect(ForegroundPolicy.needsConfirmClose(
-            sample: sample(name: "btop", isShell: false),
+            sample: sample(name: "btop", isIdleShell: false),
             executionState: .idle, isRemote: true,
             hasSurface: true, surfaceBusy: false
         ))
@@ -86,7 +86,7 @@ struct ForegroundSampleTests {
         // login shell isn't in the local database, and only the recorded
         // verdict can say it was idle.
         #expect(!ForegroundPolicy.needsConfirmClose(
-            sample: sample(name: "exotic-shell", isShell: true),
+            sample: sample(name: "exotic-shell", isIdleShell: true),
             executionState: .idle, isRemote: true,
             hasSurface: true, surfaceBusy: true
         ))
@@ -100,7 +100,7 @@ struct ForegroundSampleTests {
             sample: nil, executionState: .idle
         ) == nil)
         #expect(ForegroundPolicy.remoteNeedsConfirmClose(
-            sample: sample(name: "bash", isShell: true), executionState: .idle
+            sample: sample(name: "bash", isIdleShell: true), executionState: .idle
         ) == false)
         #expect(ForegroundPolicy.remoteNeedsConfirmClose(
             sample: sample(name: "hx"), executionState: .idle

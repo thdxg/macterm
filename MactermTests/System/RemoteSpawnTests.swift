@@ -125,6 +125,9 @@ struct RemoteSpawnTests {
             + RemoteSpawn.foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: "zmx")
         #expect(argv?.last == "\(RemoteSpawn.remoteShell) " + RemoteSpawn.shellQuote(expectedScript))
         #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
+        // The host-side idle verdict needs the leader's own pgid to compare
+        // against the tty's foreground group.
+        #expect(RemoteSpawn.foregroundProbeScript.contains("pgid"))
         // The sh -c wrapper only survives arbitrary login shells while the
         // script stays free of single quotes.
         #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))
