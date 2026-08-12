@@ -125,6 +125,8 @@ struct RemoteSpawnTests {
             + RemoteSpawn.foregroundProbeScript.replacingOccurrences(of: "<ZMX>", with: "zmx")
         #expect(argv?.last == "\(RemoteSpawn.remoteShell) " + RemoteSpawn.shellQuote(expectedScript))
         #expect(RemoteSpawn.foregroundProbeScript.contains("tpgid"))
+        // The full command line rides along for layout `run:` capture.
+        #expect(RemoteSpawn.foregroundProbeScript.contains("ps -o args="))
         // The sh -c wrapper only survives arbitrary login shells while the
         // script stays free of single quotes.
         #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))

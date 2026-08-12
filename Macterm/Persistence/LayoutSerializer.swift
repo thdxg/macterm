@@ -44,7 +44,9 @@ enum LayoutSerializer {
             // the user actually navigated. Remote panes (#104) record their
             // scp-style `projectPath` verbatim — their `currentPwd` is a
             // remote-filesystem path with no host prefix, and live-cwd capture
-            // is disabled for remote panes by design.
+            // is disabled for remote panes by design. Their `run:` IS captured:
+            // `liveCommand` answers from the remote foreground probe's cached
+            // command line (`ProcessInspector.runningCommand`'s remote branch).
             let livePath = p.isRemote ? p.projectPath : (p.nsView?.currentPwd ?? p.projectPath)
             // `run`: whatever the pane is *currently* running (its live
             // foreground command), NOT the command it was spawned with — a pane
@@ -76,12 +78,17 @@ enum LayoutSerializer {
     static func relativePath(_ path: String, to root: String) -> String? {
         // A remote root (#104) is an scp-style spec, not a local filesystem
         // path — running it through `URL(fileURLWithPath:)` standardizes it
-        // against the process cwd and yields garbage. Remote panes record
-        // their identity verbatim (see `node`), so treat any remote path as
-        // pure strings: return nil when it equals the root, else the path
-        // itself (LayoutBuilder.resolveCwd handles remote cwds symmetrically).
+        // against the process cwd and yields garbage. Treat remote paths as
+        // pure strings: nil when the path IS the root, the bare relative
+        // suffix when it extends the root (a pane a layout spawned with a
+        // relative `cwd:` — `LayoutBuilder.resolveCwd` joins the suffix back
+        // to the identical spec, closing the save→apply round trip), else the
+        // path verbatim.
         if ProjectPath.isRemote(path) || ProjectPath.isRemote(root) {
-            return path == root ? nil : path
+            if path == root { return nil }
+            let rootPrefix = root.hasSuffix("/") ? root : root + "/"
+            if path.hasPrefix(rootPrefix) { return String(path.dropFirst(rootPrefix.count)) }
+            return path
         }
         let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
         let standardizedRoot = URL(fileURLWithPath: root).standardizedFileURL.path

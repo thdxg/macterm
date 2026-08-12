@@ -155,12 +155,14 @@ enum RemoteSpawn {
         ]
     }
 
-    /// One-round-trip foreground probe for tier-2 remote tab naming: resolve
-    /// every `macterm-*` session on the host to its tty's foreground process
-    /// name — the same session→leader→tpgid→comm pipeline
+    /// One-round-trip foreground probe for tier-2 remote tab naming and layout
+    /// `run:` capture: resolve every `macterm-*` session on the host to its
+    /// tty's foreground process — the same session→leader→tpgid→comm pipeline
     /// `ZmxForegroundResolver` runs locally, expressed as portable POSIX sh
-    /// (Linux, BSD, macOS remotes). Emits `session<TAB>comm` lines; parsed by
-    /// `RemoteForegroundResolver.parseProbeOutput`.
+    /// (Linux, BSD, macOS remotes). Emits `session<TAB>comm<TAB>args` lines
+    /// (`args` is the foreground's full command line, the remote analogue of
+    /// the local KERN_PROCARGS2 argv that Save Layout records as `run:`);
+    /// parsed by `RemoteForegroundResolver.parseProbeOutput`.
     ///
     /// Deliberately contains NO single quotes: it ships to the host wrapped
     /// as `sh -c '<script>'`, and the outer quoting must survive any login
@@ -182,7 +184,8 @@ enum RemoteSpawn {
       [ -n "$t" ] || continue
       c=$(ps -o comm= -p "$t" 2>/dev/null)
       [ -n "$c" ] || continue
-      printf "%s\\t%s\\n" "$n" "$c"
+      a=$(ps -o args= -p "$t" 2>/dev/null)
+      printf "%s\\t%s\\t%s\\n" "$n" "$c" "$a"
     done
     """
 

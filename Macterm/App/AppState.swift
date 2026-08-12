@@ -465,7 +465,7 @@ final class AppState {
         lastPollSawBusyPane = sawBusyPane
         if didAcknowledgeCompletion { saveWorkspaces() }
         if !activeRemotePanes.isEmpty, isAnyWindowVisible() {
-            remoteForegroundResolver.refresh(panes: activeRemotePanes, probe: zmx.remoteForegroundComms)
+            remoteForegroundResolver.refresh(panes: activeRemotePanes, probe: zmx.remoteForegrounds)
         }
     }
 
