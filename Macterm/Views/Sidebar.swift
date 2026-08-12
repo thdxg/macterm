@@ -13,6 +13,13 @@ private enum SidebarItem: Hashable {
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
+/// Height of the invisible drop band behind each sidebar row (project header
+/// and tab rows alike). Sized to the row pitch so consecutive rows' bands
+/// tile the sidebar with no dead seam between them: a drop released between
+/// two rows resolves to one of them instead of silently snapping back. Lives
+/// in each row's `.background`, so it never affects the row's own layout.
+private let sidebarRowDropBandHeight: CGFloat = 32
+
 /// Keeps the sidebar footer above scrolling rows, using the native macOS 26
 /// scroll-edge fade when available.
 private extension View {
@@ -70,6 +77,29 @@ extension UTType {
     static let mactermProject = UTType(exportedAs: "com.thdxg.macterm.project-move")
 }
 
+/// Import-side union of the two sidebar drag payloads, so a single view can
+/// accept BOTH drags through ONE `.dropDestination`. This exists because
+/// stacking two `.dropDestination`s (one per payload type) on the same view
+/// is non-deterministic: only one of the two registrations wins, and which
+/// one flips with unrelated view changes — measured live, the project header
+/// accepted project drops in one build and silently rejected them in the
+/// next. Never stack drop destinations; widen the payload instead.
+/// Import-only: drags still lift as `MovableTab`/`MovableProject` (their
+/// `CodableRepresentation` is JSON, which is what the decoders here parse).
+enum SidebarDropItem: Transferable {
+    case tab(MovableTab)
+    case project(MovableProject)
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .mactermTab) { data in
+            try .tab(JSONDecoder().decode(MovableTab.self, from: data))
+        }
+        DataRepresentation(importedContentType: .mactermProject) { data in
+            try .project(JSONDecoder().decode(MovableProject.self, from: data))
+        }
+    }
+}
+
 struct SidebarContent: View {
     @Environment(AppState.self)
     private var appState
@@ -91,10 +121,19 @@ struct SidebarContent: View {
                 projectSection(index: projectIndex, project: project)
             }
             // No `.onMove`: it puts the List in reorder mode and hijacks the tab
-            // rows' `.draggable`, so tab drag-and-drop never fired. Project
-            // reordering is instead driven by dragging the project header (a
-            // `MovableProject` payload) so both drags share the Transferable
-            // path and coexist. See `projectHeader`.
+            // rows' `.draggable`, so tab drag-and-drop never fired. And no
+            // ForEach-level `.dropDestination` here either — on this OUTER
+            // ForEach (whose rows are DisclosureGroups) accepting a drop
+            // crashes inside SwiftUI's outline machinery
+            // (OutlineListCoordinator.outlineView(_:acceptDrop:…) →
+            // HeterogeneousCollection.element(at:) assertion; reproduced on
+            // macOS 27). The tab ForEach can use it because its rows are one
+            // level down in the outline. (A List-level catch-all doesn't work
+            // either: the outline view claims every drag over the sidebar, so
+            // a drop the rows don't handle never bubbles out to enclosing
+            // views.) Project reordering is instead a `MovableProject` drag
+            // from the project header into per-row drop targets — headers and
+            // tab rows, see `projectHeader`/`tabRow`.
         }
         // A single list-level context menu instead of one per row: the native
         // multi-select menu. Its closure receives the exact set the menu should
@@ -204,6 +243,22 @@ struct SidebarContent: View {
         // payload is just IDs — the live tab is looked up on drop, never
         // serialized.
         .draggable(MovableTab(tabID: tab.id, sourceProjectID: project.id))
+        // Dropping a PROJECT anywhere on a section — tab rows included, not
+        // just the header — reorders it to that section's slot. Without this,
+        // an expanded project's tab rows were dead zones for a project drag,
+        // which is most of a busy sidebar's surface area. Row-pitch-tall
+        // background band for the same seam-coverage reason as the header's.
+        // MovableProject only: a MovableTab destination here would shadow the
+        // ForEach-level insertion mechanism that handles tab-onto-tab drops.
+        .background {
+            Color.clear
+                .frame(minHeight: sidebarRowDropBandHeight)
+                .contentShape(Rectangle())
+                .dropDestination(for: MovableProject.self) { items, _ in
+                    receiveProjectDrop(items, before: project)
+                    return true
+                }
+        }
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
@@ -211,26 +266,44 @@ struct SidebarContent: View {
             projectStore.rename(id: project.id, to: $0)
         }
         .padding(.trailing, rowTrailingInset)
+        // Stretch to the full row so the drag grab area (and the drop band in
+        // the background below) covers the whole row, not just the label's
+        // intrinsic width — same treatment as the tab rows.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .tag(SidebarItem.project(project.id))
         // Drag the header to reorder projects (replaces the removed `.onMove`).
         .draggable(MovableProject(projectID: project.id))
-        // Dropping a TAB onto the header appends it to that project — the only
-        // drop path for a collapsed or empty project, whose tab ForEach renders
-        // no rows to target.
-        .dropDestination(for: MovableTab.self) { items, _ in
-            receiveTabDrop(items, into: project, at: nil)
-            return true
-        } isTargeted: { targeted in
-            // Spring-open a collapsed project while hovering a drag over it, so
-            // the user can see where the tab will land.
-            if targeted { expandedProjects.insert(project.id) }
-        }
-        // Dropping a PROJECT onto this header reorders it to this project's
-        // slot. Stacked as a second `.dropDestination` because each accepts a
-        // single payload type.
-        .dropDestination(for: MovableProject.self) { items, _ in
-            receiveProjectDrop(items, before: project)
-            return true
+        // ONE drop destination for both payloads (see `SidebarDropItem` for
+        // why stacking two is a landmine). A TAB dropped here appends to this
+        // project — the only drop path for a collapsed or empty project,
+        // whose tab ForEach renders no rows to target. A PROJECT dropped here
+        // reorders it to this project's slot. The destination lives on a
+        // row-pitch-tall background so drops landing in the seam between rows
+        // still resolve to a row instead of silently snapping back — a
+        // background doesn't participate in layout, so the row keeps its
+        // height while the drop band tiles the sidebar.
+        .background {
+            Color.clear
+                .frame(minHeight: sidebarRowDropBandHeight)
+                .contentShape(Rectangle())
+                .dropDestination(for: SidebarDropItem.self) { items, _ in
+                    for item in items {
+                        switch item {
+                        case let .tab(tab):
+                            receiveTabDrop([tab], into: project, at: nil)
+                        case let .project(dragged):
+                            receiveProjectDrop([dragged], before: project)
+                        }
+                    }
+                    return true
+                } isTargeted: { targeted in
+                    // Spring-open a collapsed project while hovering a drag
+                    // over it, so the user can see where a tab will land. This
+                    // also fires for project drags (the union payload can't be
+                    // inspected here); the hovered header itself doesn't move
+                    // when it expands, so the drop stays on target.
+                    if targeted { expandedProjects.insert(project.id) }
+                }
         }
     }
 
@@ -263,10 +336,11 @@ struct SidebarContent: View {
         expandedProjects.insert(project.id)
     }
 
-    /// Apply a project drag-and-drop: move the dragged project to the target
-    /// project's slot. Uses `move(fromOffsets:toOffset:)` semantics — `toOffset`
-    /// is the index in the CURRENT array where the item inserts (SwiftUI's
-    /// convention), so a downward move lands after the target.
+    /// Apply a project drag-and-drop onto a section (header or tab row): move
+    /// the dragged project to the target project's slot. Uses
+    /// `move(fromOffsets:toOffset:)` semantics — `toOffset` is the index in
+    /// the CURRENT array where the item inserts (SwiftUI's convention), so a
+    /// downward move lands after the target.
     private func receiveProjectDrop(_ items: [MovableProject], before target: Project) {
         let projects = projectStore.projects
         guard let targetIndex = projects.firstIndex(where: { $0.id == target.id }) else { return }
