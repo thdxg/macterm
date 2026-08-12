@@ -1,6 +1,9 @@
 import AppKit
+import os
 import SwiftUI
 import UserNotifications
+
+private let logger = Logger(subsystem: appBundleID, category: "AppDelegate")
 
 @main
 struct MactermApp: App {
@@ -156,10 +159,7 @@ struct MactermApp: App {
                 // dock icon — and even that depends on AppKit reopen
                 // delegation routing back through SwiftUI's WindowGroup.
                 Button("Show Window") {
-                    if let window = appDelegate.mainWindow {
-                        window.makeKeyAndOrderFront(nil)
-                        NSApp.activate()
-                    }
+                    appDelegate.showWindow()
                 }
                 .keyboardShortcut("n", modifiers: .command)
                 Divider()
@@ -207,6 +207,18 @@ struct MactermApp: App {
                 Divider()
                 AppCommandMenuItem(command: .nextTab, appState: appState, projectStore: projectStore, titleOverride: "Next Tab")
                 AppCommandMenuItem(command: .previousTab, appState: appState, projectStore: projectStore, titleOverride: "Previous Tab")
+                AppCommandMenuItem(
+                    command: .nextTabInProject,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Next Tab in Project"
+                )
+                AppCommandMenuItem(
+                    command: .previousTabInProject,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Previous Tab in Project"
+                )
                 AppCommandMenuItem(command: .recentTab, appState: appState, projectStore: projectStore, titleOverride: "Recent Tab")
             }
             CommandMenu("Project") {
@@ -359,6 +371,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let controlServer = ControlSocketServer(socketPath: ControlSocketServer.defaultSocketPath())
     private var controlHandler: ControlHandler?
 
+    /// Test seam: the window list the missing-window repair consults.
+    var windowLister: () -> [NSWindow] = { NSApp.windows }
+    /// Test seam: how a missing `WindowGroup` window is requested from SwiftUI.
+    /// The real implementation is the very call AppKit makes on a foreground
+    /// launch — see `repairMissingWindow`.
+    var openInitialWindow: () -> Void = { _ = NSApp.delegate?.applicationOpenUntitledFile?(NSApp) }
+    private var lastInitialWindowRequest: Date?
+
     func applicationWillFinishLaunching(_: Notification) {
         // The terminal window's identity is "the first window to become main"
         // (see reopenIfNeeded and MainAppResponder's key-window gate). That
@@ -453,6 +473,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        repairMissingWindow(attempt: 0)
+
         // Tell libghostty when we stop/start being the active app so idle
         // surfaces stop blinking the cursor and animating while backgrounded.
         // Visible terminals keep rendering real output (that's gated by
@@ -471,6 +493,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 queue: .main
             ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(false) } },
         ]
+    }
+
+    /// Any window of ours that could be the terminal window. Panels are the
+    /// quick terminal; everything else at launch time is the `WindowGroup`.
+    private func hasTerminalWindow() -> Bool {
+        windowLister().contains { !($0 is NSPanel) }
+    }
+
+    /// Ask SwiftUI to build the `WindowGroup`'s window when AppKit's launch
+    /// path never did (issue #241).
+    ///
+    /// SwiftUI creates that first window only while AppKit handles the launch
+    /// `aevt/oapp` event's open-untitled step, and AppKit skips the step when
+    /// the app is launched without being brought to the front — which is
+    /// exactly how macOS relaunches apps for "Reopen windows when logging back
+    /// in". Reproduced with `open -g -n` (the log shows
+    /// `BringFrontModifier … dontMakeFrontmost=1`, then the `aevt/oapp` handler
+    /// running but never reaching window creation, vs. a foreground launch
+    /// where it does).
+    ///
+    /// The result is a running app with **zero** windows: the Dock shows a
+    /// running dot, but there is nothing hidden for `reopenIfNeeded`, "Show
+    /// Window", or a Dock click to re-front — activating the app afterwards
+    /// does NOT make AppKit reconsider — so the user has to quit and relaunch.
+    /// It also means `MainWindow.onAppear` never runs, so the app has no
+    /// responders and its control socket answers `starting` forever.
+    ///
+    /// The repair is the same call AppKit itself makes on a foreground launch,
+    /// which was the one candidate that actually produced a window in that
+    /// state (`NSApp.activate(ignoringOtherApps:)` did not). It is deliberately
+    /// gated on there being no window at all, and deliberately delayed: AppKit
+    /// decides during launch-event handling, so a window that hasn't appeared
+    /// within the deadline is never coming, while firing early could add a
+    /// second window to a deliberately single-window app.
+    func repairMissingWindow(attempt: Int) {
+        guard !hasTerminalWindow() else { return }
+        guard attempt >= Self.windowRepairAttempts else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.windowRepairInterval) { [weak self] in
+                self?.repairMissingWindow(attempt: attempt + 1)
+            }
+            return
+        }
+        logger.warning("no window after launch — asking SwiftUI to open one")
+        requestInitialWindow()
+    }
+
+    private static let windowRepairInterval: TimeInterval = 0.25
+    /// Internal so the tests can jump straight to the deadline.
+    static let windowRepairAttempts = 12
+    private static let initialWindowRequestCooldown: TimeInterval = 5
+
+    /// Single funnel for "build the missing window", debounced: SwiftUI's
+    /// window appears a run-loop turn or two after the request, so two callers
+    /// racing (the launch repair and a Dock click landing just before it)
+    /// would otherwise open two windows in a deliberately single-window app.
+    private func requestInitialWindow() {
+        if let last = lastInitialWindowRequest,
+           Date().timeIntervalSince(last) < Self.initialWindowRequestCooldown
+        {
+            return
+        }
+        lastInitialWindowRequest = Date()
+        openInitialWindow()
+    }
+
+    /// Front the terminal window for an explicit user request ("Show Window"),
+    /// opening it first if the launch never produced one.
+    func showWindow() {
+        if let window = mainWindow ?? windowLister().first(where: { !($0 is NSPanel) }) {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return
+        }
+        requestInitialWindow()
     }
 
     /// Called from MactermApp.onAppear once the state objects exist. Registers
@@ -618,7 +714,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Prefer the cached terminal window; only if it's absent fall back to
         // the first hidden non-panel window.
         let target = mainWindow ?? NSApp.windows.first { !$0.isVisible && !($0 is NSPanel) }
-        guard let target else { return }
+        guard let target else {
+            // Nothing to re-front. A launch that never brought the app forward
+            // leaves SwiftUI with no window at all (see repairMissingWindow),
+            // and this activation is the user asking for it — so build it now
+            // rather than leaving them with a windowless app.
+            requestInitialWindow()
+            return
+        }
         target.makeKeyAndOrderFront(nil)
         NSApp.activate()
         // Adopt a freshly-discovered window as the cached pointer only when we

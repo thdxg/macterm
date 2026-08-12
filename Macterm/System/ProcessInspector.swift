@@ -33,10 +33,10 @@ enum ProcessInspector {
     @MainActor
     private static func foregroundPID(forPane pane: Pane) -> pid_t? {
         // Remote panes (#104): the only local process is the ssh client — no
-        // local pid ever describes what runs inside the pane. Every pane-level
-        // API returns nil/false, so layout save emits a plain leaf, reconcile
-        // matches the pane as idle, and titles come from the remote pipeline
-        // (`RemoteForegroundResolver` / execution-gated OSC titles).
+        // local pid ever describes what runs inside the pane. Every pid-based
+        // API returns nil/false; titles come from the remote pipeline
+        // (`RemoteForegroundResolver` / execution-gated OSC titles), and
+        // `runningCommand` answers from the probe's cached command line.
         guard !pane.isRemote else { return nil }
         if let resolved = ZmxForegroundResolver.foregroundPID(sessionName: pane.sessionName) {
             return resolved
@@ -61,6 +61,13 @@ enum ProcessInspector {
     /// `node …/npm-cli.js run dev`), not necessarily what the user typed.
     @MainActor
     static func runningCommand(forPane pane: Pane) -> String? {
+        // Remote panes (#104): the local process table only knows the ssh
+        // client, so the answer comes from the remote foreground probe's
+        // cached command line instead (`ps -o args=` on the host — the same
+        // full-argv shape, nil while idle at the remote prompt or before any
+        // probe result has landed). Both layout seams read this function, so
+        // save and apply stay symmetric.
+        if pane.isRemote { return pane.remoteForegroundCommand }
         guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), !args.isEmpty else { return nil }
         // Idle at a prompt: the foreground process is the shell itself. Nothing

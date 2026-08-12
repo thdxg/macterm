@@ -403,6 +403,59 @@ struct AppStateTests {
         #expect(ws.tabs.count == 1)
     }
 
+    // MARK: - Project-scoped tab navigation
+
+    @Test
+    func selectNextTab_wraps_within_the_project() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let other = seedProject(state, name: "other", path: "/tmp/other")
+        let ws = try #require(state.workspaces[p.id])
+        let first = try #require(ws.activeTabID)
+        let second = ws.createTab(projectPath: p.path).id
+        // Seed a tab in the sibling project so a leak across projects would show.
+        _ = try #require(state.workspaces[other.id]?.activeTabID)
+        state.activeProjectID = p.id
+        ws.selectTab(first)
+
+        state.selectNextTab(projectID: p.id)
+        #expect(ws.activeTabID == second)
+        // At the last tab it wraps to the first rather than crossing over.
+        state.selectNextTab(projectID: p.id)
+        #expect(ws.activeTabID == first)
+        #expect(state.activeProjectID == p.id)
+    }
+
+    @Test
+    func selectPreviousTab_wraps_within_the_project() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        _ = seedProject(state, name: "other", path: "/tmp/other")
+        let ws = try #require(state.workspaces[p.id])
+        let first = try #require(ws.activeTabID)
+        let second = ws.createTab(projectPath: p.path).id
+        state.activeProjectID = p.id
+        ws.selectTab(first)
+
+        // At the first tab it wraps to the last rather than crossing over.
+        state.selectPreviousTab(projectID: p.id)
+        #expect(ws.activeTabID == second)
+        state.selectPreviousTab(projectID: p.id)
+        #expect(ws.activeTabID == first)
+        #expect(state.activeProjectID == p.id)
+    }
+
+    @Test
+    func selectNextTab_single_tab_is_noop() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let only = try #require(ws.activeTabID)
+        state.selectNextTab(projectID: p.id)
+        state.selectPreviousTab(projectID: p.id)
+        #expect(ws.activeTabID == only)
+    }
+
     // MARK: - Focus navigation
 
     @Test
@@ -1421,7 +1474,7 @@ struct AppStateTests {
             isBundled: { true },
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
-            remoteForegroundComms: { _, _ in nil },
+            remoteForegrounds: { _, _ in nil },
             listSessionsWithClients: { [] },
             sessionLeaderPIDs: { [:] },
             sessionListSnapshot: { (entries: [], leaders: [:]) }

@@ -33,18 +33,34 @@ struct RemoteForegroundResolverTests {
     // MARK: - Probe output parsing
 
     @Test
-    func parses_session_tab_comm_lines() {
+    func parses_session_tab_comm_tab_args_lines() {
         let out = """
-        macterm-api-abc123\tbtop
-        macterm-api-def456\t/usr/local/bin/hx
+        macterm-api-abc123\tbtop\tbtop --utf-force
+        macterm-api-def456\t/usr/local/bin/hx\t
         garbage line
-        supa-other\tvim
-        macterm-empty\t
+        supa-other\tvim\tvim
+        macterm-empty\t\t
         """
         let map = RemoteForegroundResolver.parseProbeOutput(out)
         #expect(map == [
-            "macterm-api-abc123": "btop",
-            "macterm-api-def456": "/usr/local/bin/hx",
+            "macterm-api-abc123": RemoteForeground(comm: "btop", command: "btop --utf-force"),
+            "macterm-api-def456": RemoteForeground(comm: "/usr/local/bin/hx", command: nil),
+        ])
+    }
+
+    @Test
+    func args_keep_embedded_tabs_and_two_field_lines_still_parse() {
+        // The args field is the unsplit remainder of the line (a command line
+        // may itself contain tabs), and a two-field line (a `ps` that reported
+        // no args) degrades to a comm-only foreground.
+        let out = """
+        macterm-api-abc123\tnode\tnode server.js\t--flag
+        macterm-api-legacy\thx
+        """
+        let map = RemoteForegroundResolver.parseProbeOutput(out)
+        #expect(map == [
+            "macterm-api-abc123": RemoteForeground(comm: "node", command: "node server.js\t--flag"),
+            "macterm-api-legacy": RemoteForeground(comm: "hx", command: nil),
         ])
     }
 
@@ -54,7 +70,7 @@ struct RemoteForegroundResolverTests {
     func probes_once_per_host_within_the_interval() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
-        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
             return [:]
         }
@@ -79,9 +95,9 @@ struct RemoteForegroundResolverTests {
         // race (a listing that misses the session re-arms the request and
         // would defeat the throttled expectations below).
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return [session: "bash"]
+            return [session: RemoteForeground(comm: "bash", command: nil)]
         }
         let t0 = Date()
         resolver.refresh(panes: [pane], probe: probe, now: t0)
@@ -114,10 +130,10 @@ struct RemoteForegroundResolverTests {
         let resolver = RemoteForegroundResolver(minInterval: 3)
         let pane = remotePane()
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { _, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { _, _ in
             calls.mutate { $0 += 1 }
             // Registered from the third probe on.
-            return calls.value >= 3 ? [session: "bash"] : [:]
+            return calls.value >= 3 ? [session: RemoteForeground(comm: "bash", command: nil)] : [:]
         }
         let t0 = Date()
         // Init primes the first request; each miss re-arms, bypassing the
@@ -151,12 +167,16 @@ struct RemoteForegroundResolverTests {
     // MARK: - Name application
 
     @Test
-    func applies_probe_names_to_matching_panes() async {
+    func applies_probe_names_and_commands_to_matching_panes() async {
         let pane = remotePane()
         let resolver = RemoteForegroundResolver(minInterval: 0)
         let session = pane.sessionName
-        resolver.refresh(panes: [pane], probe: { _, _ in [session: "btop"] })
+        resolver.refresh(panes: [pane], probe: { _, _ in
+            [session: RemoteForeground(comm: "btop", command: "btop --utf-force")]
+        })
         await waitUntil { pane.foregroundProcessName == "btop" }
+        // The full command line lands too — Save Layout's `run:` source.
+        #expect(pane.remoteForegroundCommand == "btop --utf-force")
     }
 
     @Test

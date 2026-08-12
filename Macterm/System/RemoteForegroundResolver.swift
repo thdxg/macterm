@@ -3,6 +3,18 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "RemoteForegroundResolver")
 
+/// One session's probed remote foreground: the short process name (`comm`,
+/// feeds tab naming) and — when the host's `ps` reported it — the foreground's
+/// full command line (`args`, feeds Save Layout's `run:` capture, the remote
+/// analogue of the local KERN_PROCARGS2 argv).
+struct RemoteForeground: Equatable {
+    let comm: String
+    /// The full `ps -o args=` command line, nil when the probe line carried
+    /// none. May describe a shell at its prompt — `Pane.applyRemoteForeground`
+    /// decides whether it counts as a running command.
+    let command: String?
+}
+
 /// Tier-2 smart tab naming for remote panes (#104): a batched, per-host ssh
 /// probe resolving every `macterm-*` session on a host to its foreground
 /// process name (`RemoteSpawn.foregroundProbeScript` — the remote analogue of
@@ -41,10 +53,10 @@ final class RemoteForegroundResolver {
     /// updates now instead of on the next scheduled probe; the inflight
     /// guard still holds, and an unconsumed request survives to the next
     /// tick. `probe` is passed per call (AppState hands in the injectable
-    /// `ZmxClient.remoteForegroundComms`; tests hand in a recorder).
+    /// `ZmxClient.remoteForegrounds`; tests hand in a recorder).
     func refresh(
         panes: [Pane],
-        probe: @escaping @Sendable (ProjectPath, String?) async -> [String: String]?,
+        probe: @escaping @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]?,
         now: Date = Date()
     ) {
         guard !panes.isEmpty else { return }
@@ -80,7 +92,7 @@ final class RemoteForegroundResolver {
         }
     }
 
-    private func finish(dest: String, map: [String: String]?, panes: [Pane]) {
+    private func finish(dest: String, map: [String: RemoteForeground]?, panes: [Pane]) {
         inflight.remove(dest)
         guard let map else {
             // Unreachable/auth/timeout: names freeze at last-known. Logged
@@ -89,8 +101,8 @@ final class RemoteForegroundResolver {
             return
         }
         for pane in panes {
-            if let comm = map[pane.sessionName] {
-                pane.applyRemoteForegroundName(comm)
+            if let foreground = map[pane.sessionName] {
+                pane.applyRemoteForeground(foreground)
             } else {
                 // A successful listing with no entry for this session: the
                 // probe raced the session's async registration on the host
@@ -104,16 +116,20 @@ final class RemoteForegroundResolver {
         }
     }
 
-    /// Parse `session<TAB>comm` probe lines into a name → comm map. Pure.
-    nonisolated static func parseProbeOutput(_ stdout: String) -> [String: String] {
-        var map: [String: String] = [:]
+    /// Parse `session<TAB>comm<TAB>args` probe lines into a name → foreground
+    /// map. The args field is optional (older two-field lines, or a `ps` that
+    /// reported nothing) and may itself contain tabs — it's the unsplit
+    /// remainder of the line. Pure.
+    nonisolated static func parseProbeOutput(_ stdout: String) -> [String: RemoteForeground] {
+        var map: [String: RemoteForeground] = [:]
         for line in stdout.split(separator: "\n") {
-            let parts = line.split(separator: "\t", maxSplits: 1)
-            guard parts.count == 2 else { continue }
+            let parts = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count >= 2 else { continue }
             let name = parts[0].trimmingCharacters(in: .whitespaces)
             let comm = parts[1].trimmingCharacters(in: .whitespaces)
             guard name.hasPrefix("macterm-"), !comm.isEmpty else { continue }
-            map[name] = comm
+            let args = parts.count > 2 ? parts[2].trimmingCharacters(in: .whitespaces) : ""
+            map[name] = RemoteForeground(comm: comm, command: args.isEmpty ? nil : args)
         }
         return map
     }
