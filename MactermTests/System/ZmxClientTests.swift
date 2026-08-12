@@ -233,7 +233,7 @@ struct ZmxReapOrphansDriverTests {
             isBundled: { true },
             killSession: { id in killed.mutate { $0.append(id) } },
             killRemoteSession: { _, _, _ in },
-            remoteForegroundComms: { _, _ in nil },
+            remoteForegrounds: { _, _ in nil },
             listSessionsWithClients: { entries },
             sessionLeaderPIDs: { [:] },
             sessionListSnapshot: { entries.map { (entries: $0, leaders: [:]) } }

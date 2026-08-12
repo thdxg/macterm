@@ -13,6 +13,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case renameTab
     case nextTab
     case previousTab
+    case nextTabInProject
+    case previousTabInProject
     case recentTab
     case separateAllPanes
     // Panes
@@ -60,6 +62,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .renameTab: "Rename Current Tab"
         case .nextTab: "Next Tab"
         case .previousTab: "Previous Tab"
+        case .nextTabInProject: "Next Tab in Project"
+        case .previousTabInProject: "Previous Tab in Project"
         case .recentTab: "Recent Tab"
         case .separateAllPanes: "Separate All Panes"
         case .separateCurrentPane: "Separate Current Pane"
@@ -104,6 +108,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .renameTab,
              .nextTab,
              .previousTab,
+             .nextTabInProject,
+             .previousTabInProject,
              .recentTab,
              .separateAllPanes: .tabs
         case .splitRight,
@@ -149,6 +155,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .closePane: .closePane
         case .nextTab: .nextGlobalTab
         case .previousTab: .previousGlobalTab
+        case .nextTabInProject: .nextTabInProject
+        case .previousTabInProject: .previousTabInProject
         case .recentTab: .recentTab
         case .separateAllPanes: .separateAllPanes
         case .splitRight: .splitRight

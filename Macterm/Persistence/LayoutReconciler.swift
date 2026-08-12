@@ -67,8 +67,15 @@ enum LayoutReconciler {
         projectID: UUID,
         liveCommand: @escaping (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
         liveShellName: @escaping (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) },
-        liveCwd: @escaping (Pane) -> String = {
-            LayoutBuilder.canonicalizeLocal($0.nsView?.currentPwd ?? $0.projectPath)
+        liveCwd: @escaping (Pane) -> String = { pane in
+            // A remote pane's identity is its scp-style `projectPath` — the
+            // same value LayoutSerializer records (its `currentPwd` is a bare
+            // remote-filesystem path that could never equal a declared leaf's
+            // resolved `[user@]host:dir` cwd, so keying on it would respawn
+            // every matched remote command pane).
+            LayoutBuilder.canonicalizeLocal(
+                pane.isRemote ? pane.projectPath : (pane.nsView?.currentPwd ?? pane.projectPath)
+            )
         }
     ) -> Plan {
         let liveTabs = workspace?.tabs ?? []
