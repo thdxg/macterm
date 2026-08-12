@@ -33,12 +33,12 @@ struct ZmxClient {
     /// with its dead ssh client or will be the user's to `zmx kill`).
     var killRemoteSession: @Sendable (_ remote: ProjectPath, _ sessionID: String, _ zmxPath: String?) async -> Void
     /// One batched foreground probe of a remote host (#104): session name →
-    /// foreground `comm` for every `macterm-*` session there, via
+    /// foreground (`comm` for tab naming, full command line for layout `run:`
+    /// capture) for every `macterm-*` session there, via
     /// `RemoteSpawn.foregroundProbeArgv`. `zmxPath` (optional) is the explicit
     /// remote zmx path. nil result = probe failed (unreachable / auth /
     /// timeout) — `RemoteForegroundResolver` degrades silently.
-    var remoteForegroundObservations: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async
-        -> [String: RemoteForegroundObservation]?
+    var remoteForegrounds: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> [String: RemoteForeground]?
     /// Each live Macterm session with its attached-client count, or nil when the
     /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
     /// successful empty listing. An entry's `clients == nil` marks an unknown
@@ -118,7 +118,7 @@ extension ZmxClient {
                     timeout: .seconds(10)
                 )
             },
-            remoteForegroundObservations: { remote, zmxPath in
+            remoteForegrounds: { remote, zmxPath in
                 guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: zmxPath)
                 else { return nil }
                 guard let stdout = await runZmx(
@@ -167,7 +167,7 @@ extension ZmxClient {
         isBundled: { false },
         killSession: { _ in },
         killRemoteSession: { _, _, _ in },
-        remoteForegroundObservations: { _, _ in nil },
+        remoteForegrounds: { _, _ in nil },
         listSessionsWithClients: { [] },
         sessionLeaderPIDs: { [:] },
         sessionListSnapshot: { (entries: [], leaders: [:]) }

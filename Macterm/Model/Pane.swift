@@ -206,9 +206,9 @@ final class Pane: Identifiable {
     /// `RemoteProbeRequest.noteMiss`). Re-arm the request, bounded, so the
     /// retry rides the next poll tick from any project. Only for a pane that
     /// has never been named: a named pane's listing miss is a blip, and
-    /// `applyRemoteForegroundName` already keeps the last-known name. NOT
-    /// re-armed on probe failure (unreachable host) — retrying can't name a
-    /// pane the host won't answer for.
+    /// `applyRemoteForeground` already keeps the last-known name and
+    /// command. NOT re-armed on probe failure (unreachable host) — retrying
+    /// can't name a pane the host won't answer for.
     func noteRemoteProbeMiss() {
         guard isRemote, foregroundProcessName == nil else { return }
         remoteProbeRequest.noteMiss()
@@ -522,24 +522,44 @@ final class Pane: Identifiable {
         programTitlePID = nil
     }
 
+    /// The full command line of the remote foreground process, from the probe
+    /// (`ps -o args=`) — what Save Layout records as the pane's `run:` and the
+    /// reconciler matches against, standing in for the local KERN_PROCARGS2
+    /// argv (`ProcessInspector.runningCommand`). nil while the remote pane is
+    /// idle at its shell prompt or before any probe result has landed — the
+    /// same "idle saves no run" contract local panes get. Not observed: only
+    /// the on-demand layout paths read it, and the ~3s probe re-applies it on
+    /// every success.
+    @ObservationIgnored
+    private(set) var remoteForegroundCommand: String?
+
     /// Tier-2 naming input for remote panes (#104): the remote resolver's
-    /// foreground observation for this pane's session. A macOS remote
-    /// reports `comm` as a full executable path — keep the basename,
-    /// matching local kernel-comm behavior.
+    /// probed foreground for this pane's session. A macOS remote reports
+    /// `comm` as a full executable path — keep the basename, matching local
+    /// kernel-comm behavior. nil (session missing from a successful probe)
+    /// keeps the last-known name and command: a blip must not flap tab titles.
     ///
-    /// The idle verdict prefers the HOST's own reading (`observation.isIdle`
-    /// — foreground pgid == session leader, computed where the processes
-    /// live), falling back to the local shell database only when the probe
-    /// couldn't compute one. The local database is wrong in both directions
-    /// across hosts: a remote-only login shell it doesn't list would read
-    /// busy at an idle prompt forever, and a NESTED shell running inside the
-    /// session shell would read idle even though closing kills it — the
-    /// host-side verdict matches libghostty's local surface semantics
-    /// (a nested shell is a running child) instead.
-    func applyRemoteForeground(_ observation: RemoteForegroundObservation) {
-        let base = Self.normalizeRemoteComm(observation.comm)
+    /// The sample's idle verdict prefers the HOST's own reading
+    /// (`foreground.isIdle` — foreground pgid == session leader, computed
+    /// where the processes live), falling back to the local shell database
+    /// only when the probe couldn't compute one. The local database is wrong
+    /// in both directions across hosts: a remote-only login shell it doesn't
+    /// list would read busy at an idle prompt forever, and a NESTED shell
+    /// running inside the session shell would read idle even though closing
+    /// kills it — the host-side verdict matches libghostty's local surface
+    /// semantics (a nested shell is a running child) instead.
+    ///
+    /// `remoteForegroundCommand` follows the local `runningCommand` contract:
+    /// a shell-NAMED foreground records no command, anything else records the
+    /// probe's full command line — falling back to the comm basename when the
+    /// probe line carried no args field. Deliberately name-based (not the
+    /// host idle verdict): locally, `runningCommand` returns nil for any
+    /// shell argv[0], nested or not, and layout capture mirrors that.
+    func applyRemoteForeground(_ foreground: RemoteForeground?) {
+        guard let foreground, !foreground.comm.isEmpty else { return }
+        let base = Self.normalizeRemoteComm(foreground.comm)
         guard !base.isEmpty else { return }
-        let isIdleShell = observation.isIdle ?? ProcessInspector.isShellProcessName(base)
+        let isIdleShell = foreground.isIdle ?? ProcessInspector.isShellProcessName(base)
         if base != foregroundProcessName || isIdleShell != foregroundSample?.isIdleShell {
             foregroundSample = ForegroundSample(
                 name: base,
@@ -548,15 +568,16 @@ final class Pane: Identifiable {
                 sampledAt: Date()
             )
         }
+        remoteForegroundCommand = ProcessInspector.isShellProcessName(base)
+            ? nil
+            : (foreground.command ?? base)
     }
 
-    /// Name-only variant (no host idle verdict — falls back to the local
-    /// shell database). Kept for tests and callers that predate the
-    /// observation wire format. nil (session missing from a successful
-    /// probe) keeps the last-known name: a blip must not flap tab titles.
+    /// Name-only convenience over `applyRemoteForeground` (no probed args,
+    /// no host idle verdict — falls back to the local shell database).
     func applyRemoteForegroundName(_ comm: String?) {
-        guard let comm, !comm.isEmpty else { return }
-        applyRemoteForeground(RemoteForegroundObservation(comm: comm, isIdle: nil))
+        guard let comm else { return }
+        applyRemoteForeground(RemoteForeground(comm: comm, isIdle: nil, command: nil))
     }
 
     /// Basename of a remote `ps -o comm=` value, minus the leading `-` a

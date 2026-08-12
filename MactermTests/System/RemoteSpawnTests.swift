@@ -128,6 +128,8 @@ struct RemoteSpawnTests {
         // The host-side idle verdict needs the leader's own pgid to compare
         // against the tty's foreground group.
         #expect(RemoteSpawn.foregroundProbeScript.contains("pgid"))
+        // The full command line rides along for layout `run:` capture.
+        #expect(RemoteSpawn.foregroundProbeScript.contains("ps -o args="))
         // The sh -c wrapper only survives arbitrary login shells while the
         // script stays free of single quotes.
         #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))

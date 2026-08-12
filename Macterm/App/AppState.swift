@@ -476,7 +476,7 @@ final class AppState {
             ? activeRemotePanes
             : activeRemotePanes.filter(\.remoteProbePending)
         if !panesToProbe.isEmpty {
-            remoteForegroundResolver.refresh(panes: panesToProbe, probe: zmx.remoteForegroundObservations)
+            remoteForegroundResolver.refresh(panes: panesToProbe, probe: zmx.remoteForegrounds)
         }
     }
 

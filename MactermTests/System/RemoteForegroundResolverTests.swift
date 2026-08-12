@@ -33,40 +33,59 @@ struct RemoteForegroundResolverTests {
     // MARK: - Probe output parsing
 
     @Test
-    func parses_session_tab_comm_lines() {
-        // Two-field lines (no idle flag — an older or degraded probe) parse
-        // with an unknown verdict; garbage and non-macterm sessions drop.
+    func parses_session_tab_comm_tab_idleflag_tab_args_lines() {
+        // Garbage and non-macterm sessions drop; an empty args field is a
+        // nil command.
         let out = """
-        macterm-api-abc123\tbtop
-        macterm-api-def456\t/usr/local/bin/hx
+        macterm-api-abc123\tbtop\t0\tbtop --utf-force
+        macterm-api-def456\t/usr/local/bin/hx\t0\t
         garbage line
-        supa-other\tvim
-        macterm-empty\t
+        supa-other\tvim\t0\tvim
+        macterm-empty\t\t\t
         """
         let map = RemoteForegroundResolver.parseProbeOutput(out)
         #expect(map == [
-            "macterm-api-abc123": RemoteForegroundObservation(comm: "btop", isIdle: nil),
-            "macterm-api-def456": RemoteForegroundObservation(comm: "/usr/local/bin/hx", isIdle: nil),
+            "macterm-api-abc123": RemoteForeground(comm: "btop", isIdle: false, command: "btop --utf-force"),
+            "macterm-api-def456": RemoteForeground(comm: "/usr/local/bin/hx", isIdle: false, command: nil),
         ])
     }
 
     @Test
     func parses_the_host_idle_flag() {
         // `1` = the session leader's group owns the tty (shell at prompt),
-        // `0` = another group holds the foreground, empty = the pgid read
-        // failed on the host — unknown, never invented.
+        // `0` = another group holds the foreground, empty/garbage = the pgid
+        // read failed on the host — unknown, never invented.
         let out = """
-        macterm-api-idle\t-bash\t1
-        macterm-api-busy\tbtop\t0
-        macterm-api-unknown\thx\t
-        macterm-api-garbage\tvim\tmaybe
+        macterm-api-idle\t-bash\t1\t-bash
+        macterm-api-busy\tbtop\t0\tbtop
+        macterm-api-unknown\thx\t\thx
+        macterm-api-garbage\tvim\tmaybe\tvim
         """
         let map = RemoteForegroundResolver.parseProbeOutput(out)
         #expect(map == [
-            "macterm-api-idle": RemoteForegroundObservation(comm: "-bash", isIdle: true),
-            "macterm-api-busy": RemoteForegroundObservation(comm: "btop", isIdle: false),
-            "macterm-api-unknown": RemoteForegroundObservation(comm: "hx", isIdle: nil),
-            "macterm-api-garbage": RemoteForegroundObservation(comm: "vim", isIdle: nil),
+            "macterm-api-idle": RemoteForeground(comm: "-bash", isIdle: true, command: "-bash"),
+            "macterm-api-busy": RemoteForeground(comm: "btop", isIdle: false, command: "btop"),
+            "macterm-api-unknown": RemoteForeground(comm: "hx", isIdle: nil, command: "hx"),
+            "macterm-api-garbage": RemoteForeground(comm: "vim", isIdle: nil, command: "vim"),
+        ])
+    }
+
+    @Test
+    func args_keep_embedded_tabs_and_short_lines_still_parse() {
+        // The args field is the unsplit remainder of the line (a command line
+        // may itself contain tabs) — which is why the fixed-width idle flag
+        // sits BEFORE it. Two- and three-field lines (degraded probes)
+        // degrade to comm-only / command-less foregrounds.
+        let out = """
+        macterm-api-abc123\tnode\t0\tnode server.js\t--flag
+        macterm-api-legacy\thx
+        macterm-api-flagonly\thx\t0
+        """
+        let map = RemoteForegroundResolver.parseProbeOutput(out)
+        #expect(map == [
+            "macterm-api-abc123": RemoteForeground(comm: "node", isIdle: false, command: "node server.js\t--flag"),
+            "macterm-api-legacy": RemoteForeground(comm: "hx", isIdle: nil, command: nil),
+            "macterm-api-flagonly": RemoteForeground(comm: "hx", isIdle: false, command: nil),
         ])
     }
 
@@ -76,7 +95,7 @@ struct RemoteForegroundResolverTests {
     func probes_once_per_host_within_the_interval() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
-        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForegroundObservation]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
             return [:]
         }
@@ -101,9 +120,9 @@ struct RemoteForegroundResolverTests {
         // race (a listing that misses the session re-arms the request and
         // would defeat the throttled expectations below).
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForegroundObservation]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return [session: RemoteForegroundObservation(comm: "bash", isIdle: true)]
+            return [session: RemoteForeground(comm: "bash", isIdle: true, command: nil)]
         }
         let t0 = Date()
         resolver.refresh(panes: [pane], probe: probe, now: t0)
@@ -136,10 +155,10 @@ struct RemoteForegroundResolverTests {
         let resolver = RemoteForegroundResolver(minInterval: 3)
         let pane = remotePane()
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForegroundObservation]? = { _, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { _, _ in
             calls.mutate { $0 += 1 }
             // Registered from the third probe on.
-            return calls.value >= 3 ? [session: RemoteForegroundObservation(comm: "bash", isIdle: true)] : [:]
+            return calls.value >= 3 ? [session: RemoteForeground(comm: "bash", isIdle: true, command: nil)] : [:]
         }
         let t0 = Date()
         // Init primes the first request; each miss re-arms, bypassing the
@@ -173,14 +192,16 @@ struct RemoteForegroundResolverTests {
     // MARK: - Name application
 
     @Test
-    func applies_probe_names_to_matching_panes() async {
+    func applies_probe_names_and_commands_to_matching_panes() async {
         let pane = remotePane()
         let resolver = RemoteForegroundResolver(minInterval: 0)
         let session = pane.sessionName
         resolver.refresh(panes: [pane], probe: { _, _ in
-            [session: RemoteForegroundObservation(comm: "btop", isIdle: false)]
+            [session: RemoteForeground(comm: "btop", isIdle: false, command: "btop --utf-force")]
         })
         await waitUntil { pane.foregroundProcessName == "btop" }
+        // The full command line lands too — Save Layout's `run:` source.
+        #expect(pane.remoteForegroundCommand == "btop --utf-force")
     }
 
     @Test

@@ -537,7 +537,7 @@ struct PaneTests {
         // host says its group owns the tty, so an idle prompt must not warn.
         let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         remote.applyRemoteForeground(
-            RemoteForegroundObservation(comm: "-exotic-shell", isIdle: true)
+            RemoteForeground(comm: "-exotic-shell", isIdle: true, command: nil)
         )
         #expect(remote.foregroundProcessName == "exotic-shell")
         #expect(remote.remoteNeedsConfirmClose == false)
@@ -547,14 +547,14 @@ struct PaneTests {
         // group — closing kills it, so it warns (matching libghostty's
         // local surface semantics, where a nested shell is a running child).
         remote.applyRemoteForeground(
-            RemoteForegroundObservation(comm: "zsh", isIdle: false)
+            RemoteForeground(comm: "zsh", isIdle: false, command: nil)
         )
         #expect(remote.remoteNeedsConfirmClose == true)
 
         // No host verdict (older probe, pgid read failure): fall back to
         // the local database heuristic.
         remote.applyRemoteForeground(
-            RemoteForegroundObservation(comm: "zsh", isIdle: nil)
+            RemoteForeground(comm: "zsh", isIdle: nil, command: nil)
         )
         #expect(remote.remoteNeedsConfirmClose == false)
     }
@@ -639,5 +639,44 @@ struct PaneTests {
         // surface reading rather than silently killing an unknown foreground.
         let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
         #expect(p.remoteNeedsConfirmClose == nil)
+    }
+
+    // MARK: - Remote foreground command (layout `run:` capture)
+
+    @Test
+    func remoteForegroundCommand_records_a_running_programs_full_command_line() {
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.applyRemoteForeground(RemoteForeground(comm: "btop", command: "btop --utf-force"))
+        #expect(p.remoteForegroundCommand == "btop --utf-force")
+    }
+
+    @Test
+    func remoteForegroundCommand_is_nil_while_idle_at_the_remote_prompt() {
+        // A shell in the foreground is an idle prompt — the same "idle saves
+        // no run" contract local panes get. `-zsh` is the login form the
+        // probe actually returns; its args carry the same dash.
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.applyRemoteForeground(RemoteForeground(comm: "btop", command: "btop"))
+        p.applyRemoteForeground(RemoteForeground(comm: "-zsh", command: "-zsh"))
+        #expect(p.remoteForegroundCommand == nil)
+    }
+
+    @Test
+    func remoteForegroundCommand_falls_back_to_the_comm_basename_without_args() {
+        // A probe line with no args field (older script, a ps that reported
+        // nothing) still yields a usable `run:` — the short name.
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.applyRemoteForeground(RemoteForeground(comm: "/usr/local/bin/hx", command: nil))
+        #expect(p.remoteForegroundCommand == "hx")
+    }
+
+    @Test
+    func remoteForegroundCommand_survives_a_probe_blip() {
+        // nil (session missing from a successful probe) keeps the last-known
+        // command, mirroring the name-freeze contract.
+        let p = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        p.applyRemoteForeground(RemoteForeground(comm: "btop", command: "btop --utf-force"))
+        p.applyRemoteForeground(nil)
+        #expect(p.remoteForegroundCommand == "btop --utf-force")
     }
 }
