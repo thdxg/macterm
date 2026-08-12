@@ -546,6 +546,36 @@ struct PaneTests {
     }
 
     @Test
+    func probeMiss_rearms_a_never_named_pane_bounded() {
+        // A successful probe listing without this session (the registration
+        // race) must re-arm the request — a consumed request would strand
+        // the pane nil once its project leaves the frontmost slot.
+        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        remote.consumeRemoteProbeRequest()
+        remote.noteRemoteProbeMiss()
+        #expect(remote.remoteProbePending)
+
+        // Once a name has landed, a later listing miss (a blip) re-arms
+        // nothing — applyRemoteForegroundName already keeps the last-known
+        // name, and the scheduled cadence owns steady-state refreshes.
+        remote.applyRemoteForegroundName("bash")
+        remote.consumeRemoteProbeRequest()
+        remote.noteRemoteProbeMiss()
+        #expect(!remote.remoteProbePending)
+
+        // Bounded: a session that will never register stops re-arming.
+        let stranded = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        for _ in 0 ..< 16 {
+            stranded.consumeRemoteProbeRequest()
+            stranded.noteRemoteProbeMiss()
+        }
+        #expect(stranded.remoteProbePending)
+        stranded.consumeRemoteProbeRequest()
+        stranded.noteRemoteProbeMiss()
+        #expect(!stranded.remoteProbePending)
+    }
+
+    @Test
     func remoteCommandBoundary_requests_a_probe_for_remote_panes_only() {
         let local = Pane(projectPath: "/", projectID: UUID())
         local.noteRemoteCommandBoundary()

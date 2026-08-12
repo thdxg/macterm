@@ -73,11 +73,16 @@ struct RemoteForegroundResolverTests {
     func boundary_request_bypasses_the_interval_and_is_consumed() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
+        let pane = remotePane()
+        // The probe names the session: this test is about the boundary
+        // request's throttle-bypass in steady state, not the registration
+        // race (a listing that misses the session re-arms the request and
+        // would defeat the throttled expectations below).
+        let session = pane.sessionName
         let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return [:]
+            return [session: "bash"]
         }
-        let pane = remotePane()
         let t0 = Date()
         resolver.refresh(panes: [pane], probe: probe, now: t0)
         await waitUntil { calls.value == ["devbox"] }
@@ -97,6 +102,39 @@ struct RemoteForegroundResolverTests {
         resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(2.5))
         await waitUntil { resolver.isIdle }
         #expect(calls.value == ["devbox", "devbox"])
+    }
+
+    @Test
+    func registration_race_rearms_until_the_session_appears() async {
+        // A fresh session takes seconds to register on the host, so early
+        // probes succeed but list nothing for it. Each miss must re-arm the
+        // pane's request so the retry survives its project leaving the
+        // frontmost slot; the probe that finally names it ends the loop.
+        let calls = LockedBox<Int>(0)
+        let resolver = RemoteForegroundResolver(minInterval: 3)
+        let pane = remotePane()
+        let session = pane.sessionName
+        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { _, _ in
+            calls.mutate { $0 += 1 }
+            // Registered from the third probe on.
+            return calls.value >= 3 ? [session: "bash"] : [:]
+        }
+        let t0 = Date()
+        // Init primes the first request; each miss re-arms, bypassing the
+        // interval on every subsequent tick.
+        resolver.refresh(panes: [pane], probe: probe, now: t0)
+        await waitUntil { resolver.isIdle }
+        #expect(pane.remoteProbePending)
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(1))
+        await waitUntil { resolver.isIdle }
+        #expect(pane.remoteProbePending)
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(2))
+        await waitUntil { resolver.isIdle }
+
+        // Named — the request is answered, not re-armed.
+        #expect(pane.foregroundProcessName == "bash")
+        #expect(!pane.remoteProbePending)
+        #expect(calls.value == 3)
     }
 
     @Test

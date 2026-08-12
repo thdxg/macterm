@@ -89,7 +89,18 @@ final class RemoteForegroundResolver {
             return
         }
         for pane in panes {
-            pane.applyRemoteForegroundName(map[pane.sessionName])
+            if let comm = map[pane.sessionName] {
+                pane.applyRemoteForegroundName(comm)
+            } else {
+                // A successful listing with no entry for this session: the
+                // probe raced the session's async registration on the host
+                // (ssh handshake + zmx startup take seconds). A never-named
+                // pane re-arms its request, bounded, so the retry rides the
+                // next poll tick even after its project leaves the frontmost
+                // slot — otherwise the consumed request would strand it nil,
+                // and every close would take the conservative busy fallback.
+                pane.noteRemoteProbeMiss()
+            }
         }
     }
 

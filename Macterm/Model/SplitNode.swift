@@ -626,6 +626,33 @@ final class Pane: Identifiable {
         remoteProbePending = false
     }
 
+    /// Bounded retries while this pane has never been named: a freshly
+    /// spawned session registers on the host asynchronously (ssh handshake +
+    /// zmx startup, seconds), so the primed init probe usually fires too
+    /// early and finds no session. Consuming that request would strand the
+    /// pane nil forever if its project leaves the frontmost slot inside the
+    /// registration window — the scheduled probes that would otherwise
+    /// retry cover only the frontmost project. The local mirror is
+    /// `AppState.zmxRetryBudget` for `zmx ls` racing session registration.
+    /// Bounded so a session that will never appear (killed remotely) can't
+    /// keep re-arming probes; NOT re-armed on probe failure (unreachable
+    /// host) — retrying can't name a pane the host won't answer for.
+    /// Sixteen because retries pace at roughly max(poll tick, probe RTT)
+    /// ≈ 1–2s (a pending request bypasses the resolver's interval), and
+    /// registration on a slow host measures ~12–14s: the budget must
+    /// outlive the window it exists to cover, with margin.
+    @ObservationIgnored
+    private var remoteProbeRetryBudget = 16
+
+    /// The resolver's probe succeeded but its listing had no entry for this
+    /// pane's session (the registration race above). Re-arm the request,
+    /// bounded, so the retry rides the next poll tick from any project.
+    func noteRemoteProbeMiss() {
+        guard isRemote, foregroundProcessName == nil, remoteProbeRetryBudget > 0 else { return }
+        remoteProbeRetryBudget -= 1
+        remoteProbePending = true
+    }
+
     @ObservationIgnored
     private var executionTracker = TerminalExecutionTracker()
     /// The global foreground poll pauses when the app has no visible window.
