@@ -439,8 +439,11 @@ final class AppState {
                         // and instantly expire remote OSC titles. Execution
                         // state still settles from output heartbeats, and
                         // the frontmost project's panes feed the throttled
-                        // remote probe below.
-                        if projectID == activeProjectID {
+                        // remote probe below. A pane holding a boundary
+                        // request rides along from ANY project — a command
+                        // finishing in a background project must still
+                        // rename its tab without waiting for a switch.
+                        if projectID == activeProjectID || pane.remoteProbePending {
                             activeRemotePanes.append(pane)
                         }
                     } else {
@@ -464,8 +467,16 @@ final class AppState {
         }
         lastPollSawBusyPane = sawBusyPane
         if didAcknowledgeCompletion { saveWorkspaces() }
-        if !activeRemotePanes.isEmpty, isAnyWindowVisible() {
-            remoteForegroundResolver.refresh(panes: activeRemotePanes, probe: zmx.remoteForegroundComms)
+        // Visibility gates only the *scheduled* probes (nobody is looking at
+        // the names). A boundary request still probes while occluded — same
+        // rationale as the local #210 refresh, which runs unconditionally —
+        // so the name is already right when the window next appears instead
+        // of waiting for an interaction.
+        let panesToProbe = isAnyWindowVisible()
+            ? activeRemotePanes
+            : activeRemotePanes.filter(\.remoteProbePending)
+        if !panesToProbe.isEmpty {
+            remoteForegroundResolver.refresh(panes: panesToProbe, probe: zmx.remoteForegroundComms)
         }
     }
 

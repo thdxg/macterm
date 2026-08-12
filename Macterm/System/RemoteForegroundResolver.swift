@@ -35,8 +35,12 @@ final class RemoteForegroundResolver {
     /// Kick probes for the hosts behind `panes` (the poll passes the active
     /// project's remote panes). Per distinct ssh destination: skip when a
     /// probe is inflight or ran within `minInterval`; otherwise fire one and
-    /// apply the resulting names to every passed pane on that host. `probe`
-    /// is passed per call (AppState hands in the injectable
+    /// apply the resulting names to every passed pane on that host. A pane
+    /// holding a boundary request (`remoteProbePending` — a command just
+    /// started or finished) bypasses the interval for its host so the name
+    /// updates now instead of on the next scheduled probe; the inflight
+    /// guard still holds, and an unconsumed request survives to the next
+    /// tick. `probe` is passed per call (AppState hands in the injectable
     /// `ZmxClient.remoteForegroundComms`; tests hand in a recorder).
     func refresh(
         panes: [Pane],
@@ -46,6 +50,7 @@ final class RemoteForegroundResolver {
         guard !panes.isEmpty else { return }
         var specByDest: [String: ProjectPath] = [:]
         var panesByDest: [String: [Pane]] = [:]
+        var boundaryDests: Set<String> = []
         for pane in panes {
             guard let spec = ProjectPath.remote(from: pane.projectPath),
                   case let .remote(user, host, _) = spec
@@ -53,13 +58,19 @@ final class RemoteForegroundResolver {
             let dest = RemoteSpawn.destination(user: user, host: host)
             specByDest[dest] = spec
             panesByDest[dest, default: []].append(pane)
+            if pane.remoteProbePending { boundaryDests.insert(dest) }
         }
         for (dest, spec) in specByDest {
             guard !inflight.contains(dest) else { continue }
-            if let last = lastProbeAt[dest], now.timeIntervalSince(last) < minInterval { continue }
+            if !boundaryDests.contains(dest),
+               let last = lastProbeAt[dest], now.timeIntervalSince(last) < minInterval { continue }
             inflight.insert(dest)
             lastProbeAt[dest] = now
             let targets = panesByDest[dest] ?? []
+            // This probe answers every pending boundary request on the host.
+            for pane in targets {
+                pane.consumeRemoteProbeRequest()
+            }
             // zmxPath is a host property — all panes on this dest share it.
             let zmxPath = targets.first?.remoteZmxPath
             Task {

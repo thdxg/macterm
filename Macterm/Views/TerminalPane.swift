@@ -392,6 +392,13 @@ private struct TerminalSurface: NSViewRepresentable {
             // indicator is on, and `notePromptReturned` feeds the naming gate.
             pane.notePromptReturned()
             pane.refreshForegroundProcess()
+            // The remote analogue of the refresh above: the local process
+            // table only knows the ssh client, so `refreshForegroundProcess`
+            // is a no-op for a remote pane — instead request an immediate
+            // host probe (bypassing the resolver's throttle) so the finished
+            // program's name doesn't linger until the next scheduled probe
+            // or user interaction.
+            pane.noteRemoteCommandBoundary()
             if Preferences.shared.showTabStatusIndicator {
                 pane.markCommandFinished()
                 onCommandFinished()

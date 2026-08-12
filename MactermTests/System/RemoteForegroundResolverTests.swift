@@ -70,6 +70,36 @@ struct RemoteForegroundResolverTests {
     }
 
     @Test
+    func boundary_request_bypasses_the_interval_and_is_consumed() async {
+        let calls = LockedBox<[String]>([])
+        let resolver = RemoteForegroundResolver(minInterval: 3)
+        let probe: @Sendable (ProjectPath, String?) async -> [String: String]? = { spec, _ in
+            if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
+            return [:]
+        }
+        let pane = remotePane()
+        let t0 = Date()
+        resolver.refresh(panes: [pane], probe: probe, now: t0)
+        await waitUntil { calls.value == ["devbox"] }
+
+        // Within the interval with no boundary: throttled.
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(1))
+        await waitUntil { resolver.isIdle }
+        #expect(calls.value == ["devbox"])
+
+        // A command boundary (#210's remote mirror) bypasses the interval…
+        pane.noteRemoteCommandBoundary()
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(2))
+        await waitUntil { calls.value == ["devbox", "devbox"] }
+
+        // …and the fired probe consumes the request, restoring the throttle.
+        #expect(!pane.remoteProbePending)
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(2.5))
+        await waitUntil { resolver.isIdle }
+        #expect(calls.value == ["devbox", "devbox"])
+    }
+
+    @Test
     func distinct_hosts_probe_independently_in_one_pass() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)

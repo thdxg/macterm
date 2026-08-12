@@ -532,6 +532,49 @@ struct PaneTests {
     }
 
     @Test
+    func remotePanes_prime_a_probe_request_at_init() {
+        // Scheduled probes cover only the frontmost project, so a restored
+        // pane in a background project would otherwise never be probed —
+        // leaving `needsConfirmClose` on its conservative ssh-is-busy
+        // fallback for every plain-shell close until the project was
+        // selected once. The primed request rides any project's poll tick.
+        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        #expect(remote.remoteProbePending)
+
+        let local = Pane(projectPath: "/", projectID: UUID())
+        #expect(!local.remoteProbePending)
+    }
+
+    @Test
+    func remoteCommandBoundary_requests_a_probe_for_remote_panes_only() {
+        let local = Pane(projectPath: "/", projectID: UUID())
+        local.noteRemoteCommandBoundary()
+        #expect(!local.remoteProbePending)
+
+        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        remote.noteRemoteCommandBoundary()
+        #expect(remote.remoteProbePending)
+        remote.consumeRemoteProbeRequest()
+        #expect(!remote.remoteProbePending)
+    }
+
+    @Test
+    func executionTransitions_request_a_probe_on_remote_panes() {
+        // Both edges are naming boundaries: idle→running (a program took the
+        // foreground) and running→done (the shell owns it again).
+        let remote = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        remote.executionState = .running
+        #expect(remote.remoteProbePending)
+        remote.consumeRemoteProbeRequest()
+        remote.executionState = .done
+        #expect(remote.remoteProbePending)
+
+        let local = Pane(projectPath: "/", projectID: UUID())
+        local.executionState = .running
+        #expect(!local.remoteProbePending)
+    }
+
+    @Test
     func remoteCloseVerdict_is_nil_before_any_probe_result() {
         // No probe has ever landed (unreachable host, BatchMode auth failure)
         // → no verdict; `needsConfirmClose` falls back to the conservative
