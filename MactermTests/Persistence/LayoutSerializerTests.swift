@@ -29,6 +29,58 @@ struct LayoutSerializerTests {
     }
 
     @Test
+    func remote_cwd_round_trips_as_pure_strings() {
+        // Remote specs (#104) never touch local filesystem semantics: the root
+        // itself → nil, a spec extending the root → the bare relative suffix
+        // (LayoutBuilder.resolveCwd joins it back to the identical spec), and
+        // anything else passes through verbatim.
+        let root = "devbox:~/dev/api"
+        #expect(LayoutSerializer.relativePath(root, to: root) == nil)
+        #expect(LayoutSerializer.relativePath("devbox:~/dev/api/sub", to: root) == "sub")
+        #expect(LayoutBuilder.resolveCwd("sub", projectRoot: root) == "devbox:~/dev/api/sub")
+        #expect(LayoutSerializer.relativePath("devbox:/srv/other", to: root) == "devbox:/srv/other")
+    }
+
+    @Test
+    func records_remote_foreground_command_through_the_default_seam() {
+        // Remote pane (#104): the default liveCommand seam answers from the
+        // probe-cached remote foreground, so Save Layout captures a running
+        // command with no local pid (the bug: it used to save an empty leaf).
+        let root = "devbox:~/dev/api"
+        let ws = Workspace(projectID: UUID(), projectPath: root)
+        let pane = Pane(projectPath: root, projectID: ws.projectID)
+        pane.applyRemoteForeground(RemoteForeground(comm: "btop", command: "btop --utf-force"))
+        ws.tabs[0].splitRoot = .pane(pane)
+
+        let file = LayoutSerializer.layout(for: ws, projectName: "api", projectRoot: root)
+        guard case let .pane(p) = file.tabs[0].layout else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(p.run == "btop --utf-force")
+        #expect(p.cwd == nil)
+        #expect(p.shell == nil)
+    }
+
+    @Test
+    func omits_run_for_remote_pane_idle_at_its_prompt() {
+        // The probe reporting the session's shell means an idle prompt —
+        // nothing to record, same as a local idle pane.
+        let root = "devbox:~/dev/api"
+        let ws = Workspace(projectID: UUID(), projectPath: root)
+        let pane = Pane(projectPath: root, projectID: ws.projectID)
+        pane.applyRemoteForeground(RemoteForeground(comm: "-zsh", command: "-zsh"))
+        ws.tabs[0].splitRoot = .pane(pane)
+
+        let file = LayoutSerializer.layout(for: ws, projectName: "api", projectRoot: root)
+        guard case let .pane(p) = file.tabs[0].layout else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(p.run == nil)
+    }
+
+    @Test
     func records_live_running_command_per_pane() {
         // Save records what the pane is *currently* running (its live foreground
         // command), not what it was spawned with.

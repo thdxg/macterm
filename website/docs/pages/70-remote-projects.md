@@ -73,7 +73,7 @@ tabs:
     cwd: "logs"        # resolves on the remote, relative to the project dir
 ```
 
-Per-pane `cwd` and `~` resolve on the remote side. **Save layout** works too, writing the current tab/split structure (running commands aren't captured for remote panes — they can't be read across ssh).
+Per-pane `cwd` and `~` resolve on the remote side. **Save layout** works too, writing the current tab/split structure and each pane's running command as its `run:` (read from the same periodic probe that names tabs, so a command started a moment ago may take a few seconds to become visible). A pane idle at its prompt saves a plain shell leaf, same as a local one.
 
 ## Troubleshooting
 

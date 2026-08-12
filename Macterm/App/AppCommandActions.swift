@@ -34,6 +34,16 @@ extension AppCommand {
             return { ctx.appState.selectGlobalTab(.next, projects: ctx.projectStore.projects) }
         case .previousTab:
             return { ctx.appState.selectGlobalTab(.previous, projects: ctx.projectStore.projects) }
+        // The project-scoped pair (what ctrl+]/ctrl+[ bind to by default):
+        // cycling wraps within the active project's own tabs, so a keystroke
+        // can never carry focus into another project the way the
+        // `.nextTab`/`.previousTab` pair above does.
+        case .nextTabInProject:
+            guard let projectID else { return nil }
+            return { ctx.appState.selectNextTab(projectID: projectID) }
+        case .previousTabInProject:
+            guard let projectID else { return nil }
+            return { ctx.appState.selectPreviousTab(projectID: projectID) }
         case .recentTab:
             guard let projectID else { return nil }
             return { ctx.appState.cycleRecentTab(projectID: projectID) }

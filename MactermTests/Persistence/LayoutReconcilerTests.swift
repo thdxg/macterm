@@ -43,6 +43,29 @@ struct LayoutReconcilerTests {
     }
 
     @Test
+    func remote_pane_matches_its_declared_run_through_the_default_seams() throws {
+        // Remote panes (#104): the default liveCommand seam answers from the
+        // probe cache and the default liveCwd seam keys on the scp-style
+        // projectPath (never the pane's remote-filesystem currentPwd), so a
+        // save→apply round trip of a running remote command reuses the pane
+        // instead of respawning it.
+        let pid = UUID()
+        let root = "devbox:~/dev/api"
+        let btop = Pane(projectPath: root, projectID: pid)
+        btop.applyRemoteForeground(RemoteForeground(comm: "btop", command: "btop"))
+        let ws = workspace(projectID: pid, root: .pane(btop))
+
+        let file = try layout("""
+        tabs:
+          - { run: "btop" }
+        """)
+
+        let plan = LayoutReconciler.plan(layout: file, workspace: ws, projectRoot: root, projectID: pid)
+        #expect(!plan.isDestructive)
+        #expect(plan.tabs[0].root.allPanes().map(\.id) == [btop.id])
+    }
+
+    @Test
     func identical_layout_keeps_all_panes_and_destroys_nothing() throws {
         let pid = UUID()
         let dev = Pane(projectPath: "/proj/api", projectID: pid, command: "npm run dev")

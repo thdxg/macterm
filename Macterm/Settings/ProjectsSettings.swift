@@ -31,26 +31,27 @@ struct ProjectsSettings: View {
                     Text("No projects.")
                         .foregroundStyle(.secondary)
                 } else {
-                    // `.onMove` is safe here, unlike the sidebar's list — this
-                    // one has no tab rows or keyboard routing to hijack.
-                    // `.plain` + a clear row background keeps every row on the
-                    // section's own material: the default styles paint their
-                    // own (alternating, in the case of the inset list), which
-                    // reads as a second surface floating inside the group.
-                    List {
-                        ForEach(projectStore.projects) { project in
-                            ProjectRow(project: project)
-                                .listRowBackground(Color.clear)
-                        }
-                        .onMove { source, destination in
-                            projectStore.reorder(fromOffsets: source, toOffset: destination)
-                        }
+                    // Rows go straight into the section — the same shape the
+                    // Keymaps pane uses. A nested `List` here needed a fixed
+                    // height, which capped the pane at ~6 projects: the Form's
+                    // scroll view swallows the inner one's wheel events, so
+                    // anything past the cap was unreachable. Plain rows grow
+                    // with the content and let the Form scroll, which is the
+                    // only scroll view in the pane that works.
+                    //
+                    // The cost is `.onMove`, which exists only on `List`, so
+                    // reordering moved into the row menu.
+                    ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { index, project in
+                        ProjectRow(
+                            project: project,
+                            canMoveUp: index > 0,
+                            canMoveDown: index < projectStore.projects.count - 1,
+                            onMoveUp: { projectStore.reorder(fromOffsets: [index], toOffset: index - 1) },
+                            onMoveDown: { projectStore.reorder(fromOffsets: [index], toOffset: index + 2) }
+                        )
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 120, maxHeight: 220)
                 }
-                Text("Drag to reorder.")
+                Text("Reorder from a row's menu — the order matches the sidebar.")
                     .settingsCaption()
             } header: {
                 HStack {
@@ -77,18 +78,14 @@ struct ProjectsSettings: View {
                     Text("No layout files.")
                         .foregroundStyle(.secondary)
                 } else {
-                    List(layouts) { layout in
+                    ForEach(layouts) { layout in
                         LayoutRow(
                             layout: layout,
                             hasProject: hasProject(for: layout),
                             onCreateProject: { createProject(from: layout) },
                             onRemove: { layoutPendingDeletion = layout }
                         )
-                        .listRowBackground(Color.clear)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 120, maxHeight: 220)
                 }
                 LabeledContent("Folder") {
                     Button(ProjectFileStore.defaultDirectory().path(percentEncoded: false)) {
@@ -208,11 +205,15 @@ struct ProjectsSettings: View {
 
 // MARK: - Project row
 
-/// One project: its name, path, load state, and the four actions. Actions live
-/// in a menu rather than a row of buttons — six projects × four buttons is a
-/// wall of chrome, and the menu is what the sidebar's context menu already is.
+/// One project: its name, path, load state, and its actions. Actions live in a
+/// menu rather than a row of buttons — six projects × six buttons is a wall of
+/// chrome, and the menu is what the sidebar's context menu already is.
 private struct ProjectRow: View {
     let project: Project
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
 
     @Environment(AppState.self)
     private var appState
@@ -254,6 +255,14 @@ private struct ProjectRow: View {
                     appState.noteLayoutFilesChanged()
                 }
                 .disabled(appState.workspaces[project.id] == nil)
+
+                Divider()
+
+                Button("Move Up") { onMoveUp() }
+                    .disabled(!canMoveUp)
+
+                Button("Move Down") { onMoveDown() }
+                    .disabled(!canMoveDown)
 
                 Divider()
 

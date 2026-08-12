@@ -20,6 +20,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case previousProject = "previous_project"
     case nextGlobalTab = "next_global_tab"
     case previousGlobalTab = "previous_global_tab"
+    case nextTabInProject = "next_tab_in_project"
+    case previousTabInProject = "previous_tab_in_project"
     case focusPaneLeft = "focus_pane_left"
     case focusPaneDown = "focus_pane_down"
     case focusPaneUp = "focus_pane_up"
@@ -69,8 +71,16 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .recentTab: "ctrl+tab"
         case .nextProject: "cmd+]"
         case .previousProject: "cmd+["
-        case .nextGlobalTab: "ctrl+]"
-        case .previousGlobalTab: "ctrl+["
+        // ctrl+]/ctrl+[ drive the project-scoped pair: cycling stops at the
+        // project's own tabs, which is what a workspace boundary implies. The
+        // cross-project pair keeps the chord's old job but ships unbound —
+        // both pairs on one chord would register as a conflict in Settings,
+        // and the responder's global branch runs first, so it would simply
+        // shadow the scoped one. Users who want the old reach rebind it.
+        case .nextGlobalTab: "none"
+        case .previousGlobalTab: "none"
+        case .nextTabInProject: "ctrl+]"
+        case .previousTabInProject: "ctrl+["
         case .focusPaneLeft: "cmd+ctrl+h"
         case .focusPaneDown: "cmd+ctrl+j"
         case .focusPaneUp: "cmd+ctrl+k"
