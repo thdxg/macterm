@@ -248,14 +248,26 @@ struct SidebarContent: View {
         // an expanded project's tab rows were dead zones for a project drag,
         // which is most of a busy sidebar's surface area. Row-pitch-tall
         // background band for the same seam-coverage reason as the header's.
-        // MovableProject only: a MovableTab destination here would shadow the
-        // ForEach-level insertion mechanism that handles tab-onto-tab drops.
+        // The band must accept TABS too, with "take this row's slot"
+        // semantics: it covers the row and the seams around it, which were
+        // exactly where the ForEach-level insertion drops used to land — and
+        // a band registered for the project payload alone still swallows tab
+        // drags over it instead of letting them fall through (the same
+        // dispatch quirk as stacked destinations), which broke tab
+        // reordering outright.
         .background {
             Color.clear
                 .frame(minHeight: sidebarRowDropBandHeight)
                 .contentShape(Rectangle())
-                .dropDestination(for: MovableProject.self) { items, _ in
-                    receiveProjectDrop(items, before: project)
+                .dropDestination(for: SidebarDropItem.self) { items, _ in
+                    for item in items {
+                        switch item {
+                        case let .tab(dragged):
+                            receiveTabDrop([dragged], into: project, atRow: tabIndex)
+                        case let .project(dragged):
+                            receiveProjectDrop([dragged], before: project)
+                        }
+                    }
                     return true
                 }
         }
@@ -331,6 +343,28 @@ struct SidebarContent: View {
                     destPath: project.path,
                     toIndex: index
                 )
+            }
+        }
+        expandedProjects.insert(project.id)
+    }
+
+    /// Apply a tab drag-and-drop released ON a tab row (the row's drop band),
+    /// as opposed to the ForEach insertion path, which reports a slot between
+    /// rows. Dropping onto a row means "land at its slot", so a same-project
+    /// move converts the row index to `move(fromOffsets:toOffset:)`'s
+    /// convention the same way `receiveProjectDrop(_:before:)` does; a
+    /// cross-project move inserts at the row's position directly.
+    private func receiveTabDrop(_ items: [MovableTab], into project: Project, atRow rowIndex: Int) {
+        for item in items {
+            if item.sourceProjectID == project.id {
+                let tabs = appState.workspaces[project.id]?.tabs ?? []
+                guard let fromIndex = tabs.firstIndex(where: { $0.id == item.tabID }),
+                      fromIndex != rowIndex
+                else { continue }
+                let toOffset = fromIndex < rowIndex ? rowIndex + 1 : rowIndex
+                appState.reorderTab(item.tabID, inProject: project.id, toIndex: toOffset)
+            } else {
+                receiveTabDrop([item], into: project, at: rowIndex)
             }
         }
         expandedProjects.insert(project.id)
