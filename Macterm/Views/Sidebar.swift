@@ -124,7 +124,12 @@ struct SidebarContent: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 36)
-            .padding(.bottom, 10)
+            // Not 16: the two edges are padding the label's *layout* box, whose
+            // slack differs per edge — the leading side bearing of the `plus`
+            // symbol pushes its ink ~4.5pt in, while the line box ends ~0.5pt
+            // below the text's descender. Measured on a build, 16/20 is what
+            // puts the ink an equal ~20.5pt off both the left and bottom edges.
+            .padding(.bottom, 20)
         }
         .onChange(of: selection) { _, items in
             // Navigation follows a single selection only. A multi-selection is
