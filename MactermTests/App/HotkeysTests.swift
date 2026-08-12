@@ -334,11 +334,15 @@ struct HotkeysTests {
     }
 
     @Test
-    func project_scoped_tab_actions_are_unbound_by_default_and_titled_from_command() {
-        // The global ctrl+]/ctrl+[ pair already ships bound; these clamp the
-        // same navigation to the active project and are opt-in via Keymaps.
-        #expect(HotkeyAction.nextTabInProject.defaultShortcut == "none")
-        #expect(HotkeyAction.previousTabInProject.defaultShortcut == "none")
+    func ctrl_bracket_defaults_to_the_project_scoped_tab_pair() {
+        // ctrl+]/ctrl+[ cycle within the active project. The cross-project
+        // pair ships unbound: both on one chord would conflict, and the
+        // responder's global branch runs first, so it would shadow the
+        // scoped one outright rather than merely tie with it.
+        #expect(HotkeyAction.nextTabInProject.defaultShortcut == "ctrl+]")
+        #expect(HotkeyAction.previousTabInProject.defaultShortcut == "ctrl+[")
+        #expect(HotkeyAction.nextGlobalTab.defaultShortcut == "none")
+        #expect(HotkeyAction.previousGlobalTab.defaultShortcut == "none")
         #expect(HotkeyAction.nextTabInProject.title == "Next Tab in Project")
         #expect(HotkeyAction.previousTabInProject.title == "Previous Tab in Project")
         #expect(AppCommand.nextTabInProject.hotkeyAction == .nextTabInProject)
@@ -346,6 +350,17 @@ struct HotkeysTests {
         // Distinct from the cross-project pair they sit beside.
         #expect(AppCommand.nextTab.hotkeyAction == .nextGlobalTab)
         #expect(AppCommand.previousTab.hotkeyAction == .previousGlobalTab)
+    }
+
+    @Test
+    func no_two_actions_ship_the_same_default_shortcut() {
+        // Guards the swap above (and any future default): two actions on one
+        // chord surface as a conflict in Settings → Keymaps, and whichever
+        // responder branch runs first silently wins.
+        let bound = HotkeyAction.allCases.compactMap {
+            HotkeyRegistry.conflictKey(for: $0.defaultShortcut)
+        }
+        #expect(bound.count == Set(bound).count)
     }
 
     @Test

@@ -268,9 +268,11 @@ final class MainAppResponder: KeyResponder {
             appState.selectGlobalTab(.previous, projects: projectStore.projects)
             return .handled
         }
-        // Project-scoped counterparts: cycle within the active project's tabs
-        // only, wrapping at either end instead of crossing into the next
-        // project the way the global pair above does.
+        // Project-scoped counterparts, and what ctrl+]/ctrl+[ bind to by
+        // default: cycle within the active project's tabs only, wrapping at
+        // either end instead of crossing into the next project the way the
+        // global pair above does. Order matters only if a user binds both
+        // pairs to one chord — the global branch above would win.
         if HotkeyRegistry.matches(event, action: .nextTabInProject) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
             appState.selectNextTab(projectID: projectID)
