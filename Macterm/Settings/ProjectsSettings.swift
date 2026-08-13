@@ -245,13 +245,20 @@ private struct ProjectRow: View {
             }
 
             Menu {
+                // Every mutation here stages its dialogs on this window
+                // (`host: .settings`), so the main window's copies stay quiet —
+                // see `AppState.DialogHost`.
                 Button("Apply Layout") {
-                    appState.applyLayoutPresentingError(project)
+                    appState.applyLayoutPresentingError(project, host: .settings)
                 }
                 .disabled(!canApplyLayout)
 
                 Button("Save Layout") {
-                    appState.saveLayoutPresentingError(project, siblingProjects: projectStore.projects)
+                    appState.saveLayoutPresentingError(
+                        project,
+                        siblingProjects: projectStore.projects,
+                        host: .settings
+                    )
                     appState.noteLayoutFilesChanged()
                 }
                 .disabled(appState.workspaces[project.id] == nil)
@@ -266,11 +273,11 @@ private struct ProjectRow: View {
 
                 Divider()
 
-                Button("Unload") { appState.requestUnloadProject(project.id) }
+                Button("Unload") { appState.requestUnloadProject(project.id, host: .settings) }
                     .disabled(!isLoaded)
 
                 Button("Remove", role: .destructive) {
-                    appState.requestRemoveProject(project.id) {
+                    appState.requestRemoveProject(project.id, host: .settings) {
                         appState.removeProject(project.id)
                         projectStore.remove(id: project.id)
                     }

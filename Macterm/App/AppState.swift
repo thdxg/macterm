@@ -66,6 +66,23 @@ final class AppState {
     private var projectRecency = RecencyStack<UUID>(limit: 50)
     private let recencyKey = "macterm.projectRecency"
 
+    /// Which window presents a dialog `AppState` stages.
+    ///
+    /// Both scenes in `MactermApp` — the main `WindowGroup` and `Settings` —
+    /// attach alerts to the *same* pending state, because Settings → Projects
+    /// drives the same destructive project/layout mutations and the settings
+    /// window needs its own copy of each confirmation. With no gate, one
+    /// request presents twice: SwiftUI materializes and fronts the settings
+    /// window purely to show its duplicate, stacking an identical dialog on
+    /// top of the one the user is looking at. So every staged dialog records
+    /// the scene that asked for it, and each scene's `isPresented` binding
+    /// reads only its own. The default is the main window; only the settings
+    /// pane's call sites pass `.settings`.
+    enum DialogHost: Equatable {
+        case mainWindow
+        case settings
+    }
+
     struct PendingClosePane: Equatable {
         let paneID: UUID
         let projectID: UUID
@@ -87,6 +104,7 @@ final class AppState {
     struct PendingRemoveProject {
         let projectID: UUID
         let completeRemoval: () -> Void
+        var host: DialogHost = .mainWindow
     }
 
     var pendingRemoveProject: PendingRemoveProject?
@@ -99,6 +117,7 @@ final class AppState {
     struct PendingLayoutApply {
         let projectID: UUID
         let plan: LayoutReconciler.Plan
+        var host: DialogHost = .mainWindow
 
         var confirmationMessage: String {
             "Applying this layout will close some panes and end the processes running in them."
@@ -117,6 +136,7 @@ final class AppState {
         /// Title override for notices that aren't failures (e.g. a save that
         /// landed but is shadowed by a duplicate file).
         var customTitle: String?
+        var host: DialogHost = .mainWindow
         var title: String { customTitle ?? "Couldn't \(verb) layout" }
     }
 
@@ -746,17 +766,18 @@ final class AppState {
     /// the project (keeping the layout), so it's destructive.
     struct PendingUnloadProject: Equatable {
         let projectID: UUID
+        var host: DialogHost = .mainWindow
     }
 
     var pendingUnloadProject: PendingUnloadProject?
 
     /// Unload a project, confirming first when any pane is busy.
-    func requestUnloadProject(_ projectID: UUID) {
+    func requestUnloadProject(_ projectID: UUID, host: DialogHost = .mainWindow) {
         let busy = workspaces[projectID]?.tabs
             .flatMap { $0.splitRoot.allPanes() }
             .contains(where: \.needsConfirmClose) ?? false
         if busy {
-            pendingUnloadProject = PendingUnloadProject(projectID: projectID)
+            pendingUnloadProject = PendingUnloadProject(projectID: projectID, host: host)
             return
         }
         unloadProject(projectID)
@@ -775,12 +796,12 @@ final class AppState {
     /// Run `removal` (the caller's full remove: workspace + project store)
     /// immediately when no pane in the project is busy; otherwise stage it
     /// for the confirmation alert — removal kills every pane's zmx session.
-    func requestRemoveProject(_ projectID: UUID, removal: @escaping () -> Void) {
+    func requestRemoveProject(_ projectID: UUID, host: DialogHost = .mainWindow, removal: @escaping () -> Void) {
         let busy = workspaces[projectID]?.tabs
             .flatMap { $0.splitRoot.allPanes() }
             .contains(where: \.needsConfirmClose) ?? false
         if busy {
-            pendingRemoveProject = PendingRemoveProject(projectID: projectID, completeRemoval: removal)
+            pendingRemoveProject = PendingRemoveProject(projectID: projectID, completeRemoval: removal, host: host)
             return
         }
         removal()
@@ -1320,7 +1341,7 @@ final class AppState {
     /// surface when no file matches, the file is unparseable, or it declares
     /// no tabs (an empty declaration must never plan "close every tab").
     @discardableResult
-    func applyLayout(project: Project) -> Error? {
+    func applyLayout(project: Project, host: DialogHost = .mainWindow) -> Error? {
         logger.info("applyLayout: project=\(project.name, privacy: .public)")
         let layout: LayoutFile
         do {
@@ -1349,7 +1370,7 @@ final class AppState {
         logger.info("applyLayout plan: \(planDesc, privacy: .public)")
         if plan.isDestructive {
             logger.info("applyLayout: staged for confirmation")
-            pendingLayoutApply = PendingLayoutApply(projectID: project.id, plan: plan)
+            pendingLayoutApply = PendingLayoutApply(projectID: project.id, plan: plan, host: host)
         } else {
             executeLayoutPlan(plan, projectID: project.id)
         }
@@ -1364,9 +1385,9 @@ final class AppState {
     /// which gets a success toast. The first-open seed passes false: it fires
     /// unbidden on every project's first open, where a confirmation would be
     /// noise for something the user never asked for.
-    func applyLayoutPresentingError(_ project: Project, confirming: Bool = false) {
-        if let error = applyLayout(project: project) {
-            pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription)
+    func applyLayoutPresentingError(_ project: Project, confirming: Bool = false, host: DialogHost = .mainWindow) {
+        if let error = applyLayout(project: project, host: host) {
+            pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription, host: host)
             return
         }
         // A destructive plan is staged, not applied — its confirmation dialog is
@@ -1400,7 +1421,7 @@ final class AppState {
     /// callers pass it; the default empty list keeps the shared-path check
     /// inert for callers that don't have it (and for tests that don't care).
     @discardableResult
-    func saveLayout(project: Project, siblingProjects: [Project] = []) -> Error? {
+    func saveLayout(project: Project, siblingProjects: [Project] = [], host: DialogHost = .mainWindow) -> Error? {
         logger.info("saveLayout: project=\(project.name, privacy: .public)")
         guard let ws = workspaces[project.id] else { return nil }
         // Reserve the *other* same-directory projects' files so the save leaves
@@ -1425,8 +1446,18 @@ final class AppState {
             // takes priority over the shared-*project* notice — both write
             // `pendingLayoutError`, so only surface the latter when the former
             // stayed quiet.
-            if !presentSaveConflictIfNeeded(project: project, savedTo: target, siblingProjects: siblingProjects) {
-                presentSharedPathConflictIfNeeded(project: project, savedTo: target, siblingProjects: siblingProjects)
+            if !presentSaveConflictIfNeeded(
+                project: project,
+                savedTo: target,
+                siblingProjects: siblingProjects,
+                host: host
+            ) {
+                presentSharedPathConflictIfNeeded(
+                    project: project,
+                    savedTo: target,
+                    siblingProjects: siblingProjects,
+                    host: host
+                )
             }
             // Confirm the clean save only. Either conflict check above raises a
             // dialog that says the file landed *and* what's wrong with it — a
@@ -1464,7 +1495,12 @@ final class AppState {
     /// hand-authored copy, or an old file whose realign-delete failed), so warn
     /// they exist rather than let them rot silently.
     @discardableResult
-    private func presentSaveConflictIfNeeded(project: Project, savedTo target: URL, siblingProjects: [Project]) -> Bool {
+    private func presentSaveConflictIfNeeded(
+        project: Project,
+        savedTo target: URL,
+        siblingProjects: [Project],
+        host: DialogHost
+    ) -> Bool {
         let siblingSlugs = sameDirectorySiblingSlugs(of: project, in: siblingProjects)
         let strays = projectFiles.matches(forProjectPath: project.path).filter { file in
             let name = file.url.lastPathComponent
@@ -1480,7 +1516,8 @@ final class AppState {
             message: "The layout was saved to “\(target.lastPathComponent)”, but these other files also "
                 + "declare this project’s path and are ignored: \(names). "
                 + "Remove or merge them in the projects directory.",
-            customTitle: "Layout saved with a conflict"
+            customTitle: "Layout saved with a conflict",
+            host: host
         )
         return true
     }
@@ -1492,7 +1529,12 @@ final class AppState {
     /// AND same slug. Same path but distinct names is fine — those resolve to
     /// distinct slug files (`api.yaml` / `api-staging.yaml`) that load
     /// independently and never overwrite each other.
-    private func presentSharedPathConflictIfNeeded(project: Project, savedTo target: URL, siblingProjects: [Project]) {
+    private func presentSharedPathConflictIfNeeded(
+        project: Project,
+        savedTo target: URL,
+        siblingProjects: [Project],
+        host: DialogHost
+    ) {
         let slug = ProjectSlug.slug(from: project.name)
         let colliding = siblingProjects.filter {
             $0.id != project.id
@@ -1507,14 +1549,19 @@ final class AppState {
                 + "“\(target.lastPathComponent)” with this project. Saving here overwrote their "
                 + "layout, and each save wins over the last. Give the projects distinct names to "
                 + "keep separate layout files.",
-            customTitle: "Layout file shared with another project"
+            customTitle: "Layout file shared with another project",
+            host: host
         )
     }
 
     /// `saveLayout` + error presentation, mirroring `applyLayoutPresentingError`.
-    func saveLayoutPresentingError(_ project: Project, siblingProjects: [Project] = []) {
-        if let error = saveLayout(project: project, siblingProjects: siblingProjects) {
-            pendingLayoutError = LayoutError(verb: "save", message: error.localizedDescription)
+    func saveLayoutPresentingError(
+        _ project: Project,
+        siblingProjects: [Project] = [],
+        host: DialogHost = .mainWindow
+    ) {
+        if let error = saveLayout(project: project, siblingProjects: siblingProjects, host: host) {
+            pendingLayoutError = LayoutError(verb: "save", message: error.localizedDescription, host: host)
         }
     }
 

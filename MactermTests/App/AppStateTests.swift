@@ -1067,6 +1067,51 @@ struct AppStateTests {
         #expect(state.activeToast?.title == "Layout applied")
     }
 
+    /// Both scenes in `MactermApp` bind alerts to this one pending value, so a
+    /// staged dialog has to say which window asked for it — an ungated binding
+    /// opens the settings window purely to stack a duplicate dialog on the one
+    /// the user is answering. The default must stay the main window: everything
+    /// but the settings pane (palette, menu, sidebar, CLI) relies on it.
+    @Test
+    func staged_destructive_apply_records_the_window_that_asked_for_it() throws {
+        let files = makeProjectFileStore()
+        let state = makeAppState(projectFiles: files)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-applyhost-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        writeProjectFile("path: \(dir.path)\ntabs:\n  - name: \"Dev\"\n", in: files)
+        let project = Project(name: "applyhost", path: dir.path, sortOrder: 0)
+        state.selectProject(project)
+        // A second live tab the one-tab declaration doesn't mention: applying
+        // would close it, which is what stages the confirmation.
+        state.createTab(projectID: project.id, projectPath: dir.path)
+
+        state.applyLayoutPresentingError(project, confirming: true)
+        #expect(state.pendingLayoutApply?.host == .mainWindow)
+
+        state.cancelPendingLayoutApply()
+
+        state.applyLayoutPresentingError(project, confirming: true, host: .settings)
+        #expect(state.pendingLayoutApply?.host == .settings)
+    }
+
+    /// Same gate for the notice alerts: a Settings-invoked failure must not
+    /// surface behind the main window (or in both).
+    @Test
+    func layout_error_records_the_window_that_asked_for_it() {
+        let state = makeAppState(projectFiles: makeProjectFileStore())
+        let (project, _) = seedProjectWithDir(state)
+
+        state.applyLayoutPresentingError(project, confirming: true)
+        #expect(state.pendingLayoutError?.host == .mainWindow)
+
+        state.pendingLayoutError = nil
+
+        state.applyLayoutPresentingError(project, confirming: true, host: .settings)
+        #expect(state.pendingLayoutError?.host == .settings)
+    }
+
     @Test
     func apply_layout_failure_raises_a_dialog_instead_of_a_toast() {
         // No file declares this project's path — the command surfaces the

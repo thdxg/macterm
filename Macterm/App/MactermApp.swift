@@ -60,10 +60,14 @@ struct MactermApp: App {
                 } message: {
                     Text("A process is still running in this tab. Closing the tab ends it.")
                 }
+                // Every alert below that Settings also carries is gated on the
+                // staging call's `DialogHost` — see the enum's doc comment: an
+                // ungated binding presents in BOTH scenes, which opens the
+                // settings window just to stack a duplicate dialog.
                 .alert(
                     "Unload project with running processes?",
                     isPresented: Binding(
-                        get: { appState.pendingUnloadProject != nil },
+                        get: { appState.pendingUnloadProject?.host == .mainWindow },
                         set: { if !$0 { appState.cancelPendingUnloadProject() } }
                     )
                 ) {
@@ -79,7 +83,7 @@ struct MactermApp: App {
                 .alert(
                     "Remove project with running processes?",
                     isPresented: Binding(
-                        get: { appState.pendingRemoveProject != nil },
+                        get: { appState.pendingRemoveProject?.host == .mainWindow },
                         set: { if !$0 { appState.cancelPendingRemoveProject() } }
                     )
                 ) {
@@ -111,7 +115,7 @@ struct MactermApp: App {
                 .alert(
                     "Apply layout?",
                     isPresented: Binding(
-                        get: { appState.pendingLayoutApply != nil },
+                        get: { appState.pendingLayoutApply?.host == .mainWindow },
                         set: { if !$0 { appState.cancelPendingLayoutApply() } }
                     )
                 ) {
@@ -129,7 +133,7 @@ struct MactermApp: App {
                 .alert(
                     appState.pendingLayoutError?.title ?? "Couldn't apply layout",
                     isPresented: Binding(
-                        get: { appState.pendingLayoutError != nil },
+                        get: { appState.pendingLayoutError?.host == .mainWindow },
                         set: { if !$0 { appState.pendingLayoutError = nil } }
                     )
                 ) {
@@ -255,13 +259,19 @@ struct MactermApp: App {
                 // — and its own copies of the confirmation/error alerts, since
                 // the ones above are attached to `MainWindow` and would fire
                 // behind (or without) the settings window.
+                //
+                // Each copy is presented only for a dialog this pane staged
+                // (`DialogHost.settings`). Without that gate the shared state
+                // fires both copies, and SwiftUI opens and fronts this window
+                // just to show a duplicate of a dialog the user is already
+                // answering in the main window.
                 .environment(appState)
                 .environment(projectStore)
                 .modifier(AppColorScheme())
                 .alert(
                     "Unload project with running processes?",
                     isPresented: Binding(
-                        get: { appState.pendingUnloadProject != nil },
+                        get: { appState.pendingUnloadProject?.host == .settings },
                         set: { if !$0 { appState.cancelPendingUnloadProject() } }
                     )
                 ) {
@@ -277,7 +287,7 @@ struct MactermApp: App {
                 .alert(
                     "Remove project with running processes?",
                     isPresented: Binding(
-                        get: { appState.pendingRemoveProject != nil },
+                        get: { appState.pendingRemoveProject?.host == .settings },
                         set: { if !$0 { appState.cancelPendingRemoveProject() } }
                     )
                 ) {
@@ -293,7 +303,7 @@ struct MactermApp: App {
                 .alert(
                     "Apply layout?",
                     isPresented: Binding(
-                        get: { appState.pendingLayoutApply != nil },
+                        get: { appState.pendingLayoutApply?.host == .settings },
                         set: { if !$0 { appState.cancelPendingLayoutApply() } }
                     )
                 ) {
@@ -311,7 +321,7 @@ struct MactermApp: App {
                 .alert(
                     appState.pendingLayoutError?.title ?? "Couldn't apply layout",
                     isPresented: Binding(
-                        get: { appState.pendingLayoutError != nil },
+                        get: { appState.pendingLayoutError?.host == .settings },
                         set: { if !$0 { appState.pendingLayoutError = nil } }
                     )
                 ) {
