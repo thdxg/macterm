@@ -2,14 +2,16 @@
   "name": "macterm-website",
   "private": true,
   "version": "1.0.0",
-  "description": "Marketing site and docs for Macterm, served by a Cloudflare Worker.",
+  "description": "Marketing site and docs for Macterm — built by Bun, served by Caddy.",
   "scripts": {
     "build:docs": "bun build-docs.mjs",
     "build:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --minify",
     "build": "bun run build:docs && bun run build:css",
     "watch:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --watch",
-    "dev": "bun run build && wrangler dev",
-    "deploy": "bun run build && wrangler deploy"
+    "serve": "PORT=${PORT:-8765} SITE_ROOT=$PWD/public caddy run --config Caddyfile",
+    "dev": "bun run build && bun run serve",
+    "docker:build": "docker build -f Dockerfile -t macterm-website ..",
+    "docker:run": "docker run --rm -p 3000:3000 macterm-website"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",

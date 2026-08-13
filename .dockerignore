@@ -1,0 +1,18 @@
+# The only image this repo builds is website/Dockerfile, whose context has to
+# be the repository root (website/public/assets is a symlink to assets/). Deny
+# everything, then re-admit the two directories that build needs — otherwise
+# the Swift sources and the ~1GB GhosttyKit.xcframework ride along.
+*
+!website/
+!assets/
+
+# Regenerated inside the image by `bun run build` — never copy a host build in.
+website/node_modules/
+website/public/docs/
+website/public/tailwind.css
+website/public/sitemap.xml
+website/public/robots.txt
+
+website/Dockerfile
+website/.dockerignore
+**/.DS_Store

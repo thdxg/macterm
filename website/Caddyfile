@@ -1,0 +1,53 @@
+# Serves the built site (see website/README.md). Used verbatim by the image
+# built from website/Dockerfile and by `bun run dev`, so what you preview
+# locally is what production runs.
+#
+# The one rule this file exists for is `try_files`: the docs are a multi-page
+# site linked by extensionless URLs (/docs/install), and those are canonical
+# everywhere — sitemap, OG tags, every sidebar link. It maps them onto
+# public/docs/install.html, which is what Cloudflare's `auto-trailing-slash`
+# html handling did before this site was containerized.
+{
+	admin off
+	# TLS is terminated by whatever fronts the container, not here.
+	auto_https off
+	persist_config off
+	log {
+		format console
+	}
+}
+
+# PORT/SITE_ROOT default to the image's layout; `bun run dev` overrides both to
+# serve ./public straight out of the working tree.
+:{$PORT:3000} {
+	root * {$SITE_ROOT:/srv}
+
+	encode zstd gzip
+
+	# Keep the clean URLs canonical — /docs/install.html and /docs/index.html
+	# are the same page as /docs/install and /docs/, not rival copies of it.
+	@index_html path_regexp index_html ^(.*)/index\.html$
+	redir @index_html {re.index_html.1}/ 301
+	@html_ext path_regexp html_ext ^(.*)\.html$
+	redir @html_ext {re.html_ext.1} 301
+
+	# Liveness for the container runtime, matched before any file lookup.
+	respond /healthz 200 {
+		body "ok"
+		close
+	}
+
+	# Nothing here is content-hashed, so the pages themselves revalidate every
+	# time and only the supporting files get a real TTL.
+	@media path /assets/*
+	@static path *.css *.js *.xml *.txt
+	@pages not path /assets/* *.css *.js *.xml *.txt
+	header @media Cache-Control "public, max-age=86400"
+	header @static Cache-Control "public, max-age=3600"
+	header @pages Cache-Control "public, max-age=0, must-revalidate"
+	header X-Content-Type-Options nosniff
+	header -Server
+
+	try_files {path} {path}.html {path}/index.html
+	file_server
+}

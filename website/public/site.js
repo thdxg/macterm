@@ -109,13 +109,29 @@
   items.forEach((el) => io.observe(el));
 })();
 
-// --- Live GitHub stats from /api/stats: fill star + download counts, reveal
-//     their containers, and point Download buttons at the latest .dmg. ---
-(async function loadStats() {
+// --- Live GitHub stats: fill star + download counts, reveal their containers,
+//     and point Download buttons at the latest .dmg.
+//
+// Straight to api.github.com from the browser, unauthenticated — the site is
+// static files with no server to proxy through and no token to hide. The
+// unauthenticated budget is 60 requests/hour per *visitor* IP, and the site
+// spends at most three of them (one per figure below), so the ceiling that
+// matters is a single reader browsing the docs. Two things keep that in
+// bounds: every figure is fetched only when the page actually displays it (a
+// docs page shows only the Download button, so it spends one), and each is
+// cached in localStorage for an hour. Anything that fails — offline, rate
+// limited, storage blocked — leaves the stat hidden and the button on its
+// static /releases/latest href, which is how this already degrades. ---
+(function loadStats() {
   const starWraps = document.querySelectorAll("[data-stat-stars]");
   const dlWraps = document.querySelectorAll("[data-stat-downloads]");
   const dlBtns = document.querySelectorAll("[data-download-latest]");
   if (!starWraps.length && !dlWraps.length && !dlBtns.length) return;
+
+  const REPO = "thdxg/macterm";
+  const API = "https://api.github.com";
+  const CACHE_PREFIX = "macterm:gh:";
+  const CACHE_TTL_MS = 60 * 60 * 1000;
 
   const compact = new Intl.NumberFormat("en", {
     notation: "compact",
@@ -128,32 +144,85 @@
     if (line) line.hidden = false;
   };
 
-  try {
-    const r = await fetch("/api/stats");
-    if (!r.ok) return;
-    const data = await r.json();
+  // Cached per figure, not as one record: a docs page only ever resolves
+  // `latest`, and must not stamp a fresh timestamp on figures it never asked
+  // for. `undefined` means "not cached" — a 0 star count still caches.
+  const cached = (key, load) => {
+    const at = CACHE_PREFIX + key;
+    try {
+      const hit = JSON.parse(localStorage.getItem(at));
+      if (hit && Date.now() - hit.at < CACHE_TTL_MS) return Promise.resolve(hit.v);
+    } catch {}
+    return load().then((v) => {
+      if (v === undefined) return v;
+      try {
+        localStorage.setItem(at, JSON.stringify({ at: Date.now(), v }));
+      } catch {}
+      return v;
+    });
+  };
 
-    if (typeof data.stars === "number" && data.stars > 0) {
-      const text = compact.format(data.stars);
-      starWraps.forEach((wrap) => {
-        const num = wrap.querySelector("[data-stat-stars-num]") || wrap;
-        num.textContent = text;
-        reveal(wrap);
-      });
+  const getJSON = async (path) => {
+    const r = await fetch(API + path, {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!r.ok) throw new Error(`GitHub ${r.status} for ${path}`);
+    return r.json();
+  };
+
+  // Total downloads is the one figure with no single-request form — it sums
+  // every asset of every release. Capped so a paging bug can't run away.
+  const totalDownloads = async () => {
+    let total = 0;
+    for (let page = 1; page <= 10; page++) {
+      const rels = await getJSON(`/repos/${REPO}/releases?per_page=100&page=${page}`);
+      if (!Array.isArray(rels) || rels.length === 0) break;
+      for (const rel of rels) {
+        for (const asset of rel?.assets ?? []) total += asset.download_count || 0;
+      }
+      if (rels.length < 100) break;
     }
-    if (typeof data.downloads === "number" && data.downloads > 0) {
-      const text = compact.format(data.downloads);
-      dlWraps.forEach((wrap) => {
-        const num = wrap.querySelector("[data-stat-downloads-num]") || wrap;
-        num.textContent = text;
-        reveal(wrap);
-      });
-    }
-    if (data.latestDmg) {
+    return total;
+  };
+
+  const fill = (wraps, selector, value) => {
+    if (typeof value !== "number" || value <= 0) return;
+    const text = compact.format(value);
+    wraps.forEach((wrap) => {
+      (wrap.querySelector(selector) || wrap).textContent = text;
+      reveal(wrap);
+    });
+  };
+
+  const swallow = (p) => p.catch(() => undefined);
+
+  if (starWraps.length) {
+    swallow(
+      cached("stars", async () => (await getJSON(`/repos/${REPO}`)).stargazers_count)
+    ).then((stars) => fill(starWraps, "[data-stat-stars-num]", stars));
+  }
+
+  if (dlWraps.length) {
+    swallow(cached("downloads", totalDownloads)).then((downloads) =>
+      fill(dlWraps, "[data-stat-downloads-num]", downloads)
+    );
+  }
+
+  if (dlBtns.length) {
+    // /releases/latest is already "newest non-draft, non-prerelease", so the
+    // whole release list never has to be paged for this.
+    swallow(
+      cached("latestDmg", async () => {
+        const rel = await getJSON(`/repos/${REPO}/releases/latest`);
+        const dmg = rel?.assets?.find((a) => a.name?.endsWith(".dmg"));
+        return dmg ? { name: dmg.name, url: dmg.browser_download_url } : null;
+      })
+    ).then((latestDmg) => {
+      if (!latestDmg) return;
       dlBtns.forEach((btn) => {
-        btn.href = data.latestDmg.url;
-        btn.setAttribute("download", data.latestDmg.name);
+        btn.href = latestDmg.url;
+        btn.setAttribute("download", latestDmg.name);
       });
-    }
-  } catch {}
+    });
+  }
 })();

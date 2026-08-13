@@ -16,3 +16,18 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # The website image's base (oven/bun). Nothing else in the repo builds an
+  # image, so this watches website/Dockerfile alone.
+  - package-ecosystem: docker
+    directory: "/website"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - area:ci
+    commit-message:
+      prefix: chore
+      include: scope

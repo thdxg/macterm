@@ -20,9 +20,5 @@ __pycache__/
 Macterm.xcodeproj/
 
 
-# wrangler files
-.wrangler
-.dev.vars*
-!.dev.vars.example
 .env*
 !.env.example

@@ -1,12 +1,12 @@
 // Renders website/docs/pages/*.md into a multi-page docs site under
 // public/docs/ at build time.
 //
-// The site is static files behind a Cloudflare Worker, so the docs ship as
-// plain HTML — no client-side Markdown parser, no content flash. Each Markdown
-// file is one page; a shared sidebar links across pages and marks the current
-// one active. Cloudflare's auto-trailing-slash html handling serves
-// public/docs/install.html at /docs/install and public/docs/index.html at
-// /docs/.
+// The site is plain static files, so the docs ship as plain HTML — no
+// client-side Markdown parser, no content flash. Each Markdown file is one
+// page; a shared sidebar links across pages and marks the current one active.
+// The Caddyfile's try_files rule serves public/docs/install.html at
+// /docs/install and public/docs/index.html at /docs/, so the slugs below are
+// the URLs.
 //
 // Per-page front-matter (HTML comment at the top of each .md):
 //   <!-- page:
