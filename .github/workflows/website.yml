@@ -139,11 +139,19 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # :latest is what a deployment tracks; :sha-<short> is what it pins
-          # to, and the only way back to a specific build after a bad one.
+          # Three tags, each with a job. :latest is what a human pulls;
+          # :sha-<short> is the way back to a specific build after a bad one;
+          # and the UTC timestamp tag is what the cluster deploys, because
+          # Flux's ImagePolicy picks the newest image by sorting tag strings
+          # (`alphabetical: asc`) and neither of the other two orders. Keep the
+          # timestamp first and zero-padded — that is what makes lexical order
+          # and chronological order the same thing. Changing this format means
+          # changing the `filterTags` pattern in the homelab repo's
+          # apps/macterm/manifests/image.yaml to match.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
+            type=raw,value={{date 'YYYYMMDD-HHmmss' tz='UTC'}}-{{sha}},enable={{is_default_branch}}
 
       - name: Create and push the manifest list
         working-directory: /tmp/digests

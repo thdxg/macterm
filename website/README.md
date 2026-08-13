@@ -100,8 +100,16 @@ and publishes one multi-arch manifest to
 `ghcr.io/thdxg/macterm/website`. Pull requests build both architectures without
 pushing, so a broken Dockerfile fails the PR rather than `:latest`.
 
-Two tags are published: `:latest` (what a deployment tracks) and
-`:sha-<short>` (what it pins to, and the only way back after a bad build).
+Three tags are published: `:latest` (what a human pulls), `:sha-<short>` (the
+way back to a specific build after a bad one), and a UTC timestamp tag,
+`:20260813-142259-62701be`. The last one exists for the deployment — the
+cluster runs the site at [macterm.thdxg.dev](https://macterm.thdxg.dev) and
+Flux's image automation selects the newest image by **sorting tag strings**, so
+it needs a tag whose lexical order is its chronological order. `:latest` is one
+string forever and `:sha-<short>` sorts arbitrarily; only the zero-padded
+timestamp does. The deployment manifest lives in the
+[`thdxg/homelab`](https://github.com/thdxg/homelab) repo under `apps/macterm/`,
+and its `filterTags` pattern hard-codes this format — the two move together.
 
 ```sh
 docker run --rm -p 3000:3000 ghcr.io/thdxg/macterm/website:latest
