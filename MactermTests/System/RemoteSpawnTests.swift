@@ -37,18 +37,23 @@ struct RemoteSpawnTests {
 
     @Test
     func pane_command_settles_term_against_the_hosts_own_terminfo() {
+        // A resolvable TERM is never touched — the outer test is negated, so
+        // the replacement only runs when the arriving TERM has no entry. That
+        // precedence matters: preferring xterm-ghostty whenever the host had it
+        // overrode a user's `SetEnv TERM=xterm-256color` pin and turned a stock
+        // Debian prompt monochrome, since its ~/.bashrc gates color on
+        // `xterm-color|*-256color` — a string match no capability check can
+        // satisfy. Verified against a stubbed `infocmp` across all five cases.
+        //
         // Decided host-side on purpose: `ghostty +ssh` forces
         // `-o SetEnv=TERM=xterm-ghostty` from the client because its wrapper has
         // no remote-side script; ours reads the remote DB directly, so it needs
-        // no cache and works where env requests are dropped. Behavior verified
-        // against a stubbed `infocmp`: knows-ghostty → xterm-ghostty (even when
-        // ssh_config pinned something coarser), knows-only-forwarded → keep it,
-        // knows-neither → xterm-256color, because a TERM with no entry makes
-        // TUIs refuse to start.
+        // no cache and works where env requests are dropped.
         let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123") ?? ""
+        #expect(cmd.contains("if ! infocmp \"$TERM\" >/dev/null 2>&1; then "))
         #expect(cmd.contains("if infocmp xterm-ghostty >/dev/null 2>&1; then TERM=xterm-ghostty;"))
-        #expect(cmd.contains("elif ! infocmp \"$TERM\" >/dev/null 2>&1; then TERM=xterm-256color;"))
-        // `if`/`elif`, never `&&`/`||` chaining — the chained form's
+        #expect(cmd.contains("else TERM=xterm-256color; fi; export TERM; fi;"))
+        // Nested `if`, never `&&`/`||` chaining — the chained form's
         // left-to-right precedence binds the else-branch wrong.
         #expect(!RemoteSpawn.remoteTermPreamble.contains("||"))
         // Pane-only: a background op has no terminal to describe.

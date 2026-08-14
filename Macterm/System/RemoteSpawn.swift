@@ -70,24 +70,38 @@ enum RemoteSpawn {
     /// Prepended to the pane script only: settle TERM against the terminfo DB
     /// the remote actually has.
     ///
-    /// `xterm-ghostty` when the host knows it — full capabilities (truecolor,
-    /// styled underlines) — else whatever ssh forwarded if the host knows
-    /// *that*, else the universally-known `xterm-256color`, because a TERM with
-    /// no entry makes TUIs refuse to start. Both branches matter: ssh forwards
-    /// the local `xterm-ghostty` which most hosts can't resolve, and a user's
-    /// `~/.ssh/config` may pin something coarser (`SetEnv TERM=xterm-256color`)
-    /// which we should improve on when the host can do better.
+    /// **A TERM the host can already resolve is never touched** — including a
+    /// coarser one the user pinned themselves (`SetEnv TERM=xterm-256color` in
+    /// `~/.ssh/config`). Only an unusable arriving TERM is replaced, preferring
+    /// `xterm-ghostty` when the host has that entry and falling back to the
+    /// universally-known `xterm-256color`, because a TERM with no entry makes
+    /// TUIs refuse to start.
     ///
-    /// The upgrade is decided HOST-side, which is the deliberate divergence
-    /// from `ghostty +ssh` — it forces `-o SetEnv=TERM=xterm-ghostty` from the
-    /// client because its wrapper has no remote-side script to work with. Ours
-    /// does, so it reads the remote DB directly: no guess about what the host
-    /// has, no cache to fall out of sync with reality, and it works where env
-    /// requests are dropped (see `remoteColorPreamble` on Tailscale SSH).
-    /// `RemoteTerminfo` is what makes a host that lacks the entry acquire it,
-    /// so a later session takes the first branch.
+    /// That precedence is load-bearing, and getting it backwards is a regression
+    /// that looks like the opposite of one. An earlier revision *preferred*
+    /// `xterm-ghostty` whenever the host had it, overriding the pin — and on a
+    /// stock Debian host the prompt went monochrome, because the default
+    /// `~/.bashrc` gates color on a string match:
     ///
-    /// POSIX `if`/`elif`, not `&&`/`||` chaining — the chained form's
+    ///     case "$TERM" in xterm-color|*-256color) color_prompt=yes;; esac
+    ///
+    /// `xterm-ghostty` matches neither pattern, so a *more* capable terminal
+    /// (that entry adds `Tc`; both report 256 colors) rendered a *plainer*
+    /// prompt. Capability and dotfile heuristics are different things, and a
+    /// pinned TERM is a decision the user already made about both — so we
+    /// improve only what was broken anyway. `RemoteTerminfo` still unlocks full
+    /// capabilities the honest way: with the entry installed, the TERM ssh
+    /// forwards naturally *is* resolvable, so this keeps it instead of
+    /// downgrading.
+    ///
+    /// Decided HOST-side, the deliberate divergence from `ghostty +ssh` — it
+    /// forces `-o SetEnv=TERM=xterm-ghostty` from the client because its wrapper
+    /// has no remote-side script to work with. Ours does, so it reads the remote
+    /// DB directly: no guess about what the host has, no cache to fall out of
+    /// sync with reality, and it works where env requests are dropped (see
+    /// `remoteColorPreamble` on Tailscale SSH).
+    ///
+    /// POSIX nested `if`, not `&&`/`||` chaining — the chained form's
     /// left-to-right precedence makes the else-branch bind wrong.
     ///
     /// History, so nobody re-litigates: forcing `xterm-ghostty` was once tried
@@ -95,11 +109,12 @@ enum RemoteSpawn {
     /// on a host that has the ghostty terminfo. That experiment was confounded
     /// — the blind arm also sourced a `~/.profile` ending in `exec zsh` (the
     /// actual culprit; see `remoteEnvPreamble`). Retested un-confounded on the
-    /// same host: zmx under TERM=xterm-ghostty renders fine. What was wrong
-    /// with it was being unconditional, not the value.
+    /// same host: zmx under TERM=xterm-ghostty renders fine. So the value is
+    /// safe; what is not safe is imposing it.
     static let remoteTermPreamble =
-        "if infocmp xterm-ghostty >/dev/null 2>&1; then TERM=xterm-ghostty; export TERM; "
-            + "elif ! infocmp \"$TERM\" >/dev/null 2>&1; then TERM=xterm-256color; export TERM; fi; "
+        "if ! infocmp \"$TERM\" >/dev/null 2>&1; then "
+            + "if infocmp xterm-ghostty >/dev/null 2>&1; then TERM=xterm-ghostty; "
+            + "else TERM=xterm-256color; fi; export TERM; fi; "
 
     /// Prepended to the pane script only: 24-bit color is a property of the
     /// surface, and ours is libghostty — always truecolor — so the remote can
