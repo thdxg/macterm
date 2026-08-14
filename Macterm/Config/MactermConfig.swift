@@ -127,9 +127,17 @@ final class MactermConfig {
     /// The user's Ghostty config text, read for merging their
     /// `shell-integration-features` value into the overrides. nil when the
     /// user has disabled loading (empty path) or the file is unreadable.
-    private func userGhosttyConfigText() -> String? {
+    ///
+    /// Static so anything else that must consult the user's *stated* config
+    /// reads it the same way — `RemoteTerminfo`'s gate deliberately reads this
+    /// raw text rather than the effective post-override value.
+    static func userGhosttyConfigText() -> String? {
         let path = Preferences.shared.expandedUserGhosttyConfigPath
         guard !path.isEmpty else { return nil }
         return try? String(contentsOfFile: path, encoding: .utf8)
+    }
+
+    private func userGhosttyConfigText() -> String? {
+        Self.userGhosttyConfigText()
     }
 }

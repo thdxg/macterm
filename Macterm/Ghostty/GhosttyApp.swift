@@ -499,6 +499,14 @@ final class GhosttyApp {
         setenv("GHOSTTY_RESOURCES_DIR", resourcesDir, 1)
     }
 
+    /// Our bundled compiled terminfo DB, for callers that need to read the
+    /// `xterm-ghostty` entry with a tool of their own (`RemoteTerminfo` pipes
+    /// `infocmp` output to a remote `tic`). nil before `resolveResources` has
+    /// run or when no candidate qualified.
+    var bundledTerminfoDirectory: String? {
+        resourcesDir.map { GhosttyResourceResolver.terminfoDirectory(forResourcesDir: $0) }
+    }
+
     // MARK: - Theme split resolution (issue #38)
 
     /// When the effective `theme` is a `light:X,dark:Y` split, the colors of the

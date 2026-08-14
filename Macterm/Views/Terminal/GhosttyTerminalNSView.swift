@@ -442,6 +442,12 @@ final class GhosttyTerminalNSView: NSView {
             ) {
                 config.command = cString(sshCommand)
             }
+            // Teach the host our terminfo entry, if the user asked for it, so a
+            // later session's `remoteTermPreamble` settles on xterm-ghostty
+            // instead of xterm-256color. Fire-and-forget by design: it must
+            // never delay or fail this spawn, and the script's own COLORTERM
+            // export already guarantees truecolor without it.
+            RemoteTerminfoInstaller.shared.ensureInstalled(remote: remoteSpec)
         } else {
             // Canonicalize before libghostty sees it: the string is exported
             // VERBATIM as the shell's $PWD, and a trailing slash there is

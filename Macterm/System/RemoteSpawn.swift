@@ -67,21 +67,74 @@ enum RemoteSpawn {
         "PATH=\"$PATH:$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin\"; "
             + "export PATH; "
 
-    /// Prepended to the pane script only: ssh forwards the local
-    /// TERM=xterm-ghostty, which most remotes have no terminfo entry for —
-    /// TUIs would refuse to start. Fall back to the universally-known
-    /// xterm-256color unless the remote actually knows the current TERM;
-    /// hosts whose ncurses ships the ghostty entry keep full capabilities
-    /// (truecolor, styled underlines).
+    /// Prepended to the pane script only: settle TERM against the terminfo DB
+    /// the remote actually has.
     ///
-    /// History, so nobody re-litigates: this was briefly unconditional,
-    /// "fixing" panes that rendered a prompt but no output on a host that
-    /// has the ghostty terminfo. That experiment was confounded — the blind
-    /// arm also sourced a `~/.profile` ending in `exec zsh` (the actual
-    /// culprit; see `remoteEnvPreamble`). Retested un-confounded on the same
-    /// host: zmx under TERM=xterm-ghostty renders fine.
+    /// `xterm-ghostty` when the host knows it — full capabilities (truecolor,
+    /// styled underlines) — else whatever ssh forwarded if the host knows
+    /// *that*, else the universally-known `xterm-256color`, because a TERM with
+    /// no entry makes TUIs refuse to start. Both branches matter: ssh forwards
+    /// the local `xterm-ghostty` which most hosts can't resolve, and a user's
+    /// `~/.ssh/config` may pin something coarser (`SetEnv TERM=xterm-256color`)
+    /// which we should improve on when the host can do better.
+    ///
+    /// The upgrade is decided HOST-side, which is the deliberate divergence
+    /// from `ghostty +ssh` — it forces `-o SetEnv=TERM=xterm-ghostty` from the
+    /// client because its wrapper has no remote-side script to work with. Ours
+    /// does, so it reads the remote DB directly: no guess about what the host
+    /// has, no cache to fall out of sync with reality, and it works where env
+    /// requests are dropped (see `remoteColorPreamble` on Tailscale SSH).
+    /// `RemoteTerminfo` is what makes a host that lacks the entry acquire it,
+    /// so a later session takes the first branch.
+    ///
+    /// POSIX `if`/`elif`, not `&&`/`||` chaining — the chained form's
+    /// left-to-right precedence makes the else-branch bind wrong.
+    ///
+    /// History, so nobody re-litigates: forcing `xterm-ghostty` was once tried
+    /// *unconditionally*, "fixing" panes that rendered a prompt but no output
+    /// on a host that has the ghostty terminfo. That experiment was confounded
+    /// — the blind arm also sourced a `~/.profile` ending in `exec zsh` (the
+    /// actual culprit; see `remoteEnvPreamble`). Retested un-confounded on the
+    /// same host: zmx under TERM=xterm-ghostty renders fine. What was wrong
+    /// with it was being unconditional, not the value.
     static let remoteTermPreamble =
-        "infocmp \"$TERM\" >/dev/null 2>&1 || { TERM=xterm-256color; export TERM; }; "
+        "if infocmp xterm-ghostty >/dev/null 2>&1; then TERM=xterm-ghostty; export TERM; "
+            + "elif ! infocmp \"$TERM\" >/dev/null 2>&1; then TERM=xterm-256color; export TERM; fi; "
+
+    /// Prepended to the pane script only: 24-bit color is a property of the
+    /// surface, and ours is libghostty — always truecolor — so the remote can
+    /// be told unconditionally.
+    ///
+    /// It has to be asserted host-side because ssh carries only `TERM` by a
+    /// channel a server can't refuse: TERM rides the *pty request* (and
+    /// OpenSSH ≥8.7 lets `SetEnv` override the value put there), while every
+    /// other variable is an `env` channel request the *server* filters. So the
+    /// same `SetEnv` flag succeeds or vanishes depending only on which
+    /// variable it names — measured against a real host behind Tailscale SSH
+    /// (`tailscaled` serves the session, so the host's `AcceptEnv COLORTERM`
+    /// is never consulted): `-o SetEnv=TERM=xterm-ghostty` arrived, while
+    /// `-o SetEnv=COLORTERM=truecolor`, `-o SendEnv=COLORTERM`, and a control
+    /// `-o SetEnv=FOO=bar` all arrived empty. Setting it inside the script
+    /// depends on nothing but our own preamble, which is the rule the rest of
+    /// this file follows.
+    ///
+    /// Without it, TUIs that gate 24-bit color on COLORTERM downgrade to 256
+    /// colors or refuse outright — helix rejects a truecolor theme with
+    /// "Unsupported theme: theme requires true color support". Note the
+    /// `remoteTermPreamble` above can't cover this: it only ever *downgrades*
+    /// TERM, so a `SetEnv TERM=xterm-256color` in the user's `~/.ssh/config`
+    /// (or any host without the ghostty terminfo entry) leaves no truecolor
+    /// signal at all. Ghostty.app escapes this by a route we don't have — its
+    /// shell-integration `ssh` wrapper hands the connection to `ghostty +ssh`,
+    /// which installs the `xterm-ghostty` entry on the host and forces
+    /// `-o SetEnv=TERM=xterm-ghostty` (whose terminfo declares `Tc`). A
+    /// Macterm pane command IS the surface command, spawned with no shell in
+    /// front of it, so no such wrapper can ever run.
+    ///
+    /// Only sessions created from here on pick it up: `zmx attach` hands its
+    /// environment to the shell it CREATES, so a session that predates this
+    /// keeps the old one until it is killed.
+    static let remoteColorPreamble = "COLORTERM=truecolor; export COLORTERM; "
 
     /// How the script invokes zmx: a user-supplied absolute path used verbatim
     /// (deterministic — bypasses all PATH resolution), or the bare command
@@ -127,7 +180,7 @@ enum RemoteSpawn {
         // $SHELL unset, so the diagnostic shell can never itself exit-and-close
         // the pane. No `-l` (unportable — see remoteShell).
         let fallbackShell = "exec ${SHELL:-/bin/sh}"
-        let script = assertSingleQuoteFree(remoteEnvPreamble + remoteTermPreamble + [
+        let script = assertSingleQuoteFree(remoteEnvPreamble + remoteTermPreamble + remoteColorPreamble + [
             zmxPresenceGuard(zmx: zmx, fallbackShell: fallbackShell),
             "cd \(quotedDir) || "
                 + "{ echo \"macterm: cannot cd to \(quotedDir)\" >&2; \(fallbackShell); }",

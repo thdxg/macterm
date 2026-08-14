@@ -29,4 +29,19 @@ struct GhosttyResourceResolver {
     func resolve() -> String? {
         candidates.first { fileExists($0 + "/shell-integration") }
     }
+
+    /// The compiled terminfo DB for a resolved resources dir: its *sibling*
+    /// `terminfo`, exactly the derivation libghostty performs at shell spawn
+    /// (`dirname(GHOSTTY_RESOURCES_DIR)/terminfo`). Deriving it the same way
+    /// rather than naming a path keeps the one invariant #39/#40 turned on —
+    /// if the layout ever moves, both derivations move together instead of
+    /// silently disagreeing.
+    ///
+    /// Needed by anything that must read our own entry with a tool that isn't
+    /// a spawned shell (`RemoteTerminfo` runs `infocmp` against it), since
+    /// `TERMINFO` is deliberately never set in this process — see
+    /// `GhosttyApp.resolveResources`.
+    static func terminfoDirectory(forResourcesDir dir: String) -> String {
+        (dir as NSString).deletingLastPathComponent + "/terminfo"
+    }
 }

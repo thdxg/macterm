@@ -52,6 +52,43 @@ enum ShellIntegrationFeatures {
         return result
     }
 
+    /// ghostty's own defaults for the features it knows, read off
+    /// `ghostty +show-config --default` on the pinned build:
+    /// `cursor,no-sudo,title,no-ssh-env,no-ssh-terminfo,path`. Needed because
+    /// "the user didn't mention this flag" is not the same answer for every
+    /// flag — notably `ssh-terminfo` is OFF unless asked for.
+    private static let featureDefaults: [String: Bool] = [
+        "cursor": true, "sudo": false, "title": true,
+        "ssh-env": false, "ssh-terminfo": false, "path": true,
+    ]
+
+    /// Whether `feature` is on in the USER's ghostty config, falling back to
+    /// ghostty's own default when they never mention it. Last mention wins and
+    /// a `no-` prefix turns it off, matching libghostty's left-to-right
+    /// per-flag application; a bool literal (valid only as the entire value)
+    /// flips everything at once.
+    ///
+    /// Deliberately reads the user's RAW config, not the effective value after
+    /// `macterm-overrides.conf`: `MactermConfig` may force `no-ssh-terminfo`
+    /// when no ghostty CLI is installed, but that override exists to stop the
+    /// bundled shell *wrapper* from exec'ing a binary that isn't there — it
+    /// says nothing about whether the user wants remote terminfo installed.
+    /// Macterm's own native path (`RemoteTerminfo`) has no such dependency, so
+    /// it honors the intent rather than the workaround.
+    static func isEnabled(_ feature: String, inConfigText text: String?) -> Bool {
+        let fallback = featureDefaults[feature] ?? false
+        guard let text, let value = userValue(inConfigText: text) else { return fallback }
+        if trueLiterals.contains(value) { return true }
+        if falseLiterals.contains(value) { return false }
+        var enabled = fallback
+        for part in value.split(separator: ",") {
+            let flag = part.trimmingCharacters(in: .whitespaces)
+            if flag == feature { enabled = true }
+            if flag == "no-\(feature)" { enabled = false }
+        }
+        return enabled
+    }
+
     /// The value to write after `shell-integration-features = ` in
     /// macterm-overrides.conf, or nil when no override line is needed.
     /// `disabled` are the `no-*` flags Macterm must force (see
