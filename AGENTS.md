@@ -207,6 +207,7 @@ One `XxxTests.swift` per production type, mirroring the source path. `@testable 
 - `createSurface()` needs a non-zero frame and a window; `TerminalSurface` defers creation until attached. A `Pane`'s `command`/`shell`/`env` (from a declarative layout) map to libghostty's `initial_input`/`command`/`env_vars`.
 - The `closeSurface` callback fires asynchronously — guard against double-close.
 - First-responder handoff after reshapes/tab switches must go through `FocusRestoration.restoreFocus(...)` — a bare `makeFirstResponder` races the NSView's window attachment.
+- **Anything that must take mouse input over a pane needs an AppKit view of its own.** `GhosttyTerminalNSView` handles `mouseDown` itself and wins AppKit hit testing, so a SwiftUI gesture layered over a pane never sees the press — which is why the pane grab handle (`PaneDragSource`) and the split divider's grab band (`SplitResizeBand`, #260) are both `NSViewRepresentable`s. Before that band, the divider's SwiftUI `DragGesture` was reachable only in the 1pt gap *between* the two panes, which is exactly how "you have to be very precise to resize" got reported. A SwiftUI overlay is fine only where it takes no clicks (the unfocused-pane dim, which is `allowsHitTesting(false)`). Such a view sits ON a pane, so it must hand back what it doesn't own: the band claims the left button and forwards scroll/right/middle events to `viewBeneath`, because the responder chain runs up through its ancestors and never across to the sibling it covers.
 
 ### Persistence
 
