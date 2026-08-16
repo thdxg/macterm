@@ -51,4 +51,18 @@ struct PreferencesTests {
         let standardRecency = UserDefaults.standard.stringArray(forKey: "macterm.projectRecency") ?? []
         #expect(!standardRecency.contains(project.id.uuidString))
     }
+
+    /// The persisted sidebar width is fed straight to
+    /// `NSSplitView.setPosition` at launch, so it has to land inside the
+    /// column's own bounds: an absent key (never dragged) and a stale value
+    /// from a build with different bounds both fall back to the default.
+    @Test
+    func sidebar_width_is_clamped_to_the_column_bounds() {
+        let range = Preferences.sidebarWidthRange
+        #expect(Preferences.clampSidebarWidth(nil) == Preferences.defaultSidebarWidth)
+        #expect(Preferences.clampSidebarWidth(0) == Preferences.defaultSidebarWidth)
+        #expect(Preferences.clampSidebarWidth(range.lowerBound - 40) == range.lowerBound)
+        #expect(Preferences.clampSidebarWidth(range.upperBound + 40) == range.upperBound)
+        #expect(Preferences.clampSidebarWidth(213.5) == 213.5)
+    }
 }

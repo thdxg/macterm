@@ -26,10 +26,14 @@ struct MainWindow: View {
     /// once the pointer leaves the trigger strip.
     @State
     private var suppressPeekUntilExit = false
-    /// Last open sidebar width, read-only mirror for the peek's "pointer left
-    /// the sidebar" threshold — the reopen width itself stays SwiftUI's.
+    /// Last open sidebar width: the peek's "pointer left the sidebar"
+    /// threshold, and what we persist so the next launch reopens at it.
+    ///
+    /// SwiftUI autosaves the column width itself, but that never survives a
+    /// relaunch — see `WindowAppearance.restoreSidebarWidth`, which does the
+    /// reopening. This end just records the value.
     @State
-    private var sidebarWidth: CGFloat = 180
+    private var sidebarWidth: CGFloat = .init(Preferences.shared.launchSidebarWidth)
     /// When the running peek expand animation will have settled; a retraction
     /// requested before this waits (see `endPeek`).
     @State
@@ -83,13 +87,20 @@ struct MainWindow: View {
                 // Innermost, before `ignoresSafeArea`, so the padding insets
                 // the rows while the sidebar surface still reaches the edge.
                 .safeAreaPadding(.top, chromeHidden ? 8 : 0)
-                .navigationSplitViewColumnWidth(min: 140, ideal: 180, max: 280)
+                .navigationSplitViewColumnWidth(
+                    min: CGFloat(Preferences.sidebarWidthRange.lowerBound),
+                    // Measured to be ignored (the column comes up at its
+                    // content width regardless) — kept as the honest request
+                    // for the launch width AppKit actually installs.
+                    ideal: CGFloat(Preferences.shared.launchSidebarWidth),
+                    max: CGFloat(Preferences.sidebarWidthRange.upperBound)
+                )
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
                 } action: { width in
                     // Below the column's 140 minimum means mid-collapse; keep
                     // the last open width for the peek's exit threshold.
-                    if width >= 100 { sidebarWidth = width }
+                    if width >= 100 { recordSidebarWidth(width) }
                 }
                 // Hiding the toolbar removes the chrome but SwiftUI keeps its
                 // titlebar safe-area inset reserved; ignoring it is what lets
@@ -225,6 +236,19 @@ struct MainWindow: View {
                 DispatchQueue.main.async { appState.restoreFocusToActivePane() }
             }
         }
+    }
+
+    /// Remember an open sidebar width, and persist it for the next launch.
+    ///
+    /// The geometry callback fires continuously through a drag, so the write
+    /// is filtered to changes worth a defaults round-trip — sub-point jitter
+    /// (and every frame of an animating peek that lands back where it started)
+    /// writes nothing.
+    private func recordSidebarWidth(_ width: CGFloat) {
+        sidebarWidth = width
+        let rounded = (Double(width) * 2).rounded() / 2
+        guard abs(rounded - preferences.sidebarWidth) >= 0.5 else { return }
+        preferences.sidebarWidth = rounded
     }
 
     /// Hover-peek for the hidden sidebar: pointer in the leading-edge strip

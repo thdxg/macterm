@@ -147,6 +147,25 @@ final class Preferences {
         didSet { defaults.set(peekSidebarWhenHidden, forKey: Keys.peekSidebarWhenHidden) }
     }
 
+    /// Last width the user dragged the sidebar to, seeded into the column's
+    /// `ideal` at launch. We persist it ourselves because SwiftUI's own
+    /// autosave never survives a relaunch — see `MainWindow.sidebarWidth`.
+    var sidebarWidth: Double {
+        didSet { defaults.set(sidebarWidth, forKey: Keys.sidebarWidth) }
+    }
+
+    /// `sidebarWidth` as it stood at launch, frozen. What the restore must
+    /// read: the column lays out (and `MainWindow`'s geometry callback writes
+    /// its content-derived width over the stored one) *before* the window is
+    /// styled, so by restore time the live property already says 144.
+    private(set) var launchSidebarWidth: Double = defaultSidebarWidth
+
+    /// Bounds of the sidebar column, shared by the persisted width's clamp and
+    /// `MainWindow`'s `navigationSplitViewColumnWidth` so a stored value can
+    /// never fall outside what the column accepts.
+    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 280
+    static let defaultSidebarWidth: Double = 180
+
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
     /// `allowedChannelsForUpdater`, so `.beta` makes prerelease items visible to
     /// both the scheduled check and "Check for Updates…". Defaults to `.stable`:
@@ -446,6 +465,9 @@ final class Preferences {
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
+        let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
+        sidebarWidth = storedSidebarWidth
+        launchSidebarWidth = storedSidebarWidth
         updateChannel = (defaults.string(forKey: Keys.updateChannel))
             .flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
@@ -458,6 +480,13 @@ final class Preferences {
     private static func clampFraction(_ v: Double, fallback: Double) -> Double {
         guard v > 0 else { return fallback }
         return max(0.2, min(1.0, v))
+    }
+
+    /// An absent key (never dragged) and an out-of-range one (a stale value
+    /// from a build with different column bounds) both land on the default.
+    static func clampSidebarWidth(_ v: Double?) -> Double {
+        guard let v, v > 0 else { return defaultSidebarWidth }
+        return min(max(v, sidebarWidthRange.lowerBound), sidebarWidthRange.upperBound)
     }
 
     private static func clampPaneDimOpacity(_ v: Double) -> Double {
@@ -517,6 +546,7 @@ final class Preferences {
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
+        static let sidebarWidth = "macterm.sidebar.width"
         static let updateChannel = "macterm.updates.channel"
         static let tabSwitcherVisibility = "macterm.toolbar.tabSwitcherVisibility"
         static let tabSwitcherPosition = "macterm.toolbar.tabSwitcherPosition"
