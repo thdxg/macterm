@@ -433,7 +433,7 @@ final class Preferences {
     /// rather than a loaded-class check: the test bundle injects only after app
     /// launch, but the environment is set from process start, so this is
     /// correct however early `shared` is first touched.
-    nonisolated private static var isTestRun: Bool {
+    nonisolated static var isTestRun: Bool {
         ProcessInfo.processInfo.environment.keys.contains { $0.hasPrefix("XCTest") }
     }
 

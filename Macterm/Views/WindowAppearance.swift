@@ -314,6 +314,7 @@ enum WindowAppearance {
         // also runs on every window-became-main, so an arm left standing would
         // later snap a width the user had since dragged.
         didRestoreSidebarWidth = true
+        pinSidebarAutosaveName(split: split)
         // A sidebar the user left hidden must stay hidden: moving divider 0 on
         // a collapsed item is what would pop it open on every launch. Showing
         // it mid-session then gives SwiftUI's own width — the next launch with
@@ -323,6 +324,48 @@ enum WindowAppearance {
         let width = CGFloat(Preferences.shared.launchSidebarWidth)
         split.setPosition(width, ofDividerAt: 0)
         logger.info("sidebar width restored to \(width, privacy: .public)")
+    }
+
+    /// Our own autosave name for the sidebar split view, and a sweep of the
+    /// keys SwiftUI's name left behind.
+    ///
+    /// AppKit's autosave key is `NSSplitView Subview Frames <autosaveName>`,
+    /// so SwiftUI's address-bearing name (see above) doesn't just fail to
+    /// restore — it writes a **brand-new key on every launch**, forever. They
+    /// accumulate unread: 9 in one release domain, 51 in a debug one. Pinning
+    /// the name gives AppKit a single key it rewrites in place.
+    ///
+    /// This is hygiene, not the restore: `restoreSidebarWidth` above stays the
+    /// authority on the launch width, because when AppKit consults its own
+    /// autosave relative to SwiftUI's layout pass is exactly what isn't
+    /// dependable here.
+    private static let sidebarAutosaveName = "MactermMainSidebar"
+
+    private static func pinSidebarAutosaveName(split: NSSplitView) {
+        guard split.autosaveName != sidebarAutosaveName else { return }
+        split.autosaveName = sidebarAutosaveName
+        pruneChurnedSidebarAutosaveKeys()
+    }
+
+    /// Drop the per-launch keys written before the name was pinned. Matched on
+    /// the address marker, so the stable names (ours, and the Settings
+    /// window's `com_apple_SwiftUI_Settings_window…`) are never touched.
+    ///
+    /// Reads `UserDefaults.standard` deliberately, against the usual rule:
+    /// AppKit wrote these keys to the app's real domain, so that is the only
+    /// place they exist. Skipped under a test run so a hosted suite can't
+    /// reach into the developer's live domain.
+    private static func pruneChurnedSidebarAutosaveKeys() {
+        guard !Preferences.isTestRun else { return }
+        let defaults = UserDefaults.standard
+        let stale = defaults.dictionaryRepresentation().keys.filter {
+            $0.hasPrefix("NSSplitView Subview Frames ") && $0.contains("(unknown context at $")
+        }
+        guard !stale.isEmpty else { return }
+        for key in stale {
+            defaults.removeObject(forKey: key)
+        }
+        logger.info("pruned \(stale.count, privacy: .public) churned sidebar autosave keys")
     }
 
     /// Kill NSSplitView's windowed "proactive peek" of the collapsed sidebar:
