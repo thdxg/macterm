@@ -21,26 +21,45 @@ extension NSPasteboard.PasteboardType {
 
 /// The grab-handle drag as seen by its drop targets: the pane UUID
 /// `PaneDragSource` writes as 16 raw bytes under `.mactermPaneID`.
-/// Deliberately NOT `Transferable`: the drag is an AppKit `NSDraggingSession`
-/// whose custom-type pasteboard data never reaches SwiftUI's `dropDestination`
-/// import path, so the workspace leaves read the drag pasteboard directly
-/// through a raw `DropDelegate`. (This drag also cannot target the sidebar
-/// at all — no public drop mechanism in that column ever receives the
-/// session, which is why "separate a pane into its own tab" ships as the
-/// Separate Current Pane command rather than a sidebar drop.)
+///
+/// Deliberately NOT `Transferable` itself: the drag lifts as an AppKit
+/// `NSDraggingSession` (see `PaneDragSource`), never through `.draggable`, so
+/// there is no export side to declare, and the two importers that do exist —
+/// the sidebar's `SidebarDropItem` and `TabSlotDropItem` unions — decode these
+/// bytes as one case among several. The workspace leaves read the pasteboard
+/// directly instead (`fromDragPasteboard`), so every path decodes the same 16
+/// bytes through `init?(payload:)`.
 struct MovablePane {
     let paneID: UUID
 
-    /// Decode the drag's payload synchronously off the drag pasteboard. The
-    /// pane drag never leaves the app and its bytes are written eagerly at
-    /// mouseDragged, so unlike `MovableTab` there is no async fallback to
-    /// need — nil simply means "not a pane drag".
+    /// Decode the wire form: the pane UUID as 16 raw bytes. The one decoder
+    /// every drop path shares, so the leaves' pasteboard read and the
+    /// sidebar's `Transferable` import can't drift.
+    init?(payload: Data) {
+        guard payload.count == 16 else { return nil }
+        self.init(paneID: payload.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) })
+    }
+
+    init(paneID: UUID) {
+        self.paneID = paneID
+    }
+
+    /// The wire form of a pane's identity — what `PaneDragSource` puts on the
+    /// drag pasteboard.
+    static func payload(for paneID: UUID) -> Data {
+        withUnsafeBytes(of: paneID.uuid) { Data($0) }
+    }
+
+    /// Decode the drag's payload synchronously off the drag pasteboard — the
+    /// path the workspace leaves take, since a raw `DropDelegate` gets the
+    /// session but not a decoded payload. The bytes are written eagerly at
+    /// mouseDragged, so nil simply means "not a pane drag".
     static func fromDragPasteboard() -> MovablePane? {
         guard let data = NSPasteboard(name: .drag).pasteboardItems?
             .compactMap({ $0.data(forType: .mactermPaneID) })
-            .first, data.count == 16
+            .first
         else { return nil }
-        return MovablePane(paneID: data.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) })
+        return MovablePane(payload: data)
     }
 }
 
@@ -222,10 +241,7 @@ private struct PaneDragSource: NSViewRepresentable {
             guard !isTracking, let pane else { return }
 
             let pasteboardItem = NSPasteboardItem()
-            pasteboardItem.setData(
-                withUnsafeBytes(of: pane.id.uuid) { Data($0) },
-                forType: .mactermPaneID
-            )
+            pasteboardItem.setData(MovablePane.payload(for: pane.id), forType: .mactermPaneID)
             let item = NSDraggingItem(pasteboardWriter: pasteboardItem)
 
             let image = dragPreviewImage(for: pane)
@@ -404,7 +420,7 @@ struct LeafDropDelegate: DropDelegate {
         }
         context.resolution.wrappedValue = nil
 
-        // A pane drag first: its payload is an eagerly-written UUID, readable
+        // A pane drag first: its payload is a UUID, usually readable
         // synchronously off the drag pasteboard (this drag never leaves the
         // app — sourceOperationMask is .move only within the application).
         if let movable = MovablePane.fromDragPasteboard() {
@@ -412,7 +428,6 @@ struct LeafDropDelegate: DropDelegate {
             MainActor.assumeIsolated { move(movable.paneID, target) }
             return true
         }
-
         guard let onMergeTab = context.onMergeTab else { return false }
         if let movable = MovableTab.fromDragPasteboard() {
             MainActor.assumeIsolated { onMergeTab(movable, target) }

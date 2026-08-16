@@ -70,18 +70,20 @@ extension UTType {
     static let mactermProject = UTType(exportedAs: "com.thdxg.macterm.project-move")
 }
 
-/// Import-side union of the two sidebar drag payloads, so a single view can
-/// accept BOTH drags through ONE `.dropDestination`. This exists because
-/// stacking two `.dropDestination`s (one per payload type) on the same view
-/// is non-deterministic: only one of the two registrations wins, and which
-/// one flips with unrelated view changes — measured live, the project header
-/// accepted project drops in one build and silently rejected them in the
-/// next. Never stack drop destinations; widen the payload instead.
+/// Import-side union of the drag payloads a project HEADER accepts, so a
+/// single view can accept all of them through ONE `.dropDestination`. This
+/// exists because stacking two `.dropDestination`s (one per payload type) on
+/// the same view is non-deterministic: only one of the two registrations
+/// wins, and which one flips with unrelated view changes — measured live, the
+/// project header accepted project drops in one build and silently rejected
+/// them in the next. Never stack drop destinations; widen the payload instead.
 /// Import-only: drags still lift as `MovableTab`/`MovableProject` (their
-/// `CodableRepresentation` is JSON, which is what the decoders here parse).
+/// `CodableRepresentation` is JSON, which is what the decoders here parse) or,
+/// for a pane, as the raw UUID bytes an `NSDraggingSession` writes.
 enum SidebarDropItem: Transferable {
     case tab(MovableTab)
     case project(MovableProject)
+    case pane(MovablePane)
 
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(importedContentType: .mactermTab) { data in
@@ -89,6 +91,36 @@ enum SidebarDropItem: Transferable {
         }
         DataRepresentation(importedContentType: .mactermProject) { data in
             try .project(JSONDecoder().decode(MovableProject.self, from: data))
+        }
+        DataRepresentation(importedContentType: .mactermPaneID) { data in
+            guard let pane = MovablePane(payload: data) else {
+                throw CocoaError(.coderInvalidValue)
+            }
+            return .pane(pane)
+        }
+    }
+}
+
+/// The narrower union the tab-list ForEach accepts: a tab (reorder/move) or a
+/// pane (separate into a new tab), both of which want the insertion offset the
+/// ForEach reports. Deliberately NOT `SidebarDropItem` — including the project
+/// payload here would make a project drag target the tab rows, which is the
+/// state the header comment calls out as broken at this outline level: the
+/// insertion line would appear inside a section a project can't land in. The
+/// two unions are separate views' payloads, not stacked destinations.
+enum TabSlotDropItem: Transferable {
+    case tab(MovableTab)
+    case pane(MovablePane)
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .mactermTab) { data in
+            try .tab(JSONDecoder().decode(MovableTab.self, from: data))
+        }
+        DataRepresentation(importedContentType: .mactermPaneID) { data in
+            guard let pane = MovablePane(payload: data) else {
+                throw CocoaError(.coderInvalidValue)
+            }
+            return .pane(pane)
         }
     }
 }
@@ -214,13 +246,22 @@ struct SidebarContent: View {
             ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
                 tabRow(tab: tab, index: tabIndex, project: project)
             }
-            // Single drop mechanism for both cases: SwiftUI reports the
-            // insertion `offset` within THIS project's tab list. A drop from
-            // the same project reorders to that slot; a drop from another
-            // project moves the tab in at that slot. Replaces the old `.onMove`
-            // (which is per-section and can't express a cross-project move).
-            .dropDestination(for: MovableTab.self) { items, offset in
-                receiveTabDrop(items, into: project, at: offset)
+            // Single drop mechanism for every case: SwiftUI reports the
+            // insertion `offset` within THIS project's tab list. A tab drop
+            // from the same project reorders to that slot; one from another
+            // project moves the tab in at that slot; a PANE drop (the grab
+            // handle drag from the workspace) separates that pane into a new
+            // tab landing at the same slot. Replaces the old `.onMove` (which
+            // is per-section and can't express a cross-project move).
+            .dropDestination(for: TabSlotDropItem.self) { items, offset in
+                for item in items {
+                    switch item {
+                    case let .tab(tab):
+                        receiveTabDrop([tab], into: project, at: offset)
+                    case let .pane(pane):
+                        receivePaneDrop([pane], into: project, at: offset)
+                    }
+                }
             }
         } label: {
             projectHeader(index: projectIndex, project: project)
@@ -269,10 +310,11 @@ struct SidebarContent: View {
         .tag(SidebarItem.project(project.id))
         // Drag the header to reorder projects (replaces the removed `.onMove`).
         .draggable(MovableProject(projectID: project.id))
-        // ONE drop destination for both payloads (see `SidebarDropItem` for
+        // ONE drop destination for every payload (see `SidebarDropItem` for
         // why stacking two is a landmine). A TAB dropped here appends to this
         // project — the only drop path for a collapsed or empty project,
-        // whose tab ForEach renders no rows to target. A PROJECT dropped
+        // whose tab ForEach renders no rows to target — and a PANE dropped
+        // here appends its new tab the same way. A PROJECT dropped
         // squarely on the header reorders it to this project's slot; the
         // seams BETWEEN rows deliberately stay uncovered (label-height
         // target, no taller band) so the ForEach-level insertion line can
@@ -284,6 +326,8 @@ struct SidebarContent: View {
                     receiveTabDrop([tab], into: project, at: nil)
                 case let .project(dragged):
                     receiveProjectDrop([dragged], before: project)
+                case let .pane(pane):
+                    receivePaneDrop([pane], into: project, at: nil)
                 }
             }
             return true
@@ -322,6 +366,25 @@ struct SidebarContent: View {
                     toIndex: index
                 )
             }
+        }
+        expandedProjects.insert(project.id)
+    }
+
+    /// Apply a pane drag-and-drop: the pane leaves its split tree and becomes
+    /// its own tab in this project, at `index` (nil = append, used by header
+    /// drops). The `Pane` object — and its live surface and shell — is reused,
+    /// the same as the Separate Current Pane command, which calls the same
+    /// `AppState.separatePane`. Dragging a tab's ONLY pane here is a no-op:
+    /// it already is its own tab, and moving it to another project is what
+    /// dragging its sidebar row does.
+    private func receivePaneDrop(_ items: [MovablePane], into project: Project, at index: Int?) {
+        for item in items {
+            appState.separatePane(
+                item.paneID,
+                toProject: project.id,
+                destPath: project.path,
+                at: index
+            )
         }
         expandedProjects.insert(project.id)
     }
