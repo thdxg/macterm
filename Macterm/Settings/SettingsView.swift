@@ -353,6 +353,50 @@ extension View {
     // control rather than a broken one.
 }
 
+/// The one shape for a slider row: fixed-width leading label, the track, and
+/// a fixed-width trailing readout. Every slider in Settings renders through
+/// this so all tracks start and end at the same x, across rows *and* panes —
+/// per-row label widths, or min/max labels on the slider itself, are how
+/// tracks drift out of alignment.
+private struct SettingsSlider: View {
+    /// Wide enough for the longest label ("Background opacity"); shared so
+    /// no pane picks its own column and breaks the cross-pane alignment.
+    static let labelWidth: CGFloat = 126
+    static let valueWidth: CGFloat = 52
+
+    let label: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double?
+    let display: (Double) -> String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .frame(width: Self.labelWidth, alignment: .leading)
+            if let step {
+                Slider(value: $value, in: range, step: step)
+            } else {
+                Slider(value: $value, in: range)
+            }
+            Text(display(value))
+                .monospacedDigit()
+                .frame(width: Self.valueWidth, alignment: .trailing)
+        }
+    }
+}
+
+/// Readout for a 0…1 anchor slider: the endpoints and midpoint show their
+/// names — the readout is what documents which way the axis runs — and
+/// anything in between shows the percent. Stepped slider values accumulate
+/// floating-point error, hence the tolerance.
+private func anchorName(_ value: Double, zero: String, one: String) -> String {
+    if abs(value) < 0.001 { return zero }
+    if abs(value - 1) < 0.001 { return one }
+    if abs(value - 0.5) < 0.001 { return "Center" }
+    return "\(Int((value * 100).rounded()))%"
+}
+
 // MARK: - General
 
 private struct GeneralSettings: View {
@@ -408,13 +452,13 @@ private struct GeneralSettings: View {
             }
 
             Section("Terminal") {
-                HStack {
-                    Text("Scroll speed")
-                    Slider(value: $terminalScrollSpeed, in: 0.25 ... 3.0)
-                    Text("\(terminalScrollSpeed, specifier: "%.2f")×")
-                        .monospacedDigit()
-                        .frame(width: 52, alignment: .trailing)
-                }
+                SettingsSlider(
+                    label: "Scroll speed",
+                    value: $terminalScrollSpeed,
+                    range: 0.25 ... 3.0,
+                    step: nil,
+                    display: { String(format: "%.2f×", $0) }
+                )
                 .onChange(of: terminalScrollSpeed) { _, v in
                     Preferences.shared.terminalScrollSpeed = v
                 }
@@ -534,7 +578,6 @@ private struct GhosttyCLIBanner: View {
 // MARK: - Appearance
 
 private struct AppearanceSettings: View {
-    private let sliderLabelWidth: CGFloat = 126
 
     // Seeded from / written back through `Preferences` (see GeneralSettings) —
     // not `@AppStorage`, which would bind to the banned `UserDefaults.standard`.
@@ -566,14 +609,13 @@ private struct AppearanceSettings: View {
     var body: some View {
         Form {
             Section("Window") {
-                HStack {
-                    Text("Background opacity")
-                        .frame(width: sliderLabelWidth, alignment: .leading)
-                    Slider(value: $backgroundOpacity, in: 0.0 ... 1.0)
-                    Text("\(Int((backgroundOpacity * 100).rounded()))%")
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
-                }
+                SettingsSlider(
+                    label: "Background opacity",
+                    value: $backgroundOpacity,
+                    range: 0.0 ... 1.0,
+                    step: nil,
+                    display: { "\(Int(($0 * 100).rounded()))%" }
+                )
                 .onChange(of: backgroundOpacity) { _, v in
                     Preferences.shared.windowOpacity = v
                 }
@@ -592,14 +634,13 @@ private struct AppearanceSettings: View {
                     .disabled(backgroundOpacity >= 0.999)
                 }
 
-                HStack {
-                    Text("Background blur")
-                        .frame(width: sliderLabelWidth, alignment: .leading)
-                    Slider(value: $backgroundBlurRadius, in: 0 ... 100)
-                    Text("\(Int(backgroundBlurRadius.rounded()))%")
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
-                }
+                SettingsSlider(
+                    label: "Background blur",
+                    value: $backgroundBlurRadius,
+                    range: 0 ... 100,
+                    step: nil,
+                    display: { "\(Int($0.rounded()))%" }
+                )
                 .onChange(of: backgroundBlurRadius) { _, v in
                     Preferences.shared.windowBlurRadius = Int(v.rounded())
                 }
@@ -620,14 +661,13 @@ private struct AppearanceSettings: View {
             }
 
             Section("Split Panes") {
-                HStack {
-                    Text("Unfocused dimming")
-                        .frame(width: sliderLabelWidth, alignment: .leading)
-                    Slider(value: $paneDimOpacity, in: 0.0 ... Preferences.maxPaneDimOpacity)
-                    Text("\(Int((paneDimOpacity / Preferences.maxPaneDimOpacity * 100).rounded()))%")
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
-                }
+                SettingsSlider(
+                    label: "Unfocused dimming",
+                    value: $paneDimOpacity,
+                    range: 0.0 ... Preferences.maxPaneDimOpacity,
+                    step: nil,
+                    display: { "\(Int(($0 / Preferences.maxPaneDimOpacity * 100).rounded()))%" }
+                )
                 .onChange(of: paneDimOpacity) { _, v in
                     Preferences.shared.paneDimOpacity = v
                 }
@@ -768,8 +808,6 @@ private struct AppearanceSettings: View {
 // MARK: - Quick Terminal
 
 private struct QuickTerminalSettings: View {
-    private let sliderLabelWidth: CGFloat = 44
-
     /// Seeded from / written back through `Preferences` — not `@AppStorage`
     /// (banned `UserDefaults.standard`), and previously `enabled` wrote no
     /// Preferences value at all, so the observable stayed stale.
@@ -807,13 +845,11 @@ private struct QuickTerminalSettings: View {
             }
 
             Section("Position") {
-                Picker("Position", selection: $positionMode) {
+                Picker("Mode", selection: $positionMode) {
                     ForEach(QuickTerminalAdjustMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 .onChange(of: positionMode) { _, v in
                     Preferences.shared.quickTerminalPositionMode = v
                 }
@@ -821,33 +857,25 @@ private struct QuickTerminalSettings: View {
                 Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and remembers where you drag it.")
                     .settingsCaption()
 
-                HStack {
-                    Text("X")
-                        .frame(width: sliderLabelWidth, alignment: .leading)
-                    Slider(value: $fixedX, in: 0 ... 1, step: 0.05) {
-                        EmptyView()
-                    } minimumValueLabel: {
-                        Text("Left")
-                    } maximumValueLabel: {
-                        Text("Right")
-                    }
-                }
+                SettingsSlider(
+                    label: "X",
+                    value: $fixedX,
+                    range: 0 ... 1,
+                    step: 0.05,
+                    display: { anchorName($0, zero: "Left", one: "Right") }
+                )
                 .onChange(of: fixedX) { _, v in
                     Preferences.shared.quickTerminalFixedX = v
                 }
                 .disabled(!enabled || positionMode != .fixed)
 
-                HStack {
-                    Text("Y")
-                        .frame(width: sliderLabelWidth, alignment: .leading)
-                    Slider(value: $fixedYTopDown, in: 0 ... 1, step: 0.05) {
-                        EmptyView()
-                    } minimumValueLabel: {
-                        Text("Top")
-                    } maximumValueLabel: {
-                        Text("Bottom")
-                    }
-                }
+                SettingsSlider(
+                    label: "Y",
+                    value: $fixedYTopDown,
+                    range: 0 ... 1,
+                    step: 0.05,
+                    display: { anchorName($0, zero: "Top", one: "Bottom") }
+                )
                 .onChange(of: fixedYTopDown) { _, v in
                     Preferences.shared.quickTerminalFixedY = 1 - v
                 }
@@ -855,13 +883,11 @@ private struct QuickTerminalSettings: View {
             }
 
             Section("Size") {
-                Picker("Size", selection: $sizeMode) {
+                Picker("Mode", selection: $sizeMode) {
                     ForEach(QuickTerminalAdjustMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 .onChange(of: sizeMode) { _, v in
                     Preferences.shared.quickTerminalSizeMode = v
                 }
@@ -869,27 +895,25 @@ private struct QuickTerminalSettings: View {
                 Text("Fixed sizes the panel with the sliders. Dynamic lets you resize it from its edges and reopens it at that size.")
                     .settingsCaption()
 
-                HStack {
-                    Text("Width")
-                        .frame(width: sliderLabelWidth, alignment: .leading)
-                    Slider(value: $qtWidth, in: 0.2 ... 1.0, step: 0.05)
-                    Text("\(Int(qtWidth * 100))%")
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
-                }
+                SettingsSlider(
+                    label: "Width",
+                    value: $qtWidth,
+                    range: 0.2 ... 1.0,
+                    step: 0.05,
+                    display: { "\(Int(($0 * 100).rounded()))%" }
+                )
                 .onChange(of: qtWidth) { _, v in
                     Preferences.shared.quickTerminalWidthFraction = v
                 }
                 .disabled(!enabled || sizeMode != .fixed)
 
-                HStack {
-                    Text("Height")
-                        .frame(width: sliderLabelWidth, alignment: .leading)
-                    Slider(value: $qtHeight, in: 0.2 ... 1.0, step: 0.05)
-                    Text("\(Int(qtHeight * 100))%")
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
-                }
+                SettingsSlider(
+                    label: "Height",
+                    value: $qtHeight,
+                    range: 0.2 ... 1.0,
+                    step: 0.05,
+                    display: { "\(Int(($0 * 100).rounded()))%" }
+                )
                 .onChange(of: qtHeight) { _, v in
                     Preferences.shared.quickTerminalHeightFraction = v
                 }
