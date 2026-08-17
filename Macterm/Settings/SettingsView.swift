@@ -622,6 +622,7 @@ private struct AppearanceSettings: View {
     @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
+    @State private var hideSpinnerOnAgentTabs: Bool = Preferences.shared.hideSpinnerOnAgentTabs
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
@@ -742,6 +743,18 @@ private struct AppearanceSettings: View {
                     }
                 Text("Shows a spinner while a command runs, and a dot when it finishes.")
                     .settingsCaption()
+
+                Toggle("Hide spinner on agent tabs", isOn: $hideSpinnerOnAgentTabs)
+                    .onChange(of: hideSpinnerOnAgentTabs) { _, v in
+                        Preferences.shared.hideSpinnerOnAgentTabs = v
+                    }
+                    // Nested under the indicator it modifies: with the
+                    // indicator off there is no spinner to hide, so the row
+                    // dims rather than offering a setting with no effect.
+                    .disabled(!showTabStatusIndicator)
+                Text("Keeps the agent's logo visible while it works. The finished dot still appears.")
+                    .settingsCaption()
+                    .disabled(!showTabStatusIndicator)
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }

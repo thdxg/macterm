@@ -799,15 +799,33 @@ private struct TabStatusGlyph: View {
     let index: Int
     var agent: AgentIcon?
 
+    /// #225: on an agent tab this replaces the spinner with the agent's logo.
+    /// The badge itself is decided by `TabStatusPolicy` — this view only draws
+    /// what it is told, so the rule stays testable.
+    @AppStorage(Preferences.Keys.hideSpinnerOnAgentTabs)
+    private var hideSpinnerOnAgentTabs = false
+
+    private var badge: TabStatusPolicy.Badge {
+        TabStatusPolicy.badge(
+            state: state,
+            hasAgent: agent != nil,
+            // This view is only built when the indicator is on (see the
+            // callers in `SidebarTabRow`), so the policy's own gate is
+            // satisfied here rather than re-read.
+            indicatorEnabled: true,
+            hideSpinnerOnAgentTabs: hideSpinnerOnAgentTabs
+        )
+    }
+
     var body: some View {
-        switch state {
-        case .running:
+        switch badge {
+        case .spinner:
             ProgressView()
                 .controlSize(.small)
                 .tint(.secondary)
                 .help("Running")
                 .frame(width: 16, height: 16)
-        case .done:
+        case .finishedDot:
             SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
                 .overlay(alignment: .bottomTrailing) {
@@ -825,10 +843,13 @@ private struct TabStatusGlyph: View {
                         .offset(x: 2.5, y: 2.5)
                 }
                 .help("Done")
-        case .idle:
+        case .none:
+            // Idle, or a running agent tab with the spinner suppressed: the
+            // row keeps its normal icon, which for an agent tab is the logo
+            // the preference exists to keep visible.
             SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
-                .help("Idle")
+                .help(state == .running ? "Running" : "Idle")
         }
     }
 }

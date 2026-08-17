@@ -155,6 +155,16 @@ final class Preferences {
         didSet { defaults.set(showTabStatusIndicator, forKey: Keys.showTabStatusIndicator) }
     }
 
+    /// Replace the spinner with the agent's logo on a tab an AI agent is
+    /// running in (#225). Those CLIs draw their own spinner in the tab title,
+    /// so ours duplicates it while covering the logo. Off by default: it is a
+    /// narrow preference, and the indicator's normal behavior is the one most
+    /// users expect. The finished dot is unaffected — that is the signal for
+    /// "this agent tab has a reply you haven't read".
+    var hideSpinnerOnAgentTabs: Bool {
+        didSet { defaults.set(hideSpinnerOnAgentTabs, forKey: Keys.hideSpinnerOnAgentTabs) }
+    }
+
     var showNewProjectButton: Bool {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
     }
@@ -566,6 +576,7 @@ final class Preferences {
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
         showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
+        hideSpinnerOnAgentTabs = defaults.object(forKey: Keys.hideSpinnerOnAgentTabs) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
@@ -662,6 +673,7 @@ final class Preferences {
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
         static let showAgentIcons = "macterm.sidebar.showAgentIcons"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
+        static let hideSpinnerOnAgentTabs = "macterm.sidebar.hideSpinnerOnAgentTabs"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
         static let sidebarWidth = "macterm.sidebar.width"
