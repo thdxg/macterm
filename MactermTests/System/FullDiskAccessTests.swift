@@ -33,4 +33,20 @@ struct FullDiskAccessTests {
                 == "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
         )
     }
+
+    // The errno mapping is testable only at its deterministic edges — a
+    // protected path's result depends on the host's grant. These two pin the
+    // ends that never do.
+
+    @Test
+    func probeMapsAnAbsentPathToMissing() {
+        let absent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fda-probe-\(UUID().uuidString)").path
+        #expect(FullDiskAccess.probe(absent) == .missing)
+    }
+
+    @Test
+    func probeMapsAnOpenableDirectoryToReadable() {
+        #expect(FullDiskAccess.probe("/") == .readable)
+    }
 }
