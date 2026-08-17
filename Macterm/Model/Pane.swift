@@ -767,8 +767,16 @@ final class Pane: Identifiable {
     }
 
     /// What the tab/sidebar shows for this pane: a program-reported OSC title
-    /// when one is live (see `programTitle`), else the process name.
+    /// when one is live (see `programTitle`), else the process name. With
+    /// auto-naming off, the static fallback only — the same name an idle
+    /// pane shows. This is display-only and the SINGLE gate: `processTitle`
+    /// stays live (the quit dialog must list real processes), and the
+    /// polling/probing behind `foregroundProcessName` keeps running for
+    /// busy-close verdicts and execution tracking.
     var displayTitle: String {
+        guard Preferences.shared.autoNameTabs else {
+            return remoteHost ?? Self.defaultShellName
+        }
         if let title = programTitle, !title.isEmpty { return title }
         return processTitle
     }

@@ -155,6 +155,16 @@ final class Preferences {
         didSet { defaults.set(showTabStatusIndicator, forKey: Keys.showTabStatusIndicator) }
     }
 
+    /// Auto-name tabs after the live foreground process / OSC title (on by
+    /// default). Off = tabs hold their static fallback (login shell name, or
+    /// the host name for remote panes); a user-set custom title always wins
+    /// either way. Display-only: the polling and probing keep running for
+    /// busy-close verdicts and execution tracking (`Pane.displayTitle` is
+    /// the single gate).
+    var autoNameTabs: Bool {
+        didSet { defaults.set(autoNameTabs, forKey: Keys.autoNameTabs) }
+    }
+
     var showNewProjectButton: Bool {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
     }
@@ -566,6 +576,7 @@ final class Preferences {
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
         showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
+        autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
@@ -662,6 +673,7 @@ final class Preferences {
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
         static let showAgentIcons = "macterm.sidebar.showAgentIcons"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
+        static let autoNameTabs = "macterm.tabs.autoName"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
         static let sidebarWidth = "macterm.sidebar.width"

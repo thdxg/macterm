@@ -267,4 +267,37 @@ struct PaneTitleTests {
         pane.receiveReportedTitle("✳ session", programPID: 42)
         #expect(tab.autoTitle == "✳ session")
     }
+
+    // MARK: - Auto-naming toggle
+
+    @Test
+    func autoNameTabs_off_pins_the_static_fallback() throws {
+        Preferences.shared.autoNameTabs = false
+        defer { Preferences.shared.autoNameTabs = true }
+        let shell = try loginShellName()
+
+        let pane = makePane()
+        // Title first: its command-boundary `refreshForegroundProcess()` reads
+        // the (absent) surface and would wipe a previously applied sample.
+        pane.receiveReportedTitle("✳ session", programPID: 9)
+        pane.applyForegroundRefresh(name: "hx", foregroundPID: 9)
+        // Live process names and OSC titles are display-suppressed…
+        #expect(pane.programTitle == "✳ session")
+        #expect(pane.displayTitle == shell)
+        // …but the model underneath stays live: the quit dialog must list
+        // real processes and busy-close must keep its verdicts.
+        #expect(pane.foregroundProcessName == "hx")
+        #expect(pane.processTitle == "hx")
+
+        // A remote pane holds its host name instead of the probe's answer.
+        let remote = makeRemotePane()
+        remote.applyRemoteForegroundName("btop")
+        #expect(remote.displayTitle == "devbox")
+        #expect(remote.processTitle == "btop")
+    }
+
+    @Test
+    func autoNameTabs_defaults_on() {
+        #expect(Preferences.shared.autoNameTabs)
+    }
 }

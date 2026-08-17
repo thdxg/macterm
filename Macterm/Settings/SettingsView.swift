@@ -696,6 +696,7 @@ private struct AppearanceSettings: View {
     @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
+    @State private var autoNameTabs: Bool = Preferences.shared.autoNameTabs
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
@@ -802,6 +803,13 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
+
+                Toggle("Auto-name tabs", isOn: $autoNameTabs)
+                    .onChange(of: autoNameTabs) { _, v in
+                        Preferences.shared.autoNameTabs = v
+                    }
+                Text("Names tabs after the running program. When off, tabs show the shell or host name.")
+                    .settingsCaption()
 
                 Toggle("Show AI agent icons", isOn: $showAgentIcons)
                     .onChange(of: showAgentIcons) { _, v in
