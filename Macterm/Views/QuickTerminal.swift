@@ -493,11 +493,19 @@ final class QuickTerminalSplitState {
 /// Pure frame math for showing the panel, kept out of the service so the
 /// centering / restore / clamping rules are unit-testable.
 enum QuickTerminalPlacement {
+    /// The least of the panel that must stay on screen when restoring a
+    /// dragged position: enough of the grab strip to catch and drag it back.
+    static let minVisible: CGFloat = 60
+
     /// The panel frame for a show. Size comes from the screen-fraction
     /// preferences; the origin is centered unless a dragged `position` is
     /// given, in which case each axis restores the origin's stored place
-    /// within the screen's spare room. Fractions are clamped to 0…1, so a
-    /// panel dragged partly off-screen reopens fully inside the visible frame.
+    /// within the screen's spare room — faithfully, including a panel the
+    /// user tucked partly off a screen edge. The restore clamps only as far
+    /// as keeping `minVisible` points reachable per axis, with the top edge
+    /// (where the grab handle lives) never above the visible frame — so a
+    /// stale position from a different screen can nudge the panel back but
+    /// never strand it where it can't be grabbed.
     static func frame(
         visibleFrame: NSRect,
         widthFraction: Double,
@@ -508,25 +516,35 @@ enum QuickTerminalPlacement {
         let height = visibleFrame.height * heightFraction
         let spareX = max(0, visibleFrame.width - width)
         let spareY = max(0, visibleFrame.height - height)
-        let fractionX = position.map { min(max($0.x, 0), 1) } ?? 0.5
-        let fractionY = position.map { min(max($0.y, 0), 1) } ?? 0.5
+        guard let position else {
+            return NSRect(
+                x: visibleFrame.minX + spareX / 2,
+                y: visibleFrame.minY + spareY / 2,
+                width: width,
+                height: height
+            )
+        }
+        let x = visibleFrame.minX + spareX * position.x
+        let y = visibleFrame.minY + spareY * position.y
         return NSRect(
-            x: visibleFrame.minX + spareX * fractionX,
-            y: visibleFrame.minY + spareY * fractionY,
+            x: min(max(x, visibleFrame.minX + minVisible - width), visibleFrame.maxX - minVisible),
+            y: min(max(y, visibleFrame.minY + minVisible - height), visibleFrame.maxY - height),
             width: width,
             height: height
         )
     }
 
     /// Inverse of `frame(visibleFrame:...)`: the per-axis fractions to persist
-    /// for a panel the user just moved. An axis with no spare room (panel as
-    /// large as the screen) reads as centered.
+    /// for a panel the user just moved. Deliberately unclamped — a value
+    /// beyond 0…1 means the panel overhangs a screen edge, and that placement
+    /// is the user's to keep. An axis with no spare room (panel as large as
+    /// the screen) reads as centered.
     static func position(of frame: NSRect, in visibleFrame: NSRect) -> CGPoint {
         let spareX = visibleFrame.width - frame.width
         let spareY = visibleFrame.height - frame.height
         return CGPoint(
-            x: spareX > 0 ? min(max((frame.minX - visibleFrame.minX) / spareX, 0), 1) : 0.5,
-            y: spareY > 0 ? min(max((frame.minY - visibleFrame.minY) / spareY, 0), 1) : 0.5
+            x: spareX > 0 ? (frame.minX - visibleFrame.minX) / spareX : 0.5,
+            y: spareY > 0 ? (frame.minY - visibleFrame.minY) / spareY : 0.5
         )
     }
 }

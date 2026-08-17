@@ -3,8 +3,9 @@ import AppKit
 import Testing
 
 /// Frame math for showing the quick-terminal panel: centered by default,
-/// restored from the persisted drag position when one exists, and always
-/// landing fully inside the screen's visible frame.
+/// restored from the persisted drag position when one exists — faithfully,
+/// including a panel the user left partly off-screen — and clamped only as
+/// far as keeping enough of the panel on screen to grab it again.
 @MainActor
 struct QuickTerminalPlacementTests {
     /// Deliberately offset from the origin so a bug that drops the visible
@@ -36,19 +37,46 @@ struct QuickTerminalPlacementTests {
         #expect(frame.maxY == screen.maxY)
     }
 
-    /// A panel dragged partly off-screen (or a stale value from a smaller
-    /// screen) must reopen fully visible, not restore the out-of-range spot.
+    /// The user dragged the panel partway off the left edge; the restore puts
+    /// it back exactly there, not snapped inside the visible frame.
     @Test
-    func out_of_range_position_clamps_fully_on_screen() {
+    func partly_off_screen_position_restores_faithfully() {
+        let stored = CGPoint(x: -0.4, y: 0.5)
         let frame = QuickTerminalPlacement.frame(
             visibleFrame: screen,
             widthFraction: 0.5,
             heightFraction: 0.5,
-            position: CGPoint(x: -0.4, y: 1.7)
+            position: stored
         )
-        #expect(frame.minX == screen.minX)
+        // Origin 200pt past the left edge — 300pt of the panel still visible.
+        #expect(frame.minX == screen.minX - 200)
+        #expect(QuickTerminalPlacement.position(of: frame, in: screen) == stored)
+    }
+
+    /// A stale value (from a bigger screen, or a corrupt write) can't strand
+    /// the panel: each axis keeps `minVisible` points reachable, and the top
+    /// edge — where the grab handle is — never lands above the visible frame.
+    @Test
+    func stale_position_clamps_to_stay_grabbable() {
+        let frame = QuickTerminalPlacement.frame(
+            visibleFrame: screen,
+            widthFraction: 0.5,
+            heightFraction: 0.5,
+            position: CGPoint(x: -10, y: 3)
+        )
+        #expect(frame.maxX == screen.minX + QuickTerminalPlacement.minVisible)
         #expect(frame.maxY == screen.maxY)
-        #expect(screen.contains(frame))
+    }
+
+    @Test
+    func stale_position_past_the_bottom_keeps_the_handle_reachable() {
+        let frame = QuickTerminalPlacement.frame(
+            visibleFrame: screen,
+            widthFraction: 0.5,
+            heightFraction: 0.5,
+            position: CGPoint(x: 0.5, y: -10)
+        )
+        #expect(frame.maxY == screen.minY + QuickTerminalPlacement.minVisible)
     }
 
     @Test
@@ -74,14 +102,14 @@ struct QuickTerminalPlacementTests {
         #expect(QuickTerminalPlacement.position(of: frame, in: screen) == stored)
     }
 
-    /// The save side clamps too: a frame the window server let escape the
-    /// visible frame (drags can leave partially off-screen windows) persists
-    /// as an on-screen fraction rather than an out-of-range one.
+    /// The save side is deliberately unclamped: an overhanging placement is
+    /// the user's, so it persists as the out-of-0…1 fraction that reproduces
+    /// it, not snapped to an edge.
     @Test
-    func position_of_an_off_screen_frame_clamps_to_the_edge() {
+    func position_of_an_off_screen_frame_saves_the_overhang() {
         let offLeft = NSRect(x: screen.minX - 300, y: screen.minY + 100, width: 500, height: 400)
         let position = QuickTerminalPlacement.position(of: offLeft, in: screen)
-        #expect(position.x == 0)
+        #expect(position.x == -0.6)
         #expect(position.y == 0.25)
     }
 

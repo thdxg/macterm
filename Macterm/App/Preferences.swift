@@ -410,9 +410,11 @@ final class Preferences {
     }
 
     /// Where the user last dragged the panel: each axis is the panel origin's
-    /// place within the screen's spare room on that axis (0–1, 0.5 = centered).
-    /// Stored as fractions rather than points so the position stays sensible
-    /// across screen and size changes; `nil` = never dragged, panel centers.
+    /// place within the screen's spare room on that axis (0.5 = centered;
+    /// beyond 0…1 = the user left the panel overhanging a screen edge, which
+    /// the restore honors down to a grabbable minimum). Stored as fractions
+    /// rather than points so the position stays sensible across screen and
+    /// size changes; `nil` = never dragged, panel centers.
     var quickTerminalPosition: CGPoint? {
         didSet {
             if let position = quickTerminalPosition {
@@ -484,7 +486,10 @@ final class Preferences {
         if let x = defaults.object(forKey: Keys.quickTerminalPositionX) as? Double,
            let y = defaults.object(forKey: Keys.quickTerminalPositionY) as? Double
         {
-            quickTerminalPosition = CGPoint(x: min(max(x, 0), 1), y: min(max(y, 0), 1))
+            // No clamp: out-of-0…1 values are legitimate (panel left
+            // overhanging an edge). QuickTerminalPlacement.frame bounds the
+            // restore, so a corrupt value can't strand the panel.
+            quickTerminalPosition = CGPoint(x: x, y: y)
         } else {
             quickTerminalPosition = nil
         }
