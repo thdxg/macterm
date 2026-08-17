@@ -288,14 +288,22 @@ struct SidebarContent: View {
         // payload is just IDs — the live tab is looked up on drop, never
         // serialized.
         .draggable(MovableTab(tabID: tab.id, sourceProjectID: project.id))
-        // Deliberately NO drop destination on tab rows. Any destination here
-        // — even one registered for the project payload alone — claims every
-        // drag over the row before the tab ForEach's insertion mechanism sees
-        // it (SwiftUI routes a drag to the topmost target by geometry with no
-        // type fall-through), which kills the native insertion line and broke
-        // tab reordering outright when tried. The cost is that a PROJECT drag
-        // over an expanded section's tab rows has nothing to land on — drop
-        // it on a project header instead. The insertion line won.
+        // The row's ONE drop target is the merge band across its middle, and
+        // it must never reach the row's top and bottom edges. A destination
+        // covering the whole row — even one registered for a single payload
+        // type — claims every drag over it before the tab ForEach's insertion
+        // mechanism sees it (SwiftUI routes a drag to the topmost target by
+        // geometry with no type fall-through), which kills the native
+        // insertion line and broke tab reordering outright when tried. Leaving
+        // the outer bands uncovered is what lets one row mean three things:
+        // insert above, join, insert below. The cost is unchanged for PROJECT
+        // drags — they still have nothing to land on over an expanded
+        // section's tab rows; drop those on a project header instead.
+        .overlay {
+            TabMergeSlot { item in
+                receiveMergeDrop(item, into: tab, project: project)
+            }
+        }
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
@@ -368,6 +376,38 @@ struct SidebarContent: View {
             }
         }
         expandedProjects.insert(project.id)
+    }
+
+    /// Where a sidebar merge lands inside the destination tab. A row shows
+    /// none of the workspace geometry the in-workspace drop resolves against,
+    /// so the level is fixed rather than guessed: a whole-edge drop, which
+    /// `mergeTree` equalizes — the joined terminal takes an even share beside
+    /// what was already there instead of halving one arbitrary pane.
+    private static let mergeTarget: TabDropResolution.Target = .rootEdge(.right)
+
+    /// Apply a drop on a tab row's merge slot: the dragged pane (or the whole
+    /// dragged tab) JOINS this tab's split tree — the inverse of dragging a
+    /// pane out to the sidebar, and the gesture that puts two terminals back
+    /// in one tab without aiming at the workspace.
+    private func receiveMergeDrop(_ item: TabSlotDropItem, into tab: TerminalTab, project: Project) {
+        switch item {
+        case let .tab(dragged):
+            appState.mergeTab(
+                dragged.tabID,
+                from: dragged.sourceProjectID,
+                intoTab: tab.id,
+                at: Self.mergeTarget,
+                inProject: project.id
+            )
+        case let .pane(dragged):
+            appState.mergePane(
+                dragged.paneID,
+                intoTab: tab.id,
+                inProject: project.id,
+                destPath: project.path,
+                at: Self.mergeTarget
+            )
+        }
     }
 
     /// Apply a pane drag-and-drop: the pane leaves its split tree and becomes
@@ -655,6 +695,58 @@ private struct SidebarProjectRow: View {
     private func cancelRename() {
         isRenaming = false
         appState.restoreFocusToActivePane()
+    }
+}
+
+/// The merge band across a tab row's middle: drop a pane (or another tab)
+/// here and it joins THIS tab's split tree instead of becoming a row of its
+/// own. Spanning the row's full width at its vertical CENTER is what gives a
+/// drag three distinct meanings over one row — aim high (the seam under the
+/// row above) to insert a new tab before this one, aim low (the seam over the
+/// row below) to insert after, aim at the body to join. The height is a
+/// fraction rather than an inset so those outer bands stay reachable at any
+/// row height: they belong to the native insertion line, and a band that
+/// covered them would claim the drag first and kill tab reordering (see
+/// `tabRow`). It draws nothing until a drag is over it — the row is dense
+/// already, and the workspace's own drop preview appears the same way.
+private struct TabMergeSlot: View {
+    /// Share of the row height the join band takes, leaving a quarter of the
+    /// row above and below it for the insertion line.
+    private static let heightFraction: CGFloat = 0.5
+    /// Never shrink below a band the pointer can actually land in.
+    private static let minHeight: CGFloat = 10
+
+    let onDrop: (TabSlotDropItem) -> Void
+
+    @State
+    private var isTargeted = false
+
+    var body: some View {
+        GeometryReader { geo in
+            Color.clear
+                .frame(height: max(geo.size.height * Self.heightFraction, Self.minHeight))
+                .frame(maxHeight: .infinity, alignment: .center)
+                .dropDestination(for: TabSlotDropItem.self) { items, _ in
+                    for item in items {
+                        onDrop(item)
+                    }
+                    return true
+                } isTargeted: { isTargeted = $0 }
+                // The highlight is deliberately TALLER than the band that
+                // reads the drop: sized to the band, it cropped the row's own
+                // icon and title, which read as a misdrawn row rather than a
+                // target. It covers the row instead and takes no hit testing,
+                // so the outer quarters keep belonging to the insertion line
+                // even though the tint reaches them.
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isTargeted ? MactermTheme.accent.opacity(0.3) : .clear)
+                        .frame(height: geo.size.height)
+                        .padding(.trailing, rowTrailingInset)
+                        .allowsHitTesting(false)
+                        .animation(.easeInOut(duration: 0.12), value: isTargeted)
+                }
+        }
     }
 }
 
