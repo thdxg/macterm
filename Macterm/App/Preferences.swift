@@ -407,10 +407,6 @@ final class Preferences {
 
     // MARK: - Quick terminal
 
-    var quickTerminalEnabled: Bool {
-        didSet { defaults.set(quickTerminalEnabled, forKey: Keys.quickTerminalEnabled) }
-    }
-
     /// Fraction of screen width (0–1).
     var quickTerminalWidthFraction: Double {
         didSet { defaults.set(quickTerminalWidthFraction, forKey: Keys.quickTerminalWidth) }
@@ -532,7 +528,6 @@ final class Preferences {
         hideTitleBar = defaults.object(forKey: Keys.hideTitleBar) as? Bool ?? false
         userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
         passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
-        quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
         quickTerminalPositionMode = (defaults.string(forKey: Keys.quickTerminalPositionMode))
@@ -646,7 +641,6 @@ final class Preferences {
         static let hideTitleBar = "macterm.window.hideTitleBar"
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let passthroughPrograms = "macterm.hotkey.passthroughPrograms"
-        static let quickTerminalEnabled = "macterm.quickTerminal.enabled"
         static let quickTerminalWidth = "macterm.quickTerminal.width"
         static let quickTerminalHeight = "macterm.quickTerminal.height"
         static let quickTerminalPositionMode = "macterm.quickTerminal.positionMode"

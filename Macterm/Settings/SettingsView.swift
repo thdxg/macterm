@@ -851,10 +851,6 @@ private struct AppearanceSettings: View {
 // MARK: - Quick Terminal
 
 private struct QuickTerminalSettings: View {
-    /// Seeded from / written back through `Preferences` — not `@AppStorage`
-    /// (banned `UserDefaults.standard`), and previously `enabled` wrote no
-    /// Preferences value at all, so the observable stayed stale.
-    @State private var enabled: Bool = Preferences.shared.quickTerminalEnabled
     @State
     private var positionMode: QuickTerminalAdjustMode = Preferences.shared.quickTerminalPositionMode
     @State
@@ -873,105 +869,88 @@ private struct QuickTerminalSettings: View {
     var body: some View {
         Form {
             Section("Quick Terminal") {
-                Toggle("Enable quick terminal", isOn: $enabled)
-                    .onChange(of: enabled) { _, v in
-                        Preferences.shared.quickTerminalEnabled = v
-                    }
                 LabeledContent(
                     "Shortcut",
                     value: HotkeyRegistry.displayString(
                         for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
                     )
                 )
-                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps.")
+                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps, or clear it to disable the quick terminal.")
                     .settingsCaption()
             }
 
-            // The shared `!enabled` gate sits on each section's Group so the
-            // captions dim with their controls (nested `.disabled` ANDs with
-            // it — an inner `false` never re-enables).
             Section("Position") {
-                Group {
-                    Picker(selection: $positionMode) {
-                        ForEach(QuickTerminalAdjustMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    } label: {
-                        Text("Mode").dimsWhenDisabled()
+                Picker("Mode", selection: $positionMode) {
+                    ForEach(QuickTerminalAdjustMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
-                    .onChange(of: positionMode) { _, v in
-                        Preferences.shared.quickTerminalPositionMode = v
-                    }
-                    Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and remembers where you drag it.")
-                        .settingsCaption()
-
-                    SettingsSlider(
-                        label: "X",
-                        value: $fixedX,
-                        range: 0 ... 1,
-                        step: 0.05,
-                        display: { anchorName($0, zero: "Left", one: "Right") }
-                    )
-                    .onChange(of: fixedX) { _, v in
-                        Preferences.shared.quickTerminalFixedX = v
-                    }
-                    .disabled(positionMode != .fixed)
-
-                    SettingsSlider(
-                        label: "Y",
-                        value: $fixedYTopDown,
-                        range: 0 ... 1,
-                        step: 0.05,
-                        display: { anchorName($0, zero: "Top", one: "Bottom") }
-                    )
-                    .onChange(of: fixedYTopDown) { _, v in
-                        Preferences.shared.quickTerminalFixedY = 1 - v
-                    }
-                    .disabled(positionMode != .fixed)
                 }
-                .disabled(!enabled)
+                .onChange(of: positionMode) { _, v in
+                    Preferences.shared.quickTerminalPositionMode = v
+                }
+                Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and remembers where you drag it.")
+                    .settingsCaption()
+
+                SettingsSlider(
+                    label: "X",
+                    value: $fixedX,
+                    range: 0 ... 1,
+                    step: 0.05,
+                    display: { anchorName($0, zero: "Left", one: "Right") }
+                )
+                .onChange(of: fixedX) { _, v in
+                    Preferences.shared.quickTerminalFixedX = v
+                }
+                .disabled(positionMode != .fixed)
+
+                SettingsSlider(
+                    label: "Y",
+                    value: $fixedYTopDown,
+                    range: 0 ... 1,
+                    step: 0.05,
+                    display: { anchorName($0, zero: "Top", one: "Bottom") }
+                )
+                .onChange(of: fixedYTopDown) { _, v in
+                    Preferences.shared.quickTerminalFixedY = 1 - v
+                }
+                .disabled(positionMode != .fixed)
             }
 
             Section("Size") {
-                Group {
-                    Picker(selection: $sizeMode) {
-                        ForEach(QuickTerminalAdjustMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    } label: {
-                        Text("Mode").dimsWhenDisabled()
+                Picker("Mode", selection: $sizeMode) {
+                    ForEach(QuickTerminalAdjustMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
-                    .onChange(of: sizeMode) { _, v in
-                        Preferences.shared.quickTerminalSizeMode = v
-                    }
-                    Text("Fixed sizes the panel with the sliders. Dynamic lets you resize it from its edges and reopens it at that size.")
-                        .settingsCaption()
-
-                    SettingsSlider(
-                        label: "Width",
-                        value: $qtWidth,
-                        range: 0.2 ... 1.0,
-                        step: 0.05,
-                        display: { "\(Int(($0 * 100).rounded()))%" }
-                    )
-                    .onChange(of: qtWidth) { _, v in
-                        Preferences.shared.quickTerminalWidthFraction = v
-                    }
-                    .disabled(sizeMode != .fixed)
-
-                    SettingsSlider(
-                        label: "Height",
-                        value: $qtHeight,
-                        range: 0.2 ... 1.0,
-                        step: 0.05,
-                        display: { "\(Int(($0 * 100).rounded()))%" }
-                    )
-                    .onChange(of: qtHeight) { _, v in
-                        Preferences.shared.quickTerminalHeightFraction = v
-                    }
-                    .disabled(sizeMode != .fixed)
                 }
-                .disabled(!enabled)
+                .onChange(of: sizeMode) { _, v in
+                    Preferences.shared.quickTerminalSizeMode = v
+                }
+                Text("Fixed sizes the panel with the sliders. Dynamic lets you resize it from its edges and reopens it at that size.")
+                    .settingsCaption()
+
+                SettingsSlider(
+                    label: "Width",
+                    value: $qtWidth,
+                    range: 0.2 ... 1.0,
+                    step: 0.05,
+                    display: { "\(Int(($0 * 100).rounded()))%" }
+                )
+                .onChange(of: qtWidth) { _, v in
+                    Preferences.shared.quickTerminalWidthFraction = v
+                }
+                .disabled(sizeMode != .fixed)
+
+                SettingsSlider(
+                    label: "Height",
+                    value: $qtHeight,
+                    range: 0.2 ... 1.0,
+                    step: 0.05,
+                    display: { "\(Int(($0 * 100).rounded()))%" }
+                )
+                .onChange(of: qtHeight) { _, v in
+                    Preferences.shared.quickTerminalHeightFraction = v
+                }
+                .disabled(sizeMode != .fixed)
             }
         }
         .formStyle(.grouped)
