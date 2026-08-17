@@ -738,6 +738,10 @@ private struct WindowDragArea: NSViewRepresentable {
     func updateNSView(_: DragAreaView, context _: Context) {}
 
     final class DragAreaView: NSView {
+        /// Polls for the release that ends a window-server drag — the drag
+        /// runs out-of-process, so no mouseUp ever reaches this view.
+        private var cursorRestoreTimer: Timer?
+
         /// Let the first click both key the panel and start the drag,
         /// matching how a real titlebar behaves on an inactive window.
         override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
@@ -745,11 +749,42 @@ private struct WindowDragArea: NSViewRepresentable {
         }
 
         override func mouseDown(with event: NSEvent) {
+            // Grabbing hand for the duration of the drag. Cursor rects are
+            // suspended first — they re-evaluate as the window moves under
+            // the pointer, which is what snapped the cursor back to the
+            // arrow — and restored when the poll below sees the release.
+            window?.disableCursorRects()
+            NSCursor.closedHand.set()
             window?.performDrag(with: event)
+            watchForDragRelease()
         }
 
         override func resetCursorRects() {
             addCursorRect(bounds, cursor: .openHand)
+        }
+
+        private func watchForDragRelease() {
+            cursorRestoreTimer?.invalidate()
+            let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] timer in
+                guard NSEvent.pressedMouseButtons & 0x1 == 0 else {
+                    // Mid-drag, the arrow keeps getting stamped back (tracking
+                    // updates as the window moves under the pointer); a single
+                    // set() at mouseDown doesn't survive, so re-assert each
+                    // tick until release.
+                    MainActor.assumeIsolated { NSCursor.closedHand.set() }
+                    return
+                }
+                timer.invalidate()
+                MainActor.assumeIsolated {
+                    guard let self, let window = self.window else { return }
+                    window.enableCursorRects()
+                    window.invalidateCursorRects(for: self)
+                    let point = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+                    (self.bounds.contains(point) ? NSCursor.openHand : NSCursor.arrow).set()
+                }
+            }
+            cursorRestoreTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
         }
     }
 }
