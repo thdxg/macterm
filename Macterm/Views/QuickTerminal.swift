@@ -247,11 +247,19 @@ final class QuickTerminalService: NSObject {
         guard let screen = NSScreen.main else { return }
         let panel = makePanel()
         self.panel = panel
-        let sf = screen.visibleFrame
-        let wFrac = Preferences.shared.quickTerminalWidthFraction
-        let hFrac = Preferences.shared.quickTerminalHeightFraction
-        let w = sf.width * wFrac, h = sf.height * hFrac
-        panel.setFrame(NSRect(x: sf.minX + (sf.width - w) / 2, y: sf.minY + (sf.height - h) / 2, width: w, height: h), display: false)
+        let prefs = Preferences.shared
+        panel.setFrame(
+            QuickTerminalPlacement.frame(
+                visibleFrame: screen.visibleFrame,
+                widthFraction: prefs.quickTerminalWidthFraction,
+                heightFraction: prefs.quickTerminalHeightFraction,
+                // A remembered position only applies while dragging is enabled;
+                // with the toggle off the panel is always centered, even if a
+                // position from an earlier session is still stored.
+                position: prefs.quickTerminalDraggingEnabled ? prefs.quickTerminalPosition : nil
+            ),
+            display: false
+        )
 
         let view = QuickTerminalView(state: splitState)
         let hosting = NSHostingView(rootView: view)
@@ -288,6 +296,32 @@ final class QuickTerminalService: NSObject {
             FocusRestoration.restoreFocus(to: focusedID, in: splitState.splitRoot, window: panel)
         }
         isVisible = true
+        // The grab handle moves the panel through the window server
+        // (`performDrag(with:)`), which gives us no callback of its own — so
+        // persist the position from AppKit's move notification instead.
+        // Registered only after a successful order-front (the setFrame above
+        // happened before this line, so initial placement never records
+        // itself); hide() removes it with the panel.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(panelDidMove(_:)),
+            name: NSWindow.didMoveNotification,
+            object: panel
+        )
+    }
+
+    @objc
+    private func panelDidMove(_ notification: Notification) {
+        guard isVisible,
+              let panel,
+              (notification.object as? NSWindow) === panel,
+              Preferences.shared.quickTerminalDraggingEnabled,
+              let screen = panel.screen ?? NSScreen.main
+        else { return }
+        Preferences.shared.quickTerminalPosition = QuickTerminalPlacement.position(
+            of: panel.frame,
+            in: screen.visibleFrame
+        )
     }
 
     /// Refocus a pane after a close — retries briefly to wait for the new view.
@@ -297,6 +331,9 @@ final class QuickTerminalService: NSObject {
     }
 
     private func hide() {
+        if let panel {
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didMoveNotification, object: panel)
+        }
         panel?.orderOut(nil)
         hostingView?.removeFromSuperview()
         hostingView = nil
@@ -451,6 +488,49 @@ final class QuickTerminalSplitState {
     }
 }
 
+// MARK: - Placement
+
+/// Pure frame math for showing the panel, kept out of the service so the
+/// centering / restore / clamping rules are unit-testable.
+enum QuickTerminalPlacement {
+    /// The panel frame for a show. Size comes from the screen-fraction
+    /// preferences; the origin is centered unless a dragged `position` is
+    /// given, in which case each axis restores the origin's stored place
+    /// within the screen's spare room. Fractions are clamped to 0…1, so a
+    /// panel dragged partly off-screen reopens fully inside the visible frame.
+    static func frame(
+        visibleFrame: NSRect,
+        widthFraction: Double,
+        heightFraction: Double,
+        position: CGPoint?
+    ) -> NSRect {
+        let width = visibleFrame.width * widthFraction
+        let height = visibleFrame.height * heightFraction
+        let spareX = max(0, visibleFrame.width - width)
+        let spareY = max(0, visibleFrame.height - height)
+        let fractionX = position.map { min(max($0.x, 0), 1) } ?? 0.5
+        let fractionY = position.map { min(max($0.y, 0), 1) } ?? 0.5
+        return NSRect(
+            x: visibleFrame.minX + spareX * fractionX,
+            y: visibleFrame.minY + spareY * fractionY,
+            width: width,
+            height: height
+        )
+    }
+
+    /// Inverse of `frame(visibleFrame:...)`: the per-axis fractions to persist
+    /// for a panel the user just moved. An axis with no spare room (panel as
+    /// large as the screen) reads as centered.
+    static func position(of frame: NSRect, in visibleFrame: NSRect) -> CGPoint {
+        let spareX = visibleFrame.width - frame.width
+        let spareY = visibleFrame.height - frame.height
+        return CGPoint(
+            x: spareX > 0 ? min(max((frame.minX - visibleFrame.minX) / spareX, 0), 1) : 0.5,
+            y: spareY > 0 ? min(max((frame.minY - visibleFrame.minY) / spareY, 0), 1) : 0.5
+        )
+    }
+}
+
 // MARK: - Panel
 
 final class QuickTerminalPanel: NSPanel {
@@ -488,6 +568,22 @@ private struct QuickTerminalView: View {
             }
             return state.splitRoot
         }()
+        VStack(spacing: 0) {
+            if Preferences.shared.quickTerminalDraggingEnabled {
+                QuickTerminalDragHandle()
+            }
+            splitTree(renderedNode)
+        }
+        .background(MactermTheme.bgWithOpacity)
+        .onPreferenceChange(DraggingPaneKey.self) { value in
+            MainActor.assumeIsolated {
+                draggedPaneID = value
+                if value == nil { dropResolution = nil }
+            }
+        }
+    }
+
+    private func splitTree(_ renderedNode: SplitNode) -> some View {
         SplitTreeView(
             node: renderedNode,
             focusedPaneID: state.focusedPaneID,
@@ -518,18 +614,11 @@ private struct QuickTerminalView: View {
             )
         )
         .id(renderedNode.id)
-        .background(MactermTheme.bgWithOpacity)
         // Grab-handle drags share the workspace drop grammar (whole-edge,
         // divider, local). The context carries no tab handler: the quick
         // terminal's ephemeral world doesn't adopt workspace tabs.
         .overlay {
             WorkspaceDropPreview(resolution: dropResolution)
-        }
-        .onPreferenceChange(DraggingPaneKey.self) { value in
-            MainActor.assumeIsolated {
-                draggedPaneID = value
-                if value == nil { dropResolution = nil }
-            }
         }
         .overlay(alignment: .topTrailing) {
             if let zoomID = state.tab.zoomedPaneID {
@@ -537,6 +626,56 @@ private struct QuickTerminalView: View {
                     .padding(8)
                     .transition(.opacity)
             }
+        }
+    }
+}
+
+// MARK: - Drag handle
+
+/// The grab strip across the top of the panel when moving is enabled: a full-
+/// width drag target (generous on purpose — a precision target is how the
+/// split divider earned its grab band) with a centered capsule grabber as the
+/// visual affordance, the shape macOS itself uses for grab handles. The strip
+/// sits in its own layout row above the split tree, so unlike views layered
+/// over a pane it owns no pane's events and forwards nothing.
+private struct QuickTerminalDragHandle: View {
+    var body: some View {
+        WindowDragArea()
+            .frame(maxWidth: .infinity)
+            .frame(height: 14)
+            .overlay {
+                Capsule()
+                    .fill(MactermTheme.fgDim)
+                    .frame(width: 36, height: 5)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
+/// AppKit-backed drag area: the drag is the window server's own
+/// (`performDrag(with:)`), so it behaves exactly like a titlebar drag —
+/// live window movement, screen-edge handling, multi-display — with none
+/// of it reimplemented in a SwiftUI gesture.
+private struct WindowDragArea: NSViewRepresentable {
+    func makeNSView(context _: Context) -> DragAreaView {
+        DragAreaView()
+    }
+
+    func updateNSView(_: DragAreaView, context _: Context) {}
+
+    final class DragAreaView: NSView {
+        /// Let the first click both key the panel and start the drag,
+        /// matching how a real titlebar behaves on an inactive window.
+        override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
+            true
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .openHand)
         }
     }
 }

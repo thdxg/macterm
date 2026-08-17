@@ -778,6 +778,8 @@ private struct QuickTerminalSettings: View {
     private var qtWidth: Double = Preferences.shared.quickTerminalWidthFraction
     @State
     private var qtHeight: Double = Preferences.shared.quickTerminalHeightFraction
+    @State
+    private var draggingEnabled: Bool = Preferences.shared.quickTerminalDraggingEnabled
 
     var body: some View {
         Form {
@@ -812,6 +814,14 @@ private struct QuickTerminalSettings: View {
                     Preferences.shared.quickTerminalHeightFraction = v
                 }
                 .disabled(!enabled)
+
+                Toggle("Allow moving the panel", isOn: $draggingEnabled)
+                    .onChange(of: draggingEnabled) { _, v in
+                        Preferences.shared.quickTerminalDraggingEnabled = v
+                    }
+                    .disabled(!enabled)
+                Text("Drag the grab handle at the top of the panel to move it. It reopens where you left it.")
+                    .settingsCaption()
 
                 LabeledContent(
                     "Shortcut",

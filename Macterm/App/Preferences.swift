@@ -403,6 +403,28 @@ final class Preferences {
         didSet { defaults.set(quickTerminalHeightFraction, forKey: Keys.quickTerminalHeight) }
     }
 
+    /// Whether the panel shows a grab handle and can be moved. Off by default —
+    /// the classic quick-terminal contract is a fixed, centered overlay.
+    var quickTerminalDraggingEnabled: Bool {
+        didSet { defaults.set(quickTerminalDraggingEnabled, forKey: Keys.quickTerminalDraggingEnabled) }
+    }
+
+    /// Where the user last dragged the panel: each axis is the panel origin's
+    /// place within the screen's spare room on that axis (0–1, 0.5 = centered).
+    /// Stored as fractions rather than points so the position stays sensible
+    /// across screen and size changes; `nil` = never dragged, panel centers.
+    var quickTerminalPosition: CGPoint? {
+        didSet {
+            if let position = quickTerminalPosition {
+                defaults.set(Double(position.x), forKey: Keys.quickTerminalPositionX)
+                defaults.set(Double(position.y), forKey: Keys.quickTerminalPositionY)
+            } else {
+                defaults.removeObject(forKey: Keys.quickTerminalPositionX)
+                defaults.removeObject(forKey: Keys.quickTerminalPositionY)
+            }
+        }
+    }
+
     // MARK: - Session
 
     /// Persisted so the app re-opens to the last-used project on launch.
@@ -458,6 +480,14 @@ final class Preferences {
         quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
+        quickTerminalDraggingEnabled = defaults.object(forKey: Keys.quickTerminalDraggingEnabled) as? Bool ?? false
+        if let x = defaults.object(forKey: Keys.quickTerminalPositionX) as? Double,
+           let y = defaults.object(forKey: Keys.quickTerminalPositionY) as? Double
+        {
+            quickTerminalPosition = CGPoint(x: min(max(x, 0), 1), y: min(max(y, 0), 1))
+        } else {
+            quickTerminalPosition = nil
+        }
         activeProjectID = (defaults.string(forKey: Keys.activeProjectID)).flatMap(UUID.init)
         projectIconSymbol = defaults.string(forKey: Keys.projectIconSymbol) ?? "folder"
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
@@ -539,6 +569,9 @@ final class Preferences {
         static let quickTerminalEnabled = "macterm.quickTerminal.enabled"
         static let quickTerminalWidth = "macterm.quickTerminal.width"
         static let quickTerminalHeight = "macterm.quickTerminal.height"
+        static let quickTerminalDraggingEnabled = "macterm.quickTerminal.draggingEnabled"
+        static let quickTerminalPositionX = "macterm.quickTerminal.positionX"
+        static let quickTerminalPositionY = "macterm.quickTerminal.positionY"
         static let activeProjectID = "macterm.activeProjectID"
         static let projectIconSymbol = "macterm.sidebar.projectIcon"
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
