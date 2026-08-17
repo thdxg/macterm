@@ -459,16 +459,44 @@ private struct GeneralSettings: View {
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
+    /// Re-probed when the app becomes active, so returning from System
+    /// Settings after flipping the toggle clears the banner. `nil` (no
+    /// evidence) hides it — never nag about a grant we can't disprove.
+    @State
+    private var hasFullDiskAccess: Bool? = FullDiskAccess.isGranted()
+
+    /// Whether the user's raw ghostty config opts into an ssh
+    /// shell-integration feature (`ssh-env` / `ssh-terminfo`, both default
+    /// OFF). Those wrappers are the only thing that execs the external ghostty
+    /// CLI in a way worth warning about — the `path` feature also needs the
+    /// binary, but it's vacuous without Ghostty.app installed (there'd be no
+    /// bin dir to add to PATH). Computed once per view creation: it reads the
+    /// user's config file, and disk has no place in `body`.
+    @State
+    private var wantsCLISSHFeatures: Bool = {
+        let text = MactermConfig.userGhosttyConfigText()
+        return ShellIntegrationFeatures.isEnabled("ssh-env", inConfigText: text)
+            || ShellIntegrationFeatures.isEnabled("ssh-terminfo", inConfigText: text)
+    }()
+
     var body: some View {
         Form {
+            if hasFullDiskAccess == false {
+                FullDiskAccessBanner()
+            }
+
             // Read the CLI probe from the process-lifetime cache — never spawn
             // `ghostty +help` from inside `body` (it re-ran on every @State
             // change, e.g. each scroll-speed slider tick, blocking the main
-            // thread on `waitUntilExit`; #3.1).
-            if !GhosttyCLIProbe.isInstalled {
-                GhosttyCLIBanner(reason: .notInstalled)
-            } else if GhosttyCLIProbe.sshWrapperBinDir == nil {
-                GhosttyCLIBanner(reason: .tooOldForSSH)
+            // thread on `waitUntilExit`; #3.1). Gated on the user actually
+            // opting into an ssh feature: before the gate this warned every
+            // Ghostty-less install about features nobody had turned on.
+            if wantsCLISSHFeatures {
+                if !GhosttyCLIProbe.isInstalled {
+                    GhosttyCLIBanner(reason: .notInstalled)
+                } else if GhosttyCLIProbe.sshWrapperBinDir == nil {
+                    GhosttyCLIBanner(reason: .tooOldForSSH)
+                }
             }
 
             Section("Ghostty Config") {
@@ -531,6 +559,14 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+        // Granting FDA happens in System Settings, so the state can only have
+        // changed while this app was inactive — re-probe on every activation
+        // rather than polling.
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            hasFullDiskAccess = FullDiskAccess.isGranted()
+        }
     }
 
     /// Push the text-field's current value into Preferences and reload. We
@@ -561,14 +597,52 @@ private struct GeneralSettings: View {
     }
 }
 
+// MARK: - Full Disk Access banner
+
+/// Shown in General settings while macOS hasn't granted the app Full Disk
+/// Access. Without it, TCC prompts folder by folder (Documents, Downloads, …)
+/// as terminal commands first touch each one; one FDA grant covers them all —
+/// and persists across updates, now that releases are signed with a stable
+/// certificate. FDA can't be requested programmatically (there is no prompt to
+/// trigger), so the button deep-links to the System Settings pane and
+/// `GeneralSettings` re-probes when the app becomes active again.
+private struct FullDiskAccessBanner: View {
+    var body: some View {
+        Section {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Full Disk Access is off")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(
+                        "macOS will ask folder by folder as terminal commands touch "
+                            + "Documents, Downloads, and other protected locations. "
+                            + "One Full Disk Access grant covers them all."
+                    )
+                    .settingsCaption()
+                    if let url = FullDiskAccess.settingsURL {
+                        Button("Open System Settings…") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(MactermTheme.warning)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+}
+
 // MARK: - Missing CLI banner
 
 /// Shown in General settings when the standalone ghostty CLI (shipped in
 /// Ghostty.app) is missing or too old to drive the shell-integration wrappers.
 /// A few wrappers exec that binary (the `ssh` wrapper calls `ghostty +ssh`), so
 /// without a compatible CLI those features are disabled and fall through to the
-/// plain command — the README link spells out which. Embedded directly in a
-/// `Form`, so it renders as its own section.
+/// plain command — the README link spells out which. Shown only to users whose
+/// own ghostty config enables an ssh feature (see `wantsCLISSHFeatures`).
+/// Embedded directly in a `Form`, so it renders as its own section.
 private struct GhosttyCLIBanner: View {
     enum Reason {
         case notInstalled
