@@ -818,7 +818,7 @@ private struct QuickTerminalSettings: View {
                     Preferences.shared.quickTerminalPositionMode = v
                 }
                 .disabled(!enabled)
-                Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and reopens the panel where you last dragged it.")
+                Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and remembers where you drag it.")
                     .settingsCaption()
 
                 HStack {
