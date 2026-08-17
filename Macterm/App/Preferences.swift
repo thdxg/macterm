@@ -44,6 +44,24 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
     }
 }
 
+/// Whether a quick-terminal geometry axis (position or size) comes from the
+/// Settings sliders (`fixed`) or is remembered from the user's own
+/// manipulation of the panel — dragging the grab handle, resizing from the
+/// edges (`dynamic`). The raw values are persisted.
+enum QuickTerminalAdjustMode: String, CaseIterable, Identifiable {
+    case fixed
+    case dynamic
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .fixed: "Fixed"
+        case .dynamic: "Dynamic"
+        }
+    }
+}
+
 enum TabSwitcherPosition: String, CaseIterable, Identifiable {
     case leading
     case trailing
@@ -403,10 +421,45 @@ final class Preferences {
         didSet { defaults.set(quickTerminalHeightFraction, forKey: Keys.quickTerminalHeight) }
     }
 
-    /// Whether the panel shows a grab handle and can be moved. Off by default —
-    /// the classic quick-terminal contract is a fixed, centered overlay.
-    var quickTerminalDraggingEnabled: Bool {
-        didSet { defaults.set(quickTerminalDraggingEnabled, forKey: Keys.quickTerminalDraggingEnabled) }
+    /// How the panel's position is decided at show time: `fixed` anchors it
+    /// with the X/Y sliders below; `dynamic` shows a grab handle and reopens
+    /// the panel where the user last dragged it. Defaults to `fixed` with
+    /// centered sliders — the classic quick-terminal contract.
+    var quickTerminalPositionMode: QuickTerminalAdjustMode {
+        didSet { defaults.set(quickTerminalPositionMode.rawValue, forKey: Keys.quickTerminalPositionMode) }
+    }
+
+    /// Fixed-position anchors, as the panel origin's place within the screen's
+    /// spare room per axis (0…1). X: 0 = left, 1 = right. Y is in placement
+    /// space — 0 = bottom, 1 = top; the Settings slider reads Top…Bottom and
+    /// inverts. 0.5/0.5 = centered.
+    var quickTerminalFixedX: Double {
+        didSet { defaults.set(quickTerminalFixedX, forKey: Keys.quickTerminalFixedX) }
+    }
+
+    var quickTerminalFixedY: Double {
+        didSet { defaults.set(quickTerminalFixedY, forKey: Keys.quickTerminalFixedY) }
+    }
+
+    /// How the panel's size is decided at show time: `fixed` uses the
+    /// width/height sliders; `dynamic` makes the panel edge-resizable and
+    /// reopens it at the size the user last resized it to.
+    var quickTerminalSizeMode: QuickTerminalAdjustMode {
+        didSet { defaults.set(quickTerminalSizeMode.rawValue, forKey: Keys.quickTerminalSizeMode) }
+    }
+
+    /// The panel size the user last resized to, as fractions of the screen's
+    /// visible frame; `nil` = never resized, the size sliders' values apply.
+    var quickTerminalDynamicSize: CGSize? {
+        didSet {
+            if let size = quickTerminalDynamicSize {
+                defaults.set(Double(size.width), forKey: Keys.quickTerminalDynamicWidth)
+                defaults.set(Double(size.height), forKey: Keys.quickTerminalDynamicHeight)
+            } else {
+                defaults.removeObject(forKey: Keys.quickTerminalDynamicWidth)
+                defaults.removeObject(forKey: Keys.quickTerminalDynamicHeight)
+            }
+        }
     }
 
     /// Where the user last dragged the panel: each axis is the panel origin's
@@ -482,7 +535,22 @@ final class Preferences {
         quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
-        quickTerminalDraggingEnabled = defaults.object(forKey: Keys.quickTerminalDraggingEnabled) as? Bool ?? false
+        quickTerminalPositionMode = (defaults.string(forKey: Keys.quickTerminalPositionMode))
+            .flatMap(QuickTerminalAdjustMode.init(rawValue:)) ?? .fixed
+        quickTerminalFixedX = Self.clampUnitFraction(defaults.object(forKey: Keys.quickTerminalFixedX) as? Double)
+        quickTerminalFixedY = Self.clampUnitFraction(defaults.object(forKey: Keys.quickTerminalFixedY) as? Double)
+        quickTerminalSizeMode = (defaults.string(forKey: Keys.quickTerminalSizeMode))
+            .flatMap(QuickTerminalAdjustMode.init(rawValue:)) ?? .fixed
+        if let w = defaults.object(forKey: Keys.quickTerminalDynamicWidth) as? Double,
+           let h = defaults.object(forKey: Keys.quickTerminalDynamicHeight) as? Double
+        {
+            quickTerminalDynamicSize = CGSize(
+                width: Self.clampFraction(w, fallback: 0.6),
+                height: Self.clampFraction(h, fallback: 0.5)
+            )
+        } else {
+            quickTerminalDynamicSize = nil
+        }
         if let x = defaults.object(forKey: Keys.quickTerminalPositionX) as? Double,
            let y = defaults.object(forKey: Keys.quickTerminalPositionY) as? Double
         {
@@ -515,6 +583,13 @@ final class Preferences {
     private static func clampFraction(_ v: Double, fallback: Double) -> Double {
         guard v > 0 else { return fallback }
         return max(0.2, min(1.0, v))
+    }
+
+    /// Fixed-position anchors: an absent key means centered, and any stored
+    /// value is bounded to the 0…1 anchor range.
+    private static func clampUnitFraction(_ v: Double?) -> Double {
+        guard let v else { return 0.5 }
+        return max(0, min(1, v))
     }
 
     /// An absent key (never dragged) and an out-of-range one (a stale value
@@ -574,7 +649,12 @@ final class Preferences {
         static let quickTerminalEnabled = "macterm.quickTerminal.enabled"
         static let quickTerminalWidth = "macterm.quickTerminal.width"
         static let quickTerminalHeight = "macterm.quickTerminal.height"
-        static let quickTerminalDraggingEnabled = "macterm.quickTerminal.draggingEnabled"
+        static let quickTerminalPositionMode = "macterm.quickTerminal.positionMode"
+        static let quickTerminalFixedX = "macterm.quickTerminal.fixedX"
+        static let quickTerminalFixedY = "macterm.quickTerminal.fixedY"
+        static let quickTerminalSizeMode = "macterm.quickTerminal.sizeMode"
+        static let quickTerminalDynamicWidth = "macterm.quickTerminal.dynamicWidth"
+        static let quickTerminalDynamicHeight = "macterm.quickTerminal.dynamicHeight"
         static let quickTerminalPositionX = "macterm.quickTerminal.positionX"
         static let quickTerminalPositionY = "macterm.quickTerminal.positionY"
         static let activeProjectID = "macterm.activeProjectID"

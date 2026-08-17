@@ -248,15 +248,31 @@ final class QuickTerminalService: NSObject {
         let panel = makePanel()
         self.panel = panel
         let prefs = Preferences.shared
+        // Size: the sliders in fixed mode; the last user resize in dynamic
+        // mode, falling back to the sliders until the panel has been resized.
+        let widthFraction: Double
+        let heightFraction: Double
+        if prefs.quickTerminalSizeMode == .dynamic, let size = prefs.quickTerminalDynamicSize {
+            widthFraction = size.width
+            heightFraction = size.height
+        } else {
+            widthFraction = prefs.quickTerminalWidthFraction
+            heightFraction = prefs.quickTerminalHeightFraction
+        }
+        // Position: the X/Y anchor sliders in fixed mode; the last dragged
+        // spot in dynamic mode (nil until first drag — centered). A stored
+        // drag position is ignored in fixed mode rather than cleared, so
+        // flipping modes round-trips losslessly.
+        let position: CGPoint? = switch prefs.quickTerminalPositionMode {
+        case .fixed: CGPoint(x: prefs.quickTerminalFixedX, y: prefs.quickTerminalFixedY)
+        case .dynamic: prefs.quickTerminalPosition
+        }
         panel.setFrame(
             QuickTerminalPlacement.frame(
                 visibleFrame: screen.visibleFrame,
-                widthFraction: prefs.quickTerminalWidthFraction,
-                heightFraction: prefs.quickTerminalHeightFraction,
-                // A remembered position only applies while dragging is enabled;
-                // with the toggle off the panel is always centered, even if a
-                // position from an earlier session is still stored.
-                position: prefs.quickTerminalDraggingEnabled ? prefs.quickTerminalPosition : nil
+                widthFraction: widthFraction,
+                heightFraction: heightFraction,
+                position: position
             ),
             display: false
         )
@@ -296,16 +312,23 @@ final class QuickTerminalService: NSObject {
             FocusRestoration.restoreFocus(to: focusedID, in: splitState.splitRoot, window: panel)
         }
         isVisible = true
-        // The grab handle moves the panel through the window server
-        // (`performDrag(with:)`), which gives us no callback of its own — so
-        // persist the position from AppKit's move notification instead.
-        // Registered only after a successful order-front (the setFrame above
-        // happened before this line, so initial placement never records
-        // itself); hide() removes it with the panel.
+        // Dynamic geometry is manipulated through the window server (the grab
+        // handle's `performDrag(with:)`, edge resizes), which gives us no
+        // callback of its own — so persist from AppKit's move/resize
+        // notifications instead. Registered only after a successful
+        // order-front (the setFrame above happened before this line, so
+        // initial placement never records itself); hide() removes them with
+        // the panel.
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(panelDidMove(_:)),
             name: NSWindow.didMoveNotification,
+            object: panel
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(panelDidResize(_:)),
+            name: NSWindow.didResizeNotification,
             object: panel
         )
     }
@@ -315,13 +338,36 @@ final class QuickTerminalService: NSObject {
         guard isVisible,
               let panel,
               (notification.object as? NSWindow) === panel,
-              Preferences.shared.quickTerminalDraggingEnabled,
+              Preferences.shared.quickTerminalPositionMode == .dynamic,
               let screen = panel.screen ?? NSScreen.main
         else { return }
         Preferences.shared.quickTerminalPosition = QuickTerminalPlacement.position(
             of: panel.frame,
             in: screen.visibleFrame
         )
+    }
+
+    @objc
+    private func panelDidResize(_ notification: Notification) {
+        guard isVisible,
+              let panel,
+              (notification.object as? NSWindow) === panel,
+              let screen = panel.screen ?? NSScreen.main
+        else { return }
+        let prefs = Preferences.shared
+        let sf = screen.visibleFrame
+        guard sf.width > 0, sf.height > 0 else { return }
+        if prefs.quickTerminalSizeMode == .dynamic {
+            prefs.quickTerminalDynamicSize = CGSize(
+                width: panel.frame.width / sf.width,
+                height: panel.frame.height / sf.height
+            )
+        }
+        // A left/bottom-edge resize moves the origin without posting didMove,
+        // so a dynamic position re-records here too.
+        if prefs.quickTerminalPositionMode == .dynamic {
+            prefs.quickTerminalPosition = QuickTerminalPlacement.position(of: panel.frame, in: sf)
+        }
     }
 
     /// Refocus a pane after a close — retries briefly to wait for the new view.
@@ -333,6 +379,7 @@ final class QuickTerminalService: NSObject {
     private func hide() {
         if let panel {
             NotificationCenter.default.removeObserver(self, name: NSWindow.didMoveNotification, object: panel)
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didResizeNotification, object: panel)
         }
         panel?.orderOut(nil)
         hostingView?.removeFromSuperview()
@@ -354,7 +401,16 @@ final class QuickTerminalService: NSObject {
     }
 
     private func makePanel() -> QuickTerminalPanel {
-        let p = QuickTerminalPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        var style: NSWindow.StyleMask = [.borderless, .nonactivatingPanel]
+        // Dynamic size mode: a borderless-but-resizable window gets AppKit's
+        // native edge-resize cursors and tracking. The panel is rebuilt on
+        // every show, so a Settings mode flip applies on the next show with
+        // no live reconciliation.
+        if Preferences.shared.quickTerminalSizeMode == .dynamic {
+            style.insert(.resizable)
+        }
+        let p = QuickTerminalPanel(contentRect: .zero, styleMask: style, backing: .buffered, defer: false)
+        p.minSize = NSSize(width: 200, height: 120)
         p.isFloatingPanel = true
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -587,7 +643,7 @@ private struct QuickTerminalView: View {
             return state.splitRoot
         }()
         VStack(spacing: 0) {
-            if Preferences.shared.quickTerminalDraggingEnabled {
+            if Preferences.shared.quickTerminalPositionMode == .dynamic {
                 QuickTerminalDragHandle()
             }
             splitTree(renderedNode)
@@ -650,7 +706,7 @@ private struct QuickTerminalView: View {
 
 // MARK: - Drag handle
 
-/// The grab strip across the top of the panel when moving is enabled: a full-
+/// The grab strip across the top of the panel in dynamic position mode: a full-
 /// width drag target (generous on purpose — a precision target is how the
 /// split divider earned its grab band) with a centered capsule grabber as the
 /// visual affordance, the shape macOS itself uses for grab handles. The strip

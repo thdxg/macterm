@@ -775,11 +775,19 @@ private struct QuickTerminalSettings: View {
     /// Preferences value at all, so the observable stayed stale.
     @State private var enabled: Bool = Preferences.shared.quickTerminalEnabled
     @State
+    private var positionMode: QuickTerminalAdjustMode = Preferences.shared.quickTerminalPositionMode
+    @State
+    private var fixedX: Double = Preferences.shared.quickTerminalFixedX
+    /// The Y slider reads Top…Bottom; placement fractions run bottom-up, so
+    /// this state is the inverted view of `quickTerminalFixedY`.
+    @State
+    private var fixedYTopDown: Double = 1 - Preferences.shared.quickTerminalFixedY
+    @State
+    private var sizeMode: QuickTerminalAdjustMode = Preferences.shared.quickTerminalSizeMode
+    @State
     private var qtWidth: Double = Preferences.shared.quickTerminalWidthFraction
     @State
     private var qtHeight: Double = Preferences.shared.quickTerminalHeightFraction
-    @State
-    private var draggingEnabled: Bool = Preferences.shared.quickTerminalDraggingEnabled
 
     var body: some View {
         Form {
@@ -788,6 +796,78 @@ private struct QuickTerminalSettings: View {
                     .onChange(of: enabled) { _, v in
                         Preferences.shared.quickTerminalEnabled = v
                     }
+                LabeledContent(
+                    "Shortcut",
+                    value: HotkeyRegistry.displayString(
+                        for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
+                    )
+                )
+                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps.")
+                    .settingsCaption()
+            }
+
+            Section("Position") {
+                Picker("Position", selection: $positionMode) {
+                    ForEach(QuickTerminalAdjustMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: positionMode) { _, v in
+                    Preferences.shared.quickTerminalPositionMode = v
+                }
+                .disabled(!enabled)
+                Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and reopens the panel where you last dragged it.")
+                    .settingsCaption()
+
+                HStack {
+                    Text("X")
+                        .frame(width: sliderLabelWidth, alignment: .leading)
+                    Slider(value: $fixedX, in: 0 ... 1, step: 0.05) {
+                        EmptyView()
+                    } minimumValueLabel: {
+                        Text("Left")
+                    } maximumValueLabel: {
+                        Text("Right")
+                    }
+                }
+                .onChange(of: fixedX) { _, v in
+                    Preferences.shared.quickTerminalFixedX = v
+                }
+                .disabled(!enabled || positionMode != .fixed)
+
+                HStack {
+                    Text("Y")
+                        .frame(width: sliderLabelWidth, alignment: .leading)
+                    Slider(value: $fixedYTopDown, in: 0 ... 1, step: 0.05) {
+                        EmptyView()
+                    } minimumValueLabel: {
+                        Text("Top")
+                    } maximumValueLabel: {
+                        Text("Bottom")
+                    }
+                }
+                .onChange(of: fixedYTopDown) { _, v in
+                    Preferences.shared.quickTerminalFixedY = 1 - v
+                }
+                .disabled(!enabled || positionMode != .fixed)
+            }
+
+            Section("Size") {
+                Picker("Size", selection: $sizeMode) {
+                    ForEach(QuickTerminalAdjustMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: sizeMode) { _, v in
+                    Preferences.shared.quickTerminalSizeMode = v
+                }
+                .disabled(!enabled)
+                Text("Fixed sizes the panel with the sliders. Dynamic lets you resize it from its edges and reopens it at that size.")
+                    .settingsCaption()
 
                 HStack {
                     Text("Width")
@@ -800,7 +880,7 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: qtWidth) { _, v in
                     Preferences.shared.quickTerminalWidthFraction = v
                 }
-                .disabled(!enabled)
+                .disabled(!enabled || sizeMode != .fixed)
 
                 HStack {
                     Text("Height")
@@ -813,24 +893,7 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: qtHeight) { _, v in
                     Preferences.shared.quickTerminalHeightFraction = v
                 }
-                .disabled(!enabled)
-
-                Toggle("Allow moving the panel", isOn: $draggingEnabled)
-                    .onChange(of: draggingEnabled) { _, v in
-                        Preferences.shared.quickTerminalDraggingEnabled = v
-                    }
-                    .disabled(!enabled)
-                Text("Drag the grab handle at the top of the panel to move it. It reopens where you left it.")
-                    .settingsCaption()
-
-                LabeledContent(
-                    "Shortcut",
-                    value: HotkeyRegistry.displayString(
-                        for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
-                    )
-                )
-                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps.")
-                    .settingsCaption()
+                .disabled(!enabled || sizeMode != .fixed)
             }
         }
         .formStyle(.grouped)
