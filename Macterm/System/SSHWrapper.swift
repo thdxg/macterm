@@ -102,17 +102,24 @@ enum SSHWrapper {
         return "\(user)@\(host)"
     }
 
-    /// The remote install script, byte-for-byte ghostty's: probe for `tic`,
-    /// make `~/.terminfo` (where an unprivileged `tic` compiles to), compile
-    /// from stdin. Verbose keeps tic's stderr — the commonest failure source —
-    /// visible; quiet discards it.
+    /// The remote install command: probe for `tic`, make `~/.terminfo` (where
+    /// an unprivileged `tic` compiles to), compile from stdin. Verbose keeps
+    /// tic's stderr — the commonest failure source — visible; quiet discards
+    /// it.
+    ///
+    /// One deliberate divergence from ghostty here: its `+ssh` sends the raw
+    /// POSIX script and lets the host's *login shell* parse it, which breaks
+    /// outright on hosts whose login shell isn't POSIX — measured against a
+    /// real sshd with a nushell login shell, where nu rejected `2>&1` and
+    /// every install failed. So the script ships wrapped as
+    /// `sh -c '<single-quote-free single-line script>'`, the same wire rule
+    /// as `RemoteSpawn.remoteShell`: the one form bash/zsh/fish/nu all
+    /// tokenize identically before POSIX `sh` takes over.
     static func installScript(verbose: Bool) -> String {
-        let tic = verbose ? "tic -x -" : "tic -x - 2>/dev/null"
-        return """
-        command -v tic >/dev/null 2>&1 || exit 1
-        mkdir -p ~/.terminfo 2>/dev/null && \(tic) && exit 0
-        exit 1
-        """
+        let tic = verbose ? "exec tic -x -" : "exec tic -x - 2>/dev/null"
+        let script = "command -v tic >/dev/null 2>&1 || exit 1; mkdir -p ~/.terminfo 2>/dev/null; \(tic)"
+        assert(!script.contains("'"), "install script must stay single-quote-free")
+        return "sh -c '\(script)'"
     }
 
     /// argv installing the terminfo source (piped to stdin) on the remote,

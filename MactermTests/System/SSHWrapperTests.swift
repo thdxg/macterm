@@ -100,6 +100,23 @@ struct SSHWrapperTests {
         #expect(SSHWrapper.installScript(verbose: true).contains("tic -x -"))
     }
 
+    @Test
+    func install_script_survives_non_posix_login_shells() {
+        // sshd hands the remote command to the LOGIN shell, so the script
+        // must ship as `sh -c '<single-quote-free single-line script>'` —
+        // the RemoteSpawn wire rule. Sent bare (as ghostty does), a nushell
+        // login shell rejects `2>&1` and the install always fails; measured
+        // against a real sshd.
+        for verbose in [true, false] {
+            let command = SSHWrapper.installScript(verbose: verbose)
+            #expect(command.hasPrefix("sh -c '"))
+            #expect(command.hasSuffix("'"))
+            let inner = command.dropFirst("sh -c '".count).dropLast()
+            #expect(!inner.contains("'"))
+            #expect(!inner.contains("\n"))
+        }
+    }
+
     // MARK: - shared contract with the app side
 
     @Test
