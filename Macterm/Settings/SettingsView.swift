@@ -578,7 +578,6 @@ private struct GhosttyCLIBanner: View {
 // MARK: - Appearance
 
 private struct AppearanceSettings: View {
-
     // Seeded from / written back through `Preferences` (see GeneralSettings) —
     // not `@AppStorage`, which would bind to the banned `UserDefaults.standard`.
     @State private var projectIconSymbol: String = Preferences.shared.projectIconSymbol
