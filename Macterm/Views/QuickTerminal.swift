@@ -78,11 +78,12 @@ final class QuickTerminalService: NSObject {
             name: UserDefaults.didChangeNotification,
             object: nil
         )
-        // Re-apply the blur radius when Ghostty config changes so the visible
-        // panel picks up Settings adjustments without needing to be re-shown.
+        // Re-apply the window appearance (opacity/blur/glass) when a Ghostty
+        // config or appearance pref changes so the visible panel picks up
+        // Settings adjustments without needing to be re-shown.
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(reapplyBlur),
+            selector: #selector(reapplyAppearance),
             name: .mactermConfigDidChange,
             object: nil
         )
@@ -90,9 +91,9 @@ final class QuickTerminalService: NSObject {
     }
 
     @objc
-    private func reapplyBlur() {
+    private func reapplyAppearance() {
         guard let panel, isVisible else { return }
-        setWindowBackgroundBlur(panel, radius: Preferences.shared.windowBlurRadius)
+        WindowAppearance.syncPanel(panel)
     }
 
     @objc
@@ -306,8 +307,10 @@ final class QuickTerminalService: NSObject {
             previousFrontmostApp = nil
             return
         }
-        // Apply the current blur radius (0 = no blur) for this panel session.
-        setWindowBackgroundBlur(panel, radius: Preferences.shared.windowBlurRadius)
+        // Apply the current appearance (opacity/blur/glass) for this panel
+        // session. After the order-front: the glass view sizes itself against
+        // the panel's frame view, which wants the panel fully set up.
+        WindowAppearance.syncPanel(panel)
         if let focusedID = splitState.focusedPaneID {
             FocusRestoration.restoreFocus(to: focusedID, in: splitState.splitRoot, window: panel)
         }
@@ -648,7 +651,10 @@ private struct QuickTerminalView: View {
             }
             splitTree(renderedNode)
         }
-        .background(MactermTheme.bgWithOpacity)
+        // No SwiftUI background: the panel window paints the tint itself
+        // (`WindowAppearance.syncPanel` — window backgroundColor, or the glass
+        // view's tint when liquid glass is on). Painting the tinted background
+        // here too would double-tint the glass.
         .onPreferenceChange(DraggingPaneKey.self) { value in
             MainActor.assumeIsolated {
                 draggedPaneID = value

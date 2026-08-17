@@ -414,6 +414,42 @@ enum WindowAppearance {
         logger.info("sidebar edge-hover reveal disabled")
     }
 
+    /// Apply the current opacity/blur/glass settings to the quick-terminal
+    /// panel. The window-background slice of `sync(window:)` only: a borderless
+    /// panel has no titlebar, sidebar, or toolbar to style, but it must make
+    /// the same glass-vs-blur-vs-solid decision as the main window or the
+    /// liquid glass setting silently degrades to the legacy blur there.
+    ///
+    /// The panel's tint deliberately lives here (window `backgroundColor` /
+    /// glass tint), not in its SwiftUI content — a tinted SwiftUI background
+    /// over an installed glass view would double-tint it, the same
+    /// double-paint problem `macterm-overrides.conf` pins
+    /// `background-opacity = 0` to avoid.
+    static func syncPanel(_ panel: NSPanel) {
+        let opacity = Preferences.shared.windowOpacity
+        let bg = MactermTheme.nsBg
+        let isTransparent = opacity < 1.0
+        let useGlass = glassSupported && Preferences.shared.windowGlassEnabled && isTransparent
+
+        if isTransparent {
+            panel.isOpaque = false
+            if useGlass {
+                panel.backgroundColor = .clear
+                setWindowBackgroundBlur(panel, radius: 0)
+                syncGlass(window: panel, backgroundColor: bg, opacity: opacity)
+            } else {
+                panel.backgroundColor = bg.withAlphaComponent(opacity)
+                setWindowBackgroundBlur(panel, radius: Preferences.shared.windowBlurRadius)
+                removeGlass(window: panel)
+            }
+        } else {
+            panel.isOpaque = true
+            panel.backgroundColor = bg
+            setWindowBackgroundBlur(panel, radius: 0)
+            removeGlass(window: panel)
+        }
+    }
+
     /// Update the inactive-glass tint when the window gains/loses key status.
     /// Cheap no-op unless the glass view is currently installed.
     static func syncKeyStatus(window: NSWindow) {
