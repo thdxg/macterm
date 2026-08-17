@@ -403,6 +403,87 @@ struct AppStateTests {
         #expect(ws.tabs.count == 1)
     }
 
+    // MARK: - Join a pane or tab into another tab (sidebar merge band)
+
+    @Test
+    func mergePane_moves_the_pane_into_the_named_tab() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let source = try #require(ws.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let dragged = try #require(source.focusedPaneID)
+        state.createTab(projectID: p.id, projectPath: p.path)
+        let destination = try #require(ws.tabs.last)
+
+        state.mergePane(dragged, intoTab: destination.id, inProject: p.id, destPath: p.path, at: .rootEdge(.right))
+
+        // The Pane object itself moves — same id, so the surface and its shell
+        // came along rather than being respawned.
+        #expect(destination.splitRoot.allPanes().map(\.id).contains(dragged))
+        #expect(!source.splitRoot.allPanes().map(\.id).contains(dragged))
+        #expect(ws.activeTabID == destination.id)
+    }
+
+    /// The whole point of the single-pane branch: that pane IS its tab, so
+    /// moving it must take the tab with it instead of leaving an empty one.
+    @Test
+    func mergePane_of_a_single_pane_tab_takes_the_whole_tab() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let source = try #require(ws.activeTab)
+        let dragged = try #require(source.focusedPaneID)
+        state.createTab(projectID: p.id, projectPath: p.path)
+        let destination = try #require(ws.tabs.last)
+
+        state.mergePane(dragged, intoTab: destination.id, inProject: p.id, destPath: p.path, at: .rootEdge(.right))
+
+        #expect(ws.tabs.count == 1)
+        #expect(ws.tabs.first?.id == destination.id)
+        #expect(destination.splitRoot.allPanes().map(\.id).contains(dragged))
+    }
+
+    @Test
+    func mergePane_into_its_own_tab_is_noop() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        state.splitPane(direction: .horizontal, projectID: p.id)
+        let dragged = try #require(tab.focusedPaneID)
+        let before = tab.splitRoot.allPanes().map(\.id)
+
+        state.mergePane(dragged, intoTab: tab.id, inProject: p.id, destPath: p.path, at: .rootEdge(.right))
+
+        #expect(tab.splitRoot.allPanes().map(\.id) == before)
+        #expect(ws.tabs.count == 1)
+    }
+
+    /// `mergeTab(intoTab:)` exists because the older overload could only merge
+    /// into the ACTIVE tab, which is never what a drop on a specific row means.
+    @Test
+    func mergeTab_joins_the_named_tab_not_the_active_one() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let first = try #require(ws.activeTab)
+        state.createTab(projectID: p.id, projectPath: p.path)
+        let second = try #require(ws.tabs.last)
+        state.createTab(projectID: p.id, projectPath: p.path)
+        let third = try #require(ws.tabs.last)
+        ws.selectTab(third.id)
+        let movedPane = try #require(first.splitRoot.allPanes().first?.id)
+
+        state.mergeTab(first.id, from: p.id, intoTab: second.id, at: .rootEdge(.right), inProject: p.id)
+
+        // Landed in `second` — the row that was dropped on — while `third` was
+        // active and stayed untouched.
+        #expect(second.splitRoot.allPanes().map(\.id).contains(movedPane))
+        #expect(third.splitRoot.allPanes().map(\.id).contains(movedPane) == false)
+        #expect(ws.tabs.contains { $0.id == first.id } == false)
+    }
+
     // MARK: - Project-scoped tab navigation
 
     @Test
