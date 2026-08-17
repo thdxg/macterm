@@ -81,6 +81,7 @@ Per-pane `cwd` and `~` resolve on the remote side. **Save layout** works too, wr
 - **`macterm: cannot cd to …`** — the project directory doesn't exist on the host. The pane drops to a shell in the home directory.
 - **Connection errors** (unreachable host, failed auth) show ssh's own message on a "press any key to close" screen.
 - **Slow tab/split opening** — each pane is its own ssh connection; add `ControlMaster` to your ssh config (example above) to multiplex them over one connection.
+- **Touch ID (or another per-connection auth prompt) appears repeatedly** — live tab naming polls the host over short background ssh connections, and a biometric-gated key prompts on each one. Cancel the prompt once and Macterm stops polling that host until you open a new pane on it (tabs fall back to the host name; program-reported titles keep working). To get live naming *and* a single authentication, add `ControlMaster` (example above) — the background polls then reuse the pane's already-authenticated connection and never prompt.
 
 > Your dotfiles still apply *inside* remote panes — the session starts your login shell on the host as usual. Macterm just never runs them in its own connection plumbing, so a `.profile` that `exec`s another shell can't interfere with pane startup.
 

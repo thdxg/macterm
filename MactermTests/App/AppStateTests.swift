@@ -1519,7 +1519,7 @@ struct AppStateTests {
             isBundled: { true },
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
-            remoteForegrounds: { _, _ in nil },
+            remoteForegrounds: { _, _ in .unreachable },
             listSessionsWithClients: { [] },
             sessionLeaderPIDs: { [:] },
             sessionListSnapshot: { (entries: [], leaders: [:]) }
