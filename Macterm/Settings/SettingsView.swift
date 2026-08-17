@@ -343,12 +343,32 @@ private struct SettingsCaption: ViewModifier {
     }
 }
 
+/// Primary text that should fade with its `.disabled(_:)` scope. Grouped-form
+/// rows draw a control's string-initializer label themselves, outside the
+/// control's own disabled rendering — the popup dims, its label doesn't — so
+/// controls pass an explicit label `Text` carrying this modifier instead. The
+/// label closure evaluates inside the control's scope, where `isEnabled` is
+/// already false.
+private struct DimsWhenDisabled: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+    }
+}
+
 extension View {
     /// The one style for a control's explanatory line. Every pane's
     /// descriptions went through this by hand before (one had drifted to
     /// `.footnote`), so it lives in a modifier now.
     func settingsCaption() -> some View {
         modifier(SettingsCaption())
+    }
+
+    /// Fades primary text to match a disabled control — see `DimsWhenDisabled`.
+    func dimsWhenDisabled() -> some View {
+        modifier(DimsWhenDisabled())
     }
 
     @ViewBuilder
@@ -384,15 +404,13 @@ private struct SettingsSlider: View {
     var step: Double?
     let display: (Double) -> String
 
-    /// The `Slider` dims itself when a `.disabled(_:)` above sets this, but
-    /// the flanking `Text`s are not controls and wouldn't follow on their own.
-    @Environment(\.isEnabled) private var isEnabled
-
     var body: some View {
+        // The `Slider` dims itself inside a `.disabled(_:)` scope, but the
+        // flanking `Text`s are not controls and wouldn't follow on their own.
         HStack {
             Text(label)
                 .frame(width: Self.labelWidth, alignment: .leading)
-                .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                .dimsWhenDisabled()
             if let step {
                 Slider(value: $value, in: range, step: step)
             } else {
@@ -401,7 +419,7 @@ private struct SettingsSlider: View {
             Text(display(value))
                 .monospacedDigit()
                 .frame(width: Self.valueWidth, alignment: .trailing)
-                .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                .dimsWhenDisabled()
         }
     }
 }
@@ -644,11 +662,13 @@ private struct AppearanceSettings: View {
                 // inert rather than show a dead picker. "None" off / a style on
                 // are folded into one picker over the two underlying prefs.
                 if WindowAppearance.glassSupported {
-                    Picker("Liquid Glass", selection: glassSelection) {
+                    Picker(selection: glassSelection) {
                         Text("None").tag(WindowGlassStyle?.none)
                         ForEach(WindowGlassStyle.allCases) { style in
                             Text(style.displayName).tag(WindowGlassStyle?.some(style))
                         }
+                    } label: {
+                        Text("Liquid Glass").dimsWhenDisabled()
                     }
                     .disabled(backgroundOpacity >= 0.999)
                 }
@@ -743,10 +763,12 @@ private struct AppearanceSettings: View {
                     .settingsCaption()
 
                 Group {
-                    Picker("Tab switcher", selection: $tabSwitcherVisibility) {
+                    Picker(selection: $tabSwitcherVisibility) {
                         ForEach(TabSwitcherVisibility.allCases) { option in
                             Text(option.displayName).tag(option.rawValue)
                         }
+                    } label: {
+                        Text("Tab switcher").dimsWhenDisabled()
                     }
                     .onChange(of: tabSwitcherVisibility) { _, v in
                         Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
@@ -754,10 +776,12 @@ private struct AppearanceSettings: View {
                     Text("Numbered control in the title bar for switching tabs by index.")
                         .settingsCaption()
 
-                    Picker("Tab switcher position", selection: $tabSwitcherPosition) {
+                    Picker(selection: $tabSwitcherPosition) {
                         ForEach(TabSwitcherPosition.allCases) { option in
                             Text(option.displayName).tag(option.rawValue)
                         }
+                    } label: {
+                        Text("Tab switcher position").dimsWhenDisabled()
                     }
                     .onChange(of: tabSwitcherPosition) { _, v in
                         Preferences.shared.tabSwitcherPosition = TabSwitcherPosition(rawValue: v) ?? .trailing
@@ -868,10 +892,12 @@ private struct QuickTerminalSettings: View {
             // it — an inner `false` never re-enables).
             Section("Position") {
                 Group {
-                    Picker("Mode", selection: $positionMode) {
+                    Picker(selection: $positionMode) {
                         ForEach(QuickTerminalAdjustMode.allCases) { mode in
                             Text(mode.displayName).tag(mode)
                         }
+                    } label: {
+                        Text("Mode").dimsWhenDisabled()
                     }
                     .onChange(of: positionMode) { _, v in
                         Preferences.shared.quickTerminalPositionMode = v
@@ -908,10 +934,12 @@ private struct QuickTerminalSettings: View {
 
             Section("Size") {
                 Group {
-                    Picker("Mode", selection: $sizeMode) {
+                    Picker(selection: $sizeMode) {
                         ForEach(QuickTerminalAdjustMode.allCases) { mode in
                             Text(mode.displayName).tag(mode)
                         }
+                    } label: {
+                        Text("Mode").dimsWhenDisabled()
                     }
                     .onChange(of: sizeMode) { _, v in
                         Preferences.shared.quickTerminalSizeMode = v
@@ -1252,11 +1280,13 @@ private struct UpdatesSettings: View {
                         updater.automaticallyChecksForUpdates = v
                     }
 
-                Toggle("Download updates in the background", isOn: $automaticallyDownloads)
-                    .disabled(!automaticallyChecks)
-                    .onChange(of: automaticallyDownloads) { _, v in
-                        updater.automaticallyDownloadsUpdates = v
-                    }
+                Toggle(isOn: $automaticallyDownloads) {
+                    Text("Download updates in the background").dimsWhenDisabled()
+                }
+                .disabled(!automaticallyChecks)
+                .onChange(of: automaticallyDownloads) { _, v in
+                    updater.automaticallyDownloadsUpdates = v
+                }
 
                 HStack {
                     Spacer()
