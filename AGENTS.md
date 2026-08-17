@@ -43,7 +43,25 @@ Requires macOS 14+, Swift 6.0+. Liquid glass and a few chrome refinements are ma
 
 Auto-updates ship via [Sparkle](https://sparkle-project.org/) — daily background check, manual via **Macterm → Check for Updates…**. Updates verify an EdDSA signature, so no `xattr` workaround after first install. No telemetry.
 
-Tag-pushed builds release via `.github/workflows/release.yml`, which needs repo secrets: `SPARKLE_ED_PUBLIC_KEY` (baked into `Info.plist`), `SPARKLE_ED_PRIVATE_KEY` (signs each DMG — **back it up; losing it means users can't auto-update to any further release**), and `HOMEBREW_TAP_PAT` (pushes the cask to the tap repo). GhosttyKit needs no secret: `thdxg/ghostty` is public, so `setup.sh`'s release downloads run under `GITHUB_TOKEN` here as in every other workflow. The workflow appends an `<item>` to `appcast.xml` on `gh-pages` (served at `https://thdxg.github.io/macterm/appcast.xml`, the feed URL in `Info.plist`) along with a per-version notes page rendered from the GitHub Release body (`publish-appcast.sh`).
+Tag-pushed builds release via `.github/workflows/release.yml`, which needs repo secrets: `SPARKLE_ED_PUBLIC_KEY` (baked into `Info.plist`), `SPARKLE_ED_PRIVATE_KEY` (signs each DMG — **back it up; losing it means users can't auto-update to any further release**), `HOMEBREW_TAP_PAT` (pushes the cask to the tap repo), and `MACTERM_SIGNING_CERT_P12` + `MACTERM_SIGNING_CERT_PASSWORD` (the stable self-signed code-signing certificate — **back it up too; rotating or losing it resets every user's TCC privacy grants one more time**, because TCC keys grants to the certificate in the app's designated requirement. Ad-hoc signing, the old scheme, keyed grants to the per-build CDHash, which is why every update used to drop Documents/Downloads access. A missing cert secret fails the release loudly rather than silently shipping an ad-hoc build that would reset grants again; local `mise run build`/`bench` stay ad-hoc, which is fine because they're never distributed).
+
+The certificate is a once-a-decade ceremony, so there's no script — the recipe lives here. It deliberately uses `/usr/bin/openssl` (macOS's LibreSSL): its PKCS#12 defaults are the legacy algorithms `security import` is guaranteed to read, where a Homebrew OpenSSL 3 defaults to AES/PBES2 containers it has a history of rejecting. The codeSigning EKU is what makes the identity acceptable to `codesign`; validity only gates *future signing*, not already-shipped apps.
+
+```bash
+mkdir -p ~/.config/macterm/signing && cd ~/.config/macterm/signing
+/usr/bin/openssl rand -hex 16 > macterm-signing.password
+/usr/bin/openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 3650 \
+  -subj "/CN=Macterm Release Signing" \
+  -addext "keyUsage=critical,digitalSignature" \
+  -addext "extendedKeyUsage=critical,codeSigning" \
+  -addext "basicConstraints=critical,CA:FALSE" \
+  -keyout macterm-signing.key -out macterm-signing.crt
+/usr/bin/openssl pkcs12 -export -inkey macterm-signing.key -in macterm-signing.crt \
+  -name "Macterm Release Signing" -passout "pass:$(cat macterm-signing.password)" \
+  -out macterm-signing.p12
+gh secret set MACTERM_SIGNING_CERT_P12 --repo thdxg/macterm --body "$(base64 -i macterm-signing.p12)"
+gh secret set MACTERM_SIGNING_CERT_PASSWORD --repo thdxg/macterm --body "$(cat macterm-signing.password)"
+``` GhosttyKit needs no secret: `thdxg/ghostty` is public, so `setup.sh`'s release downloads run under `GITHUB_TOKEN` here as in every other workflow. The workflow appends an `<item>` to `appcast.xml` on `gh-pages` (served at `https://thdxg.github.io/macterm/appcast.xml`, the feed URL in `Info.plist`) along with a per-version notes page rendered from the GitHub Release body (`publish-appcast.sh`).
 
 **Release notes come from GitHub's native generator**, configured by `.github/release.yml` (categories keyed on the `enhancement`/`bug`/`chore`/`dependencies`/`documentation` labels, `skip-changelog` excluded, a trailing `*` catch-all so nothing is silently dropped — GitHub assigns each PR to the first matching category, so that entry must stay last). `release-drafter` used to maintain a rolling draft and derive the next version from PR labels; it was removed as redundant now that the notes are native. The tradeoff is deliberate: **the version number is chosen by hand when cutting a release**, since native notes only ever describe a tag that already exists. That is also what keeps `vX.Y.Z-beta.N` prerelease tags simple — nothing tries to compute them.
 
@@ -272,5 +290,5 @@ Three things hold the restore together. It reads **`Preferences.launchSidebarWid
 - **Remote projects require zmx preinstalled on the host** — auto-detected via PATH (profiles + a fallback dir list); if that fails (network-mounted home, exotic `/bin/sh`, non-POSIX shell config), set the project's `zmxPath` to an absolute path. A missing binary surfaces a `macterm: zmx not found` diagnostic in the pane (not a silent close). No upload/install flow yet.
 - **Remote orphan sessions aren't reaped** — the reaper is local-only by design (a shared host's detached `macterm-*` sessions may belong to another machine); crash leftovers on a remote are the user's to `zmx kill`.
 - **Single window only** — multi-window would require a tmux-like daemon; out of scope.
-- **Not code-signed with a Developer ID** — first launch needs `xattr -cr /Applications/Macterm.app` (or Homebrew install); Sparkle updates verify EdDSA after that.
+- **Not code-signed with a Developer ID** — first launch needs `xattr -cr /Applications/Macterm.app` (or Homebrew install); Sparkle updates verify EdDSA after that. Releases are signed with a stable self-signed certificate, so TCC privacy grants (Documents, Downloads, Full Disk Access, …) persist across updates — under the old ad-hoc signing they reset on every update.
 - **Pane IDs not stable across restarts** — fresh views are created on restore.

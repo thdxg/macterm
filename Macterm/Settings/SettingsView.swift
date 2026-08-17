@@ -459,8 +459,18 @@ private struct GeneralSettings: View {
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
+    /// Re-probed when the app becomes active, so returning from System
+    /// Settings after flipping the toggle clears the banner. `nil` (no
+    /// evidence) hides it — never nag about a grant we can't disprove.
+    @State
+    private var hasFullDiskAccess: Bool? = FullDiskAccess.isGranted()
+
     var body: some View {
         Form {
+            if hasFullDiskAccess == false {
+                FullDiskAccessBanner()
+            }
+
             Section("Ghostty Config") {
                 HStack {
                     TextField(
@@ -521,6 +531,14 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+        // Granting FDA happens in System Settings, so the state can only have
+        // changed while this app was inactive — re-probe on every activation
+        // rather than polling.
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            hasFullDiskAccess = FullDiskAccess.isGranted()
+        }
     }
 
     /// Push the text-field's current value into Preferences and reload. We
@@ -548,6 +566,43 @@ private struct GeneralSettings: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         ghosttyConfigPath = url.path(percentEncoded: false)
         commitPath()
+    }
+}
+
+// MARK: - Full Disk Access banner
+
+/// Shown in General settings while macOS hasn't granted the app Full Disk
+/// Access. Without it, TCC prompts folder by folder (Documents, Downloads, …)
+/// as terminal commands first touch each one; one FDA grant covers them all —
+/// and persists across updates, now that releases are signed with a stable
+/// certificate. FDA can't be requested programmatically (there is no prompt to
+/// trigger), so the button deep-links to the System Settings pane and
+/// `GeneralSettings` re-probes when the app becomes active again.
+private struct FullDiskAccessBanner: View {
+    var body: some View {
+        Section {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Full Disk Access is off")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(
+                        "macOS will ask folder by folder as terminal commands touch "
+                            + "Documents, Downloads, and other protected locations. "
+                            + "One Full Disk Access grant covers them all."
+                    )
+                    .settingsCaption()
+                    if let url = FullDiskAccess.settingsURL {
+                        Button("Open System Settings…") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(MactermTheme.warning)
+            }
+            .padding(.vertical, 2)
+        }
     }
 }
 
