@@ -69,12 +69,10 @@ enum ShellIntegrationFeatures {
     /// flips everything at once.
     ///
     /// Deliberately reads the user's RAW config, not the effective value after
-    /// `macterm-overrides.conf`: `MactermConfig` may force `no-ssh-terminfo`
-    /// when no ghostty CLI is installed, but that override exists to stop the
-    /// bundled shell *wrapper* from exec'ing a binary that isn't there — it
-    /// says nothing about whether the user wants remote terminfo installed.
-    /// Macterm's own native path (`RemoteTerminfo`) has no such dependency, so
-    /// it honors the intent rather than the workaround.
+    /// `macterm-overrides.conf`: the overrides re-emit this key to force
+    /// plumbing flags (`no-path` — see `MactermConfig.regenerate`), and a
+    /// consumer of an intent flag like `ssh-terminfo` must never be coupled to
+    /// whatever plumbing Macterm happens to force alongside it.
     static func isEnabled(_ feature: String, inConfigText text: String?) -> Bool {
         let fallback = featureDefaults[feature] ?? false
         guard let text, let value = userValue(inConfigText: text) else { return fallback }

@@ -8,12 +8,15 @@ private let logger = Logger(subsystem: appBundleID, category: "RemoteTerminfo")
 /// entry instead of `xterm-256color`.
 ///
 /// This is `ghostty +ssh`'s terminfo install reimplemented natively — no
-/// ghostty binary involved. Macterm ships no `ghostty` CLI, so depending on
-/// `+ssh` would make remote projects work only on machines that also have
-/// Ghostty.app installed and new enough (the condition `GhosttyCLI` exists to
-/// detect), and would put a foreign auto-updating binary in the pane's spawn
-/// path. The pieces we need are all already here: our bundled compiled entry,
-/// macOS's own `/usr/bin/infocmp`, and `tic` on the far side.
+/// ghostty binary involved. Macterm neither ships nor detects a `ghostty`
+/// CLI, so depending on `+ssh` would make remote projects work only on
+/// machines that also have Ghostty.app installed and new enough, and would
+/// put a foreign auto-updating binary in the pane's spawn path. The pieces we
+/// need are all already here: our bundled compiled entry, macOS's own
+/// `/usr/bin/infocmp`, and `tic` on the far side. (The same reasoning later
+/// produced `SSHWrapper`/`macterm ssh`, which serves the ssh the user types
+/// into a *local* pane; this type serves panes whose connection Macterm
+/// itself owns.)
 ///
 /// **The source must be OUR bundled entry**, never the installed Ghostty.app's:
 /// `TERM=xterm-ghostty` on the remote is a promise about what *our* surface
@@ -46,8 +49,9 @@ private let logger = Logger(subsystem: appBundleID, category: "RemoteTerminfo")
 enum RemoteTerminfo {
     /// The terminfo entry we install and the value `remoteTermPreamble` looks
     /// for. One constant so the installer and the preamble can never disagree
-    /// about which name is being promised.
-    static let entryName = "xterm-ghostty"
+    /// about which name is being promised — delegated to `SSHWrapper` so the
+    /// local ssh wrapper can't drift from it either.
+    static let entryName = SSHWrapper.entryName
 
     /// macOS always ships these, so there is no probe and no fallback: both are
     /// in `/usr/bin` on every supported system (14+).
