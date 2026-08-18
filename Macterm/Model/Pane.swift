@@ -665,6 +665,7 @@ final class Pane: Identifiable {
             executionState: executionState,
             isRemote: isRemote,
             hasSurface: nsView != nil,
+            remoteProbingEnabled: Preferences.shared.backgroundSSHConnections,
             surfaceBusy: nsView?.needsConfirmQuit() == true
         )
     }

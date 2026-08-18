@@ -63,16 +63,25 @@ enum ForegroundPolicy {
     /// landed (unreachable host, BatchMode auth failure, the registration
     /// window) does it fall back to the conservative `surfaceBusy` reading —
     /// never silently killing an unknown foreground.
+    ///
+    /// `remoteProbingEnabled` = `Preferences.backgroundSSHConnections`. Off,
+    /// only the execution state can warn: any probe sample is a frozen relic
+    /// from before the toggle flipped, and the conservative fallback would
+    /// warn on EVERY close forever (no probe can ever land) — the user chose
+    /// "don't warn" over "always warn" when they turned probing off. Local
+    /// panes are untouched: their signals cost no ssh connections.
     static func needsConfirmClose(
         sample: ForegroundSample?,
         executionState: TerminalExecutionState,
         isRemote: Bool,
         hasSurface: Bool,
+        remoteProbingEnabled: Bool = true,
         surfaceBusy: @autoclosure () -> Bool
     ) -> Bool {
         guard hasSurface else { return false }
         guard isRemote else { return surfaceBusy() }
         if executionState == .running { return true }
+        guard remoteProbingEnabled else { return false }
         guard let sample, let name = sample.name, !name.isEmpty else { return surfaceBusy() }
         return !sample.isIdleShell
     }

@@ -169,6 +169,20 @@ final class Preferences {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
     }
 
+    /// Allow non-interactive background ssh connections to remote-project
+    /// hosts: the foreground probe (live tab names, busy-close verdicts,
+    /// layout `run:` capture) and the opt-in terminfo install. On by default.
+    /// Off exists for keys gated behind a per-connection biometric dialog
+    /// (#272): every background connection raises a Touch ID prompt BatchMode
+    /// can't suppress, so off narrows Macterm's ssh traffic to the panes' own
+    /// connections plus the one-shot `zmx kill` of an explicit close. Remote
+    /// tabs then fall back to the host name / OSC titles, and closing warns
+    /// only on a positively-known running command (OSC 133 execution state) —
+    /// never from the conservative ssh-is-always-busy fallback.
+    var backgroundSSHConnections: Bool {
+        didSet { defaults.set(backgroundSSHConnections, forKey: Keys.backgroundSSHConnections) }
+    }
+
     /// Slide the hidden sidebar out while the pointer sits at the window's
     /// leading edge, and back in when it leaves (`MainWindow`'s hover peek).
     var peekSidebarWhenHidden: Bool {
@@ -573,6 +587,7 @@ final class Preferences {
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
+        backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
         sidebarWidth = storedSidebarWidth
@@ -669,6 +684,7 @@ final class Preferences {
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let autoNameTabs = "macterm.tabs.autoName"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
+        static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
         static let sidebarWidth = "macterm.sidebar.width"
         static let updateChannel = "macterm.updates.channel"

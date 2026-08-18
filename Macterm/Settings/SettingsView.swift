@@ -443,6 +443,7 @@ private struct GeneralSettings: View {
     /// NOT `@AppStorage`, which binds to `UserDefaults.standard` — banned by the
     /// project, and it diverged from the `.onChange` write-through under test.
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
+    @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -511,6 +512,18 @@ private struct GeneralSettings: View {
                     }
                 Text("Distributes pane sizes evenly on split and close.")
                     .settingsCaption()
+            }
+
+            Section("Remote Projects") {
+                Toggle("Background SSH connections", isOn: $backgroundSSHConnections)
+                    .onChange(of: backgroundSSHConnections) { _, v in
+                        Preferences.shared.backgroundSSHConnections = v
+                    }
+                Text(
+                    "Probes remote hosts for live tab names and close warnings. "
+                        + "Turn off if each connection prompts for Touch ID."
+                )
+                .settingsCaption()
             }
 
             // Shells always keep running after quit and reattach on the next
