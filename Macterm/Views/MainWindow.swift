@@ -138,15 +138,7 @@ struct MainWindow: View {
                 // explain why it is empty.
                 if activeProject?.isRemote == false {
                     ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            appState.isGitChangesPanelVisible.toggle()
-                        } label: {
-                            Image(systemName: "arrow.triangle.branch")
-                        }
-                        .help("Repository Changes")
-                        .foregroundStyle(
-                            appState.isGitChangesPanelVisible ? MactermTheme.accent : MactermTheme.fgMuted
-                        )
+                        GitChangesToolbarItem()
                     }
                 }
                 // Structural branch, not a placement ternary: each side is its
