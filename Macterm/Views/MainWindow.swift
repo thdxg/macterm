@@ -107,22 +107,15 @@ struct MainWindow: View {
                 // rows actually start at the window's top edge.
                 .ignoresSafeArea(chromeHidden ? .container : [], edges: .top)
         } detail: {
-            ZStack {
-                // The window's NSWindow.backgroundColor (set by WindowAppearance)
-                // fills the detail column at the configured opacity. No need
-                // to paint another tinted layer here — doing so stacks two
-                // translucent fills and the detail reads as darker than the
-                // strip around the sidebar.
-                if let project = activeProjectWithWorkspace {
-                    if projectHasAnyTab(project) {
-                        WorkspaceView(project: project)
-                            .id(project.id)
-                    } else {
-                        EmptyProjectView(project: project)
-                            .id(project.id)
-                    }
-                } else {
-                    WelcomeView()
+            HStack(spacing: 0) {
+                workspaceDetail
+                // The changes panel is a sibling COLUMN, not an overlay: it
+                // must take width from the terminal rather than cover it, or
+                // the panes it describes reflow under it.
+                if appState.isGitChangesPanelVisible, activeProject?.isRemote == false {
+                    Divider()
+                    GitChangesPanel()
+                        .frame(width: 460)
                 }
             }
             // Same safe-area reclaim as the sidebar: without it the terminal
@@ -138,6 +131,23 @@ struct MainWindow: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
+                }
+                // Local projects only: git runs on this Mac, and a remote
+                // project's path names a directory on another host. The button
+                // disappears rather than opening a panel that could only
+                // explain why it is empty.
+                if activeProject?.isRemote == false {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            appState.isGitChangesPanelVisible.toggle()
+                        } label: {
+                            Image(systemName: "arrow.triangle.branch")
+                        }
+                        .help("Repository Changes")
+                        .foregroundStyle(
+                            appState.isGitChangesPanelVisible ? MactermTheme.accent : MactermTheme.fgMuted
+                        )
+                    }
                 }
                 // Structural branch, not a placement ternary: each side is its
                 // own toolbar item identity, so flipping the preference tears
@@ -343,6 +353,31 @@ struct MainWindow: View {
         deferredUnpeek = false
         peekCollapseSettleTime = Date().addingTimeInterval(peekAnimationDuration)
         withAnimation { columnVisibility = .detailOnly }
+    }
+
+    /// The terminal half of the detail column. Extracted so the changes panel
+    /// can sit beside it in an `HStack` without nesting the whole workspace
+    /// tree one level deeper in `body`, which the type checker charges for.
+    private var workspaceDetail: some View {
+        ZStack {
+            // The window's NSWindow.backgroundColor (set by WindowAppearance)
+            // fills the detail column at the configured opacity. No need
+            // to paint another tinted layer here — doing so stacks two
+            // translucent fills and the detail reads as darker than the
+            // strip around the sidebar.
+            if let project = activeProjectWithWorkspace {
+                if projectHasAnyTab(project) {
+                    WorkspaceView(project: project)
+                        .id(project.id)
+                } else {
+                    EmptyProjectView(project: project)
+                        .id(project.id)
+                }
+            } else {
+                WelcomeView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var activeProject: Project? {

@@ -46,6 +46,39 @@ enum MactermTheme {
         GhosttyApp.shared.paletteColor(at: 2).map { Color(nsColor: $0) } ?? .green
     }
 
+    /// Palette index 1 = red, completing the trio above. Used where something
+    /// is removed or broken (a diff's deleted lines, a conflicted file).
+    @MainActor
+    static var danger: Color {
+        GhosttyApp.shared.paletteColor(at: 1).map { Color(nsColor: $0) } ?? .red
+    }
+
+    /// Syntax colors for the diff viewer, drawn from the SAME palette a TUI
+    /// editor in a pane would use — so a file reads the same colors whether
+    /// it's open in helix beside the panel or shown in it. Deliberately not
+    /// the semantic trio above: `success`/`danger` already mean added/removed
+    /// in a diff, and reusing green for strings would make every string look
+    /// like an insertion.
+    @MainActor
+    static var syntaxKeyword: Color {
+        GhosttyApp.shared.paletteColor(at: 5).map { Color(nsColor: $0) } ?? .purple
+    }
+
+    @MainActor
+    static var syntaxString: Color {
+        GhosttyApp.shared.paletteColor(at: 2).map { Color(nsColor: $0) } ?? .green
+    }
+
+    @MainActor
+    static var syntaxNumber: Color {
+        GhosttyApp.shared.paletteColor(at: 6).map { Color(nsColor: $0) } ?? .cyan
+    }
+
+    @MainActor
+    static var syntaxComment: Color {
+        GhosttyApp.shared.paletteColor(at: 8).map { Color(nsColor: $0) } ?? fgDim
+    }
+
     /// Scrollbar search-tick colors (NSColor: drawn by an AppKit overlay),
     /// mirroring the renderer's search highlight backgrounds
     /// (`search-background` / `search-selected-background`) so the ticks read

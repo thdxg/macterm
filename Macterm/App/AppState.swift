@@ -173,6 +173,10 @@ final class AppState {
     /// Presents the "New Remote Project" sheet (#104) — set by the palette
     /// command and the sidebar's New Project menu, consumed by `MainWindow`.
     var isNewRemoteProjectSheetPresented = false
+    /// Shows the read-only repository-changes panel beside the workspace.
+    /// Lives here rather than in the panel because both the toolbar button and
+    /// the palette command drive it.
+    var isGitChangesPanelVisible = false
 
     // Tab cycling state (Ctrl+Tab)
     private var tabCycleOrder: [UUID] = []

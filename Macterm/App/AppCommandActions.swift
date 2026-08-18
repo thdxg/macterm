@@ -140,6 +140,13 @@ extension AppCommand {
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
         case .newRemoteProject:
             return { ctx.appState.isNewRemoteProjectSheetPresented = true }
+        case .showRepositoryChanges:
+            // Local projects only: git runs on this Mac, and a remote
+            // project's path names a directory on another host. Returning nil
+            // hides the command rather than opening a panel that can only
+            // explain itself.
+            guard let current, !current.isRemote else { return nil }
+            return { ctx.appState.isGitChangesPanelVisible.toggle() }
         case .renameProject:
             guard let current else { return nil }
             let projectID = current.id
