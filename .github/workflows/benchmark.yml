@@ -1,9 +1,9 @@
 name: Benchmark
 
 # Window-state resource benchmark (scripts/benchmark.py). Pushes to main
-# publish a `benchmark-results` artifact that becomes the baseline; PR runs
-# download the latest main baseline and post a comparison table to the job
-# summary.
+# publish a `benchmark-results` artifact; PR runs pool the last several main
+# runs' artifacts into a per-metric median baseline and post a comparison
+# table to the job summary.
 #
 # PR runs can't label or comment directly: `pull_request` from a fork gets a
 # read-only GITHUB_TOKEN (the `permissions:` block is capped at read regardless
@@ -54,29 +54,41 @@ jobs:
       contents: read
       actions: read # download the baseline artifact from a main run
     steps:
-      - name: Fetch main baseline
+      - name: Fetch main baselines
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          # Walk recent successful main runs: a run whose benchmark job was
-          # skipped by the paths filter has no artifact, so try until one
-          # downloads.
+          # Pool up to the 10 most recent successful main runs: a PR delta
+          # against a single main run is one noisy sample vs. another, and one
+          # unlucky main run then mislabels every PR until the next push
+          # replaces it — the report medians the pool per metric instead. Runs
+          # whose benchmark job was skipped by the paths filter have no
+          # artifact (and old ones expire), so scan deeper than we keep.
+          mkdir -p baseline
+          count=0
           for run_id in $(gh run list --workflow benchmark.yml --branch main --status success \
-              --limit 20 --json databaseId --jq '.[].databaseId'); do
-            if gh run download "$run_id" --name benchmark-results --dir baseline 2>/dev/null; then
-              echo "baseline: run $run_id"
-              break
+              --limit 40 --json databaseId --jq '.[].databaseId'); do
+            if gh run download "$run_id" --name benchmark-results --dir "download/$run_id" 2>/dev/null; then
+              count=$((count + 1))
+              # The index prefix keeps newest-first order through the report
+              # step's lexicographic glob (the pooled `commit` header reads it).
+              cp "download/$run_id/results.json" \
+                "$(printf 'baseline/results-%02d-%s.json' "$count" "$run_id")"
+              echo "baseline $count: run $run_id"
+              if [ "$count" -ge 10 ]; then break; fi
             fi
           done
-          [ -f baseline/results.json ] || echo "no main baseline found; reporting absolute values"
+          if [ "$count" -eq 0 ]; then
+            echo "no main baseline found; reporting absolute values"
+          fi
 
-      - name: Upload baseline
-        if: hashFiles('baseline/results.json') != ''
+      - name: Upload baselines
+        if: hashFiles('baseline/*.json') != ''
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-baseline
-          path: baseline/results.json
+          path: baseline/*.json
 
   benchmark:
     name: Window states
@@ -178,10 +190,10 @@ jobs:
           path: build/benchmark/diagnostics/
           if-no-files-found: ignore
 
-      # Bring in the baseline the parallel job fetched. Best-effort: absent on
+      # Bring in the baselines the parallel job fetched. Best-effort: absent on
       # pushes to main and when no main baseline exists yet, in which case the
       # report falls back to absolute values.
-      - name: Download baseline
+      - name: Download baselines
         if: github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/download-artifact@v8
@@ -192,7 +204,11 @@ jobs:
       - name: Report
         run: |
           args=(build/benchmark/results.json --verdict build/benchmark/verdict.json)
-          [ -f baseline/results.json ] && args+=(--baseline baseline/results.json)
+          # The glob expands lexicographically, so the index-prefixed names
+          # arrive newest-first — what pool_baselines expects.
+          if compgen -G 'baseline/results-*.json' > /dev/null; then
+            args+=(--baseline baseline/results-*.json)
+          fi
           python3 scripts/benchmark.py report "${args[@]}" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
 

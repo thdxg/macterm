@@ -413,17 +413,50 @@ def delta_cell(base, current, floor, min_baseline=None):
     return f"{diff / base * 100:+.0f}% {arrow}".strip()
 
 
+def pool_baselines(paths):
+    """Pool several main-run baselines into one synthetic baseline: for each
+    state/metric, the per-metric median across runs. A PR delta is one noisy
+    sample against the reference, so a single-run reference doubles the noise
+    in every cell — and one unlucky main run then mislabels every PR until the
+    next push replaces it. The median (not the mean) keeps one such anomalous
+    run from moving the reference at all, matching the per-state window median.
+    Paths arrive newest-first (the workflow's index-prefixed filenames), so
+    `commit` records the newest run for the report header."""
+    runs = []
+    for path in paths:
+        with open(path) as f:
+            runs.append(json.load(f))
+    if len(runs) == 1:
+        return runs[0]
+    states = {}
+    for state in STATES:
+        per_run = [r["states"][state] for r in runs if r.get("states", {}).get(state)]
+        if not per_run:
+            continue  # e.g. workload states before main's baseline had them
+        states[state] = {
+            key: _median_or_none([s.get(key) for s in per_run])
+            for key, *_ in METRICS
+        }
+    return {
+        "commit": runs[0].get("commit", "unknown"),
+        "runs": len(runs),
+        "states": states,
+    }
+
+
 def cmd_report(args):
     with open(args.results) as f:
         current = json.load(f)
-    baseline = None
-    if args.baseline:
-        with open(args.baseline) as f:
-            baseline = json.load(f)
+    baseline = pool_baselines(args.baseline) if args.baseline else None
 
     lines = ["## Window-state benchmark", ""]
     if baseline:
-        base_ref = f"main@{baseline.get('commit', 'unknown')[:9]}"
+        baseline_runs = baseline.get("runs", 1)
+        newest = baseline.get("commit", "unknown")[:9]
+        if baseline_runs > 1:
+            base_ref = f"main (median of {baseline_runs} runs)"
+        else:
+            base_ref = f"main@{newest}"
         lines += [
             f"| State | Metric | {base_ref} | this branch | Δ |",
             "|---|---|---:|---:|---:|",
@@ -537,7 +570,14 @@ def cmd_report(args):
     if baseline is None:
         lines.append("")
         lines.append("_No main-branch baseline found; showing absolute values only._")
-    elif workload_missing_baseline:
+    elif baseline.get("runs", 1) > 1:
+        lines.append("")
+        lines.append(
+            f"_The baseline column pools the last {baseline['runs']} successful "
+            f"main runs (newest main@{newest}) as a per-metric median, so one "
+            "anomalous main run can't skew the reference._"
+        )
+    if baseline is not None and workload_missing_baseline:
         lines.append("")
         lines.append(
             "_The `workload-*` states (busy tabs spawned via the `macterm` CLI) "
@@ -585,7 +625,12 @@ def main():
 
     report = sub.add_parser("report", help="render results as markdown")
     report.add_argument("results", help="results JSON from `run`")
-    report.add_argument("--baseline", help="baseline results JSON to compare against")
+    report.add_argument(
+        "--baseline", nargs="+", metavar="JSON",
+        help="baseline results JSON(s) to compare against, newest first; several "
+             "are pooled as a per-metric median so one anomalous main run can't "
+             "skew the reference",
+    )
     report.add_argument("--verdict", help="also write a labeling verdict JSON to this path")
     report.set_defaults(func=cmd_report)
 
