@@ -9,6 +9,8 @@ struct MainWindow: View {
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
+    @Environment(GitBranchNames.self)
+    private var branchNames
     @State
     private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State
@@ -178,6 +180,14 @@ struct MainWindow: View {
         }
         .onAppear {
             AdaptiveTerminalChrome.shared.mainWindowDidAppear()
+            branchNames.refresh(directory: focusedDirectory)
+        }
+        // A `git checkout` typed into a pane is the ordinary way the branch
+        // changes, and a `cd` is the ordinary way the DIRECTORY changes; both
+        // ride this event, which the tab names already use. `GitBranchNames`
+        // throttles, so the 250ms burst cadence costs one read per window.
+        .onReceive(NotificationCenter.default.publisher(for: .terminalPollEvent)) { _ in
+            branchNames.refresh(directory: focusedDirectory)
         }
         .task {
             guard !appState.hasRestoredSelection else { return }
@@ -391,7 +401,33 @@ struct MainWindow: View {
 
     private var activeTabTitle: String {
         guard let project = activeProject else { return "" }
-        return project.path
+        guard let branch = branchNames.branch(for: focusedDirectory) else { return project.path }
+        return "\(project.path) — \(branch)"
+    }
+
+    /// The directory whose branch the title bar reports: the FOCUSED pane's
+    /// working directory, falling back to the project's own path.
+    ///
+    /// The pane's cwd, not the project's, because the title says which branch
+    /// "the terminal you are looking at" is on — and a pane that has `cd`ed
+    /// into a submodule or a sibling worktree is on a different one. It comes
+    /// from the kernel (`ProcessInspector`), not from shell integration, so it
+    /// is right even for a shell that reports no cwd or a full-screen program
+    /// holding the foreground.
+    ///
+    /// Remote panes answer nil — the local process table only knows their
+    /// `ssh` client — and their project path names a directory on another
+    /// host, so a remote project simply shows no branch.
+    private var focusedDirectory: String {
+        guard let project = activeProject, !project.isRemote else { return "" }
+        if let tab = appState.workspaces[project.id]?.activeTab,
+           let paneID = tab.focusedPaneID,
+           let pane = tab.splitRoot.findPane(id: paneID),
+           let cwd = ProcessInspector.foregroundWorkingDirectory(forPane: pane)
+        {
+            return cwd
+        }
+        return ProjectPath.canonicalLocal(project.path)
     }
 }
 
