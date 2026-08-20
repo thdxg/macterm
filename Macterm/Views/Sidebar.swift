@@ -825,14 +825,21 @@ private struct TabMergeSlot: View {
     var body: some View {
         GeometryReader { geo in
             let bandHeight = max(geo.size.height * Self.heightFraction, Self.minHeight)
-            // A row that drew no dividers — a single-pane tab, or one collapsed
-            // to a pane count — offers exactly one position, the trailing edge
-            // of its title: there is nothing visible to land BETWEEN, so the
+            // The band runs from where the title starts to the row's trailing
+            // inset — NOT to where the title's text happens to end. A
+            // single-pane row's title is as wide as the word in it (`zsh` is
+            // about 25pt), and a band that narrow, already limited to the
+            // middle half of the row's height, was effectively unhittable:
+            // joining two single-pane tabs stopped working entirely.
+            let bandMinX = titleFrame.width > 0 ? titleFrame.minX : 0
+            let bandMaxX = max(geo.size.width - rowTrailingInset, bandMinX + 1)
+            // A row that drew no dividers offers exactly one position, that
+            // trailing edge: there is nothing visible to land BETWEEN, so the
             // only honest indicator is "after what is here".
-            let positions = seams.isEmpty ? [titleFrame.maxX] : seams
+            let positions = seams.isEmpty ? [bandMaxX] : seams
             ZStack(alignment: .topLeading) {
                 Color.clear
-                    .frame(width: max(titleFrame.width, 1), height: bandHeight)
+                    .frame(width: bandMaxX - bandMinX, height: bandHeight)
                     // `.onDrop` BEFORE `.position`, and this order is the whole
                     // fix: `.position` returns a view that fills its parent, so
                     // attaching the drop after it made the target the entire
@@ -845,17 +852,17 @@ private struct TabMergeSlot: View {
                             // are shifted into the band's before comparing.
                             // Drawing still uses the row-space values, because
                             // the indicator is drawn against the row.
-                            positions: positions.map { $0 - titleFrame.minX },
+                            positions: positions.map { $0 - bandMinX },
                             appendIndex: paneIDs.count,
                             hasSeams: !seams.isEmpty,
                             insertionIndex: $insertionIndex,
                             onDrop: onDrop
                         )
                     )
-                    // Pinned to the title's own span: the icon names the whole
+                    // Starts where the title does: the icon names the whole
                     // tab and is where the row's own drag lifts from, so it is
                     // not a position among the panes.
-                    .position(x: titleFrame.midX, y: geo.size.height / 2)
+                    .position(x: (bandMinX + bandMaxX) / 2, y: geo.size.height / 2)
 
                 if let insertionIndex {
                     InsertionLine(
