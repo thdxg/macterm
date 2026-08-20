@@ -39,7 +39,7 @@
 - **Declarative layouts** — describe a project's tabs, splits, and per-pane commands in YAML; Macterm builds the workspace from it on open.
 - **Control CLI** — a bundled `macterm` command drives the running app over a local socket, so scripts and AI agents can spawn panes, run commands, and script layouts.
 - **Quick terminal** — a global drop-down terminal on a hotkey (<kbd>⌃`</kbd>), for scratch work from anywhere.
-- **Ghostty compatibility** — reads your existing `~/.config/ghostty/config`. Theme, font, keybinds — all of it just works.
+- **Ghostty compatibility** — finds your existing Ghostty config in its macOS Application Support or XDG location, including the legacy `config` filename. Theme, font, keybinds — all of it just works.
 
 ## Install
 

@@ -376,6 +376,52 @@ final class Preferences {
 
     // MARK: - Ghostty config
 
+    static let ghosttyApplicationSupportConfigDirectory =
+        "~/Library/Application Support/com.mitchellh.ghostty"
+    static let fallbackGhosttyXDGConfigDirectory = "~/.config/ghostty"
+    private static let ghosttyXDGSubdirectory = "ghostty"
+    private static let currentGhosttyConfigFilename = "config.ghostty"
+    private static let legacyGhosttyConfigFilename = "config"
+    static let defaultGhosttyConfigPath = (ghosttyApplicationSupportConfigDirectory as NSString)
+        .appendingPathComponent(currentGhosttyConfigFilename)
+
+    /// Match Ghostty's effective macOS precedence. Ghostty loads XDG before
+    /// Application Support and legacy before current, so later files win.
+    static func preferredGhosttyConfigPath(
+        applicationSupportConfigDirectory: String,
+        xdgConfigDirectory: String,
+        fileIsNonEmpty: (String) -> Bool
+    ) -> String {
+        let candidates = [
+            (applicationSupportConfigDirectory as NSString)
+                .appendingPathComponent(currentGhosttyConfigFilename),
+            (applicationSupportConfigDirectory as NSString)
+                .appendingPathComponent(legacyGhosttyConfigFilename),
+            (xdgConfigDirectory as NSString).appendingPathComponent(currentGhosttyConfigFilename),
+            (xdgConfigDirectory as NSString).appendingPathComponent(legacyGhosttyConfigFilename),
+        ]
+        return candidates.first(where: fileIsNonEmpty) ?? candidates[0]
+    }
+
+    private static func defaultUserGhosttyConfigPath() -> String {
+        let applicationSupport = (ghosttyApplicationSupportConfigDirectory as NSString)
+            .expandingTildeInPath
+        let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"].flatMap { directory in
+            guard !directory.isEmpty else { return nil }
+            return (directory as NSString).appendingPathComponent(ghosttyXDGSubdirectory)
+        } ?? (fallbackGhosttyXDGConfigDirectory as NSString).expandingTildeInPath
+
+        return preferredGhosttyConfigPath(
+            applicationSupportConfigDirectory: applicationSupport,
+            xdgConfigDirectory: xdg
+        ) { path in
+            let values = try? URL(fileURLWithPath: path).resourceValues(
+                forKeys: [.isRegularFileKey, .fileSizeKey]
+            )
+            return values?.isRegularFile == true && (values?.fileSize ?? 0) > 0
+        }
+    }
+
     /// Path to the user's Ghostty config. Empty string = don't load any user
     /// config (Macterm-defaults only). Tilde-expand via
     /// `expandedUserGhosttyConfigPath` at use sites.
@@ -550,7 +596,8 @@ final class Preferences {
             .flatMap(WindowGlassStyle.init(rawValue:)) ?? .regular
         adaptiveTerminalChromeEnabled = defaults.object(forKey: Keys.adaptiveTerminalChromeEnabled) as? Bool ?? false
         hideTitleBar = defaults.object(forKey: Keys.hideTitleBar) as? Bool ?? false
-        userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
+        userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath)
+            ?? Self.defaultUserGhosttyConfigPath()
         passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
