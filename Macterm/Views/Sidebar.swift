@@ -101,13 +101,11 @@ enum SidebarDropItem: Transferable {
     }
 }
 
-/// The narrower union the tab-list ForEach accepts: a tab (reorder/move) or a
-/// pane (separate into a new tab), both of which want the insertion offset the
-/// ForEach reports. Deliberately NOT `SidebarDropItem` — including the project
-/// payload here would make a project drag target the tab rows, which is the
-/// state the header comment calls out as broken at this outline level: the
-/// insertion line would appear inside a section a project can't land in. The
-/// two unions are separate views' payloads, not stacked destinations.
+/// The narrower union the pin drop zone accepts: a tab (pin/move) or a pane
+/// (separate into a new pinned tab). Deliberately NOT `SidebarDropItem` — a
+/// project drag has no meaning at the pin strip. (The tab lists themselves
+/// use `DropDelegate`s + the insertion placeholder, not this payload — see
+/// `SidebarRowDropDelegate`.)
 enum TabSlotDropItem: Transferable {
     case tab(MovableTab)
     case pane(MovablePane)
@@ -141,27 +139,33 @@ struct SidebarContent: View {
     private var selection: Set<SidebarItem> = []
     /// The live insertion target while a drag hovers a pinned row — which row,
     /// and whether the payload would land above or below it (decided by which
-    /// half of the row the pointer is in). Drives the insertion-line overlays.
+    /// half of the row the pointer is in). Owns the insertion-placeholder
+    /// lifecycle (see `SidebarDropCoordinator`).
     @State
-    private var pinnedDropTarget: PinnedDropTarget?
-    /// Each pinned row's measured height, for the delegate's above/below
-    /// midpoint test (`DropInfo.location` is in the row's own space).
+    private var dropCoordinator = SidebarDropCoordinator()
+    /// Each row's measured height, for the delegates' above/below midpoint
+    /// test (`DropInfo.location` is in the row's own space) and for sizing
+    /// the placeholder like a real row.
     @State
-    private var pinnedRowHeights: [UUID: CGFloat] = [:]
+    private var sidebarRowHeights: [UUID: CGFloat] = [:]
 
     var body: some View {
         List(selection: $selection) {
             // Pinned tabs live above every project as FLAT top-level rows —
             // no enclosing section. Their ForEach carries NO
             // `.dropDestination`: at this outline level the accept crashes
-            // (see the project ForEach's notes below), so each ROW is its own
-            // drop target instead — dropping a tab on a pinned row pins it at
-            // that slot. The always-available target — and the ONLY one when
-            // no pinned rows exist yet — is the pin drop zone strip above the
-            // list (see `PinTabDropZone`).
+            // (see the project ForEach's notes below), so each ROW hosts its
+            // own drop delegate — and a hovering drag inserts a PLACEHOLDER
+            // row at the slot the drop would land in, pushing the rows apart
+            // to preview the final position (see `SidebarDropCoordinator`).
+            // The always-available target — and the ONLY one when no pinned
+            // rows exist yet — is the pin drop zone strip above the list
+            // (see `PinTabDropZone`).
             ForEach(Array(appState.pinnedRecords.enumerated()), id: \.element.id) { index, record in
+                insertionPlaceholder(for: .pinned(slot: index))
                 pinnedRow(record: record, index: index)
             }
+            insertionPlaceholder(for: .pinned(slot: appState.pinnedRecords.count))
             ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
                 projectSection(index: projectIndex, project: project)
             }
@@ -284,15 +288,43 @@ struct SidebarContent: View {
 
     // MARK: - Pinned rows
 
+    /// The insertion placeholder rendered at `insertion`'s slot while a drag
+    /// targets it — a row-sized labeled box that pushes its neighbors apart
+    /// to preview exactly where the drop will land. It is itself a drop
+    /// target: the reflow that inserts it usually leaves the pointer ON it,
+    /// so it must keep the proposal alive and accept the drop.
+    @ViewBuilder
+    private func insertionPlaceholder(for insertion: SidebarInsertion) -> some View {
+        if dropCoordinator.insertion == insertion {
+            let icon = switch insertion {
+            case .pinned: "pin.fill"
+            case .projectTab: "arrow.forward"
+            }
+            SidebarInsertionPlaceholder(
+                label: dropCoordinator.label,
+                icon: icon,
+                height: sidebarRowHeights.values.max() ?? 24
+            )
+            .onDrop(
+                of: [.mactermTab, .mactermPaneID],
+                delegate: SidebarPlaceholderDropDelegate(
+                    insertion: insertion,
+                    coordinator: dropCoordinator,
+                    perform: { performSidebarDrop($0, info: $1) }
+                )
+            )
+        }
+    }
+
     /// One pinned row: loaded (a live tab, standard row treatment with a pin
     /// icon) or unloaded (dimmed; selecting it rebuilds the tab from its
     /// declaration). Rows are top-level List items, so — unlike project tab
-    /// rows — each carries its own drop target: there is no enclosing ForEach
-    /// insertion mechanism to shadow (a top-level `.dropDestination` crashes
-    /// the outline accept, see `body`). The target is a `DropDelegate`, not
-    /// `.dropDestination`, because only the delegate reports the hover
-    /// LOCATION — which half of the row the drag is over decides whether the
-    /// payload lands above or below it, shown live as an insertion line.
+    /// rows before this interaction — each hosts its own drop delegate: there
+    /// is no ForEach insertion mechanism at this outline level (a top-level
+    /// `.dropDestination` crashes the outline accept, see `body`). A
+    /// `DropDelegate`, not `.dropDestination`, because only the delegate
+    /// reports the hover LOCATION — which half of the row the drag is over
+    /// decides the placeholder's slot.
     private func pinnedRow(record: PinnedTabRecord, index: Int) -> some View {
         Group {
             if let tab = appState.pinnedWorkspace?.tabs.first(where: { $0.id == record.id }) {
@@ -334,71 +366,77 @@ struct SidebarContent: View {
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { height in
-                    pinnedRowHeights[record.id] = height
+                    sidebarRowHeights[record.id] = height
                 }
                 .onDrop(
                     of: [.mactermTab, .mactermPaneID],
-                    delegate: PinnedRowDropDelegate(
+                    delegate: SidebarRowDropDelegate(
                         index: index,
-                        rowHeight: { pinnedRowHeights[record.id] ?? 24 },
-                        target: $pinnedDropTarget,
-                        perform: { resolved, info in
-                            performPinnedRowDrop(slot: resolved.slot, info: info)
-                        }
+                        makeInsertion: { .pinned(slot: $0) },
+                        rowHeight: { sidebarRowHeights[record.id] ?? 24 },
+                        coordinator: dropCoordinator,
+                        perform: { performSidebarDrop($0, info: $1) }
                     )
                 )
         }
-        .overlay(alignment: .top) {
-            if let target = pinnedDropTarget, target.index == index, !target.below {
-                PinnedInsertionBadge(label: target.label)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if let target = pinnedDropTarget, target.index == index, target.below {
-                PinnedInsertionBadge(label: target.label)
-            }
-        }
     }
 
-    /// Apply a resolved pinned-row drop at `slot` (record-space insertion
-    /// offset, pre-removal coordinates). A pane drag first — its payload is
-    /// synchronously readable, same as `LeafDropDelegate` — then a tab drag,
-    /// with the async item-provider fallback for a payload the Transferable
-    /// hasn't rendered onto the pasteboard yet.
-    private func performPinnedRowDrop(slot: Int, info: DropInfo) -> Bool {
+    /// Apply a resolved sidebar drop at an insertion slot (record/tab-space
+    /// insertion offset, pre-removal coordinates). A pane drag first — its
+    /// payload is synchronously readable, same as `LeafDropDelegate` — then a
+    /// tab drag, with the async item-provider fallback for a payload the
+    /// Transferable hasn't rendered onto the pasteboard yet.
+    @MainActor
+    private func performSidebarDrop(_ insertion: SidebarInsertion, info: DropInfo) -> Bool {
         if let movable = MovablePane.fromDragPasteboard() {
-            MainActor.assumeIsolated {
+            switch insertion {
+            case let .pinned(slot):
                 appState.separatePane(
                     movable.paneID,
                     toProject: PinnedTabs.projectID,
                     destPath: PinnedTabs.fallbackRoot,
                     at: slot
                 )
+            case let .projectTab(projectID, slot):
+                guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return false }
+                appState.separatePane(movable.paneID, toProject: projectID, destPath: project.path, at: slot)
             }
             return true
         }
         if let movable = MovableTab.fromDragPasteboard() {
-            MainActor.assumeIsolated { receivePinnedRowDrop(movable, atSlot: slot) }
+            applyTabDrop(movable, insertion: insertion)
             return true
         }
         guard let provider = info.itemProviders(for: [.mactermTab]).first else { return false }
         provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermTab.identifier) { data, _ in
             guard let data, let movable = try? JSONDecoder().decode(MovableTab.self, from: data) else { return }
             Task { @MainActor in
-                receivePinnedRowDrop(movable, atSlot: slot)
+                applyTabDrop(movable, insertion: insertion)
             }
         }
         return true
     }
 
-    /// A tab dropped at a pinned insertion slot: from a project → pin there;
-    /// from within the pinned rows → reorder (`reorderPinnedTab` speaks the
-    /// same pre-removal offset).
-    private func receivePinnedRowDrop(_ item: MovableTab, atSlot slot: Int) {
-        if item.sourceProjectID == PinnedTabs.projectID {
-            appState.reorderPinnedTab(item.tabID, toIndex: slot)
-        } else {
-            appState.pinTab(item.tabID, fromProject: item.sourceProjectID, toRecordIndex: slot)
+    /// A tab dropped at an insertion slot: reorder within its own list, pin
+    /// into the pinned rows, or move across projects — all speaking the same
+    /// pre-removal offsets (`reorderPinnedTab` / `reorderTab` / `moveTab`).
+    @MainActor
+    private func applyTabDrop(_ item: MovableTab, insertion: SidebarInsertion) {
+        switch insertion {
+        case let .pinned(slot):
+            if item.sourceProjectID == PinnedTabs.projectID {
+                appState.reorderPinnedTab(item.tabID, toIndex: slot)
+            } else {
+                appState.pinTab(item.tabID, fromProject: item.sourceProjectID, toRecordIndex: slot)
+            }
+        case let .projectTab(projectID, slot):
+            if item.sourceProjectID == projectID {
+                appState.reorderTab(item.tabID, inProject: projectID, toIndex: slot)
+            } else {
+                guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return }
+                appState.moveTab(item.tabID, from: item.sourceProjectID, to: projectID, destPath: project.path, toIndex: slot)
+                expandedProjects.insert(projectID)
+            }
         }
     }
 
@@ -415,26 +453,21 @@ struct SidebarContent: View {
             get: { expandedProjects.contains(project.id) },
             set: { if $0 { expandedProjects.insert(project.id) } else { expandedProjects.remove(project.id) } }
         )) {
+            // One drop interaction for every case, shared with the pinned
+            // rows: hovering a drag over a row's top/bottom half inserts the
+            // placeholder at that slot — pushing the rows apart to preview
+            // the final position — and the drop lands exactly there. A tab
+            // from the same project reorders, one from another project (or
+            // the pinned rows) moves in, and a PANE (the grab-handle drag
+            // from the workspace) separates into a new tab at the slot. This
+            // replaced the ForEach-level `.dropDestination` (the native
+            // insertion line): a hairline between rows couldn't say what the
+            // drop would do, and it drew OVER the rows instead of making room.
             ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
+                insertionPlaceholder(for: .projectTab(projectID: project.id, slot: tabIndex))
                 tabRow(tab: tab, index: tabIndex, project: project)
             }
-            // Single drop mechanism for every case: SwiftUI reports the
-            // insertion `offset` within THIS project's tab list. A tab drop
-            // from the same project reorders to that slot; one from another
-            // project moves the tab in at that slot; a PANE drop (the grab
-            // handle drag from the workspace) separates that pane into a new
-            // tab landing at the same slot. Replaces the old `.onMove` (which
-            // is per-section and can't express a cross-project move).
-            .dropDestination(for: TabSlotDropItem.self) { items, offset in
-                for item in items {
-                    switch item {
-                    case let .tab(tab):
-                        receiveTabDrop([tab], into: project, at: offset)
-                    case let .pane(pane):
-                        receivePaneDrop([pane], into: project, at: offset)
-                    }
-                }
-            }
+            insertionPlaceholder(for: .projectTab(projectID: project.id, slot: tabs.count))
         } label: {
             projectHeader(index: projectIndex, project: project)
         }
@@ -460,14 +493,32 @@ struct SidebarContent: View {
         // payload is just IDs — the live tab is looked up on drop, never
         // serialized.
         .draggable(MovableTab(tabID: tab.id, sourceProjectID: project.id))
-        // Deliberately NO drop destination on tab rows. Any destination here
-        // — even one registered for the project payload alone — claims every
-        // drag over the row before the tab ForEach's insertion mechanism sees
-        // it (SwiftUI routes a drag to the topmost target by geometry with no
-        // type fall-through), which kills the native insertion line and broke
-        // tab reordering outright when tried. The cost is that a PROJECT drag
-        // over an expanded section's tab rows has nothing to land on — drop
-        // it on a project header instead. The insertion line won.
+        // The drop capture lives BEHIND the row, never on it — an `.onDrop`
+        // directly on a row swallows left clicks (measured on the pinned
+        // rows: they dragged fine but stopped being selectable), while a
+        // background destination still receives every drag, because drop
+        // routing is geometric and only registered destinations participate.
+        // Tab rows accept only tab/pane payloads, so a PROJECT drag over an
+        // expanded section's tab rows still has nothing to land on — drop it
+        // on a project header instead.
+        .background {
+            Color.clear
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    sidebarRowHeights[tab.id] = height
+                }
+                .onDrop(
+                    of: [.mactermTab, .mactermPaneID],
+                    delegate: SidebarRowDropDelegate(
+                        index: tabIndex,
+                        makeInsertion: { .projectTab(projectID: project.id, slot: $0) },
+                        rowHeight: { sidebarRowHeights[tab.id] ?? 24 },
+                        coordinator: dropCoordinator,
+                        perform: { performSidebarDrop($0, info: $1) }
+                    )
+                )
+        }
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
@@ -1001,94 +1052,222 @@ private struct SidebarTabRow: View {
     }
 }
 
-/// Where a drag hovering a pinned row would insert: above (`below == false`)
-/// or below that row's record index. `label` names the action the drop will
-/// take ("Pin Tab" for a project tab or pane, "Move Tab" for a pinned-row
-/// reorder), shown in the insertion badge.
-private struct PinnedDropTarget: Equatable {
-    let index: Int
-    let below: Bool
-    let label: String
-    /// The record-space insertion offset the drop resolves to.
-    var slot: Int { below ? index + 1 : index }
+/// Where a hovering drag would insert into the sidebar: a pinned-row slot or
+/// a project's tab slot (record/tab-space insertion offsets, pre-removal
+/// coordinates — the shape `reorderPinnedTab`/`reorderTab`/`moveTab` speak).
+enum SidebarInsertion: Equatable {
+    case pinned(slot: Int)
+    case projectTab(projectID: UUID, slot: Int)
 }
 
-/// The per-row drop delegate for pinned rows. A delegate (not
-/// `.dropDestination`) because only `DropInfo` carries the hover location —
-/// the above/below decision — and because it can update the shared target
-/// continuously so the insertion line tracks the pointer.
-private struct PinnedRowDropDelegate: DropDelegate {
+/// Owns the insertion placeholder's lifecycle. One coordinator for the whole
+/// sidebar, because the placeholder is a single row that MOVES between slots
+/// as the drag travels — and because clearing it is the subtle part:
+///
+/// - Inserting the placeholder reflows the rows UNDER the pointer, so the
+///   row that proposed it usually fires `dropExited` immediately (the
+///   placeholder took its place). Clearing on that exit would remove the
+///   placeholder, reflow back, re-enter, and flicker forever — so an exit
+///   only SCHEDULES a clear, and any proposal inside the grace period
+///   (the take-over enter, the next row) cancels it.
+/// - `dropExited` is not delivered reliably for a cancelled drag (Esc, or a
+///   release outside every target), so while a placeholder is up a watchdog
+///   polls the physical mouse button: the drag is over the moment it's
+///   released. A completed drop clears immediately via `complete()`.
+@MainActor @Observable
+final class SidebarDropCoordinator {
+    private(set) var insertion: SidebarInsertion?
+    private(set) var label = ""
+
+    @ObservationIgnored
+    private var clearWork: DispatchWorkItem?
+    @ObservationIgnored
+    private var watchdog: Timer?
+
+    func propose(_ insertion: SidebarInsertion, label: String) {
+        clearWork?.cancel()
+        clearWork = nil
+        if self.insertion != insertion || self.label != label {
+            withAnimation(.easeInOut(duration: 0.12)) {
+                self.insertion = insertion
+                self.label = label
+            }
+        }
+        startWatchdogIfNeeded()
+    }
+
+    /// A target the drag left — see the flicker note above: schedule, don't
+    /// clear.
+    func noteExit() {
+        guard insertion != nil else { return }
+        clearWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.clearNow() }
+        }
+        clearWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    /// The drop landed (anywhere) — collapse immediately.
+    func complete() {
+        clearNow()
+    }
+
+    private func clearNow() {
+        clearWork?.cancel()
+        clearWork = nil
+        watchdog?.invalidate()
+        watchdog = nil
+        guard insertion != nil else { return }
+        withAnimation(.easeInOut(duration: 0.12)) {
+            insertion = nil
+            label = ""
+        }
+    }
+
+    private func startWatchdogIfNeeded() {
+        guard watchdog == nil else { return }
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if NSEvent.pressedMouseButtons & 0x1 == 0 { self.clearNow() }
+            }
+        }
+        // .common so it keeps firing inside the drag's event-tracking run
+        // loop mode.
+        RunLoop.main.add(timer, forMode: .common)
+        watchdog = timer
+    }
+}
+
+/// What the hovered drop would do, for the placeholder's label. The payload
+/// is synchronously readable off the drag pasteboard for in-app drags (falls
+/// open to the pin/move default when it isn't rendered yet).
+private func sidebarDragActionLabel(for insertion: SidebarInsertion) -> String {
+    if MovablePane.fromDragPasteboard() != nil {
+        return switch insertion {
+        case .pinned: "Pin Pane"
+        case .projectTab: "Move Pane"
+        }
+    }
+    let source = MovableTab.fromDragPasteboard()?.sourceProjectID
+    return switch insertion {
+    case .pinned: source == PinnedTabs.projectID ? "Move Tab" : "Pin Tab"
+    case .projectTab: "Move Tab"
+    }
+}
+
+/// The per-row drop delegate shared by pinned rows and project tab rows. A
+/// delegate (not `.dropDestination`) because only `DropInfo` carries the
+/// hover location — which half of the row the drag is over decides whether
+/// the placeholder lands above (`index`) or below (`index + 1`) the row.
+private struct SidebarRowDropDelegate: DropDelegate {
     let index: Int
+    let makeInsertion: (Int) -> SidebarInsertion
     let rowHeight: () -> CGFloat
-    let target: Binding<PinnedDropTarget?>
-    let perform: (PinnedDropTarget, DropInfo) -> Bool
+    let coordinator: SidebarDropCoordinator
+    let perform: @MainActor (SidebarInsertion, DropInfo) -> Bool
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.mactermTab, .mactermPaneID])
     }
 
     func dropEntered(info: DropInfo) {
-        update(info)
+        propose(info)
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        // dropUpdated can fire after performDrop (the same quirk
-        // LeafDropDelegate documents); without this guard it would re-show
-        // the insertion badge on a completed drop and leave it stuck.
-        guard target.wrappedValue != nil else { return DropProposal(operation: .forbidden) }
-        update(info)
+        propose(info)
         return DropProposal(operation: .move)
     }
 
     func dropExited(info _: DropInfo) {
-        if target.wrappedValue?.index == index {
-            target.wrappedValue = nil
-        }
+        MainActor.assumeIsolated { coordinator.noteExit() }
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        update(info)
-        guard let resolved = target.wrappedValue else { return false }
-        target.wrappedValue = nil
-        return perform(resolved, info)
+        MainActor.assumeIsolated {
+            let insertion = resolvedInsertion(info)
+            coordinator.complete()
+            return perform(insertion, info)
+        }
     }
 
-    private func update(_ info: DropInfo) {
-        let below = info.location.y > rowHeight() / 2
-        // Name the action, not just the place: a pinned row dragged onto a
-        // sibling is a move; anything else pins. The payload is synchronously
-        // readable off the drag pasteboard for in-app drags (falls open to
-        // "Pin Tab" when it isn't rendered yet).
-        let isReorder = MovableTab.fromDragPasteboard()?.sourceProjectID == PinnedTabs.projectID
-        let resolved = PinnedDropTarget(index: index, below: below, label: isReorder ? "Move Tab" : "Pin Tab")
-        if target.wrappedValue != resolved {
-            target.wrappedValue = resolved
+    private func resolvedInsertion(_ info: DropInfo) -> SidebarInsertion {
+        makeInsertion(info.location.y > rowHeight() / 2 ? index + 1 : index)
+    }
+
+    private func propose(_ info: DropInfo) {
+        MainActor.assumeIsolated {
+            let insertion = resolvedInsertion(info)
+            coordinator.propose(insertion, label: sidebarDragActionLabel(for: insertion))
         }
     }
 }
 
-/// The insertion indicator shown at a pinned row's top or bottom edge while a
-/// drag hovers it: the same labeled band style as `PinTabDropZone`, compact
-/// enough to sit inside the row at the edge the drop targets.
-private struct PinnedInsertionBadge: View {
+/// The placeholder row's own delegate: the reflow that inserts the
+/// placeholder usually leaves the pointer ON it, so it must keep the
+/// proposal alive (cancelling the exit-scheduled clear) and accept the drop
+/// at its slot.
+private struct SidebarPlaceholderDropDelegate: DropDelegate {
+    let insertion: SidebarInsertion
+    let coordinator: SidebarDropCoordinator
+    let perform: @MainActor (SidebarInsertion, DropInfo) -> Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.mactermTab, .mactermPaneID])
+    }
+
+    func dropEntered(info _: DropInfo) {
+        propose()
+    }
+
+    func dropUpdated(info _: DropInfo) -> DropProposal? {
+        propose()
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info _: DropInfo) {
+        MainActor.assumeIsolated { coordinator.noteExit() }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        MainActor.assumeIsolated {
+            coordinator.complete()
+            return perform(insertion, info)
+        }
+    }
+
+    private func propose() {
+        MainActor.assumeIsolated {
+            coordinator.propose(insertion, label: sidebarDragActionLabel(for: insertion))
+        }
+    }
+}
+
+/// The insertion placeholder: a row-sized labeled box occupying the slot the
+/// drop would land in, pushing the real rows apart to preview the final
+/// position — the same band style as `PinTabDropZone`.
+private struct SidebarInsertionPlaceholder: View {
     let label: String
+    let icon: String
+    let height: CGFloat
 
     var body: some View {
-        Label(label, systemImage: "pin.fill")
-            .font(.caption.weight(.semibold))
+        Label(label, systemImage: icon)
+            .font(.callout.weight(.medium))
             .foregroundStyle(MactermTheme.accent)
             .frame(maxWidth: .infinity)
-            .frame(height: 17)
+            .frame(height: max(height, 20))
             .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(MactermTheme.accent.opacity(0.18))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(MactermTheme.accent.opacity(0.15))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .strokeBorder(MactermTheme.accent.opacity(0.6), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(MactermTheme.accent.opacity(0.5), lineWidth: 1)
                     )
             )
             .padding(.trailing, 2)
-            .allowsHitTesting(false)
     }
 }
 

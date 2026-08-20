@@ -35,6 +35,7 @@
 - **Persistent multiplexing** — projects, tabs, and split panes are saved and restored on relaunch. Shells run under a bundled [zmx](https://github.com/neurosnap/zmx) session, so quitting detaches and relaunching reattaches every pane with its scrollback and running processes intact.
 - **Remote projects** — open a directory on another machine over SSH. Each pane is a persistent session *on the host*, so your shells survive quits, dropped connections, and even a local reboot.
 - **Vertical project sidebar** — organize projects and their tabs in a native macOS sidebar, stacked vertically where there's room to read them.
+- **Pinned tabs** — pin a tab above your projects to keep it running: it starts on every launch, closing only stops it (the row and its layout stay), and if its session dies it restores itself, re-running the command it was pinned with. The pinned set lives in an editable `pinned.yaml`.
 - **Command palette** — press <kbd>⌘P</kbd> to split panes, switch projects, or open a directory. Every action is a keystroke away, and each row shows its keybind.
 - **Declarative layouts** — describe a project's tabs, splits, and per-pane commands in YAML; Macterm builds the workspace from it on open.
 - **Control CLI** — a bundled `macterm` command drives the running app over a local socket, so scripts and AI agents can spawn panes, run commands, and script layouts.
