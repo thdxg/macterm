@@ -17,6 +17,21 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 BUILD_NUMBER="$(sparkle_comparison_version "$VERSION")"
 GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 SPARKLE_ED_PUBLIC_KEY="${SPARKLE_ED_PUBLIC_KEY:-SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER}"
+
+# Optional stable code-signing identity (a SHA-1 identity hash or a certificate
+# name resolvable in the keychain). macOS TCC keys privacy grants (Documents,
+# Downloads, …) to the app's code-signing designated requirement; an ad-hoc
+# signature's requirement is the per-build CDHash, so every update looks like a
+# brand-new app to TCC and drops every grant. Release CI sets this to the
+# imported self-signed release certificate (see release.yml's "Import signing
+# certificate" step) so the requirement stays stable across releases and grants
+# survive updates. Unset = ad-hoc (project.yml's default), which is fine for
+# local and benchmark builds that are never distributed.
+CODESIGN_IDENTITY="${MACTERM_CODESIGN_IDENTITY:-}"
+SIGNING_OVERRIDES=()
+if [[ -n "$CODESIGN_IDENTITY" ]]; then
+  SIGNING_OVERRIDES+=(CODE_SIGN_IDENTITY="$CODESIGN_IDENTITY")
+fi
 DMG_NAME="Macterm-${VERSION}.dmg"
 DERIVED_DATA="$BUILD_DIR/DerivedData"
 ARCHIVE_PATH="$BUILD_DIR/Macterm.xcarchive"
@@ -47,12 +62,14 @@ xcodebuild \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   GIT_COMMIT="$GIT_COMMIT" \
   SPARKLE_ED_PUBLIC_KEY="$SPARKLE_ED_PUBLIC_KEY" \
+  ${SIGNING_OVERRIDES[@]+"${SIGNING_OVERRIDES[@]}"} \
   archive \
   | (xcbeautify --quiet 2>/dev/null || cat)
 
-# Copy the .app straight out of the archive. We ship ad-hoc-signed, so there's
-# nothing to re-sign or notarize — the archive's Products/Applications already
-# holds the fully-built, signed bundle (Sparkle and its XPC services included).
+# Copy the .app straight out of the archive. There's nothing to re-sign or
+# notarize — the archive's Products/Applications already holds the fully-built,
+# signed bundle (Sparkle and its XPC services included), signed either ad-hoc
+# (local) or with the stable release certificate (CI, via SIGNING_OVERRIDES).
 # `ditto` (not cp) preserves the framework symlinks a valid macOS bundle needs.
 #
 # This deliberately avoids `xcodebuild -exportArchive`: its `-exportOptionsPlist`
@@ -71,6 +88,14 @@ APP_BUNDLE="$EXPORT_PATH/Macterm.app"
 # Sanity-check the copy is a valid, signed bundle before building a DMG from it.
 if ! codesign --verify --deep --strict "$APP_BUNDLE" 2>/dev/null; then
   echo "ERROR: exported $APP_BUNDLE failed code-signature verification" >&2
+  exit 1
+fi
+# When a stable identity was requested, an ad-hoc signature slipping through
+# would ship an update that silently resets every user's TCC grants — exactly
+# what the identity exists to prevent — so fail rather than package it.
+if [[ -n "$CODESIGN_IDENTITY" ]] \
+  && codesign --display --verbose "$APP_BUNDLE" 2>&1 | grep -q "Signature=adhoc"; then
+  echo "ERROR: $APP_BUNDLE is ad-hoc signed despite MACTERM_CODESIGN_IDENTITY being set" >&2
   exit 1
 fi
 

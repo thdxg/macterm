@@ -443,6 +443,7 @@ private struct GeneralSettings: View {
     /// NOT `@AppStorage`, which binds to `UserDefaults.standard` — banned by the
     /// project, and it diverged from the `.onChange` write-through under test.
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
+    @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -459,16 +460,16 @@ private struct GeneralSettings: View {
     @State
     private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
 
+    /// Re-probed when the app becomes active, so returning from System
+    /// Settings after flipping the toggle clears the banner. `nil` (no
+    /// evidence) hides it — never nag about a grant we can't disprove.
+    @State
+    private var hasFullDiskAccess: Bool? = FullDiskAccess.isGranted()
+
     var body: some View {
         Form {
-            // Read the CLI probe from the process-lifetime cache — never spawn
-            // `ghostty +help` from inside `body` (it re-ran on every @State
-            // change, e.g. each scroll-speed slider tick, blocking the main
-            // thread on `waitUntilExit`; #3.1).
-            if !GhosttyCLIProbe.isInstalled {
-                GhosttyCLIBanner(reason: .notInstalled)
-            } else if GhosttyCLIProbe.sshWrapperBinDir == nil {
-                GhosttyCLIBanner(reason: .tooOldForSSH)
+            if hasFullDiskAccess == false {
+                FullDiskAccessBanner()
             }
 
             Section("Ghostty Config") {
@@ -513,6 +514,18 @@ private struct GeneralSettings: View {
                     .settingsCaption()
             }
 
+            Section("Remote Projects") {
+                Toggle("Background SSH connections", isOn: $backgroundSSHConnections)
+                    .onChange(of: backgroundSSHConnections) { _, v in
+                        Preferences.shared.backgroundSSHConnections = v
+                    }
+                Text(
+                    "Probes remote hosts for live tab names and close warnings. "
+                        + "Turn off if each connection prompts for Touch ID."
+                )
+                .settingsCaption()
+            }
+
             // Shells always keep running after quit and reattach on the next
             // launch — there's no setting, so the section exists only to report
             // that persistence is unavailable. It can be silently so (Supacode
@@ -531,6 +544,14 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+        // Granting FDA happens in System Settings, so the state can only have
+        // changed while this app was inactive — re-probe on every activation
+        // rather than polling.
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            hasFullDiskAccess = FullDiskAccess.isGranted()
+        }
     }
 
     /// Push the text-field's current value into Preferences and reload. We
@@ -561,47 +582,32 @@ private struct GeneralSettings: View {
     }
 }
 
-// MARK: - Missing CLI banner
+// MARK: - Full Disk Access banner
 
-/// Shown in General settings when the standalone ghostty CLI (shipped in
-/// Ghostty.app) is missing or too old to drive the shell-integration wrappers.
-/// A few wrappers exec that binary (the `ssh` wrapper calls `ghostty +ssh`), so
-/// without a compatible CLI those features are disabled and fall through to the
-/// plain command — the README link spells out which. Embedded directly in a
-/// `Form`, so it renders as its own section.
-private struct GhosttyCLIBanner: View {
-    enum Reason {
-        case notInstalled
-        case tooOldForSSH
-
-        var message: String {
-            switch self {
-            case .notInstalled:
-                "Ghostty.app isn't installed, so a few shell-integration features can't run."
-            case .tooOldForSSH:
-                "Your installed Ghostty.app is too old for the ssh shell integration. "
-                    + "Update Ghostty.app to forward terminfo over ssh; until then, ssh runs normally."
-            }
-        }
-    }
-
-    let reason: Reason
-
-    private static let detailsURL = URL(
-        string: "https://github.com/thdxg/macterm#shell-integration"
-    )
-
+/// Shown in General settings while macOS hasn't granted the app Full Disk
+/// Access. Without it, TCC prompts folder by folder (Documents, Downloads, …)
+/// as terminal commands first touch each one; one FDA grant covers them all —
+/// and persists across updates, now that releases are signed with a stable
+/// certificate. FDA can't be requested programmatically (there is no prompt to
+/// trigger), so the button deep-links to the System Settings pane and
+/// `GeneralSettings` re-probes when the app becomes active again.
+private struct FullDiskAccessBanner: View {
     var body: some View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Some features are disabled")
+                    Text("Full Disk Access is off")
                         .font(.system(size: 13, weight: .semibold))
-                    Text(reason.message)
-                        .settingsCaption()
-                    if let url = Self.detailsURL {
-                        Link("Learn more", destination: url)
-                            .font(.system(size: 11))
+                    Text(
+                        "macOS will ask folder by folder as terminal commands touch "
+                            + "Documents, Downloads, and other protected locations. "
+                            + "One Full Disk Access grant covers them all."
+                    )
+                    .settingsCaption()
+                    if let url = FullDiskAccess.settingsURL {
+                        Button("Open System Settings…") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
                 }
             } icon: {
@@ -622,6 +628,7 @@ private struct AppearanceSettings: View {
     @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
+    @State private var autoNameTabs: Bool = Preferences.shared.autoNameTabs
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
@@ -728,6 +735,13 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
+
+                Toggle("Auto-name tabs", isOn: $autoNameTabs)
+                    .onChange(of: autoNameTabs) { _, v in
+                        Preferences.shared.autoNameTabs = v
+                    }
+                Text("Names tabs after the running program. When off, tabs show the shell or host name.")
+                    .settingsCaption()
 
                 Toggle("Show AI agent icons", isOn: $showAgentIcons)
                     .onChange(of: showAgentIcons) { _, v in
@@ -851,10 +865,6 @@ private struct AppearanceSettings: View {
 // MARK: - Quick Terminal
 
 private struct QuickTerminalSettings: View {
-    /// Seeded from / written back through `Preferences` — not `@AppStorage`
-    /// (banned `UserDefaults.standard`), and previously `enabled` wrote no
-    /// Preferences value at all, so the observable stayed stale.
-    @State private var enabled: Bool = Preferences.shared.quickTerminalEnabled
     @State
     private var positionMode: QuickTerminalAdjustMode = Preferences.shared.quickTerminalPositionMode
     @State
@@ -873,105 +883,88 @@ private struct QuickTerminalSettings: View {
     var body: some View {
         Form {
             Section("Quick Terminal") {
-                Toggle("Enable quick terminal", isOn: $enabled)
-                    .onChange(of: enabled) { _, v in
-                        Preferences.shared.quickTerminalEnabled = v
-                    }
                 LabeledContent(
                     "Shortcut",
                     value: HotkeyRegistry.displayString(
                         for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
                     )
                 )
-                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps.")
+                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps, or clear it to disable the quick terminal.")
                     .settingsCaption()
             }
 
-            // The shared `!enabled` gate sits on each section's Group so the
-            // captions dim with their controls (nested `.disabled` ANDs with
-            // it — an inner `false` never re-enables).
             Section("Position") {
-                Group {
-                    Picker(selection: $positionMode) {
-                        ForEach(QuickTerminalAdjustMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    } label: {
-                        Text("Mode").dimsWhenDisabled()
+                Picker("Mode", selection: $positionMode) {
+                    ForEach(QuickTerminalAdjustMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
-                    .onChange(of: positionMode) { _, v in
-                        Preferences.shared.quickTerminalPositionMode = v
-                    }
-                    Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and remembers where you drag it.")
-                        .settingsCaption()
-
-                    SettingsSlider(
-                        label: "X",
-                        value: $fixedX,
-                        range: 0 ... 1,
-                        step: 0.05,
-                        display: { anchorName($0, zero: "Left", one: "Right") }
-                    )
-                    .onChange(of: fixedX) { _, v in
-                        Preferences.shared.quickTerminalFixedX = v
-                    }
-                    .disabled(positionMode != .fixed)
-
-                    SettingsSlider(
-                        label: "Y",
-                        value: $fixedYTopDown,
-                        range: 0 ... 1,
-                        step: 0.05,
-                        display: { anchorName($0, zero: "Top", one: "Bottom") }
-                    )
-                    .onChange(of: fixedYTopDown) { _, v in
-                        Preferences.shared.quickTerminalFixedY = 1 - v
-                    }
-                    .disabled(positionMode != .fixed)
                 }
-                .disabled(!enabled)
+                .onChange(of: positionMode) { _, v in
+                    Preferences.shared.quickTerminalPositionMode = v
+                }
+                Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and remembers where you drag it.")
+                    .settingsCaption()
+
+                SettingsSlider(
+                    label: "X",
+                    value: $fixedX,
+                    range: 0 ... 1,
+                    step: 0.05,
+                    display: { anchorName($0, zero: "Left", one: "Right") }
+                )
+                .onChange(of: fixedX) { _, v in
+                    Preferences.shared.quickTerminalFixedX = v
+                }
+                .disabled(positionMode != .fixed)
+
+                SettingsSlider(
+                    label: "Y",
+                    value: $fixedYTopDown,
+                    range: 0 ... 1,
+                    step: 0.05,
+                    display: { anchorName($0, zero: "Top", one: "Bottom") }
+                )
+                .onChange(of: fixedYTopDown) { _, v in
+                    Preferences.shared.quickTerminalFixedY = 1 - v
+                }
+                .disabled(positionMode != .fixed)
             }
 
             Section("Size") {
-                Group {
-                    Picker(selection: $sizeMode) {
-                        ForEach(QuickTerminalAdjustMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    } label: {
-                        Text("Mode").dimsWhenDisabled()
+                Picker("Mode", selection: $sizeMode) {
+                    ForEach(QuickTerminalAdjustMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
-                    .onChange(of: sizeMode) { _, v in
-                        Preferences.shared.quickTerminalSizeMode = v
-                    }
-                    Text("Fixed sizes the panel with the sliders. Dynamic lets you resize it from its edges and reopens it at that size.")
-                        .settingsCaption()
-
-                    SettingsSlider(
-                        label: "Width",
-                        value: $qtWidth,
-                        range: 0.2 ... 1.0,
-                        step: 0.05,
-                        display: { "\(Int(($0 * 100).rounded()))%" }
-                    )
-                    .onChange(of: qtWidth) { _, v in
-                        Preferences.shared.quickTerminalWidthFraction = v
-                    }
-                    .disabled(sizeMode != .fixed)
-
-                    SettingsSlider(
-                        label: "Height",
-                        value: $qtHeight,
-                        range: 0.2 ... 1.0,
-                        step: 0.05,
-                        display: { "\(Int(($0 * 100).rounded()))%" }
-                    )
-                    .onChange(of: qtHeight) { _, v in
-                        Preferences.shared.quickTerminalHeightFraction = v
-                    }
-                    .disabled(sizeMode != .fixed)
                 }
-                .disabled(!enabled)
+                .onChange(of: sizeMode) { _, v in
+                    Preferences.shared.quickTerminalSizeMode = v
+                }
+                Text("Fixed sizes the panel with the sliders. Dynamic lets you resize it from its edges and reopens it at that size.")
+                    .settingsCaption()
+
+                SettingsSlider(
+                    label: "Width",
+                    value: $qtWidth,
+                    range: 0.2 ... 1.0,
+                    step: 0.05,
+                    display: { "\(Int(($0 * 100).rounded()))%" }
+                )
+                .onChange(of: qtWidth) { _, v in
+                    Preferences.shared.quickTerminalWidthFraction = v
+                }
+                .disabled(sizeMode != .fixed)
+
+                SettingsSlider(
+                    label: "Height",
+                    value: $qtHeight,
+                    range: 0.2 ... 1.0,
+                    step: 0.05,
+                    display: { "\(Int(($0 * 100).rounded()))%" }
+                )
+                .onChange(of: qtHeight) { _, v in
+                    Preferences.shared.quickTerminalHeightFraction = v
+                }
+                .disabled(sizeMode != .fixed)
             }
         }
         .formStyle(.grouped)

@@ -95,6 +95,9 @@ struct MainWindow: View {
                     // content width regardless) — kept as the honest request
                     // for the launch width AppKit actually installs.
                     ideal: CGFloat(Preferences.shared.launchSidebarWidth),
+                    // Also ignored — a drag sails straight past it. The cap
+                    // that holds is `WindowAppearance.enforceSidebarWidthLimit`
+                    // (NSSplitViewItem.maximumThickness, re-asserted per drag).
                     max: CGFloat(Preferences.sidebarWidthRange.upperBound)
                 )
                 .onGeometryChange(for: CGFloat.self) { proxy in

@@ -12,4 +12,4 @@ Macterm reads your `~/.config/ghostty/config` on launch — themes, fonts, palet
 
 Macterm-specific settings — window opacity, blur style, quick-terminal size, and hotkeys — live in **Macterm → Settings**. A few Ghostty keys are overridden because Macterm owns that chrome: `background-opacity` and `background-blur` are forced to `0` (use Settings instead), and titlebar, window-decoration, split-divider, and quick-terminal settings are ignored.
 
-> The `ssh-env`, `ssh-terminfo`, and `path` features require the `ghostty` CLI — install Ghostty.app to enable them.
+> The `ssh-env` and `ssh-terminfo` shell-integration features work out of the box — Macterm serves them natively (via `macterm ssh`), no Ghostty.app needed. The `path` feature is disabled: Macterm ships no `ghostty` CLI to put on your PATH (the bundled `macterm` CLI is already there).

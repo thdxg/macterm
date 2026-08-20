@@ -36,9 +36,10 @@ struct ZmxClient {
     /// foreground (`comm` for tab naming, full command line for layout `run:`
     /// capture) for every `macterm-*` session there, via
     /// `RemoteSpawn.foregroundProbeArgv`. `zmxPath` (optional) is the explicit
-    /// remote zmx path. nil result = probe failed (unreachable / auth /
-    /// timeout) — `RemoteForegroundResolver` degrades silently.
-    var remoteForegrounds: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> [String: RemoteForeground]?
+    /// remote zmx path. Failures are classified (`RemoteProbeOutcome`) so the
+    /// resolver can keep retrying a flaky link but suspend a host that
+    /// refused our non-interactive auth (#272).
+    var remoteForegrounds: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> RemoteProbeOutcome
     /// Each live Macterm session with its attached-client count, or nil when the
     /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
     /// successful empty listing. An entry's `clients == nil` marks an unknown
@@ -120,15 +121,21 @@ extension ZmxClient {
             },
             remoteForegrounds: { remote, zmxPath in
                 guard let argv = RemoteSpawn.foregroundProbeArgv(remote: remote, zmxPath: zmxPath)
-                else { return nil }
-                guard let stdout = await runZmx(
+                else { return .unreachable }
+                // The raw subprocess outcome, not the exit-zero-only wrapper:
+                // classification needs ssh's stderr to tell a refused auth
+                // (suspend the host, #272) from a flaky link (keep retrying).
+                guard let outcome = await runZmxProcess(
                     argv,
                     executable: URL(fileURLWithPath: "/usr/bin/ssh"),
                     captureStdout: true,
                     timeout: .seconds(10)
                 )
-                else { return nil }
-                return RemoteForegroundResolver.parseProbeOutput(stdout)
+                else { return .unreachable }
+                guard outcome.exitStatus == 0 else {
+                    return RemoteProbeOutcome.classifyFailure(stderr: outcome.stderr)
+                }
+                return .success(RemoteForegroundResolver.parseProbeOutput(outcome.stdout))
             },
             listSessionsWithClients: {
                 // nil from runZmx is the UNKNOWN signal (spawn error / timeout /
@@ -167,7 +174,7 @@ extension ZmxClient {
         isBundled: { false },
         killSession: { _ in },
         killRemoteSession: { _, _, _ in },
-        remoteForegrounds: { _, _ in nil },
+        remoteForegrounds: { _, _ in .unreachable },
         listSessionsWithClients: { [] },
         sessionLeaderPIDs: { [:] },
         sessionListSnapshot: { (entries: [], leaders: [:]) }
@@ -248,12 +255,37 @@ extension ZmxClient {
     /// `bundledExecutable` so kill paths work even when this launch is over
     /// budget. Remote callers pass a longer `timeout`: ssh's ConnectTimeout
     /// alone can eat the local 5s budget.
+    /// A completed subprocess: exit status plus both captured streams.
+    /// Callers that only care about happy-path stdout use the `runZmx`
+    /// wrapper; the probe path reads `exitStatus`/`stderr` itself to
+    /// classify failures (`RemoteProbeOutcome`).
+    private struct SubprocessOutcome {
+        let exitStatus: Int32
+        let stdout: String
+        let stderr: String
+    }
+
+    /// Exit-zero-only convenience over `runZmxProcess`: nil on spawn
+    /// failure, timeout, or non-zero exit; stdout only when requested.
     private static func runZmx(
         _ arguments: [String],
         executable: URL?,
         captureStdout: Bool = false,
         timeout: Duration = subprocessTimeout
     ) async -> String? {
+        guard let outcome = await runZmxProcess(
+            arguments, executable: executable, captureStdout: captureStdout, timeout: timeout
+        ), outcome.exitStatus == 0
+        else { return nil }
+        return captureStdout ? outcome.stdout : nil
+    }
+
+    private static func runZmxProcess(
+        _ arguments: [String],
+        executable: URL?,
+        captureStdout: Bool = false,
+        timeout: Duration = subprocessTimeout
+    ) async -> SubprocessOutcome? {
         guard let executable else { return nil }
         let commandDesc = "\(executable.lastPathComponent) " + arguments.joined(separator: " ")
         let process = Process()
@@ -297,13 +329,20 @@ extension ZmxClient {
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
         let stderrBuffer = OSAllocatedUnfairLock(initialState: Data())
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if chunk.isEmpty {
-                handle.readabilityHandler = nil
-                return
+        // Same EOF signalling as stdout: `terminationHandler` can fire before
+        // the last stderr chunk is delivered, and the probe path CLASSIFIES
+        // failures by stderr content — a truncated "Permission denied" would
+        // silently downgrade an auth refusal to a transient failure.
+        let stderrEOF = AsyncStream<Void> { continuation in
+            stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+                let chunk = handle.availableData
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    continuation.finish()
+                    return
+                }
+                stderrBuffer.withLock { $0.append(chunk) }
             }
-            stderrBuffer.withLock { $0.append(chunk) }
         }
 
         // `terminationHandler` is the cancellation-safe exit signal; wired
@@ -352,11 +391,19 @@ extension ZmxClient {
             return nil
         }
         if exitStatus != 0 {
+            // Wait (bounded) for stderr EOF so the classification-bearing
+            // tail has landed before we read the buffer.
+            _ = await withTaskGroup(of: Void.self) { group in
+                group.addTask { for await _ in stderrEOF {} }
+                group.addTask { try? await Task.sleep(for: .seconds(1)) }
+                defer { group.cancelAll() }
+                await group.next()
+            }
             let stderr = stderrBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
             logger.warning("\(commandDesc, privacy: .public) exit=\(exitStatus, privacy: .public) stderr=\(stderr, privacy: .public)")
-            return nil
+            return SubprocessOutcome(exitStatus: exitStatus, stdout: "", stderr: stderr)
         }
-        guard captureStdout else { return nil }
+        guard captureStdout else { return SubprocessOutcome(exitStatus: 0, stdout: "", stderr: "") }
         // `terminationHandler` can fire before the final `readabilityHandler`
         // chunk (and its EOF) have been delivered, so the buffer may still be
         // missing the tail. Wait for the handler's own empty-chunk EOF signal
@@ -371,7 +418,8 @@ extension ZmxClient {
             defer { group.cancelAll() }
             await group.next()
         }
-        return stdoutBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
+        let stdout = stdoutBuffer.withLock { String(data: $0, encoding: .utf8) ?? "" }
+        return SubprocessOutcome(exitStatus: 0, stdout: stdout, stderr: "")
     }
 }
 
