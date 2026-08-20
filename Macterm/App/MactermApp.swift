@@ -60,6 +60,22 @@ struct MactermApp: App {
                 } message: {
                     Text("A process is still running in this tab. Closing the tab ends it.")
                 }
+                .alert(
+                    "Remove pinned tab with running processes?",
+                    isPresented: Binding(
+                        get: { appState.pendingRemovePinnedTab != nil },
+                        set: { if !$0 { appState.cancelPendingRemovePinnedTab() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingRemovePinnedTab()
+                    }
+                    Button("Remove", role: .destructive) {
+                        appState.confirmPendingRemovePinnedTab()
+                    }
+                } message: {
+                    Text("A process is still running in this tab. Removing the pin ends it and forgets the saved layout.")
+                }
                 // Every alert below that Settings also carries is gated on the
                 // staging call's `DialogHost` — see the enum's doc comment: an
                 // ungated binding presents in BOTH scenes, which opens the
@@ -149,7 +165,10 @@ struct MactermApp: App {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore
                     NotificationHandler.shared.appState = appState
-                    appDelegate.onTerminate = { [appState] in appState.saveWorkspaces() }
+                    // Termination persists the snapshot AND refreshes the
+                    // pinned declarations (`pinned.yaml`) from live state —
+                    // the moment the respawn recipes are about to matter.
+                    appDelegate.onTerminate = { [appState] in appState.persistForTermination() }
                     appDelegate.installResponders(appState: appState, projectStore: projectStore)
                 }
         }
@@ -704,7 +723,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for ws in appState?.workspaces.values ?? [:].values {
             let project = projectsByID[ws.projectID]
-            let projectName = project?.name ?? "Project"
+            let projectName = ws.projectID == PinnedTabs.projectID
+                ? PinnedTabs.displayName
+                : (project?.name ?? "Project")
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.needsConfirmClose {
                     // The adaptive poll may be slow or fully paused here (e.g.

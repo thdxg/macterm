@@ -664,7 +664,7 @@ struct AppStateTests {
 
         state.selectTab(tab.id, projectID: project.id)
 
-        let restored = WorkspaceSerializer.restore(from: store.load(), validIDs: [project.id])
+        let restored = WorkspaceSerializer.restore(from: store.load().workspaces, validIDs: [project.id])
         #expect(restored.first?.tabs.first?.executionState == .idle)
     }
 
@@ -684,7 +684,7 @@ struct AppStateTests {
 
         state.selectProject(p1)
 
-        let restored = WorkspaceSerializer.restore(from: store.load(), validIDs: [p1.id])
+        let restored = WorkspaceSerializer.restore(from: store.load().workspaces, validIDs: [p1.id])
         #expect(restored.first?.tabs.first?.executionState == .idle)
     }
 
@@ -1853,7 +1853,7 @@ struct AppStateTests {
 
         // The reorder persisted: a fresh store reading the same file sees it.
         let reloaded = WorkspaceStore(fileURL: storeURL).load()
-        let saved = try #require(reloaded.first { $0.projectID == p.id })
+        let saved = try #require(reloaded.workspaces.first { $0.projectID == p.id })
         #expect(saved.tabs.map(\.id) == [t2, t1])
     }
 

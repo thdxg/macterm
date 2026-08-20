@@ -45,6 +45,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case saveLayout = "save_layout"
     case separateAllPanes = "separate_all_panes"
     case separateCurrentPane = "separate_current_pane"
+    case pinTab = "pin_tab"
+    case unpinTab = "unpin_tab"
 
     var id: String { rawValue }
 
@@ -108,6 +110,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // pane tree (shells survive, but the layout doesn't).
         case .separateAllPanes: "none"
         case .separateCurrentPane: "none"
+        // Unbound by default: pinning moves the tab between sidebar sections,
+        // which is disorienting from a stray chord.
+        case .pinTab: "none"
+        case .unpinTab: "none"
         }
     }
 }

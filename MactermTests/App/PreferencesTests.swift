@@ -88,4 +88,39 @@ struct PreferencesTests {
         #expect(Preferences.clampSidebarWidth(range.upperBound + 40) == range.upperBound)
         #expect(Preferences.clampSidebarWidth(213.5) == 213.5)
     }
+
+    @Test
+    func ghostty_config_matches_ghostty_macos_precedence() {
+        let appSupport = "/Application Support/com.mitchellh.ghostty"
+        let xdg = "/xdg/ghostty"
+        let candidates = [
+            "/Application Support/com.mitchellh.ghostty/config.ghostty",
+            "/Application Support/com.mitchellh.ghostty/config",
+            "/xdg/ghostty/config.ghostty",
+            "/xdg/ghostty/config",
+        ]
+
+        for expected in candidates {
+            #expect(Preferences.preferredGhosttyConfigPath(
+                applicationSupportConfigDirectory: appSupport,
+                xdgConfigDirectory: xdg,
+                fileIsNonEmpty: { $0 == expected }
+            ) == expected)
+        }
+
+        #expect(Preferences.preferredGhosttyConfigPath(
+            applicationSupportConfigDirectory: appSupport,
+            xdgConfigDirectory: xdg,
+            fileIsNonEmpty: { _ in true }
+        ) == candidates[0])
+    }
+
+    @Test
+    func ghostty_config_defaults_to_current_application_support_path() {
+        #expect(Preferences.preferredGhosttyConfigPath(
+            applicationSupportConfigDirectory: "/Application Support/com.mitchellh.ghostty",
+            xdgConfigDirectory: "/xdg/ghostty",
+            fileIsNonEmpty: { _ in false }
+        ) == "/Application Support/com.mitchellh.ghostty/config.ghostty")
+    }
 }

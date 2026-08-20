@@ -142,6 +142,37 @@ struct SidebarContent: View {
 
     var body: some View {
         List(selection: $selection) {
+            // Pinned tabs live above every project as flat rows (no header,
+            // no disclosure), wrapped in a headerless Section so their ForEach
+            // sits inside a container — mirroring the tab ForEach below, whose
+            // `.dropDestination` insertion line works there while the same
+            // API on a BARE top-level ForEach crashes the outline accept (see
+            // the project ForEach's notes below). The drop mechanism is the
+            // native insertion line, exactly like a project's tab list: the
+            // ForEach reports the insertion offset, a drop pins (or reorders /
+            // separates a pane) at that slot, and rows carry NO destinations
+            // of their own (a row-level target would kill the line — see
+            // `tabRow`). The always-available target — and the ONLY one when
+            // no pinned rows exist yet — is the pin drop zone strip above the
+            // list (see `PinTabDropZone`).
+            Section {
+                ForEach(Array(appState.pinnedRecords.enumerated()), id: \.element.id) { index, record in
+                    pinnedRow(record: record, index: index)
+                }
+                .dropDestination(for: TabSlotDropItem.self) { items, offset in
+                    for item in items {
+                        switch item {
+                        case let .tab(tab):
+                            receivePinnedTabDrop(tab, at: offset)
+                        case let .pane(pane):
+                            // The offset counts RECORDS (unloaded rows
+                            // included) — the pinned-aware API owns the
+                            // conversion to the live-tab index.
+                            appState.separatePaneIntoPinned(pane.paneID, atRecordIndex: offset)
+                        }
+                    }
+                }
+            }
             ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
                 projectSection(index: projectIndex, project: project)
             }
@@ -176,6 +207,21 @@ struct SidebarContent: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        // The pin drop zone: a thin strip above the list that expands into a
+        // visible "Pin Tab" band while a tab/pane drag hovers it. It lives
+        // OUTSIDE the List on purpose — a plain view's `.dropDestination` has
+        // none of the outline view's drop hazards (see the notes inside the
+        // List body), and it exists even with zero pinned rows, so the FIRST
+        // pin can be a drag too.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            // Same handlers as the insertion line, fixed at the first slot
+            // — the strip and the line are one operation, so a routing fix
+            // in one can't strand the other.
+            PinTabDropZone(
+                onPinTab: { receivePinnedTabDrop($0, at: 0) },
+                onPinPane: { appState.separatePaneIntoPinned($0.paneID, atRecordIndex: 0) }
+            )
+        }
         .sidebarSafeAreaBar(isPresented: showNewProjectButton) {
             HStack(spacing: 0) {
                 Menu {
@@ -210,6 +256,9 @@ struct SidebarContent: View {
             case let .project(projectID):
                 guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return }
                 appState.selectProject(project)
+            case let .tab(PinnedTabs.projectID, tabID):
+                // Loaded → select; unloaded → restore from declaration.
+                appState.selectPinnedTab(tabID)
             case let .tab(projectID, tabID):
                 if let project = projectStore.projects.first(where: { $0.id == projectID }) {
                     appState.selectProject(project)
@@ -218,7 +267,9 @@ struct SidebarContent: View {
             }
         }
         .onChange(of: appState.activeProjectID) { _, newID in
-            if let newID { expandedProjects.insert(newID) }
+            if let newID, newID != PinnedTabs.projectID {
+                expandedProjects.insert(newID)
+            }
             syncSelection()
         }
         .onChange(of: activeTabID) {
@@ -227,6 +278,64 @@ struct SidebarContent: View {
         .onAppear {
             if let id = appState.activeProjectID { expandedProjects.insert(id) }
             syncSelection()
+        }
+    }
+
+    // MARK: - Pinned rows
+
+    /// One pinned row: loaded (a live tab, standard row treatment with a pin
+    /// icon) or unloaded (dimmed; selecting it rebuilds the tab from its
+    /// declaration). Draggable only — drops are the enclosing ForEach's
+    /// native insertion line (see `body`), and a row-level destination would
+    /// kill it, same as `tabRow` documents.
+    private func pinnedRow(record: PinnedTabRecord, index: Int) -> some View {
+        Group {
+            if let tab = appState.pinnedWorkspace?.tabs.first(where: { $0.id == record.id }) {
+                // The shared row with the pin as its fixed icon — pinned rows
+                // have no project section around them, so the pin is what
+                // says which rows these are.
+                SidebarTabRow(
+                    tab: tab,
+                    index: index + 1,
+                    iconSymbolOverride: "pin",
+                    onRename: { newName in
+                        tab.customTitle = newName.isEmpty ? nil : newName
+                        appState.saveWorkspaces()
+                    }
+                )
+            } else {
+                // Unloaded: the sessions ended (a close, or their own death).
+                // The row stays; selecting it restores from the layout.
+                Label {
+                    FadingText(record.displayTitle)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "pin.slash")
+                        .foregroundStyle(.tertiary)
+                }
+                .help("Not running — select to restore from its saved layout")
+            }
+        }
+        .padding(.trailing, rowTrailingInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .tag(SidebarItem.tab(projectID: PinnedTabs.projectID, tabID: record.id))
+        // Dragging a pinned row into a project unpins it (AppState.moveTab
+        // routes the record bookkeeping). Deliberately NO drop destination on
+        // the row — same rule as `tabRow`: any row-level target claims the
+        // drag before the ForEach's insertion mechanism sees it and kills the
+        // native insertion line.
+        .draggable(MovableTab(tabID: record.id, sourceProjectID: PinnedTabs.projectID))
+    }
+
+    /// A tab dropped at a pinned insertion offset (the ForEach's native
+    /// insertion line): from a project → pin there; from within the pinned
+    /// rows → reorder (`reorderPinnedTab` speaks the same pre-removal offset).
+    private func receivePinnedTabDrop(_ item: MovableTab, at offset: Int) {
+        if item.sourceProjectID == PinnedTabs.projectID {
+            appState.reorderPinnedTab(item.tabID, toIndex: offset)
+        } else {
+            appState.pinTab(item.tabID, fromProject: item.sourceProjectID, toRecordIndex: offset)
         }
     }
 
@@ -436,6 +545,10 @@ struct SidebarContent: View {
                 if let project = projectStore.projects.first(where: { $0.id == id }) {
                     projectMenu(project)
                 }
+            case let .tab(PinnedTabs.projectID, tabID):
+                if let record = appState.pinnedRecord(tabID) {
+                    pinnedTabMenu(record: record)
+                }
             case let .tab(projectID, tabID):
                 if let project = projectStore.projects.first(where: { $0.id == projectID }),
                    let tab = appState.workspaces[projectID]?.tabs.first(where: { $0.id == tabID })
@@ -488,6 +601,68 @@ struct SidebarContent: View {
         }
     }
 
+    /// A pinned row's menu — three exits with distinct semantics: Unpin (a
+    /// move back to a project, nothing killed), Close (an unload: processes
+    /// end, the row and layout stay), and Remove from Pinned (gone for good,
+    /// busy-confirmed).
+    @ViewBuilder
+    private func pinnedTabMenu(record: PinnedTabRecord) -> some View {
+        let isLoaded = appState.isPinnedTabLoaded(record.id)
+        if isLoaded {
+            Button("Rename Tab") { appState.renamingTabID = record.id }
+            if let tab = appState.pinnedWorkspace?.tabs.first(where: { $0.id == record.id }),
+               tab.splitRoot.allPanes().count > 1
+            {
+                Button("Separate Panes") {
+                    appState.separateTabPanes(record.id, projectID: PinnedTabs.projectID)
+                }
+            }
+            Divider()
+        }
+        let index = appState.pinnedRecords.firstIndex(where: { $0.id == record.id }) ?? 0
+        Button("Move Up") {
+            appState.reorderPinnedTab(record.id, toIndex: index - 1)
+        }
+        .disabled(index <= 0)
+        Button("Move Down") {
+            appState.reorderPinnedTab(record.id, toIndex: index + 2)
+        }
+        .disabled(index >= appState.pinnedRecords.count - 1)
+        if isLoaded, !projectStore.projects.isEmpty {
+            Menu("Unpin to Project") {
+                ForEach(projectStore.projects) { destination in
+                    Button(destination.name) {
+                        appState.moveTab(
+                            record.id,
+                            from: PinnedTabs.projectID,
+                            to: destination.id,
+                            destPath: destination.path
+                        )
+                        expandedProjects.insert(destination.id)
+                    }
+                }
+            }
+        }
+        Divider()
+        if isLoaded {
+            // Unpin = a MOVE back to the origin project (nothing killed).
+            Button("Unpin Tab") {
+                appState.unpinTab(record.id, projects: projectStore.projects)
+            }
+            // Close = UNLOAD: processes end, the dimmed row and its saved
+            // layout stay, and the next launch starts it again.
+            Button("Close Tab", role: .destructive) {
+                appState.requestCloseTab(record.id, projectID: PinnedTabs.projectID)
+            }
+        }
+        // Remove = gone for good: sessions end (busy-confirmed), the record
+        // and its pinned.yaml entry are forgotten. For an unloaded record
+        // nothing is running, so it just forgets the declaration.
+        Button("Remove from Pinned", role: .destructive) {
+            appState.requestRemovePinnedTab(record.id)
+        }
+    }
+
     @ViewBuilder
     private func tabMenu(project: Project, tab: TerminalTab) -> some View {
         Button("Rename Tab") { appState.renamingTabID = tab.id }
@@ -519,6 +694,9 @@ struct SidebarContent: View {
                     }
                 }
             }
+        }
+        Button("Pin Tab") {
+            appState.pinTab(tab.id, fromProject: project.id)
         }
         Divider()
         Button("Close Tab", role: .destructive) {
@@ -556,9 +734,14 @@ struct SidebarContent: View {
         var tabRefs: [(tabID: UUID, projectID: UUID)] = []
         for item in items {
             switch item {
+            case .project(PinnedTabs.projectID):
+                // The pinned section can't be removed.
+                break
             case let .project(id):
                 projectIDs.append(id)
             case let .tab(projectID, tabID):
+                // Pinned tabs are included: `closeTabs` routes them to the
+                // unload path (record kept), matching a single-row close.
                 tabRefs.append((tabID: tabID, projectID: projectID))
             }
         }
@@ -661,6 +844,9 @@ private struct SidebarProjectRow: View {
 private struct SidebarTabRow: View {
     let tab: TerminalTab
     let index: Int
+    /// Fixed icon overriding the user's `tabIconSymbol` preference — the
+    /// pinned rows pass "pin" so the icon itself marks the row's kind.
+    var iconSymbolOverride: String?
     let onRename: (String) -> Void
     @Environment(AppState.self)
     private var appState
@@ -690,18 +876,8 @@ private struct SidebarTabRow: View {
                 .onSubmit { commit() }
                 .onExitCommand { cancelRename() }
                 .onAppear { focused = true }
-        } else if tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
-            // #227: a split tab reads as multiple tabs sharing one row — one
-            // chromeless title segment per pane instead of one tab
-            // concatenating the titles with a pipe. A custom title still
-            // wins: the user named the whole tab. Four or more panes won't
-            // fit legibly, so that row collapses back to a single tab titled
-            // with the pane count (see `sidebarRowTitle`). The segments are
-            // a TITLE variant, not their own labels: the row carries one tab
-            // icon regardless of how it is named.
-            splitSegments
         } else {
-            FadingText(tab.sidebarRowTitle)
+            TabRowTitle(tab: tab)
         }
     }
 
@@ -710,21 +886,14 @@ private struct SidebarTabRow: View {
         showAgentIcons ? tab.agentIcon : nil
     }
 
-    /// One title segment per pane, sharing the row in equal widths, divided
-    /// by hairlines so adjacent titles don't read as one run-on name.
-    private var splitSegments: some View {
-        HStack(spacing: 10) {
-            ForEach(Array(tab.splitRoot.allPanes().enumerated()), id: \.element.id) { i, pane in
-                if i > 0 { Divider() }
-                FadingText(pane.sidebarSegmentTitle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
+    /// The effective icon symbol: the override wins over the preference.
+    private var iconSymbol: String {
+        iconSymbolOverride ?? tabIconSymbol
     }
 
     var body: some View {
         Group {
-            if tabIconSymbol == Preferences.noIcon {
+            if iconSymbol == Preferences.noIcon {
                 Label {
                     titleContent
                 } icon: {
@@ -737,7 +906,7 @@ private struct SidebarTabRow: View {
                         // other icon-less row.
                         TabStatusGlyph(
                             state: tab.executionState,
-                            symbol: tabIconSymbol,
+                            symbol: iconSymbol,
                             index: index,
                             agent: agentIcon,
                             spinnerOverAgent: showSpinnerOverAgentIcons
@@ -745,7 +914,7 @@ private struct SidebarTabRow: View {
                     } else if let agentIcon {
                         // "None" suppresses the user's icon, not the agent
                         // logo — a live status signal, like the else branch.
-                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
+                        SidebarRowIcon(symbol: iconSymbol, index: index, agent: agentIcon)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -757,13 +926,13 @@ private struct SidebarTabRow: View {
                     if showTabStatusIndicator {
                         TabStatusGlyph(
                             state: tab.executionState,
-                            symbol: tabIconSymbol,
+                            symbol: iconSymbol,
                             index: index,
                             agent: agentIcon,
                             spinnerOverAgent: showSpinnerOverAgentIcons
                         )
                     } else {
-                        SidebarRowIcon(symbol: tabIconSymbol, index: index, agent: agentIcon)
+                        SidebarRowIcon(symbol: iconSymbol, index: index, agent: agentIcon)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -794,6 +963,84 @@ private struct SidebarTabRow: View {
     private func cancelRename() {
         isRenaming = false
         appState.restoreFocusToActivePane()
+    }
+}
+
+/// The pin drop zone at the top of the sidebar: a near-invisible strip that
+/// expands into a labeled "Pin Tab" band while a tab or pane drag hovers it,
+/// and pins the payload at the first slot on drop. The strip must keep a
+/// nonzero idle height — `isTargeted` only fires once the pointer is over the
+/// target, so a zero-height strip could never be discovered by a drag.
+private struct PinTabDropZone: View {
+    let onPinTab: (MovableTab) -> Void
+    let onPinPane: (MovablePane) -> Void
+    @State
+    private var isTargeted = false
+
+    var body: some View {
+        ZStack {
+            if isTargeted {
+                Label("Pin Tab", systemImage: "pin.fill")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(MactermTheme.accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(MactermTheme.accent.opacity(0.15))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(MactermTheme.accent.opacity(0.5), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: isTargeted ? 38 : 12)
+        .contentShape(Rectangle())
+        .dropDestination(for: TabSlotDropItem.self) { items, _ in
+            for item in items {
+                switch item {
+                case let .tab(tab):
+                    onPinTab(tab)
+                case let .pane(pane):
+                    onPinPane(pane)
+                }
+            }
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isTargeted = targeted
+            }
+        }
+    }
+}
+
+/// A tab row's display title, shared by project and pinned rows so the two
+/// render identically. #227: an unnamed split of 2-3 panes reads as multiple
+/// tabs sharing one row — one chromeless title segment per pane, divided by
+/// hairlines so adjacent titles don't read as one run-on name. A custom
+/// title still wins (the user named the whole tab), and four or more panes
+/// won't fit legibly, so that row collapses back to a single title with the
+/// pane count (see `sidebarRowTitle`). The segments are a TITLE variant, not
+/// their own labels: the row carries one tab icon regardless.
+private struct TabRowTitle: View {
+    let tab: TerminalTab
+
+    var body: some View {
+        if tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
+            HStack(spacing: 10) {
+                ForEach(Array(tab.splitRoot.allPanes().enumerated()), id: \.element.id) { i, pane in
+                    if i > 0 { Divider() }
+                    FadingText(pane.sidebarSegmentTitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        } else {
+            FadingText(tab.sidebarRowTitle)
+        }
     }
 }
 

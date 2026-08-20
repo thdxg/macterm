@@ -23,6 +23,18 @@ struct Project: Identifiable, Codable, Hashable {
         self.zmxPath = zmxPath
         createdAt = Date()
     }
+
+    /// Explicit-id variant for SYNTHETIC projects only (`PinnedTabs.project`).
+    /// Real projects always mint a fresh id above — a directory is not an
+    /// identity, and two projects may share a path.
+    init(id: UUID, name: String, path: String) {
+        self.id = id
+        self.name = name
+        self.path = path
+        sortOrder = 0
+        zmxPath = nil
+        createdAt = Date()
+    }
 }
 
 extension Project {

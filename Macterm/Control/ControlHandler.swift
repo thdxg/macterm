@@ -307,7 +307,14 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "project.select requires a project selector")
         }
         let project = try resolveProject(args.project)
-        appState.selectProject(project)
+        if project.id == PinnedTabs.projectID {
+            // The synthetic project must not go through `selectProject` — its
+            // first-open auto-apply would match a layout file declaring the
+            // home directory.
+            appState.selectPinnedProject()
+        } else {
+            appState.selectProject(project)
+        }
         return projectData(project)
     }
 
@@ -368,9 +375,12 @@ final class ControlHandler {
         }
         let (project, workspace) = try resolveWorkspace(args)
         let (_, tab) = try resolveTab(args, in: workspace)
-        // Closing kills the panes' zmx sessions. The UI stages a confirmation
-        // dialog for busy tabs; a headless caller gets a typed `busy` error
-        // instead — never a dialog the CLI can't answer.
+        // Closing kills the panes' zmx sessions. (For a PINNED tab, close is
+        // an unload: sessions end but the record and its pinned.yaml entry
+        // stay, and the next launch starts it again — unpin in the app is the
+        // removal path.) The UI stages a confirmation dialog for busy tabs; a
+        // headless caller gets a typed `busy` error instead — never a dialog
+        // the CLI can't answer.
         let busy = tab.splitRoot.allPanes().contains(where: \.needsConfirmClose)
         if busy, args.force != true {
             throw ControlError(
@@ -698,6 +708,7 @@ final class ControlHandler {
 
     private func layoutApply(_ args: ControlArgs) throws -> ControlData {
         let project = try resolveProject(args.project)
+        try rejectPinned(project, verb: "layout apply")
         if let error = appState.applyLayout(project: project) {
             throw ControlError(code: .notFound, message: error.localizedDescription)
         }
@@ -728,10 +739,25 @@ final class ControlHandler {
 
     private func layoutSave(_ args: ControlArgs) throws -> ControlData {
         let project = try resolveProject(args.project)
+        try rejectPinned(project, verb: "layout save")
         if let error = appState.saveLayout(project: project, siblingProjects: projectStore.projects) {
             throw ControlError(code: .internalError, message: error.localizedDescription)
         }
         return ControlData()
+    }
+
+    /// The layout verbs must never treat the SYNTHETIC pinned project as a
+    /// real one: `layout save` would write a project file declaring the home
+    /// directory (which first-open auto-apply would then pick up for any
+    /// home-rooted project), and `layout apply --force` would swap the pinned
+    /// workspace's tabs out from under the records.
+    private func rejectPinned(_ project: Project, verb: String) throws {
+        guard project.id == PinnedTabs.projectID else { return }
+        throw ControlError(
+            code: .badRequest,
+            message: "\(verb) doesn't apply to the pinned workspace — its layout is managed automatically",
+            action: "edit ~/.config/macterm/projects/pinned.yaml instead"
+        )
     }
 
     // MARK: - Selector resolution
@@ -752,6 +778,11 @@ final class ControlHandler {
 
     private func resolveProject(_ selector: String?) throws -> Project {
         guard let selector, !selector.isEmpty else {
+            // The pinned workspace resolves through its synthetic project so
+            // tab/pane verbs keep working while it's active.
+            if appState.activeProjectID == PinnedTabs.projectID {
+                return PinnedTabs.project
+            }
             guard let active = projectStore.projects.first(where: { $0.id == appState.activeProjectID }) else {
                 throw ControlError(
                     code: .notFound,
@@ -760,6 +791,14 @@ final class ControlHandler {
                 )
             }
             return active
+        }
+        // `--project pinned` (or the sentinel UUID) targets the pinned
+        // workspace. Checked before the name lookup so a user project that
+        // happens to be named "pinned" is still reachable by UUID/index.
+        if selector.lowercased() == PinnedTabs.displayName.lowercased()
+            || selector == PinnedTabs.projectID.uuidString
+        {
+            return PinnedTabs.project
         }
         let projects = projectStore.projects
         if let id = UUID(uuidString: selector), let match = projects.first(where: { $0.id == id }) {
