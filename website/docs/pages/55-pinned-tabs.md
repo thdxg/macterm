@@ -26,7 +26,7 @@ At pin time Macterm captures the tab's layout the same way **Save Layout** does 
 The pinned set lives in `~/.config/macterm/projects/pinned.yaml` — the one layout file Macterm maintains automatically (on pin, unpin, and quit). It's still yours to edit:
 
 ```yaml
-path: pinned
+path: <pinned>
 tabs:
   - name: dev server
     cwd: ~/dev/api

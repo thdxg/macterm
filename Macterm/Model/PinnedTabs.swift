@@ -20,11 +20,13 @@ enum PinnedTabs {
     static let displayName = "Pinned"
 
     /// The reserved `path:` literal that marks `pinned.yaml` as the pinned
-    /// set rather than a project declaration. Safe as a marker by
-    /// construction: `ProjectPath.parse` returns nil for it (not absolute,
-    /// `~`-prefixed, or scp-style), so `ProjectPath.matches` can never pair
-    /// it with a real project's path.
-    static let pathMarker = "pinned"
+    /// set rather than a project declaration. The angle brackets make the
+    /// sentinel VISIBLY impossible as a real path: they are illegal in
+    /// hostnames (so no `host:dir` spec can ever start this way), a local
+    /// path must start with `/` or `~`, and `<` is not a YAML indicator, so
+    /// the value needs no quoting. `ProjectPath.parse` returns nil for it,
+    /// so `ProjectPath.matches` can never pair it with a project's path.
+    static let pathMarker = "<pinned>"
 
     /// Where a NEW pinned tab (Cmd+T while the pinned workspace is active, a
     /// declared cwd-less leaf) starts: the user's home. Pinned tabs carry no

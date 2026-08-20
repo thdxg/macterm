@@ -12,7 +12,7 @@ private let logger = Logger(subsystem: appBundleID, category: "PinnedLayoutStore
 // every other layout file, editor validation included — whose `path:` is
 // the reserved literal `pinned` (see `PinnedTabs.pathMarker`):
 //
-//     path: pinned            # the marker that makes this file the pinned set
+//     path: <pinned>          # the marker that makes this file the pinned set
 //     tabs:
 //       - name: dev server
 //         run: npm run dev
@@ -23,8 +23,10 @@ private let logger = Logger(subsystem: appBundleID, category: "PinnedLayoutStore
 // panes, something project layouts (one root) can't express.
 //
 // The marker keeps the file out of the project-file machinery by
-// construction: `ProjectPath.parse("pinned")` is nil (not absolute, `~`, or
-// scp-style), so `ProjectPath.matches` pairs it with no project — plus
+// construction: `ProjectPath.parse("<pinned>")` is nil (not absolute, `~`,
+// or scp-style — and `<` is illegal in a hostname, so not even a mistyped
+// remote spec can look like it), so `ProjectPath.matches` pairs it with no
+// project — plus
 // `listAll` filters the reserved filename and `write` never binds or
 // realign-deletes it.
 
@@ -108,7 +110,7 @@ struct PinnedLayoutStore {
         /// external input" (never as "remove everything"), so an editor's
         /// delete-then-rewrite save can't spuriously unpin the whole set.
         case absent
-        /// Parsed and carries the `path: pinned` marker.
+        /// Parsed and carries the `path: <pinned>` marker.
         case file(tabs: [LayoutTab], text: String)
         /// Present but unparseable, or missing the marker (a foreign file —
         /// e.g. a hand-crafted project file squatting on the name). Callers

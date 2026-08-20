@@ -52,7 +52,7 @@ struct PinnedLayoutStoreTests {
             return
         }
         #expect(readTabs == tabs)
-        #expect(text.contains("path: pinned"))
+        #expect(text.contains("<pinned>"))
         #expect(text.contains("dev server"))
     }
 
@@ -60,7 +60,7 @@ struct PinnedLayoutStoreTests {
     func read_unparseable_yaml_is_invalid() throws {
         let (store, dir) = makeStore()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try "path: pinned\ntabs: [ {{".write(to: store.fileURL, atomically: true, encoding: .utf8)
+        try "path: <pinned>\ntabs: [ {{".write(to: store.fileURL, atomically: true, encoding: .utf8)
         guard case .invalid = store.read() else {
             Issue.record("expected .invalid")
             return
@@ -75,7 +75,7 @@ struct PinnedLayoutStoreTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try "path: ~/dev\ntabs:\n  - run: btop\n".write(to: store.fileURL, atomically: true, encoding: .utf8)
         guard case .invalid = store.read() else {
-            Issue.record("expected .invalid without the path: pinned marker")
+            Issue.record("expected .invalid without the path marker")
             return
         }
     }

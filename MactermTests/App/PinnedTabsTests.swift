@@ -69,7 +69,7 @@ struct PinnedTabsTests {
         fx.state.pinTab(tab.id, fromProject: p.id)
 
         let text = try String(contentsOf: fx.state.pinnedLayoutStore.fileURL, encoding: .utf8)
-        #expect(text.contains("path: pinned"))
+        #expect(text.contains("<pinned>"))
         // No wire-level ids — entries stay hand-editable.
         #expect(!text.contains(tab.id.uuidString))
     }
@@ -550,7 +550,7 @@ struct PinnedTabsTests {
         fx.state.pinTab(tab.id, fromProject: p.id) // creates a valid file
 
         // The user breaks the file mid-edit.
-        let broken = "path: pinned\ntabs: [ not yaml {"
+        let broken = "path: <pinned>\ntabs: [ not yaml {"
         try broken.write(to: fx.state.pinnedLayoutStore.fileURL, atomically: true, encoding: .utf8)
 
         // A membership change would normally rewrite — it must not clobber.
