@@ -68,7 +68,7 @@ Full guides live at **[macterm.thdxg.dev/docs](https://macterm.thdxg.dev/docs/)*
 
 - [Installation](https://macterm.thdxg.dev/docs/install) and [Configuration](https://macterm.thdxg.dev/docs/configuration)
 - [Command palette](https://macterm.thdxg.dev/docs/command-palette) and [Quick terminal](https://macterm.thdxg.dev/docs/quick-terminal)
-- [Declarative layouts](https://macterm.thdxg.dev/docs/declarative-layouts), [Session persistence](https://macterm.thdxg.dev/docs/session-persistence), and [Remote projects](https://macterm.thdxg.dev/docs/remote-projects)
+- [Declarative layouts](https://macterm.thdxg.dev/docs/declarative-layouts), [Pinned tabs](https://macterm.thdxg.dev/docs/pinned-tabs), [Session persistence](https://macterm.thdxg.dev/docs/session-persistence), and [Remote projects](https://macterm.thdxg.dev/docs/remote-projects)
 - [The `macterm` CLI](https://macterm.thdxg.dev/docs/cli)
 
 ### Cookbook
