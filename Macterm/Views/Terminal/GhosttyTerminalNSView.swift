@@ -446,8 +446,13 @@ final class GhosttyTerminalNSView: NSView {
             // later session's `remoteTermPreamble` settles on xterm-ghostty
             // instead of xterm-256color. Fire-and-forget by design: it must
             // never delay or fail this spawn, and the script's own COLORTERM
-            // export already guarantees truecolor without it.
-            RemoteTerminfoInstaller.shared.ensureInstalled(remote: remoteSpec)
+            // export already guarantees truecolor without it. Gated on the
+            // background-connections toggle like the foreground probe: it is
+            // its own ssh connection, so on a biometric-gated key it would
+            // raise a second Touch ID dialog beside the pane's own (#272).
+            if Preferences.shared.backgroundSSHConnections {
+                RemoteTerminfoInstaller.shared.ensureInstalled(remote: remoteSpec)
+            }
         } else {
             // Canonicalize before libghostty sees it: the string is exported
             // VERBATIM as the shell's $PWD, and a trailing slash there is
