@@ -281,6 +281,7 @@ enum WindowAppearance {
 
         disableSidebarEdgeHoverReveal(window: window)
         restoreSidebarWidth(window: window)
+        enforceSidebarWidthLimit(window: window)
         _ = disableProactivePeekOnce
     }
 
@@ -324,6 +325,71 @@ enum WindowAppearance {
         let width = CGFloat(Preferences.shared.launchSidebarWidth)
         split.setPosition(width, ofDividerAt: 0)
         logger.info("sidebar width restored to \(width, privacy: .public)")
+    }
+
+    /// Cap the sidebar column at `Preferences.sidebarWidthRange`'s upper bound.
+    ///
+    /// `navigationSplitViewColumnWidth`'s `max:` is as much a preference as its
+    /// `ideal:` — the column drags straight past it, across half the window.
+    /// The bound that actually binds is `NSSplitViewItem.maximumThickness`, but
+    /// it doesn't *stay* applied: SwiftUI re-applies its own column metrics on
+    /// events we can't enumerate (`PinnedSidebar` in Settings fights the same
+    /// reset). So besides asserting it here on every `sync`, the cap is
+    /// re-asserted from `NSSplitView.didResizeSubviewsNotification` — the one
+    /// notification a divider drag is guaranteed to fire, since a drag never
+    /// resizes the window — and any width that slipped past before the
+    /// re-assert landed is snapped back to the limit.
+    ///
+    /// Only the maximum is enforced. The minimum is SwiftUI's to manage: a
+    /// drag-to-collapse legitimately passes below it, and pinning
+    /// `minimumThickness` would fight that animation.
+    private struct SidebarClamp {
+        // A struct field, not a `static weak var` — the swiftformat and
+        // swiftlint configs disagree on that modifier order and reject each
+        // other's spelling.
+        weak var split: NSSplitView?
+        let observer: any NSObjectProtocol
+    }
+
+    private static var sidebarClamp: SidebarClamp?
+    /// Guards the re-assert: `setPosition` inside a resize notification posts
+    /// another one, which would recurse.
+    private static var isClampingSidebarWidth = false
+
+    private static func enforceSidebarWidthLimit(window: NSWindow) {
+        guard let split = window.contentView?.firstSplitView,
+              split.owningSplitViewController?.splitViewItems.first != nil
+        else { return }
+        clampSidebarWidth(split: split)
+        // One observer on the current split view; re-keyed if SwiftUI ever
+        // rebuilds it.
+        guard sidebarClamp?.split !== split else { return }
+        if let clamp = sidebarClamp {
+            NotificationCenter.default.removeObserver(clamp.observer)
+        }
+        let observer = NotificationCenter.default.addObserver(
+            forName: NSSplitView.didResizeSubviewsNotification,
+            object: split,
+            queue: .main
+        ) { [weak split] _ in
+            guard let split else { return }
+            MainActor.assumeIsolated { clampSidebarWidth(split: split) }
+        }
+        sidebarClamp = SidebarClamp(split: split, observer: observer)
+    }
+
+    private static func clampSidebarWidth(split: NSSplitView) {
+        guard !isClampingSidebarWidth,
+              let sidebar = split.owningSplitViewController?.splitViewItems.first,
+              !sidebar.isCollapsed
+        else { return }
+        isClampingSidebarWidth = true
+        defer { isClampingSidebarWidth = false }
+        let limit = CGFloat(Preferences.sidebarWidthRange.upperBound)
+        sidebar.maximumThickness = limit
+        if sidebar.viewController.view.frame.width > limit + 0.5 {
+            split.setPosition(limit, ofDividerAt: 0)
+        }
     }
 
     /// Our own autosave name for the sidebar split view, and a sweep of the
