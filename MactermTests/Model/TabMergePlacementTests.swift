@@ -6,45 +6,70 @@ import Testing
 /// positions a user aims at most and the ones an off-by-one loses first.
 @MainActor
 struct TabMergePlacementTests {
+    // MARK: - Where the seams are
+
+    /// Interior seams sit at the MIDPOINT of the gap between two segments,
+    /// because that is where the row draws its divider. Even fractions of the
+    /// row width land a few points beside it, which is visible when the whole
+    /// point is to line up with the `|` the user is aiming at.
+    @Test
+    func interior_seams_sit_on_the_divider_between_segments() {
+        let frames = [
+            CGRect(x: 0, y: 0, width: 90, height: 20),
+            CGRect(x: 100, y: 0, width: 90, height: 20),
+        ]
+        #expect(TabMergePlacement.seams(segmentFrames: frames) == [0, 95, 190])
+    }
+
+    @Test
+    func seams_are_ordered_even_when_the_frames_arrive_unordered() {
+        // Preference collection makes no ordering promise.
+        let frames = [
+            CGRect(x: 100, y: 0, width: 90, height: 20),
+            CGRect(x: 0, y: 0, width: 90, height: 20),
+        ]
+        #expect(TabMergePlacement.seams(segmentFrames: frames) == [0, 95, 190])
+    }
+
+    /// A row that drew no dividers has no seam to offer: its title is one
+    /// piece, or it collapsed to a pane count. The caller falls back to
+    /// appending at the trailing edge rather than inventing a position.
+    @Test
+    func a_row_without_segments_has_no_seams() {
+        #expect(TabMergePlacement.seams(segmentFrames: []).isEmpty)
+        #expect(TabMergePlacement.seams(segmentFrames: [CGRect(x: 0, y: 0, width: 90, height: 20)]).isEmpty)
+    }
+
     // MARK: - Which seam
 
-    /// Rounding to the nearest boundary, not flooring into a segment: with
-    /// flooring the last boundary is unreachable, and "after the last pane" is
-    /// the commonest intent there is.
+    /// Nearest seam, not "the segment x falls into": falling-in can never
+    /// choose the last seam, and "after everything" is the commonest intent.
     @Test
     func the_far_edges_are_reachable() {
-        #expect(TabMergePlacement.insertionIndex(x: 0, width: 300, paneCount: 3) == 0)
-        #expect(TabMergePlacement.insertionIndex(x: 300, width: 300, paneCount: 3) == 3)
+        let seams: [CGFloat] = [0, 95, 190]
+        #expect(TabMergePlacement.insertionIndex(x: 0, seams: seams) == 0)
+        #expect(TabMergePlacement.insertionIndex(x: 190, seams: seams) == 2)
     }
 
     @Test
     func the_nearest_seam_wins() {
-        // Three panes across 300pt: seams at 0, 100, 200, 300.
-        #expect(TabMergePlacement.insertionIndex(x: 40, width: 300, paneCount: 3) == 0)
-        #expect(TabMergePlacement.insertionIndex(x: 60, width: 300, paneCount: 3) == 1)
-        #expect(TabMergePlacement.insertionIndex(x: 149, width: 300, paneCount: 3) == 1)
-        #expect(TabMergePlacement.insertionIndex(x: 151, width: 300, paneCount: 3) == 2)
-    }
-
-    /// A single-pane tab still offers both sides: before it or after it.
-    @Test
-    func a_single_pane_row_still_has_two_sides() {
-        #expect(TabMergePlacement.insertionIndex(x: 10, width: 200, paneCount: 1) == 0)
-        #expect(TabMergePlacement.insertionIndex(x: 190, width: 200, paneCount: 1) == 1)
+        let seams: [CGFloat] = [0, 95, 190]
+        #expect(TabMergePlacement.insertionIndex(x: 40, seams: seams) == 0)
+        #expect(TabMergePlacement.insertionIndex(x: 60, seams: seams) == 1)
+        #expect(TabMergePlacement.insertionIndex(x: 140, seams: seams) == 1)
+        #expect(TabMergePlacement.insertionIndex(x: 150, seams: seams) == 2)
     }
 
     @Test
-    func a_pointer_past_the_edges_clamps() {
-        #expect(TabMergePlacement.insertionIndex(x: -50, width: 300, paneCount: 3) == 0)
-        #expect(TabMergePlacement.insertionIndex(x: 900, width: 300, paneCount: 3) == 3)
+    func a_pointer_past_the_edges_clamps_to_an_end_seam() {
+        let seams: [CGFloat] = [0, 95, 190]
+        #expect(TabMergePlacement.insertionIndex(x: -50, seams: seams) == 0)
+        #expect(TabMergePlacement.insertionIndex(x: 900, seams: seams) == 2)
     }
 
-    /// A row mid-teardown can report zero width or no panes; neither may
-    /// produce a NaN or a negative index.
     @Test
-    func degenerate_geometry_is_survivable() {
-        #expect(TabMergePlacement.insertionIndex(x: 10, width: 0, paneCount: 3) == 0)
-        #expect(TabMergePlacement.insertionIndex(x: 10, width: 300, paneCount: 0) == 0)
+    func no_seams_resolves_to_the_first_index() {
+        #expect(TabMergePlacement.insertionIndex(x: 10, seams: []) == 0)
     }
 
     // MARK: - Which target

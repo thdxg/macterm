@@ -13,6 +13,21 @@ private enum SidebarItem: Hashable {
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
+/// The row's own coordinate space, so a segment's frame is measured against
+/// the row that draws the join indicator rather than the window.
+private let tabRowSpace = "macterm.sidebar.tabRow"
+
+/// Where a split row actually drew its per-pane segments. The join indicator
+/// has to sit on the divider the user is aiming at, and only the layout knows
+/// where that ended up.
+private struct TabSegmentFramesKey: PreferenceKey {
+    static let defaultValue: [CGRect] = []
+
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
 /// Keeps the sidebar footer above scrolling rows, using the native macOS 26
 /// scroll-edge fade when available.
 private extension View {
@@ -269,41 +284,22 @@ struct SidebarContent: View {
     }
 
     private func tabRow(tab: TerminalTab, index tabIndex: Int, project: Project) -> some View {
-        SidebarTabRow(
+        TabRow(
             tab: tab,
             index: tabIndex + 1,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
+            },
+            onMergeDrop: { item, insertionIndex in
+                receiveMergeDrop(item, into: tab, project: project, at: insertionIndex)
             }
         )
-        .padding(.trailing, rowTrailingInset)
-        // Stretch to the full row and make every point hit-testable: without
-        // this, the drag grab area hugs the label's intrinsic width instead
-        // of covering the whole row.
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
         // Drag a tab out to another project (or reorder within this one). The
         // payload is just IDs — the live tab is looked up on drop, never
         // serialized.
         .draggable(MovableTab(tabID: tab.id, sourceProjectID: project.id))
-        // The row's ONE drop target is the merge band across its middle, and
-        // it must never reach the row's top and bottom edges. A destination
-        // covering the whole row — even one registered for a single payload
-        // type — claims every drag over it before the tab ForEach's insertion
-        // mechanism sees it (SwiftUI routes a drag to the topmost target by
-        // geometry with no type fall-through), which kills the native
-        // insertion line and broke tab reordering outright when tried. Leaving
-        // the outer bands uncovered is what lets one row mean three things:
-        // insert above, join, insert below. The cost is unchanged for PROJECT
-        // drags — they still have nothing to land on over an expanded
-        // section's tab rows; drop those on a project header instead.
-        .overlay {
-            TabMergeSlot(paneIDs: tab.splitRoot.allPanes().map(\.id)) { item, insertionIndex in
-                receiveMergeDrop(item, into: tab, project: project, at: insertionIndex)
-            }
-        }
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
@@ -706,6 +702,52 @@ private struct SidebarProjectRow: View {
     }
 }
 
+/// One tab's row: the label, the seams its split segments were drawn at, and
+/// the merge band that uses them.
+///
+/// A view rather than a function on `SidebarContent` because the seams are
+/// measured state: the segments report their frames through a preference, and
+/// the band needs them to draw the indicator on the divider rather than a few
+/// points beside it.
+private struct TabRow: View {
+    let tab: TerminalTab
+    let index: Int
+    let onRename: (String) -> Void
+    let onMergeDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
+
+    @State
+    private var seams: [CGFloat] = []
+
+    var body: some View {
+        SidebarTabRow(tab: tab, index: index, onRename: onRename)
+            .padding(.trailing, rowTrailingInset)
+            // Stretch to the full row and make every point hit-testable:
+            // without this, the drag grab area hugs the label's intrinsic
+            // width instead of covering the whole row.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .coordinateSpace(name: tabRowSpace)
+            .onPreferenceChange(TabSegmentFramesKey.self) { frames in
+                seams = TabMergePlacement.seams(segmentFrames: frames)
+            }
+            // The row's ONE drop target is the merge band across its middle,
+            // and it must never reach the row's top and bottom edges. A
+            // destination covering the whole row — even one registered for a
+            // single payload type — claims every drag over it before the tab
+            // ForEach's insertion mechanism sees it (SwiftUI routes a drag to
+            // the topmost target by geometry with no type fall-through), which
+            // kills the native insertion line and broke tab reordering
+            // outright when tried. Leaving the outer bands uncovered is what
+            // lets one row mean three things: insert above, join, insert
+            // below. The cost is unchanged for PROJECT drags — they still have
+            // nothing to land on over an expanded section's tab rows; drop
+            // those on a project header instead.
+            .overlay {
+                TabMergeSlot(paneIDs: tab.splitRoot.allPanes().map(\.id), seams: seams, onDrop: onMergeDrop)
+            }
+    }
+}
+
 /// The merge band across a tab row's middle: drop a pane (or another tab)
 /// here and it joins THIS tab's split tree, at the position you aimed at.
 ///
@@ -729,6 +771,8 @@ private struct TabMergeSlot: View {
     private static let minHeight: CGFloat = 10
 
     let paneIDs: [UUID]
+    /// Where the row drew its segment dividers, empty when it drew none.
+    let seams: [CGFloat]
     /// `@Sendable @MainActor` because the async payload fallback hands this to
     /// an item provider's completion, which runs off the main actor: a plain
     /// closure can't cross that boundary under Swift 6's isolation checking.
@@ -743,30 +787,33 @@ private struct TabMergeSlot: View {
     var body: some View {
         GeometryReader { geo in
             let bandHeight = max(geo.size.height * Self.heightFraction, Self.minHeight)
+            // A row that drew no dividers — a single-pane tab, or one collapsed
+            // to a pane count — offers exactly one position, the trailing edge:
+            // there is nothing visible to land BETWEEN, so the only honest
+            // indicator is "after what is here".
+            let positions = seams.isEmpty ? [geo.size.width - rowTrailingInset] : seams
             Color.clear
                 .frame(height: bandHeight)
                 .frame(maxHeight: .infinity, alignment: .center)
                 .onDrop(
                     of: [.mactermPaneID, .mactermTab],
                     delegate: TabMergeDropDelegate(
-                        paneCount: paneIDs.count,
-                        width: geo.size.width - rowTrailingInset,
+                        positions: positions,
+                        appendIndex: paneIDs.count,
+                        hasSeams: !seams.isEmpty,
                         insertionIndex: $insertionIndex,
                         onDrop: onDrop
                     )
                 )
                 .overlay {
                     if let insertionIndex {
-                        InsertionLine(
-                            index: insertionIndex,
-                            paneCount: paneIDs.count,
-                            size: CGSize(width: geo.size.width - rowTrailingInset, height: geo.size.height)
-                        )
-                        // The line is drawn OVER the whole row while the band
-                        // that reads the drop stays the middle half, so the
-                        // outer quarters keep belonging to the row-order
-                        // insertion line even though this one reaches them.
-                        .allowsHitTesting(false)
+                        let x = positions[min(insertionIndex, positions.count - 1)]
+                        InsertionLine(x: seams.isEmpty ? x : positions[insertionIndex], height: geo.size.height)
+                            // Drawn OVER the whole row while the band that
+                            // reads the drop stays the middle half, so the
+                            // outer quarters keep belonging to the row-order
+                            // insertion line even though this reaches them.
+                            .allowsHitTesting(false)
                     }
                 }
         }
@@ -781,29 +828,23 @@ private struct InsertionLine: View {
     private static let lineWidth: CGFloat = 2
     private static let dotDiameter: CGFloat = 6
 
-    let index: Int
-    let paneCount: Int
-    let size: CGSize
+    let x: CGFloat
+    let height: CGFloat
 
     var body: some View {
-        // Both ends are inset by half the line width so a seam at x=0 or
-        // x=width draws fully inside the row instead of half-clipped.
-        let clamped = max(1, paneCount)
-        let x = min(
-            max(size.width * CGFloat(index) / CGFloat(clamped), Self.lineWidth / 2),
-            size.width - Self.lineWidth / 2
-        )
         ZStack(alignment: .top) {
             Rectangle()
                 .fill(MactermTheme.accent)
-                .frame(width: Self.lineWidth, height: size.height)
+                .frame(width: Self.lineWidth, height: height)
             Circle()
                 .fill(MactermTheme.accent)
                 .frame(width: Self.dotDiameter, height: Self.dotDiameter)
                 .offset(y: -Self.dotDiameter / 3)
         }
-        .position(x: x, y: size.height / 2)
-        .animation(.easeInOut(duration: 0.08), value: index)
+        // Half the line width in from either end, so a seam at the row's edge
+        // draws fully inside it rather than half-clipped.
+        .position(x: max(x, Self.lineWidth / 2), y: height / 2)
+        .animation(.easeInOut(duration: 0.08), value: x)
     }
 }
 
@@ -812,8 +853,12 @@ private struct InsertionLine: View {
 /// the row IS the choice being made here. Payloads are therefore decoded the
 /// same way the workspace leaves decode them.
 private struct TabMergeDropDelegate: DropDelegate {
-    let paneCount: Int
-    let width: CGFloat
+    /// The x positions the indicator can occupy — the row's real dividers, or
+    /// a single trailing edge when it drew none.
+    let positions: [CGFloat]
+    /// The index a position-less row resolves to: append after every pane.
+    let appendIndex: Int
+    let hasSeams: Bool
     let insertionIndex: Binding<Int?>
     let onDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
 
@@ -826,6 +871,11 @@ private struct TabMergeDropDelegate: DropDelegate {
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        // `dropUpdated` fires again AFTER `performDrop`, and updating there
+        // re-showed the indicator on a completed drop and left it stuck on the
+        // row — the same trap `LeafDropDelegate` documents. Only a drag that
+        // is still in flight (entered, not yet dropped) has a position.
+        guard insertionIndex.wrappedValue != nil else { return DropProposal(operation: .forbidden) }
         update(info)
         return DropProposal(operation: .move)
     }
@@ -835,7 +885,7 @@ private struct TabMergeDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        let index = TabMergePlacement.insertionIndex(x: info.location.x, width: width, paneCount: paneCount)
+        let index = resolvedIndex(at: info.location.x)
         insertionIndex.wrappedValue = nil
 
         // A pane's bytes are usually already on the drag pasteboard (the grab
@@ -876,11 +926,15 @@ private struct TabMergeDropDelegate: DropDelegate {
     }
 
     private func update(_ info: DropInfo) {
-        insertionIndex.wrappedValue = TabMergePlacement.insertionIndex(
-            x: info.location.x,
-            width: width,
-            paneCount: paneCount
-        )
+        insertionIndex.wrappedValue = resolvedIndex(at: info.location.x)
+    }
+
+    /// Seam index for a pointer position — or the append slot for a row with
+    /// no dividers, where the single drawn position means "after everything"
+    /// regardless of how many panes are behind it.
+    private func resolvedIndex(at x: CGFloat) -> Int {
+        guard hasSeams else { return appendIndex }
+        return TabMergePlacement.insertionIndex(x: x, seams: positions)
     }
 }
 
@@ -953,6 +1007,14 @@ private struct SidebarTabRow: View {
                     // share of the row dragging the tab instead.
                     .contentShape(Rectangle())
                     .draggable(MovablePane(paneID: pane.id))
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: TabSegmentFramesKey.self,
+                                value: [proxy.frame(in: .named(tabRowSpace))]
+                            )
+                        }
+                    }
             }
         }
     }
