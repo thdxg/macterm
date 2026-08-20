@@ -484,11 +484,21 @@ final class Workspace: Identifiable {
     /// destination (same slot) leaves the array and selection untouched.
     func moveTab(_ tabID: UUID, toIndex destination: Int) {
         guard let from = tabs.firstIndex(where: { $0.id == tabID }) else { return }
-        let clamped = max(0, min(destination, tabs.count))
-        var to = clamped > from ? clamped - 1 : clamped
-        to = max(0, min(to, tabs.count - 1))
+        let to = Self.resolvedMoveIndex(from: from, toDropOffset: destination, count: tabs.count)
         guard to != from else { return }
         let tab = tabs.remove(at: from)
         tabs.insert(tab, at: to)
+    }
+
+    /// Resolve a drag-and-drop insertion offset into the element's final
+    /// index. `destination` is in the PRE-removal coordinate space — the
+    /// offset SwiftUI's `dropDestination` reports — so it is adjusted down by
+    /// one when the element moves toward the end. One home for the
+    /// convention: the pinned records reorder speaks it too, and a duplicated
+    /// copy of this arithmetic is exactly how off-by-one drift starts.
+    static func resolvedMoveIndex(from: Int, toDropOffset destination: Int, count: Int) -> Int {
+        let clamped = max(0, min(destination, count))
+        let to = clamped > from ? clamped - 1 : clamped
+        return max(0, min(to, count - 1))
     }
 }

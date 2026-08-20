@@ -703,6 +703,7 @@ final class ControlHandler {
 
     private func layoutApply(_ args: ControlArgs) throws -> ControlData {
         let project = try resolveProject(args.project)
+        try rejectPinned(project, verb: "layout apply")
         if let error = appState.applyLayout(project: project) {
             throw ControlError(code: .notFound, message: error.localizedDescription)
         }
@@ -733,10 +734,25 @@ final class ControlHandler {
 
     private func layoutSave(_ args: ControlArgs) throws -> ControlData {
         let project = try resolveProject(args.project)
+        try rejectPinned(project, verb: "layout save")
         if let error = appState.saveLayout(project: project, siblingProjects: projectStore.projects) {
             throw ControlError(code: .internalError, message: error.localizedDescription)
         }
         return ControlData()
+    }
+
+    /// The layout verbs must never treat the SYNTHETIC pinned project as a
+    /// real one: `layout save` would write a project file declaring the home
+    /// directory (which first-open auto-apply would then pick up for any
+    /// home-rooted project), and `layout apply --force` would swap the pinned
+    /// workspace's tabs out from under the records.
+    private func rejectPinned(_ project: Project, verb: String) throws {
+        guard project.id == PinnedTabs.projectID else { return }
+        throw ControlError(
+            code: .badRequest,
+            message: "\(verb) doesn't apply to the pinned workspace — its layout is managed automatically",
+            action: "edit ~/.config/macterm/projects/pinned.yaml instead"
+        )
     }
 
     // MARK: - Selector resolution

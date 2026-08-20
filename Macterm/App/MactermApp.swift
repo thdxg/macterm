@@ -61,7 +61,7 @@ struct MactermApp: App {
                     Text("A process is still running in this tab. Closing the tab ends it.")
                 }
                 .alert(
-                    "Remove pinned tab with a running process?",
+                    "Remove pinned tab with running processes?",
                     isPresented: Binding(
                         get: { appState.pendingRemovePinnedTab != nil },
                         set: { if !$0 { appState.cancelPendingRemovePinnedTab() } }

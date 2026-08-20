@@ -465,6 +465,190 @@ struct PinnedTabsTests {
         #expect(text.contains("renamed"))
     }
 
+    // MARK: - Audit regressions
+
+    @Test
+    func declaration_refresh_never_erases_an_established_run() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+        // The record was pinned with a run: (hand-set here; live capture in
+        // tests always reads idle, which is exactly the hazard).
+        fx.state.pinnedRecords[0].declaration = LayoutTab(
+            name: nil, layout: .pane(LayoutPane(cwd: "/tmp", run: "npm run dev"))
+        )
+
+        fx.state.refreshPinnedDeclarationsFromLiveTabs()
+
+        guard case let .pane(leaf) = fx.state.pinnedRecords[0].declaration.layout else {
+            Issue.record("expected a leaf")
+            return
+        }
+        #expect(leaf.run == "npm run dev")
+    }
+
+    @Test
+    func pinned_active_tab_survives_a_restart() async throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let ws = try #require(fx.state.workspaces[p.id])
+        let first = ws.tabs[0]
+        let second = ws.createTab(projectPath: p.path)
+        fx.state.pinTab(first.id, fromProject: p.id)
+        fx.state.pinTab(second.id, fromProject: p.id)
+        fx.state.selectPinnedTab(second.id)
+        fx.state.saveWorkspaces()
+
+        let loaded = WorkspaceStore(fileURL: fx.storeURL).load()
+        #expect(loaded.pinnedActiveTabID == second.id)
+
+        let state2 = AppState(
+            workspaceStore: WorkspaceStore(fileURL: fx.storeURL),
+            projectFiles: ProjectFileStore(directoryURL: fx.projectsDir)
+        )
+        // Computed on the main actor first — the client closure is @Sendable.
+        let sessionEntries = [first, second].flatMap { $0.splitRoot.allPanes() }.map {
+            ZmxSessionListParser.Entry(name: $0.sessionName, clients: 0)
+        }
+        var alive = ZmxClient.noop
+        alive.isBundled = { true }
+        alive.listSessionsWithClients = { sessionEntries }
+        state2.zmx = alive
+        state2.warmPane = { _ in }
+        state2.restorePinnedState(loaded.pinned, activeTabID: loaded.pinnedActiveTabID)
+        await state2.materializeRestoredPinnedTabs()
+
+        #expect(state2.pinnedWorkspace?.activeTabID == second.id)
+    }
+
+    @Test
+    func dragging_an_unloaded_record_into_a_project_spawns_it_there() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let recordID = UUID()
+        fx.state.pinnedRecords = [PinnedTabRecord(
+            id: recordID,
+            declaration: LayoutTab(name: "dev", layout: .pane(LayoutPane(cwd: "/tmp", run: "btop"))),
+            originProjectID: nil
+        )]
+
+        fx.state.moveTab(recordID, from: pinnedID, to: p.id, destPath: p.path)
+
+        #expect(fx.state.pinnedRecords.isEmpty)
+        let moved = try #require(fx.state.workspaces[p.id]?.tabs.first { $0.id == recordID })
+        #expect(moved.splitRoot.allPanes().first?.command == "btop")
+        #expect(moved.splitRoot.allPanes().first?.projectID == p.id)
+    }
+
+    @Test
+    func reorderTab_in_pinned_moves_the_record_too() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let ws = try #require(fx.state.workspaces[p.id])
+        let first = ws.tabs[0]
+        let second = ws.createTab(projectPath: p.path)
+        fx.state.pinTab(first.id, fromProject: p.id)
+        fx.state.pinTab(second.id, fromProject: p.id)
+
+        // The CLI's live-tab drop offset: move `second` to the front.
+        fx.state.reorderTab(second.id, inProject: pinnedID, toIndex: 0)
+
+        #expect(fx.state.pinnedRecords.map(\.id) == [second.id, first.id])
+        #expect(fx.state.pinnedWorkspace?.tabs.map(\.id) == [second.id, first.id])
+    }
+
+    @Test
+    func selectTabByIndex_in_pinned_counts_sidebar_rows() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+        // An UNLOADED record ahead of the loaded tab: index 0 must reach it.
+        let unloadedID = UUID()
+        fx.state.pinnedRecords.insert(PinnedTabRecord(
+            id: unloadedID,
+            declaration: LayoutTab(layout: .pane(LayoutPane(cwd: "/tmp", run: "btop"))),
+            originProjectID: nil
+        ), at: 0)
+
+        fx.state.selectTabByIndex(0, projectID: pinnedID)
+
+        #expect(fx.state.pinnedWorkspace?.activeTabID == unloadedID)
+        #expect(fx.state.isPinnedTabLoaded(unloadedID))
+    }
+
+    @Test
+    func project_cycling_steps_through_the_pinned_slot() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+        #expect(fx.state.activeProjectID == pinnedID)
+
+        fx.state.selectNextProject(projects: [p])
+        #expect(fx.state.activeProjectID == p.id)
+
+        fx.state.selectPreviousProject(projects: [p])
+        #expect(fx.state.activeProjectID == pinnedID)
+    }
+
+    @Test
+    func write_time_absorption_adopts_the_files_order() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let ws = try #require(fx.state.workspaces[p.id])
+        let a = ws.tabs[0]
+        let b = ws.createTab(projectPath: p.path)
+        fx.state.pinTab(a.id, fromProject: p.id)
+        fx.state.pinTab(b.id, fromProject: p.id)
+        fx.state.pinnedRecords[0].declaration = LayoutTab(name: "a", layout: .pane(LayoutPane(cwd: "/tmp")))
+        fx.state.pinnedRecords[1].declaration = LayoutTab(name: "b", layout: .pane(LayoutPane(cwd: "/tmp")))
+
+        // Hand-reorder the file while the app runs, then trigger a write.
+        try fx.state.pinnedLayoutStore.write(tabs: [
+            fx.state.pinnedRecords[1].declaration,
+            fx.state.pinnedRecords[0].declaration,
+        ])
+        fx.state.writePinnedLayout()
+
+        #expect(fx.state.pinnedRecords.map(\.declaration.name) == ["b", "a"])
+        #expect(fx.state.pinnedWorkspace?.tabs.map(\.id) == [b.id, a.id])
+    }
+
+    @Test
+    func quit_never_creates_pinned_yaml_for_users_who_never_pinned() {
+        let fx = makeFixture()
+        _ = seedProject(fx.state)
+        fx.state.reconcilePinnedLayoutAtLaunch(projects: [])
+
+        fx.state.persistForTermination()
+
+        #expect(!FileManager.default.fileExists(atPath: fx.state.pinnedLayoutStore.fileURL.path))
+    }
+
+    @Test
+    func separated_pane_lands_at_the_record_slot_the_drop_named() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        // An unloaded record occupies row 0; the drop names slot 1 (below it).
+        let unloadedID = UUID()
+        fx.state.pinnedRecords = [PinnedTabRecord(
+            id: unloadedID,
+            declaration: LayoutTab(name: "sleeper", layout: .pane(LayoutPane(cwd: "/tmp"))),
+            originProjectID: nil
+        )]
+        fx.state.ensurePinnedWorkspace()
+        let paneID = try #require(tab.split(paneID: tab.splitRoot.allPanes()[0].id, direction: .horizontal))
+
+        fx.state.separatePaneIntoPinned(paneID, atRecordIndex: 1)
+
+        #expect(fx.state.pinnedRecords.count == 2)
+        #expect(fx.state.pinnedRecords[0].id == unloadedID)
+        #expect(fx.state.pinnedRecords[1].id != unloadedID)
+    }
+
     // MARK: - pinned.yaml reconcile / absorb
 
     @Test

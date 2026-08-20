@@ -49,7 +49,8 @@ enum PinnedTabs {
 /// declaration when selected.
 struct PinnedTabRecord: Identifiable, Equatable {
     /// Stable across load/unload cycles; equals the live `TerminalTab.id`
-    /// while loaded, and the `id:` written into `pinned.yaml`.
+    /// while loaded. Internal only — `pinned.yaml` entries deliberately carry
+    /// no id (see `PinnedLayoutMatcher`).
     let id: UUID
     /// The respawn recipe. Captured at pin time, refreshed from live state at
     /// quit, and replaced by hand-edits to `pinned.yaml`. Leaf `cwd`s are

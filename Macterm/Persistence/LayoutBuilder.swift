@@ -16,13 +16,23 @@ enum LayoutBuilder {
     /// directory, and the result keeps the `[user@]host:` prefix so the pane
     /// stays a remote pane.
     static func resolveCwd(_ cwd: String?, projectRoot: String) -> String {
+        // The PINNED pseudo-root (`PinnedTabs.pathMarker`): pinned tabs have
+        // no project root, so every leaf cwd is SELF-CONTAINED — a full
+        // scp-style spec stays remote, absolute/`~` resolve locally, and the
+        // (degenerate) relative case falls back to home. Scoped to the
+        // marker on purpose: under a real project root, a cwd like
+        // `build:release` is a legal RELATIVE directory name, and treating
+        // any colon-bearing cwd as remote would turn it into an ssh attempt.
+        if projectRoot == PinnedTabs.pathMarker {
+            guard let cwd, !cwd.isEmpty else { return ProjectPath.currentHome }
+            if ProjectPath.isRemote(cwd) { return cwd }
+            let expanded = expandTilde(cwd)
+            if expanded.hasPrefix("/") { return canonicalizeLocal(expanded) }
+            return URL(fileURLWithPath: ProjectPath.currentHome)
+                .appendingPathComponent(expanded)
+                .standardizedFileURL.path
+        }
         guard let cwd, !cwd.isEmpty else { return projectRoot }
-        // A leaf's cwd can itself be a full scp-style spec — pinned tabs
-        // have no project root, so their remote leaves are
-        // self-contained. Whatever the root, such a cwd passes through
-        // verbatim; joining it onto a local root would fabricate a local dir
-        // named "host:dir".
-        if ProjectPath.isRemote(cwd) { return cwd }
         if case let .remote(user, host, directory)? = ProjectPath.parse(projectRoot) {
             let resolved: String = if cwd.hasPrefix("/") || cwd.hasPrefix("~") {
                 cwd

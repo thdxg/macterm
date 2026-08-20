@@ -93,6 +93,41 @@ enum PinnedLayoutMatcher {
     }
 }
 
+extension LayoutNode {
+    /// Merge a freshly captured pinned declaration with the previous one so
+    /// an established `run:` is never ERASED by a capture that observed the
+    /// pane idle. The live capture reads what's running NOW, which is nil at
+    /// a shell prompt — but for a pinned tab the `run:` is the respawn recipe,
+    /// and moments where the pane reads idle include exactly the ones that
+    /// must not lose it: the eager launch before a spawned command has
+    /// started, a crashed process back at the prompt, a capture racing the
+    /// zmx resolver. A leaf therefore inherits the previous declaration's
+    /// `run` when the new capture has none at the same tree position; a NEW
+    /// observed command still replaces the old one, and a reshaped tree takes
+    /// the fresh capture as-is.
+    func preservingRuns(from previous: LayoutNode) -> LayoutNode {
+        switch (self, previous) {
+        case let (.pane(fresh), .pane(old)):
+            guard fresh.run == nil, let oldRun = old.run else { return self }
+            var merged = fresh
+            merged.run = oldRun
+            // `run` and `shell` are mutually exclusive on a leaf: keeping the
+            // old command means dropping the idle capture's shell.
+            merged.shell = nil
+            return .pane(merged)
+        case let (.split(fresh), .split(old)) where fresh.direction == old.direction:
+            return .split(LayoutBranch(
+                direction: fresh.direction,
+                ratio: fresh.ratio,
+                first: fresh.first.preservingRuns(from: old.first),
+                second: fresh.second.preservingRuns(from: old.second)
+            ))
+        default:
+            return self
+        }
+    }
+}
+
 @MainActor
 struct PinnedLayoutStore {
     static let filename = "pinned.yaml"

@@ -181,9 +181,21 @@ struct PinnedLayoutStoreTests {
         }
         #expect(local.cwd == "~/dev/api")
         #expect(remote.cwd == "devbox:~/work")
-        // Round trip: both resolve back to full self-contained paths.
-        #expect(LayoutBuilder.resolveCwd(local.cwd, projectRoot: PinnedTabs.fallbackRoot) == home + "/dev/api")
-        #expect(LayoutBuilder.resolveCwd(remote.cwd, projectRoot: PinnedTabs.fallbackRoot) == "devbox:~/work")
+        // Round trip: both resolve back to full self-contained paths under
+        // the pinned pseudo-root.
+        #expect(LayoutBuilder.resolveCwd(local.cwd, projectRoot: PinnedTabs.pathMarker) == home + "/dev/api")
+        #expect(LayoutBuilder.resolveCwd(remote.cwd, projectRoot: PinnedTabs.pathMarker) == "devbox:~/work")
+    }
+
+    @Test
+    func resolveCwd_self_contained_semantics_are_scoped_to_the_pinned_root() {
+        // Under a REAL local root, a colon-bearing cwd is a legal relative
+        // directory name — it must join the root, not turn into an ssh host.
+        #expect(LayoutBuilder.resolveCwd("build:release", projectRoot: "/tmp/api") == "/tmp/api/build:release")
+        // Under the pinned pseudo-root the same shape IS a remote spec.
+        #expect(LayoutBuilder.resolveCwd("build:release", projectRoot: PinnedTabs.pathMarker) == "build:release")
+        // And the empty pinned cwd falls back to home, not to the marker.
+        #expect(LayoutBuilder.resolveCwd(nil, projectRoot: PinnedTabs.pathMarker) == ProjectPath.currentHome)
     }
 
     // MARK: - Snapshot round trip

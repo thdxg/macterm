@@ -24,6 +24,10 @@ struct WorkspacesFile: Codable {
     /// never collides with the `validIDs` restore filter. Optional so v4
     /// files decode with nil.
     var pinned: [PinnedTabSnapshot]?
+    /// The pinned workspace's selected tab (v5+) — the sentinel is excluded
+    /// from `workspaces`, which is where every other workspace keeps its
+    /// `activeTabID`.
+    var pinnedActiveTabID: UUID?
 }
 
 // MARK: - Snapshot types
@@ -151,6 +155,7 @@ final class WorkspaceStore {
     struct Loaded {
         var workspaces: [WorkspaceSnapshot] = []
         var pinned: [PinnedTabSnapshot] = []
+        var pinnedActiveTabID: UUID?
     }
 
     func load() -> Loaded {
@@ -181,10 +186,18 @@ final class WorkspaceStore {
                 """)
                 loadFailed = true
                 let migrated = migrate(file)
-                return Loaded(workspaces: migrated.workspaces, pinned: migrated.pinned ?? [])
+                return Loaded(
+                    workspaces: migrated.workspaces,
+                    pinned: migrated.pinned ?? [],
+                    pinnedActiveTabID: migrated.pinnedActiveTabID
+                )
             }
             let migrated = migrate(file)
-            return Loaded(workspaces: migrated.workspaces, pinned: migrated.pinned ?? [])
+            return Loaded(
+                workspaces: migrated.workspaces,
+                pinned: migrated.pinned ?? [],
+                pinnedActiveTabID: migrated.pinnedActiveTabID
+            )
         } catch let envelopeError {
             // Fallback: pre-envelope format where the file was a bare array of
             // WorkspaceSnapshot. Upgrade on next save.
@@ -200,13 +213,22 @@ final class WorkspaceStore {
         }
     }
 
-    func save(_ snapshots: [WorkspaceSnapshot], pinned: [PinnedTabSnapshot] = []) {
+    func save(
+        _ snapshots: [WorkspaceSnapshot],
+        pinned: [PinnedTabSnapshot] = [],
+        pinnedActiveTabID: UUID? = nil
+    ) {
         guard !loadFailed else {
             logger.error("Refusing to save workspaces: prior load failed, file preserved")
             return
         }
         do {
-            let file = WorkspacesFile(version: currentSchemaVersion, workspaces: snapshots, pinned: pinned)
+            let file = WorkspacesFile(
+                version: currentSchemaVersion,
+                workspaces: snapshots,
+                pinned: pinned,
+                pinnedActiveTabID: pinnedActiveTabID
+            )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(file).write(to: fileURL, options: .atomic)
@@ -222,7 +244,12 @@ final class WorkspaceStore {
             // already been visually cleared. Drop the old attention bits once;
             // v4+ saves them only after the false-start and clear/save fixes.
             logger.info("Migrating workspaces v\(file.version, privacy: .public)→4: clearing persisted attention bits")
-            return WorkspacesFile(version: 4, workspaces: clearPersistedAttention(in: file.workspaces), pinned: file.pinned)
+            return WorkspacesFile(
+                version: 4,
+                workspaces: clearPersistedAttention(in: file.workspaces),
+                pinned: file.pinned,
+                pinnedActiveTabID: file.pinnedActiveTabID
+            )
         }
         return file
     }
@@ -272,14 +299,7 @@ enum WorkspaceSerializer {
             WorkspaceSnapshot(
                 projectID: ws.projectID,
                 activeTabID: ws.activeTabID,
-                tabs: ws.tabs.map { tab in
-                    TabSnapshot(
-                        id: tab.id,
-                        customTitle: tab.customTitle,
-                        focusedPaneID: tab.focusedPaneID,
-                        splitRoot: snapshotNode(tab.splitRoot)
-                    )
-                }
+                tabs: ws.tabs.map { snapshotTab($0) }
             )
         }
     }
