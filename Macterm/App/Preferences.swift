@@ -205,7 +205,7 @@ final class Preferences {
     /// Bounds of the sidebar column, shared by the persisted width's clamp and
     /// `MainWindow`'s `navigationSplitViewColumnWidth` so a stored value can
     /// never fall outside what the column accepts.
-    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 280
+    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 400
     static let defaultSidebarWidth: Double = 180
 
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
