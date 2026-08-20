@@ -16,6 +16,55 @@ import Testing
 @MainActor
 struct UpdaterChannelTests {
     @Test
+    func updater_starts_only_for_distributed_release_builds() {
+        let realKey = "real-release-public-key"
+
+        #expect(UpdaterAvailability.shouldStart(
+            isDebug: false, isBenchmark: false, publicKey: realKey
+        ))
+        #expect(!UpdaterAvailability.shouldStart(
+            isDebug: true, isBenchmark: false, publicKey: realKey
+        ))
+        #expect(!UpdaterAvailability.shouldStart(
+            isDebug: false, isBenchmark: true, publicKey: realKey
+        ))
+        #expect(!UpdaterAvailability.shouldStart(
+            isDebug: false,
+            isBenchmark: false,
+            publicKey: UpdaterAvailability.placeholderPublicKey
+        ))
+        #expect(!UpdaterAvailability.shouldStart(
+            isDebug: false, isBenchmark: false, publicKey: nil
+        ))
+    }
+
+    @Test
+    func placeholder_public_key_matches_the_build_and_release_contracts() throws {
+        let placeholder = UpdaterAvailability.placeholderPublicKey
+        let root = repoRoot()
+        let project = try String(
+            contentsOf: root.appendingPathComponent("project.yml"),
+            encoding: .utf8
+        )
+        let buildScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/build.sh"),
+            encoding: .utf8
+        )
+        let releaseWorkflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        #expect(project.contains("SPARKLE_ED_PUBLIC_KEY: \(placeholder)"))
+        #expect(buildScript.contains(
+            #"SPARKLE_ED_PUBLIC_KEY="${SPARKLE_ED_PUBLIC_KEY:-\#(placeholder)}""#
+        ))
+        #expect(releaseWorkflow.contains(
+            "\"$SPARKLE_ED_PUBLIC_KEY\" == \"\(placeholder)\""
+        ))
+    }
+
+    @Test
     func beta_channel_name_matches_the_appcast_literal() throws {
         // Must equal the value in publish-appcast.sh's CHANNEL_LINE. Read the
         // script rather than restating "beta", so an edit to either side fails.

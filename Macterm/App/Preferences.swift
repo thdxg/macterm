@@ -155,6 +155,16 @@ final class Preferences {
         didSet { defaults.set(showTabStatusIndicator, forKey: Keys.showTabStatusIndicator) }
     }
 
+    /// Whether the running spinner also replaces an AI agent's logo (#225).
+    /// Off keeps the agent logo while the agent works — agent CLIs draw their
+    /// own busy indicator in the tab title, so the spinner is redundant there —
+    /// while the done dot still appears (it overlays the logo rather than
+    /// replacing it). Meaningful only while `showTabStatusIndicator` and
+    /// `showAgentIcons` are both on.
+    var showSpinnerOverAgentIcons: Bool {
+        didSet { defaults.set(showSpinnerOverAgentIcons, forKey: Keys.showSpinnerOverAgentIcons) }
+    }
+
     /// Auto-name tabs after the live foreground process / OSC title (on by
     /// default). Off = tabs hold their static fallback (login shell name, or
     /// the host name for remote panes); a user-set custom title always wins
@@ -234,7 +244,7 @@ final class Preferences {
     /// Bounds of the sidebar column, shared by the persisted width's clamp and
     /// `MainWindow`'s `navigationSplitViewColumnWidth` so a stored value can
     /// never fall outside what the column accepts.
-    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 280
+    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 400
     static let defaultSidebarWidth: Double = 180
 
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
@@ -614,6 +624,7 @@ final class Preferences {
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
         showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
+        showSpinnerOverAgentIcons = defaults.object(forKey: Keys.showSpinnerOverAgentIcons) as? Bool ?? true
         autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
@@ -712,6 +723,7 @@ final class Preferences {
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
         static let showAgentIcons = "macterm.sidebar.showAgentIcons"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
+        static let showSpinnerOverAgentIcons = "macterm.sidebar.showSpinnerOverAgentIcons"
         static let autoNameTabs = "macterm.tabs.autoName"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"

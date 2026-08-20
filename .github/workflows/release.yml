@@ -182,6 +182,10 @@ jobs:
             echo "error: tag '$GITHUB_REF_NAME' is not $EXPECTED; refusing to build a placeholder release" >&2
             exit 1
           fi
+          if [[ -z "$SPARKLE_ED_PUBLIC_KEY" || "$SPARKLE_ED_PUBLIC_KEY" == "SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER" ]]; then
+            echo "error: SPARKLE_ED_PUBLIC_KEY is missing or still set to the local-build placeholder; refusing to build a release without auto-updates" >&2
+            exit 1
+          fi
           # Release builds invoke the build script directly to skip the
           # format/lint/test deps on `mise run build` — main is already
           # format/lint-gated by checks.yml and test-gated by test.yml before
