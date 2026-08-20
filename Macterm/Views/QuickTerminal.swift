@@ -37,10 +37,6 @@ final class QuickTerminalService: NSObject {
     /// String form of the shortcut we currently have registered with Carbon,
     /// so `userDefaultsDidChange` can detect rebinds and re-register.
     private var lastRegisteredShortcutID: String?
-    /// Snapshot of `isEnabled` after the most recent reconcile. Used to detect
-    /// flips when `UserDefaults.didChangeNotification` fires, since that
-    /// notification doesn't tell us which key changed.
-    private var lastKnownEnabled: Bool = Preferences.shared.quickTerminalEnabled
     /// The app that was frontmost just before we showed the quick terminal.
     /// Captured so we can re-activate it on hide if Macterm somehow took over —
     /// without this, dismissing the panel would leave focus on Macterm even
@@ -48,15 +44,6 @@ final class QuickTerminalService: NSObject {
     private var previousFrontmostApp: NSRunningApplication?
     let splitState = QuickTerminalSplitState()
     var suppressAutoHide = false
-    private var isEnabled: Bool {
-        // Read directly from UserDefaults instead of Preferences.shared.
-        // Preferences caches the value in a stored property that's only set on
-        // init and via its own setter — Settings writes through @AppStorage,
-        // which bypasses Preferences entirely. Reading defaults here keeps the
-        // service in sync with whatever the toggle's current persisted value
-        // actually is.
-        Preferences.defaults.object(forKey: Preferences.Keys.quickTerminalEnabled) as? Bool ?? true
-    }
 
     override private init() {
         super.init()
@@ -67,11 +54,10 @@ final class QuickTerminalService: NSObject {
             name: .autoTilingEnabledDidChange,
             object: nil
         )
-        // Observe UserDefaults broadly so we hot-reload no matter who flips the
-        // toggle. Settings uses @AppStorage which writes through UserDefaults
-        // without going through Preferences.shared, so observing the
-        // Preferences object would miss those writes. didChangeNotification
-        // fires on any key change; we filter by snapshotting the value.
+        // Observe UserDefaults broadly so a Settings → Keymaps rebind of the
+        // global shortcut takes effect immediately. didChangeNotification
+        // fires on any key change; we filter by comparing the registered
+        // binding against the current one.
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(userDefaultsDidChange),
@@ -87,7 +73,7 @@ final class QuickTerminalService: NSObject {
             name: .mactermConfigDidChange,
             object: nil
         )
-        if isEnabled { registerHotKey() }
+        registerHotKey()
     }
 
     @objc
@@ -98,24 +84,13 @@ final class QuickTerminalService: NSObject {
 
     @objc
     private func userDefaultsDidChange() {
-        // Two unrelated keys we react to: the enable toggle and the hotkey
-        // binding. Reconcile both each time since UserDefaults' change
-        // notification doesn't tell us which key changed.
-        let now = isEnabled
-        if now != lastKnownEnabled {
-            lastKnownEnabled = now
-            if now {
-                registerHotKey()
-            } else {
-                if isVisible { hide() }
-                unregisterHotKey()
-            }
-        }
         // Re-register on hotkey-binding changes so a Settings → Keymaps
-        // rebind takes effect immediately, not after restart.
+        // rebind takes effect immediately, not after restart. A cleared
+        // binding unregisters and registers nothing — that's how the user
+        // opts out of the quick terminal.
         let currentBindingID = lastRegisteredShortcutID
         let newBindingID = HotkeyRegistry.selectedShortcut(for: .toggleQuickTerminal)?.id
-        if now, currentBindingID != newBindingID {
+        if currentBindingID != newBindingID {
             unregisterHotKey()
             registerHotKey()
         }
@@ -129,15 +104,10 @@ final class QuickTerminalService: NSObject {
 
     @objc
     func toggle() {
-        guard isEnabled else {
-            if isVisible { hide() }
-            return
-        }
         if isVisible { hide() } else { show() }
     }
 
     func showPanel() {
-        guard isEnabled else { return }
         if isVisible {
             if let panel, orderPanelFront(panel), let focusedID = splitState.focusedPaneID {
                 FocusRestoration.restoreFocus(to: focusedID, in: splitState.splitRoot, window: panel)

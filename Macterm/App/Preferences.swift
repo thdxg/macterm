@@ -155,8 +155,32 @@ final class Preferences {
         didSet { defaults.set(showTabStatusIndicator, forKey: Keys.showTabStatusIndicator) }
     }
 
+    /// Auto-name tabs after the live foreground process / OSC title (on by
+    /// default). Off = tabs hold their static fallback (login shell name, or
+    /// the host name for remote panes); a user-set custom title always wins
+    /// either way. Display-only: the polling and probing keep running for
+    /// busy-close verdicts and execution tracking (`Pane.displayTitle` is
+    /// the single gate).
+    var autoNameTabs: Bool {
+        didSet { defaults.set(autoNameTabs, forKey: Keys.autoNameTabs) }
+    }
+
     var showNewProjectButton: Bool {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
+    }
+
+    /// Allow non-interactive background ssh connections to remote-project
+    /// hosts: the foreground probe (live tab names, busy-close verdicts,
+    /// layout `run:` capture) and the opt-in terminfo install. On by default.
+    /// Off exists for keys gated behind a per-connection biometric dialog
+    /// (#272): every background connection raises a Touch ID prompt BatchMode
+    /// can't suppress, so off narrows Macterm's ssh traffic to the panes' own
+    /// connections plus the one-shot `zmx kill` of an explicit close. Remote
+    /// tabs then fall back to the host name / OSC titles, and closing warns
+    /// only on a positively-known running command (OSC 133 execution state) —
+    /// never from the conservative ssh-is-always-busy fallback.
+    var backgroundSSHConnections: Bool {
+        didSet { defaults.set(backgroundSSHConnections, forKey: Keys.backgroundSSHConnections) }
     }
 
     /// Slide the hidden sidebar out while the pointer sits at the window's
@@ -181,7 +205,7 @@ final class Preferences {
     /// Bounds of the sidebar column, shared by the persisted width's clamp and
     /// `MainWindow`'s `navigationSplitViewColumnWidth` so a stored value can
     /// never fall outside what the column accepts.
-    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 280
+    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 400
     static let defaultSidebarWidth: Double = 180
 
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
@@ -407,10 +431,6 @@ final class Preferences {
 
     // MARK: - Quick terminal
 
-    var quickTerminalEnabled: Bool {
-        didSet { defaults.set(quickTerminalEnabled, forKey: Keys.quickTerminalEnabled) }
-    }
-
     /// Fraction of screen width (0–1).
     var quickTerminalWidthFraction: Double {
         didSet { defaults.set(quickTerminalWidthFraction, forKey: Keys.quickTerminalWidth) }
@@ -532,7 +552,6 @@ final class Preferences {
         hideTitleBar = defaults.object(forKey: Keys.hideTitleBar) as? Bool ?? false
         userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
         passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
-        quickTerminalEnabled = defaults.object(forKey: Keys.quickTerminalEnabled) as? Bool ?? true
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
         quickTerminalPositionMode = (defaults.string(forKey: Keys.quickTerminalPositionMode))
@@ -566,7 +585,9 @@ final class Preferences {
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
         showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
+        autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
+        backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
         sidebarWidth = storedSidebarWidth
@@ -646,7 +667,6 @@ final class Preferences {
         static let hideTitleBar = "macterm.window.hideTitleBar"
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let passthroughPrograms = "macterm.hotkey.passthroughPrograms"
-        static let quickTerminalEnabled = "macterm.quickTerminal.enabled"
         static let quickTerminalWidth = "macterm.quickTerminal.width"
         static let quickTerminalHeight = "macterm.quickTerminal.height"
         static let quickTerminalPositionMode = "macterm.quickTerminal.positionMode"
@@ -662,7 +682,9 @@ final class Preferences {
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
         static let showAgentIcons = "macterm.sidebar.showAgentIcons"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
+        static let autoNameTabs = "macterm.tabs.autoName"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
+        static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
         static let sidebarWidth = "macterm.sidebar.width"
         static let updateChannel = "macterm.updates.channel"

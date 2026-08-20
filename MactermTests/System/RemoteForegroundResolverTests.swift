@@ -95,9 +95,9 @@ struct RemoteForegroundResolverTests {
     func probes_once_per_host_within_the_interval() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
-        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return [:]
+            return .success([:])
         }
         let panes = [remotePane(), remotePane()]
         let t0 = Date()
@@ -120,9 +120,9 @@ struct RemoteForegroundResolverTests {
         // race (a listing that misses the session re-arms the request and
         // would defeat the throttled expectations below).
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { spec, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return [session: RemoteForeground(comm: "bash", isIdle: true, command: nil)]
+            return .success([session: RemoteForeground(comm: "bash", isIdle: true, command: nil)])
         }
         let t0 = Date()
         resolver.refresh(panes: [pane], probe: probe, now: t0)
@@ -155,10 +155,10 @@ struct RemoteForegroundResolverTests {
         let resolver = RemoteForegroundResolver(minInterval: 3)
         let pane = remotePane()
         let session = pane.sessionName
-        let probe: @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]? = { _, _ in
+        let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { _, _ in
             calls.mutate { $0 += 1 }
             // Registered from the third probe on.
-            return calls.value >= 3 ? [session: RemoteForeground(comm: "bash", isIdle: true, command: nil)] : [:]
+            return .success(calls.value >= 3 ? [session: RemoteForeground(comm: "bash", isIdle: true, command: nil)] : [:])
         }
         let t0 = Date()
         // Init primes the first request; each miss re-arms, bypassing the
@@ -184,7 +184,7 @@ struct RemoteForegroundResolverTests {
         let resolver = RemoteForegroundResolver(minInterval: 3)
         resolver.refresh(panes: [remotePane(host: "alpha"), remotePane(host: "beta")], probe: { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return [:]
+            return .success([:])
         })
         await waitUntil { Set(calls.value) == ["alpha", "beta"] }
     }
@@ -197,7 +197,7 @@ struct RemoteForegroundResolverTests {
         let resolver = RemoteForegroundResolver(minInterval: 0)
         let session = pane.sessionName
         resolver.refresh(panes: [pane], probe: { _, _ in
-            [session: RemoteForeground(comm: "btop", isIdle: false, command: "btop --utf-force")]
+            .success([session: RemoteForeground(comm: "btop", isIdle: false, command: "btop --utf-force")])
         })
         await waitUntil { pane.foregroundProcessName == "btop" }
         // The full command line lands too — Save Layout's `run:` source.
@@ -209,11 +209,131 @@ struct RemoteForegroundResolverTests {
         let pane = remotePane()
         pane.applyRemoteForegroundName("btop")
         let resolver = RemoteForegroundResolver(minInterval: 0)
-        resolver.refresh(panes: [pane], probe: { _, _ in nil })
+        resolver.refresh(panes: [pane], probe: { _, _ in .unreachable })
         // The failure path changes no name, so there's no state edge to poll —
         // wait for the probe Task to finish, then assert the name held.
         await waitUntil { resolver.isIdle }
         // Silent degradation: the name froze instead of flapping to nil.
         #expect(pane.foregroundProcessName == "btop")
+    }
+
+    // MARK: - Auth-refusal gate (#272)
+
+    @Test
+    func classifies_ssh_failure_stderr() {
+        // "Permission denied" is what a cancelled Touch ID dialog produces
+        // once BatchMode blocks the interactive fallbacks; anything else
+        // (timeouts, DNS, dropped links) must stay transient.
+        #expect(RemoteProbeOutcome.classifyFailure(
+            stderr: "seth@devbox: Permission denied (publickey,password)."
+        ) == .authRefused)
+        #expect(RemoteProbeOutcome.classifyFailure(
+            stderr: "Received disconnect: Too many authentication failures"
+        ) == .authRefused)
+        #expect(RemoteProbeOutcome.classifyFailure(
+            stderr: "ssh: connect to host devbox port 22: Operation timed out"
+        ) == .unreachable)
+        #expect(RemoteProbeOutcome.classifyFailure(
+            stderr: "ssh: Could not resolve hostname devbox"
+        ) == .unreachable)
+        #expect(RemoteProbeOutcome.classifyFailure(stderr: "") == .unreachable)
+    }
+
+    @Test
+    func auth_refusal_suspends_the_host_and_boundary_requests_do_not_bypass() async {
+        // A refused probe must be the LAST probe of the run for that host:
+        // with a biometric-gated key every retry is a system dialog, so
+        // neither the scheduled interval nor a boundary request may re-fire.
+        let calls = LockedBox<Int>(0)
+        let resolver = RemoteForegroundResolver(minInterval: 3)
+        let pane = remotePane()
+        let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { _, _ in
+            calls.mutate { $0 += 1 }
+            return .authRefused
+        }
+        let t0 = Date()
+        resolver.refresh(panes: [pane], probe: probe, now: t0)
+        await waitUntil { calls.value == 1 && resolver.isIdle }
+
+        // Past the interval: still suspended.
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(10))
+        await waitUntil { resolver.isIdle }
+        #expect(calls.value == 1)
+
+        // A command boundary bypasses the throttle but never the auth gate.
+        pane.noteRemoteCommandBoundary()
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(20))
+        await waitUntil { resolver.isIdle }
+        #expect(calls.value == 1)
+    }
+
+    @Test
+    func unreachable_probe_keeps_the_scheduled_retry() async {
+        // The transient failure must NOT inherit the auth gate: a flaky link
+        // recovers on its own, so the next tick past the interval retries.
+        let calls = LockedBox<Int>(0)
+        let resolver = RemoteForegroundResolver(minInterval: 3)
+        let pane = remotePane()
+        let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { _, _ in
+            calls.mutate { $0 += 1 }
+            return .unreachable
+        }
+        let t0 = Date()
+        resolver.refresh(panes: [pane], probe: probe, now: t0)
+        await waitUntil { calls.value == 1 && resolver.isIdle }
+        resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(4))
+        await waitUntil { calls.value == 2 }
+    }
+
+    @Test
+    func a_new_pane_on_the_host_retests_a_refused_gate_once() async {
+        // A never-seen pane means a fresh interactive connection to the host
+        // — the one moment a retest is worth a possible prompt (a user who
+        // configured ControlMaster since gets full naming back). Refused
+        // again, the gate re-arms until the next new pane.
+        let calls = LockedBox<Int>(0)
+        let resolver = RemoteForegroundResolver(minInterval: 3)
+        let first = remotePane()
+        let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { _, _ in
+            calls.mutate { $0 += 1 }
+            return .authRefused
+        }
+        let t0 = Date()
+        resolver.refresh(panes: [first], probe: probe, now: t0)
+        await waitUntil { calls.value == 1 && resolver.isIdle }
+        resolver.refresh(panes: [first], probe: probe, now: t0.addingTimeInterval(10))
+        await waitUntil { resolver.isIdle }
+        #expect(calls.value == 1)
+
+        // A new pane (primed request from init) clears the gate for one probe…
+        let second = remotePane()
+        resolver.refresh(panes: [first, second], probe: probe, now: t0.addingTimeInterval(20))
+        await waitUntil { calls.value == 2 && resolver.isIdle }
+
+        // …and the repeated refusal re-gates: the same panes stay silent.
+        resolver.refresh(panes: [first, second], probe: probe, now: t0.addingTimeInterval(30))
+        await waitUntil { resolver.isIdle }
+        #expect(calls.value == 2)
+    }
+
+    @Test
+    func the_auth_gate_is_per_host() async {
+        // alpha refusing must not cost beta its probes.
+        let calls = LockedBox<[String]>([])
+        let resolver = RemoteForegroundResolver(minInterval: 3)
+        let alpha = remotePane(host: "alpha")
+        let beta = remotePane(host: "beta")
+        let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { spec, _ in
+            guard case let .remote(_, host, _) = spec else { return .unreachable }
+            calls.mutate { $0.append(host) }
+            return host == "alpha" ? .authRefused : .success([:])
+        }
+        let t0 = Date()
+        resolver.refresh(panes: [alpha, beta], probe: probe, now: t0)
+        await waitUntil { Set(calls.value) == ["alpha", "beta"] && resolver.isIdle }
+
+        resolver.refresh(panes: [alpha, beta], probe: probe, now: t0.addingTimeInterval(10))
+        await waitUntil { calls.value.count(where: { $0 == "beta" }) == 2 }
+        #expect(calls.value.count(where: { $0 == "alpha" }) == 1)
     }
 }

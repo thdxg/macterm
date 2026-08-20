@@ -31,6 +31,32 @@ struct RemoteForeground: Equatable {
     }
 }
 
+/// One probe's result, classified so the resolver can pick the right
+/// degradation. The split matters because the two failure modes want
+/// opposite policies (#272): a transient failure keeps the silent per-tick
+/// retry — a flaky link must recover on its own — while an authentication
+/// refusal suspends the host's probes for the rest of the run, because under
+/// `BatchMode` a refusal can only repeat, and with a biometric-gated key
+/// (Touch ID) every attempt raises a key-provider system dialog that
+/// `BatchMode` cannot suppress (it only disables ssh's own tty prompts).
+enum RemoteProbeOutcome: Equatable {
+    case success([String: RemoteForeground])
+    /// Spawn failure, timeout, unreachable host — transient; keep retrying.
+    case unreachable
+    /// The host refused our non-interactive authentication.
+    case authRefused
+
+    /// Classify a failed ssh exit by its stderr. `Permission denied` is the
+    /// canonical BatchMode refusal — and exactly what a cancelled Touch ID
+    /// dialog produces: the key provider reports the signature failed and
+    /// BatchMode blocks every interactive fallback. Anything else (timeouts,
+    /// resolution failures, dropped connections) stays transient.
+    static func classifyFailure(stderr: String) -> RemoteProbeOutcome {
+        let authMarkers = ["Permission denied", "Too many authentication failures"]
+        return authMarkers.contains(where: stderr.contains) ? .authRefused : .unreachable
+    }
+}
+
 /// Tier-2 smart tab naming for remote panes (#104): a batched, per-host ssh
 /// probe resolving every `macterm-*` session on a host to its foreground
 /// process name (`RemoteSpawn.foregroundProbeScript` — the remote analogue of
@@ -41,6 +67,9 @@ struct RemoteForeground: Equatable {
 /// per `minInterval`, one ssh covers all of its sessions, overlapping probes
 /// are dropped, and a failed probe degrades silently — names freeze at their
 /// last-known value (tier 1, the execution-gated OSC titles, keeps working).
+/// An auth-REFUSED probe suspends the host outright (see
+/// `RemoteProbeOutcome`): retrying a refusal is at best pointless and at
+/// worst a Touch ID dialog every 3 seconds (#272).
 @MainActor
 final class RemoteForegroundResolver {
     /// Minimum spacing between probes of one host. ~3s keeps names feeling
@@ -50,6 +79,17 @@ final class RemoteForegroundResolver {
 
     private var inflight: Set<String> = []
     private var lastProbeAt: [String: Date] = [:]
+    /// Destinations whose last probe was an authentication refusal (#272):
+    /// suspended for the rest of the run — every further attempt would fail
+    /// the same way, or nag a biometric key's dialog every tick. In-memory
+    /// only (like `RemoteTerminfo`'s attempted set): next launch tries once.
+    private var authRefusedDests: Set<String> = []
+    /// Panes already seen by `refresh`. A never-seen pane is the reset signal
+    /// for `authRefusedDests`: it means a fresh interactive connection to the
+    /// host, so a ControlMaster the user configured since now exists (probes
+    /// ride it free) — and if not, the retest costs one prompt beside the
+    /// pane's own instead of one per tick.
+    private var seenPaneIDs: Set<UUID> = []
 
     /// True when no probe `Task` is outstanding. Read by tests to wait for a
     /// probe to complete deterministically — including the failure path, whose
@@ -68,11 +108,14 @@ final class RemoteForegroundResolver {
     /// started or finished) bypasses the interval for its host so the name
     /// updates now instead of on the next scheduled probe; the inflight
     /// guard still holds, and an unconsumed request survives to the next
-    /// tick. `probe` is passed per call (AppState hands in the injectable
-    /// `ZmxClient.remoteForegrounds`; tests hand in a recorder).
+    /// tick. A destination whose last probe was refused authentication is
+    /// skipped entirely — boundary requests included — until a new pane on
+    /// it appears (see `seenPaneIDs`). `probe` is passed per call (AppState
+    /// hands in the injectable `ZmxClient.remoteForegrounds`; tests hand in
+    /// a recorder).
     func refresh(
         panes: [Pane],
-        probe: @escaping @Sendable (ProjectPath, String?) async -> [String: RemoteForeground]?,
+        probe: @escaping @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome,
         now: Date = Date()
     ) {
         guard !panes.isEmpty else { return }
@@ -84,11 +127,15 @@ final class RemoteForegroundResolver {
                   case let .remote(user, host, _) = spec
             else { continue }
             let dest = RemoteSpawn.destination(user: user, host: host)
+            if seenPaneIDs.insert(pane.id).inserted {
+                authRefusedDests.remove(dest)
+            }
             specByDest[dest] = spec
             panesByDest[dest, default: []].append(pane)
             if pane.remoteProbePending { boundaryDests.insert(dest) }
         }
         for (dest, spec) in specByDest {
+            guard !authRefusedDests.contains(dest) else { continue }
             guard !inflight.contains(dest) else { continue }
             if !boundaryDests.contains(dest),
                let last = lastProbeAt[dest], now.timeIntervalSince(last) < minInterval { continue }
@@ -102,32 +149,46 @@ final class RemoteForegroundResolver {
             // zmxPath is a host property — all panes on this dest share it.
             let zmxPath = targets.first?.remoteZmxPath
             Task {
-                let map = await probe(spec, zmxPath)
-                finish(dest: dest, map: map, panes: targets)
+                let outcome = await probe(spec, zmxPath)
+                finish(dest: dest, outcome: outcome, panes: targets)
             }
         }
     }
 
-    private func finish(dest: String, map: [String: RemoteForeground]?, panes: [Pane]) {
+    private func finish(dest: String, outcome: RemoteProbeOutcome, panes: [Pane]) {
         inflight.remove(dest)
-        guard let map else {
-            // Unreachable/auth/timeout: names freeze at last-known. Logged
-            // once per failure, never surfaced — a flaky link must not nag.
+        switch outcome {
+        case .unreachable:
+            // Unreachable/timeout: names freeze at last-known and the next
+            // tick retries. Logged once per failure, never surfaced — a
+            // flaky link must not nag.
             logger.info("Remote foreground probe failed for \(dest, privacy: .public)")
-            return
-        }
-        for pane in panes {
-            if let foreground = map[pane.sessionName] {
-                pane.applyRemoteForeground(foreground)
-            } else {
-                // A successful listing with no entry for this session: the
-                // probe raced the session's async registration on the host
-                // (ssh handshake + zmx startup take seconds). A never-named
-                // pane re-arms its request, bounded, so the retry rides the
-                // next poll tick even after its project leaves the frontmost
-                // slot — otherwise the consumed request would strand it nil,
-                // and every close would take the conservative busy fallback.
-                pane.noteRemoteProbeMiss()
+        case .authRefused:
+            // The host denied our BatchMode auth — further probes can only
+            // repeat the refusal (or re-raise a biometric key's dialog, the
+            // #272 nag), so the destination is suspended until a new pane
+            // connects to it. Tier-1 OSC titles keep working; busy-close
+            // falls back to the conservative surface reading.
+            logger.warning("""
+            Remote foreground probe auth refused for \(dest, privacy: .public) — \
+            suspending probes for this host (interactive-only key? consider \
+            ssh ControlMaster so probes reuse the pane's connection)
+            """)
+            authRefusedDests.insert(dest)
+        case let .success(map):
+            for pane in panes {
+                if let foreground = map[pane.sessionName] {
+                    pane.applyRemoteForeground(foreground)
+                } else {
+                    // A successful listing with no entry for this session: the
+                    // probe raced the session's async registration on the host
+                    // (ssh handshake + zmx startup take seconds). A never-named
+                    // pane re-arms its request, bounded, so the retry rides the
+                    // next poll tick even after its project leaves the frontmost
+                    // slot — otherwise the consumed request would strand it nil,
+                    // and every close would take the conservative busy fallback.
+                    pane.noteRemoteProbeMiss()
+                }
             }
         }
     }
