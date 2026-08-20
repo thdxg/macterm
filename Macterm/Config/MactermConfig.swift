@@ -66,46 +66,37 @@ final class MactermConfig {
             "background-blur = 0",
         ]
 
-        // libghostty auto-populates `GHOSTTY_BIN_DIR` in spawned shells from
-        // the host executable's directory — for us that's Macterm's bundle,
-        // which ships no `ghostty` CLI. The shell-integration `ssh` wrapper
-        // then tries to exec a non-existent `Macterm.app/Contents/MacOS/ghostty`
-        // and dies. If the real Ghostty.app is installed, point at its CLI so
-        // the `path` feature works; otherwise disable the wrappers that need
-        // the binary so they fall through to plain `ssh`.
+        // The shell-integration `ssh` wrapper (the `ssh-env`/`ssh-terminfo`
+        // features) execs `"$GHOSTTY_BIN_DIR/ghostty" +ssh` — an action
+        // Macterm serves natively via the bundled `ghostty` shim, which
+        // relays to `macterm ssh` (see SSHWrapper). Point GHOSTTY_BIN_DIR at
+        // the shim's directory so those features work with no Ghostty.app
+        // installed; libghostty would otherwise auto-populate it with the
+        // host executable's directory (Contents/MacOS), where no `ghostty`
+        // exists. Only if the shim is missing from the bundle (a broken or
+        // partial build) are the ssh features forced off, so the wrapper
+        // falls through to plain `ssh` instead of dying on a bad exec.
         //
-        // The ssh wrappers additionally need a *new enough* CLI: the bundled
-        // shell integration calls `ghostty +ssh`, an action older builds (e.g.
-        // 1.3.1) lack. A present-but-too-old CLI makes the wrapper fail with
-        // "Ghostty failed to initialize!" — worse than plain `ssh`. So we gate
-        // the ssh features on `+ssh` support specifically, independent of
-        // whether the binary exists for the `path` feature.
-        // Read the CLI probe from the process-lifetime cache: the installed
-        // ghostty CLI can't change within a launch, and `loadConfig` calls
-        // `regenerate()` before EVERY reload — a blocking `ghostty +help` spawn
-        // per reload was pure waste (#3.2).
-        var disabledFeatures: [String] = []
-        if let binDir = GhosttyCLIProbe.binDir {
-            overrides.append("env = GHOSTTY_BIN_DIR=\(binDir)")
+        // `path` is always forced off: its sole effect is putting
+        // GHOSTTY_BIN_DIR on PATH, and the shim answers nothing but `+ssh` —
+        // exposing it as a bare `ghostty` would impersonate the real CLI.
+        var disabledFeatures = ["no-path"]
+        if let shimDir = Self.sshShimDirectory() {
+            overrides.append("env = GHOSTTY_BIN_DIR=\(shimDir)")
         } else {
-            disabledFeatures.append("no-path")
-        }
-        if GhosttyCLIProbe.sshWrapperBinDir == nil {
             disabledFeatures.append(contentsOf: ["no-ssh-env", "no-ssh-terminfo"])
         }
-        if !disabledFeatures.isEmpty {
-            // A bare `shell-integration-features = <ours>` would replace the
-            // user's own value entirely — libghostty re-parses the key from
-            // defaults on every occurrence — wiping user flags like
-            // `no-cursor`. Re-emit the user's effective value with our forced
-            // flags appended so only those change. (#75)
-            let value = ShellIntegrationFeatures.overrideValue(
-                userConfigText: userGhosttyConfigText(),
-                disabled: disabledFeatures
-            )
-            if let value {
-                overrides.append("shell-integration-features = \(value)")
-            }
+        // A bare `shell-integration-features = no-path` would replace the
+        // user's own value entirely — libghostty re-parses the key from
+        // defaults on every occurrence — wiping user flags like `no-cursor`.
+        // Re-emit the user's effective value with our forced flags appended
+        // so only those change. (#75)
+        let value = ShellIntegrationFeatures.overrideValue(
+            userConfigText: userGhosttyConfigText(),
+            disabled: disabledFeatures
+        )
+        if let value {
+            overrides.append("shell-integration-features = \(value)")
         }
 
         let body = overrides.joined(separator: "\n") + "\n"
@@ -122,6 +113,22 @@ final class MactermConfig {
         } catch {
             logger.error("failed to write \(url.lastPathComponent, privacy: .public): \(error, privacy: .public)")
         }
+    }
+
+    /// The bundle directory holding the `ghostty` shim that serves the
+    /// shell-integration ssh wrapper (`scripts/ghostty-shim.sh`, installed by
+    /// the "Bundle macterm CLI" post-build step), or nil when the shim isn't
+    /// there — a broken or partial build, in which case `regenerate` forces
+    /// the ssh features off rather than let the wrapper exec a missing file.
+    /// Its own directory, NOT `Resources/bin` or `Contents/MacOS`, because
+    /// both of those land on pane PATHs and a `ghostty` that only answers
+    /// `+ssh` must never be reachable by name.
+    static func sshShimDirectory() -> String? {
+        guard let dir = Bundle.main.resourceURL?
+            .appendingPathComponent("ssh-bridge", isDirectory: true)
+        else { return nil }
+        let shim = dir.appendingPathComponent("ghostty").path
+        return FileManager.default.isExecutableFile(atPath: shim) ? dir.path : nil
     }
 
     /// The user's Ghostty config text, read for merging their

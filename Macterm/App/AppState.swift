@@ -499,7 +499,12 @@ final class AppState {
         let panesToProbe = isAnyWindowVisible()
             ? activeRemotePanes
             : activeRemotePanes.filter(\.remoteProbePending)
-        if !panesToProbe.isEmpty {
+        // The background-connections toggle gates ALL probe kinds — scheduled,
+        // boundary, and priming requests alike — because each is a fresh ssh
+        // connection, and one connection is one Touch ID dialog on a
+        // biometric-gated key (#272). This is the single resolver call site,
+        // so the check lives here rather than inside the resolver.
+        if !panesToProbe.isEmpty, Preferences.shared.backgroundSSHConnections {
             remoteForegroundResolver.refresh(panes: panesToProbe, probe: zmx.remoteForegrounds)
         }
     }

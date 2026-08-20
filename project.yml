@@ -159,6 +159,15 @@ targets:
       # Bundle the control CLI at Contents/Resources/bin/macterm. The app
       # prepends this dir to PATH for spawned shells; scripts outside the app
       # (the CI benchmark) invoke it by bundle path.
+      #
+      # Also bundle the `ghostty` shim at Contents/Resources/ssh-bridge/
+      # (MactermConfig.sshShimDirectory) — MactermConfig.regenerate points
+      # GHOSTTY_BIN_DIR there so the shell-integration ssh wrapper's
+      # `"$GHOSTTY_BIN_DIR/ghostty" +ssh` resolves to `macterm ssh` (see
+      # scripts/ghostty-shim.sh). Deliberately NOT Resources/bin or
+      # Contents/MacOS: both land on pane PATHs (EnvironmentSetup prepends
+      # bin; libghostty appends the exe dir), and the shim must never be
+      # reachable as a bare `ghostty`.
       - name: "Bundle macterm CLI"
         basedOnDependencyAnalysis: false
         script: |
@@ -166,15 +175,22 @@ targets:
           BIN_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources/bin"
           mkdir -p "$BIN_DIR"
           cp "$BUILT_PRODUCTS_DIR/macterm" "$BIN_DIR/macterm"
+          SHIM_DIR="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources/ssh-bridge"
+          mkdir -p "$SHIM_DIR"
+          cp "$SRCROOT/scripts/ghostty-shim.sh" "$SHIM_DIR/ghostty"
+          chmod +x "$SHIM_DIR/ghostty"
 
   # The bundled control CLI (`macterm`). Shares ControlProtocol.swift with the
-  # app target so the wire codec can never drift between the two.
+  # app target so the wire codec can never drift between the two, and
+  # SSHWrapper.swift so `macterm ssh` and the app promise the same terminfo
+  # entry (both files are unit-tested through the app module).
   MactermCLI:
     type: tool
     platform: macOS
     sources:
       - path: CLI
       - path: Macterm/Control/ControlProtocol.swift
+      - path: Macterm/System/SSHWrapper.swift
     dependencies:
       - package: ArgumentParser
         product: ArgumentParser

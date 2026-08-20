@@ -92,6 +92,41 @@ struct ForegroundSampleTests {
         ))
     }
 
+    // MARK: - The background-connections toggle
+
+    @Test
+    func remote_with_probing_disabled_warns_only_on_running_execution() {
+        // Positive knowledge still warns: OSC 133 execution state rides the
+        // pane's own connection, so it costs nothing to trust.
+        #expect(ForegroundPolicy.needsConfirmClose(
+            sample: nil, executionState: .running, isRemote: true,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: false
+        ))
+        // A sample is a frozen relic from before the toggle flipped — ignored.
+        #expect(!ForegroundPolicy.needsConfirmClose(
+            sample: sample(name: "btop", isIdleShell: false),
+            executionState: .idle, isRemote: true,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
+        ))
+        // No conservative surface fallback: with probing off no observation
+        // can ever land, so "conservative" would mean warning on EVERY close
+        // forever — the user chose "don't warn" when they turned probing off.
+        #expect(!ForegroundPolicy.needsConfirmClose(
+            sample: nil, executionState: .idle, isRemote: true,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
+        ))
+    }
+
+    @Test
+    func local_panes_ignore_the_probing_toggle() {
+        // Local signals cost no ssh connections; the toggle must not weaken
+        // libghostty's own verdict.
+        #expect(ForegroundPolicy.needsConfirmClose(
+            sample: nil, executionState: .idle, isRemote: false,
+            hasSurface: true, remoteProbingEnabled: false, surfaceBusy: true
+        ))
+    }
+
     // MARK: - remoteNeedsConfirmClose (the nil-able split)
 
     @Test
