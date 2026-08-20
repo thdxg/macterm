@@ -2,6 +2,15 @@ import Combine
 import Sparkle
 import SwiftUI
 
+enum UpdaterAvailability {
+    static let placeholderPublicKey = "SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER"
+
+    static func shouldStart(isDebug: Bool, isBenchmark: Bool, publicKey: String?) -> Bool {
+        guard !isDebug, !isBenchmark, let publicKey, !publicKey.isEmpty else { return false }
+        return publicKey != placeholderPublicKey
+    }
+}
+
 /// Thin wrapper around `SPUStandardUpdaterController` that exposes the
 /// observable bits SwiftUI views need.
 ///
@@ -36,22 +45,27 @@ final class Updater {
     private var cancellable: AnyCancellable?
 
     private init() {
-        // In debug builds Sparkle can't verify the unsigned dev binary against
-        // the production EdDSA key, so it pops an "Unable to Check For
-        // Updates" dialog on every launch. Start the controller without
-        // kicking off update checks; release builds still auto-check.
+        // Debug and local Release builds have no production EdDSA key, so
+        // Sparkle would show "Unable to Check For Updates" on launch. Only a
+        // distributed release with a real embedded key starts the updater.
         //
         // Benchmark mode is a Release build with the placeholder key
         // (scripts/bench.sh builds without SPARKLE_ED_PUBLIC_KEY), so the
         // updater fails to start and its app-modal alert blocks the run
         // loop at launch — on CI nobody can click OK.
-        let startUpdater: Bool = {
+        let isDebug: Bool = {
             #if DEBUG
-            return false
+            true
             #else
-            return !BenchmarkControl.isEnabled
+            false
             #endif
         }()
+        let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
+        let startUpdater = UpdaterAvailability.shouldStart(
+            isDebug: isDebug,
+            isBenchmark: BenchmarkControl.isEnabled,
+            publicKey: publicKey
+        )
 
         // Construct the controller WITHOUT starting the updater, so we can wire
         // the delegate callbacks before any check can fire. Referencing `self`
@@ -76,8 +90,8 @@ final class Updater {
         userDriverDelegate.onUpdateFound = { [weak self] in self?.updateAvailable = true }
         userDriverDelegate.onUpdateCleared = { [weak self] in self?.updateAvailable = false }
 
-        // Now that callbacks are wired, actually start the updater (release,
-        // non-benchmark). Debug/benchmark skip it (see `startUpdater` above).
+        // Now that callbacks are wired, actually start the updater. Local,
+        // Debug, and benchmark builds skip it (see `startUpdater` above).
         if startUpdater {
             controller.startUpdater()
         }
