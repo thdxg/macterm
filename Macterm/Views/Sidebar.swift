@@ -323,10 +323,30 @@ struct SidebarContent: View {
         // Dragging a pinned row into a project unpins it (AppState.moveTab
         // routes the record bookkeeping).
         .draggable(MovableTab(tabID: record.id, sourceProjectID: PinnedTabs.projectID))
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.height
-        } action: { height in
-            pinnedRowHeights[record.id] = height
+        // The drop capture lives BEHIND the row, never on it — the
+        // SplitLeafView pattern. An `.onDrop` directly on the row swallowed
+        // left clicks (the row dragged fine but stopped being selectable);
+        // a background destination still receives every drag, because drop
+        // routing is geometric and only registered destinations participate,
+        // while clicks pass through to the row and the List's selection.
+        .background {
+            Color.clear
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    pinnedRowHeights[record.id] = height
+                }
+                .onDrop(
+                    of: [.mactermTab, .mactermPaneID],
+                    delegate: PinnedRowDropDelegate(
+                        index: index,
+                        rowHeight: { pinnedRowHeights[record.id] ?? 24 },
+                        target: $pinnedDropTarget,
+                        perform: { resolved, info in
+                            performPinnedRowDrop(slot: resolved.slot, info: info)
+                        }
+                    )
+                )
         }
         .overlay(alignment: .top) {
             if pinnedDropTarget == PinnedDropTarget(index: index, below: false) {
@@ -338,17 +358,6 @@ struct SidebarContent: View {
                 PinnedInsertionLine()
             }
         }
-        .onDrop(
-            of: [.mactermTab, .mactermPaneID],
-            delegate: PinnedRowDropDelegate(
-                index: index,
-                rowHeight: { pinnedRowHeights[record.id] ?? 24 },
-                target: $pinnedDropTarget,
-                perform: { resolved, info in
-                    performPinnedRowDrop(slot: resolved.slot, info: info)
-                }
-            )
-        )
     }
 
     /// Apply a resolved pinned-row drop at `slot` (record-space insertion
