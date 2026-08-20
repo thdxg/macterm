@@ -349,13 +349,13 @@ struct SidebarContent: View {
                 )
         }
         .overlay(alignment: .top) {
-            if pinnedDropTarget == PinnedDropTarget(index: index, below: false) {
-                PinnedInsertionLine()
+            if let target = pinnedDropTarget, target.index == index, !target.below {
+                PinnedInsertionBadge(label: target.label)
             }
         }
         .overlay(alignment: .bottom) {
-            if pinnedDropTarget == PinnedDropTarget(index: index, below: true) {
-                PinnedInsertionLine()
+            if let target = pinnedDropTarget, target.index == index, target.below {
+                PinnedInsertionBadge(label: target.label)
             }
         }
     }
@@ -1002,10 +1002,13 @@ private struct SidebarTabRow: View {
 }
 
 /// Where a drag hovering a pinned row would insert: above (`below == false`)
-/// or below that row's record index.
+/// or below that row's record index. `label` names the action the drop will
+/// take ("Pin Tab" for a project tab or pane, "Move Tab" for a pinned-row
+/// reorder), shown in the insertion badge.
 private struct PinnedDropTarget: Equatable {
     let index: Int
     let below: Bool
+    let label: String
     /// The record-space insertion offset the drop resolves to.
     var slot: Int { below ? index + 1 : index }
 }
@@ -1029,6 +1032,10 @@ private struct PinnedRowDropDelegate: DropDelegate {
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        // dropUpdated can fire after performDrop (the same quirk
+        // LeafDropDelegate documents); without this guard it would re-show
+        // the insertion badge on a completed drop and leave it stuck.
+        guard target.wrappedValue != nil else { return DropProposal(operation: .forbidden) }
         update(info)
         return DropProposal(operation: .move)
     }
@@ -1048,7 +1055,12 @@ private struct PinnedRowDropDelegate: DropDelegate {
 
     private func update(_ info: DropInfo) {
         let below = info.location.y > rowHeight() / 2
-        let resolved = PinnedDropTarget(index: index, below: below)
+        // Name the action, not just the place: a pinned row dragged onto a
+        // sibling is a move; anything else pins. The payload is synchronously
+        // readable off the drag pasteboard for in-app drags (falls open to
+        // "Pin Tab" when it isn't rendered yet).
+        let isReorder = MovableTab.fromDragPasteboard()?.sourceProjectID == PinnedTabs.projectID
+        let resolved = PinnedDropTarget(index: index, below: below, label: isReorder ? "Move Tab" : "Pin Tab")
         if target.wrappedValue != resolved {
             target.wrappedValue = resolved
         }
@@ -1056,13 +1068,25 @@ private struct PinnedRowDropDelegate: DropDelegate {
 }
 
 /// The insertion indicator shown at a pinned row's top or bottom edge while a
-/// drag hovers it — the native List insertion line's look, drawn by hand
-/// because these rows manage their own drops (see `pinnedRow`).
-private struct PinnedInsertionLine: View {
+/// drag hovers it: the same labeled band style as `PinTabDropZone`, compact
+/// enough to sit inside the row at the edge the drop targets.
+private struct PinnedInsertionBadge: View {
+    let label: String
+
     var body: some View {
-        Capsule()
-            .fill(MactermTheme.accent)
-            .frame(height: 2.5)
+        Label(label, systemImage: "pin.fill")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(MactermTheme.accent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 17)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(MactermTheme.accent.opacity(0.18))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(MactermTheme.accent.opacity(0.6), lineWidth: 1)
+                    )
+            )
             .padding(.trailing, 2)
             .allowsHitTesting(false)
     }
