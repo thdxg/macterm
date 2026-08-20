@@ -15,10 +15,12 @@ struct MainWindow: View {
     private var detailWidth: CGFloat = .infinity
     @State
     private var preferences = Preferences.shared
+    @State
+    private var windowCornerRadius: CGFloat?
     /// The sidebar is temporarily out because the pointer is at the leading
-    /// edge, while the user's toggle state still says hidden. Peeking drives
-    /// the same `columnVisibility` path the shortcut uses — never AppKit's
-    /// broken overlay reveal, disabled in `WindowAppearance`.
+    /// edge while the user's toggle state still says hidden. Resize peeks use
+    /// `columnVisibility`; overlay peeks leave that column hidden and mount a
+    /// separate glass surface.
     @State
     private var isPeeking = false
     /// Set when the shortcut hides the sidebar with the pointer still over it,
@@ -58,6 +60,12 @@ struct MainWindow: View {
     /// event. Cleared when the pointer leaves the window.
     @State
     private var lastHoverPoint: CGPoint?
+    /// Invalidates a pending overlay dismissal whenever the pointer returns.
+    /// A generation token avoids retaining a task handle in view state.
+    @State
+    private var overlayDismissGeneration = 0
+    @State
+    private var isResizingOverlay = false
 
     /// Conservative bound on the column expand/collapse animation, including a
     /// margin — deferring the opposite transition slightly long is invisible,
@@ -65,9 +73,14 @@ struct MainWindow: View {
     /// NavigationSplitView's stored width metric.
     private let peekAnimationDuration: TimeInterval = 0.4
 
-    /// Width of the hover strip at the leading edge that pops the hidden
-    /// sidebar out — a little wider than AppKit's own edge-hover band.
-    private let peekStripWidth: CGFloat = 12
+    /// A generous activation band makes the overlay easy to acquire without
+    /// requiring pixel-perfect contact with the window edge.
+    private let peekStripWidth: CGFloat = 24
+    private let overlayDismissDelay: Duration = .milliseconds(440)
+
+    private var usesOverlayPeek: Bool {
+        preferences.sidebarPeekStyle == .overlayTerminal
+    }
 
     var body: some View {
         // Derive bindings to the @Observable AppState via @Bindable (the
@@ -159,8 +172,20 @@ struct MainWindow: View {
                 }
             }
         }
+        .overlay(alignment: .leading) {
+            if isPeeking, usesOverlayPeek, !appState.sidebarVisible {
+                SidebarOverlayPanel(
+                    width: sidebarWidth,
+                    chromeHidden: chromeHidden,
+                    windowCornerRadius: windowCornerRadius,
+                    onResize: { recordSidebarWidth($0) },
+                    onResizeStateChanged: { handleOverlayResizeState($0) }
+                )
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+        }
         .toolbar(chromeHidden ? .hidden : .visible, for: .windowToolbar)
-        .background(WindowStyler(hideTitle: chromeHidden))
+        .background(WindowStyler(hideTitle: chromeHidden, windowCornerRadius: $windowCornerRadius))
         .overlay {
             if appState.isCommandPaletteVisible {
                 CommandPaletteOverlay()
@@ -186,16 +211,15 @@ struct MainWindow: View {
         }
         .onChange(of: appState.sidebarVisible) { _, visible in
             if visible {
-                // A peek promoted to pinned (toolbar button, shortcut while
-                // peeked): the column is already out, just drop the peek flag.
+                cancelOverlayDismiss()
                 isPeeking = false
-            } else if isPeeking {
+            } else if isPeeking, !usesOverlayPeek {
                 // Hidden by shortcut while peeked out under the pointer: don't
                 // let the very next hover event pop it straight back open.
                 isPeeking = false
                 suppressPeekUntilExit = true
             }
-            if !visible {
+            if !visible, !usesOverlayPeek {
                 // A shortcut hide collapses the column just like a peek's
                 // retraction; a peek starting into that animation would
                 // reverse it mid-flight (see `beginPeek`).
@@ -212,6 +236,18 @@ struct MainWindow: View {
             // A peek is the exception: the column shows while the user's
             // toggle state stays hidden.
             if isPeeking {
+                if usesOverlayPeek {
+                    // The overlay never changes the split-view column. If the
+                    // toolbar button opens that column, promote the temporary
+                    // peek to the one pinned native sidebar and remove the
+                    // overlay immediately.
+                    if visibility != .detailOnly {
+                        cancelOverlayDismiss()
+                        isPeeking = false
+                        appState.sidebarVisible = true
+                    }
+                    return
+                }
                 // The toolbar button honors the sidebar's real configuration
                 // (hidden), not the peeked column it happens to see — so its
                 // collapse means "show": pin the sidebar instead of letting
@@ -227,6 +263,16 @@ struct MainWindow: View {
             if appState.sidebarVisible != visible {
                 appState.sidebarVisible = visible
             }
+        }
+        .onChange(of: preferences.sidebarPeekStyle) { _, style in
+            guard isPeeking, !appState.sidebarVisible else { return }
+            cancelOverlayDismiss()
+            withAnimation(.easeOut(duration: 0.16)) {
+                columnVisibility = style == .resizeTerminal ? .automatic : .detailOnly
+            }
+        }
+        .onChange(of: preferences.peekSidebarWhenHidden) { _, enabled in
+            if !enabled, isPeeking { endPeek() }
         }
         .onChange(of: appState.isCommandPaletteVisible) { _, visible in
             guard !visible else { return }
@@ -254,15 +300,21 @@ struct MainWindow: View {
         preferences.sidebarWidth = rounded
     }
 
-    /// Hover-peek for the hidden sidebar: pointer in the leading-edge strip
-    /// slides it out at its remembered width; pointer off the sidebar (or out
-    /// of the window) slides it back in. Runs through `columnVisibility`, the
-    /// shortcut's path, so the titlebar lays out as for a pinned sidebar.
+    /// Hover-peek for the hidden sidebar. The resize style uses the native
+    /// split-view column; the overlay style leaves that column hidden and
+    /// draws a separate glass panel over the terminal.
     private func handleSidebarPeekHover(_ phase: HoverPhase) {
         switch phase {
         case let .active(point):
             lastHoverPoint = point
-            guard !appState.sidebarVisible else { return }
+            if isResizingOverlay {
+                cancelOverlayDismiss()
+                return
+            }
+            guard !appState.sidebarVisible else {
+                cancelOverlayDismiss()
+                return
+            }
             // Toggleable in Settings → Appearance → Sidebar. Checked here, not
             // at the modifier, so flipping it off mid-peek still retracts.
             guard preferences.peekSidebarWhenHidden else {
@@ -275,17 +327,28 @@ struct MainWindow: View {
             }
             if !isPeeking, point.x <= peekStripWidth {
                 beginPeek()
-            } else if isPeeking, point.x > sidebarWidth + 8 {
-                endPeek()
             } else if isPeeking {
-                // Pointer back over the sidebar: cancel a deferred retraction.
-                deferredUnpeek = false
+                if point.x <= sidebarWidth + 24 {
+                    deferredUnpeek = false
+                    cancelOverlayDismiss()
+                } else if usesOverlayPeek {
+                    scheduleOverlayDismiss()
+                } else {
+                    endPeek()
+                }
             }
         case .ended:
-            // The pointer left the window entirely.
+            // A brief overshoot beyond the window's left edge is common while
+            // acquiring the panel. Overlay mode gets a grace period.
             lastHoverPoint = nil
             deferredPeek = false
-            if isPeeking { endPeek() }
+            if isPeeking, !isResizingOverlay {
+                if usesOverlayPeek {
+                    scheduleOverlayDismiss()
+                } else {
+                    endPeek()
+                }
+            }
             suppressPeekUntilExit = false
         }
     }
@@ -295,6 +358,10 @@ struct MainWindow: View {
     /// re-checks against the pointer's last known position (it may be parked
     /// in the strip, generating no further events to retry on).
     private func beginPeek() {
+        if usesOverlayPeek {
+            expandPeek()
+            return
+        }
         let remaining = peekCollapseSettleTime.timeIntervalSinceNow
         guard remaining <= 0 else {
             guard !deferredPeek else { return }
@@ -315,8 +382,13 @@ struct MainWindow: View {
     }
 
     private func expandPeek() {
-        isPeeking = true
         deferredPeek = false
+        if usesOverlayPeek {
+            cancelOverlayDismiss()
+            withAnimation(.easeOut(duration: 0.16)) { isPeeking = true }
+            return
+        }
+        isPeeking = true
         peekExpandSettleTime = Date().addingTimeInterval(peekAnimationDuration)
         withAnimation { columnVisibility = .automatic }
     }
@@ -327,6 +399,10 @@ struct MainWindow: View {
     /// `ideal` can override a stored metric), so a too-quick exit defers the
     /// retraction until the expand has settled.
     private func endPeek() {
+        if usesOverlayPeek {
+            collapsePeek()
+            return
+        }
         let remaining = peekExpandSettleTime.timeIntervalSinceNow
         guard remaining <= 0 else {
             guard !deferredUnpeek else { return }
@@ -342,10 +418,43 @@ struct MainWindow: View {
     }
 
     private func collapsePeek() {
+        if usesOverlayPeek {
+            cancelOverlayDismiss()
+            deferredUnpeek = false
+            withAnimation(.easeOut(duration: 0.16)) { isPeeking = false }
+            return
+        }
         isPeeking = false
         deferredUnpeek = false
         peekCollapseSettleTime = Date().addingTimeInterval(peekAnimationDuration)
         withAnimation { columnVisibility = .detailOnly }
+    }
+
+    private func scheduleOverlayDismiss() {
+        guard usesOverlayPeek, isPeeking, !isResizingOverlay else { return }
+        overlayDismissGeneration += 1
+        let generation = overlayDismissGeneration
+        Task { @MainActor in
+            try? await Task.sleep(for: overlayDismissDelay)
+            guard generation == overlayDismissGeneration,
+                  usesOverlayPeek, isPeeking,
+                  !appState.sidebarVisible, !isResizingOverlay
+            else { return }
+            collapsePeek()
+        }
+    }
+
+    private func cancelOverlayDismiss() {
+        overlayDismissGeneration += 1
+    }
+
+    private func handleOverlayResizeState(_ isResizing: Bool) {
+        isResizingOverlay = isResizing
+        if isResizing {
+            cancelOverlayDismiss()
+        } else if lastHoverPoint.map({ $0.x > sidebarWidth + 24 }) ?? true {
+            scheduleOverlayDismiss()
+        }
     }
 
     private var activeProject: Project? {
@@ -604,9 +713,11 @@ private struct WindowStyler: NSViewRepresentable {
     /// (`.toolbar(.hidden, for: .windowToolbar)` in `MainWindow`); the title
     /// text is an `NSWindow` property, so it's applied here.
     var hideTitle: Bool = false
+    @Binding
+    var windowCornerRadius: CGFloat?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(windowCornerRadius: $windowCornerRadius)
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -640,6 +751,7 @@ private struct WindowStyler: NSViewRepresentable {
             window.styleMask.insert(.fullSizeContentView)
             window.titleVisibility = hideTitle ? .hidden : .visible
             WindowAppearance.sync(window: window)
+            coordinator.syncWindowCornerRadius(window: window)
             coordinator.observe(window: window)
             // Intercept the close button to hide instead of close,
             // preserving terminal surfaces and running processes.
@@ -647,7 +759,7 @@ private struct WindowStyler: NSViewRepresentable {
         }
     }
 
-    func updateNSView(_ view: NSView, context _: Context) {
+    func updateNSView(_ view: NSView, context: Context) {
         // Follow live setting flips. Async because SwiftUI forbids window
         // mutation from inside the update pass.
         let hide = hideTitle
@@ -655,12 +767,23 @@ private struct WindowStyler: NSViewRepresentable {
             guard let window = view.window else { return }
             window.titleVisibility = hide ? .hidden : .visible
             WindowAppearance.syncTitleBarHidden(window: window)
+            context.coordinator.syncWindowCornerRadius(window: window)
         }
     }
 
     final class Coordinator: NSObject, NSWindowDelegate {
         nonisolated(unsafe) private var observer: Any?
         weak var swiftuiDelegate: (any NSWindowDelegate)?
+        private var windowCornerRadius: Binding<CGFloat?>
+
+        init(windowCornerRadius: Binding<CGFloat?>) {
+            self.windowCornerRadius = windowCornerRadius
+        }
+
+        @MainActor
+        func syncWindowCornerRadius(window: NSWindow) {
+            windowCornerRadius.wrappedValue = WindowAppearance.windowCornerRadius(window)
+        }
 
         @MainActor
         func observe(window: NSWindow) {
@@ -683,6 +806,7 @@ private struct WindowStyler: NSViewRepresentable {
         func windowDidBecomeMain(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
             WindowAppearance.sync(window: window)
+            syncWindowCornerRadius(window: window)
             swiftuiDelegate?.windowDidBecomeMain?(notification)
         }
 
@@ -703,12 +827,14 @@ private struct WindowStyler: NSViewRepresentable {
         func windowDidEnterFullScreen(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
             WindowAppearance.sync(window: window)
+            syncWindowCornerRadius(window: window)
             swiftuiDelegate?.windowDidEnterFullScreen?(notification)
         }
 
         func windowDidExitFullScreen(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
             WindowAppearance.sync(window: window)
+            syncWindowCornerRadius(window: window)
             swiftuiDelegate?.windowDidExitFullScreen?(notification)
         }
 

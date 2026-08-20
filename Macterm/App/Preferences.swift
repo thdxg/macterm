@@ -92,6 +92,32 @@ enum WindowGlassStyle: String, CaseIterable, Identifiable {
     }
 }
 
+/// How a hidden sidebar appears while the pointer rests at the window's
+/// leading edge. The normal pinned sidebar always remains a native split-view
+/// column; this only controls the temporary hover peek.
+enum SidebarPeekStyle: String, CaseIterable, Identifiable {
+    case resizeTerminal = "resize_content"
+    case overlayTerminal = "overlay_on_hover"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .resizeTerminal: "Resize terminal"
+        case .overlayTerminal: "Overlay terminal"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .resizeTerminal:
+            "Slides the native sidebar column out and temporarily resizes the terminal."
+        case .overlayTerminal:
+            "Shows a floating Liquid Glass sidebar over the terminal without changing its size."
+        }
+    }
+}
+
 /// Single observable source of truth for UserDefaults-backed preferences.
 ///
 /// Macterm only stores app-shaped state here (window opacity/blur, quick
@@ -130,6 +156,12 @@ final class Preferences {
     /// Capped below 1 so an unfocused pane is never fully black.
     var paneDimOpacity: Double {
         didSet { defaults.set(paneDimOpacity, forKey: Keys.paneDimOpacity) }
+    }
+
+    /// Presentation used by `peekSidebarWhenHidden`. The pinned sidebar is
+    /// always the native split-view column.
+    var sidebarPeekStyle: SidebarPeekStyle {
+        didSet { defaults.set(sidebarPeekStyle.rawValue, forKey: Keys.sidebarPeekStyle) }
     }
 
     // MARK: - Sidebar icons
@@ -543,6 +575,8 @@ final class Preferences {
         paneDimOpacity = Self.clampPaneDimOpacity(
             (defaults.object(forKey: Keys.paneDimOpacity) as? Double) ?? 0.2
         )
+        sidebarPeekStyle = (defaults.string(forKey: Keys.sidebarPeekStyle))
+            .flatMap(SidebarPeekStyle.init(rawValue:)) ?? .resizeTerminal
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
         windowBlurRadius = defaults.integer(forKey: Keys.windowBlurRadius)
         windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
@@ -659,6 +693,7 @@ final class Preferences {
         static let autoTiling = "macterm.autoTiling.enabled"
         static let terminalScrollSpeed = "macterm.terminal.scrollSpeed"
         static let paneDimOpacity = "macterm.pane.dimOpacity"
+        static let sidebarPeekStyle = "macterm.sidebar.presentation"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"
         static let windowGlassEnabled = "macterm.window.glassEnabled"

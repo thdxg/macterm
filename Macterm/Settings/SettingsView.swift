@@ -645,6 +645,8 @@ private struct AppearanceSettings: View {
     private var paneDimOpacity: Double = Preferences.shared.paneDimOpacity
     @State
     private var adaptiveTerminalChrome: Bool = Preferences.shared.adaptiveTerminalChromeEnabled
+    @State
+    private var sidebarPeekStyle: SidebarPeekStyle = Preferences.shared.sidebarPeekStyle
     /// Inverted view of `Preferences.hideTitleBar`: the control reads as
     /// "Show toolbar" (on by default), the preference stores the hide.
     @State
@@ -722,6 +724,25 @@ private struct AppearanceSettings: View {
             }
 
             Section("Sidebar") {
+                Toggle("Peek sidebar when hidden", isOn: $peekSidebarWhenHidden)
+                    .onChange(of: peekSidebarWhenHidden) { _, v in Preferences.shared.peekSidebarWhenHidden = v }
+                Text("Shows the hidden sidebar while the pointer rests at the window's left edge.")
+                    .settingsCaption()
+
+                Group {
+                    Picker("Peek style", selection: $sidebarPeekStyle) {
+                        ForEach(SidebarPeekStyle.allCases) { style in
+                            Text(style.displayName).tag(style)
+                        }
+                    }
+                    .onChange(of: sidebarPeekStyle) { _, style in
+                        Preferences.shared.sidebarPeekStyle = style
+                    }
+                    Text(sidebarPeekStyle.explanation)
+                        .settingsCaption()
+                }
+                .disabled(!peekSidebarWhenHidden)
+
                 Picker("Project icon", selection: $projectIconSymbol) {
                     ForEach(Preferences.projectIconChoices, id: \.self) { name in
                         iconPickerLabel(name).tag(name)
@@ -760,11 +781,6 @@ private struct AppearanceSettings: View {
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
                 Text("When hidden, create projects via the command palette or context menu.")
-                    .settingsCaption()
-
-                Toggle("Peek sidebar when hidden", isOn: $peekSidebarWhenHidden)
-                    .onChange(of: peekSidebarWhenHidden) { _, v in Preferences.shared.peekSidebarWhenHidden = v }
-                Text("Slides the hidden sidebar out while the pointer rests at the window's left edge.")
                     .settingsCaption()
             }
 
