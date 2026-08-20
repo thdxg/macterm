@@ -18,6 +18,16 @@ private let rowTrailingInset: CGFloat = 10
 /// measured here, so there is no conversion between two spaces to get wrong.
 private let tabTitleSpace = "macterm.sidebar.tabTitle"
 
+/// The width the title has to work with, which decides whether a split tab
+/// shows its panes' names or falls back to counting them.
+private struct TabTitleWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// Where a split row actually drew its per-pane segments. The join indicator
 /// has to sit on the divider the user is aiming at, and only the layout knows
 /// where that ended up.
@@ -941,6 +951,29 @@ private struct SidebarTabRow: View {
     /// Where this row drew its segment dividers, in the title's own space.
     @State
     private var seams: [CGFloat] = []
+
+    /// The title's width, for deciding how many names fit.
+    @State
+    private var titleWidth: CGFloat = 0
+
+    /// Room a segment needs before its title is worth showing. Tuned on
+    /// screen: 44pt held names back while they were still perfectly readable,
+    /// and the fading titles degrade gracefully — a clipped `nvi…` still says
+    /// more than a pane count does.
+    private static let minSegmentWidth: CGFloat = 32
+
+    /// Show one title per pane while they still fit, and count them when they
+    /// don't. The old rule was a fixed "2 or 3 panes", which is the same
+    /// judgement made once for a sidebar that can be dragged from 140pt to
+    /// 280pt: at its widest four names fit comfortably, at its narrowest even
+    /// two are cramped. A user-set title always wins — the user named the
+    /// whole tab, so the tab is what the row should say.
+    private var showsSegments: Bool {
+        let panes = tab.splitRoot.allPanes().count
+        guard tab.customTitle == nil, panes >= 2 else { return false }
+        return titleWidth >= CGFloat(panes) * Self.minSegmentWidth
+    }
+
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
@@ -975,6 +1008,14 @@ private struct SidebarTabRow: View {
         rawTitle
             .frame(maxWidth: .infinity, alignment: .leading)
             .coordinateSpace(name: tabTitleSpace)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: TabTitleWidthKey.self, value: proxy.size.width)
+                }
+            }
+            .onPreferenceChange(TabTitleWidthKey.self) { width in
+                titleWidth = width
+            }
             .onPreferenceChange(TabSegmentFramesKey.self) { frames in
                 seams = TabMergePlacement.seams(segmentFrames: frames)
             }
@@ -996,15 +1037,15 @@ private struct SidebarTabRow: View {
                 .onSubmit { commit() }
                 .onExitCommand { cancelRename() }
                 .onAppear { focused = true }
-        } else if tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
+        } else if showsSegments {
             // #227: a split tab reads as multiple tabs sharing one row — one
             // chromeless title segment per pane instead of one tab
-            // concatenating the titles with a pipe. A custom title still
-            // wins: the user named the whole tab. Four or more panes won't
-            // fit legibly, so that row collapses back to a single tab titled
-            // with the pane count (see `sidebarRowTitle`). The segments are
-            // a TITLE variant, not their own labels: the row carries one tab
-            // icon regardless of how it is named.
+            // concatenating the titles with a pipe. Whether they fit is
+            // measured rather than assumed (see `showsSegments`); when they
+            // don't, the row collapses to the pane count (see
+            // `sidebarRowTitle`). The segments are a TITLE variant, not their
+            // own labels: the row carries one tab icon regardless of how it is
+            // named.
             splitSegments
         } else {
             FadingText(tab.sidebarRowTitle)
