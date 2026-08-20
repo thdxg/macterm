@@ -396,6 +396,53 @@ extension AppState {
         }
     }
 
+    /// Poll hook: when any pinned pane's foreground name changed since the
+    /// last tick (a command started, ended, or was replaced), schedule a
+    /// debounced declaration refresh + persist. Debounced because a command
+    /// boundary often lands as two quick transitions (resolver race reports
+    /// nil, then the real argv), and because each persist rewrites
+    /// `pinned.yaml` — a file people dotfile-sync. Returns whether a persist
+    /// was scheduled (for tests).
+    @discardableResult
+    func notePinnedForegroundChangesIfNeeded() -> Bool {
+        guard let ws = pinnedWorkspace, !ws.tabs.isEmpty else {
+            pinnedForegroundStamp = [:]
+            return false
+        }
+        var stamp: [UUID: String?] = [:]
+        for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
+            stamp[pane.id] = pane.foregroundSample?.name
+        }
+        guard stamp != pinnedForegroundStamp else { return false }
+        pinnedForegroundStamp = stamp
+        schedulePinnedDeclarationPersist()
+        return true
+    }
+
+    private func schedulePinnedDeclarationPersist() {
+        pinnedDeclarationPersistWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pinnedDeclarationPersistWork = nil
+                self.persistRefreshedPinnedDeclarations()
+            }
+        }
+        pinnedDeclarationPersistWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    }
+
+    /// Re-capture every loaded record's declaration from its live tab and
+    /// persist both layers (snapshot + `pinned.yaml`). The debounced landing
+    /// point of `notePinnedForegroundChangesIfNeeded`; also safe to call
+    /// directly.
+    func persistRefreshedPinnedDeclarations() {
+        guard !pinnedRecords.isEmpty, pinnedWorkspace?.tabs.isEmpty == false else { return }
+        refreshPinnedDeclarationsFromLiveTabs()
+        saveWorkspaces()
+        writePinnedLayout()
+    }
+
     func refreshPinnedDeclarationsFromLiveTabs() {
         guard let ws = pinnedWorkspace else { return }
         for index in pinnedRecords.indices {

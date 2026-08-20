@@ -82,6 +82,19 @@ final class AppState {
     /// declaration (re-running its `run:`) instead of upserting a bare shell.
     @ObservationIgnored
     var pendingPinnedLiveRestores: [UUID: TabSnapshot] = [:]
+
+    /// Each pinned pane's last-seen foreground name, so the poll can tell
+    /// when a pinned tab started or stopped a process — the trigger that
+    /// re-captures its declaration (and rewrites `pinned.yaml`, debounced)
+    /// so the respawn recipe tracks what's actually running, not just what
+    /// ran at pin time.
+    @ObservationIgnored
+    var pinnedForegroundStamp: [UUID: String?] = [:]
+
+    /// The debounced declaration-refresh write (see
+    /// `notePinnedForegroundChangesIfNeeded`).
+    @ObservationIgnored
+    var pinnedDeclarationPersistWork: DispatchWorkItem?
     var sidebarVisible = true
     var pendingClosePane: PendingClosePane?
     /// A computed layout-apply plan awaiting user confirmation because applying
@@ -525,6 +538,11 @@ final class AppState {
         }
         lastPollSawBusyPane = sawBusyPane
         if didAcknowledgeCompletion { saveWorkspaces() }
+        // A pinned pane's foreground changing (a command started or ended) is
+        // the cue to re-capture its tab's declaration, so the respawn recipe
+        // tracks what the tab is actually doing — not just what it did at pin
+        // time. Cheap in steady state: a name compare per pinned pane.
+        notePinnedForegroundChangesIfNeeded()
         // Visibility gates only the *scheduled* probes (nobody is looking at
         // the names). A boundary request still probes while occluded — same
         // rationale as the local #210 refresh, which runs unconditionally —

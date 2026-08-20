@@ -139,6 +139,15 @@ struct SidebarContent: View {
     /// selected row at once (see `.contextMenu(forSelectionType:)` below).
     @State
     private var selection: Set<SidebarItem> = []
+    /// The live insertion target while a drag hovers a pinned row — which row,
+    /// and whether the payload would land above or below it (decided by which
+    /// half of the row the pointer is in). Drives the insertion-line overlays.
+    @State
+    private var pinnedDropTarget: PinnedDropTarget?
+    /// Each pinned row's measured height, for the delegate's above/below
+    /// midpoint test (`DropInfo.location` is in the row's own space).
+    @State
+    private var pinnedRowHeights: [UUID: CGFloat] = [:]
 
     var body: some View {
         List(selection: $selection) {
@@ -147,8 +156,9 @@ struct SidebarContent: View {
             // `.dropDestination`: at this outline level the accept crashes
             // (see the project ForEach's notes below), so each ROW is its own
             // drop target instead — dropping a tab on a pinned row pins it at
-            // that slot. With zero pinned rows there is nothing to drop on;
-            // the first pin comes from the tab context menu / palette.
+            // that slot. The always-available target — and the ONLY one when
+            // no pinned rows exist yet — is the pin drop zone strip above the
+            // list (see `PinTabDropZone`).
             ForEach(Array(appState.pinnedRecords.enumerated()), id: \.element.id) { index, record in
                 pinnedRow(record: record, index: index)
             }
@@ -186,6 +196,33 @@ struct SidebarContent: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        // The pin drop zone: a thin strip above the list that expands into a
+        // visible "Pin Tab" band while a tab/pane drag hovers it. It lives
+        // OUTSIDE the List on purpose — a plain view's `.dropDestination` has
+        // none of the outline view's drop hazards (see the notes inside the
+        // List body), and it exists even with zero pinned rows, so the FIRST
+        // pin can be a drag too.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            PinTabDropZone(
+                onPinTab: { movable in
+                    if movable.sourceProjectID == PinnedTabs.projectID {
+                        // Already pinned — dropping on the top zone moves it
+                        // to the first slot.
+                        appState.reorderPinnedTab(movable.tabID, toIndex: 0)
+                    } else {
+                        appState.pinTab(movable.tabID, fromProject: movable.sourceProjectID, toRecordIndex: 0)
+                    }
+                },
+                onPinPane: { movable in
+                    appState.separatePane(
+                        movable.paneID,
+                        toProject: PinnedTabs.projectID,
+                        destPath: PinnedTabs.fallbackRoot,
+                        at: 0
+                    )
+                }
+            )
+        }
         .sidebarSafeAreaBar(isPresented: showNewProjectButton) {
             HStack(spacing: 0) {
                 Menu {
@@ -252,8 +289,10 @@ struct SidebarContent: View {
     /// declaration). Rows are top-level List items, so — unlike project tab
     /// rows — each carries its own drop target: there is no enclosing ForEach
     /// insertion mechanism to shadow (a top-level `.dropDestination` crashes
-    /// the outline accept, see `body`), and a drop on a row means "land at
-    /// this row's slot".
+    /// the outline accept, see `body`). The target is a `DropDelegate`, not
+    /// `.dropDestination`, because only the delegate reports the hover
+    /// LOCATION — which half of the row the drag is over decides whether the
+    /// payload lands above or below it, shown live as an insertion line.
     private func pinnedRow(record: PinnedTabRecord, index: Int) -> some View {
         Group {
             if let tab = appState.pinnedWorkspace?.tabs.first(where: { $0.id == record.id }) {
@@ -284,36 +323,73 @@ struct SidebarContent: View {
         // Dragging a pinned row into a project unpins it (AppState.moveTab
         // routes the record bookkeeping).
         .draggable(MovableTab(tabID: record.id, sourceProjectID: PinnedTabs.projectID))
-        .dropDestination(for: TabSlotDropItem.self) { items, _ in
-            for item in items {
-                switch item {
-                case let .tab(tab):
-                    receivePinnedRowDrop(tab, targetIndex: index)
-                case let .pane(pane):
-                    appState.separatePane(
-                        pane.paneID,
-                        toProject: PinnedTabs.projectID,
-                        destPath: PinnedTabs.fallbackRoot,
-                        at: index
-                    )
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            pinnedRowHeights[record.id] = height
+        }
+        .overlay(alignment: .top) {
+            if pinnedDropTarget == PinnedDropTarget(index: index, below: false) {
+                PinnedInsertionLine()
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if pinnedDropTarget == PinnedDropTarget(index: index, below: true) {
+                PinnedInsertionLine()
+            }
+        }
+        .onDrop(
+            of: [.mactermTab, .mactermPaneID],
+            delegate: PinnedRowDropDelegate(
+                index: index,
+                rowHeight: { pinnedRowHeights[record.id] ?? 24 },
+                target: $pinnedDropTarget,
+                perform: { resolved, info in
+                    performPinnedRowDrop(slot: resolved.slot, info: info)
                 }
+            )
+        )
+    }
+
+    /// Apply a resolved pinned-row drop at `slot` (record-space insertion
+    /// offset, pre-removal coordinates). A pane drag first — its payload is
+    /// synchronously readable, same as `LeafDropDelegate` — then a tab drag,
+    /// with the async item-provider fallback for a payload the Transferable
+    /// hasn't rendered onto the pasteboard yet.
+    private func performPinnedRowDrop(slot: Int, info: DropInfo) -> Bool {
+        if let movable = MovablePane.fromDragPasteboard() {
+            MainActor.assumeIsolated {
+                appState.separatePane(
+                    movable.paneID,
+                    toProject: PinnedTabs.projectID,
+                    destPath: PinnedTabs.fallbackRoot,
+                    at: slot
+                )
             }
             return true
         }
+        if let movable = MovableTab.fromDragPasteboard() {
+            MainActor.assumeIsolated { receivePinnedRowDrop(movable, atSlot: slot) }
+            return true
+        }
+        guard let provider = info.itemProviders(for: [.mactermTab]).first else { return false }
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermTab.identifier) { data, _ in
+            guard let data, let movable = try? JSONDecoder().decode(MovableTab.self, from: data) else { return }
+            Task { @MainActor in
+                receivePinnedRowDrop(movable, atSlot: slot)
+            }
+        }
+        return true
     }
 
-    /// A tab dropped ON a pinned row: from a project → pin at that slot; a
-    /// pinned row dropped on another → reorder to its slot (the same "land at
-    /// the target's slot" convention as project-header drops).
-    private func receivePinnedRowDrop(_ item: MovableTab, targetIndex: Int) {
+    /// A tab dropped at a pinned insertion slot: from a project → pin there;
+    /// from within the pinned rows → reorder (`reorderPinnedTab` speaks the
+    /// same pre-removal offset).
+    private func receivePinnedRowDrop(_ item: MovableTab, atSlot slot: Int) {
         if item.sourceProjectID == PinnedTabs.projectID {
-            guard let fromIndex = appState.pinnedRecords.firstIndex(where: { $0.id == item.tabID }),
-                  fromIndex != targetIndex
-            else { return }
-            let toOffset = fromIndex < targetIndex ? targetIndex + 1 : targetIndex
-            appState.reorderPinnedTab(item.tabID, toIndex: toOffset)
+            appState.reorderPinnedTab(item.tabID, toIndex: slot)
         } else {
-            appState.pinTab(item.tabID, fromProject: item.sourceProjectID, toRecordIndex: targetIndex)
+            appState.pinTab(item.tabID, fromProject: item.sourceProjectID, toRecordIndex: slot)
         }
     }
 
@@ -835,36 +911,14 @@ private struct SidebarTabRow: View {
                 .onSubmit { commit() }
                 .onExitCommand { cancelRename() }
                 .onAppear { focused = true }
-        } else if tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
-            // #227: a split tab reads as multiple tabs sharing one row — one
-            // chromeless title segment per pane instead of one tab
-            // concatenating the titles with a pipe. A custom title still
-            // wins: the user named the whole tab. Four or more panes won't
-            // fit legibly, so that row collapses back to a single tab titled
-            // with the pane count (see `sidebarRowTitle`). The segments are
-            // a TITLE variant, not their own labels: the row carries one tab
-            // icon regardless of how it is named.
-            splitSegments
         } else {
-            FadingText(tab.sidebarRowTitle)
+            TabRowTitle(tab: tab)
         }
     }
 
     /// The tab's live agent logo, unless disabled in Settings.
     private var agentIcon: AgentIcon? {
         showAgentIcons ? tab.agentIcon : nil
-    }
-
-    /// One title segment per pane, sharing the row in equal widths, divided
-    /// by hairlines so adjacent titles don't read as one run-on name.
-    private var splitSegments: some View {
-        HStack(spacing: 10) {
-            ForEach(Array(tab.splitRoot.allPanes().enumerated()), id: \.element.id) { i, pane in
-                if i > 0 { Divider() }
-                FadingText(pane.sidebarSegmentTitle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
     }
 
     var body: some View {
@@ -930,6 +984,125 @@ private struct SidebarTabRow: View {
     }
 }
 
+/// Where a drag hovering a pinned row would insert: above (`below == false`)
+/// or below that row's record index.
+private struct PinnedDropTarget: Equatable {
+    let index: Int
+    let below: Bool
+    /// The record-space insertion offset the drop resolves to.
+    var slot: Int { below ? index + 1 : index }
+}
+
+/// The per-row drop delegate for pinned rows. A delegate (not
+/// `.dropDestination`) because only `DropInfo` carries the hover location —
+/// the above/below decision — and because it can update the shared target
+/// continuously so the insertion line tracks the pointer.
+private struct PinnedRowDropDelegate: DropDelegate {
+    let index: Int
+    let rowHeight: () -> CGFloat
+    let target: Binding<PinnedDropTarget?>
+    let perform: (PinnedDropTarget, DropInfo) -> Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.mactermTab, .mactermPaneID])
+    }
+
+    func dropEntered(info: DropInfo) {
+        update(info)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        update(info)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info _: DropInfo) {
+        if target.wrappedValue?.index == index {
+            target.wrappedValue = nil
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        update(info)
+        guard let resolved = target.wrappedValue else { return false }
+        target.wrappedValue = nil
+        return perform(resolved, info)
+    }
+
+    private func update(_ info: DropInfo) {
+        let below = info.location.y > rowHeight() / 2
+        let resolved = PinnedDropTarget(index: index, below: below)
+        if target.wrappedValue != resolved {
+            target.wrappedValue = resolved
+        }
+    }
+}
+
+/// The insertion indicator shown at a pinned row's top or bottom edge while a
+/// drag hovers it — the native List insertion line's look, drawn by hand
+/// because these rows manage their own drops (see `pinnedRow`).
+private struct PinnedInsertionLine: View {
+    var body: some View {
+        Capsule()
+            .fill(MactermTheme.accent)
+            .frame(height: 2.5)
+            .padding(.trailing, 2)
+            .allowsHitTesting(false)
+    }
+}
+
+/// The pin drop zone at the top of the sidebar: a near-invisible strip that
+/// expands into a labeled "Pin Tab" band while a tab or pane drag hovers it,
+/// and pins the payload at the first slot on drop. The strip must keep a
+/// nonzero idle height — `isTargeted` only fires once the pointer is over the
+/// target, so a zero-height strip could never be discovered by a drag.
+private struct PinTabDropZone: View {
+    let onPinTab: (MovableTab) -> Void
+    let onPinPane: (MovablePane) -> Void
+    @State
+    private var isTargeted = false
+
+    var body: some View {
+        ZStack {
+            if isTargeted {
+                Label("Pin Tab", systemImage: "pin.fill")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(MactermTheme.accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(MactermTheme.accent.opacity(0.15))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(MactermTheme.accent.opacity(0.5), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: isTargeted ? 38 : 12)
+        .contentShape(Rectangle())
+        .dropDestination(for: TabSlotDropItem.self) { items, _ in
+            for item in items {
+                switch item {
+                case let .tab(tab):
+                    onPinTab(tab)
+                case let .pane(pane):
+                    onPinPane(pane)
+                }
+            }
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isTargeted = targeted
+            }
+        }
+    }
+}
+
 /// A LOADED pinned tab's row: `SidebarTabRow`'s behavior with the pin
 /// as the row's fixed icon — pinned rows are top-level items with no project
 /// section around them, so the pin is what says which rows these are. The
@@ -967,7 +1140,7 @@ private struct PinnedSidebarTabRow: View {
                     .onExitCommand { cancelRename() }
                     .onAppear { focused = true }
             } else {
-                FadingText(tab.sidebarRowTitle)
+                TabRowTitle(tab: tab)
             }
         } icon: {
             if showTabStatusIndicator {
@@ -1002,6 +1175,32 @@ private struct PinnedSidebarTabRow: View {
     private func cancelRename() {
         isRenaming = false
         appState.restoreFocusToActivePane()
+    }
+}
+
+/// A tab row's display title, shared by project and pinned rows so the two
+/// render identically. #227: an unnamed split of 2-3 panes reads as multiple
+/// tabs sharing one row — one chromeless title segment per pane, divided by
+/// hairlines so adjacent titles don't read as one run-on name. A custom
+/// title still wins (the user named the whole tab), and four or more panes
+/// won't fit legibly, so that row collapses back to a single title with the
+/// pane count (see `sidebarRowTitle`). The segments are a TITLE variant, not
+/// their own labels: the row carries one tab icon regardless.
+private struct TabRowTitle: View {
+    let tab: TerminalTab
+
+    var body: some View {
+        if tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
+            HStack(spacing: 10) {
+                ForEach(Array(tab.splitRoot.allPanes().enumerated()), id: \.element.id) { i, pane in
+                    if i > 0 { Divider() }
+                    FadingText(pane.sidebarSegmentTitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        } else {
+            FadingText(tab.sidebarRowTitle)
+        }
     }
 }
 

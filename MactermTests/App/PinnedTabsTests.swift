@@ -338,6 +338,43 @@ struct PinnedTabsTests {
         #expect(state2.isPinnedTabLoaded(tab.id))
     }
 
+    // MARK: - Declaration freshness
+
+    @Test
+    func foreground_change_schedules_a_declaration_refresh() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+
+        // First observation populates the stamp (counts as a change);
+        // steady state schedules nothing; a new foreground does.
+        #expect(fx.state.notePinnedForegroundChangesIfNeeded())
+        #expect(fx.state.notePinnedForegroundChangesIfNeeded() == false)
+        pane.foregroundProcessName = "btop"
+        #expect(fx.state.notePinnedForegroundChangesIfNeeded())
+        #expect(fx.state.notePinnedForegroundChangesIfNeeded() == false)
+    }
+
+    @Test
+    func persistRefreshedPinnedDeclarations_recaptures_and_rewrites_the_file() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+
+        // The declaration was captured at pin time; a later change to the tab
+        // (a rename stands in for a started process, which needs a live
+        // surface to observe) must reach both the record and pinned.yaml.
+        tab.customTitle = "renamed"
+        fx.state.persistRefreshedPinnedDeclarations()
+
+        #expect(fx.state.pinnedRecords.first?.declaration.name == "renamed")
+        let text = try String(contentsOf: fx.state.pinnedLayoutStore.fileURL, encoding: .utf8)
+        #expect(text.contains("renamed"))
+    }
+
     // MARK: - pinned.yaml reconcile / absorb
 
     @Test
