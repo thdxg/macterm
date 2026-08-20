@@ -459,7 +459,14 @@ private struct GeneralSettings: View {
     @State
     private var terminalScrollSpeed: Double = Preferences.shared.terminalScrollSpeed
     @State
-    private var ghosttyConfigPath: String = Preferences.shared.userGhosttyConfigPath
+    private var useDefaultGhosttyConfigFiles: Bool = Preferences.shared.ghosttyConfigSelection.loadsDefaultFiles
+    @State
+    private var customGhosttyConfigPaths: [String] = Preferences.shared.ghosttyConfigSelection.customPaths
+    @State
+    private var defaultGhosttyConfigFiles: [GhosttyConfigSource.DefaultFileLocation] =
+        GhosttyConfigSource.defaultFileLocations()
+    @FocusState
+    private var focusedCustomGhosttyConfigIndex: Int?
 
     /// Re-probed when the app becomes active, so returning from System
     /// Settings after flipping the toggle clears the banner. `nil` (no
@@ -474,22 +481,84 @@ private struct GeneralSettings: View {
             }
 
             Section("Ghostty Config") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Load Ghostty's default config files", isOn: $useDefaultGhosttyConfigFiles)
+                        .onChange(of: useDefaultGhosttyConfigFiles) { _, _ in commitGhosttyConfig() }
+                    if useDefaultGhosttyConfigFiles {
+                        ForEach(defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }) { file in
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.circle")
+                                    Text(abbreviatedPath(file.searchedPath))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .help(file.searchedPath)
+                                }
+                                if let resolvedPath = file.resolvedPath,
+                                   resolvedPath != file.searchedPath
+                                {
+                                    Text("Resolves to \(abbreviatedPath(resolvedPath))")
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .help(resolvedPath)
+                                        .padding(.leading, 22)
+                                }
+                            }
+                            .settingsCaption()
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Additional files")
+                        .settingsCaption()
+                    ForEach(customGhosttyConfigPaths.indices, id: \.self) { index in
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text")
+                                .foregroundStyle(.secondary)
+                            TextField(
+                                "Config file path",
+                                text: $customGhosttyConfigPaths[index],
+                                prompt: Text("Path")
+                            )
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedCustomGhosttyConfigIndex, equals: index)
+                            .onSubmit { commitGhosttyConfig() }
+                            .help(customGhosttyConfigPaths[index])
+                            Button {
+                                focusedCustomGhosttyConfigIndex = nil
+                                customGhosttyConfigPaths.remove(at: index)
+                                commitGhosttyConfig()
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Remove this config file")
+                        }
+                    }
+                    Menu {
+                        Button("Enter Path…") {
+                            let newIndex = customGhosttyConfigPaths.endIndex
+                            customGhosttyConfigPaths.append("")
+                            focusedCustomGhosttyConfigIndex = newIndex
+                        }
+                    } label: {
+                        Label("Add Config File", systemImage: "plus")
+                    } primaryAction: {
+                        browseForCustomGhosttyConfigFiles()
+                    }
+                }
+
                 HStack {
-                    TextField(
-                        "Path", text: $ghosttyConfigPath,
-                        prompt: Text(Preferences.defaultGhosttyConfigPath)
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { commitPath() }
-                    Button("Browse…") { browse() }
+                    Text("Files load from top to bottom; later files override earlier ones.")
+                        .settingsCaption()
+                    Spacer()
                     Button("Reload") {
-                        commitPath()
-                        GhosttyApp.shared.reloadAndReport()
+                        commitGhosttyConfig()
                     }
                     .help("Re-read your Ghostty config. Click after saving external edits.")
                 }
-                Text("Controls theme, font, palette, and keybinds. Click Reload after editing it elsewhere.")
-                    .settingsCaption()
             }
 
             Section("Terminal") {
@@ -562,34 +631,64 @@ private struct GeneralSettings: View {
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             hasFullDiskAccess = FullDiskAccess.isGranted()
+            refreshDefaultGhosttyConfigLocations()
+        }
+        .onChange(of: focusedCustomGhosttyConfigIndex) { oldIndex, newIndex in
+            guard oldIndex != nil, oldIndex != newIndex else { return }
+            commitGhosttyConfig()
         }
     }
 
-    /// Push the text-field's current value into Preferences and reload. We
-    /// don't bind directly because that would reload on every keystroke;
-    /// debouncing on submit/blur matches how the path is typically edited.
-    /// If the new path produces errors, the alert surfaces via `reloadAndReport`.
-    private func commitPath() {
-        guard ghosttyConfigPath != Preferences.shared.userGhosttyConfigPath else { return }
-        Preferences.shared.userGhosttyConfigPath = ghosttyConfigPath
+    /// Persist the two config layers together, then reload once.
+    private func commitGhosttyConfig() {
+        let customPaths = customGhosttyConfigPaths.filter { !$0.isEmpty }
+        let selection = GhosttyConfigSelection(
+            loadsDefaultFiles: useDefaultGhosttyConfigFiles,
+            customPaths: customPaths
+        )
+        if selection != Preferences.shared.ghosttyConfigSelection {
+            Preferences.shared.setGhosttyConfig(
+                loadsDefaultFiles: useDefaultGhosttyConfigFiles,
+                customPaths: customPaths
+            )
+        }
         GhosttyApp.shared.reloadAndReport()
+        refreshDefaultGhosttyConfigLocations()
     }
 
-    private func browse() {
+    private func browseForCustomGhosttyConfigFiles() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.showsHiddenFiles = true
-        // Default the panel to the user's currently configured path's
-        // directory so they don't always start from ~.
-        let current = Preferences.shared.expandedUserGhosttyConfigPath
-        if !current.isEmpty {
-            panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
+        panel.prompt = "Add"
+        // Start beside the last selected file instead of at a generic location.
+        if let lastPath = customGhosttyConfigPaths.last {
+            let expandedPath = (lastPath as NSString).expandingTildeInPath
+            panel.directoryURL = URL(fileURLWithPath: expandedPath).deletingLastPathComponent()
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        ghosttyConfigPath = url.path(percentEncoded: false)
-        commitPath()
+        guard panel.runModal() == .OK else { return }
+        addCustomGhosttyConfigPaths(panel.urls.map { $0.path(percentEncoded: false) })
+    }
+
+    private func addCustomGhosttyConfigPaths(_ paths: [String]) {
+        let additions = paths.compactMap { path -> String? in
+            let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !customGhosttyConfigPaths.contains(trimmed) else { return nil }
+            return trimmed
+        }
+        guard !additions.isEmpty else { return }
+        customGhosttyConfigPaths.append(contentsOf: additions)
+        commitGhosttyConfig()
+    }
+
+    private func refreshDefaultGhosttyConfigLocations() {
+        defaultGhosttyConfigFiles = GhosttyConfigSource.defaultFileLocations()
+    }
+
+    private func abbreviatedPath(_ path: String) -> String {
+        (path as NSString).abbreviatingWithTildeInPath
     }
 }
 

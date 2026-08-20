@@ -52,21 +52,12 @@ enum MactermTheme {
     /// as the same yellow/orange as the highlighted text in the terminal.
     @MainActor
     static var nsSearchTick: NSColor {
-        nsColor(SearchHighlightColors.matchBackground(inConfigText: userGhosttyConfigText()))
+        nsColor(SearchHighlightColors.matchBackground(inConfigText: MactermConfig.userGhosttyConfigText()))
     }
 
     @MainActor
     static var nsSearchTickSelected: NSColor {
-        nsColor(SearchHighlightColors.selectedBackground(inConfigText: userGhosttyConfigText()))
-    }
-
-    /// Same read as `MactermConfig.userGhosttyConfigText` — the search
-    /// highlight keys live in the user's ghostty config, not ours.
-    @MainActor
-    private static func userGhosttyConfigText() -> String? {
-        let path = Preferences.shared.expandedUserGhosttyConfigPath
-        guard !path.isEmpty else { return nil }
-        return try? String(contentsOfFile: path, encoding: .utf8)
+        nsColor(SearchHighlightColors.selectedBackground(inConfigText: MactermConfig.userGhosttyConfigText()))
     }
 
     private static func nsColor(_ rgb: SearchHighlightColors.RGB) -> NSColor {

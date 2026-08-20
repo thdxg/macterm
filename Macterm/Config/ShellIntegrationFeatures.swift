@@ -14,9 +14,9 @@ import Foundation
 /// comma-separated parts left to right with later parts winning per-flag, so
 /// the forced flags take precedence while every other user flag survives.
 ///
-/// Pure selection logic — the user's config text is passed in so this is
-/// unit-testable without touching disk. Limitation: only the main config file
-/// is scanned; a value set in a `config-file` include isn't seen.
+/// Pure selection logic: the user's merged root-config text is passed in so
+/// this is unit-testable without touching disk. A value set in a recursively
+/// loaded `config-file` include still isn't seen.
 enum ShellIntegrationFeatures {
     /// Every flag the bundled libghostty's `ShellIntegrationFeatures` struct
     /// knows (ghostty `src/config/Config.zig`). Needed to expand a bare

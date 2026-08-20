@@ -415,71 +415,17 @@ final class Preferences {
 
     // MARK: - Ghostty config
 
-    static let ghosttyApplicationSupportConfigDirectory =
-        "~/Library/Application Support/com.mitchellh.ghostty"
-    static let fallbackGhosttyXDGConfigDirectory = "~/.config/ghostty"
-    private static let ghosttyXDGSubdirectory = "ghostty"
-    private static let currentGhosttyConfigFilename = "config.ghostty"
-    private static let legacyGhosttyConfigFilename = "config"
-    static let defaultGhosttyConfigPath = (ghosttyApplicationSupportConfigDirectory as NSString)
-        .appendingPathComponent(currentGhosttyConfigFilename)
+    /// The selected source for the user's Ghostty config.
+    private(set) var ghosttyConfigSelection: GhosttyConfigSelection
 
-    /// Match Ghostty's effective macOS precedence. Ghostty loads XDG before
-    /// Application Support and legacy before current, so later files win.
-    static func preferredGhosttyConfigPath(
-        applicationSupportConfigDirectory: String,
-        xdgConfigDirectory: String,
-        fileIsNonEmpty: (String) -> Bool
-    ) -> String {
-        let candidates = [
-            (applicationSupportConfigDirectory as NSString)
-                .appendingPathComponent(currentGhosttyConfigFilename),
-            (applicationSupportConfigDirectory as NSString)
-                .appendingPathComponent(legacyGhosttyConfigFilename),
-            (xdgConfigDirectory as NSString).appendingPathComponent(currentGhosttyConfigFilename),
-            (xdgConfigDirectory as NSString).appendingPathComponent(legacyGhosttyConfigFilename),
-        ]
-        return candidates.first(where: fileIsNonEmpty) ?? candidates[0]
-    }
-
-    private static func defaultUserGhosttyConfigPath() -> String {
-        let applicationSupport = (ghosttyApplicationSupportConfigDirectory as NSString)
-            .expandingTildeInPath
-        let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"].flatMap { directory in
-            guard !directory.isEmpty else { return nil }
-            return (directory as NSString).appendingPathComponent(ghosttyXDGSubdirectory)
-        } ?? (fallbackGhosttyXDGConfigDirectory as NSString).expandingTildeInPath
-
-        return preferredGhosttyConfigPath(
-            applicationSupportConfigDirectory: applicationSupport,
-            xdgConfigDirectory: xdg
-        ) { path in
-            let values = try? URL(fileURLWithPath: path).resourceValues(
-                forKeys: [.isRegularFileKey, .fileSizeKey]
-            )
-            return values?.isRegularFile == true && (values?.fileSize ?? 0) > 0
-        }
-    }
-
-    /// Path to the user's Ghostty config. Empty string = don't load any user
-    /// config (Macterm-defaults only). Tilde-expand via
-    /// `expandedUserGhosttyConfigPath` at use sites.
-    ///
-    /// Note: this setter does NOT auto-reload, intentionally. Settings UI is
-    /// the only writer and it calls `GhosttyApp.shared.reloadConfig()`
-    /// directly so it can surface any errors (missing file, parse errors)
-    /// in an alert. Other reloads happen silently.
-    var userGhosttyConfigPath: String {
-        didSet {
-            defaults.set(userGhosttyConfigPath, forKey: Keys.userGhosttyConfigPath)
-        }
-    }
-
-    /// `userGhosttyConfigPath` with leading `~` expanded to the home dir.
-    /// Empty when the user has disabled loading by clearing the field.
-    var expandedUserGhosttyConfigPath: String {
-        guard !userGhosttyConfigPath.isEmpty else { return "" }
-        return (userGhosttyConfigPath as NSString).expandingTildeInPath
+    func setGhosttyConfig(loadsDefaultFiles: Bool, customPaths: [String]) {
+        ghosttyConfigSelection = GhosttyConfigSelection(
+            loadsDefaultFiles: loadsDefaultFiles,
+            customPaths: customPaths
+        )
+        defaults.set(loadsDefaultFiles, forKey: Keys.loadsDefaultGhosttyConfigFiles)
+        defaults.set(customPaths, forKey: Keys.customGhosttyConfigPaths)
+        defaults.removeObject(forKey: Keys.userGhosttyConfigPath)
     }
 
     /// Programs a passthrough-flagged keybind yields to, as the user typed them
@@ -635,8 +581,7 @@ final class Preferences {
             .flatMap(WindowGlassStyle.init(rawValue:)) ?? .regular
         adaptiveTerminalChromeEnabled = defaults.object(forKey: Keys.adaptiveTerminalChromeEnabled) as? Bool ?? false
         hideTitleBar = defaults.object(forKey: Keys.hideTitleBar) as? Bool ?? false
-        userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath)
-            ?? Self.defaultUserGhosttyConfigPath()
+        ghosttyConfigSelection = Self.readGhosttyConfigSelection(from: defaults)
         passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
@@ -741,6 +686,27 @@ final class Preferences {
         }
     }
 
+    /// Reads the two-layer config preference. The single-path key came from the
+    /// previous UI, where choosing a custom path replaced Ghostty's defaults.
+    /// Keep that exact behavior when migrating it.
+    static func readGhosttyConfigSelection(from defaults: UserDefaults) -> GhosttyConfigSelection {
+        let hasCurrentValue = defaults.object(forKey: Keys.loadsDefaultGhosttyConfigFiles) != nil
+            || defaults.object(forKey: Keys.customGhosttyConfigPaths) != nil
+        if hasCurrentValue {
+            return GhosttyConfigSelection(
+                loadsDefaultFiles: defaults.object(forKey: Keys.loadsDefaultGhosttyConfigFiles) as? Bool ?? true,
+                customPaths: defaults.stringArray(forKey: Keys.customGhosttyConfigPaths) ?? []
+            )
+        }
+        guard let legacyPath = defaults.string(forKey: Keys.userGhosttyConfigPath) else {
+            return .automatic
+        }
+        return GhosttyConfigSelection(
+            loadsDefaultFiles: false,
+            customPaths: legacyPath.isEmpty ? [] : [legacyPath]
+        )
+    }
+
     // MARK: - UserDefaults keys
 
     enum Keys {
@@ -753,6 +719,9 @@ final class Preferences {
         static let windowGlassStyle = "macterm.window.glassStyle"
         static let adaptiveTerminalChromeEnabled = "macterm.window.adaptiveTerminalChromeEnabled"
         static let hideTitleBar = "macterm.window.hideTitleBar"
+        static let loadsDefaultGhosttyConfigFiles = "macterm.ghostty.loadsDefaultConfigFiles"
+        static let customGhosttyConfigPaths = "macterm.ghostty.customConfigPaths"
+        /// Legacy single-path key. Read only for migration.
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let passthroughPrograms = "macterm.hotkey.passthroughPrograms"
         static let quickTerminalWidth = "macterm.quickTerminal.width"

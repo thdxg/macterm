@@ -335,13 +335,25 @@ final class GhosttyCallbacks: @unchecked Sendable {
         }
     }
 
-    /// Open the user's ghostty config in their text editor, creating an empty
-    /// file (and its directory) first so a fresh setup gets an editable file
-    /// rather than a silent no-op.
+    /// Open the highest-precedence user config. With no additional file, ask
+    /// libghostty for its preferred default edit path.
     @MainActor
     private static func openUserConfig() {
-        let path = Preferences.shared.expandedUserGhosttyConfigPath
-        guard !path.isEmpty else { return }
+        let path: String
+        let selection = Preferences.shared.ghosttyConfigSelection
+        if let customPath = selection.customPaths.last {
+            path = (customPath as NSString).expandingTildeInPath
+        } else if selection.loadsDefaultFiles {
+            let value = ghostty_config_open_path()
+            defer { ghostty_string_free(value) }
+            guard let pointer = value.ptr, value.len > 0 else { return }
+            let bytes = UnsafeBufferPointer(start: pointer, count: Int(value.len)).map { UInt8(bitPattern: $0) }
+            guard let resolved = String(bytes: bytes, encoding: .utf8), !resolved.isEmpty else { return }
+            path = resolved
+        } else {
+            return
+        }
+
         if !FileManager.default.fileExists(atPath: path) {
             let url = URL(fileURLWithPath: path)
             try? FileManager.default.createDirectory(
