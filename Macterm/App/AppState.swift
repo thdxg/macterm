@@ -95,6 +95,12 @@ final class AppState {
     /// `notePinnedForegroundChangesIfNeeded`).
     @ObservationIgnored
     var pinnedDeclarationPersistWork: DispatchWorkItem?
+
+    /// Starts a background pane's shell off-screen (the incubator). A seam so
+    /// unit tests of the eager pinned-tab launch never create real ghostty
+    /// surfaces (and thus never spawn shells) inside the test host.
+    @ObservationIgnored
+    var warmPane: (Pane) -> Void = { SurfaceIncubator.shared.warm($0) }
     var sidebarVisible = true
     var pendingClosePane: PendingClosePane?
     /// A computed layout-apply plan awaiting user confirmation because applying
@@ -996,11 +1002,13 @@ final class AppState {
     /// The teardown half of `closeTab`, without the workspace save — so a
     /// bulk close can persist once for the whole batch.
     private func closeTabWithoutSaving(_ tabID: UUID, projectID: UUID) {
-        // A pinned tab cannot be closed — only unpinned (a move) or ended by
-        // its own session dying (which unloads, keeping the record). Teardown
-        // paths that ARE allowed (unpin, unload-on-death) operate on the
-        // Workspace directly and never come through here.
-        guard projectID != PinnedTabs.projectID else { return }
+        // Closing a PINNED tab is an unload, not a removal: sessions end, the
+        // record (and its pinned.yaml entry) stays as a dimmed row, and the
+        // next launch eager-starts it again. Unpin is the removal path.
+        if projectID == PinnedTabs.projectID {
+            unloadPinnedTab(tabID)
+            return
+        }
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
@@ -1022,11 +1030,8 @@ final class AppState {
     /// identified by its owning project since a multi-selection can span
     /// projects. Saves once for the batch.
     func closeTabs(_ tabs: [(tabID: UUID, projectID: UUID)]) {
-        // Pinned tabs are skipped, not closed — a bulk sidebar delete that
-        // sweeps one up must not bypass the can't-close rule.
-        let closable = tabs.filter { $0.projectID != PinnedTabs.projectID }
-        guard !closable.isEmpty else { return }
-        for tab in closable {
+        guard !tabs.isEmpty else { return }
+        for tab in tabs {
             closeTabWithoutSaving(tab.tabID, projectID: tab.projectID)
         }
         saveWorkspaces()
@@ -1036,10 +1041,6 @@ final class AppState {
     /// foreground program — closing kills the panes' zmx sessions, so the
     /// destructive-confirmation lives here (quit will detach, not kill).
     func requestCloseTab(_ tabID: UUID, projectID: UUID) {
-        if projectID == PinnedTabs.projectID {
-            presentToast("Pinned tabs can’t be closed", subtitle: "Unpin the tab first")
-            return
-        }
         let tab = workspaces[projectID]?.tabs.first { $0.id == tabID }
         let busy = tab?.splitRoot.allPanes()
             .contains(where: \.needsConfirmClose) ?? false
@@ -1266,6 +1267,13 @@ final class AppState {
     }
 
     func selectNextTab(projectID: UUID) {
+        // The pinned workspace cycles in RECORD order — unloaded rows
+        // included, restored on landing — so the keyboard walks exactly what
+        // the sidebar shows, not just the loaded subset.
+        if projectID == PinnedTabs.projectID {
+            cyclePinnedTab(step: 1)
+            return
+        }
         guard let ws = workspaces[projectID] else { return }
         let before = ws.activeTabID
         let didAcknowledgeCompletion = ws.selectNextTab()
@@ -1275,6 +1283,10 @@ final class AppState {
     }
 
     func selectPreviousTab(projectID: UUID) {
+        if projectID == PinnedTabs.projectID {
+            cyclePinnedTab(step: -1)
+            return
+        }
         guard let ws = workspaces[projectID] else { return }
         let before = ws.activeTabID
         let didAcknowledgeCompletion = ws.selectPreviousTab()
@@ -1309,29 +1321,37 @@ final class AppState {
     enum GlobalTabDirection { case next, previous }
 
     func selectGlobalTab(_ direction: GlobalTabDirection, projects: [Project]) {
-        // Pinned tabs cycle first (they sit at the top of the sidebar), via
-        // the synthetic pinned project.
-        let pinnedTabs = (workspaces[PinnedTabs.projectID]?.tabs ?? []).map { (PinnedTabs.project, $0) }
-        let allTabs = pinnedTabs + projects.flatMap { p in
-            (workspaces[p.id]?.tabs ?? []).map { (p, $0) }
+        // Pinned rows cycle first (they sit at the top of the sidebar), in
+        // RECORD order — unloaded records included, so keyboard cycling can
+        // land on (and restore) a dead pinned tab exactly like clicking it.
+        let pinnedEntries: [(projectID: UUID, tabID: UUID)] = pinnedRecords.map { (PinnedTabs.projectID, $0.id) }
+        let projectEntries: [(projectID: UUID, tabID: UUID)] = projects.flatMap { p in
+            (workspaces[p.id]?.tabs ?? []).map { (p.id, $0.id) }
         }
+        let allTabs = pinnedEntries + projectEntries
         guard !allTabs.isEmpty else { return }
 
         let currentTabID = activeProjectID.flatMap { pid in workspaces[pid]?.activeTabID }
         let currentIndex =
-            allTabs.firstIndex { $0.0.id == activeProjectID && $0.1.id == currentTabID } ?? 0
+            allTabs.firstIndex { $0.projectID == activeProjectID && $0.tabID == currentTabID } ?? 0
         let newIndex: Int =
             switch direction {
             case .next: (currentIndex + 1) % allTabs.count
             case .previous: (currentIndex - 1 + allTabs.count) % allTabs.count
             }
-        let (project, tab) = allTabs[newIndex]
+        let entry = allTabs[newIndex]
+        if entry.projectID == PinnedTabs.projectID {
+            // Loads an unloaded record and persists on its own.
+            selectPinnedTab(entry.tabID)
+            return
+        }
+        guard let project = projects.first(where: { $0.id == entry.projectID }) else { return }
         let beforeProjectID = activeProjectID
         let beforeTabID = workspaces[project.id]?.activeTabID
 
         activeProjectID = project.id
         ensureWorkspace(projectID: project.id, path: project.path)
-        let didAcknowledgeCompletion = workspaces[project.id]?.selectTab(tab.id) ?? false
+        let didAcknowledgeCompletion = workspaces[project.id]?.selectTab(entry.tabID) ?? false
         if activeProjectID != beforeProjectID
             || workspaces[project.id]?.activeTabID != beforeTabID
             || didAcknowledgeCompletion
@@ -1426,13 +1446,13 @@ final class AppState {
         guard let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) else {
             return
         }
-        // Closing a pinned tab's LAST pane would close the tab — the
-        // can't-close rule applies. (Inner panes of a pinned split may still
-        // be closed; the tab survives.) The `.onlyPaneLeft` branch below
-        // would otherwise destroy the surface and then no-op on the guarded
-        // closeTab, stranding a dead pane in a live tab.
+        // Closing a pinned tab's LAST pane closes the tab, which for a pinned
+        // tab is an unload (record kept). Route it whole through closeTab so
+        // the unload path tears the pane down itself — falling through to
+        // removePane would destroy the surface first and leave unloadPinnedTab
+        // double-tearing it (harmless but pointless).
         if projectID == PinnedTabs.projectID, tab.splitRoot.allPanes().count <= 1 {
-            presentToast("Pinned tabs can’t be closed", subtitle: "Unpin the tab first")
+            closeTab(tab.id, projectID: projectID)
             return
         }
         logger.debug("closePane: \(paneID, privacy: .public) project=\(projectID, privacy: .public)")
@@ -1451,13 +1471,6 @@ final class AppState {
     }
 
     func requestClosePane(_ paneID: UUID, projectID: UUID) {
-        if projectID == PinnedTabs.projectID,
-           let tab = workspaces[projectID]?.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
-           tab.splitRoot.allPanes().count <= 1
-        {
-            presentToast("Pinned tabs can’t be closed", subtitle: "Unpin the tab first")
-            return
-        }
         let pane = workspaces[projectID]?.tabs
             .compactMap { $0.splitRoot.findPane(id: paneID) }
             .first

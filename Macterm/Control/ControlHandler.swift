@@ -370,18 +370,12 @@ final class ControlHandler {
         }
         let (project, workspace) = try resolveWorkspace(args)
         let (_, tab) = try resolveTab(args, in: workspace)
-        // A pinned tab can't be closed, with or without --force — unpinning
-        // (in the app) is the only way out.
-        if project.id == PinnedTabs.projectID {
-            throw ControlError(
-                code: .pinned,
-                message: "that tab is pinned and can't be closed",
-                action: "unpin it in the app first"
-            )
-        }
-        // Closing kills the panes' zmx sessions. The UI stages a confirmation
-        // dialog for busy tabs; a headless caller gets a typed `busy` error
-        // instead — never a dialog the CLI can't answer.
+        // Closing kills the panes' zmx sessions. (For a PINNED tab, close is
+        // an unload: sessions end but the record and its pinned.yaml entry
+        // stay, and the next launch starts it again — unpin in the app is the
+        // removal path.) The UI stages a confirmation dialog for busy tabs; a
+        // headless caller gets a typed `busy` error instead — never a dialog
+        // the CLI can't answer.
         let busy = tab.splitRoot.allPanes().contains(where: \.needsConfirmClose)
         if busy, args.force != true {
             throw ControlError(

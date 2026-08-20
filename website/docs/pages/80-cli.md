@@ -46,7 +46,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
 | `tab select <tab>` | Activate a tab (`tab:3`, index, UUID, or exact title). |
 | `tab move <tab> <slot>` | Reorder a tab within its project. `slot` is the tab's **final** 1-based position in `tab list` order (so `tab move tab:4 2` makes it second). Out-of-range slots are an error, never a silent clamp. |
-| `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. A pinned tab refuses with `pinned` regardless of `--force` — unpin it in the app first. |
+| `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. Closing a pinned tab unloads it — sessions end, but its row and saved layout stay, and the next launch starts it again. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |
 | `pane inspect [target]` | Read-only snapshot of a pane's terminal core: grid, cell/surface pixels, scrollback totals, content scale, foreground pid + argv. Needs a live surface. |
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text — the viewport, or the full scrollback with `--scrollback`. Pipeline-friendly (text only). |
@@ -169,7 +169,7 @@ The `macterm` binary is a thin client over a documented protocol — any same-us
 {"v":1,"id":"<echoed>","ok":true,"data":{"panes":[{"id":"…","session":"macterm-api-1a2b3c4d5e6f","index":2}]}}
 ```
 
-Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}` with snake_case codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `pinned`, `internal`. Commands are `noun.verb`; unknown fields are ignored on both sides, so the protocol can grow without breaking clients. Debuggable by hand:
+Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}` with snake_case codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `internal`. Commands are `noun.verb`; unknown fields are ignored on both sides, so the protocol can grow without breaking clients. Debuggable by hand:
 
 ```sh
 echo '{"v":1,"id":"x","command":"status"}' | nc -U ~/Library/Application\ Support/Macterm/control.sock

@@ -27,6 +27,9 @@ struct PinnedTabsTests {
             projectFiles: ProjectFileStore(directoryURL: projectsDir)
         )
         state.zmx = .noop
+        // Never let the eager pinned launch warm REAL surfaces in the test
+        // host (that would spawn actual shells).
+        state.warmPane = { _ in }
         return Fixture(state: state, storeURL: storeURL, projectsDir: projectsDir)
     }
 
@@ -124,10 +127,10 @@ struct PinnedTabsTests {
         #expect(fx.state.pinnedRecords.isEmpty)
     }
 
-    // MARK: - Can't close
+    // MARK: - Close = unload
 
     @Test
-    func requestCloseTab_refuses_pinned_tab() throws {
+    func requestCloseTab_unloads_pinned_tab_keeping_the_record() throws {
         let fx = makeFixture()
         let p = seedProject(fx.state)
         let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
@@ -135,12 +138,14 @@ struct PinnedTabsTests {
 
         fx.state.requestCloseTab(tab.id, projectID: pinnedID)
 
-        #expect(fx.state.pinnedWorkspace?.tabs.map(\.id) == [tab.id])
-        #expect(fx.state.activeToast != nil)
+        // Sessions end and the live tab goes — but the record (the dimmed
+        // row, and its pinned.yaml entry) stays; unpin is the removal path.
+        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
+        #expect(fx.state.pinnedRecords.map(\.id) == [tab.id])
     }
 
     @Test
-    func closeTabs_bulk_skips_pinned_tabs() throws {
+    func closeTabs_bulk_unloads_pinned_and_closes_normal_tabs() throws {
         let fx = makeFixture()
         let p = seedProject(fx.state)
         let ws = try #require(fx.state.workspaces[p.id])
@@ -153,23 +158,23 @@ struct PinnedTabsTests {
             (tabID: normalTab.id, projectID: p.id),
         ])
 
-        #expect(fx.state.pinnedWorkspace?.tabs.map(\.id) == [pinnedTab.id])
+        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
+        #expect(fx.state.pinnedRecords.map(\.id) == [pinnedTab.id])
         #expect(fx.state.workspaces[p.id]?.tabs.isEmpty == true)
     }
 
     @Test
-    func closePane_refuses_pinned_tabs_last_pane() throws {
+    func closePane_last_pane_of_pinned_tab_unloads_it() throws {
         let fx = makeFixture()
         let p = seedProject(fx.state)
         let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
         fx.state.pinTab(tab.id, fromProject: p.id)
         let paneID = try #require(tab.splitRoot.allPanes().first?.id)
 
-        fx.state.requestClosePane(paneID, projectID: pinnedID)
         fx.state.closePane(paneID, projectID: pinnedID)
 
-        #expect(tab.splitRoot.allPanes().count == 1)
-        #expect(fx.state.pinnedWorkspace?.tabs.count == 1)
+        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
+        #expect(fx.state.pinnedRecords.map(\.id) == [tab.id])
     }
 
     @Test
@@ -262,15 +267,17 @@ struct PinnedTabsTests {
     }
 
     @Test
-    func materialize_leaves_dead_sessions_unloaded() async throws {
+    func materialize_respawns_dead_sessions_from_the_declaration() async throws {
         let fx = makeFixture()
         let p = seedProject(fx.state)
         let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        let originalSession = try #require(tab.splitRoot.allPanes().first?.sessionName)
         fx.state.pinTab(tab.id, fromProject: p.id)
         fx.state.saveWorkspaces()
 
         // Second launch: a fresh state restoring the same file, with a zmx
-        // whose listing says nothing survived.
+        // whose listing says nothing survived. Pinned tabs are EAGER: the
+        // dead tab respawns from its declaration at launch, not on click.
         let state2 = AppState(
             workspaceStore: WorkspaceStore(fileURL: fx.storeURL),
             projectFiles: ProjectFileStore(directoryURL: fx.projectsDir)
@@ -279,12 +286,41 @@ struct PinnedTabsTests {
         dead.isBundled = { true }
         dead.listSessionsWithClients = { [] }
         state2.zmx = dead
+        state2.warmPane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
 
         await state2.materializeRestoredPinnedTabs()
 
         #expect(state2.pinnedRecords.map(\.id) == [tab.id])
-        #expect(state2.isPinnedTabLoaded(tab.id) == false)
+        #expect(state2.isPinnedTabLoaded(tab.id))
+        // A respawn, not a reattach: fresh pane, fresh session identity.
+        let pane = try #require(state2.pinnedWorkspace?.tabs.first?.splitRoot.allPanes().first)
+        #expect(pane.sessionName != originalSession)
+        #expect(pane.projectPath == "/tmp")
+    }
+
+    @Test
+    func materialize_eager_loads_declaration_only_records_and_warms_them() async throws {
+        let fx = makeFixture()
+        let recordID = UUID()
+        fx.state.pinnedRecords = [PinnedTabRecord(
+            id: recordID,
+            declaration: LayoutTab(
+                id: recordID,
+                name: "dev",
+                layout: .pane(LayoutPane(cwd: "/tmp", run: "npm run dev"))
+            ),
+            originProjectID: nil
+        )]
+        var warmed: [UUID] = []
+        fx.state.warmPane = { warmed.append($0.id) }
+
+        await fx.state.materializeRestoredPinnedTabs()
+
+        #expect(fx.state.isPinnedTabLoaded(recordID))
+        let pane = try #require(fx.state.pinnedWorkspace?.tabs.first?.splitRoot.allPanes().first)
+        #expect(pane.command == "npm run dev")
+        #expect(warmed == [pane.id])
     }
 
     @Test
@@ -304,6 +340,7 @@ struct PinnedTabsTests {
         alive.isBundled = { true }
         alive.listSessionsWithClients = { [ZmxSessionListParser.Entry(name: sessionName, clients: 0)] }
         state2.zmx = alive
+        state2.warmPane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
 
         await state2.materializeRestoredPinnedTabs()
@@ -330,6 +367,7 @@ struct PinnedTabsTests {
         unknown.isBundled = { true }
         unknown.listSessionsWithClients = { nil } // probe failed → unknown
         state2.zmx = unknown
+        state2.warmPane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
 
         await state2.materializeRestoredPinnedTabs()
@@ -500,6 +538,31 @@ struct PinnedTabsTests {
         // The absorbed entry survived the rewrite too.
         let text = try String(contentsOf: fx.state.pinnedLayoutStore.fileURL, encoding: .utf8)
         #expect(text.contains("external"))
+    }
+
+    // MARK: - Keyboard navigation
+
+    @Test
+    func nextTabInProject_cycles_pinned_records_and_restores_unloaded_ones() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+        let unloadedID = UUID()
+        fx.state.pinnedRecords.append(PinnedTabRecord(
+            id: unloadedID,
+            declaration: LayoutTab(id: unloadedID, layout: .pane(LayoutPane(cwd: "/tmp", run: "btop"))),
+            originProjectID: nil
+        ))
+
+        fx.state.selectNextTab(projectID: PinnedTabs.projectID)
+
+        // Landed on the unloaded record and restored it.
+        #expect(fx.state.pinnedWorkspace?.activeTabID == unloadedID)
+        #expect(fx.state.isPinnedTabLoaded(unloadedID))
+
+        fx.state.selectPreviousTab(projectID: PinnedTabs.projectID)
+        #expect(fx.state.pinnedWorkspace?.activeTabID == tab.id)
     }
 
     // MARK: - Global cycling

@@ -152,6 +152,13 @@ extension AppState {
     /// so declared `run:` commands launch via `initial_input`.
     private func loadPinnedTab(_ record: PinnedTabRecord) {
         logger.info("loadPinnedTab: restoring \(record.id, privacy: .public) from declaration")
+        guard let tab = buildDeclaredPinnedTab(record) else { return }
+        insertPinnedTabAligned(tab)
+    }
+
+    /// Construct (but don't insert) a fresh live tab from a record's
+    /// declaration. Shared by restore-on-selection and the eager launch load.
+    private func buildDeclaredPinnedTab(_ record: PinnedTabRecord) -> TerminalTab? {
         let layout = LayoutFile(name: nil, tabs: [record.declaration])
         let plan = LayoutReconciler.plan(
             layout: layout,
@@ -159,14 +166,25 @@ extension AppState {
             projectRoot: PinnedTabs.fallbackRoot,
             projectID: PinnedTabs.projectID
         )
-        guard let planned = plan.tabs.first else { return }
-        let tab = TerminalTab(
+        guard let planned = plan.tabs.first else { return nil }
+        return TerminalTab(
             id: record.id,
             splitRoot: planned.root,
             focusedPaneID: planned.focusedPaneID,
             customTitle: record.declaration.name
         )
-        insertPinnedTabAligned(tab)
+    }
+
+    /// In-project keyboard cycling for the pinned workspace: steps through
+    /// the RECORDS (what the sidebar shows), restoring an unloaded row on
+    /// landing — not just the loaded tabs.
+    func cyclePinnedTab(step: Int) {
+        guard pinnedRecords.count > 1 else { return }
+        let currentIndex = pinnedWorkspace?.activeTabID
+            .flatMap { id in pinnedRecords.firstIndex { $0.id == id } } ?? 0
+        let count = pinnedRecords.count
+        let next = pinnedRecords[(currentIndex + step + count) % count]
+        selectPinnedTab(next.id)
     }
 
     // MARK: - Session death → unload
@@ -233,17 +251,28 @@ extension AppState {
         Set(pendingPinnedLiveRestores.values.flatMap { paneSnapshots(of: $0.splitRoot).compactMap(\.sessionName) })
     }
 
-    /// Materialize the restored pinned tabs whose sessions survived; leave
-    /// the rest unloaded so selection restores them from their declarations.
-    /// A tab with any REMOTE pane always materializes — its sessions live on
-    /// the remote host, which a local `zmx ls` can't see (and which survive
-    /// this machine's reboots by design). A failed listing (nil) also
-    /// materializes everything: fail toward reattach, never toward
-    /// respawning over sessions that may be alive.
+    /// Materialize EVERY pinned record into a running tab at launch — pinned
+    /// tabs are eager by design (they exist to keep things running), unlike
+    /// projects, which stay lazy until selected. A record whose sessions
+    /// survived reattaches its live snapshot; one whose sessions died — and
+    /// one that was already unloaded at quit, or hand-added to `pinned.yaml`
+    /// — rebuilds from its declaration, re-running its `run:` commands. A tab
+    /// with any REMOTE pane always reattaches — its sessions live on the
+    /// remote host, which a local `zmx ls` can't see (and which survive this
+    /// machine's reboots by design). A failed listing (nil) also reattaches
+    /// everything: fail toward reattach, never toward respawning over
+    /// sessions that may be alive.
+    ///
+    /// The unloaded (dimmed) state therefore only arises mid-session, when a
+    /// tab's own sessions die — and stays lazy there on purpose: eagerly
+    /// respawning at the moment of death would be a crash loop for a `run:`
+    /// that exits immediately.
     func materializeRestoredPinnedTabs() async {
-        guard !pendingPinnedLiveRestores.isEmpty else { return }
+        guard !pinnedRecords.isEmpty else { return }
         var aliveNames: Set<String>?
-        if zmx.isBundled() {
+        if pendingPinnedLiveRestores.isEmpty {
+            aliveNames = []
+        } else if zmx.isBundled() {
             if let entries = await zmx.listSessionsWithClients() {
                 aliveNames = Set(entries.map(\.name))
             }
@@ -252,28 +281,53 @@ extension AppState {
             aliveNames = []
         }
         for record in pinnedRecords {
-            guard let snapshot = pendingPinnedLiveRestores[record.id] else { continue }
-            pendingPinnedLiveRestores.removeValue(forKey: record.id)
-            let panes = paneSnapshots(of: snapshot.splitRoot)
-            let hasRemote = panes.contains { ProjectPath.isRemote($0.projectPath) }
-            let survived: Bool = if hasRemote {
-                true
-            } else if let aliveNames {
-                panes.contains { pane in pane.sessionName.map { aliveNames.contains($0) } ?? false }
-            } else {
-                true
+            guard !isPinnedTabLoaded(record.id) else { continue }
+            if let snapshot = pendingPinnedLiveRestores.removeValue(forKey: record.id) {
+                let panes = paneSnapshots(of: snapshot.splitRoot)
+                let hasRemote = panes.contains { ProjectPath.isRemote($0.projectPath) }
+                let survived: Bool = if hasRemote {
+                    true
+                } else if let aliveNames {
+                    panes.contains { pane in pane.sessionName.map { aliveNames.contains($0) } ?? false }
+                } else {
+                    true
+                }
+                if survived {
+                    let tab = WorkspaceSerializer.restoreTab(snapshot, projectID: PinnedTabs.projectID)
+                    insertPinnedTabAligned(tab, activate: false)
+                    continue
+                }
+                logger.info("pinned tab \(record.id, privacy: .public): sessions died; respawning from layout")
             }
-            guard survived else {
-                logger.info("pinned tab \(record.id, privacy: .public): sessions died; unloaded, will restore from layout")
-                continue
-            }
-            let tab = WorkspaceSerializer.restoreTab(snapshot, projectID: PinnedTabs.projectID)
+            ensurePinnedWorkspace()
+            guard let tab = buildDeclaredPinnedTab(record) else { continue }
             insertPinnedTabAligned(tab, activate: false)
         }
         if activeProjectID == PinnedTabs.projectID, let ws = pinnedWorkspace, ws.activeTabID == nil {
             ws.activeTabID = ws.tabs.first?.id
         }
+        warmPinnedTabs()
         saveWorkspaces()
+    }
+
+    /// Start every pinned pane's shell off-screen, staggered like
+    /// `warmFocusedProject` (each warm is a login shell / a `zmx attach`;
+    /// firing them all in one tick multiplies launch pressure). `warmPane`
+    /// (the incubator) is idempotent, so a pane SwiftUI has already spawned —
+    /// the active pinned tab of an active pinned workspace — just no-ops.
+    private func warmPinnedTabs() {
+        guard let ws = pinnedWorkspace else { return }
+        let panes = ws.tabs.flatMap { $0.splitRoot.allPanes() }
+        for (index, pane) in panes.enumerated() {
+            if index == 0 {
+                warmPane(pane)
+                continue
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.125 * Double(index)) { [weak self, weak pane] in
+                guard let self, let pane else { return }
+                warmPane(pane)
+            }
+        }
     }
 
     // MARK: - pinned.yaml

@@ -709,6 +709,14 @@ struct SidebarContent: View {
         Button(isLoaded ? "Unpin Tab" : "Remove from Pinned", role: isLoaded ? nil : .destructive) {
             appState.unpinTab(record.id, projects: projectStore.projects)
         }
+        if isLoaded {
+            // Close = UNLOAD for a pinned tab: processes end, the dimmed row
+            // stays, and the next launch starts it again. Unpin above is the
+            // removal path.
+            Button("Close Tab", role: .destructive) {
+                appState.requestCloseTab(record.id, projectID: PinnedTabs.projectID)
+            }
+        }
     }
 
     @ViewBuilder
