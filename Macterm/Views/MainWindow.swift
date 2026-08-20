@@ -347,6 +347,9 @@ struct MainWindow: View {
 
     private var activeProject: Project? {
         guard let pid = appState.activeProjectID else { return nil }
+        // The pinned workspace has no ProjectStore row; render it through the
+        // synthetic project.
+        if pid == PinnedTabs.projectID { return PinnedTabs.project }
         return projectStore.projects.first { $0.id == pid }
     }
 
@@ -361,6 +364,8 @@ struct MainWindow: View {
 
     private var activeTabTitle: String {
         guard let project = activeProject else { return "" }
+        // The pinned workspace has no project directory worth advertising.
+        if project.id == PinnedTabs.projectID { return "" }
         return project.path
     }
 }
@@ -509,7 +514,12 @@ struct WorkspaceView: View {
                     tab.split(paneID: paneID, direction: dir)
                     appState.saveWorkspaces()
                 },
-                onClosePane: { appState.requestClosePane($0, projectID: project.id) },
+                // This closure is the PROCESS-EXIT path only (SplitTreeView
+                // wires it to the surface's onProcessExit; the user's Cmd+W
+                // goes through Responders → requestClosePane directly). For a
+                // pinned tab, the last pane's death unloads the tab instead
+                // of closing it.
+                onClosePane: { appState.paneProcessExited($0, projectID: project.id) },
                 onCommandFinished: { paneID in
                     appState.acknowledgeFinishedCommandIfActive(paneID: paneID, projectID: project.id)
                 },

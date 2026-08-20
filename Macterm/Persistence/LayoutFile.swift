@@ -28,19 +28,32 @@ struct LayoutFile: Codable, Equatable {
 /// `name` — there's no `layout:` wrapper. `name` is tab-level only; inner split
 /// children are plain nodes.
 struct LayoutTab: Equatable {
+    /// Stable tab identity, tab-level only. Project files never carry one;
+    /// `pinned.yaml` writes each record's id here so external edits to an
+    /// entry can be matched back to its pinned tab exactly (name and shape
+    /// are both hand-editable). Optional: a hand-added entry without an id
+    /// is an addition by definition, and the app assigns one on next write.
+    var id: UUID?
     var name: String?
     var layout: LayoutNode
+
+    init(id: UUID? = nil, name: String? = nil, layout: LayoutNode) {
+        self.id = id
+        self.name = name
+        self.layout = layout
+    }
 }
 
 extension LayoutTab: Codable {
     init(from decoder: Decoder) throws {
         let dto = try LayoutNodeDTO(from: decoder)
+        id = dto.id
         name = dto.name
         layout = try LayoutNode(fromDTO: dto, codingPath: decoder.codingPath)
     }
 
     func encode(to encoder: Encoder) throws {
-        try layout.dto(name: name).encode(to: encoder)
+        try layout.dto(name: name, id: id).encode(to: encoder)
     }
 }
 
@@ -80,6 +93,8 @@ struct LayoutSplitDTO: Codable, Equatable {
 /// (`cwd`/`run`/`shell`) apply directly at this level — no `pane:` wrapper. A
 /// bare `{}` is a plain-shell leaf. `name` is only meaningful at the tab level.
 struct LayoutNodeDTO: Codable, Equatable {
+    /// Tab-level only (see `LayoutTab.id`).
+    var id: UUID?
     /// Tab-level only.
     var name: String?
     // Leaf fields (flattened — see LayoutPane).
@@ -137,16 +152,16 @@ extension LayoutNode: Codable {
     }
 
     func encode(to encoder: Encoder) throws {
-        try dto(name: nil).encode(to: encoder)
+        try dto(name: nil, id: nil).encode(to: encoder)
     }
 
-    /// The DTO wire form, optionally carrying a tab-level `name`.
-    func dto(name: String?) -> LayoutNodeDTO {
+    /// The DTO wire form, optionally carrying the tab-level `name`/`id`.
+    func dto(name: String?, id: UUID? = nil) -> LayoutNodeDTO {
         switch self {
         case let .pane(p):
-            LayoutNodeDTO(name: name, cwd: p.cwd, run: p.run, shell: p.shell)
+            LayoutNodeDTO(id: id, name: name, cwd: p.cwd, run: p.run, shell: p.shell)
         case let .split(b):
-            LayoutNodeDTO(name: name, split: LayoutSplitDTO(
+            LayoutNodeDTO(id: id, name: name, split: LayoutSplitDTO(
                 direction: b.direction,
                 ratio: b.ratio,
                 first: LayoutNodeBox(b.first),

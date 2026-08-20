@@ -302,7 +302,14 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "project.select requires a project selector")
         }
         let project = try resolveProject(args.project)
-        appState.selectProject(project)
+        if project.id == PinnedTabs.projectID {
+            // The synthetic project must not go through `selectProject` — its
+            // first-open auto-apply would match a layout file declaring the
+            // home directory.
+            appState.selectPinnedProject()
+        } else {
+            appState.selectProject(project)
+        }
         return projectData(project)
     }
 
@@ -363,6 +370,15 @@ final class ControlHandler {
         }
         let (project, workspace) = try resolveWorkspace(args)
         let (_, tab) = try resolveTab(args, in: workspace)
+        // A pinned tab can't be closed, with or without --force — unpinning
+        // (in the app) is the only way out.
+        if project.id == PinnedTabs.projectID {
+            throw ControlError(
+                code: .pinned,
+                message: "that tab is pinned and can't be closed",
+                action: "unpin it in the app first"
+            )
+        }
         // Closing kills the panes' zmx sessions. The UI stages a confirmation
         // dialog for busy tabs; a headless caller gets a typed `busy` error
         // instead — never a dialog the CLI can't answer.
@@ -747,6 +763,11 @@ final class ControlHandler {
 
     private func resolveProject(_ selector: String?) throws -> Project {
         guard let selector, !selector.isEmpty else {
+            // The pinned workspace resolves through its synthetic project so
+            // tab/pane verbs keep working while it's active.
+            if appState.activeProjectID == PinnedTabs.projectID {
+                return PinnedTabs.project
+            }
             guard let active = projectStore.projects.first(where: { $0.id == appState.activeProjectID }) else {
                 throw ControlError(
                     code: .notFound,
@@ -755,6 +776,14 @@ final class ControlHandler {
                 )
             }
             return active
+        }
+        // `--project pinned` (or the sentinel UUID) targets the pinned
+        // workspace. Checked before the name lookup so a user project that
+        // happens to be named "pinned" is still reachable by UUID/index.
+        if selector.lowercased() == PinnedTabs.displayName.lowercased()
+            || selector == PinnedTabs.projectID.uuidString
+        {
+            return PinnedTabs.project
         }
         let projects = projectStore.projects
         if let id = UUID(uuidString: selector), let match = projects.first(where: { $0.id == id }) {

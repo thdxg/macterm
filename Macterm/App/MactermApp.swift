@@ -149,7 +149,10 @@ struct MactermApp: App {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore
                     NotificationHandler.shared.appState = appState
-                    appDelegate.onTerminate = { [appState] in appState.saveWorkspaces() }
+                    // Termination persists the snapshot AND refreshes the
+                    // pinned declarations (`pinned.yaml`) from live state —
+                    // the moment the respawn recipes are about to matter.
+                    appDelegate.onTerminate = { [appState] in appState.persistForTermination() }
                     appDelegate.installResponders(appState: appState, projectStore: projectStore)
                 }
         }
@@ -664,7 +667,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for ws in appState?.workspaces.values ?? [:].values {
             let project = projectsByID[ws.projectID]
-            let projectName = project?.name ?? "Project"
+            let projectName = ws.projectID == PinnedTabs.projectID
+                ? PinnedTabs.displayName
+                : (project?.name ?? "Project")
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.needsConfirmClose {
                     // The adaptive poll may be slow or fully paused here (e.g.

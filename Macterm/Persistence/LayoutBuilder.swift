@@ -17,6 +17,12 @@ enum LayoutBuilder {
     /// stays a remote pane.
     static func resolveCwd(_ cwd: String?, projectRoot: String) -> String {
         guard let cwd, !cwd.isEmpty else { return projectRoot }
+        // A leaf's cwd can itself be a full scp-style spec — pinned tabs
+        // have no project root, so their remote leaves are
+        // self-contained. Whatever the root, such a cwd passes through
+        // verbatim; joining it onto a local root would fabricate a local dir
+        // named "host:dir".
+        if ProjectPath.isRemote(cwd) { return cwd }
         if case let .remote(user, host, directory)? = ProjectPath.parse(projectRoot) {
             let resolved: String = if cwd.hasPrefix("/") || cwd.hasPrefix("~") {
                 cwd

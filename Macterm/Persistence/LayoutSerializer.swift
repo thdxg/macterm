@@ -72,6 +72,52 @@ enum LayoutSerializer {
         }
     }
 
+    // MARK: - Pinned tabs
+
+    /// Capture one live tab as a pinned declaration (`PinnedTabRecord`'s
+    /// respawn recipe). Same seams as `layout(for:)`, with one structural
+    /// difference: pinned tabs have NO project root, so every leaf's `cwd` is
+    /// self-contained — the live absolute cwd (home-contracted to `~` so
+    /// `pinned.yaml` survives a dotfiles sync) or, for a remote pane, its
+    /// scp-style `projectPath` verbatim. `LayoutBuilder.resolveCwd` round-trips
+    /// all three forms against `PinnedTabs.fallbackRoot`.
+    static func pinnedDeclaration(
+        for tab: TerminalTab,
+        id: UUID,
+        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
+        liveShell: (Pane) -> String? = { ProcessInspector.runningShell(forPane: $0) }
+    ) -> LayoutTab {
+        LayoutTab(
+            id: id,
+            name: tab.customTitle,
+            layout: pinnedNode(tab.splitRoot, liveCommand: liveCommand, liveShell: liveShell)
+        )
+    }
+
+    private static func pinnedNode(
+        _ node: SplitNode,
+        liveCommand: (Pane) -> String?,
+        liveShell: (Pane) -> String?
+    ) -> LayoutNode {
+        switch node {
+        case let .pane(p):
+            let livePath = p.isRemote ? p.projectPath : (p.nsView?.currentPwd ?? p.projectPath)
+            let cwd = p.isRemote ? livePath : ProjectPath.homeContracted(livePath)
+            return .pane(LayoutPane(
+                cwd: cwd,
+                run: liveCommand(p),
+                shell: liveShell(p)
+            ))
+        case let .split(b):
+            return .split(LayoutBranch(
+                direction: b.direction,
+                ratio: Double(b.ratio),
+                first: pinnedNode(b.first, liveCommand: liveCommand, liveShell: liveShell),
+                second: pinnedNode(b.second, liveCommand: liveCommand, liveShell: liveShell)
+            ))
+        }
+    }
+
     /// Express an absolute path relative to the project root when it's inside
     /// the root; otherwise keep it absolute. The project root itself becomes
     /// nil (the builder treats nil cwd as "the project root").

@@ -185,6 +185,8 @@ enum ControlErrorCode: String, Codable {
     case busy
     /// The target pane exists but its terminal surface hasn't been created.
     case noSurface = "no_surface"
+    /// The target is a pinned tab, which can't be closed — only unpinned.
+    case pinned
     case internalError = "internal"
 }
 

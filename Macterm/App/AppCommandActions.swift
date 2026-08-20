@@ -60,6 +60,19 @@ extension AppCommand {
                 // responder. Applies to every caller (palette, menu, hotkey).
                 DispatchQueue.main.async { ctx.appState.renamingTabID = tabID }
             }
+        case .pinTab:
+            // Pin the active tab. Only from a real project — the
+            // pinned workspace's own tabs are already pinned.
+            guard let projectID, projectID != PinnedTabs.projectID,
+                  let tab = ctx.appState.workspaces[projectID]?.activeTab
+            else { return nil }
+            return { ctx.appState.pinTab(tab.id, fromProject: projectID) }
+        case .unpinTab:
+            // Unpin the active pinned tab — back to its origin project.
+            guard projectID == PinnedTabs.projectID,
+                  let tab = ctx.appState.workspaces[PinnedTabs.projectID]?.activeTab
+            else { return nil }
+            return { ctx.appState.unpinTab(tab.id, projects: ctx.projectStore.projects) }
         case .separateAllPanes:
             // The palette/keybind form of the tab context menu's "Separate
             // Panes": every pane of the active tab after the first opens in
@@ -73,14 +86,23 @@ extension AppCommand {
         case .separateCurrentPane:
             // Split just the focused pane out of the active tab into its own
             // tab, landing right after the source tab (mirroring where
-            // "Separate All Panes" puts them). Same single-pane guard.
-            guard let projectID, let current,
+            // "Separate All Panes" puts them). Same single-pane guard. Works
+            // in the pinned workspace too (the separated tab is pinned from
+            // birth); its destPath is only a fallback — the pane keeps its cwd.
+            guard let projectID,
                   let ws = ctx.appState.workspaces[projectID],
                   let tab = ws.activeTab,
                   tab.splitRoot.allPanes().count > 1,
                   let paneID = tab.focusedPaneID
             else { return nil }
-            let destPath = current.path
+            let destPath: String
+            if projectID == PinnedTabs.projectID {
+                destPath = PinnedTabs.fallbackRoot
+            } else if let current {
+                destPath = current.path
+            } else {
+                return nil
+            }
             let index = ws.tabs.firstIndex(where: { $0.id == tab.id }).map { $0 + 1 }
             return { ctx.appState.separatePane(paneID, toProject: projectID, destPath: destPath, at: index) }
         case .splitRight:
@@ -149,10 +171,14 @@ extension AppCommand {
                 DispatchQueue.main.async { ctx.appState.renamingProjectID = projectID }
             }
         case .unloadProject:
-            guard let projectID, ctx.appState.isProjectLoaded(projectID) else { return nil }
+            // The pinned workspace can't be unloaded (its tabs unload one by
+            // one, only when their own sessions die).
+            guard let projectID, projectID != PinnedTabs.projectID,
+                  ctx.appState.isProjectLoaded(projectID)
+            else { return nil }
             return { ctx.appState.requestUnloadProject(projectID) }
         case .removeProject:
-            guard let projectID else { return nil }
+            guard let projectID, projectID != PinnedTabs.projectID else { return nil }
             return {
                 ctx.appState.requestRemoveProject(projectID) {
                     ctx.appState.removeProject(projectID)
