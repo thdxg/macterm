@@ -833,11 +833,10 @@ private struct TabMergeSlot: View {
             ZStack(alignment: .topLeading) {
                 Color.clear
                     .frame(width: max(titleFrame.width, 1), height: bandHeight)
-                    // Pinned to the title's own span. Covering the full row let
-                    // a drag over the tab ICON pick a seam — a position the
-                    // icon does not represent, and the place the row's own drag
-                    // lifts from.
-                    .position(x: titleFrame.midX, y: geo.size.height / 2)
+                    // `.onDrop` BEFORE `.position`, and this order is the whole
+                    // fix: `.position` returns a view that fills its parent, so
+                    // attaching the drop after it made the target the entire
+                    // row again — icon included — while only LOOKING confined.
                     .onDrop(
                         of: [.mactermPaneID, .mactermTab],
                         delegate: TabMergeDropDelegate(
@@ -853,6 +852,10 @@ private struct TabMergeSlot: View {
                             onDrop: onDrop
                         )
                     )
+                    // Pinned to the title's own span: the icon names the whole
+                    // tab and is where the row's own drag lifts from, so it is
+                    // not a position among the panes.
+                    .position(x: titleFrame.midX, y: geo.size.height / 2)
 
                 if let insertionIndex {
                     InsertionLine(
