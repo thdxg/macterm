@@ -28,6 +28,18 @@ private struct TabSegmentFramesKey: PreferenceKey {
     }
 }
 
+/// Where the row drew its TITLE — the segments and nothing else. The join band
+/// is confined to it, so the tab's icon is not a position you can aim at: it
+/// names the whole tab, and the row's own drag lifts from it.
+private struct TabTitleFrameKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
 /// Keeps the sidebar footer above scrolling rows, using the native macOS 26
 /// scroll-edge fade when available.
 private extension View {
@@ -642,8 +654,20 @@ private struct SidebarProjectRow: View {
     @FocusState
     private var focused: Bool
 
-    @ViewBuilder
     private var titleContent: some View {
+        measuredTitle
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: TabTitleFrameKey.self,
+                        value: proxy.frame(in: .named(tabRowSpace))
+                    )
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var measuredTitle: some View {
         if isRenaming {
             TextField("", text: $renameText)
                 .textFieldStyle(.plain)
@@ -717,6 +741,10 @@ private struct TabRow: View {
 
     @State
     private var seams: [CGFloat] = []
+    /// The row's title area. The join band is confined to it, so the tab icon
+    /// and the leading padding aren't positions a drag can choose.
+    @State
+    private var titleFrame: CGRect = .zero
 
     var body: some View {
         SidebarTabRow(tab: tab, index: index, onRename: onRename)
@@ -729,6 +757,9 @@ private struct TabRow: View {
             .coordinateSpace(name: tabRowSpace)
             .onPreferenceChange(TabSegmentFramesKey.self) { frames in
                 seams = TabMergePlacement.seams(segmentFrames: frames)
+            }
+            .onPreferenceChange(TabTitleFrameKey.self) { frame in
+                titleFrame = frame
             }
             // The row's ONE drop target is the merge band across its middle,
             // and it must never reach the row's top and bottom edges. A
@@ -743,7 +774,12 @@ private struct TabRow: View {
             // nothing to land on over an expanded section's tab rows; drop
             // those on a project header instead.
             .overlay {
-                TabMergeSlot(paneIDs: tab.splitRoot.allPanes().map(\.id), seams: seams, onDrop: onMergeDrop)
+                TabMergeSlot(
+                    paneIDs: tab.splitRoot.allPanes().map(\.id),
+                    seams: seams,
+                    titleFrame: titleFrame,
+                    onDrop: onMergeDrop
+                )
             }
     }
 }
@@ -773,6 +809,8 @@ private struct TabMergeSlot: View {
     let paneIDs: [UUID]
     /// Where the row drew its segment dividers, empty when it drew none.
     let seams: [CGFloat]
+    /// The row's title area, which bounds the band horizontally.
+    let titleFrame: CGRect
     /// `@Sendable @MainActor` because the async payload fallback hands this to
     /// an item provider's completion, which runs off the main actor: a plain
     /// closure can't cross that boundary under Swift 6's isolation checking.
@@ -788,34 +826,46 @@ private struct TabMergeSlot: View {
         GeometryReader { geo in
             let bandHeight = max(geo.size.height * Self.heightFraction, Self.minHeight)
             // A row that drew no dividers — a single-pane tab, or one collapsed
-            // to a pane count — offers exactly one position, the trailing edge:
-            // there is nothing visible to land BETWEEN, so the only honest
-            // indicator is "after what is here".
-            let positions = seams.isEmpty ? [geo.size.width - rowTrailingInset] : seams
-            Color.clear
-                .frame(height: bandHeight)
-                .frame(maxHeight: .infinity, alignment: .center)
-                .onDrop(
-                    of: [.mactermPaneID, .mactermTab],
-                    delegate: TabMergeDropDelegate(
-                        positions: positions,
-                        appendIndex: paneIDs.count,
-                        hasSeams: !seams.isEmpty,
-                        insertionIndex: $insertionIndex,
-                        onDrop: onDrop
+            // to a pane count — offers exactly one position, the trailing edge
+            // of its title: there is nothing visible to land BETWEEN, so the
+            // only honest indicator is "after what is here".
+            let positions = seams.isEmpty ? [titleFrame.maxX] : seams
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .frame(width: max(titleFrame.width, 1), height: bandHeight)
+                    // Pinned to the title's own span. Covering the full row let
+                    // a drag over the tab ICON pick a seam — a position the
+                    // icon does not represent, and the place the row's own drag
+                    // lifts from.
+                    .position(x: titleFrame.midX, y: geo.size.height / 2)
+                    .onDrop(
+                        of: [.mactermPaneID, .mactermTab],
+                        delegate: TabMergeDropDelegate(
+                            // A drop reports its location in the TARGET's own
+                            // space, so the seams — measured against the row —
+                            // are shifted into the band's before comparing.
+                            // Drawing still uses the row-space values, because
+                            // the indicator is drawn against the row.
+                            positions: positions.map { $0 - titleFrame.minX },
+                            appendIndex: paneIDs.count,
+                            hasSeams: !seams.isEmpty,
+                            insertionIndex: $insertionIndex,
+                            onDrop: onDrop
+                        )
                     )
-                )
-                .overlay {
-                    if let insertionIndex {
-                        let x = positions[min(insertionIndex, positions.count - 1)]
-                        InsertionLine(x: seams.isEmpty ? x : positions[insertionIndex], height: geo.size.height)
-                            // Drawn OVER the whole row while the band that
-                            // reads the drop stays the middle half, so the
-                            // outer quarters keep belonging to the row-order
-                            // insertion line even though this reaches them.
-                            .allowsHitTesting(false)
-                    }
+
+                if let insertionIndex {
+                    InsertionLine(
+                        x: positions[min(insertionIndex, positions.count - 1)],
+                        height: geo.size.height
+                    )
+                    // Drawn over the whole row while the band that reads the
+                    // drop stays the middle half, so the outer quarters keep
+                    // belonging to the row-order insertion line even though
+                    // this reaches them.
+                    .allowsHitTesting(false)
                 }
+            }
         }
     }
 }
