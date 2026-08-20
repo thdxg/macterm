@@ -802,12 +802,23 @@ private struct SidebarTabRow: View {
 
     /// One title segment per pane, sharing the row in equal widths, divided
     /// by hairlines so adjacent titles don't read as one run-on name.
+    ///
+    /// Each segment carries its OWN drag, of that single pane. A split tab
+    /// reads as several terminals sharing a row, so dragging the one you
+    /// pointed at should move that one — dragging the row moves the whole tab,
+    /// which is the segment-less behavior and stays available on the icon and
+    /// the padding around the segments.
     private var splitSegments: some View {
         HStack(spacing: 10) {
             ForEach(Array(tab.splitRoot.allPanes().enumerated()), id: \.element.id) { i, pane in
                 if i > 0 { Divider() }
                 FadingText(pane.sidebarSegmentTitle)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // Hit-testable across the whole segment, not just the
+                    // glyphs: a short title would otherwise leave most of its
+                    // share of the row dragging the tab instead.
+                    .contentShape(Rectangle())
+                    .draggable(MovablePane(paneID: pane.id))
             }
         }
     }

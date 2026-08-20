@@ -31,15 +31,27 @@ extension NSPasteboard.PasteboardType {
 /// The grab-handle drag as seen by its drop targets: the pane UUID
 /// `PaneDragSource` writes as 16 raw bytes under `.mactermPaneID`.
 ///
-/// Deliberately NOT `Transferable` itself: the drag lifts as an AppKit
-/// `NSDraggingSession` (see `PaneDragSource`), never through `.draggable`, so
-/// there is no export side to declare, and the two importers that do exist —
-/// the sidebar's `SidebarDropItem` and `TabSlotDropItem` unions — decode these
-/// bytes as one case among several. The workspace leaves read the pasteboard
-/// directly instead (`fromDragPasteboard`), so every path decodes the same 16
-/// bytes through `init?(payload:)`.
-struct MovablePane {
+/// `Transferable` in BOTH directions, for two drags that write the same
+/// bytes. The grab handle lifts an AppKit `NSDraggingSession` (see
+/// `PaneDragSource`) and needs no export side; a sidebar split segment lifts
+/// through `.draggable`, which does. Import is what the sidebar's
+/// `SidebarDropItem` / `TabSlotDropItem` unions decode as one case among
+/// several, and the workspace leaves read the pasteboard directly instead
+/// (`fromDragPasteboard`) — so every path goes through `init?(payload:)` and
+/// `payload(for:)`, and the two drags are indistinguishable to every drop.
+struct MovablePane: Transferable {
     let paneID: UUID
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(contentType: .mactermPaneID) { movable in
+            payload(for: movable.paneID)
+        } importing: { data in
+            guard let pane = MovablePane(payload: data) else {
+                throw CocoaError(.coderInvalidValue)
+            }
+            return pane
+        }
+    }
 
     /// Decode the wire form: the pane UUID as 16 raw bytes. The one decoder
     /// every drop path shares, so the leaves' pasteboard read and the
@@ -61,8 +73,10 @@ struct MovablePane {
 
     /// Decode the drag's payload synchronously off the drag pasteboard — the
     /// path the workspace leaves take, since a raw `DropDelegate` gets the
-    /// session but not a decoded payload. The bytes are written eagerly at
-    /// mouseDragged, so nil simply means "not a pane drag".
+    /// session but not a decoded payload. The grab handle writes its bytes
+    /// eagerly at mouseDragged; a `.draggable` segment renders them through an
+    /// item provider, which may not have resolved yet, so nil means "not a
+    /// pane drag, or not yet" and callers fall back to the provider.
     static func fromDragPasteboard() -> MovablePane? {
         guard let data = NSPasteboard(name: .drag).pasteboardItems?
             .compactMap({ $0.data(forType: .mactermPaneID) })
@@ -435,6 +449,20 @@ struct LeafDropDelegate: DropDelegate {
         if let movable = MovablePane.fromDragPasteboard() {
             let move = context.onMovePane
             MainActor.assumeIsolated { move(movable.paneID, target) }
+            return true
+        }
+        // The async half of the same read: a pane dragged from a sidebar split
+        // segment lifts through `.draggable`, whose bytes arrive via the item
+        // provider rather than eagerly. Without this, dropping a segment into
+        // the workspace silently does nothing.
+        if let provider = info.itemProviders(for: [.mactermPaneID]).first {
+            let move = context.onMovePane
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermPaneID.identifier) { data, _ in
+                guard let data, let movable = MovablePane(payload: data) else { return }
+                Task { @MainActor in
+                    move(movable.paneID, target)
+                }
+            }
             return true
         }
         guard let onMergeTab = context.onMergeTab else { return false }
