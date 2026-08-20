@@ -91,8 +91,8 @@ targets:
         # via xcodebuild -override; defaults below apply for local dev builds.
         MARKETING_VERSION: "0.0.0"
         CURRENT_PROJECT_VERSION: "0.0.0"
-        # Public Sparkle key is overridden in CI release builds; placeholder
-        # is fine for local development since Sparkle never invokes itself.
+        # Public Sparkle key is overridden in CI release builds. Updater.swift
+        # treats this placeholder as an explicit local-build disable switch.
         SPARKLE_ED_PUBLIC_KEY: SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER
         GIT_COMMIT: GIT_COMMIT_PLACEHOLDER
         # Bundle identifier of the in-bundle frameworks (Sparkle).
