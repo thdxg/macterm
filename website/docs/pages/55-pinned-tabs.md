@@ -26,7 +26,7 @@ At pin time Macterm captures the tab's layout the same way **Save Layout** does 
 The pinned set lives in `~/.config/macterm/projects/pinned.yaml` — the one layout file Macterm maintains automatically (on pin, unpin, and quit). It's still yours to edit:
 
 ```yaml
-pinned: true
+path: pinned
 tabs:
   - name: dev server
     cwd: ~/dev/api
@@ -34,9 +34,11 @@ tabs:
   - cwd: ~/dev/api
 ```
 
-- **Add an entry** (no `id:` needed — Macterm assigns one) and it appears as a pinned tab, spawning on the next launch.
+- **Add an entry** and it appears as a pinned tab, spawning on the next launch.
 - **Remove an entry** and the tab is unpinned on the next launch (moved back to its origin project — never killed).
 - **Edit an entry** (`run:`, `cwd:`, splits) and the change applies the next time that tab restores.
+
+Entries carry no identifiers: Macterm matches them back to your pinned tabs by `name:`, then by content, then by position. Naming an entry keeps a heavy edit unambiguous.
 
 Your edits are never clobbered: Macterm re-reads the file before every write and folds external changes in first. If the file doesn't parse mid-edit, auto-saving pauses (with an alert) until it parses again. Because it lives with your other layout files, `pinned.yaml` dotfile-syncs — the pinned *set* follows you across machines, while the live sessions stay per-machine.
 

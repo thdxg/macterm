@@ -60,6 +60,22 @@ struct MactermApp: App {
                 } message: {
                     Text("A process is still running in this tab. Closing the tab ends it.")
                 }
+                .alert(
+                    "Remove pinned tab with a running process?",
+                    isPresented: Binding(
+                        get: { appState.pendingRemovePinnedTab != nil },
+                        set: { if !$0 { appState.cancelPendingRemovePinnedTab() } }
+                    )
+                ) {
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelPendingRemovePinnedTab()
+                    }
+                    Button("Remove", role: .destructive) {
+                        appState.confirmPendingRemovePinnedTab()
+                    }
+                } message: {
+                    Text("A process is still running in this tab. Removing the pin ends it and forgets the saved layout.")
+                }
                 // Every alert below that Settings also carries is gated on the
                 // staging call's `DialogHost` — see the enum's doc comment: an
                 // ungated binding presents in BOTH scenes, which opens the

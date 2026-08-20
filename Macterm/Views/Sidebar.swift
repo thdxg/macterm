@@ -652,16 +652,22 @@ struct SidebarContent: View {
             }
         }
         Divider()
-        Button(isLoaded ? "Unpin Tab" : "Remove from Pinned", role: isLoaded ? nil : .destructive) {
-            appState.unpinTab(record.id, projects: projectStore.projects)
-        }
         if isLoaded {
-            // Close = UNLOAD for a pinned tab: processes end, the dimmed row
-            // stays, and the next launch starts it again. Unpin above is the
-            // removal path.
+            // Unpin = a MOVE back to the origin project (nothing killed).
+            Button("Unpin Tab") {
+                appState.unpinTab(record.id, projects: projectStore.projects)
+            }
+            // Close = UNLOAD: processes end, the dimmed row and its saved
+            // layout stay, and the next launch starts it again.
             Button("Close Tab", role: .destructive) {
                 appState.requestCloseTab(record.id, projectID: PinnedTabs.projectID)
             }
+        }
+        // Remove = gone for good: sessions end (busy-confirmed), the record
+        // and its pinned.yaml entry are forgotten. For an unloaded record
+        // nothing is running, so it just forgets the declaration.
+        Button("Remove from Pinned", role: .destructive) {
+            appState.requestRemovePinnedTab(record.id)
         }
     }
 

@@ -79,7 +79,6 @@
       "additionalProperties": false,
       "not": { "required": ["split"] },
       "properties": {
-        "id": { "$ref": "#/$defs/tabID" },
         "name": { "$ref": "#/$defs/name" },
         "cwd": { "$ref": "#/$defs/paneProperties/cwd" },
         "run": { "$ref": "#/$defs/paneProperties/run" },
@@ -129,14 +128,9 @@
       "additionalProperties": false,
       "required": ["split"],
       "properties": {
-        "id": { "$ref": "#/$defs/tabID" },
         "name": { "$ref": "#/$defs/name" },
         "split": { "$ref": "#/$defs/splitBody" }
       }
-    },
-    "tabID": {
-      "type": "string",
-      "description": "Stable tab identity (a UUID). Macterm writes one into every pinned.yaml entry so hand-edits match back to the right pinned tab; omit it when hand-adding an entry (the app assigns one on its next write). Accepted but unused in project files."
     }
   }
 }

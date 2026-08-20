@@ -69,8 +69,9 @@ struct PinnedTabsTests {
         fx.state.pinTab(tab.id, fromProject: p.id)
 
         let text = try String(contentsOf: fx.state.pinnedLayoutStore.fileURL, encoding: .utf8)
-        #expect(text.contains("pinned: true"))
-        #expect(text.contains(tab.id.uuidString))
+        #expect(text.contains("path: pinned"))
+        // No wire-level ids — entries stay hand-editable.
+        #expect(!text.contains(tab.id.uuidString))
     }
 
     @Test
@@ -123,6 +124,59 @@ struct PinnedTabsTests {
         fx.state.pinnedRecords = [record]
 
         fx.state.unpinTab(record.id, projects: [])
+
+        #expect(fx.state.pinnedRecords.isEmpty)
+    }
+
+    // MARK: - Remove from pinned
+
+    @Test
+    func removePinnedTab_idle_removes_record_and_live_tab() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+
+        fx.state.requestRemovePinnedTab(tab.id)
+
+        #expect(fx.state.pinnedRecords.isEmpty)
+        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
+        #expect(fx.state.pendingRemovePinnedTab == nil)
+    }
+
+    @Test
+    func removePinnedTab_confirmation_flow_removes_on_confirm() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+
+        // Stage manually (busy detection needs a live surface — the same
+        // convention as the other pending-confirmation tests).
+        fx.state.pendingRemovePinnedTab = AppState.PendingRemovePinnedTab(tabID: tab.id)
+
+        fx.state.cancelPendingRemovePinnedTab()
+        #expect(fx.state.pendingRemovePinnedTab == nil)
+        #expect(fx.state.pinnedRecords.count == 1)
+
+        fx.state.pendingRemovePinnedTab = AppState.PendingRemovePinnedTab(tabID: tab.id)
+        fx.state.confirmPendingRemovePinnedTab()
+        #expect(fx.state.pendingRemovePinnedTab == nil)
+        #expect(fx.state.pinnedRecords.isEmpty)
+        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
+    }
+
+    @Test
+    func removePinnedTab_unloaded_forgets_the_record() {
+        let fx = makeFixture()
+        let record = PinnedTabRecord(
+            id: UUID(),
+            declaration: LayoutTab(layout: .pane(LayoutPane(run: "btop"))),
+            originProjectID: nil
+        )
+        fx.state.pinnedRecords = [record]
+
+        fx.state.requestRemovePinnedTab(record.id)
 
         #expect(fx.state.pinnedRecords.isEmpty)
     }
@@ -215,7 +269,6 @@ struct PinnedTabsTests {
         fx.state.pinnedRecords = [PinnedTabRecord(
             id: recordID,
             declaration: LayoutTab(
-                id: recordID,
                 name: "dev",
                 layout: .pane(LayoutPane(cwd: "/tmp", run: "npm run dev"))
             ),
@@ -306,7 +359,6 @@ struct PinnedTabsTests {
         fx.state.pinnedRecords = [PinnedTabRecord(
             id: recordID,
             declaration: LayoutTab(
-                id: recordID,
                 name: "dev",
                 layout: .pane(LayoutPane(cwd: "/tmp", run: "npm run dev"))
             ),
@@ -426,8 +478,6 @@ struct PinnedTabsTests {
 
         #expect(fx.state.pinnedRecords.count == 1)
         #expect(fx.state.pinnedRecords.first?.declaration.name == "hand-added")
-        // An id was assigned for the next round trip.
-        #expect(fx.state.pinnedRecords.first?.declaration.id != nil)
         #expect(fx.state.isPinnedTabLoaded(fx.state.pinnedRecords[0].id) == false)
     }
 
@@ -445,9 +495,7 @@ struct PinnedTabsTests {
             originProjectID: nil
         )
         fx.state.pinnedRecords = [keep, removed]
-        var keepTab = keep.declaration
-        keepTab.id = keep.id
-        try fx.state.pinnedLayoutStore.write(tabs: [keepTab])
+        try fx.state.pinnedLayoutStore.write(tabs: [keep.declaration])
 
         fx.state.reconcilePinnedLayoutAtLaunch(projects: [])
 
@@ -502,7 +550,7 @@ struct PinnedTabsTests {
         fx.state.pinTab(tab.id, fromProject: p.id) // creates a valid file
 
         // The user breaks the file mid-edit.
-        let broken = "pinned: true\ntabs: [ not yaml {"
+        let broken = "path: pinned\ntabs: [ not yaml {"
         try broken.write(to: fx.state.pinnedLayoutStore.fileURL, atomically: true, encoding: .utf8)
 
         // A membership change would normally rewrite — it must not clobber.
@@ -522,11 +570,10 @@ struct PinnedTabsTests {
         let second = ws.createTab(projectPath: p.path)
         fx.state.pinTab(first.id, fromProject: p.id)
 
-        // Hand-edit while running: append an entry.
-        var mine = fx.state.pinnedRecords[0].declaration
-        mine.id = first.id
+        // Hand-edit while running: append an entry. The existing entry is
+        // matched back by content (no wire-level ids).
         try fx.state.pinnedLayoutStore.write(tabs: [
-            mine,
+            fx.state.pinnedRecords[0].declaration,
             LayoutTab(name: "external", layout: .pane(LayoutPane(run: "htop"))),
         ])
 
@@ -551,7 +598,7 @@ struct PinnedTabsTests {
         let unloadedID = UUID()
         fx.state.pinnedRecords.append(PinnedTabRecord(
             id: unloadedID,
-            declaration: LayoutTab(id: unloadedID, layout: .pane(LayoutPane(cwd: "/tmp", run: "btop"))),
+            declaration: LayoutTab(layout: .pane(LayoutPane(cwd: "/tmp", run: "btop"))),
             originProjectID: nil
         ))
 

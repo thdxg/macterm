@@ -1,34 +1,94 @@
 import Foundation
 import os
-import Yams
 
 private let logger = Logger(subsystem: appBundleID, category: "PinnedLayoutStore")
 
-/// The auto-maintained declaration of the pinned tabs:
-/// `~/.config/macterm/projects/pinned.yaml`. Unlike every other file in that
-/// directory it has TWO writers — the app (on pin/unpin/membership change and
-/// at quit) and the user's editor — so the store tracks the exact text of its
-/// own last write and callers absorb any external change before overwriting
-/// (see `AppState.writePinnedLayoutIfNeeded`). The file's schema:
-///
-///     pinned: true            # the marker that makes this file ours
-///     tabs:                   # LayoutTab schema + a per-tab `id:`
-///       - id: 6D0B…           # app-assigned; omit when hand-adding
-///         name: dev server
-///         run: npm run dev
-///         cwd: ~/dev/api
-///
-/// Leaf `cwd`s are self-contained (absolute / `~` / scp-spec) — there is no
-/// project root — which also means one pinned set can mix local and remote
-/// panes, something project layouts (one root) can't express.
-///
-/// The `pinned: true` marker (and the absence of `path:`) is what keeps the
-/// file out of the project-file machinery: `ProjectFileStore.matches` skips it
-/// (no declared path), `listAll` filters the reserved filename, and `write`
-/// never binds or realign-deletes it.
-struct PinnedLayoutFile: Codable, Equatable {
-    var pinned: Bool?
-    var tabs: [LayoutTab]?
+// The auto-maintained declaration of the pinned tabs:
+// `~/.config/macterm/projects/pinned.yaml`. Unlike every other file in that
+// directory it has TWO writers — the app (on pin/unpin/membership change and
+// at quit) and the user's editor — so the store tracks the exact text of its
+// own last write and callers absorb any external change before overwriting
+// (see `AppState.writePinnedLayout`). It IS a `ProjectFile` — same schema as
+// every other layout file, editor validation included — whose `path:` is
+// the reserved literal `pinned` (see `PinnedTabs.pathMarker`):
+//
+//     path: pinned            # the marker that makes this file the pinned set
+//     tabs:
+//       - name: dev server
+//         run: npm run dev
+//         cwd: ~/dev/api
+//
+// Leaf `cwd`s are self-contained (absolute / `~` / scp-spec) — there is no
+// project root — which also means one pinned set can mix local and remote
+// panes, something project layouts (one root) can't express.
+//
+// The marker keeps the file out of the project-file machinery by
+// construction: `ProjectPath.parse("pinned")` is nil (not absolute, `~`, or
+// scp-style), so `ProjectPath.matches` pairs it with no project — plus
+// `listAll` filters the reserved filename and `write` never binds or
+// realign-deletes it.
+
+/// Pairs `pinned.yaml` entries with the existing records WITHOUT a wire-level
+/// id — a UUID on every entry was hostile to exactly the hand-editing the
+/// file exists for (and churned dotfile diffs). Matching mirrors
+/// `LayoutReconciler.matchTab`: by `name:` first, then by exact layout
+/// content (an unchanged entry matches its record even after a reorder),
+/// then positionally among the leftovers. The consequences of a mismatch are
+/// deliberately non-destructive — a live pinned tab is at worst unpinned
+/// (moved to its origin project), never killed — so fuzzy matching is safe;
+/// giving entries a `name:` makes hand-edits unambiguous.
+enum PinnedLayoutMatcher {
+    struct Matching {
+        /// One element per file entry, in file order; `record` is the
+        /// existing record the entry matched (its declaration should adopt
+        /// the entry), nil for a genuine addition.
+        var pairs: [(entry: LayoutTab, record: PinnedTabRecord?)]
+        /// Records no file entry claimed — removals.
+        var removed: [PinnedTabRecord]
+    }
+
+    static func match(entries: [LayoutTab], records: [PinnedTabRecord]) -> Matching {
+        var consumed = Set<UUID>()
+        var byEntry: [PinnedTabRecord?] = Array(repeating: nil, count: entries.count)
+        // Pass 1: name.
+        for (i, entry) in entries.enumerated() {
+            guard let name = entry.name, !name.isEmpty else { continue }
+            if let record = records.first(where: { !consumed.contains($0.id) && $0.declaration.name == name }) {
+                byEntry[i] = record
+                consumed.insert(record.id)
+            }
+        }
+        // Pass 2: exact layout content.
+        for (i, entry) in entries.enumerated() where byEntry[i] == nil {
+            if let record = records.first(where: { !consumed.contains($0.id) && $0.declaration.layout == entry.layout }) {
+                byEntry[i] = record
+                consumed.insert(record.id)
+            }
+        }
+        // Pass 3: positional among the leftovers (the edited-in-place case)
+        // — but only where the names don't CONTRADICT (equal, or both
+        // absent). Without that constraint, a remove+add pair would silently
+        // convert into an "edit", keeping a live session the user meant to
+        // unpin under the new entry's declaration.
+        var leftovers = records.filter { !consumed.contains($0.id) }
+        for (i, entry) in entries.enumerated() where byEntry[i] == nil {
+            guard let index = leftovers.firstIndex(where: { namesCompatible(entry.name, $0.declaration.name) })
+            else { continue }
+            let record = leftovers.remove(at: index)
+            byEntry[i] = record
+            consumed.insert(record.id)
+        }
+        return Matching(
+            pairs: Array(zip(entries, byEntry)),
+            removed: records.filter { !consumed.contains($0.id) }
+        )
+    }
+
+    private static func namesCompatible(_ a: String?, _ b: String?) -> Bool {
+        let a = a?.isEmpty == false ? a : nil
+        let b = b?.isEmpty == false ? b : nil
+        return a == b
+    }
 }
 
 @MainActor
@@ -48,8 +108,8 @@ struct PinnedLayoutStore {
         /// external input" (never as "remove everything"), so an editor's
         /// delete-then-rewrite save can't spuriously unpin the whole set.
         case absent
-        /// Parsed and carries the `pinned: true` marker.
-        case file(PinnedLayoutFile, text: String)
+        /// Parsed and carries the `path: pinned` marker.
+        case file(tabs: [LayoutTab], text: String)
         /// Present but unparseable, or missing the marker (a foreign file —
         /// e.g. a hand-crafted project file squatting on the name). Callers
         /// suspend auto-writes so a mid-edit typo can't get clobbered.
@@ -67,16 +127,16 @@ struct PinnedLayoutStore {
         // An empty file is a transient editor state (truncate-then-write), not
         // a request to unpin everything.
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .absent }
-        let file: PinnedLayoutFile
+        let file: ProjectFile
         do {
-            file = try YAMLDecoder().decode(PinnedLayoutFile.self, from: text)
+            file = try ProjectFile.parse(yaml: text)
         } catch {
             return .invalid("\(Self.filename) is not valid YAML: \(error.localizedDescription)")
         }
-        guard file.pinned == true else {
-            return .invalid("\(Self.filename) is missing the `pinned: true` marker; not touching it")
+        guard file.path.trimmingCharacters(in: .whitespaces).lowercased() == PinnedTabs.pathMarker else {
+            return .invalid("\(Self.filename) is missing the `path: \(PinnedTabs.pathMarker)` marker; not touching it")
         }
-        return .file(file, text: text)
+        return .file(tabs: file.tabs ?? [], text: text)
     }
 
     /// Serialize and write the canonical file. Returns the exact text written
@@ -94,9 +154,9 @@ struct PinnedLayoutStore {
         # removing an entry unpins its tab (honored at launch). Macterm
         # rewrites this file when tabs are pinned or unpinned and on quit.
         """
-        let encoder = YAMLEncoder()
-        encoder.options.sortKeys = false
-        let body = try encoder.encode(PinnedLayoutFile(pinned: true, tabs: tabs))
+        // A real ProjectFile whose reserved `path:` marks it as the pinned
+        // set — one schema for every layout file, modeline included.
+        let body = try ProjectFile(name: nil, path: PinnedTabs.pathMarker, zmxPath: nil, tabs: tabs).yaml()
         let text = "\(header)\n\(body)"
         try text.write(to: fileURL, atomically: true, encoding: .utf8)
         logger.info("Wrote \(Self.filename, privacy: .public) with \(tabs.count, privacy: .public) tabs")

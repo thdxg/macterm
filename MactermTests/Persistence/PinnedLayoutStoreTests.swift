@@ -35,9 +35,7 @@ struct PinnedLayoutStoreTests {
     @Test
     func write_then_read_round_trips_tabs_and_marker() throws {
         let (store, _) = makeStore()
-        let id = UUID()
         let tabs = [LayoutTab(
-            id: id,
             name: "dev server",
             layout: .split(LayoutBranch(
                 direction: .horizontal,
@@ -49,20 +47,20 @@ struct PinnedLayoutStoreTests {
 
         try store.write(tabs: tabs)
 
-        guard case let .file(file, text) = store.read() else {
+        guard case let .file(readTabs, text) = store.read() else {
             Issue.record("expected .file")
             return
         }
-        #expect(file.pinned == true)
-        #expect(file.tabs == tabs)
-        #expect(text.contains(id.uuidString))
+        #expect(readTabs == tabs)
+        #expect(text.contains("path: pinned"))
+        #expect(text.contains("dev server"))
     }
 
     @Test
     func read_unparseable_yaml_is_invalid() throws {
         let (store, dir) = makeStore()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try "pinned: true\ntabs: [ {{".write(to: store.fileURL, atomically: true, encoding: .utf8)
+        try "path: pinned\ntabs: [ {{".write(to: store.fileURL, atomically: true, encoding: .utf8)
         guard case .invalid = store.read() else {
             Issue.record("expected .invalid")
             return
@@ -71,13 +69,13 @@ struct PinnedLayoutStoreTests {
 
     @Test
     func read_file_without_marker_is_invalid() throws {
-        // A foreign file squatting on the name (e.g. a hand-crafted project
-        // file) must never be treated — or overwritten — as ours.
+        // A foreign file squatting on the name (a project file declaring a
+        // real path) must never be treated — or overwritten — as ours.
         let (store, dir) = makeStore()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try "path: ~/dev\ntabs:\n  - run: btop\n".write(to: store.fileURL, atomically: true, encoding: .utf8)
         guard case .invalid = store.read() else {
-            Issue.record("expected .invalid without the pinned marker")
+            Issue.record("expected .invalid without the path: pinned marker")
             return
         }
     }
@@ -120,7 +118,7 @@ struct PinnedLayoutStoreTests {
         // realign-deleted) by a project save declaring the same path.
         let (store, dir) = makeStore()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try "pinned: true\npath: /tmp/api\ntabs:\n".write(to: store.fileURL, atomically: true, encoding: .utf8)
+        try "path: /tmp/api\ntabs:\n".write(to: store.fileURL, atomically: true, encoding: .utf8)
         let projectFiles = ProjectFileStore(directoryURL: dir)
 
         let target = try projectFiles.write(
@@ -138,16 +136,13 @@ struct PinnedLayoutStoreTests {
     func pinnedDeclaration_captures_run_and_absolute_cwd() {
         let (tree, ids) = build(H(pane("a", projectPath: "/tmp/api"), pane("b", projectPath: "/tmp/api/sub")))
         let tab = TerminalTab(id: UUID(), splitRoot: tree, focusedPaneID: ids["a"], customTitle: "dev")
-        let recordID = UUID()
 
         let declaration = LayoutSerializer.pinnedDeclaration(
             for: tab,
-            id: recordID,
             liveCommand: { $0.id == ids["a"] ? "npm run dev" : nil },
             liveShell: { _ in nil }
         )
 
-        #expect(declaration.id == recordID)
         #expect(declaration.name == "dev")
         guard case let .split(branch) = declaration.layout,
               case let .pane(first) = branch.first,
@@ -173,7 +168,6 @@ struct PinnedLayoutStoreTests {
 
         let declaration = LayoutSerializer.pinnedDeclaration(
             for: tab,
-            id: UUID(),
             liveCommand: { _ in nil },
             liveShell: { _ in nil }
         )
@@ -206,7 +200,7 @@ struct PinnedLayoutStoreTests {
         let records = [
             PinnedTabRecord(
                 id: liveTab.id,
-                declaration: LayoutTab(id: liveTab.id, layout: .pane(LayoutPane(cwd: "/tmp"))),
+                declaration: LayoutTab(layout: .pane(LayoutPane(cwd: "/tmp"))),
                 originProjectID: UUID()
             ),
             PinnedTabRecord(
@@ -224,6 +218,63 @@ struct PinnedLayoutStoreTests {
         #expect(loaded.pinned[0].originProjectID == records[0].originProjectID)
         #expect(loaded.pinned[1].live == nil)
         #expect(loaded.pinned[1].declaration == records[1].declaration)
+    }
+
+    // MARK: - Id-less entry matching
+
+    private func record(name: String? = nil, run: String? = nil) -> PinnedTabRecord {
+        PinnedTabRecord(
+            id: UUID(),
+            declaration: LayoutTab(name: name, layout: .pane(LayoutPane(run: run))),
+            originProjectID: nil
+        )
+    }
+
+    @Test
+    func matcher_pairs_by_name_across_a_reorder() {
+        let a = record(name: "a", run: "one")
+        let b = record(name: "b", run: "two")
+        let matching = PinnedLayoutMatcher.match(
+            entries: [b.declaration, a.declaration],
+            records: [a, b]
+        )
+        #expect(matching.pairs.map { $0.record?.id } == [b.id, a.id])
+        #expect(matching.removed.isEmpty)
+    }
+
+    @Test
+    func matcher_pairs_unnamed_unchanged_entries_by_content() {
+        let a = record(run: "one")
+        let b = record(run: "two")
+        let matching = PinnedLayoutMatcher.match(
+            entries: [b.declaration, a.declaration],
+            records: [a, b]
+        )
+        #expect(matching.pairs.map { $0.record?.id } == [b.id, a.id])
+    }
+
+    @Test
+    func matcher_pairs_an_edited_entry_positionally() {
+        let a = record(run: "one")
+        var edited = a.declaration
+        edited.layout = .pane(LayoutPane(run: "one --port 3000"))
+        let matching = PinnedLayoutMatcher.match(entries: [edited], records: [a])
+        #expect(matching.pairs.first?.record?.id == a.id)
+        #expect(matching.removed.isEmpty)
+    }
+
+    @Test
+    func matcher_reports_additions_and_removals() {
+        let kept = record(name: "kept")
+        let gone = record(name: "gone")
+        let added = LayoutTab(name: "added", layout: .pane(LayoutPane(run: "new")))
+        let matching = PinnedLayoutMatcher.match(
+            entries: [kept.declaration, added],
+            records: [kept, gone]
+        )
+        #expect(matching.pairs[0].record?.id == kept.id)
+        #expect(matching.pairs[1].record == nil)
+        #expect(matching.removed.map(\.id) == [gone.id])
     }
 
     @Test

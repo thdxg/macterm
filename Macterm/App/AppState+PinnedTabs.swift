@@ -57,7 +57,7 @@ extension AppState {
               let tab = source.tabs.first(where: { $0.id == tabID })
         else { return }
         logger.info("pinTab: \(tabID, privacy: .public) from=\(sourceProjectID, privacy: .public)")
-        let declaration = LayoutSerializer.pinnedDeclaration(for: tab, id: tabID)
+        let declaration = LayoutSerializer.pinnedDeclaration(for: tab)
         ensurePinnedWorkspace()
         guard let dest = pinnedWorkspace else { return }
         let recordIndex = min(max(toRecordIndex ?? pinnedRecords.count, 0), pinnedRecords.count)
@@ -90,6 +90,46 @@ extension AppState {
         }
         // moveTab removes the record (its unpin hook) and rewrites the file.
         moveTab(tabID, from: PinnedTabs.projectID, to: dest.id, destPath: dest.path)
+    }
+
+    /// Remove a pin ENTIRELY — the record, its `pinned.yaml` entry, and (when
+    /// loaded) the live tab with its sessions. The one pinned action that
+    /// kills, hence the busy confirmation; for an unloaded record there is
+    /// nothing running and it reduces to forgetting the declaration.
+    func requestRemovePinnedTab(_ tabID: UUID) {
+        let busy = pinnedWorkspace?.tabs
+            .first { $0.id == tabID }?
+            .splitRoot.allPanes()
+            .contains(where: \.needsConfirmClose) ?? false
+        if busy {
+            pendingRemovePinnedTab = AppState.PendingRemovePinnedTab(tabID: tabID)
+            return
+        }
+        removePinnedTab(tabID)
+    }
+
+    func confirmPendingRemovePinnedTab() {
+        guard let pending = pendingRemovePinnedTab else { return }
+        pendingRemovePinnedTab = nil
+        removePinnedTab(pending.tabID)
+    }
+
+    func cancelPendingRemovePinnedTab() {
+        pendingRemovePinnedTab = nil
+    }
+
+    func removePinnedTab(_ tabID: UUID) {
+        guard pinnedRecord(tabID) != nil else { return }
+        logger.info("removePinnedTab: \(tabID, privacy: .public)")
+        if let ws = pinnedWorkspace, let tab = ws.tabs.first(where: { $0.id == tabID }) {
+            for pane in tab.splitRoot.allPanes() {
+                pane.killPersistentSession(using: zmx)
+                pane.destroySurface()
+            }
+            ws.closeTab(tabID)
+        }
+        removePinnedRecord(forTab: tabID)
+        saveWorkspaces()
     }
 
     /// Drop a record after its tab left the pinned workspace (a moveTab /
@@ -351,40 +391,29 @@ extension AppState {
         case let .invalid(reason):
             suspendPinnedLayoutWrites(reason: reason)
             pinnedMembershipStamp = pinnedRecords.map(\.id)
-        case let .file(file, text):
-            applyPinnedFileMembership(file, projects: projects)
+        case let .file(tabs, text):
+            applyPinnedFileMembership(tabs, projects: projects)
             pinnedLayoutLastWrittenText = text
             pinnedMembershipStamp = pinnedRecords.map(\.id)
             pinnedLayoutSuspended = false
-            // A hand-added entry just got an app-assigned id — canonicalize
-            // the file NOW, or a later edit of that (still id-less) entry
-            // would absorb as a brand-new addition instead of an update.
-            if (file.tabs ?? []).contains(where: { $0.id == nil }) {
-                writePinnedLayout()
-            }
         }
     }
 
-    private func applyPinnedFileMembership(_ file: PinnedLayoutFile, projects: [Project]) {
-        let fileTabs = file.tabs ?? []
-        let byID = Dictionary(uniqueKeysWithValues: pinnedRecords.map { ($0.id, $0) })
-        var result: [PinnedTabRecord] = []
-        var kept = Set<UUID>()
-        for tab in fileTabs {
-            if let id = tab.id, var existing = byID[id] {
-                var declaration = tab
-                declaration.id = id
-                existing.declaration = declaration
-                result.append(existing)
-                kept.insert(id)
-            } else {
-                let id = tab.id ?? UUID()
-                var declaration = tab
-                declaration.id = id
-                result.append(PinnedTabRecord(id: id, declaration: declaration, originProjectID: nil))
+    private func applyPinnedFileMembership(_ fileTabs: [LayoutTab], projects: [Project]) {
+        // Entries carry no wire-level id (hostile to hand-editing); they are
+        // matched back to records by name → exact layout → position
+        // (`PinnedLayoutMatcher`). A matched record keeps its internal
+        // identity — and thus its live-session snapshot — while adopting the
+        // entry's declaration; an unmatched entry is a genuine addition.
+        let matching = PinnedLayoutMatcher.match(entries: fileTabs, records: pinnedRecords)
+        let result: [PinnedTabRecord] = matching.pairs.map { entry, record in
+            if var record {
+                record.declaration = entry
+                return record
             }
+            return PinnedTabRecord(id: UUID(), declaration: entry, originProjectID: nil)
         }
-        let removed = pinnedRecords.filter { !kept.contains($0.id) }
+        let removed = matching.removed
         pinnedRecords = result
         for record in removed {
             guard let snapshot = pendingPinnedLiveRestores.removeValue(forKey: record.id) else {
@@ -423,7 +452,7 @@ extension AppState {
         if let ws = pinnedWorkspace {
             let known = Set(pinnedRecords.map(\.id))
             for tab in ws.tabs where !known.contains(tab.id) {
-                let declaration = LayoutSerializer.pinnedDeclaration(for: tab, id: tab.id)
+                let declaration = LayoutSerializer.pinnedDeclaration(for: tab)
                 let record = PinnedTabRecord(id: tab.id, declaration: declaration, originProjectID: nil)
                 pinnedRecords.insert(record, at: recordIndex(forLiveTab: tab.id, in: ws))
             }
@@ -501,9 +530,7 @@ extension AppState {
         guard let ws = pinnedWorkspace else { return }
         for index in pinnedRecords.indices {
             guard let live = ws.tabs.first(where: { $0.id == pinnedRecords[index].id }) else { continue }
-            pinnedRecords[index].declaration = LayoutSerializer.pinnedDeclaration(
-                for: live, id: pinnedRecords[index].id
-            )
+            pinnedRecords[index].declaration = LayoutSerializer.pinnedDeclaration(for: live)
         }
     }
 
@@ -531,18 +558,13 @@ extension AppState {
         case let .invalid(reason):
             suspendPinnedLayoutWrites(reason: reason)
             return
-        case let .file(file, text):
+        case let .file(tabs, text):
             if text != pinnedLayoutLastWrittenText {
-                absorbExternalPinnedEdits(file)
+                absorbExternalPinnedEdits(tabs)
             }
         }
         do {
-            let tabs = pinnedRecords.map { record in
-                var tab = record.declaration
-                tab.id = record.id
-                return tab
-            }
-            pinnedLayoutLastWrittenText = try pinnedLayoutStore.write(tabs: tabs)
+            pinnedLayoutLastWrittenText = try pinnedLayoutStore.write(tabs: pinnedRecords.map(\.declaration))
             pinnedMembershipStamp = pinnedRecords.map(\.id)
             noteLayoutFilesChanged()
         } catch {
@@ -553,29 +575,19 @@ extension AppState {
     /// Write-time absorption (the app is running; launch reconcile handles
     /// the rest): additions → unloaded records; matched entries → declaration
     /// updates; removals → only records that are UNLOADED are forgotten.
-    private func absorbExternalPinnedEdits(_ file: PinnedLayoutFile) {
+    private func absorbExternalPinnedEdits(_ fileTabs: [LayoutTab]) {
         logger.info("pinned.yaml changed externally; absorbing before write")
-        let fileTabs = file.tabs ?? []
-        // Every id the file accounts for — including the fresh ones assigned
-        // to id-less hand-added entries, or the removal sweep below would
-        // delete an addition the moment it was absorbed.
-        var keptIDs = Set<UUID>()
-        for tab in fileTabs {
-            if let id = tab.id, let index = pinnedRecords.firstIndex(where: { $0.id == id }) {
-                var declaration = tab
-                declaration.id = id
-                pinnedRecords[index].declaration = declaration
-                keptIDs.insert(id)
+        let matching = PinnedLayoutMatcher.match(entries: fileTabs, records: pinnedRecords)
+        for (entry, record) in matching.pairs {
+            if let record, let index = pinnedRecords.firstIndex(where: { $0.id == record.id }) {
+                pinnedRecords[index].declaration = entry
             } else {
-                let id = tab.id ?? UUID()
-                var declaration = tab
-                declaration.id = id
-                pinnedRecords.append(PinnedTabRecord(id: id, declaration: declaration, originProjectID: nil))
-                keptIDs.insert(id)
+                pinnedRecords.append(PinnedTabRecord(id: UUID(), declaration: entry, originProjectID: nil))
             }
         }
+        let removedIDs = Set(matching.removed.map(\.id))
         pinnedRecords.removeAll { record in
-            !keptIDs.contains(record.id) && !isPinnedTabLoaded(record.id)
+            removedIDs.contains(record.id) && !isPinnedTabLoaded(record.id)
                 && pendingPinnedLiveRestores[record.id] == nil
         }
     }

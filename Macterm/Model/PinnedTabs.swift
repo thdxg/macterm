@@ -19,6 +19,13 @@ enum PinnedTabs {
 
     static let displayName = "Pinned"
 
+    /// The reserved `path:` literal that marks `pinned.yaml` as the pinned
+    /// set rather than a project declaration. Safe as a marker by
+    /// construction: `ProjectPath.parse` returns nil for it (not absolute,
+    /// `~`-prefixed, or scp-style), so `ProjectPath.matches` can never pair
+    /// it with a real project's path.
+    static let pathMarker = "pinned"
+
     /// Where a NEW pinned tab (Cmd+T while the pinned workspace is active, a
     /// declared cwd-less leaf) starts: the user's home. Pinned tabs carry no
     /// project directory; each pane's own `projectPath` is its cwd.

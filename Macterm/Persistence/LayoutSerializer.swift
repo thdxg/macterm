@@ -83,12 +83,10 @@ enum LayoutSerializer {
     /// all three forms against `PinnedTabs.fallbackRoot`.
     static func pinnedDeclaration(
         for tab: TerminalTab,
-        id: UUID,
         liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
         liveShell: (Pane) -> String? = { ProcessInspector.runningShell(forPane: $0) }
     ) -> LayoutTab {
         LayoutTab(
-            id: id,
             name: tab.customTitle,
             layout: pinnedNode(tab.splitRoot, liveCommand: liveCommand, liveShell: liveShell)
         )
