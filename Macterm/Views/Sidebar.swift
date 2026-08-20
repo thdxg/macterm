@@ -300,8 +300,8 @@ struct SidebarContent: View {
         // drags — they still have nothing to land on over an expanded
         // section's tab rows; drop those on a project header instead.
         .overlay {
-            TabMergeSlot { item in
-                receiveMergeDrop(item, into: tab, project: project)
+            TabMergeSlot(paneIDs: tab.splitRoot.allPanes().map(\.id)) { item, insertionIndex in
+                receiveMergeDrop(item, into: tab, project: project, at: insertionIndex)
             }
         }
     }
@@ -378,25 +378,33 @@ struct SidebarContent: View {
         expandedProjects.insert(project.id)
     }
 
-    /// Where a sidebar merge lands inside the destination tab. A row shows
-    /// none of the workspace geometry the in-workspace drop resolves against,
-    /// so the level is fixed rather than guessed: a whole-edge drop, which
-    /// `mergeTree` equalizes — the joined terminal takes an even share beside
-    /// what was already there instead of halving one arbitrary pane.
-    private static let mergeTarget: TabDropResolution.Target = .rootEdge(.right)
-
-    /// Apply a drop on a tab row's merge slot: the dragged pane (or the whole
+    /// Apply a drop on a tab row's merge band: the dragged pane (or the whole
     /// dragged tab) JOINS this tab's split tree — the inverse of dragging a
     /// pane out to the sidebar, and the gesture that puts two terminals back
     /// in one tab without aiming at the workspace.
-    private func receiveMergeDrop(_ item: TabSlotDropItem, into tab: TerminalTab, project: Project) {
+    ///
+    /// `insertionIndex` is the seam the pointer chose, so the drop decides the
+    /// ORDER inside the tab too, not just which tab. A row whose panes have
+    /// vanished mid-drag resolves to no target and the drop is dropped, rather
+    /// than landing somewhere the user didn't point at.
+    private func receiveMergeDrop(
+        _ item: TabSlotDropItem,
+        into tab: TerminalTab,
+        project: Project,
+        at insertionIndex: Int
+    ) {
+        guard let target = TabMergePlacement.target(
+            insertionIndex: insertionIndex,
+            panes: tab.splitRoot.allPanes().map(\.id)
+        )
+        else { return }
         switch item {
         case let .tab(dragged):
             appState.mergeTab(
                 dragged.tabID,
                 from: dragged.sourceProjectID,
                 intoTab: tab.id,
-                at: Self.mergeTarget,
+                at: target,
                 inProject: project.id
             )
         case let .pane(dragged):
@@ -405,7 +413,7 @@ struct SidebarContent: View {
                 intoTab: tab.id,
                 inProject: project.id,
                 destPath: project.path,
-                at: Self.mergeTarget
+                at: target
             )
         }
     }
@@ -699,16 +707,20 @@ private struct SidebarProjectRow: View {
 }
 
 /// The merge band across a tab row's middle: drop a pane (or another tab)
-/// here and it joins THIS tab's split tree instead of becoming a row of its
-/// own. Spanning the row's full width at its vertical CENTER is what gives a
-/// drag three distinct meanings over one row — aim high (the seam under the
-/// row above) to insert a new tab before this one, aim low (the seam over the
-/// row below) to insert after, aim at the body to join. The height is a
-/// fraction rather than an inset so those outer bands stay reachable at any
-/// row height: they belong to the native insertion line, and a band that
-/// covered them would claim the drag first and kill tab reordering (see
-/// `tabRow`). It draws nothing until a drag is over it — the row is dense
-/// already, and the workspace's own drop preview appears the same way.
+/// here and it joins THIS tab's split tree, at the position you aimed at.
+///
+/// Spanning the row's full width at its vertical CENTER is what gives a drag
+/// three distinct meanings over one row — aim high (the seam under the row
+/// above) to insert a new tab before this one, aim low (the seam over the row
+/// below) to insert after, aim at the body to join. The height is a fraction
+/// rather than an inset so those outer bands stay reachable at any row height:
+/// they belong to the native insertion line, and a band that covered them
+/// would claim the drag first and kill tab reordering (see `tabRow`).
+///
+/// The affordance is an insertion line, not a filled rectangle, because a
+/// filled row can only say "it goes in here" — while a split tab's row draws
+/// one segment per pane, and the seams between them are positions the user can
+/// already see. A line at the nearest seam says WHERE among them it lands.
 private struct TabMergeSlot: View {
     /// Share of the row height the join band takes, leaving a quarter of the
     /// row above and below it for the insertion line.
@@ -716,37 +728,159 @@ private struct TabMergeSlot: View {
     /// Never shrink below a band the pointer can actually land in.
     private static let minHeight: CGFloat = 10
 
-    let onDrop: (TabSlotDropItem) -> Void
+    let paneIDs: [UUID]
+    /// `@Sendable @MainActor` because the async payload fallback hands this to
+    /// an item provider's completion, which runs off the main actor: a plain
+    /// closure can't cross that boundary under Swift 6's isolation checking.
+    let onDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
 
+    /// Which seam the pointer is nearest, or nil when no drag is over the
+    /// band. Doubles as the "is targeted" flag — there is no state where the
+    /// line should draw without a position.
     @State
-    private var isTargeted = false
+    private var insertionIndex: Int?
 
     var body: some View {
         GeometryReader { geo in
+            let bandHeight = max(geo.size.height * Self.heightFraction, Self.minHeight)
             Color.clear
-                .frame(height: max(geo.size.height * Self.heightFraction, Self.minHeight))
+                .frame(height: bandHeight)
                 .frame(maxHeight: .infinity, alignment: .center)
-                .dropDestination(for: TabSlotDropItem.self) { items, _ in
-                    for item in items {
-                        onDrop(item)
-                    }
-                    return true
-                } isTargeted: { isTargeted = $0 }
-                // The highlight is deliberately TALLER than the band that
-                // reads the drop: sized to the band, it cropped the row's own
-                // icon and title, which read as a misdrawn row rather than a
-                // target. It covers the row instead and takes no hit testing,
-                // so the outer quarters keep belonging to the insertion line
-                // even though the tint reaches them.
+                .onDrop(
+                    of: [.mactermPaneID, .mactermTab],
+                    delegate: TabMergeDropDelegate(
+                        paneCount: paneIDs.count,
+                        width: geo.size.width - rowTrailingInset,
+                        insertionIndex: $insertionIndex,
+                        onDrop: onDrop
+                    )
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(isTargeted ? MactermTheme.accent.opacity(0.3) : .clear)
-                        .frame(height: geo.size.height)
-                        .padding(.trailing, rowTrailingInset)
+                    if let insertionIndex {
+                        InsertionLine(
+                            index: insertionIndex,
+                            paneCount: paneIDs.count,
+                            size: CGSize(width: geo.size.width - rowTrailingInset, height: geo.size.height)
+                        )
+                        // The line is drawn OVER the whole row while the band
+                        // that reads the drop stays the middle half, so the
+                        // outer quarters keep belonging to the row-order
+                        // insertion line even though this one reaches them.
                         .allowsHitTesting(false)
-                        .animation(.easeInOut(duration: 0.12), value: isTargeted)
+                    }
                 }
         }
+    }
+}
+
+/// The join indicator: a vertical rule at the chosen seam, capped with a dot,
+/// matching the shape of the insertion line the List draws between rows so the
+/// two gestures read as one family — that one orders TABS, this one orders the
+/// terminals inside a tab.
+private struct InsertionLine: View {
+    private static let lineWidth: CGFloat = 2
+    private static let dotDiameter: CGFloat = 6
+
+    let index: Int
+    let paneCount: Int
+    let size: CGSize
+
+    var body: some View {
+        // Both ends are inset by half the line width so a seam at x=0 or
+        // x=width draws fully inside the row instead of half-clipped.
+        let clamped = max(1, paneCount)
+        let x = min(
+            max(size.width * CGFloat(index) / CGFloat(clamped), Self.lineWidth / 2),
+            size.width - Self.lineWidth / 2
+        )
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(MactermTheme.accent)
+                .frame(width: Self.lineWidth, height: size.height)
+            Circle()
+                .fill(MactermTheme.accent)
+                .frame(width: Self.dotDiameter, height: Self.dotDiameter)
+                .offset(y: -Self.dotDiameter / 3)
+        }
+        .position(x: x, y: size.height / 2)
+        .animation(.easeInOut(duration: 0.08), value: index)
+    }
+}
+
+/// A raw `DropDelegate` rather than `.dropDestination(for:)`, for one reason:
+/// the Transferable form reports no pointer location, and the position within
+/// the row IS the choice being made here. Payloads are therefore decoded the
+/// same way the workspace leaves decode them.
+private struct TabMergeDropDelegate: DropDelegate {
+    let paneCount: Int
+    let width: CGFloat
+    let insertionIndex: Binding<Int?>
+    let onDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.mactermPaneID, .mactermTab])
+    }
+
+    func dropEntered(info: DropInfo) {
+        update(info)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        update(info)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info _: DropInfo) {
+        insertionIndex.wrappedValue = nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let index = TabMergePlacement.insertionIndex(x: info.location.x, width: width, paneCount: paneCount)
+        insertionIndex.wrappedValue = nil
+
+        // A pane's bytes are usually already on the drag pasteboard (the grab
+        // handle writes them eagerly); a sidebar segment's arrive through the
+        // item provider, so both reads exist here as they do on the leaves.
+        if let movable = MovablePane.fromDragPasteboard() {
+            let drop = onDrop
+            MainActor.assumeIsolated { drop(.pane(movable), index) }
+            return true
+        }
+        if let movable = MovableTab.fromDragPasteboard() {
+            let drop = onDrop
+            MainActor.assumeIsolated { drop(.tab(movable), index) }
+            return true
+        }
+        return loadAsync(info: info, index: index)
+    }
+
+    private func loadAsync(info: DropInfo, index: Int) -> Bool {
+        let drop = onDrop
+        if let provider = info.itemProviders(for: [.mactermPaneID]).first {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermPaneID.identifier) { data, _ in
+                guard let data, let movable = MovablePane(payload: data) else { return }
+                Task { @MainActor in
+                    drop(.pane(movable), index)
+                }
+            }
+            return true
+        }
+        guard let provider = info.itemProviders(for: [.mactermTab]).first else { return false }
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermTab.identifier) { data, _ in
+            guard let data, let movable = try? JSONDecoder().decode(MovableTab.self, from: data) else { return }
+            Task { @MainActor in
+                drop(.tab(movable), index)
+            }
+        }
+        return true
+    }
+
+    private func update(_ info: DropInfo) {
+        insertionIndex.wrappedValue = TabMergePlacement.insertionIndex(
+            x: info.location.x,
+            width: width,
+            paneCount: paneCount
+        )
     }
 }
 
