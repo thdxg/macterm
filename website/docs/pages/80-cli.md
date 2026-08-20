@@ -40,7 +40,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 |---|---|
 | `status` | Liveness probe: version, pid, active project. Exits non-zero if no app is reachable. |
 | `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
-| `project create <path> [--name N] [--select]` | Add a project for a local directory. **Not idempotent** — each run adds a distinct project, even for a directory that already has one; check `project list` first if you want create-or-select. `--select` activates it — and, on first open, applies a matching [layout file](/docs/declarative-layouts). |
+| `project create <path> [--name N] [--select]` | Add a project for a local directory or an scp-style `[user@]host:dir` [remote spec](/docs/remote-projects) (stored verbatim — a wrong host or dir surfaces in the pane). **Not idempotent** — each run adds a distinct project, even for a directory that already has one; check `project list` first if you want create-or-select. `--select` activates it — and, on first open, applies a matching [layout file](/docs/declarative-layouts). |
 | `project select <name\|uuid\|index>` | Make a project active. |
 | `tab list [--project P]` | Tabs of a project (default: active project). |
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
@@ -116,8 +116,6 @@ Both need a **live surface** (a never-shown pane returns `no_surface` — select
 ## Debug-only verbs
 
 `pane resize --cols C --rows R [target]` drives a single, in-place `ghostty_surface_set_size` on a pane, bypassing the normal SwiftUI layout path — for reproducing a specific resize/reflow transition in isolation. It exists **only in debug builds**: it is absent from a release CLI's `--help`, and a release app rejects `pane.resize` as an unknown command. The live layout system reasserts the pane's real geometry on the next tick, so the verb drives the *transition* (and any reflow side effect, visible via `pane inspect`'s scrollback) rather than persisting a size.
-
-`pane reconnect [target]` rebuilds a pane's surface in place, reattaching its persistent session — the primitive behind the automatic remote-pane reconnect. Debug-only the same way: the user-facing trigger is automatic (system wake / app activation), so no release verb exists.
 
 ## Environment
 

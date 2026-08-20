@@ -724,9 +724,7 @@ final class AppState {
     /// run `ensureScrollView` → `attach` → `configure` (reinstalling the
     /// callbacks the destroy just nil'd) → `createSurface`, which re-dials
     /// ssh against the same persisted session name.
-    /// Internal (not private) so the DEBUG-only `pane.reconnect` control verb
-    /// can drive the same primitive headlessly for the e2e suite.
-    func reconnectSurface(of pane: Pane) {
+    private func reconnectSurface(of pane: Pane) {
         pane.destroySurface()
         pane.requestSurfaceReattach()
     }
@@ -1492,6 +1490,68 @@ final class AppState {
             saveWorkspaces()
         case .notFound:
             break
+        }
+    }
+
+    /// A pane's child process ended (libghostty's `close_surface`, routed
+    /// through `onProcessExit`). Local panes close, as always. A REMOTE
+    /// pane's child is its ssh client, and WHY it ended decides (#281):
+    /// a deliberate end (the user typed `exit`, ending the zmx session, or
+    /// killed it) should close the pane as before, while a dropped
+    /// connection must NOT — libghostty has already rendered its exit
+    /// message into the still-live surface, the session lives on host-side,
+    /// and the reconnect sweep redials it on the next trigger. Closing
+    /// unconditionally was the pre-#281 behavior, and because `closePane`
+    /// kills the pane's session, a wake-time ssh death destroyed the remote
+    /// work the moment the network came back.
+    ///
+    /// The discriminator is the HOST's answer, not the exit code — measured
+    /// on macOS the exit code is always 0 (ghostty's own Surface.zig notes
+    /// exit-code detection doesn't work on Darwin), so a one-shot BatchMode
+    /// listing settles it: session gone → deliberate end → close; session
+    /// alive or host unreachable → drop → keep. Fail-safe by construction:
+    /// wrongly keeping a pane costs a manual close, wrongly closing one
+    /// costs the user's running session. With `backgroundSSHConnections`
+    /// off (#272) no probe is allowed, so every remote exit keeps the pane.
+    func handleProcessExit(_ paneID: UUID, projectID: UUID) {
+        let pane = workspaces[projectID]?.tabs
+            .compactMap { $0.splitRoot.findPane(id: paneID) }
+            .first
+        guard let pane, pane.isRemote, let remote = pane.remoteSpec else {
+            requestClosePane(paneID, projectID: projectID)
+            return
+        }
+        guard Preferences.shared.backgroundSSHConnections else {
+            logger.info("remote pane ssh ended; probes disabled — keeping pane as disconnected")
+            return
+        }
+        let sessionName = pane.sessionName
+        let zmxPath = pane.remoteZmxPath
+        let ownerID = Preferences.shared.installationID
+        Task { [zmx, weak self] in
+            // The stamp-then-list op doubles as the liveness probe (stamping
+            // our own claimed session is what the sweep does anyway).
+            let entries = await zmx.sweepRemoteOrphans(remote, zmxPath, [sessionName], ownerID)
+            guard let entries else {
+                logger.info("remote pane ssh ended; host unreachable — keeping pane as disconnected")
+                return
+            }
+            guard !entries.contains(where: { $0.name == sessionName }) else {
+                logger.info("remote pane ssh ended but its session lives — keeping pane as disconnected")
+                return
+            }
+            guard let self else { return }
+            // Session is gone: deliberate end. Close — unless something
+            // (a reconnect trigger racing this probe) already revived the
+            // pane with a live child.
+            if let view = self.workspaces[projectID]?.tabs
+                .compactMap({ $0.splitRoot.findPane(id: paneID) })
+                .first?.nsView, view.surface != nil, !view.processExited
+            {
+                return
+            }
+            logger.info("remote pane ssh ended and its session is gone — closing the pane")
+            self.closePane(paneID, projectID: projectID)
         }
     }
 

@@ -114,6 +114,13 @@ extension ZmxClient {
             cachedBundledURL
         }
 
+        // Remote ops resolve `ssh` via PATH (through /usr/bin/env), NOT a
+        // hardcoded /usr/bin/ssh: the PANE's own ssh is PATH-resolved (its
+        // command runs through a shell), so ops must dial the same client —
+        // a user on Homebrew OpenSSH gets consistent config/behavior across
+        // both, and the e2e harness's ssh shim (its only route to a hermetic
+        // ssh config, since OpenSSH resolves ~/.ssh/config via the user
+        // record, not $HOME) covers background ops too.
         return ZmxClient(
             executableURL: resolveExecutable,
             isBundled: { bundledExecutable() != nil },
@@ -126,8 +133,8 @@ extension ZmxClient {
                 )
                 else { return }
                 _ = await runZmx(
-                    argv,
-                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    remoteSSHArgv(argv),
+                    executable: remoteSSHExecutable,
                     timeout: .seconds(10)
                 )
             },
@@ -138,8 +145,8 @@ extension ZmxClient {
                 // classification needs ssh's stderr to tell a refused auth
                 // (suspend the host, #272) from a flaky link (keep retrying).
                 guard let outcome = await runZmxProcess(
-                    argv,
-                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    remoteSSHArgv(argv),
+                    executable: remoteSSHExecutable,
                     captureStdout: true,
                     timeout: .seconds(10)
                 )
@@ -159,8 +166,8 @@ extension ZmxClient {
                 // the caller reaps nothing, same contract as the local
                 // listSessionsWithClients.
                 guard let stdout = await runZmx(
-                    argv,
-                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    remoteSSHArgv(argv),
+                    executable: remoteSSHExecutable,
                     captureStdout: true,
                     timeout: .seconds(10)
                 )
@@ -197,6 +204,12 @@ extension ZmxClient {
             }
         )
     }()
+
+    /// See the PATH-resolution note above `return ZmxClient(` in `live`.
+    private static let remoteSSHExecutable = URL(fileURLWithPath: "/usr/bin/env")
+    private static func remoteSSHArgv(_ argv: [String]) -> [String] {
+        ["ssh"] + argv
+    }
 
     /// No-op client for tests / when zmx is unavailable.
     static let noop = ZmxClient(

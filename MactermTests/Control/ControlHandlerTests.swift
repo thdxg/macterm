@@ -338,9 +338,6 @@ struct ControlHandlerTests {
         let (handler, _, projectStore) = makeHandler()
         let relative = await handler.handle(request("project.create", args: ControlArgs(path: "dev/api")))
         #expect(relative.error?.code == .badRequest)
-        let remote = await handler.handle(request("project.create", args: ControlArgs(path: "host:~/dev/api")))
-        #expect(remote.error?.code == .badRequest)
-        #expect(remote.error?.message.contains("#104") == true)
         let missing = await handler.handle(request(
             "project.create", args: ControlArgs(path: "/nonexistent-\(UUID().uuidString)")
         ))
@@ -348,6 +345,20 @@ struct ControlHandlerTests {
         let empty = await handler.handle(request("project.create"))
         #expect(empty.error?.code == .badRequest)
         #expect(projectStore.projects.isEmpty)
+    }
+
+    @Test
+    func project_create_accepts_a_remote_spec_verbatim() async {
+        // #104 shipped: a remote spec is a valid project path. Stored
+        // verbatim — no local canonicalization or existence check applies,
+        // and a wrong host/dir surfaces in the pane itself.
+        let (handler, _, projectStore) = makeHandler()
+        let response = await handler.handle(request(
+            "project.create", args: ControlArgs(path: "dev@host:~/dev/api")
+        ))
+        #expect(response.ok)
+        #expect(projectStore.projects.first?.path == "dev@host:~/dev/api")
+        #expect(projectStore.projects.first?.isRemote == true)
     }
 
     @Test

@@ -336,7 +336,6 @@ struct PaneCommand: ParsableCommand {
         #if DEBUG
         subs.append(Resize.self)
         subs.append(Move.self)
-        subs.append(Reconnect.self)
         #endif
         return subs
     }
@@ -606,22 +605,6 @@ struct PaneCommand: ParsableCommand {
             args.zone = zone
             args.dest = dest
             try runControlCommand(command: "pane.move", args: args, options: options)
-        }
-    }
-
-    /// DEBUG-only (#281): rebuild a pane's surface against the same zmx
-    /// session, so the reconnect path is drivable headlessly (the user-facing
-    /// trigger is automatic — system wake / app activation).
-    struct Reconnect: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "[debug] Respawn a pane's surface, reattaching its persistent session."
-        )
-
-        @OptionGroup var target: PaneTarget
-        @OptionGroup var options: ConnectionOptions
-
-        func run() throws {
-            try runControlCommand(command: "pane.reconnect", args: target.controlArgs(), options: options)
         }
     }
     #endif

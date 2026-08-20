@@ -151,47 +151,63 @@ def test_busy_tab_close_refused_then_forced(app, fresh_tab, live_pane):
     app.cli("tab", "close", fresh_tab["id"], "--force")
     assert fresh_tab["id"] not in {t["id"] for t in app.cli_json("tab", "list")["tabs"]}
 
-def test_pane_reconnect_reattaches_the_same_session(app, fresh_tab, live_pane):
-    """`pane reconnect` (debug-only, #281) rebuilds a pane's surface against
-    the SAME zmx session — the primitive the automatic remote reconnect uses.
-    Identity must survive (pane id, session name); where the pane is
-    zmx-wrapped, zmx's re-attach replay must bring prior output back into the
-    brand-new surface, which is what proves this reattached rather than
-    respawned. Wrapping is environment-dependent (the socket-path budget can
-    bypass it), so the replay assertion is conditional on the session actually
-    existing in the daemon — same pattern as the busy-close tests."""
-    pane_id = live_pane["id"]
-    session = live_pane["session"]
 
-    nonce = uuid.uuid4().hex[:12]
-    marker = f"e2e-{nonce}-pre"
-    app.pane_run(f'/bin/sh -c "printf e2e-%s-pre {nonce}; echo"', pane=pane_id)
-    wait_for(
-        lambda: marker in (app.pane_text(pane=pane_id, scrollback=True) or ""),
-        timeout=60,
-        message=f"marker {marker} before the reconnect",
-    )
-    daemon_names = {s["name"] for s in app.cli_json("session", "list").get("sessions") or []}
+def _app_log(app):
+    try:
+        with open(app.log_stream_path) as f:
+            return f.read()
+    except OSError:
+        return ""
 
-    app.cli("pane", "reconnect", "--pane", pane_id)
 
-    # The rebuilt surface comes back live with the same identity.
-    def reconnected():
-        panes = {p["id"]: p for p in app.panes(tab=fresh_tab["id"])}
-        return pane_id in panes and panes[pane_id]["session"] == session
+def _process_exited(app, pane_id):
+    """processExited via pane inspect, None while the surface is mid-rebuild
+    (inspect errors with no_surface during the destroy→respawn window)."""
+    try:
+        return app.pane_inspect(pane=pane_id).get("processExited")
+    except Exception:
+        return None
 
-    wait_for(reconnected, timeout=60, message="the pane back in the list with its session")
-    wait_for(
-        lambda: app.pane_text(pane=pane_id),
-        timeout=60,
-        message="a prompt in the rebuilt surface",
-    )
 
-    if session in daemon_names:
-        # zmx replays scrollback + screen on re-attach, so output written
-        # BEFORE the reconnect must be readable in the NEW surface.
+def test_dropped_remote_pane_reconnects_on_project_select(app):
+    """A remote pane whose ssh client died is respawned by the reconnect
+    sweep's `.projectSelected` trigger — the one trigger drivable headlessly
+    (wake and app-activation need real system transitions; there is
+    deliberately NO manual reconnect verb — automatic or nothing, #281).
+    The host is unreachable by construction, so what's asserted is the
+    automatic respawn attempt itself: ssh dies → overlay (processExited) →
+    select away and back → the sweep logs a respawn and a fresh ssh dials
+    (and dies again, same pane, same session). The full round trip against a
+    reachable host lives in test_remote_reconnect.py (docker-gated)."""
+    projects = app.cli_json("project", "list")["projects"]
+    original = next(p for p in projects if p.get("active"))
+    app.cli("project", "create", "e2e-badhost.invalid:/tmp", "--name", "deadremote", "--select")
+    try:
+        pane = wait_for(lambda: app.panes(), timeout=30, message="the remote pane")[0]
         wait_for(
-            lambda: marker in (app.pane_text(pane=pane_id, scrollback=True) or ""),
+            lambda: _process_exited(app, pane["id"]) is True,
             timeout=60,
-            message=f"marker {marker} replayed into the rebuilt surface",
+            message="the ssh client's death (processExited)",
         )
+        assert "reconnect(projectSelected): respawning" not in _app_log(app)
+
+        app.cli("project", "select", original["name"])
+        app.cli("project", "select", "deadremote")
+
+        wait_for(
+            lambda: "reconnect(projectSelected): respawning 1 dropped remote pane" in _app_log(app),
+            timeout=30,
+            message="the reconnect sweep's respawn log line",
+        )
+        # The respawned ssh dials the same unreachable host and dies again —
+        # same pane identity, same session name, back on the overlay.
+        wait_for(
+            lambda: _process_exited(app, pane["id"]) is True,
+            timeout=60,
+            message="the respawned ssh client's death",
+        )
+        panes = {p["id"]: p for p in app.panes()}
+        assert pane["id"] in panes
+        assert panes[pane["id"]]["session"] == pane["session"]
+    finally:
+        app.cli("project", "select", original["name"], check=False)

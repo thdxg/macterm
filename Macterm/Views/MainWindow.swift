@@ -509,7 +509,7 @@ struct WorkspaceView: View {
                     tab.split(paneID: paneID, direction: dir)
                     appState.saveWorkspaces()
                 },
-                onClosePane: { appState.requestClosePane($0, projectID: project.id) },
+                onClosePane: { appState.handleProcessExit($0, projectID: project.id) },
                 onCommandFinished: { paneID in
                     appState.acknowledgeFinishedCommandIfActive(paneID: paneID, projectID: project.id)
                 },

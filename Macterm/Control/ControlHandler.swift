@@ -76,7 +76,6 @@ final class ControlHandler {
         case "pane.resize-split": return try paneResizeSplit(args)
         #if DEBUG
         case "pane.resize": return try paneResize(args)
-        case "pane.reconnect": return try paneReconnect(args)
         case "pane.move": return try paneMove(args)
         case "tab.merge": return try tabMerge(args)
         #endif
@@ -268,17 +267,22 @@ final class ControlHandler {
         guard let parsed = ProjectPath.parse(rawPath) else {
             throw ControlError(code: .badRequest, message: "\"\(rawPath)\" is not an absolute or ~-prefixed path")
         }
-        guard case .local = parsed else {
-            throw ControlError(
-                code: .badRequest,
-                message: "remote projects aren't supported yet (#104)",
-                action: "pass a local directory path"
-            )
-        }
-        let canonical = ProjectPath.canonicalLocal(rawPath)
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: canonical, isDirectory: &isDirectory), isDirectory.boolValue else {
-            throw ControlError(code: .notFound, message: "no directory at \(canonical)")
+        // A remote spec ([user@]host:dir, #104) is stored verbatim — there is
+        // no local directory to canonicalize or existence-check; a wrong host
+        // or dir surfaces in the pane itself (ssh's error / the cd
+        // diagnostic), same as a sheet-created remote project.
+        let canonical: String
+        switch parsed {
+        case .local:
+            canonical = ProjectPath.canonicalLocal(rawPath)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: canonical, isDirectory: &isDirectory),
+                  isDirectory.boolValue
+            else {
+                throw ControlError(code: .notFound, message: "no directory at \(canonical)")
+            }
+        case .remote:
+            canonical = rawPath
         }
 
         // Always create — `project create` is not idempotent: re-running adds a
@@ -572,19 +576,6 @@ final class ControlHandler {
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
-        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
-    }
-
-    /// DEBUG-ONLY (#281): rebuild a pane's surface in place — destroy +
-    /// respawn against the same zmx session — so the reconnect path can be
-    /// driven headlessly by the e2e suite. The user-facing trigger is
-    /// automatic (system wake / app activation); there is deliberately no
-    /// release verb, so a Release app answers `pane.reconnect` with
-    /// `unknown_command`.
-    private func paneReconnect(_ args: ControlArgs) throws -> ControlData {
-        let (_, workspace) = try resolveWorkspace(args)
-        let target = try resolvePane(args, in: workspace)
-        appState.reconnectSurface(of: target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
