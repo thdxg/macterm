@@ -150,3 +150,48 @@ def test_busy_tab_close_refused_then_forced(app, fresh_tab, live_pane):
 
     app.cli("tab", "close", fresh_tab["id"], "--force")
     assert fresh_tab["id"] not in {t["id"] for t in app.cli_json("tab", "list")["tabs"]}
+
+def test_pane_reconnect_reattaches_the_same_session(app, fresh_tab, live_pane):
+    """`pane reconnect` (debug-only, #281) rebuilds a pane's surface against
+    the SAME zmx session — the primitive the automatic remote reconnect uses.
+    Identity must survive (pane id, session name); where the pane is
+    zmx-wrapped, zmx's re-attach replay must bring prior output back into the
+    brand-new surface, which is what proves this reattached rather than
+    respawned. Wrapping is environment-dependent (the socket-path budget can
+    bypass it), so the replay assertion is conditional on the session actually
+    existing in the daemon — same pattern as the busy-close tests."""
+    pane_id = live_pane["id"]
+    session = live_pane["session"]
+
+    nonce = uuid.uuid4().hex[:12]
+    marker = f"e2e-{nonce}-pre"
+    app.pane_run(f'/bin/sh -c "printf e2e-%s-pre {nonce}; echo"', pane=pane_id)
+    wait_for(
+        lambda: marker in (app.pane_text(pane=pane_id, scrollback=True) or ""),
+        timeout=60,
+        message=f"marker {marker} before the reconnect",
+    )
+    daemon_names = {s["name"] for s in app.cli_json("session", "list").get("sessions") or []}
+
+    app.cli("pane", "reconnect", "--pane", pane_id)
+
+    # The rebuilt surface comes back live with the same identity.
+    def reconnected():
+        panes = {p["id"]: p for p in app.panes(tab=fresh_tab["id"])}
+        return pane_id in panes and panes[pane_id]["session"] == session
+
+    wait_for(reconnected, timeout=60, message="the pane back in the list with its session")
+    wait_for(
+        lambda: app.pane_text(pane=pane_id),
+        timeout=60,
+        message="a prompt in the rebuilt surface",
+    )
+
+    if session in daemon_names:
+        # zmx replays scrollback + screen on re-attach, so output written
+        # BEFORE the reconnect must be readable in the NEW surface.
+        wait_for(
+            lambda: marker in (app.pane_text(pane=pane_id, scrollback=True) or ""),
+            timeout=60,
+            message=f"marker {marker} replayed into the rebuilt surface",
+        )

@@ -251,6 +251,7 @@ struct ControlHandlerTests {
             killSession: { _ in },
             killRemoteSession: { _, _, _ in },
             remoteForegrounds: { _, _ in .unreachable },
+            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessionsWithClients: { entries },
             sessionLeaderPIDs: { leaders },
             sessionListSnapshot: { entries.map { (entries: $0, leaders: leaders) } }
@@ -814,6 +815,7 @@ struct ControlHandlerTests {
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, _, _ in },
             remoteForegrounds: { _, _ in .unreachable },
+            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessionsWithClients: { [.init(name: "macterm-x-000011112222", clients: 0)] },
             sessionLeaderPIDs: { [:] },
             sessionListSnapshot: { (entries: [.init(name: "macterm-x-000011112222", clients: 0)], leaders: [:]) }

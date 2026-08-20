@@ -76,6 +76,7 @@ final class ControlHandler {
         case "pane.resize-split": return try paneResizeSplit(args)
         #if DEBUG
         case "pane.resize": return try paneResize(args)
+        case "pane.reconnect": return try paneReconnect(args)
         case "pane.move": return try paneMove(args)
         case "tab.merge": return try tabMerge(args)
         #endif
@@ -571,6 +572,19 @@ final class ControlHandler {
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    /// DEBUG-ONLY (#281): rebuild a pane's surface in place — destroy +
+    /// respawn against the same zmx session — so the reconnect path can be
+    /// driven headlessly by the e2e suite. The user-facing trigger is
+    /// automatic (system wake / app activation); there is deliberately no
+    /// release verb, so a Release app answers `pane.reconnect` with
+    /// `unknown_command`.
+    private func paneReconnect(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        appState.reconnectSurface(of: target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 

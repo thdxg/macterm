@@ -444,6 +444,7 @@ private struct GeneralSettings: View {
     /// project, and it diverged from the `.onChange` write-through under test.
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
+    @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -522,6 +523,15 @@ private struct GeneralSettings: View {
                 Text(
                     "Probes remote hosts for live tab names and close warnings. "
                         + "Turn off if each connection prompts for Touch ID."
+                )
+                .settingsCaption()
+                Toggle("Reconnect panes after a dropped connection", isOn: $reconnectRemotePanes)
+                    .onChange(of: reconnectRemotePanes) { _, v in
+                        Preferences.shared.reconnectRemotePanes = v
+                    }
+                Text(
+                    "Reattaches a disconnected pane's session when you wake "
+                        + "the Mac or return to the app."
                 )
                 .settingsCaption()
             }

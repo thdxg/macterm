@@ -1520,6 +1520,7 @@ struct AppStateTests {
             killSession: { name in await killed.append(name) },
             killRemoteSession: { _, name, _ in await (remoteKilled ?? killed).append(name) },
             remoteForegrounds: { _, _ in .unreachable },
+            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessionsWithClients: { [] },
             sessionLeaderPIDs: { [:] },
             sessionListSnapshot: { (entries: [], leaders: [:]) }
@@ -1580,6 +1581,7 @@ struct AppStateTests {
                 await probes.append(UUID().uuidString)
                 return .unreachable
             },
+            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessionsWithClients: { [] },
             sessionLeaderPIDs: { [:] },
             sessionListSnapshot: { (entries: [], leaders: [:]) }

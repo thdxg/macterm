@@ -117,6 +117,8 @@ Both need a **live surface** (a never-shown pane returns `no_surface` — select
 
 `pane resize --cols C --rows R [target]` drives a single, in-place `ghostty_surface_set_size` on a pane, bypassing the normal SwiftUI layout path — for reproducing a specific resize/reflow transition in isolation. It exists **only in debug builds**: it is absent from a release CLI's `--help`, and a release app rejects `pane.resize` as an unknown command. The live layout system reasserts the pane's real geometry on the next tick, so the verb drives the *transition* (and any reflow side effect, visible via `pane inspect`'s scrollback) rather than persisting a size.
 
+`pane reconnect [target]` rebuilds a pane's surface in place, reattaching its persistent session — the primitive behind the automatic remote-pane reconnect. Debug-only the same way: the user-facing trigger is automatic (system wake / app activation), so no release verb exists.
+
 ## Environment
 
 The app exports into every spawned shell:

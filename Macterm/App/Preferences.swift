@@ -183,6 +183,35 @@ final class Preferences {
         didSet { defaults.set(backgroundSSHConnections, forKey: Keys.backgroundSSHConnections) }
     }
 
+    /// Reconnect a remote pane whose ssh connection died (#281): respawn the
+    /// surface so it redials and reattaches the SAME zmx session (which
+    /// replays scrollback), instead of leaving the pane on ghostty's
+    /// abnormal-exit overlay until the app is relaunched. Trigger-driven —
+    /// system wake, app activation, project selection — never a timer, so an
+    /// unreachable host is retried a bounded number of times per return, not
+    /// polled. Off exists for the same reason as `backgroundSSHConnections`:
+    /// a Touch ID-gated key (#272) would raise one prompt per dead pane on
+    /// every wake.
+    var reconnectRemotePanes: Bool {
+        didSet { defaults.set(reconnectRemotePanes, forKey: Keys.reconnectRemotePanes) }
+    }
+
+    /// Stable per-installation identity, lazily created on first use. Stamped
+    /// onto remote zmx sessions as a `macterm.owner` label so the orphan sweep
+    /// can tell OUR sessions apart from another machine's on a shared host
+    /// (#281) — never the hostname, which two Macs can share and the user can
+    /// rename. UUID hex without dashes, because zmx label values allow only
+    /// `[A-Za-z0-9._-]`. Not `@Observable` state (no UI reads it), so it's a
+    /// computed lazy read-through rather than a stored property.
+    var installationID: String {
+        if let existing = defaults.string(forKey: Keys.installationID), !existing.isEmpty {
+            return existing
+        }
+        let fresh = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        defaults.set(fresh, forKey: Keys.installationID)
+        return fresh
+    }
+
     /// Slide the hidden sidebar out while the pointer sits at the window's
     /// leading edge, and back in when it leaves (`MainWindow`'s hover peek).
     var peekSidebarWhenHidden: Bool {
@@ -588,6 +617,7 @@ final class Preferences {
         autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
+        reconnectRemotePanes = defaults.object(forKey: Keys.reconnectRemotePanes) as? Bool ?? true
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
         sidebarWidth = storedSidebarWidth
@@ -685,6 +715,8 @@ final class Preferences {
         static let autoNameTabs = "macterm.tabs.autoName"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
+        static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"
+        static let installationID = "macterm.installationID"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
         static let sidebarWidth = "macterm.sidebar.width"
         static let updateChannel = "macterm.updates.channel"

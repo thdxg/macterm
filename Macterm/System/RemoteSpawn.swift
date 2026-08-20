@@ -289,6 +289,59 @@ enum RemoteSpawn {
         ]
     }
 
+    /// The zmx label key marking a session as created by a Macterm
+    /// installation (`macterm.owner=<Preferences.installationID>`). Labels
+    /// are in-memory and settable only on a LIVE session — `zmx set` has no
+    /// attach-time form — so ownership can't be stamped at creation; the
+    /// sweep re-asserts it on every pass instead (`orphanSweepScript`).
+    static let ownerLabelKey = "macterm.owner"
+
+    /// One-connection stamp-then-list for the remote orphan sweep (#281):
+    /// re-assert our ownership label on every session a live pane claims,
+    /// then list ALL sessions (each line carries `clients=` and the labels)
+    /// for the Swift-side verdict. Two rules keep this safe on a shared host:
+    /// the stamp half only ever names sessions WE pass in, so it can never
+    /// brand another machine's session as ours; and the list half filters
+    /// nothing host-side — `zmx ls --where` is advertised in zmx's help but
+    /// silently unimplemented (thdxg/zmx `src/main.zig` parses only
+    /// `--short`, so `--where` would return EVERY session) — the reap
+    /// decision lives in tested Swift (`ZmxReaper.orphans(in:known:owner:)`).
+    /// Each `set` is `|| true`-guarded: a session that died between listing
+    /// and stamping must not fail the sweep.
+    static func orphanSweepScript(sessionNames: [String], ownerID: String, zmxPath: String?) -> String {
+        let zmx = zmxInvocation(zmxPath: zmxPath)
+        var script = remoteEnvPreamble
+        if !sessionNames.isEmpty {
+            let quoted = sessionNames.map(posixDoubleQuote).joined(separator: " ")
+            let label = posixDoubleQuote("\(ownerLabelKey)=\(ownerID)")
+            script += "for n in \(quoted); do \(zmx) set \"$n\" \(label) >/dev/null 2>&1 || true; done; "
+        }
+        script += "\(zmx) ls"
+        return script
+    }
+
+    /// argv (for `/usr/bin/ssh`) running the orphan sweep on the remote host —
+    /// the same non-interactive profile as `opArgv`/`foregroundProbeArgv`.
+    /// nil for a local path.
+    static func orphanSweepArgv(
+        remote: ProjectPath,
+        zmxPath: String?,
+        sessionNames: [String],
+        ownerID: String
+    ) -> [String]? {
+        guard case let .remote(user, host, _) = remote else { return nil }
+        let script = assertSingleQuoteFree(
+            orphanSweepScript(sessionNames: sessionNames, ownerID: ownerID, zmxPath: zmxPath),
+            onViolation: .failNonZero
+        )
+        return [
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=\(opConnectTimeoutSeconds)",
+            destination(user: user, host: host),
+            "\(remoteShell) \(shellQuote(script))",
+        ]
+    }
+
     /// POSIX single-quote escaping: safe against spaces, globs, `$`, and
     /// embedded quotes (`'` → `'\''`). For strings parsed by a shell that is
     /// KNOWN to be POSIX — the local bash ghostty spawns through, or the
