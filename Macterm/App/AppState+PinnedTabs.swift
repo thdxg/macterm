@@ -118,46 +118,6 @@ extension AppState {
         saveWorkspaces()
     }
 
-    /// Remove a pin ENTIRELY — the record, its `pinned.yaml` entry, and (when
-    /// loaded) the live tab with its sessions. The one pinned action that
-    /// kills, hence the busy confirmation; for an unloaded record there is
-    /// nothing running and it reduces to forgetting the declaration.
-    func requestRemovePinnedTab(_ tabID: UUID) {
-        let busy = pinnedWorkspace?.tabs
-            .first { $0.id == tabID }?
-            .splitRoot.allPanes()
-            .contains(where: \.needsConfirmClose) ?? false
-        if busy {
-            pendingRemovePinnedTab = AppState.PendingRemovePinnedTab(tabID: tabID)
-            return
-        }
-        removePinnedTab(tabID)
-    }
-
-    func confirmPendingRemovePinnedTab() {
-        guard let pending = pendingRemovePinnedTab else { return }
-        pendingRemovePinnedTab = nil
-        removePinnedTab(pending.tabID)
-    }
-
-    func cancelPendingRemovePinnedTab() {
-        pendingRemovePinnedTab = nil
-    }
-
-    func removePinnedTab(_ tabID: UUID) {
-        guard pinnedRecord(tabID) != nil else { return }
-        logger.info("removePinnedTab: \(tabID, privacy: .public)")
-        if let ws = pinnedWorkspace, let tab = ws.tabs.first(where: { $0.id == tabID }) {
-            for pane in tab.splitRoot.allPanes() {
-                pane.killPersistentSession(using: zmx)
-                pane.destroySurface()
-            }
-            ws.closeTab(tabID)
-        }
-        removePinnedRecord(forTab: tabID)
-        saveWorkspaces()
-    }
-
     /// Drop a record after its tab left the pinned workspace (a moveTab /
     /// merge out). The workspace side is the caller's job.
     func removePinnedRecord(forTab tabID: UUID) {

@@ -11,6 +11,7 @@ final class HotkeyCaptureState {
 enum HotkeyAction: String, CaseIterable, Identifiable {
     case newTab = "new_tab"
     case closePane = "close_pane"
+    case closeTab = "close_tab"
     case splitRight = "split_right"
     case splitDown = "split_down"
     case splitAuto = "split_auto"
@@ -66,6 +67,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         switch self {
         case .newTab: "cmd+t"
         case .closePane: "cmd+w"
+        // Unbound by default: cmd+w already closes the tab pane-by-pane, and
+        // a whole-tab close on a stray chord ends every session in it (busy
+        // panes still confirm; a pinned tab only unloads).
+        case .closeTab: "none"
         case .splitRight: "cmd+d"
         case .splitDown: "cmd+shift+d"
         case .splitAuto: "none"

@@ -128,60 +128,36 @@ struct PinnedTabsTests {
         #expect(fx.state.pinnedRecords.isEmpty)
     }
 
-    // MARK: - Remove from pinned
-
-    @Test
-    func removePinnedTab_idle_removes_record_and_live_tab() throws {
-        let fx = makeFixture()
-        let p = seedProject(fx.state)
-        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
-        fx.state.pinTab(tab.id, fromProject: p.id)
-
-        fx.state.requestRemovePinnedTab(tab.id)
-
-        #expect(fx.state.pinnedRecords.isEmpty)
-        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
-        #expect(fx.state.pendingRemovePinnedTab == nil)
-    }
-
-    @Test
-    func removePinnedTab_confirmation_flow_removes_on_confirm() throws {
-        let fx = makeFixture()
-        let p = seedProject(fx.state)
-        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
-        fx.state.pinTab(tab.id, fromProject: p.id)
-
-        // Stage manually (busy detection needs a live surface — the same
-        // convention as the other pending-confirmation tests).
-        fx.state.pendingRemovePinnedTab = AppState.PendingRemovePinnedTab(tabID: tab.id)
-
-        fx.state.cancelPendingRemovePinnedTab()
-        #expect(fx.state.pendingRemovePinnedTab == nil)
-        #expect(fx.state.pinnedRecords.count == 1)
-
-        fx.state.pendingRemovePinnedTab = AppState.PendingRemovePinnedTab(tabID: tab.id)
-        fx.state.confirmPendingRemovePinnedTab()
-        #expect(fx.state.pendingRemovePinnedTab == nil)
-        #expect(fx.state.pinnedRecords.isEmpty)
-        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
-    }
-
-    @Test
-    func removePinnedTab_unloaded_forgets_the_record() {
-        let fx = makeFixture()
-        let record = PinnedTabRecord(
-            id: UUID(),
-            declaration: LayoutTab(layout: .pane(LayoutPane(run: "btop"))),
-            originProjectID: nil
-        )
-        fx.state.pinnedRecords = [record]
-
-        fx.state.requestRemovePinnedTab(record.id)
-
-        #expect(fx.state.pinnedRecords.isEmpty)
-    }
-
     // MARK: - Close = unload
+
+    /// One `AppCommand.closeTab` serves both kinds of tab: on the pinned
+    /// workspace it unloads (record kept), on a project it closes for good.
+    @Test
+    func closeTab_command_unloads_pinned_and_closes_normal_tabs() throws {
+        let fx = makeFixture()
+        let storeTmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-projstore-\(UUID().uuidString).json")
+        let ctx = AppCommandContext(appState: fx.state, projectStore: ProjectStore(fileURL: storeTmp))
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+
+        // Active tab is the pinned one → close unloads, keeping the record.
+        // (Bound before calling: invoking the `#require` result directly
+        // crashes the Swift 6.3 frontend.)
+        let closePinned = try #require(AppCommand.closeTab.action(in: ctx))
+        closePinned()
+        #expect(fx.state.pinnedWorkspace?.tabs.isEmpty == true)
+        #expect(fx.state.pinnedRecords.map(\.id) == [tab.id])
+
+        // Back on the project (pinning moved its only tab out, so make a
+        // fresh one), close removes the tab outright.
+        fx.state.activeProjectID = p.id
+        _ = try #require(fx.state.createTab(projectID: p.id, projectPath: p.path))
+        let closeNormal = try #require(AppCommand.closeTab.action(in: ctx))
+        closeNormal()
+        #expect(fx.state.workspaces[p.id]?.tabs.isEmpty == true)
+    }
 
     @Test
     func requestCloseTab_unloads_pinned_tab_keeping_the_record() throws {

@@ -30,6 +30,14 @@ extension AppCommand {
                     ctx.appState.requestClosePane(pane.id, projectID: projectID)
                 }
             }
+        case .closeTab:
+            // Close the active tab — pinned or normal. `requestCloseTab` owns
+            // the busy confirmation and routes a pinned tab to the unload path
+            // (sessions end, the record stays), so one command serves both.
+            guard let projectID,
+                  let tab = ctx.appState.workspaces[projectID]?.activeTab
+            else { return nil }
+            return { ctx.appState.requestCloseTab(tab.id, projectID: projectID) }
         case .nextTab:
             return { ctx.appState.selectGlobalTab(.next, projects: ctx.projectStore.projects) }
         case .previousTab:

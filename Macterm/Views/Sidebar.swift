@@ -601,10 +601,11 @@ struct SidebarContent: View {
         }
     }
 
-    /// A pinned row's menu — three exits with distinct semantics: Unpin (a
-    /// move back to a project, nothing killed), Close (an unload: processes
-    /// end, the row and layout stay), and Remove from Pinned (gone for good,
-    /// busy-confirmed).
+    /// A pinned row's menu — two exits with distinct semantics: Unpin (a
+    /// move back to a project for a loaded tab, nothing killed; forgetting
+    /// the declaration for an unloaded record — the removal path) and Close
+    /// (an unload: processes end, the row and layout stay), matching the
+    /// normal tab menu's Close Tab.
     @ViewBuilder
     private func pinnedTabMenu(record: PinnedTabRecord) -> some View {
         let isLoaded = appState.isPinnedTabLoaded(record.id)
@@ -644,22 +645,20 @@ struct SidebarContent: View {
             }
         }
         Divider()
+        // Unpin = a MOVE back to the origin project for a loaded tab (nothing
+        // killed); an unloaded record has no live tab, so unpinning forgets
+        // the declaration — how a dead row is removed.
+        Button("Unpin Tab") {
+            appState.unpinTab(record.id, projects: projectStore.projects)
+        }
         if isLoaded {
-            // Unpin = a MOVE back to the origin project (nothing killed).
-            Button("Unpin Tab") {
-                appState.unpinTab(record.id, projects: projectStore.projects)
-            }
             // Close = UNLOAD: processes end, the dimmed row and its saved
-            // layout stay, and the next launch starts it again.
+            // layout stay, and the next launch starts it again. Same entry
+            // point as the normal tab menu's Close Tab and the closeTab
+            // command — `requestCloseTab` routes pinned tabs to the unload.
             Button("Close Tab", role: .destructive) {
                 appState.requestCloseTab(record.id, projectID: PinnedTabs.projectID)
             }
-        }
-        // Remove = gone for good: sessions end (busy-confirmed), the record
-        // and its pinned.yaml entry are forgotten. For an unloaded record
-        // nothing is running, so it just forgets the declaration.
-        Button("Remove from Pinned", role: .destructive) {
-            appState.requestRemovePinnedTab(record.id)
         }
     }
 

@@ -161,15 +161,6 @@ final class AppState {
 
     var pendingCloseTab: PendingCloseTab?
 
-    /// A pinned-tab REMOVAL staged for confirmation — unlike closing a
-    /// pinned tab (an unload that keeps the record), removal kills the
-    /// sessions AND forgets the pin, so a running program confirms first.
-    struct PendingRemovePinnedTab: Equatable {
-        let tabID: UUID
-    }
-
-    var pendingRemovePinnedTab: PendingRemovePinnedTab?
-
     /// A project removal staged for confirmation, same busy rule as tabs.
     /// Carries the full removal (AppState workspace + ProjectStore entry) as
     /// a closure, since the store lives with the caller.
