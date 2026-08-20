@@ -13,9 +13,10 @@ private enum SidebarItem: Hashable {
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
-/// The row's own coordinate space, so a segment's frame is measured against
-/// the row that draws the join indicator rather than the window.
-private let tabRowSpace = "macterm.sidebar.tabRow"
+/// The TITLE's coordinate space. Everything the join band needs — the seams
+/// it draws on and the pointer positions it compares them against — is
+/// measured here, so there is no conversion between two spaces to get wrong.
+private let tabTitleSpace = "macterm.sidebar.tabTitle"
 
 /// Where a split row actually drew its per-pane segments. The join indicator
 /// has to sit on the divider the user is aiming at, and only the layout knows
@@ -25,18 +26,6 @@ private struct TabSegmentFramesKey: PreferenceKey {
 
     static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
         value.append(contentsOf: nextValue())
-    }
-}
-
-/// Where the row drew its TITLE — the segments and nothing else. The join band
-/// is confined to it, so the tab's icon is not a position you can aim at: it
-/// names the whole tab, and the row's own drag lifts from it.
-private struct TabTitleFrameKey: PreferenceKey {
-    static let defaultValue: CGRect = .zero
-
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        let next = nextValue()
-        if next != .zero { value = next }
     }
 }
 
@@ -654,20 +643,8 @@ private struct SidebarProjectRow: View {
     @FocusState
     private var focused: Bool
 
-    private var titleContent: some View {
-        measuredTitle
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: TabTitleFrameKey.self,
-                        value: proxy.frame(in: .named(tabRowSpace))
-                    )
-                }
-            }
-    }
-
     @ViewBuilder
-    private var measuredTitle: some View {
+    private var titleContent: some View {
         if isRenaming {
             TextField("", text: $renameText)
                 .textFieldStyle(.plain)
@@ -739,48 +716,21 @@ private struct TabRow: View {
     let onRename: (String) -> Void
     let onMergeDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
 
-    @State
-    private var seams: [CGFloat] = []
-    /// The row's title area. The join band is confined to it, so the tab icon
-    /// and the leading padding aren't positions a drag can choose.
-    @State
-    private var titleFrame: CGRect = .zero
-
     var body: some View {
-        SidebarTabRow(tab: tab, index: index, onRename: onRename)
+        // The join band lives INSIDE the row's title (see `SidebarTabRow`),
+        // not as an overlay measured against the row. Two attempts to place it
+        // by geometry both leaked: the tab's icon kept accepting drops, either
+        // because the frame was measured in one space and the drop reported in
+        // another, or because `.position` handed the whole row back as the
+        // target. Making the title the band's parent removes the arithmetic —
+        // the icon is outside it by construction.
+        SidebarTabRow(tab: tab, index: index, onRename: onRename, onMergeDrop: onMergeDrop)
             .padding(.trailing, rowTrailingInset)
             // Stretch to the full row and make every point hit-testable:
             // without this, the drag grab area hugs the label's intrinsic
             // width instead of covering the whole row.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .coordinateSpace(name: tabRowSpace)
-            .onPreferenceChange(TabSegmentFramesKey.self) { frames in
-                seams = TabMergePlacement.seams(segmentFrames: frames)
-            }
-            .onPreferenceChange(TabTitleFrameKey.self) { frame in
-                titleFrame = frame
-            }
-            // The row's ONE drop target is the merge band across its middle,
-            // and it must never reach the row's top and bottom edges. A
-            // destination covering the whole row — even one registered for a
-            // single payload type — claims every drag over it before the tab
-            // ForEach's insertion mechanism sees it (SwiftUI routes a drag to
-            // the topmost target by geometry with no type fall-through), which
-            // kills the native insertion line and broke tab reordering
-            // outright when tried. Leaving the outer bands uncovered is what
-            // lets one row mean three things: insert above, join, insert
-            // below. The cost is unchanged for PROJECT drags — they still have
-            // nothing to land on over an expanded section's tab rows; drop
-            // those on a project header instead.
-            .overlay {
-                TabMergeSlot(
-                    paneIDs: tab.splitRoot.allPanes().map(\.id),
-                    seams: seams,
-                    titleFrame: titleFrame,
-                    onDrop: onMergeDrop
-                )
-            }
     }
 }
 
@@ -809,8 +759,6 @@ private struct TabMergeSlot: View {
     let paneIDs: [UUID]
     /// Where the row drew its segment dividers, empty when it drew none.
     let seams: [CGFloat]
-    /// The row's title area, which bounds the band horizontally.
-    let titleFrame: CGRect
     /// `@Sendable @MainActor` because the async payload fallback hands this to
     /// an item provider's completion, which runs off the main actor: a plain
     /// closure can't cross that boundary under Swift 6's isolation checking.
@@ -825,44 +773,30 @@ private struct TabMergeSlot: View {
     var body: some View {
         GeometryReader { geo in
             let bandHeight = max(geo.size.height * Self.heightFraction, Self.minHeight)
-            // The band runs from where the title starts to the row's trailing
-            // inset — NOT to where the title's text happens to end. A
-            // single-pane row's title is as wide as the word in it (`zsh` is
-            // about 25pt), and a band that narrow, already limited to the
-            // middle half of the row's height, was effectively unhittable:
-            // joining two single-pane tabs stopped working entirely.
-            let bandMinX = titleFrame.width > 0 ? titleFrame.minX : 0
-            let bandMaxX = max(geo.size.width - rowTrailingInset, bandMinX + 1)
-            // A row that drew no dividers offers exactly one position, that
+            // A row that drew no dividers — a single-pane tab, or one
+            // collapsed to a pane count — offers exactly one position, its
             // trailing edge: there is nothing visible to land BETWEEN, so the
             // only honest indicator is "after what is here".
-            let positions = seams.isEmpty ? [bandMaxX] : seams
+            let positions = seams.isEmpty ? [geo.size.width] : seams
             ZStack(alignment: .topLeading) {
+                // The band spans this view, which IS the title area — no
+                // measuring, no coordinate conversion, and the pointer
+                // positions the drop reports are already in the same space as
+                // the seams.
                 Color.clear
-                    .frame(width: bandMaxX - bandMinX, height: bandHeight)
-                    // `.onDrop` BEFORE `.position`, and this order is the whole
-                    // fix: `.position` returns a view that fills its parent, so
-                    // attaching the drop after it made the target the entire
-                    // row again — icon included — while only LOOKING confined.
+                    .frame(maxWidth: .infinity)
+                    .frame(height: bandHeight)
+                    .frame(maxHeight: .infinity, alignment: .center)
                     .onDrop(
                         of: [.mactermPaneID, .mactermTab],
                         delegate: TabMergeDropDelegate(
-                            // A drop reports its location in the TARGET's own
-                            // space, so the seams — measured against the row —
-                            // are shifted into the band's before comparing.
-                            // Drawing still uses the row-space values, because
-                            // the indicator is drawn against the row.
-                            positions: positions.map { $0 - bandMinX },
+                            positions: positions,
                             appendIndex: paneIDs.count,
                             hasSeams: !seams.isEmpty,
                             insertionIndex: $insertionIndex,
                             onDrop: onDrop
                         )
                     )
-                    // Starts where the title does: the icon names the whole
-                    // tab and is where the row's own drag lifts from, so it is
-                    // not a position among the panes.
-                    .position(x: (bandMinX + bandMaxX) / 2, y: geo.size.height / 2)
 
                 if let insertionIndex {
                     InsertionLine(
@@ -1002,6 +936,11 @@ private struct SidebarTabRow: View {
     let tab: TerminalTab
     let index: Int
     let onRename: (String) -> Void
+    let onMergeDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
+
+    /// Where this row drew its segment dividers, in the title's own space.
+    @State
+    private var seams: [CGFloat] = []
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
@@ -1019,8 +958,37 @@ private struct SidebarTabRow: View {
     @FocusState
     private var focused: Bool
 
-    @ViewBuilder
+    /// The title, and over it the band that joins terminals into this tab.
+    ///
+    /// The band is a child of the TITLE rather than an overlay on the row,
+    /// because the title is exactly the region it should cover: the tab's icon
+    /// names the whole tab and is where the row's own drag lifts from, so it
+    /// must not offer a position among the panes. Two attempts to achieve that
+    /// by measuring frames both leaked the icon back in — one of them because
+    /// the measurement landed on the PROJECT row's title, which has the same
+    /// shape. Parenting removes the arithmetic and the ambiguity.
+    ///
+    /// Expanding to the full width keeps the target usable: a single-pane
+    /// row's title is only as wide as the word in it, and a band that narrow
+    /// made joining two single-pane tabs impossible.
     private var titleContent: some View {
+        rawTitle
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .coordinateSpace(name: tabTitleSpace)
+            .onPreferenceChange(TabSegmentFramesKey.self) { frames in
+                seams = TabMergePlacement.seams(segmentFrames: frames)
+            }
+            .overlay {
+                TabMergeSlot(
+                    paneIDs: tab.splitRoot.allPanes().map(\.id),
+                    seams: seams,
+                    onDrop: onMergeDrop
+                )
+            }
+    }
+
+    @ViewBuilder
+    private var rawTitle: some View {
         if isRenaming {
             TextField(tab.autoTitle, text: $renameText)
                 .textFieldStyle(.plain)
@@ -1071,7 +1039,7 @@ private struct SidebarTabRow: View {
                         GeometryReader { proxy in
                             Color.clear.preference(
                                 key: TabSegmentFramesKey.self,
-                                value: [proxy.frame(in: .named(tabRowSpace))]
+                                value: [proxy.frame(in: .named(tabTitleSpace))]
                             )
                         }
                     }
