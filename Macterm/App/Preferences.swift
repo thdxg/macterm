@@ -155,6 +155,16 @@ final class Preferences {
         didSet { defaults.set(showTabStatusIndicator, forKey: Keys.showTabStatusIndicator) }
     }
 
+    /// Whether the running spinner also replaces an AI agent's logo (#225).
+    /// Off keeps the agent logo while the agent works — agent CLIs draw their
+    /// own busy indicator in the tab title, so the spinner is redundant there —
+    /// while the done dot still appears (it overlays the logo rather than
+    /// replacing it). Meaningful only while `showTabStatusIndicator` and
+    /// `showAgentIcons` are both on.
+    var showSpinnerOverAgentIcons: Bool {
+        didSet { defaults.set(showSpinnerOverAgentIcons, forKey: Keys.showSpinnerOverAgentIcons) }
+    }
+
     /// Auto-name tabs after the live foreground process / OSC title (on by
     /// default). Off = tabs hold their static fallback (login shell name, or
     /// the host name for remote panes); a user-set custom title always wins
@@ -205,7 +215,7 @@ final class Preferences {
     /// Bounds of the sidebar column, shared by the persisted width's clamp and
     /// `MainWindow`'s `navigationSplitViewColumnWidth` so a stored value can
     /// never fall outside what the column accepts.
-    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 280
+    static let sidebarWidthRange: ClosedRange<Double> = 140 ... 400
     static let defaultSidebarWidth: Double = 180
 
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
@@ -375,6 +385,52 @@ final class Preferences {
     }
 
     // MARK: - Ghostty config
+
+    static let ghosttyApplicationSupportConfigDirectory =
+        "~/Library/Application Support/com.mitchellh.ghostty"
+    static let fallbackGhosttyXDGConfigDirectory = "~/.config/ghostty"
+    private static let ghosttyXDGSubdirectory = "ghostty"
+    private static let currentGhosttyConfigFilename = "config.ghostty"
+    private static let legacyGhosttyConfigFilename = "config"
+    static let defaultGhosttyConfigPath = (ghosttyApplicationSupportConfigDirectory as NSString)
+        .appendingPathComponent(currentGhosttyConfigFilename)
+
+    /// Match Ghostty's effective macOS precedence. Ghostty loads XDG before
+    /// Application Support and legacy before current, so later files win.
+    static func preferredGhosttyConfigPath(
+        applicationSupportConfigDirectory: String,
+        xdgConfigDirectory: String,
+        fileIsNonEmpty: (String) -> Bool
+    ) -> String {
+        let candidates = [
+            (applicationSupportConfigDirectory as NSString)
+                .appendingPathComponent(currentGhosttyConfigFilename),
+            (applicationSupportConfigDirectory as NSString)
+                .appendingPathComponent(legacyGhosttyConfigFilename),
+            (xdgConfigDirectory as NSString).appendingPathComponent(currentGhosttyConfigFilename),
+            (xdgConfigDirectory as NSString).appendingPathComponent(legacyGhosttyConfigFilename),
+        ]
+        return candidates.first(where: fileIsNonEmpty) ?? candidates[0]
+    }
+
+    private static func defaultUserGhosttyConfigPath() -> String {
+        let applicationSupport = (ghosttyApplicationSupportConfigDirectory as NSString)
+            .expandingTildeInPath
+        let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"].flatMap { directory in
+            guard !directory.isEmpty else { return nil }
+            return (directory as NSString).appendingPathComponent(ghosttyXDGSubdirectory)
+        } ?? (fallbackGhosttyXDGConfigDirectory as NSString).expandingTildeInPath
+
+        return preferredGhosttyConfigPath(
+            applicationSupportConfigDirectory: applicationSupport,
+            xdgConfigDirectory: xdg
+        ) { path in
+            let values = try? URL(fileURLWithPath: path).resourceValues(
+                forKeys: [.isRegularFileKey, .fileSizeKey]
+            )
+            return values?.isRegularFile == true && (values?.fileSize ?? 0) > 0
+        }
+    }
 
     /// Path to the user's Ghostty config. Empty string = don't load any user
     /// config (Macterm-defaults only). Tilde-expand via
@@ -550,7 +606,8 @@ final class Preferences {
             .flatMap(WindowGlassStyle.init(rawValue:)) ?? .regular
         adaptiveTerminalChromeEnabled = defaults.object(forKey: Keys.adaptiveTerminalChromeEnabled) as? Bool ?? false
         hideTitleBar = defaults.object(forKey: Keys.hideTitleBar) as? Bool ?? false
-        userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath) ?? "~/.config/ghostty/config"
+        userGhosttyConfigPath = defaults.string(forKey: Keys.userGhosttyConfigPath)
+            ?? Self.defaultUserGhosttyConfigPath()
         passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
@@ -585,6 +642,7 @@ final class Preferences {
         tabIconSymbol = defaults.string(forKey: Keys.tabIconSymbol) ?? "terminal"
         showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
+        showSpinnerOverAgentIcons = defaults.object(forKey: Keys.showSpinnerOverAgentIcons) as? Bool ?? true
         autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
@@ -682,6 +740,7 @@ final class Preferences {
         static let tabIconSymbol = "macterm.sidebar.tabIcon"
         static let showAgentIcons = "macterm.sidebar.showAgentIcons"
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
+        static let showSpinnerOverAgentIcons = "macterm.sidebar.showSpinnerOverAgentIcons"
         static let autoNameTabs = "macterm.tabs.autoName"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"

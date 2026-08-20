@@ -475,7 +475,8 @@ private struct GeneralSettings: View {
             Section("Ghostty Config") {
                 HStack {
                     TextField(
-                        "Path", text: $ghosttyConfigPath, prompt: Text("~/.config/ghostty/config")
+                        "Path", text: $ghosttyConfigPath,
+                        prompt: Text(Preferences.defaultGhosttyConfigPath)
                     )
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { commitPath() }
@@ -628,6 +629,7 @@ private struct AppearanceSettings: View {
     @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
+    @State private var showSpinnerOverAgentIcons: Bool = Preferences.shared.showSpinnerOverAgentIcons
     @State private var autoNameTabs: Bool = Preferences.shared.autoNameTabs
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
@@ -756,6 +758,19 @@ private struct AppearanceSettings: View {
                     }
                 Text("Shows a spinner while a command runs, and a dot when it finishes.")
                     .settingsCaption()
+
+                Group {
+                    Toggle(isOn: $showSpinnerOverAgentIcons) {
+                        Text("Show spinner over agent icons").dimsWhenDisabled()
+                    }
+                    .onChange(of: showSpinnerOverAgentIcons) { _, v in
+                        Preferences.shared.showSpinnerOverAgentIcons = v
+                    }
+                    Text("When off, a tab running an AI agent keeps its logo while busy. The completion dot still appears.")
+                        .settingsCaption()
+                }
+                .disabled(!(showTabStatusIndicator && showAgentIcons))
+                .padding(.leading, 16)
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }

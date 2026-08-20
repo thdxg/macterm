@@ -9,8 +9,8 @@ import Foundation
 /// (`parsePackedStruct` in ghostty's `src/cli/args.zig`). A bare
 /// `shell-integration-features = no-ssh-env` in the overrides file — loaded
 /// last — would therefore silently wipe user flags like `no-cursor` from
-/// `~/.config/ghostty/config`. So Macterm re-emits the user's effective value
-/// first and appends its own forced `no-*` flags; ghostty applies the
+/// the selected user Ghostty config. So Macterm re-emits the user's effective
+/// value first and appends its own forced `no-*` flags; ghostty applies the
 /// comma-separated parts left to right with later parts winning per-flag, so
 /// the forced flags take precedence while every other user flag survives.
 ///

@@ -856,6 +856,8 @@ private struct SidebarTabRow: View {
     private var showAgentIcons = true
     @AppStorage(Preferences.Keys.showTabStatusIndicator)
     private var showTabStatusIndicator = false
+    @AppStorage(Preferences.Keys.showSpinnerOverAgentIcons)
+    private var showSpinnerOverAgentIcons = true
     @State
     private var isRenaming = false
     @State
@@ -902,7 +904,13 @@ private struct SidebarTabRow: View {
                         // sentinel as an invisible Image that still reserves
                         // the icon column, nudging the title right of every
                         // other icon-less row.
-                        TabStatusGlyph(state: tab.executionState, symbol: iconSymbol, index: index, agent: agentIcon)
+                        TabStatusGlyph(
+                            state: tab.executionState,
+                            symbol: iconSymbol,
+                            index: index,
+                            agent: agentIcon,
+                            spinnerOverAgent: showSpinnerOverAgentIcons
+                        )
                     } else if let agentIcon {
                         // "None" suppresses the user's icon, not the agent
                         // logo — a live status signal, like the else branch.
@@ -916,7 +924,13 @@ private struct SidebarTabRow: View {
                     titleContent
                 } icon: {
                     if showTabStatusIndicator {
-                        TabStatusGlyph(state: tab.executionState, symbol: iconSymbol, index: index, agent: agentIcon)
+                        TabStatusGlyph(
+                            state: tab.executionState,
+                            symbol: iconSymbol,
+                            index: index,
+                            agent: agentIcon,
+                            spinnerOverAgent: showSpinnerOverAgentIcons
+                        )
                     } else {
                         SidebarRowIcon(symbol: iconSymbol, index: index, agent: agentIcon)
                             .foregroundStyle(.secondary)
@@ -1034,26 +1048,37 @@ private struct TabRowTitle: View {
 /// suggestion): the user's chosen icon stays put, and status is additive.
 ///
 /// - `running`: a small spinner replaces the icon (temporary prominence,
-///   Xcode-build-navigator style).
+///   Xcode-build-navigator style) — unless the icon is an AI agent's logo and
+///   the user turned "Show spinner over agent icons" off (#225): agent CLIs
+///   draw their own busy indicator in the tab title, so the logo can stay put.
 /// - `done` (needs attention): the icon with a small solid status dot in the
 ///   bottom-trailing corner — like the Messages/FaceTime "available" dot. A
 ///   dot reads as "done/positive" without competing with the icon's identity,
 ///   and it avoids the heavy, off-platform look of a checkmark glyph badge.
+///   It overlays the agent logo the same way, regardless of the spinner
+///   preference — "unread agent messages" is the signal #225 asked to keep.
 /// - `idle`: the icon as-is.
 private struct TabStatusGlyph: View {
     let state: TerminalExecutionState
     let symbol: String
     let index: Int
     var agent: AgentIcon?
+    var spinnerOverAgent = true
 
     var body: some View {
         switch state {
         case .running:
-            ProgressView()
-                .controlSize(.small)
-                .tint(.secondary)
-                .help("Running")
-                .frame(width: 16, height: 16)
+            if let agent, !spinnerOverAgent {
+                SidebarRowIcon(symbol: symbol, index: index, agent: agent)
+                    .foregroundStyle(.secondary)
+                    .help("Running")
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.secondary)
+                    .help("Running")
+                    .frame(width: 16, height: 16)
+            }
         case .done:
             SidebarRowIcon(symbol: symbol, index: index, agent: agent)
                 .foregroundStyle(.secondary)
