@@ -491,7 +491,7 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Toggle("Load Ghostty config files", isOn: $ghosttyConfigFilesEnabled)
+                Toggle("Use Ghostty config files", isOn: $ghosttyConfigFilesEnabled)
                     .onChange(of: ghosttyConfigFilesEnabled) { _, enabled in
                         commitCustomGhosttyConfigEdit()
                         Preferences.shared.ghosttyConfigFilesEnabled = enabled
