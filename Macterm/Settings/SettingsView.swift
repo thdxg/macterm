@@ -819,8 +819,8 @@ private struct GeneralSettings: View {
 /// same row shape as the Projects pane. All entries are equal here (Ghostty's
 /// default files were dissolved into ordinary entries at first load). Move
 /// Up/Down matter because later files override earlier ones. A non-nil
-/// `problem` swaps the file icon for a warning triangle with the reason
-/// underneath.
+/// `problem` swaps the file icon for a warning triangle whose tooltip
+/// carries the reason, keeping the row single-line.
 private struct GhosttyConfigFileRow: View {
     let path: String
     let problem: String?
@@ -836,17 +836,12 @@ private struct GhosttyConfigFileRow: View {
             Image(systemName: problem == nil ? "doc.text" : "exclamationmark.triangle")
                 .foregroundStyle(problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(MactermTheme.warning))
                 .frame(width: 16)
+                .help(problem ?? "")
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text((path as NSString).abbreviatingWithTildeInPath)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(path)
-                if let problem {
-                    Text(problem)
-                        .settingsCaption()
-                }
-            }
+            Text((path as NSString).abbreviatingWithTildeInPath)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(path)
 
             Spacer(minLength: 8)
 
