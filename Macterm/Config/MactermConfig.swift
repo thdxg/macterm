@@ -140,7 +140,7 @@ final class MactermConfig {
     /// raw text rather than the effective post-override value.
     static func userGhosttyConfigText() -> String? {
         guard !Preferences.isTestRun, !BenchmarkControl.isEnabled else { return nil }
-        return GhosttyConfigSource(selection: Preferences.shared.effectiveGhosttyConfigSelection).mergedText()
+        return GhosttyConfigSource(selection: Preferences.shared.ghosttyConfigSelection).mergedText()
     }
 
     private func userGhosttyConfigText() -> String? {

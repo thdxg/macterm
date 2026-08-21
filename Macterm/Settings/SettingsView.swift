@@ -458,14 +458,17 @@ private struct GeneralSettings: View {
 
     @State
     private var terminalScrollSpeed: Double = Preferences.shared.terminalScrollSpeed
-    /// One flat, ordered list of config files. Ghostty's default files hold
-    /// no special status here: the first load dissolved the automatic layer
-    /// into plain entries (`Preferences.dissolveGhosttyDefaultLayer`), so by
-    /// the time this pane renders they're ordinary rows like any other.
+    /// The config source is one of two exclusive modes: Ghostty's default
+    /// locations (its own loader, its own order) or the user's custom list.
+    /// The toggle picks the mode; the inactive mode's list stays visible but
+    /// dims, so switching back is never a rebuild.
     @State
-    private var ghosttyConfigFilesEnabled: Bool = Preferences.shared.ghosttyConfigFilesEnabled
+    private var useDefaultGhosttyConfigLocations: Bool = Preferences.shared.ghosttyConfigSelection.loadsDefaultFiles
     @State
     private var customGhosttyConfigPaths: [String] = Preferences.shared.ghosttyConfigSelection.customPaths
+    @State
+    private var defaultGhosttyConfigFiles: [GhosttyConfigSource.DefaultFileLocation] =
+        GhosttyConfigSource.defaultFileLocations()
 
     /// Which custom-path row is being edited inline, with its draft text.
     /// `customGhosttyConfigPaths.count` marks a new entry being typed via
@@ -490,28 +493,37 @@ private struct GeneralSettings: View {
                 FullDiskAccessBanner()
             }
 
-            Section {
-                Toggle("Use Ghostty config files", isOn: $ghosttyConfigFilesEnabled)
-                    .onChange(of: ghosttyConfigFilesEnabled) { _, enabled in
+            Section("Ghostty Config") {
+                Toggle("Use default locations", isOn: $useDefaultGhosttyConfigLocations)
+                    .onChange(of: useDefaultGhosttyConfigLocations) { _, _ in
                         commitCustomGhosttyConfigEdit()
-                        Preferences.shared.ghosttyConfigFilesEnabled = enabled
-                        GhosttyApp.shared.reloadAndReport()
+                        commitGhosttyConfig()
                     }
 
-                // The rows stay visible when loading is off — the list is the
-                // user's, the toggle only governs whether it's read — they
-                // just dim and stop taking edits. The dimming modifiers wrap
-                // the rows only in the off branch: an `.opacity` (even 1.0)
-                // over the rows can flatten them into a layer that swallows
-                // the tooltip tracking areas inside.
-                if ghosttyConfigFilesEnabled {
-                    ghosttyConfigFileRows
+                // The inactive mode's list stays visible but dims. The
+                // dimming modifiers wrap the rows only in the dim branch: an
+                // `.opacity` (even 1.0) over the rows can flatten them into a
+                // layer that swallows the tooltip tracking areas inside.
+                if useDefaultGhosttyConfigLocations {
+                    defaultGhosttyLocationRows
                 } else {
+                    Group {
+                        defaultGhosttyLocationRows
+                    }
+                    .disabled(true)
+                    .opacity(0.45)
+                }
+            }
+
+            Section {
+                if useDefaultGhosttyConfigLocations {
                     Group {
                         ghosttyConfigFileRows
                     }
                     .disabled(true)
                     .opacity(0.45)
+                } else {
+                    ghosttyConfigFileRows
                 }
 
                 HStack {
@@ -521,20 +533,17 @@ private struct GeneralSettings: View {
                     Button("Reload") {
                         commitGhosttyConfig()
                     }
-                    .disabled(!ghosttyConfigFilesEnabled)
                     .help("Re-read your Ghostty config. Click after saving external edits.")
                 }
             } header: {
                 HStack {
-                    Text("Ghostty Config")
+                    Text("Custom Locations")
                     Spacer()
                     // Mirrors the Projects pane's add affordance: a plus in the
                     // header, with the creation paths in its menu.
                     Menu {
                         Button("Choose Files…") { browseForCustomGhosttyConfigFiles() }
                         Button("Enter Path…") { beginEnteringCustomGhosttyConfigPath() }
-                        Divider()
-                        Button("Ghostty Default Files") { addGhosttyDefaultConfigFiles() }
                     } label: {
                         Label("Add Config File", systemImage: "plus")
                             .labelStyle(.iconOnly)
@@ -542,7 +551,7 @@ private struct GeneralSettings: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    .disabled(!ghosttyConfigFilesEnabled)
+                    .disabled(useDefaultGhosttyConfigLocations)
                     .help("Add a config file")
                 }
             }
@@ -617,10 +626,28 @@ private struct GeneralSettings: View {
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             hasFullDiskAccess = FullDiskAccess.isGranted()
+            // Default files are created and deleted in other apps, so
+            // discovery can only have changed while we were inactive.
+            defaultGhosttyConfigFiles = GhosttyConfigSource.defaultFileLocations()
         }
         .onChange(of: isCustomGhosttyConfigFieldFocused) { wasFocused, isFocused in
             guard wasFocused, !isFocused else { return }
             commitCustomGhosttyConfigEdit()
+        }
+    }
+
+    /// The discovered default locations, read-only: in default mode Ghostty's
+    /// own loader picks these up, so there's nothing to edit — customization
+    /// means switching the toggle off and using the custom list.
+    @ViewBuilder
+    private var defaultGhosttyLocationRows: some View {
+        let found = defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }
+        ForEach(found) { file in
+            GhosttyDefaultLocationRow(file: file)
+        }
+        if found.isEmpty {
+            Text("No default config files found.")
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -649,7 +676,7 @@ private struct GeneralSettings: View {
         }
 
         if customGhosttyConfigPaths.isEmpty, editingCustomGhosttyConfigIndex == nil {
-            Text("No config files.")
+            Text("No custom config files.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -675,32 +702,23 @@ private struct GeneralSettings: View {
         .padding(.vertical, 2)
     }
 
-    /// Persist the list and reload. The stored selection is always plain
-    /// paths by the time this pane exists — the first load dissolved the
-    /// automatic default layer into entries.
+    /// Persist the mode and the custom list together, then reload once. The
+    /// custom list is stored even in default mode — it's the user's, kept
+    /// intact for the next switch back.
     private func commitGhosttyConfig() {
         let customPaths = customGhosttyConfigPaths.filter { !$0.isEmpty }
-        let selection = GhosttyConfigSelection(loadsDefaultFiles: false, customPaths: customPaths)
+        let selection = GhosttyConfigSelection(
+            loadsDefaultFiles: useDefaultGhosttyConfigLocations,
+            customPaths: customPaths
+        )
         if selection != Preferences.shared.ghosttyConfigSelection {
-            Preferences.shared.setGhosttyConfig(loadsDefaultFiles: false, customPaths: customPaths)
+            Preferences.shared.setGhosttyConfig(
+                loadsDefaultFiles: useDefaultGhosttyConfigLocations,
+                customPaths: customPaths
+            )
         }
         GhosttyApp.shared.reloadAndReport()
-    }
-
-    /// Seeds the locations Ghostty itself would load — the set the automatic
-    /// layer once covered — as ordinary entries at the top of the list (they
-    /// load first by convention), skipping any already listed. The escape
-    /// hatch for re-adding a deleted default without typing its path.
-    private func addGhosttyDefaultConfigFiles() {
-        commitCustomGhosttyConfigEdit()
-        let listed = expandedListedGhosttyConfigPaths()
-        let additions = GhosttyConfigSource.defaultFileLocations()
-            .filter { $0.resolvedPath != nil }
-            .filter { !listed.contains($0.searchedPath) && !listed.contains($0.resolvedPath ?? "") }
-            .map { ($0.searchedPath as NSString).abbreviatingWithTildeInPath }
-        guard !additions.isEmpty else { return }
-        customGhosttyConfigPaths.insert(contentsOf: additions, at: 0)
-        commitGhosttyConfig()
+        defaultGhosttyConfigFiles = GhosttyConfigSource.defaultFileLocations()
     }
 
     /// Why a custom entry gets the warning icon, or nil when it's a plausible
@@ -830,12 +848,43 @@ private struct GeneralSettings: View {
 
 // MARK: - Ghostty config rows
 
-/// One config file in the list: its path and its actions in a menu — the
-/// same row shape as the Projects pane. All entries are equal here (Ghostty's
-/// default files were dissolved into ordinary entries at first load). Move
-/// Up/Down matter because later files override earlier ones. A non-nil
-/// `problem` swaps the file icon for a warning triangle whose tooltip
-/// carries the reason, keeping the row single-line.
+/// One discovered default location, read-only: Ghostty's own loader owns
+/// this set and its order, so the row just shows what was found (and where a
+/// symlink leads). Customization happens in the custom list instead.
+private struct GhosttyDefaultLocationRow: View {
+    let file: GhosttyConfigSource.DefaultFileLocation
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text((file.searchedPath as NSString).abbreviatingWithTildeInPath)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(file.searchedPath)
+                if let resolved = file.resolvedPath, resolved != file.searchedPath {
+                    Text("Resolves to \((resolved as NSString).abbreviatingWithTildeInPath)")
+                        .settingsCaption()
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(resolved)
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// One custom config file: its path and its actions in a menu — the same row
+/// shape as the Projects pane. Move Up/Down matter because later files
+/// override earlier ones. A non-nil `problem` swaps the file icon for a
+/// warning triangle whose tooltip carries the reason, keeping the row
+/// single-line.
 private struct GhosttyConfigFileRow: View {
     let path: String
     let problem: String?

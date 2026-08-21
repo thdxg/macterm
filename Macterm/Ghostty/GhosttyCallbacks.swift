@@ -341,17 +341,19 @@ final class GhosttyCallbacks: @unchecked Sendable {
     private static func openUserConfig() {
         let path: String
         let selection = Preferences.shared.ghosttyConfigSelection
-        if let customPath = selection.customPaths.last {
-            path = (customPath as NSString).expandingTildeInPath
-        } else {
-            // Empty list: ask libghostty for its preferred default edit path
-            // so the action still opens (and creates) something sensible.
+        if selection.loadsDefaultFiles {
+            // Default mode: libghostty owns the file set, so ask it for its
+            // preferred edit path.
             let value = ghostty_config_open_path()
             defer { ghostty_string_free(value) }
             guard let pointer = value.ptr, value.len > 0 else { return }
             let bytes = UnsafeBufferPointer(start: pointer, count: Int(value.len)).map { UInt8(bitPattern: $0) }
             guard let resolved = String(bytes: bytes, encoding: .utf8), !resolved.isEmpty else { return }
             path = resolved
+        } else if let customPath = selection.customPaths.last {
+            path = (customPath as NSString).expandingTildeInPath
+        } else {
+            return
         }
 
         if !FileManager.default.fileExists(atPath: path) {

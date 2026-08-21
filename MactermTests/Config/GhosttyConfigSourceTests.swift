@@ -66,8 +66,11 @@ struct GhosttyConfigSourceTests {
         #expect(text == "theme = xdg-legacy\ntheme = xdg-current\ntheme = app-current")
     }
 
+    /// The modes are exclusive: default mode delegates to libghostty's own
+    /// loader and never touches the stored custom paths — they're kept for
+    /// the next switch back to custom mode, not loaded alongside.
     @Test
-    func custom_files_load_after_defaults_and_report_every_missing_path() {
+    func default_mode_ignores_stored_custom_paths() {
         let source = GhosttyConfigSource(
             selection: GhosttyConfigSelection(
                 loadsDefaultFiles: true,
@@ -88,16 +91,41 @@ struct GhosttyConfigSourceTests {
         )
 
         #expect(defaultLoadCount == 1)
-        #expect(loadedPaths == ["/custom/first.ghostty", "/custom/second.ghostty"])
-        #expect(missing == loadedPaths)
+        #expect(loadedPaths.isEmpty)
+        #expect(missing.isEmpty)
         #expect(source.pathsForRawInspection == [
             "/xdg/ghostty/config",
             "/xdg/ghostty/config.ghostty",
             "/Library/Application Support/com.mitchellh.ghostty/config",
             "/Library/Application Support/com.mitchellh.ghostty/config.ghostty",
-            "/custom/first.ghostty",
-            "/custom/second.ghostty",
         ])
+    }
+
+    @Test
+    func custom_mode_loads_paths_in_order_and_reports_every_missing_path() {
+        let source = GhosttyConfigSource(
+            selection: GhosttyConfigSelection(
+                loadsDefaultFiles: false,
+                customPaths: ["/custom/first.ghostty", "/custom/second.ghostty"]
+            ),
+            applicationSupportConfigDirectory: appSupport,
+            xdgConfigDirectory: xdg
+        )
+        var defaultLoadCount = 0
+        var loadedPaths: [String] = []
+
+        let missing = source.load(
+            loadDefaultFiles: { defaultLoadCount += 1 },
+            loadCustomFile: { path in
+                loadedPaths.append(path)
+                return false
+            }
+        )
+
+        #expect(defaultLoadCount == 0)
+        #expect(loadedPaths == ["/custom/first.ghostty", "/custom/second.ghostty"])
+        #expect(missing == loadedPaths)
+        #expect(source.pathsForRawInspection == loadedPaths)
     }
 
     @Test

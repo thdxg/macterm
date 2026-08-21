@@ -38,24 +38,30 @@ struct GhosttyConfigSource {
         self.xdgConfigDirectory = xdgConfigDirectory
     }
 
-    /// Root files in Ghostty's last-wins load order.
+    /// Root files in Ghostty's last-wins load order. The two modes are
+    /// exclusive: default mode reads Ghostty's own locations, custom mode
+    /// reads the user's list — never both.
     var pathsForRawInspection: [String] {
-        let defaultPaths = selection.loadsDefaultFiles
-            ? Self.defaultFilePaths(
+        if selection.loadsDefaultFiles {
+            return Self.defaultFilePaths(
                 applicationSupportConfigDirectory: applicationSupportConfigDirectory,
                 xdgConfigDirectory: xdgConfigDirectory
             )
-            : []
-        return defaultPaths + selection.customPaths.map { ($0 as NSString).expandingTildeInPath }
+        }
+        return selection.customPaths.map { ($0 as NSString).expandingTildeInPath }
     }
 
-    /// Loads the selected layers and returns any missing custom paths.
+    /// Loads the selected mode and returns any missing custom paths. Default
+    /// mode delegates entirely to libghostty's own default loader, so its
+    /// file set, order, and merge are Ghostty's by construction; the stored
+    /// custom paths are kept but not loaded.
     func load(
         loadDefaultFiles: () -> Void,
         loadCustomFile: (String) -> Bool
     ) -> [String] {
         if selection.loadsDefaultFiles {
             loadDefaultFiles()
+            return []
         }
         return selection.customPaths.compactMap { path in
             let expandedPath = (path as NSString).expandingTildeInPath

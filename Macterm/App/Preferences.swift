@@ -428,44 +428,6 @@ final class Preferences {
         defaults.removeObject(forKey: Keys.userGhosttyConfigPath)
     }
 
-    /// Global switch for loading the selected config files — off keeps the
-    /// list intact but loads none of it (Settings dims the rows). Separate
-    /// from the selection so toggling round-trips without losing the user's
-    /// paths or their order.
-    var ghosttyConfigFilesEnabled: Bool {
-        didSet {
-            defaults.set(ghosttyConfigFilesEnabled, forKey: Keys.ghosttyConfigFilesEnabled)
-        }
-    }
-
-    /// What the loader should actually use: the stored selection, or nothing
-    /// while the load switch is off.
-    var effectiveGhosttyConfigSelection: GhosttyConfigSelection {
-        ghosttyConfigFilesEnabled ? ghosttyConfigSelection : .disabled
-    }
-
-    /// One-time dissolve of the automatic default layer into plain path
-    /// entries: Ghostty's found default files become ordinary list items —
-    /// same files, same order — that Settings can reorder, edit, or remove
-    /// like any other row, with nothing left that treats them specially.
-    /// Called after a load that still went through libghostty's default
-    /// loader, so first-run template creation has already happened. Custom
-    /// entries that duplicated a found default fold in rather than listing
-    /// twice. `locations` is injectable for tests.
-    func dissolveGhosttyDefaultLayer(
-        locations: [GhosttyConfigSource.DefaultFileLocation] = GhosttyConfigSource.defaultFileLocations()
-    ) {
-        guard ghosttyConfigSelection.loadsDefaultFiles else { return }
-        let found = locations
-            .filter { $0.resolvedPath != nil }
-            .map { ($0.searchedPath as NSString).abbreviatingWithTildeInPath }
-        let foundExpanded = Set(found.map { ($0 as NSString).expandingTildeInPath })
-        let kept = ghosttyConfigSelection.customPaths.filter {
-            !foundExpanded.contains(($0 as NSString).expandingTildeInPath)
-        }
-        setGhosttyConfig(loadsDefaultFiles: false, customPaths: found + kept)
-    }
-
     /// Programs a passthrough-flagged keybind yields to, as the user typed them
     /// (`nvim, hx`). Stored raw so the Settings field round-trips their spacing
     /// verbatim; `KeybindPassthrough.programNames` does the parsing and is the
@@ -620,7 +582,6 @@ final class Preferences {
         adaptiveTerminalChromeEnabled = defaults.object(forKey: Keys.adaptiveTerminalChromeEnabled) as? Bool ?? false
         hideTitleBar = defaults.object(forKey: Keys.hideTitleBar) as? Bool ?? false
         ghosttyConfigSelection = Self.readGhosttyConfigSelection(from: defaults)
-        ghosttyConfigFilesEnabled = defaults.object(forKey: Keys.ghosttyConfigFilesEnabled) as? Bool ?? true
         passthroughPrograms = defaults.string(forKey: Keys.passthroughPrograms) ?? ""
         quickTerminalWidthFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalWidth), fallback: 0.6)
         quickTerminalHeightFraction = Self.clampFraction(defaults.double(forKey: Keys.quickTerminalHeight), fallback: 0.5)
@@ -760,7 +721,6 @@ final class Preferences {
         static let hideTitleBar = "macterm.window.hideTitleBar"
         static let loadsDefaultGhosttyConfigFiles = "macterm.ghostty.loadsDefaultConfigFiles"
         static let customGhosttyConfigPaths = "macterm.ghostty.customConfigPaths"
-        static let ghosttyConfigFilesEnabled = "macterm.ghostty.configFilesEnabled"
         /// Legacy single-path key. Read only for migration.
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let passthroughPrograms = "macterm.hotkey.passthroughPrograms"
