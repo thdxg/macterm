@@ -490,7 +490,7 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Toggle("Load Ghostty's default config files", isOn: $useDefaultGhosttyConfigFiles)
+                Toggle("Load Ghostty config files", isOn: $useDefaultGhosttyConfigFiles)
                     .onChange(of: useDefaultGhosttyConfigFiles) { _, _ in commitGhosttyConfig() }
 
                 if useDefaultGhosttyConfigFiles {
