@@ -501,10 +501,10 @@ private struct GeneralSettings: View {
                     }
 
                 if useDefaultGhosttyConfigFiles {
-                    // Every location Ghostty checks, found or not — a missing
-                    // candidate renders as an inert warning row so the full
-                    // search list is visible, matching Ghostty's own loader.
-                    ForEach(defaultGhosttyConfigFiles) { file in
+                    // Only the locations Ghostty actually found — a missing
+                    // candidate is skipped by the loader and adds nothing but
+                    // noise as a row.
+                    ForEach(defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }) { file in
                         GhosttyDefaultConfigRow(
                             file: file,
                             canMoveUp: canMoveDefaultGhosttyConfigFile(file, by: -1),
@@ -777,15 +777,14 @@ private struct GeneralSettings: View {
         return isDirectory.boolValue ? "Not a file." : nil
     }
 
-    /// Expanded forms of every path the list already shows — each default
-    /// location (searched path and any resolve target, found or not) while
-    /// the toggle is on, plus the committed custom entries — so adds and
-    /// edits refuse duplicates against the whole list, not just the custom
-    /// layer.
+    /// Expanded forms of every path the list already shows — the found default
+    /// locations (both the searched path and its resolve target) while the
+    /// toggle is on, plus the committed custom entries — so adds and edits
+    /// refuse duplicates against the whole list, not just the custom layer.
     private func expandedListedGhosttyConfigPaths(excludingCustomIndex excluded: Int? = nil) -> Set<String> {
         var listed = Set<String>()
         if useDefaultGhosttyConfigFiles {
-            for file in defaultGhosttyConfigFiles {
+            for file in defaultGhosttyConfigFiles where file.resolvedPath != nil {
                 listed.insert(file.searchedPath)
                 if let resolved = file.resolvedPath {
                     listed.insert(resolved)
@@ -906,11 +905,11 @@ private struct GeneralSettings: View {
 
 // MARK: - Ghostty config rows
 
-/// One location Ghostty's own loader checks, listed while the default-files
-/// toggle is on. A found file is a regular row — Edit/Move/Remove convert the
-/// whole default layer into explicit custom entries first, since the loader
-/// takes defaults all-or-nothing. A missing candidate is an inert warning
-/// row: it shows where Ghostty would look, but there's no file to act on.
+/// One of the config files Ghostty's own loader found, listed while the
+/// default-files toggle is on. Edit/Move/Remove convert the whole default
+/// layer into explicit custom entries first, since the loader takes defaults
+/// all-or-nothing. Missing candidate locations aren't listed at all — the
+/// loader skips them silently, so a row would be noise.
 private struct GhosttyDefaultConfigRow: View {
     let file: GhosttyConfigSource.DefaultFileLocation
     let canMoveUp: Bool
@@ -920,12 +919,10 @@ private struct GhosttyDefaultConfigRow: View {
     let onMoveDown: () -> Void
     let onRemove: () -> Void
 
-    private var isFound: Bool { file.resolvedPath != nil }
-
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: isFound ? "doc.text" : "exclamationmark.triangle")
-                .foregroundStyle(isFound ? AnyShapeStyle(.secondary) : AnyShapeStyle(MactermTheme.warning))
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -933,10 +930,7 @@ private struct GhosttyDefaultConfigRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(file.searchedPath)
-                if !isFound {
-                    Text("File not found — Ghostty skips it.")
-                        .settingsCaption()
-                } else if let resolved = file.resolvedPath, resolved != file.searchedPath {
+                if let resolved = file.resolvedPath, resolved != file.searchedPath {
                     Text("Resolves to \((resolved as NSString).abbreviatingWithTildeInPath)")
                         .settingsCaption()
                         .lineLimit(1)
@@ -947,28 +941,26 @@ private struct GhosttyDefaultConfigRow: View {
 
             Spacer(minLength: 8)
 
-            if isFound {
-                Menu {
-                    Button("Edit Path") { onEdit() }
+            Menu {
+                Button("Edit Path") { onEdit() }
 
-                    Divider()
+                Divider()
 
-                    Button("Move Up") { onMoveUp() }
-                        .disabled(!canMoveUp)
+                Button("Move Up") { onMoveUp() }
+                    .disabled(!canMoveUp)
 
-                    Button("Move Down") { onMoveDown() }
-                        .disabled(!canMoveDown)
+                Button("Move Down") { onMoveDown() }
+                    .disabled(!canMoveDown)
 
-                    Divider()
+                Divider()
 
-                    Button("Remove", role: .destructive) { onRemove() }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+                Button("Remove", role: .destructive) { onRemove() }
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
         .padding(.vertical, 2)
     }
