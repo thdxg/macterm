@@ -270,6 +270,20 @@ final class GhosttyCallbacks: @unchecked Sendable {
             let title = action.action.set_tab_title.title.flatMap { String(cString: $0) } ?? ""
             DispatchQueue.main.async { view.onSetTabTitle?(title.isEmpty ? nil : title) }
             return true
+        case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
+            // Log-only, and deliberately `return false` so the core still
+            // renders its own message / abnormal-exit overlay — the error UI
+            // Macterm relies on. The report is NOT used to classify the exit:
+            // measured on macOS, `exit_code` is always 0 (even for an ssh
+            // resolution failure that exits 255 — ghostty's Surface.zig notes
+            // Darwin exit-code detection doesn't work), so the remote
+            // drop-vs-deliberate-end decision asks the host instead
+            // (`AppState.handleProcessExit`). The log line remains the only
+            // record of what the child reported.
+            let info = action.action.child_exited
+            let runtime = info.timetime_ms // upstream's field name (sic) for runtime
+            logger.info("child exited: code=\(info.exit_code, privacy: .public) runtime=\(runtime, privacy: .public)ms")
+            return false
         case GHOSTTY_ACTION_RENDERER_HEALTH:
             // No recovery UI (Ghostty.app shows a banner); surfacing the
             // transition in the log is what makes a black pane diagnosable.

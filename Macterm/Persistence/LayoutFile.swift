@@ -30,6 +30,11 @@ struct LayoutFile: Codable, Equatable {
 struct LayoutTab: Equatable {
     var name: String?
     var layout: LayoutNode
+
+    init(name: String? = nil, layout: LayoutNode) {
+        self.name = name
+        self.layout = layout
+    }
 }
 
 extension LayoutTab: Codable {

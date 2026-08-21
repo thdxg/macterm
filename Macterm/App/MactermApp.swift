@@ -149,7 +149,10 @@ struct MactermApp: App {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore
                     NotificationHandler.shared.appState = appState
-                    appDelegate.onTerminate = { [appState] in appState.saveWorkspaces() }
+                    // Termination persists the snapshot AND refreshes the
+                    // pinned declarations (`pinned.yaml`) from live state —
+                    // the moment the respawn recipes are about to matter.
+                    appDelegate.onTerminate = { [appState] in appState.persistForTermination() }
                     appDelegate.installResponders(appState: appState, projectStore: projectStore)
                 }
         }
@@ -183,6 +186,7 @@ struct MactermApp: App {
                 )
                 Divider()
                 AppCommandMenuItem(command: .closePane, appState: appState, projectStore: projectStore, titleOverride: "Close Pane")
+                AppCommandMenuItem(command: .closeTab, appState: appState, projectStore: projectStore, titleOverride: "Close Tab")
                 AppCommandMenuItem(command: .closeWindow, appState: appState, projectStore: projectStore, titleOverride: "Close Window")
             }
             CommandGroup(replacing: .sidebar) {
@@ -370,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowObserver: Any?
     private var activateObserver: Any?
     private var appFocusObservers: [Any] = []
+    private var reconnectObservers: [Any] = []
     private var mainAppResponder: MainAppResponder?
     private var hasInstalledResponders = false
     /// Exists from delegate init — NOT created in applicationDidFinishLaunching
@@ -503,6 +508,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 queue: .main
             ) { _ in MainActor.assumeIsolated { GhosttyApp.shared.setAppFocus(false) } },
         ]
+
+        // Reconnect dropped remote panes when the user comes back (#281).
+        // System wake fires a short burst — wifi isn't up at wake, and when
+        // the app is already frontmost no activation ever follows — while
+        // app activation is a single sweep. Every sweep is additionally gated
+        // per pane by `RemoteReconnectPolicy`, so notification churn here can
+        // never turn into a retry loop against an unreachable host.
+        reconnectObservers = [
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scheduleWakeReconnectBurst() }
+            },
+            focusCenter.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.appState?.reconnectDroppedRemotePanes(trigger: .activate)
+                }
+            },
+        ]
+    }
+
+    /// Seconds after wake at which the reconnect sweep runs. The first waits
+    /// out wifi re-association; the later ones cover ssh clients that took
+    /// longer to die (a dropped connection can sit in TCP keepalive for a
+    /// while before the client exits) and the frontmost-at-wake case above.
+    private static let wakeReconnectDelays: [TimeInterval] = [3, 10, 30, 75]
+
+    private func scheduleWakeReconnectBurst() {
+        for delay in Self.wakeReconnectDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.appState?.reconnectDroppedRemotePanes(trigger: .wake)
+            }
+        }
     }
 
     /// Any window of ours that could be the terminal window. Panels are the
@@ -664,7 +708,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for ws in appState?.workspaces.values ?? [:].values {
             let project = projectsByID[ws.projectID]
-            let projectName = project?.name ?? "Project"
+            let projectName = ws.projectID == PinnedTabs.projectID
+                ? PinnedTabs.displayName
+                : (project?.name ?? "Project")
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.needsConfirmClose {
                     // The adaptive poll may be slow or fully paused here (e.g.

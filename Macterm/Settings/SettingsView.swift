@@ -444,6 +444,7 @@ private struct GeneralSettings: View {
     /// project, and it diverged from the `.onChange` write-through under test.
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
+    @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -475,7 +476,8 @@ private struct GeneralSettings: View {
             Section("Ghostty Config") {
                 HStack {
                     TextField(
-                        "Path", text: $ghosttyConfigPath, prompt: Text("~/.config/ghostty/config")
+                        "Path", text: $ghosttyConfigPath,
+                        prompt: Text(Preferences.defaultGhosttyConfigPath)
                     )
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { commitPath() }
@@ -522,6 +524,15 @@ private struct GeneralSettings: View {
                 Text(
                     "Probes remote hosts for live tab names and close warnings. "
                         + "Turn off if each connection prompts for Touch ID."
+                )
+                .settingsCaption()
+                Toggle("Reconnect panes after a dropped connection", isOn: $reconnectRemotePanes)
+                    .onChange(of: reconnectRemotePanes) { _, v in
+                        Preferences.shared.reconnectRemotePanes = v
+                    }
+                Text(
+                    "Reattaches a disconnected pane's session when you wake "
+                        + "the Mac or return to the app."
                 )
                 .settingsCaption()
             }
@@ -628,6 +639,7 @@ private struct AppearanceSettings: View {
     @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
+    @State private var showSpinnerOverAgentIcons: Bool = Preferences.shared.showSpinnerOverAgentIcons
     @State private var autoNameTabs: Bool = Preferences.shared.autoNameTabs
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
@@ -756,6 +768,19 @@ private struct AppearanceSettings: View {
                     }
                 Text("Shows a spinner while a command runs, and a dot when it finishes.")
                     .settingsCaption()
+
+                Group {
+                    Toggle(isOn: $showSpinnerOverAgentIcons) {
+                        Text("Show spinner over agent icons").dimsWhenDisabled()
+                    }
+                    .onChange(of: showSpinnerOverAgentIcons) { _, v in
+                        Preferences.shared.showSpinnerOverAgentIcons = v
+                    }
+                    Text("When off, a tab running an AI agent keeps its logo while busy. The completion dot still appears.")
+                        .settingsCaption()
+                }
+                .disabled(!(showTabStatusIndicator && showAgentIcons))
+                .padding(.leading, 16)
 
                 Toggle("Show New Project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }

@@ -8,7 +8,11 @@ private let logger = Logger(subsystem: appBundleID, category: "WorkspacePersiste
 /// Current schema version. Bump when the snapshot types change shape.
 /// Adding an optional field does NOT require a bump — Codable decodes
 /// missing fields as nil / default. Removing or renaming fields does.
-private let currentSchemaVersion = 4
+/// v5 adds the `pinned` section; the bump is deliberate even though the key
+/// is optional, because an older build would restore without pinned tabs and
+/// then SAVE without them — the version gate turns that into refuse-to-save,
+/// so a downgrade preserves pinned state instead of silently dropping it.
+private let currentSchemaVersion = 5
 
 /// Top-level on-disk representation. Wraps the workspace array so we can
 /// evolve the file format (add fields, do migrations) without renaming the
@@ -16,6 +20,14 @@ private let currentSchemaVersion = 4
 struct WorkspacesFile: Codable {
     var version: Int
     var workspaces: [WorkspaceSnapshot]
+    /// Pinned tabs (v5+): kept out of `workspaces` so the sentinel project ID
+    /// never collides with the `validIDs` restore filter. Optional so v4
+    /// files decode with nil.
+    var pinned: [PinnedTabSnapshot]?
+    /// The pinned workspace's selected tab (v5+) — the sentinel is excluded
+    /// from `workspaces`, which is where every other workspace keeps its
+    /// `activeTabID`.
+    var pinnedActiveTabID: UUID?
 }
 
 // MARK: - Snapshot types
@@ -113,6 +125,17 @@ struct SplitBranchSnapshot: Codable {
     let second: SplitNodeSnapshot
 }
 
+/// One pinned tab (v5+): its durable declaration plus — while it was live at
+/// save time — the ordinary tab snapshot that lets its sessions reattach on
+/// relaunch. `live == nil` is an unloaded record (sessions died; the
+/// declaration is the respawn recipe).
+struct PinnedTabSnapshot: Codable {
+    let id: UUID
+    let declaration: LayoutTab
+    let originProjectID: UUID?
+    let live: TabSnapshot?
+}
+
 // MARK: - Persistence
 
 final class WorkspaceStore {
@@ -121,14 +144,26 @@ final class WorkspaceStore {
     /// `save()` refuses to overwrite — a single corrupt field (or a snapshot
     /// written by a newer build) must never let the next autosave clobber the
     /// user's persisted tabs/sessions with empty state.
-    private var loadFailed = false
+    /// Exposed read-only (#281): the orphan reapers infer "unclaimed" from the
+    /// set of restored session names, so a failed load would present an empty
+    /// claim set and mark every live session an orphan. Both reapers skip
+    /// entirely while this is set — same fail-closed stance as `save`.
+    private(set) var loadFailed = false
 
     init(fileURL: URL = FileStorage.fileURL(filename: "workspaces_v3.json")) {
         self.fileURL = fileURL
     }
 
-    func load() -> [WorkspaceSnapshot] {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+    /// What `load()` recovered: the ordinary per-project snapshots plus the
+    /// pinned section (empty for pre-v5 files).
+    struct Loaded {
+        var workspaces: [WorkspaceSnapshot] = []
+        var pinned: [PinnedTabSnapshot] = []
+        var pinnedActiveTabID: UUID?
+    }
+
+    func load() -> Loaded {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return Loaded() }
         let data: Data
         do {
             data = try Data(contentsOf: fileURL)
@@ -137,10 +172,10 @@ final class WorkspaceStore {
             // don't let the next save overwrite what we couldn't read.
             logger.error("Failed to read workspaces file: \(error, privacy: .public)")
             loadFailed = true
-            return []
+            return Loaded()
         }
         // An empty file is a genuine empty state, not corruption.
-        guard !data.isEmpty else { return [] }
+        guard !data.isEmpty else { return Loaded() }
         let decoder = JSONDecoder()
         // Envelope format first (version + workspaces).
         do {
@@ -154,31 +189,50 @@ final class WorkspaceStore {
                 supported v\(currentSchemaVersion, privacy: .public); not overwriting
                 """)
                 loadFailed = true
-                return migrate(file).workspaces
+                let migrated = migrate(file)
+                return Loaded(
+                    workspaces: migrated.workspaces,
+                    pinned: migrated.pinned ?? [],
+                    pinnedActiveTabID: migrated.pinnedActiveTabID
+                )
             }
-            return migrate(file).workspaces
+            let migrated = migrate(file)
+            return Loaded(
+                workspaces: migrated.workspaces,
+                pinned: migrated.pinned ?? [],
+                pinnedActiveTabID: migrated.pinnedActiveTabID
+            )
         } catch let envelopeError {
             // Fallback: pre-envelope format where the file was a bare array of
             // WorkspaceSnapshot. Upgrade on next save.
             if let bare = try? decoder.decode([WorkspaceSnapshot].self, from: data) {
-                return clearPersistedAttention(in: bare)
+                return Loaded(workspaces: clearPersistedAttention(in: bare))
             }
             // Present but decodable as neither shape → corrupt or a format we
             // don't understand. Log the PRIMARY (envelope) error and preserve
             // the file rather than clobbering it with the next save.
             logger.error("Failed to decode workspaces file: \(envelopeError, privacy: .public)")
             loadFailed = true
-            return []
+            return Loaded()
         }
     }
 
-    func save(_ snapshots: [WorkspaceSnapshot]) {
+    func save(
+        _ snapshots: [WorkspaceSnapshot],
+        pinned: [PinnedTabSnapshot] = [],
+        pinnedActiveTabID: UUID? = nil
+    ) {
         guard !loadFailed else {
             logger.error("Refusing to save workspaces: prior load failed, file preserved")
             return
         }
         do {
-            let file = WorkspacesFile(version: currentSchemaVersion, workspaces: snapshots)
+            let file = WorkspacesFile(
+                version: currentSchemaVersion,
+                workspaces: snapshots,
+                pinned: pinned,
+                pinnedActiveTabID: pinnedActiveTabID
+            )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(file).write(to: fileURL, options: .atomic)
@@ -194,7 +248,12 @@ final class WorkspaceStore {
             // already been visually cleared. Drop the old attention bits once;
             // v4+ saves them only after the false-start and clear/save fixes.
             logger.info("Migrating workspaces v\(file.version, privacy: .public)→4: clearing persisted attention bits")
-            return WorkspacesFile(version: 4, workspaces: clearPersistedAttention(in: file.workspaces))
+            return WorkspacesFile(
+                version: 4,
+                workspaces: clearPersistedAttention(in: file.workspaces),
+                pinned: file.pinned,
+                pinnedActiveTabID: file.pinnedActiveTabID
+            )
         }
         return file
     }
@@ -244,14 +303,7 @@ enum WorkspaceSerializer {
             WorkspaceSnapshot(
                 projectID: ws.projectID,
                 activeTabID: ws.activeTabID,
-                tabs: ws.tabs.map { tab in
-                    TabSnapshot(
-                        id: tab.id,
-                        customTitle: tab.customTitle,
-                        focusedPaneID: tab.focusedPaneID,
-                        splitRoot: snapshotNode(tab.splitRoot)
-                    )
-                }
+                tabs: ws.tabs.map { snapshotTab($0) }
             )
         }
     }
@@ -259,13 +311,44 @@ enum WorkspaceSerializer {
     static func restore(from snapshots: [WorkspaceSnapshot], validIDs: Set<UUID>) -> [Workspace] {
         snapshots.compactMap { snap in
             guard validIDs.contains(snap.projectID) else { return nil }
-            let tabs = snap.tabs.map { t in
-                let root = restoreNode(t.splitRoot, projectID: snap.projectID)
-                let focused = t.focusedPaneID.flatMap { root.findPane(id: $0)?.id } ?? root.allPanes().first?.id
-                return TerminalTab(id: t.id, splitRoot: root, focusedPaneID: focused, customTitle: t.customTitle)
-            }
+            let tabs = snap.tabs.map { restoreTab($0, projectID: snap.projectID) }
             guard !tabs.isEmpty else { return nil }
             return Workspace(projectID: snap.projectID, tabs: tabs, activeTabID: snap.activeTabID)
+        }
+    }
+
+    /// Rebuild one live tab from its snapshot. Shared by the per-project
+    /// restore above and the pinned-tab restore (which materializes tabs
+    /// one-by-one after checking whether their sessions survived).
+    static func restoreTab(_ t: TabSnapshot, projectID: UUID) -> TerminalTab {
+        let root = restoreNode(t.splitRoot, projectID: projectID)
+        let focused = t.focusedPaneID.flatMap { root.findPane(id: $0)?.id } ?? root.allPanes().first?.id
+        return TerminalTab(id: t.id, splitRoot: root, focusedPaneID: focused, customTitle: t.customTitle)
+    }
+
+    /// Serialize one live tab — the pinned counterpart of the per-workspace
+    /// walk inside `snapshot(_:)`.
+    static func snapshotTab(_ tab: TerminalTab) -> TabSnapshot {
+        TabSnapshot(
+            id: tab.id,
+            customTitle: tab.customTitle,
+            focusedPaneID: tab.focusedPaneID,
+            splitRoot: snapshotNode(tab.splitRoot)
+        )
+    }
+
+    /// Serialize the pinned records in order, attaching each loaded record's
+    /// live tab snapshot (session identity for reattach). An unloaded record
+    /// persists its declaration alone.
+    static func snapshotPinned(records: [PinnedTabRecord], workspace: Workspace?) -> [PinnedTabSnapshot] {
+        records.map { record in
+            let live = workspace?.tabs.first { $0.id == record.id }
+            return PinnedTabSnapshot(
+                id: record.id,
+                declaration: record.declaration,
+                originProjectID: record.originProjectID,
+                live: live.map { snapshotTab($0) }
+            )
         }
     }
 

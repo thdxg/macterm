@@ -11,6 +11,7 @@ final class HotkeyCaptureState {
 enum HotkeyAction: String, CaseIterable, Identifiable {
     case newTab = "new_tab"
     case closePane = "close_pane"
+    case closeTab = "close_tab"
     case splitRight = "split_right"
     case splitDown = "split_down"
     case splitAuto = "split_auto"
@@ -45,6 +46,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case saveLayout = "save_layout"
     case separateAllPanes = "separate_all_panes"
     case separateCurrentPane = "separate_current_pane"
+    case pinTab = "pin_tab"
+    case unpinTab = "unpin_tab"
 
     var id: String { rawValue }
 
@@ -64,6 +67,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         switch self {
         case .newTab: "cmd+t"
         case .closePane: "cmd+w"
+        // Unbound by default: cmd+w already closes the tab pane-by-pane, and
+        // a whole-tab close on a stray chord ends every session in it (busy
+        // panes still confirm; a pinned tab only unloads).
+        case .closeTab: "none"
         case .splitRight: "cmd+d"
         case .splitDown: "cmd+shift+d"
         case .splitAuto: "none"
@@ -108,6 +115,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // pane tree (shells survive, but the layout doesn't).
         case .separateAllPanes: "none"
         case .separateCurrentPane: "none"
+        // Unbound by default: pinning moves the tab between sidebar sections,
+        // which is disorienting from a stray chord.
+        case .pinTab: "none"
+        case .unpinTab: "none"
         }
     }
 }

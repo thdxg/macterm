@@ -11,6 +11,29 @@ import Testing
 @MainActor
 struct PreferencesTests {
     @Test
+    func reconnect_remote_panes_defaults_on_and_round_trips() {
+        let prior = Preferences.shared.reconnectRemotePanes
+        defer { Preferences.shared.reconnectRemotePanes = prior }
+
+        // Fresh (wiped) test suite → the default is on.
+        #expect(Preferences.shared.reconnectRemotePanes)
+
+        Preferences.shared.reconnectRemotePanes = false
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.reconnectRemotePanes) as? Bool == false)
+    }
+
+    @Test
+    func installation_id_is_lazily_created_stable_and_label_safe() {
+        let first = Preferences.shared.installationID
+        // Stable across reads (it's the persistent ownership identity zmx
+        // sessions get stamped with, #281).
+        #expect(Preferences.shared.installationID == first)
+        // zmx label values allow only [A-Za-z0-9._-]; ours is bare hex.
+        #expect(!first.isEmpty)
+        #expect(first.allSatisfy { $0.isHexDigit && ($0.isNumber || $0.isLowercase) })
+    }
+
+    @Test
     func shared_writes_do_not_reach_the_standard_defaults_domain() {
         let sentinel = UUID()
         let prior = Preferences.shared.activeProjectID
@@ -64,5 +87,40 @@ struct PreferencesTests {
         #expect(Preferences.clampSidebarWidth(range.lowerBound - 40) == range.lowerBound)
         #expect(Preferences.clampSidebarWidth(range.upperBound + 40) == range.upperBound)
         #expect(Preferences.clampSidebarWidth(213.5) == 213.5)
+    }
+
+    @Test
+    func ghostty_config_matches_ghostty_macos_precedence() {
+        let appSupport = "/Application Support/com.mitchellh.ghostty"
+        let xdg = "/xdg/ghostty"
+        let candidates = [
+            "/Application Support/com.mitchellh.ghostty/config.ghostty",
+            "/Application Support/com.mitchellh.ghostty/config",
+            "/xdg/ghostty/config.ghostty",
+            "/xdg/ghostty/config",
+        ]
+
+        for expected in candidates {
+            #expect(Preferences.preferredGhosttyConfigPath(
+                applicationSupportConfigDirectory: appSupport,
+                xdgConfigDirectory: xdg,
+                fileIsNonEmpty: { $0 == expected }
+            ) == expected)
+        }
+
+        #expect(Preferences.preferredGhosttyConfigPath(
+            applicationSupportConfigDirectory: appSupport,
+            xdgConfigDirectory: xdg,
+            fileIsNonEmpty: { _ in true }
+        ) == candidates[0])
+    }
+
+    @Test
+    func ghostty_config_defaults_to_current_application_support_path() {
+        #expect(Preferences.preferredGhosttyConfigPath(
+            applicationSupportConfigDirectory: "/Application Support/com.mitchellh.ghostty",
+            xdgConfigDirectory: "/xdg/ghostty",
+            fileIsNonEmpty: { _ in false }
+        ) == "/Application Support/com.mitchellh.ghostty/config.ghostty")
     }
 }

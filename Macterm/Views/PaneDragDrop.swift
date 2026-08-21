@@ -407,7 +407,7 @@ struct WorkspaceDropPreview: View {
 /// and SwiftUI's topmost-wins routing means a full-area target would shadow
 /// everything beneath. Each leaf converts its local location into workspace
 /// space via the pane's frame in the tree and resolves through the same
-/// `TabDropPlacer` into the shared resolution, so the placement bands and
+/// `TabDropPlacer` into the shared resolution, so the placement zones and
 /// preview are identical for every drag. The dragged pane's own leaf carries
 /// no target (a self-drop is meaningless and an invalid drop animates back).
 struct LeafDropDelegate: DropDelegate {
@@ -511,17 +511,15 @@ struct LeafDropDelegate: DropDelegate {
             )
             return TabDropPlacer.resolve(point: point, in: context.root)
         }
-        // A target aimed at the dragged pane itself is meaningless; show
-        // nothing rather than a lying preview.
-        if let dragged = context.draggedPaneID {
-            switch resolved?.target {
-            case let .pane(id, _) where id == dragged,
-                 let .divider(id, _) where id == dragged:
-                context.resolution.wrappedValue = nil
-                return
-            default:
-                break
-            }
+        // A target aimed at the dragged pane itself is meaningless (reachable
+        // despite the source leaf carrying no target: a point on the exact
+        // shared edge resolves into the neighbor); show nothing rather than a
+        // lying preview.
+        if let dragged = context.draggedPaneID,
+           case let .pane(id, _) = resolved?.target, id == dragged
+        {
+            context.resolution.wrappedValue = nil
+            return
         }
         context.resolution.wrappedValue = resolved
     }

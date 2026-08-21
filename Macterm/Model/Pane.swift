@@ -623,6 +623,16 @@ final class Pane: Identifiable {
     @ObservationIgnored
     private var _nsView: GhosttyTerminalNSView?
 
+    /// True once this pane has built a surface view. `command` is a
+    /// FIRST-spawn input (it becomes libghostty's `initial_input`, typed into
+    /// the fresh shell): a later rebuild — the reconnect path destroying and
+    /// respawning the surface — reattaches an EXISTING zmx session, so
+    /// retyping the command would run it a second time inside a session
+    /// already running it. Snapshot restore has the same contract for the
+    /// same reason (`PaneSnapshot` deliberately doesn't persist `command`).
+    @ObservationIgnored
+    private var hasBuiltSurface = false
+
     func ensureNSView() -> GhosttyTerminalNSView {
         if let existing = _nsView { return existing }
         // Every pane's shell learns its own restart-stable address so
@@ -638,17 +648,31 @@ final class Pane: Identifiable {
             paneID: id,
             workingDirectory: projectPath,
             sessionName: sessionName,
-            command: command,
+            command: hasBuiltSurface ? nil : command,
             shell: shell,
             env: mergedEnv,
             remoteSpec: remoteSpec,
             remoteZmxPath: remoteZmxPath
         )
+        hasBuiltSurface = true
         _nsView = view
         return view
     }
 
     var nsView: GhosttyTerminalNSView? { _nsView }
+
+    /// Whether this remote pane's ssh connection has died under it (#281):
+    /// the surface's child (the `ssh` client) exited, leaving libghostty's
+    /// abnormal-exit overlay on screen while the remote zmx session lives on.
+    /// Read at trigger time (wake / activation / project selection) by the
+    /// reconnect sweep — `ghostty_surface_process_exited` is authoritative
+    /// while the overlay is up, so no exit-callback state is kept. Local
+    /// panes are never "disconnected": they have no network to lose, and a
+    /// normal local child exit closes the pane via `close_surface` instead
+    /// of stranding it.
+    var isDisconnected: Bool {
+        isRemote && (nsView?.processExited ?? false)
+    }
 
     /// Whether closing this pane must be confirmed first because a foreground
     /// program is running. This is the single signal every busy-close guard

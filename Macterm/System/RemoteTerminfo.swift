@@ -207,7 +207,9 @@ final class RemoteTerminfoInstaller {
             return false
         }
         return run(
-            executable: "/usr/bin/ssh", arguments: installArgv, environment: nil, stdin: source
+            // PATH-resolved ssh via env, matching the pane's own resolution
+            // and ZmxClient's remote ops (see the note in ZmxClient.live).
+            executable: "/usr/bin/env", arguments: ["ssh"] + installArgv, environment: nil, stdin: source
         ) != nil
     }
 

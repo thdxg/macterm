@@ -181,7 +181,7 @@ struct WorkspaceSerializerTests {
         ws.tabs[0].splitRoot = tree
 
         store.save(WorkspaceSerializer.snapshot([ws.projectID: ws]))
-        let reloaded = store.load()
+        let reloaded = store.load().workspaces
         #expect(reloaded.count == 1)
         #expect(reloaded[0].projectID == ws.projectID)
 
@@ -218,7 +218,7 @@ struct WorkspaceSerializerTests {
         let encoder = JSONEncoder()
         try encoder.encode(file).write(to: tmp)
 
-        let restored = WorkspaceSerializer.restore(from: store.load(), validIDs: [projectID])
+        let restored = WorkspaceSerializer.restore(from: store.load().workspaces, validIDs: [projectID])
 
         #expect(restored.first?.tabs.first?.executionState == .idle)
     }
@@ -228,7 +228,7 @@ struct WorkspaceSerializerTests {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-doesnotexist-\(UUID().uuidString).json")
         let store = WorkspaceStore(fileURL: tmp)
-        #expect(store.load().isEmpty)
+        #expect(store.load().workspaces.isEmpty)
     }
 
     @Test
@@ -238,7 +238,7 @@ struct WorkspaceSerializerTests {
         defer { try? FileManager.default.removeItem(at: tmp) }
         try Data("not valid json {".utf8).write(to: tmp)
         let store = WorkspaceStore(fileURL: tmp)
-        #expect(store.load().isEmpty)
+        #expect(store.load().workspaces.isEmpty)
     }
 
     // MARK: - Remote-pane persistence (data-loss regression, #4.1)
@@ -288,7 +288,7 @@ struct WorkspaceSerializerTests {
         try garbage.write(to: tmp)
 
         let store = WorkspaceStore(fileURL: tmp)
-        #expect(store.load().isEmpty) // present-but-undecodable → empty + latch
+        #expect(store.load().workspaces.isEmpty) // present-but-undecodable → empty + latch
 
         // The next mutation's autosave must be refused, leaving the file intact.
         let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
@@ -311,7 +311,7 @@ struct WorkspaceSerializerTests {
         store.save(WorkspaceSerializer.snapshot([ws.projectID: ws]))
 
         #expect(FileManager.default.fileExists(atPath: tmp.path))
-        #expect(WorkspaceStore(fileURL: tmp).load().count == 1)
+        #expect(WorkspaceStore(fileURL: tmp).load().workspaces.count == 1)
     }
 }
 

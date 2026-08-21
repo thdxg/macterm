@@ -175,7 +175,10 @@ struct ProjectFileStore {
     /// reason this listing exists: without it they're invisible outside a
     /// terminal, which is exactly what the settings pane replaces.
     func listAll() -> [Listing] {
-        scan().map { file in
+        // `pinned.yaml` is the auto-managed pinned-tabs declaration, not a
+        // project layout — surfacing it here would offer "Create Project" on
+        // a file with no `path:` (and "Remove" on state the app rewrites).
+        scan().filter { $0.url.lastPathComponent.lowercased() != PinnedLayoutStore.filename }.map { file in
             let full = try? ProjectFile.parse(yaml: (try? String(contentsOf: file.url, encoding: .utf8)) ?? "")
             return Listing(
                 url: file.url,
@@ -240,6 +243,10 @@ struct ProjectFileStore {
         let existing = scan()
         let slug = ProjectSlug.slug(from: projectName)
         let pathMatches = existing.filter { scanned in
+            // `pinned.yaml` is never a project's own file, whatever it
+            // declares — binding it would let a save realign-delete the
+            // pinned-tabs declaration.
+            guard scanned.url.lastPathComponent.lowercased() != PinnedLayoutStore.filename else { return false }
             guard let declared = scanned.header?.path else { return false }
             return ProjectPath.matches(declared, file.path)
         }
@@ -264,11 +271,14 @@ struct ProjectFileStore {
         // avoids the case-sensitive-volume hazard where writing `api.yaml`
         // beside a hand-named `API.yaml` leaves two files declaring one path and
         // byte-order lets the stale `API.yaml` win.
+        // `pinned.yaml` is reserved even when it doesn't exist yet — a project
+        // named "Pinned" must never claim the pinned-tabs declaration's name
+        // (its collision suffix gives it `pinned_2.yaml` instead).
         let takenNames = Set(
             existing
                 .filter { $0.url != bound?.url }
                 .map { $0.url.lastPathComponent.lowercased() }
-        )
+        ).union([PinnedLayoutStore.filename])
         var attempt = 1
         while takenNames.contains(ProjectSlug.filename(slug: slug, attempt: attempt).lowercased()) {
             attempt += 1
