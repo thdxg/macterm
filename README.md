@@ -35,11 +35,12 @@
 - **Persistent multiplexing** — projects, tabs, and split panes are saved and restored on relaunch. Shells run under a bundled [zmx](https://github.com/neurosnap/zmx) session, so quitting detaches and relaunching reattaches every pane with its scrollback and running processes intact.
 - **Remote projects** — open a directory on another machine over SSH. Each pane is a persistent session *on the host*, so your shells survive quits, dropped connections, and even a local reboot.
 - **Vertical project sidebar** — organize projects and their tabs in a native macOS sidebar, stacked vertically where there's room to read them.
+- **Pinned tabs** — pin a tab above your projects to keep it running: it starts on every launch, closing only stops it (the row and its layout stay), and if its session dies it restores itself, re-running the command it was pinned with. The pinned set lives in an editable `pinned.yaml`.
 - **Command palette** — press <kbd>⌘P</kbd> to split panes, switch projects, or open a directory. Every action is a keystroke away, and each row shows its keybind.
 - **Declarative layouts** — describe a project's tabs, splits, and per-pane commands in YAML; Macterm builds the workspace from it on open.
 - **Control CLI** — a bundled `macterm` command drives the running app over a local socket, so scripts and AI agents can spawn panes, run commands, and script layouts.
 - **Quick terminal** — a global drop-down terminal on a hotkey (<kbd>⌃`</kbd>), for scratch work from anywhere.
-- **Ghostty compatibility** — reads your existing `~/.config/ghostty/config`. Theme, font, keybinds — all of it just works.
+- **Ghostty compatibility** — finds your existing Ghostty config in its macOS Application Support or XDG location, including the legacy `config` filename. Theme, font, keybinds — all of it just works.
 
 ## Install
 
@@ -67,7 +68,7 @@ Full guides live at **[macterm.thdxg.dev/docs](https://macterm.thdxg.dev/docs/)*
 
 - [Installation](https://macterm.thdxg.dev/docs/install) and [Configuration](https://macterm.thdxg.dev/docs/configuration)
 - [Command palette](https://macterm.thdxg.dev/docs/command-palette) and [Quick terminal](https://macterm.thdxg.dev/docs/quick-terminal)
-- [Declarative layouts](https://macterm.thdxg.dev/docs/declarative-layouts), [Session persistence](https://macterm.thdxg.dev/docs/session-persistence), and [Remote projects](https://macterm.thdxg.dev/docs/remote-projects)
+- [Declarative layouts](https://macterm.thdxg.dev/docs/declarative-layouts), [Pinned tabs](https://macterm.thdxg.dev/docs/pinned-tabs), [Session persistence](https://macterm.thdxg.dev/docs/session-persistence), and [Remote projects](https://macterm.thdxg.dev/docs/remote-projects)
 - [The `macterm` CLI](https://macterm.thdxg.dev/docs/cli)
 
 ### Cookbook

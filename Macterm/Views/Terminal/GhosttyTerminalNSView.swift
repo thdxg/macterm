@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import GhosttyKit
 import QuartzCore
 
@@ -14,6 +15,80 @@ final class GhosttyTerminalNSView: NSView {
     /// idea as Ghostty's `NonDraggableHostingView`. Unconditional: a click on
     /// the terminal should always be terminal input, never a window drag.
     override var mouseDownCanMoveWindow: Bool { false }
+
+    // MARK: - Accessibility
+
+    /// Expose the focused terminal as an editable text target to accessibility
+    /// clients such as VoiceOver and dictation tools, matching Ghostty.app.
+    override func isAccessibilityElement() -> Bool {
+        true
+    }
+
+    override func accessibilityRole() -> NSAccessibility.Role? {
+        .textArea
+    }
+
+    override func accessibilityHelp() -> String? {
+        "Terminal content area"
+    }
+
+    override func accessibilityValue() -> Any? {
+        cachedAccessibilityScreenContents()
+    }
+
+    override func accessibilitySelectedTextRange() -> NSRange {
+        selectedRange()
+    }
+
+    override func accessibilitySelectedText() -> String? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let pointer = text.text else { return nil }
+        let selectedText = String(cString: pointer)
+        return selectedText.isEmpty ? nil : selectedText
+    }
+
+    override func accessibilityNumberOfCharacters() -> Int {
+        cachedAccessibilityScreenContents().count
+    }
+
+    override func accessibilityVisibleCharacterRange() -> NSRange {
+        NSRange(location: 0, length: cachedAccessibilityScreenContents().count)
+    }
+
+    override func accessibilityLine(for index: Int) -> Int {
+        let content = cachedAccessibilityScreenContents()
+        return String(content.prefix(index)).components(separatedBy: .newlines).count - 1
+    }
+
+    override func accessibilityString(for range: NSRange) -> String? {
+        let content = cachedAccessibilityScreenContents()
+        guard let swiftRange = Range(range, in: content) else { return nil }
+        return String(content[swiftRange])
+    }
+
+    override func accessibilityAttributedString(for range: NSRange) -> NSAttributedString? {
+        guard let surface, let plainString = accessibilityString(for: range) else { return nil }
+        var attributes: [NSAttributedString.Key: Any] = [:]
+        if let fontRaw = ghostty_surface_quicklook_font(surface) {
+            let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
+            attributes[.font] = font.takeUnretainedValue()
+            font.release()
+        }
+        return NSAttributedString(string: plainString, attributes: attributes)
+    }
+
+    private func cachedAccessibilityScreenContents() -> String {
+        let now = ContinuousClock.now
+        if let cache = accessibilityScreenContentsCache, now < cache.expiresAt {
+            return cache.contents
+        }
+        let contents = readText(scrollback: true) ?? ""
+        accessibilityScreenContentsCache = (contents, now + .milliseconds(500))
+        return contents
+    }
 
     /// Weak registry of every live instance so global operations (e.g. config
     /// reload) can iterate without a central cache.
@@ -351,7 +426,10 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
-    private var _selectedRange: NSRange = .init(location: NSNotFound, length: 0)
+    private var accessibilityScreenContentsCache: (
+        contents: String,
+        expiresAt: ContinuousClock.Instant
+    )?
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
@@ -589,6 +667,7 @@ final class GhosttyTerminalNSView: NSView {
         clearCommandSubmissionEvidence()
         if let surface { ghostty_surface_free(surface) }
         surface = nil
+        accessibilityScreenContentsCache = nil
         configCStrings.forEach { free($0) }
         configCStrings = []
     }
@@ -1612,7 +1691,6 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
         guard let surface else { return }
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
         _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.utf16.count)
-        _selectedRange = selectedRange
         text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.utf8.count)) }
     }
 
@@ -1623,7 +1701,11 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
     }
 
     func selectedRange() -> NSRange {
-        _selectedRange
+        guard let surface else { return NSRange() }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return NSRange() }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return NSRange(location: Int(text.offset_start), length: Int(text.offset_len))
     }
 
     func markedRange() -> NSRange {

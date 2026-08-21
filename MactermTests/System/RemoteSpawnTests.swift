@@ -80,6 +80,53 @@ struct RemoteSpawnTests {
         #expect(!probe.contains("COLORTERM"))
     }
 
+    // MARK: - Orphan sweep (#281)
+
+    @Test
+    func orphan_sweep_stamps_only_the_names_passed_then_lists() {
+        // The safety property: the stamp half can only ever touch sessions
+        // OUR panes claim, so it can never brand another machine's session.
+        let script = RemoteSpawn.orphanSweepScript(
+            sessionNames: ["macterm-api-aa11", "macterm-api-bb22"],
+            ownerID: "cafe01",
+            zmxPath: nil
+        )
+        #expect(script.contains("for n in \"macterm-api-aa11\" \"macterm-api-bb22\""))
+        #expect(script.contains("zmx set \"$n\" \"macterm.owner=cafe01\""))
+        // A session that died between listing and stamping must not fail the
+        // sweep, and stamp chatter must not pollute the parsed listing.
+        #expect(script.contains(">/dev/null 2>&1 || true"))
+        #expect(script.hasSuffix("zmx ls"))
+        #expect(!script.contains("'"))
+    }
+
+    @Test
+    func orphan_sweep_with_no_claimed_names_just_lists() {
+        let script = RemoteSpawn.orphanSweepScript(sessionNames: [], ownerID: "cafe01", zmxPath: nil)
+        #expect(!script.contains("for n in"))
+        #expect(!script.contains("zmx set"))
+        #expect(script.hasSuffix("zmx ls"))
+    }
+
+    @Test
+    func orphan_sweep_argv_uses_the_background_ssh_profile() {
+        // BatchMode + ConnectTimeout: a background op can never answer a
+        // prompt, so it must fail fast instead of hanging on one.
+        let argv = RemoteSpawn.orphanSweepArgv(
+            remote: remote, zmxPath: "~/bin/zmx",
+            sessionNames: ["macterm-api-aa11"], ownerID: "cafe01"
+        )
+        let wire = argv?.joined(separator: " ") ?? ""
+        #expect(wire.contains("BatchMode=yes"))
+        #expect(wire.contains("ConnectTimeout=5"))
+        // Explicit zmxPath is used verbatim for both the stamp and the list.
+        #expect(wire.contains("\"~/bin/zmx\" set"))
+        #expect(wire.contains("\"~/bin/zmx\" ls"))
+        #expect(RemoteSpawn.orphanSweepArgv(
+            remote: .local("/a"), zmxPath: nil, sessionNames: [], ownerID: "x"
+        ) == nil)
+    }
+
     @Test
     func remote_scripts_never_source_profiles() {
         // Locked-in decision (#104): profiles are arbitrary code in the
@@ -91,7 +138,10 @@ struct RemoteSpawnTests {
         let pane = RemoteSpawn.paneCommand(remote: remote, sessionName: "s") ?? ""
         let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
         let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
-        for wire in [pane, op, probe] {
+        let sweep = RemoteSpawn.orphanSweepArgv(
+            remote: remote, zmxPath: nil, sessionNames: ["macterm-a-1"], ownerID: "x"
+        )?.joined(separator: " ") ?? ""
+        for wire in [pane, op, probe, sweep] {
             #expect(!wire.contains(".profile"))
             #expect(!wire.contains("/etc/profile"))
         }

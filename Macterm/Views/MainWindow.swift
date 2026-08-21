@@ -387,6 +387,9 @@ struct MainWindow: View {
 
     private var activeProject: Project? {
         guard let pid = appState.activeProjectID else { return nil }
+        // The pinned workspace has no ProjectStore row; render it through the
+        // synthetic project.
+        if pid == PinnedTabs.projectID { return PinnedTabs.project }
         return projectStore.projects.first { $0.id == pid }
     }
 
@@ -401,6 +404,9 @@ struct MainWindow: View {
 
     private var activeTabTitle: String {
         guard let project = activeProject else { return "" }
+        // The pinned workspace has no project directory worth advertising,
+        // and no repository behind it either.
+        if project.id == PinnedTabs.projectID { return "" }
         guard let branch = branchNames.branch(for: focusedDirectory) else { return project.path }
         return "\(project.path) — \(branch)"
     }
@@ -415,11 +421,15 @@ struct MainWindow: View {
     /// is right even for a shell that reports no cwd or a full-screen program
     /// holding the foreground.
     ///
-    /// Remote panes answer nil — the local process table only knows their
-    /// `ssh` client — and their project path names a directory on another
-    /// host, so a remote project simply shows no branch.
+    /// Answers "" — and so shows no branch — for the cases with no local
+    /// directory to ask about: remote panes (the local process table only
+    /// knows their `ssh` client, and their path names another host) and the
+    /// pinned workspace, which has no project path at all.
     private var focusedDirectory: String {
-        guard let project = activeProject, !project.isRemote else { return "" }
+        guard let project = activeProject,
+              !project.isRemote,
+              project.id != PinnedTabs.projectID
+        else { return "" }
         if let tab = appState.workspaces[project.id]?.activeTab,
            let paneID = tab.focusedPaneID,
            let pane = tab.splitRoot.findPane(id: paneID),
@@ -575,7 +585,14 @@ struct WorkspaceView: View {
                     tab.split(paneID: paneID, direction: dir)
                     appState.saveWorkspaces()
                 },
-                onClosePane: { appState.requestClosePane($0, projectID: project.id) },
+                // This closure is the PROCESS-EXIT path only (SplitTreeView
+                // wires it to the surface's onProcessExit; the user's Cmd+W
+                // goes through Responders → requestClosePane directly).
+                // handleProcessExit classifies a remote pane's exit
+                // (drop → keep for the reconnect sweep, #281) and routes a
+                // real end through paneProcessExited, where a pinned tab's
+                // last pane unloads the tab instead of closing it (#285).
+                onClosePane: { appState.handleProcessExit($0, projectID: project.id) },
                 onCommandFinished: { paneID in
                     appState.acknowledgeFinishedCommandIfActive(paneID: paneID, projectID: project.id)
                 },

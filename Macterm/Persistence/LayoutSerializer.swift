@@ -23,17 +23,51 @@ enum LayoutSerializer {
             tabs: workspace.tabs.map { tab in
                 LayoutTab(
                     name: tab.customTitle,
-                    layout: node(tab.splitRoot, projectRoot: projectRoot, liveCommand: liveCommand, liveShell: liveShell)
+                    layout: node(
+                        tab.splitRoot,
+                        cwdStyle: .projectRelative(root: projectRoot),
+                        liveCommand: liveCommand,
+                        liveShell: liveShell
+                    )
                 )
             }
         )
     }
 
+    /// Capture one live tab as a pinned declaration (`PinnedTabRecord`'s
+    /// respawn recipe). Same walk and seams as `layout(for:)`, with one
+    /// structural difference: pinned tabs have NO project root, so every
+    /// leaf's `cwd` is self-contained (`CwdStyle.selfContained`).
+    /// `LayoutBuilder.resolveCwd` round-trips all three forms against the
+    /// pinned pseudo-root (`PinnedTabs.pathMarker`).
+    static func pinnedDeclaration(
+        for tab: TerminalTab,
+        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) },
+        liveShell: (Pane) -> String? = { ProcessInspector.runningShell(forPane: $0) }
+    ) -> LayoutTab {
+        LayoutTab(
+            name: tab.customTitle,
+            layout: node(tab.splitRoot, cwdStyle: .selfContained, liveCommand: liveCommand, liveShell: liveShell)
+        )
+    }
+
     // MARK: - Tree walk
+
+    /// How a leaf's live path becomes the declared `cwd:` — ONE walk serves
+    /// both layout kinds, so the subtle live-path rules below can't drift
+    /// between project files and `pinned.yaml`.
+    enum CwdStyle {
+        /// Project layout: relative to the project root when inside it.
+        case projectRelative(root: String)
+        /// Pinned declaration: absolute (home-contracted to `~` so
+        /// `pinned.yaml` survives a dotfiles sync), or the remote pane's
+        /// scp-style spec verbatim.
+        case selfContained
+    }
 
     private static func node(
         _ node: SplitNode,
-        projectRoot: String,
+        cwdStyle: CwdStyle,
         liveCommand: (Pane) -> String?,
         liveShell: (Pane) -> String?
     ) -> LayoutNode {
@@ -48,6 +82,12 @@ enum LayoutSerializer {
             // `liveCommand` answers from the remote foreground probe's cached
             // command line (`ProcessInspector.runningCommand`'s remote branch).
             let livePath = p.isRemote ? p.projectPath : (p.nsView?.currentPwd ?? p.projectPath)
+            let cwd: String? = switch cwdStyle {
+            case let .projectRelative(root):
+                relativePath(livePath, to: root)
+            case .selfContained:
+                p.isRemote ? livePath : ProjectPath.homeContracted(livePath)
+            }
             // `run`: whatever the pane is *currently* running (its live
             // foreground command), NOT the command it was spawned with — a pane
             // launched with `btop` that the user has since quit is idle and
@@ -58,7 +98,7 @@ enum LayoutSerializer {
             // `zsh` launched from `nu`) reopens in it. `run` and `shell` are
             // mutually exclusive: the foreground is either a shell or a command.
             return .pane(LayoutPane(
-                cwd: relativePath(livePath, to: projectRoot),
+                cwd: cwd,
                 run: liveCommand(p),
                 shell: liveShell(p)
             ))
@@ -66,8 +106,8 @@ enum LayoutSerializer {
             return .split(LayoutBranch(
                 direction: b.direction,
                 ratio: Double(b.ratio),
-                first: self.node(b.first, projectRoot: projectRoot, liveCommand: liveCommand, liveShell: liveShell),
-                second: self.node(b.second, projectRoot: projectRoot, liveCommand: liveCommand, liveShell: liveShell)
+                first: self.node(b.first, cwdStyle: cwdStyle, liveCommand: liveCommand, liveShell: liveShell),
+                second: self.node(b.second, cwdStyle: cwdStyle, liveCommand: liveCommand, liveShell: liveShell)
             ))
         }
     }

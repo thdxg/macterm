@@ -41,6 +41,21 @@ struct ZmxSessionListParserTests {
         #expect(ZmxSessionListParser.parse("").isEmpty)
         #expect(ZmxSessionListParser.parse("\n  \n").isEmpty)
     }
+
+    @Test
+    func extractsTheOwnerLabelWhenPresent() {
+        // A full `zmx ls` line carries every session label as trailing
+        // tab-separated k=v pairs; the owner stamp (#281) rides one of them.
+        let stdout = """
+        name=macterm-abc\tpid=42\tclients=0\tcreated=123\tcwd=/home/u\tmacterm.owner=cafe01
+          name=macterm-def\tclients=0\tcreated=456
+        """
+        let entries = ZmxSessionListParser.parse(stdout)
+        #expect(entries == [
+            .init(name: "macterm-abc", clients: 0, owner: "cafe01"),
+            .init(name: "macterm-def", clients: 0, owner: nil),
+        ])
+    }
 }
 
 struct ZmxSocketBudgetTests {
@@ -181,6 +196,32 @@ struct ZmxReaperTests {
     func empty_listing_reaps_nothing() {
         #expect(ZmxReaper.orphans(in: [], known: ["macterm-a"]).isEmpty)
     }
+
+    // MARK: - Remote (owner-labelled) variant (#281)
+
+    private func entry(_ name: String, clients: Int?, owner: String?) -> ZmxSessionListParser.Entry {
+        .init(name: name, clients: clients, owner: owner)
+    }
+
+    @Test
+    func remote_reaps_only_our_labelled_unclaimed_detached_sessions() {
+        let entries = [
+            entry("macterm-a", clients: 0, owner: "us"), // ours, orphan → reap
+            entry("macterm-b", clients: 0, owner: "them"), // another machine → spare
+            entry("macterm-c", clients: 0, owner: nil), // unstamped → spare
+            entry("macterm-d", clients: 0, owner: "us"), // claimed → spare
+            entry("macterm-e", clients: 1, owner: "us"), // attached → spare
+            entry("macterm-f", clients: nil, owner: "us"), // unknown count → spare
+            entry("supa-g", clients: 0, owner: "us"), // foreign prefix → spare
+        ]
+        let orphans = ZmxReaper.orphans(in: entries, known: ["macterm-d"], owner: "us")
+        #expect(orphans == ["macterm-a"])
+    }
+
+    @Test
+    func remote_empty_listing_reaps_nothing() {
+        #expect(ZmxReaper.orphans(in: [], known: [], owner: "us").isEmpty)
+    }
 }
 
 struct ZmxAttachTests {
@@ -234,6 +275,7 @@ struct ZmxReapOrphansDriverTests {
             killSession: { id in killed.mutate { $0.append(id) } },
             killRemoteSession: { _, _, _ in },
             remoteForegrounds: { _, _ in .unreachable },
+            sweepRemoteOrphans: { _, _, _, _ in nil },
             listSessionsWithClients: { entries },
             sessionLeaderPIDs: { [:] },
             sessionListSnapshot: { entries.map { (entries: $0, leaders: [:]) } }

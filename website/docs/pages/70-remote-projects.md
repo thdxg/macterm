@@ -55,7 +55,9 @@ Remote projects show a small network badge in the sidebar. The first connection 
 | Quit Macterm | SSH disconnects; sessions **detach and keep running** on the host |
 | Relaunch | Every pane reattaches — scrollback and running processes intact |
 | Close a pane or tab | Its session on the host is killed (you're asked first if something is running) |
-| Local reboot / network drop | Sessions keep running on the host; panes reattach when you're back |
+| Local reboot / network drop | Sessions keep running on the host; dropped panes **reconnect automatically** when you're back |
+
+When the connection drops (closing the lid, changing networks), a pane's ssh dies and the pane shows the disconnect message. Macterm reconnects those panes for you — when the Mac wakes, when you return to the app, or when you select the project — reattaching each one's still-running session, scrollback included. No timer is involved: an unreachable host is retried a bounded number of times per return, not polled. Turn it off with **Settings → General → Remote Projects → Reconnect panes after a dropped connection** (worth doing for a Touch ID-gated key, where every new connection prompts — see Troubleshooting).
 
 Tab titles work like local panes: the tab shows the running program's name (`btop`, `hx`), falling back to the host name when idle. Program-reported titles are picked up too.
 
@@ -82,12 +84,12 @@ Per-pane `cwd` and `~` resolve on the remote side. **Save layout** works too, wr
 - **Connection errors** (unreachable host, failed auth) show ssh's own message on a "press any key to close" screen.
 - **Slow tab/split opening** — each pane is its own ssh connection; add `ControlMaster` to your ssh config (example above) to multiplex them over one connection.
 - **Touch ID (or another per-connection auth prompt) appears repeatedly** — live tab naming polls the host over short background ssh connections, and a biometric-gated key prompts on each one. Cancel the prompt once and Macterm stops polling that host until you open a new pane on it (tabs fall back to the host name; program-reported titles keep working). To get live naming *and* a single authentication, add `ControlMaster` (example above) — the background polls then reuse the pane's already-authenticated connection and never prompt.
-- **To never see a background-triggered prompt at all**, turn off **Settings → General → Remote Projects → Background SSH connections**. The only connections Macterm then opens are the panes' own, plus a one-shot `zmx kill` when you explicitly close a pane (cancel that prompt and the session just stays running on the host). Trade-offs: remote tabs show the host name (program-reported titles keep working), Save Layout can't capture remote `run:` commands, and closing a remote pane only warns when a running command is positively detected via [shell integration](https://ghostty.org/docs/features/shell-integration) on the host — without it, closes don't warn.
+- **To never see a background-triggered prompt at all**, turn off **Settings → General → Remote Projects → Background SSH connections**. The only connections Macterm then opens are the panes' own, plus a one-shot `zmx kill` when you explicitly close a pane (cancel that prompt and the session just stays running on the host). Trade-offs: remote tabs show the host name (program-reported titles keep working), Save Layout can't capture remote `run:` commands, orphaned-session cleanup on the host stops, and closing a remote pane only warns when a running command is positively detected via [shell integration](https://ghostty.org/docs/features/shell-integration) on the host — without it, closes don't warn.
 
 > Your dotfiles still apply *inside* remote panes — the session starts your login shell on the host as usual. Macterm just never runs them in its own connection plumbing, so a `.profile` that `exec`s another shell can't interfere with pane startup.
 
 ## Limitations
 
 - zmx must be preinstalled on the host — there's no upload/install flow yet.
-- Crash-orphaned sessions on a remote host aren't cleaned up automatically (on a shared machine they might belong to someone else's Macterm); `zmx ls` and `zmx kill` them by hand.
+- Orphaned sessions on a remote host (a pane closed while the host was unreachable, so the kill never landed) are cleaned up automatically — but only sessions this Macterm installation has marked as its own, so on a shared machine someone else's sessions are never touched. A session orphaned before it was ever marked stays for you to `zmx ls` / `zmx kill` by hand.
 - Features that assume a local working directory — like **Replace Project Path with Current Dir** — are disabled for remote projects.

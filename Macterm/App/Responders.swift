@@ -338,6 +338,9 @@ final class MainAppResponder: KeyResponder {
             .reloadGhosttyConfig,
             .separateAllPanes,
             .separateCurrentPane,
+            .pinTab,
+            .unpinTab,
+            .closeTab,
         ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })

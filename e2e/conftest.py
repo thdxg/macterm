@@ -47,6 +47,7 @@ def app(request):
     if not os.path.exists(app_path):
         pytest.exit(f"no app at {app_path} — build it first (`mise run e2e` builds and runs)", returncode=2)
     harness = MactermHarness(app_path, home_prefix="macterm-e2e-home-")
+    _install_ssh_shim(harness)
     try:
         try:
             harness.launch()
@@ -67,6 +68,33 @@ def pytest_runtest_makereport(item, call):
     report = yield
     setattr(item, "rep_" + report.when, report)
     return report
+
+
+def _install_ssh_shim(harness):
+    """Front `ssh` on the app's PATH with a shim that adds `-F <config>` when
+    the per-session config file exists (written by the docker-backed remote
+    fixture), and is a transparent passthrough otherwise.
+
+    Needed because OpenSSH resolves `~/.ssh/config` through the user record,
+    NOT $HOME — the hermetic home can't carry ssh config — and Macterm
+    deliberately passes no ssh flags of its own (host/port/identity belong to
+    ssh config, per #104). The pane's surface command invokes plain `ssh`, so
+    PATH is the one seam that reaches it without touching the developer's
+    real ~/.ssh. Background ops are unaffected (they exec /usr/bin/ssh by
+    absolute path) — fine, the remote tests don't rely on them."""
+    shim_dir = Path(harness.home) / "ssh-shim"
+    shim_dir.mkdir()
+    harness.ssh_config_path = str(shim_dir / "ssh_config")
+    shim = shim_dir / "ssh"
+    shim.write_text(
+        "#!/bin/sh\n"
+        f'if [ -f "{harness.ssh_config_path}" ]; then\n'
+        f'  exec /usr/bin/ssh -F "{harness.ssh_config_path}" "$@"\n'
+        "fi\n"
+        'exec /usr/bin/ssh "$@"\n'
+    )
+    shim.chmod(0o755)
+    harness.env["PATH"] = f"{shim_dir}:{os.environ.get('PATH', '/usr/bin:/bin')}"
 
 
 @pytest.fixture(autouse=True)

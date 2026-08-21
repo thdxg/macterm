@@ -40,6 +40,18 @@ struct ZmxClient {
     /// resolver can keep retrying a flaky link but suspend a host that
     /// refused our non-interactive auth (#272).
     var remoteForegrounds: @Sendable (_ remote: ProjectPath, _ zmxPath: String?) async -> RemoteProbeOutcome
+    /// One stamp-then-list round trip for the remote orphan sweep (#281):
+    /// re-assert `macterm.owner=<ownerID>` on every claimed session, then
+    /// return the host's full listing (nil = probe failed → reap NOTHING).
+    /// The caller (`AppState.sweepOrphanSessions`) judges the listing via
+    /// `ZmxReaper.orphans(in:known:owner:)` and kills through
+    /// `killRemoteSession`.
+    var sweepRemoteOrphans: @Sendable (
+        _ remote: ProjectPath,
+        _ zmxPath: String?,
+        _ sessionNames: [String],
+        _ ownerID: String
+    ) async -> [ZmxSessionListParser.Entry]?
     /// Each live Macterm session with its attached-client count, or nil when the
     /// probe failed/timed out. nil means UNKNOWN (never reap); `[]` is a
     /// successful empty listing. An entry's `clients == nil` marks an unknown
@@ -102,6 +114,13 @@ extension ZmxClient {
             cachedBundledURL
         }
 
+        // Remote ops resolve `ssh` via PATH (through /usr/bin/env), NOT a
+        // hardcoded /usr/bin/ssh: the PANE's own ssh is PATH-resolved (its
+        // command runs through a shell), so ops must dial the same client —
+        // a user on Homebrew OpenSSH gets consistent config/behavior across
+        // both, and the e2e harness's ssh shim (its only route to a hermetic
+        // ssh config, since OpenSSH resolves ~/.ssh/config via the user
+        // record, not $HOME) covers background ops too.
         return ZmxClient(
             executableURL: resolveExecutable,
             isBundled: { bundledExecutable() != nil },
@@ -114,8 +133,8 @@ extension ZmxClient {
                 )
                 else { return }
                 _ = await runZmx(
-                    argv,
-                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    remoteSSHArgv(argv),
+                    executable: remoteSSHExecutable,
                     timeout: .seconds(10)
                 )
             },
@@ -126,8 +145,8 @@ extension ZmxClient {
                 // classification needs ssh's stderr to tell a refused auth
                 // (suspend the host, #272) from a flaky link (keep retrying).
                 guard let outcome = await runZmxProcess(
-                    argv,
-                    executable: URL(fileURLWithPath: "/usr/bin/ssh"),
+                    remoteSSHArgv(argv),
+                    executable: remoteSSHExecutable,
                     captureStdout: true,
                     timeout: .seconds(10)
                 )
@@ -136,6 +155,24 @@ extension ZmxClient {
                     return RemoteProbeOutcome.classifyFailure(stderr: outcome.stderr)
                 }
                 return .success(RemoteForegroundResolver.parseProbeOutput(outcome.stdout))
+            },
+            sweepRemoteOrphans: { remote, zmxPath, sessionNames, ownerID in
+                guard let argv = RemoteSpawn.orphanSweepArgv(
+                    remote: remote, zmxPath: zmxPath,
+                    sessionNames: sessionNames, ownerID: ownerID
+                )
+                else { return nil }
+                // nil (spawn error / timeout / non-zero ssh exit) = UNKNOWN:
+                // the caller reaps nothing, same contract as the local
+                // listSessionsWithClients.
+                guard let stdout = await runZmx(
+                    remoteSSHArgv(argv),
+                    executable: remoteSSHExecutable,
+                    captureStdout: true,
+                    timeout: .seconds(10)
+                )
+                else { return nil }
+                return ZmxSessionListParser.parse(stdout)
             },
             listSessionsWithClients: {
                 // nil from runZmx is the UNKNOWN signal (spawn error / timeout /
@@ -168,6 +205,12 @@ extension ZmxClient {
         )
     }()
 
+    /// See the PATH-resolution note above `return ZmxClient(` in `live`.
+    private static let remoteSSHExecutable = URL(fileURLWithPath: "/usr/bin/env")
+    private static func remoteSSHArgv(_ argv: [String]) -> [String] {
+        ["ssh"] + argv
+    }
+
     /// No-op client for tests / when zmx is unavailable.
     static let noop = ZmxClient(
         executableURL: { nil },
@@ -175,6 +218,7 @@ extension ZmxClient {
         killSession: { _ in },
         killRemoteSession: { _, _, _ in },
         remoteForegrounds: { _, _ in .unreachable },
+        sweepRemoteOrphans: { _, _, _, _ in nil },
         listSessionsWithClients: { [] },
         sessionLeaderPIDs: { [:] },
         sessionListSnapshot: { (entries: [], leaders: [:]) }
@@ -519,6 +563,16 @@ enum ZmxSessionListParser {
         var name: String
         /// nil when the count is unknown (err/status line); the reaper spares these.
         var clients: Int?
+        /// The `macterm.owner` label value (#281), nil when absent — a session
+        /// from another machine, another user, or one created before this
+        /// installation ever stamped it. The remote reaper spares nil.
+        var owner: String?
+
+        init(name: String, clients: Int?, owner: String? = nil) {
+            self.name = name
+            self.clients = clients
+            self.owner = owner
+        }
     }
 
     static func parse(_ stdout: String) -> [Entry] {
@@ -527,7 +581,8 @@ enum ZmxSessionListParser {
             guard let name = values["name"], name.hasPrefix(ZmxSessionName.prefix) else { return }
             // Absent `clients=` (err/status line) → nil = unknown, not zero.
             let clients = values["clients"].flatMap { Int($0) }
-            entries.append(Entry(name: String(name), clients: clients))
+            let owner = values[Substring(RemoteSpawn.ownerLabelKey)].map(String.init)
+            entries.append(Entry(name: String(name), clients: clients, owner: owner))
         }
         return entries
     }
@@ -547,6 +602,23 @@ enum ZmxReaper {
                   !known.contains(entry.name)
             else { return nil }
             return entry.name
+        }
+    }
+
+    /// The REMOTE variant (#281): everything the local rule requires, plus the
+    /// session must carry OUR `macterm.owner` label. A shared host legitimately
+    /// parks zero-client `macterm-*` sessions belonging to other machines, so
+    /// an unlabelled or foreign-owned session is spared unconditionally — the
+    /// sweep only ever stamps names our own panes claim
+    /// (`RemoteSpawn.orphanSweepScript`), which is what makes `owner == ours`
+    /// mean "this installation created it and later failed to kill it".
+    static func orphans(
+        in entries: [ZmxSessionListParser.Entry],
+        known: Set<String>,
+        owner: String
+    ) -> [String] {
+        orphans(in: entries, known: known).filter { name in
+            entries.first { $0.name == name }?.owner == owner
         }
     }
 }

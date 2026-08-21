@@ -10,6 +10,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     // Tabs
     case newTab
     case closePane
+    case closeTab
     case renameTab
     case nextTab
     case previousTab
@@ -17,6 +18,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case previousTabInProject
     case recentTab
     case separateAllPanes
+    case pinTab
+    case unpinTab
     // Panes
     case splitRight
     case splitDown
@@ -60,6 +63,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .newTab: "New Tab"
         case .closePane: "Close Pane"
+        case .closeTab: "Close Tab"
         case .renameTab: "Rename Current Tab"
         case .nextTab: "Next Tab"
         case .previousTab: "Previous Tab"
@@ -67,6 +71,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .previousTabInProject: "Previous Tab in Project"
         case .recentTab: "Recent Tab"
         case .separateAllPanes: "Separate All Panes"
+        case .pinTab: "Pin Tab"
+        case .unpinTab: "Unpin Tab"
         case .separateCurrentPane: "Separate Current Pane"
         case .splitRight: "Split Right"
         case .splitDown: "Split Down"
@@ -107,13 +113,16 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .newTab,
              .closePane,
+             .closeTab,
              .renameTab,
              .nextTab,
              .previousTab,
              .nextTabInProject,
              .previousTabInProject,
              .recentTab,
-             .separateAllPanes: .tabs
+             .separateAllPanes,
+             .pinTab,
+             .unpinTab: .tabs
         case .splitRight,
              .splitDown,
              .splitAuto,
@@ -156,12 +165,15 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .newTab: .newTab
         case .closePane: .closePane
+        case .closeTab: .closeTab
         case .nextTab: .nextGlobalTab
         case .previousTab: .previousGlobalTab
         case .nextTabInProject: .nextTabInProject
         case .previousTabInProject: .previousTabInProject
         case .recentTab: .recentTab
         case .separateAllPanes: .separateAllPanes
+        case .pinTab: .pinTab
+        case .unpinTab: .unpinTab
         case .splitRight: .splitRight
         case .splitDown: .splitDown
         case .splitAuto: .splitAuto
