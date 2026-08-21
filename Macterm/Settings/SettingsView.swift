@@ -521,6 +521,7 @@ private struct GeneralSettings: View {
                     Button("Reload") {
                         commitGhosttyConfig()
                     }
+                    .disabled(!ghosttyConfigFilesEnabled)
                     .help("Re-read your Ghostty config. Click after saving external edits.")
                 }
             } header: {
