@@ -465,8 +465,17 @@ private struct GeneralSettings: View {
     @State
     private var defaultGhosttyConfigFiles: [GhosttyConfigSource.DefaultFileLocation] =
         GhosttyConfigSource.defaultFileLocations()
+
+    /// Which custom-path row is being edited inline, with its draft text.
+    /// `customGhosttyConfigPaths.count` marks a new entry being typed via
+    /// "Enter Path…". Committed rows render read-only, like the Projects
+    /// pane's rows; the text field exists only while adding or editing one.
+    @State
+    private var editingCustomGhosttyConfigIndex: Int?
+    @State
+    private var editingCustomGhosttyConfigText: String = ""
     @FocusState
-    private var focusedCustomGhosttyConfigIndex: Int?
+    private var isCustomGhosttyConfigFieldFocused: Bool
 
     /// Re-probed when the app becomes active, so returning from System
     /// Settings after flipping the toggle clears the banner. `nil` (no
@@ -480,74 +489,41 @@ private struct GeneralSettings: View {
                 FullDiskAccessBanner()
             }
 
-            Section("Ghostty Config") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Load Ghostty's default config files", isOn: $useDefaultGhosttyConfigFiles)
-                        .onChange(of: useDefaultGhosttyConfigFiles) { _, _ in commitGhosttyConfig() }
-                    if useDefaultGhosttyConfigFiles {
-                        ForEach(defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }) { file in
-                            VStack(alignment: .leading, spacing: 1) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.circle")
-                                    Text(abbreviatedPath(file.searchedPath))
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .help(file.searchedPath)
-                                }
-                                if let resolvedPath = file.resolvedPath,
-                                   resolvedPath != file.searchedPath
-                                {
-                                    Text("Resolves to \(abbreviatedPath(resolvedPath))")
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .help(resolvedPath)
-                                        .padding(.leading, 22)
-                                }
-                            }
-                            .settingsCaption()
-                        }
+            Section {
+                Toggle("Load Ghostty's default config files", isOn: $useDefaultGhosttyConfigFiles)
+                    .onChange(of: useDefaultGhosttyConfigFiles) { _, _ in commitGhosttyConfig() }
+
+                if useDefaultGhosttyConfigFiles {
+                    ForEach(defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }) { file in
+                        GhosttyDefaultConfigRow(file: file)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Additional files")
-                        .settingsCaption()
-                    ForEach(customGhosttyConfigPaths.indices, id: \.self) { index in
-                        HStack(spacing: 6) {
-                            Image(systemName: "doc.text")
-                                .foregroundStyle(.secondary)
-                            TextField(
-                                "Config file path",
-                                text: $customGhosttyConfigPaths[index],
-                                prompt: Text("Path")
-                            )
-                            .labelsHidden()
-                            .textFieldStyle(.roundedBorder)
-                            .focused($focusedCustomGhosttyConfigIndex, equals: index)
-                            .onSubmit { commitGhosttyConfig() }
-                            .help(customGhosttyConfigPaths[index])
-                            Button {
-                                focusedCustomGhosttyConfigIndex = nil
-                                customGhosttyConfigPaths.remove(at: index)
-                                commitGhosttyConfig()
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Remove this config file")
-                        }
+                ForEach(customGhosttyConfigPaths.indices, id: \.self) { index in
+                    if editingCustomGhosttyConfigIndex == index {
+                        editingCustomGhosttyConfigRow
+                    } else {
+                        GhosttyCustomConfigRow(
+                            path: customGhosttyConfigPaths[index],
+                            canMoveUp: index > 0,
+                            canMoveDown: index < customGhosttyConfigPaths.count - 1,
+                            onEdit: { beginEditingCustomGhosttyConfigPath(at: index) },
+                            onMoveUp: { moveCustomGhosttyConfigPath(at: index, by: -1) },
+                            onMoveDown: { moveCustomGhosttyConfigPath(at: index, by: 1) },
+                            onRemove: { removeCustomGhosttyConfigPath(at: index) }
+                        )
                     }
-                    Menu {
-                        Button("Enter Path…") {
-                            let newIndex = customGhosttyConfigPaths.endIndex
-                            customGhosttyConfigPaths.append("")
-                            focusedCustomGhosttyConfigIndex = newIndex
-                        }
-                    } label: {
-                        Label("Add Config File", systemImage: "plus")
-                    } primaryAction: {
-                        browseForCustomGhosttyConfigFiles()
-                    }
+                }
+                if editingCustomGhosttyConfigIndex == customGhosttyConfigPaths.count {
+                    editingCustomGhosttyConfigRow
+                }
+
+                if !useDefaultGhosttyConfigFiles,
+                   customGhosttyConfigPaths.isEmpty,
+                   editingCustomGhosttyConfigIndex == nil
+                {
+                    Text("No config files.")
+                        .foregroundStyle(.secondary)
                 }
 
                 HStack {
@@ -558,6 +534,24 @@ private struct GeneralSettings: View {
                         commitGhosttyConfig()
                     }
                     .help("Re-read your Ghostty config. Click after saving external edits.")
+                }
+            } header: {
+                HStack {
+                    Text("Ghostty Config")
+                    Spacer()
+                    // Mirrors the Projects pane's add affordance: a plus in the
+                    // header, with the creation paths in its menu.
+                    Menu {
+                        Button("Choose Files…") { browseForCustomGhosttyConfigFiles() }
+                        Button("Enter Path…") { beginEnteringCustomGhosttyConfigPath() }
+                    } label: {
+                        Label("Add Config File", systemImage: "plus")
+                            .labelStyle(.iconOnly)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Add a config file")
                 }
             }
 
@@ -633,10 +627,31 @@ private struct GeneralSettings: View {
             hasFullDiskAccess = FullDiskAccess.isGranted()
             refreshDefaultGhosttyConfigLocations()
         }
-        .onChange(of: focusedCustomGhosttyConfigIndex) { oldIndex, newIndex in
-            guard oldIndex != nil, oldIndex != newIndex else { return }
-            commitGhosttyConfig()
+        .onChange(of: isCustomGhosttyConfigFieldFocused) { wasFocused, isFocused in
+            guard wasFocused, !isFocused else { return }
+            commitCustomGhosttyConfigEdit()
         }
+    }
+
+    /// The one inline text field, shown in place of the row being edited (or
+    /// appended for a new entry). Same leading icon as the committed rows so
+    /// the list keeps its shape while a path is typed.
+    private var editingCustomGhosttyConfigRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            TextField(
+                "Config file path",
+                text: $editingCustomGhosttyConfigText,
+                prompt: Text("~/.config/ghostty/config")
+            )
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+            .focused($isCustomGhosttyConfigFieldFocused)
+            .onSubmit { commitCustomGhosttyConfigEdit() }
+        }
+        .padding(.vertical, 2)
     }
 
     /// Persist the two config layers together, then reload once.
@@ -656,7 +671,74 @@ private struct GeneralSettings: View {
         refreshDefaultGhosttyConfigLocations()
     }
 
+    private func beginEnteringCustomGhosttyConfigPath() {
+        guard finishPendingCustomGhosttyConfigEdit() else { return }
+        editingCustomGhosttyConfigText = ""
+        editingCustomGhosttyConfigIndex = customGhosttyConfigPaths.count
+        isCustomGhosttyConfigFieldFocused = true
+    }
+
+    private func beginEditingCustomGhosttyConfigPath(at index: Int) {
+        guard finishPendingCustomGhosttyConfigEdit() else { return }
+        editingCustomGhosttyConfigText = customGhosttyConfigPaths[index]
+        editingCustomGhosttyConfigIndex = index
+        isCustomGhosttyConfigFieldFocused = true
+    }
+
+    /// Fold the in-flight edit back into the list: empty text removes the row
+    /// (or abandons a new entry), anything else replaces or appends. Persists
+    /// and reloads only when the list actually changed, so blurring an
+    /// untouched field doesn't churn the config.
+    private func commitCustomGhosttyConfigEdit() {
+        guard let index = editingCustomGhosttyConfigIndex else { return }
+        editingCustomGhosttyConfigIndex = nil
+        isCustomGhosttyConfigFieldFocused = false
+        let trimmed = editingCustomGhosttyConfigText.trimmingCharacters(in: .whitespacesAndNewlines)
+        editingCustomGhosttyConfigText = ""
+        let before = customGhosttyConfigPaths
+        if index < customGhosttyConfigPaths.count {
+            if trimmed.isEmpty {
+                customGhosttyConfigPaths.remove(at: index)
+            } else {
+                customGhosttyConfigPaths[index] = trimmed
+            }
+        } else if !trimmed.isEmpty, !customGhosttyConfigPaths.contains(trimmed) {
+            customGhosttyConfigPaths.append(trimmed)
+        }
+        if customGhosttyConfigPaths != before {
+            commitGhosttyConfig()
+        }
+    }
+
+    /// Row actions capture their index at render time, so an action arriving
+    /// while an inline edit is pending would apply to a possibly-shifted row.
+    /// Commit the edit and report `false` so the caller drops its action; the
+    /// re-rendered rows carry fresh indices for the next click.
+    private func finishPendingCustomGhosttyConfigEdit() -> Bool {
+        guard editingCustomGhosttyConfigIndex != nil else { return true }
+        commitCustomGhosttyConfigEdit()
+        return false
+    }
+
+    private func moveCustomGhosttyConfigPath(at index: Int, by offset: Int) {
+        guard finishPendingCustomGhosttyConfigEdit() else { return }
+        let destination = index + offset
+        guard customGhosttyConfigPaths.indices.contains(index),
+              customGhosttyConfigPaths.indices.contains(destination)
+        else { return }
+        customGhosttyConfigPaths.swapAt(index, destination)
+        commitGhosttyConfig()
+    }
+
+    private func removeCustomGhosttyConfigPath(at index: Int) {
+        guard finishPendingCustomGhosttyConfigEdit() else { return }
+        guard customGhosttyConfigPaths.indices.contains(index) else { return }
+        customGhosttyConfigPaths.remove(at: index)
+        commitGhosttyConfig()
+    }
+
     private func browseForCustomGhosttyConfigFiles() {
+        commitCustomGhosttyConfigEdit()
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -686,9 +768,97 @@ private struct GeneralSettings: View {
     private func refreshDefaultGhosttyConfigLocations() {
         defaultGhosttyConfigFiles = GhosttyConfigSource.defaultFileLocations()
     }
+}
 
-    private func abbreviatedPath(_ path: String) -> String {
-        (path as NSString).abbreviatingWithTildeInPath
+// MARK: - Ghostty config rows
+
+/// One of Ghostty's own config files, listed while the default-files toggle is
+/// on. Read-only — the rows exist so the user can see exactly which files were
+/// found, in load order; there's nothing to do to one from here, which is also
+/// what visually separates them from the removable custom rows below.
+private struct GhosttyDefaultConfigRow: View {
+    let file: GhosttyConfigSource.DefaultFileLocation
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text((file.searchedPath as NSString).lastPathComponent)
+                Text(subtitle)
+                    .settingsCaption()
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(file.resolvedPath ?? file.searchedPath)
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var subtitle: String {
+        let searched = (file.searchedPath as NSString).abbreviatingWithTildeInPath
+        guard let resolved = file.resolvedPath, resolved != file.searchedPath else {
+            return searched
+        }
+        return "\(searched) — resolves to \((resolved as NSString).abbreviatingWithTildeInPath)"
+    }
+}
+
+/// A user-added config file: filename, path, and its actions in a menu — the
+/// same row shape as the Projects pane. Move Up/Down matter here because later
+/// files override earlier ones.
+private struct GhosttyCustomConfigRow: View {
+    let path: String
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onEdit: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text((path as NSString).lastPathComponent)
+                Text((path as NSString).abbreviatingWithTildeInPath)
+                    .settingsCaption()
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(path)
+            }
+
+            Spacer(minLength: 8)
+
+            Menu {
+                Button("Edit Path") { onEdit() }
+
+                Divider()
+
+                Button("Move Up") { onMoveUp() }
+                    .disabled(!canMoveUp)
+
+                Button("Move Down") { onMoveDown() }
+                    .disabled(!canMoveDown)
+
+                Divider()
+
+                Button("Remove", role: .destructive) { onRemove() }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .padding(.vertical, 2)
     }
 }
 
