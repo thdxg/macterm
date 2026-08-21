@@ -491,11 +491,22 @@ private struct GeneralSettings: View {
 
             Section {
                 Toggle("Load Ghostty config files", isOn: $useDefaultGhosttyConfigFiles)
-                    .onChange(of: useDefaultGhosttyConfigFiles) { _, _ in commitGhosttyConfig() }
+                    .onChange(of: useDefaultGhosttyConfigFiles) { _, loads in
+                        // The per-file handlers below flip this state and
+                        // commit in one step; skip the redundant reload when
+                        // the persisted value already agrees.
+                        guard loads != Preferences.shared.ghosttyConfigSelection.loadsDefaultFiles
+                        else { return }
+                        commitGhosttyConfig()
+                    }
 
                 if useDefaultGhosttyConfigFiles {
                     ForEach(defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }) { file in
-                        GhosttyDefaultConfigRow(file: file)
+                        GhosttyDefaultConfigRow(
+                            file: file,
+                            onEdit: { beginEditingDefaultGhosttyConfigFile(file) },
+                            onRemove: { removeDefaultGhosttyConfigFile(file) }
+                        )
                     }
                 }
 
@@ -671,6 +682,65 @@ private struct GeneralSettings: View {
         refreshDefaultGhosttyConfigLocations()
     }
 
+    /// Ghostty's default layer is all-or-nothing in the loader, so per-file
+    /// changes to it first convert the whole layer into explicit custom
+    /// entries: the toggle flips off and every found default becomes a
+    /// regular row (minus one being removed), ahead of the existing custom
+    /// entries since defaults load first. Custom entries that duplicated a
+    /// converted default are folded in rather than kept twice.
+    private func convertDefaultGhosttyConfigFilesToCustom(
+        removing removed: GhosttyConfigSource.DefaultFileLocation? = nil
+    ) {
+        let converted = defaultGhosttyConfigFiles
+            .filter { $0.resolvedPath != nil && $0.searchedPath != removed?.searchedPath }
+            .map { ($0.searchedPath as NSString).abbreviatingWithTildeInPath }
+        let convertedExpanded = Set(converted.map { ($0 as NSString).expandingTildeInPath })
+        let keptCustomPaths = customGhosttyConfigPaths.filter {
+            !convertedExpanded.contains(($0 as NSString).expandingTildeInPath)
+        }
+        useDefaultGhosttyConfigFiles = false
+        customGhosttyConfigPaths = converted + keptCustomPaths
+        commitGhosttyConfig()
+    }
+
+    private func removeDefaultGhosttyConfigFile(_ file: GhosttyConfigSource.DefaultFileLocation) {
+        guard finishPendingCustomGhosttyConfigEdit() else { return }
+        convertDefaultGhosttyConfigFilesToCustom(removing: file)
+    }
+
+    private func beginEditingDefaultGhosttyConfigFile(_ file: GhosttyConfigSource.DefaultFileLocation) {
+        guard finishPendingCustomGhosttyConfigEdit() else { return }
+        convertDefaultGhosttyConfigFilesToCustom()
+        let target = (file.searchedPath as NSString).expandingTildeInPath
+        guard let index = customGhosttyConfigPaths.firstIndex(where: {
+            ($0 as NSString).expandingTildeInPath == target
+        })
+        else { return }
+        editingCustomGhosttyConfigText = customGhosttyConfigPaths[index]
+        editingCustomGhosttyConfigIndex = index
+        isCustomGhosttyConfigFieldFocused = true
+    }
+
+    /// Expanded forms of every path the list already shows — the found default
+    /// locations (both the searched path and its resolve target) while the
+    /// toggle is on, plus the committed custom entries — so adds and edits
+    /// refuse duplicates against the whole list, not just the custom layer.
+    private func expandedListedGhosttyConfigPaths(excludingCustomIndex excluded: Int? = nil) -> Set<String> {
+        var listed = Set<String>()
+        if useDefaultGhosttyConfigFiles {
+            for file in defaultGhosttyConfigFiles where file.resolvedPath != nil {
+                listed.insert(file.searchedPath)
+                if let resolved = file.resolvedPath {
+                    listed.insert(resolved)
+                }
+            }
+        }
+        for (index, path) in customGhosttyConfigPaths.enumerated() where index != excluded {
+            listed.insert((path as NSString).expandingTildeInPath)
+        }
+        return listed
+    }
+
     private func beginEnteringCustomGhosttyConfigPath() {
         guard finishPendingCustomGhosttyConfigEdit() else { return }
         editingCustomGhosttyConfigText = ""
@@ -686,23 +756,26 @@ private struct GeneralSettings: View {
     }
 
     /// Fold the in-flight edit back into the list: empty text removes the row
-    /// (or abandons a new entry), anything else replaces or appends. Persists
-    /// and reloads only when the list actually changed, so blurring an
-    /// untouched field doesn't churn the config.
+    /// (or abandons a new entry), anything else replaces or appends. A path
+    /// the list already shows is refused — an edit keeps the row's previous
+    /// value, an add is dropped. Persists and reloads only when the list
+    /// actually changed, so blurring an untouched field doesn't churn the
+    /// config.
     private func commitCustomGhosttyConfigEdit() {
         guard let index = editingCustomGhosttyConfigIndex else { return }
         editingCustomGhosttyConfigIndex = nil
         isCustomGhosttyConfigFieldFocused = false
         let trimmed = editingCustomGhosttyConfigText.trimmingCharacters(in: .whitespacesAndNewlines)
         editingCustomGhosttyConfigText = ""
+        let expanded = (trimmed as NSString).expandingTildeInPath
         let before = customGhosttyConfigPaths
         if index < customGhosttyConfigPaths.count {
             if trimmed.isEmpty {
                 customGhosttyConfigPaths.remove(at: index)
-            } else {
+            } else if !expandedListedGhosttyConfigPaths(excludingCustomIndex: index).contains(expanded) {
                 customGhosttyConfigPaths[index] = trimmed
             }
-        } else if !trimmed.isEmpty, !customGhosttyConfigPaths.contains(trimmed) {
+        } else if !trimmed.isEmpty, !expandedListedGhosttyConfigPaths().contains(expanded) {
             customGhosttyConfigPaths.append(trimmed)
         }
         if customGhosttyConfigPaths != before {
@@ -755,9 +828,13 @@ private struct GeneralSettings: View {
     }
 
     private func addCustomGhosttyConfigPaths(_ paths: [String]) {
+        var listed = expandedListedGhosttyConfigPaths()
         let additions = paths.compactMap { path -> String? in
             let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !customGhosttyConfigPaths.contains(trimmed) else { return nil }
+            guard !trimmed.isEmpty else { return nil }
+            let expanded = (trimmed as NSString).expandingTildeInPath
+            guard !listed.contains(expanded) else { return nil }
+            listed.insert(expanded)
             return trimmed
         }
         guard !additions.isEmpty else { return }
@@ -773,11 +850,14 @@ private struct GeneralSettings: View {
 // MARK: - Ghostty config rows
 
 /// One of Ghostty's own config files, listed while the default-files toggle is
-/// on. Read-only — the rows exist so the user can see exactly which files were
-/// found, in load order; there's nothing to do to one from here, which is also
-/// what visually separates them from the removable custom rows below.
+/// on. Editing or removing one converts the whole default layer into explicit
+/// custom entries first (the loader takes defaults all-or-nothing), so its
+/// menu is shorter than a custom row's — no Move, since the defaults' order
+/// is Ghostty's.
 private struct GhosttyDefaultConfigRow: View {
     let file: GhosttyConfigSource.DefaultFileLocation
+    let onEdit: () -> Void
+    let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -786,30 +866,40 @@ private struct GhosttyDefaultConfigRow: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text((file.searchedPath as NSString).lastPathComponent)
-                Text(subtitle)
-                    .settingsCaption()
+                Text((file.searchedPath as NSString).abbreviatingWithTildeInPath)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(file.resolvedPath ?? file.searchedPath)
+                    .help(file.searchedPath)
+                if let resolved = file.resolvedPath, resolved != file.searchedPath {
+                    Text("Resolves to \((resolved as NSString).abbreviatingWithTildeInPath)")
+                        .settingsCaption()
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(resolved)
+                }
             }
 
             Spacer(minLength: 8)
+
+            Menu {
+                Button("Edit Path") { onEdit() }
+
+                Divider()
+
+                Button("Remove", role: .destructive) { onRemove() }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
         .padding(.vertical, 2)
     }
-
-    private var subtitle: String {
-        let searched = (file.searchedPath as NSString).abbreviatingWithTildeInPath
-        guard let resolved = file.resolvedPath, resolved != file.searchedPath else {
-            return searched
-        }
-        return "\(searched) — resolves to \((resolved as NSString).abbreviatingWithTildeInPath)"
-    }
 }
 
-/// A user-added config file: filename, path, and its actions in a menu — the
-/// same row shape as the Projects pane. Move Up/Down matter here because later
+/// A user-added config file: its path and its actions in a menu — the same
+/// row shape as the Projects pane. Move Up/Down matter here because later
 /// files override earlier ones.
 private struct GhosttyCustomConfigRow: View {
     let path: String
@@ -826,14 +916,10 @@ private struct GhosttyCustomConfigRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text((path as NSString).lastPathComponent)
-                Text((path as NSString).abbreviatingWithTildeInPath)
-                    .settingsCaption()
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(path)
-            }
+            Text((path as NSString).abbreviatingWithTildeInPath)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(path)
 
             Spacer(minLength: 8)
 
