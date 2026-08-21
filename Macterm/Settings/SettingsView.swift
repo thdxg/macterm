@@ -500,35 +500,19 @@ private struct GeneralSettings: View {
 
                 // The rows stay visible when loading is off — the list is the
                 // user's, the toggle only governs whether it's read — they
-                // just dim and stop taking edits.
-                Group {
-                    ForEach(customGhosttyConfigPaths.indices, id: \.self) { index in
-                        if editingCustomGhosttyConfigIndex == index {
-                            editingCustomGhosttyConfigRow
-                        } else {
-                            GhosttyConfigFileRow(
-                                path: customGhosttyConfigPaths[index],
-                                problem: customGhosttyConfigProblem(customGhosttyConfigPaths[index]),
-                                canMoveUp: index > 0,
-                                canMoveDown: index < customGhosttyConfigPaths.count - 1,
-                                onEdit: { beginEditingCustomGhosttyConfigPath(at: index) },
-                                onMoveUp: { moveCustomGhosttyConfigPath(at: index, by: -1) },
-                                onMoveDown: { moveCustomGhosttyConfigPath(at: index, by: 1) },
-                                onRemove: { removeCustomGhosttyConfigPath(at: index) }
-                            )
-                        }
+                // just dim and stop taking edits. The dimming modifiers wrap
+                // the rows only in the off branch: an `.opacity` (even 1.0)
+                // over the rows can flatten them into a layer that swallows
+                // the tooltip tracking areas inside.
+                if ghosttyConfigFilesEnabled {
+                    ghosttyConfigFileRows
+                } else {
+                    Group {
+                        ghosttyConfigFileRows
                     }
-                    if editingCustomGhosttyConfigIndex == customGhosttyConfigPaths.count {
-                        editingCustomGhosttyConfigRow
-                    }
-
-                    if customGhosttyConfigPaths.isEmpty, editingCustomGhosttyConfigIndex == nil {
-                        Text("No config files.")
-                            .foregroundStyle(.secondary)
-                    }
+                    .disabled(true)
+                    .opacity(0.45)
                 }
-                .disabled(!ghosttyConfigFilesEnabled)
-                .opacity(ghosttyConfigFilesEnabled ? 1 : 0.45)
 
                 HStack {
                     Text("Files load from top to bottom; later files override earlier ones.")
@@ -636,6 +620,36 @@ private struct GeneralSettings: View {
         .onChange(of: isCustomGhosttyConfigFieldFocused) { wasFocused, isFocused in
             guard wasFocused, !isFocused else { return }
             commitCustomGhosttyConfigEdit()
+        }
+    }
+
+    /// The config-file rows plus the inline editor and empty state, shared by
+    /// the enabled and dimmed branches of the section.
+    @ViewBuilder
+    private var ghosttyConfigFileRows: some View {
+        ForEach(customGhosttyConfigPaths.indices, id: \.self) { index in
+            if editingCustomGhosttyConfigIndex == index {
+                editingCustomGhosttyConfigRow
+            } else {
+                GhosttyConfigFileRow(
+                    path: customGhosttyConfigPaths[index],
+                    problem: customGhosttyConfigProblem(customGhosttyConfigPaths[index]),
+                    canMoveUp: index > 0,
+                    canMoveDown: index < customGhosttyConfigPaths.count - 1,
+                    onEdit: { beginEditingCustomGhosttyConfigPath(at: index) },
+                    onMoveUp: { moveCustomGhosttyConfigPath(at: index, by: -1) },
+                    onMoveDown: { moveCustomGhosttyConfigPath(at: index, by: 1) },
+                    onRemove: { removeCustomGhosttyConfigPath(at: index) }
+                )
+            }
+        }
+        if editingCustomGhosttyConfigIndex == customGhosttyConfigPaths.count {
+            editingCustomGhosttyConfigRow
+        }
+
+        if customGhosttyConfigPaths.isEmpty, editingCustomGhosttyConfigIndex == nil {
+            Text("No config files.")
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -833,10 +847,22 @@ private struct GhosttyConfigFileRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: problem == nil ? "doc.text" : "exclamationmark.triangle")
-                .foregroundStyle(problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(MactermTheme.warning))
-                .frame(width: 16)
-                .help(problem ?? "")
+            if let problem {
+                // A control, not a bare image: tooltips are only dependable
+                // on controls in this context, and the natural click-through
+                // for a broken path is fixing it.
+                Button(action: onEdit) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(MactermTheme.warning)
+                        .frame(width: 16)
+                }
+                .buttonStyle(.plain)
+                .help(problem)
+            } else {
+                Image(systemName: "doc.text")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+            }
 
             Text((path as NSString).abbreviatingWithTildeInPath)
                 .lineLimit(1)
