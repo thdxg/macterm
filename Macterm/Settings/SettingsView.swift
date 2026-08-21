@@ -501,10 +501,17 @@ private struct GeneralSettings: View {
                     }
 
                 if useDefaultGhosttyConfigFiles {
-                    ForEach(defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }) { file in
+                    // Every location Ghostty checks, found or not — a missing
+                    // candidate renders as an inert warning row so the full
+                    // search list is visible, matching Ghostty's own loader.
+                    ForEach(defaultGhosttyConfigFiles) { file in
                         GhosttyDefaultConfigRow(
                             file: file,
+                            canMoveUp: canMoveDefaultGhosttyConfigFile(file, by: -1),
+                            canMoveDown: canMoveDefaultGhosttyConfigFile(file, by: 1),
                             onEdit: { beginEditingDefaultGhosttyConfigFile(file) },
+                            onMoveUp: { moveDefaultGhosttyConfigFile(file, by: -1) },
+                            onMoveDown: { moveDefaultGhosttyConfigFile(file, by: 1) },
                             onRemove: { removeDefaultGhosttyConfigFile(file) }
                         )
                     }
@@ -516,6 +523,7 @@ private struct GeneralSettings: View {
                     } else {
                         GhosttyCustomConfigRow(
                             path: customGhosttyConfigPaths[index],
+                            problem: customGhosttyConfigProblem(customGhosttyConfigPaths[index]),
                             canMoveUp: index > 0,
                             canMoveDown: index < customGhosttyConfigPaths.count - 1,
                             onEdit: { beginEditingCustomGhosttyConfigPath(at: index) },
@@ -684,10 +692,13 @@ private struct GeneralSettings: View {
 
     /// Ghostty's default layer is all-or-nothing in the loader, so per-file
     /// changes to it first convert the whole layer into explicit custom
-    /// entries: the toggle flips off and every found default becomes a
+    /// entries: the toggle flips off and every FOUND default becomes a
     /// regular row (minus one being removed), ahead of the existing custom
-    /// entries since defaults load first. Custom entries that duplicated a
-    /// converted default are folded in rather than kept twice.
+    /// entries since defaults load first. Missing candidates are never
+    /// converted — a missing custom file raises a "file not found" alert on
+    /// every reload, which a merely-absent default location doesn't deserve.
+    /// Custom entries that duplicated a converted default are folded in
+    /// rather than kept twice. Callers commit.
     private func convertDefaultGhosttyConfigFilesToCustom(
         removing removed: GhosttyConfigSource.DefaultFileLocation? = nil
     ) {
@@ -700,17 +711,18 @@ private struct GeneralSettings: View {
         }
         useDefaultGhosttyConfigFiles = false
         customGhosttyConfigPaths = converted + keptCustomPaths
-        commitGhosttyConfig()
     }
 
     private func removeDefaultGhosttyConfigFile(_ file: GhosttyConfigSource.DefaultFileLocation) {
         guard finishPendingCustomGhosttyConfigEdit() else { return }
         convertDefaultGhosttyConfigFilesToCustom(removing: file)
+        commitGhosttyConfig()
     }
 
     private func beginEditingDefaultGhosttyConfigFile(_ file: GhosttyConfigSource.DefaultFileLocation) {
         guard finishPendingCustomGhosttyConfigEdit() else { return }
         convertDefaultGhosttyConfigFilesToCustom()
+        commitGhosttyConfig()
         let target = (file.searchedPath as NSString).expandingTildeInPath
         guard let index = customGhosttyConfigPaths.firstIndex(where: {
             ($0 as NSString).expandingTildeInPath == target
@@ -721,14 +733,59 @@ private struct GeneralSettings: View {
         isCustomGhosttyConfigFieldFocused = true
     }
 
-    /// Expanded forms of every path the list already shows — the found default
-    /// locations (both the searched path and its resolve target) while the
-    /// toggle is on, plus the committed custom entries — so adds and edits
-    /// refuse duplicates against the whole list, not just the custom layer.
+    private func moveDefaultGhosttyConfigFile(
+        _ file: GhosttyConfigSource.DefaultFileLocation,
+        by offset: Int
+    ) {
+        guard finishPendingCustomGhosttyConfigEdit() else { return }
+        convertDefaultGhosttyConfigFilesToCustom()
+        let target = (file.searchedPath as NSString).expandingTildeInPath
+        if let index = customGhosttyConfigPaths.firstIndex(where: {
+            ($0 as NSString).expandingTildeInPath == target
+        }), customGhosttyConfigPaths.indices.contains(index + offset) {
+            customGhosttyConfigPaths.swapAt(index, index + offset)
+        }
+        commitGhosttyConfig()
+    }
+
+    /// Whether a default row's Move item should be enabled: its position in
+    /// the post-conversion list (found defaults, then customs). Approximate
+    /// when a custom entry duplicates a default — the move handler's own
+    /// bounds check is the backstop.
+    private func canMoveDefaultGhosttyConfigFile(
+        _ file: GhosttyConfigSource.DefaultFileLocation,
+        by offset: Int
+    ) -> Bool {
+        let found = defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }
+        guard let index = found.firstIndex(of: file) else { return false }
+        if offset < 0 {
+            return index > 0
+        }
+        return index < found.count - 1 || !customGhosttyConfigPaths.isEmpty
+    }
+
+    /// Why a custom entry gets the warning icon, or nil when it's a plausible
+    /// config file. Existence only — parse errors surface through the reload
+    /// alert instead, and note a TCC-protected file can read as missing until
+    /// Full Disk Access is granted (the banner above covers that case).
+    private func customGhosttyConfigProblem(_ path: String) -> String? {
+        let expanded = (path as NSString).expandingTildeInPath
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory) else {
+            return "File not found."
+        }
+        return isDirectory.boolValue ? "Not a file." : nil
+    }
+
+    /// Expanded forms of every path the list already shows — each default
+    /// location (searched path and any resolve target, found or not) while
+    /// the toggle is on, plus the committed custom entries — so adds and
+    /// edits refuse duplicates against the whole list, not just the custom
+    /// layer.
     private func expandedListedGhosttyConfigPaths(excludingCustomIndex excluded: Int? = nil) -> Set<String> {
         var listed = Set<String>()
         if useDefaultGhosttyConfigFiles {
-            for file in defaultGhosttyConfigFiles where file.resolvedPath != nil {
+            for file in defaultGhosttyConfigFiles {
                 listed.insert(file.searchedPath)
                 if let resolved = file.resolvedPath {
                     listed.insert(resolved)
@@ -849,20 +906,26 @@ private struct GeneralSettings: View {
 
 // MARK: - Ghostty config rows
 
-/// One of Ghostty's own config files, listed while the default-files toggle is
-/// on. Editing or removing one converts the whole default layer into explicit
-/// custom entries first (the loader takes defaults all-or-nothing), so its
-/// menu is shorter than a custom row's — no Move, since the defaults' order
-/// is Ghostty's.
+/// One location Ghostty's own loader checks, listed while the default-files
+/// toggle is on. A found file is a regular row — Edit/Move/Remove convert the
+/// whole default layer into explicit custom entries first, since the loader
+/// takes defaults all-or-nothing. A missing candidate is an inert warning
+/// row: it shows where Ghostty would look, but there's no file to act on.
 private struct GhosttyDefaultConfigRow: View {
     let file: GhosttyConfigSource.DefaultFileLocation
+    let canMoveUp: Bool
+    let canMoveDown: Bool
     let onEdit: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
     let onRemove: () -> Void
+
+    private var isFound: Bool { file.resolvedPath != nil }
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
+            Image(systemName: isFound ? "doc.text" : "exclamationmark.triangle")
+                .foregroundStyle(isFound ? AnyShapeStyle(.secondary) : AnyShapeStyle(MactermTheme.warning))
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -870,7 +933,10 @@ private struct GhosttyDefaultConfigRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(file.searchedPath)
-                if let resolved = file.resolvedPath, resolved != file.searchedPath {
+                if !isFound {
+                    Text("File not found — Ghostty skips it.")
+                        .settingsCaption()
+                } else if let resolved = file.resolvedPath, resolved != file.searchedPath {
                     Text("Resolves to \((resolved as NSString).abbreviatingWithTildeInPath)")
                         .settingsCaption()
                         .lineLimit(1)
@@ -881,18 +947,28 @@ private struct GhosttyDefaultConfigRow: View {
 
             Spacer(minLength: 8)
 
-            Menu {
-                Button("Edit Path") { onEdit() }
+            if isFound {
+                Menu {
+                    Button("Edit Path") { onEdit() }
 
-                Divider()
+                    Divider()
 
-                Button("Remove", role: .destructive) { onRemove() }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+                    Button("Move Up") { onMoveUp() }
+                        .disabled(!canMoveUp)
+
+                    Button("Move Down") { onMoveDown() }
+                        .disabled(!canMoveDown)
+
+                    Divider()
+
+                    Button("Remove", role: .destructive) { onRemove() }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
         }
         .padding(.vertical, 2)
     }
@@ -900,9 +976,11 @@ private struct GhosttyDefaultConfigRow: View {
 
 /// A user-added config file: its path and its actions in a menu — the same
 /// row shape as the Projects pane. Move Up/Down matter here because later
-/// files override earlier ones.
+/// files override earlier ones. A non-nil `problem` swaps the file icon for
+/// a warning triangle with the reason underneath.
 private struct GhosttyCustomConfigRow: View {
     let path: String
+    let problem: String?
     let canMoveUp: Bool
     let canMoveDown: Bool
     let onEdit: () -> Void
@@ -912,14 +990,20 @@ private struct GhosttyCustomConfigRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
+            Image(systemName: problem == nil ? "doc.text" : "exclamationmark.triangle")
+                .foregroundStyle(problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(MactermTheme.warning))
                 .frame(width: 16)
 
-            Text((path as NSString).abbreviatingWithTildeInPath)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(path)
+            VStack(alignment: .leading, spacing: 1) {
+                Text((path as NSString).abbreviatingWithTildeInPath)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(path)
+                if let problem {
+                    Text(problem)
+                        .settingsCaption()
+                }
+            }
 
             Spacer(minLength: 8)
 
