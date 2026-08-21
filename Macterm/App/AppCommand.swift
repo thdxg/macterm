@@ -46,6 +46,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case replaceProjectPathWithCurrentDir
     case applyLayout
     case saveLayout
+    case showRepositoryChanges
     case nextProject
     case previousProject
     // Window
@@ -103,6 +104,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .toggleCommandPalette: "Command Palette"
         case .reloadGhosttyConfig: "Reload Ghostty Config"
         case .toggleQuickTerminal: "Toggle Quick Terminal"
+        case .showRepositoryChanges: "Toggle Repository Changes"
         case .checkForUpdate: "Check for Update"
         }
     }
@@ -145,6 +147,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .replaceProjectPathWithCurrentDir,
              .applyLayout,
              .saveLayout,
+             .showRepositoryChanges,
              .nextProject,
              .previousProject: .projects
         case .toggleSidebar,
@@ -203,6 +206,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
+             .showRepositoryChanges,
              .checkForUpdate: nil
         }
     }

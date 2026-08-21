@@ -13,6 +13,8 @@ struct MactermApp: App {
     private var appState = AppState()
     @State
     private var projectStore = ProjectStore()
+    @State
+    private var gitBranchNames = GitBranchNames()
 
     init() {
         // Must precede any scene construction: SwiftUI can touch
@@ -27,6 +29,7 @@ struct MactermApp: App {
             MainWindow()
                 .environment(appState)
                 .environment(projectStore)
+                .environment(gitBranchNames)
                 .modifier(AppColorScheme())
                 .alert(
                     "Close running process?",

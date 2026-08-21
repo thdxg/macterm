@@ -9,6 +9,8 @@ struct MainWindow: View {
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
+    @Environment(GitBranchNames.self)
+    private var branchNames
     @State
     private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State
@@ -110,22 +112,15 @@ struct MainWindow: View {
                 // rows actually start at the window's top edge.
                 .ignoresSafeArea(chromeHidden ? .container : [], edges: .top)
         } detail: {
-            ZStack {
-                // The window's NSWindow.backgroundColor (set by WindowAppearance)
-                // fills the detail column at the configured opacity. No need
-                // to paint another tinted layer here — doing so stacks two
-                // translucent fills and the detail reads as darker than the
-                // strip around the sidebar.
-                if let project = activeProjectWithWorkspace {
-                    if projectHasAnyTab(project) {
-                        WorkspaceView(project: project)
-                            .id(project.id)
-                    } else {
-                        EmptyProjectView(project: project)
-                            .id(project.id)
-                    }
-                } else {
-                    WelcomeView()
+            HStack(spacing: 0) {
+                workspaceDetail
+                // The changes panel is a sibling COLUMN, not an overlay: it
+                // must take width from the terminal rather than cover it, or
+                // the panes it describes reflow under it.
+                if appState.isGitChangesPanelVisible, activeProject?.isRemote == false {
+                    Divider()
+                    GitChangesPanel()
+                        .frame(width: 460)
                 }
             }
             // Same safe-area reclaim as the sidebar: without it the terminal
@@ -141,6 +136,15 @@ struct MainWindow: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     UpdateAvailableToolbarButton()
+                }
+                // Local projects only: git runs on this Mac, and a remote
+                // project's path names a directory on another host. The button
+                // disappears rather than opening a panel that could only
+                // explain why it is empty.
+                if activeProject?.isRemote == false {
+                    ToolbarItem(placement: .primaryAction) {
+                        GitChangesToolbarItem()
+                    }
                 }
                 // Structural branch, not a placement ternary: each side is its
                 // own toolbar item identity, so flipping the preference tears
@@ -176,6 +180,14 @@ struct MainWindow: View {
         }
         .onAppear {
             AdaptiveTerminalChrome.shared.mainWindowDidAppear()
+            branchNames.refresh(directory: focusedDirectory)
+        }
+        // A `git checkout` typed into a pane is the ordinary way the branch
+        // changes, and a `cd` is the ordinary way the DIRECTORY changes; both
+        // ride this event, which the tab names already use. `GitBranchNames`
+        // throttles, so the 250ms burst cadence costs one read per window.
+        .onReceive(NotificationCenter.default.publisher(for: .terminalPollEvent)) { _ in
+            branchNames.refresh(directory: focusedDirectory)
         }
         .task {
             guard !appState.hasRestoredSelection else { return }
@@ -348,6 +360,31 @@ struct MainWindow: View {
         withAnimation { columnVisibility = .detailOnly }
     }
 
+    /// The terminal half of the detail column. Extracted so the changes panel
+    /// can sit beside it in an `HStack` without nesting the whole workspace
+    /// tree one level deeper in `body`, which the type checker charges for.
+    private var workspaceDetail: some View {
+        ZStack {
+            // The window's NSWindow.backgroundColor (set by WindowAppearance)
+            // fills the detail column at the configured opacity. No need
+            // to paint another tinted layer here — doing so stacks two
+            // translucent fills and the detail reads as darker than the
+            // strip around the sidebar.
+            if let project = activeProjectWithWorkspace {
+                if projectHasAnyTab(project) {
+                    WorkspaceView(project: project)
+                        .id(project.id)
+                } else {
+                    EmptyProjectView(project: project)
+                        .id(project.id)
+                }
+            } else {
+                WelcomeView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var activeProject: Project? {
         guard let pid = appState.activeProjectID else { return nil }
         // The pinned workspace has no ProjectStore row; render it through the
@@ -367,9 +404,40 @@ struct MainWindow: View {
 
     private var activeTabTitle: String {
         guard let project = activeProject else { return "" }
-        // The pinned workspace has no project directory worth advertising.
+        // The pinned workspace has no project directory worth advertising,
+        // and no repository behind it either.
         if project.id == PinnedTabs.projectID { return "" }
-        return project.path
+        guard let branch = branchNames.branch(for: focusedDirectory) else { return project.path }
+        return "\(project.path) — \(branch)"
+    }
+
+    /// The directory whose branch the title bar reports: the FOCUSED pane's
+    /// working directory, falling back to the project's own path.
+    ///
+    /// The pane's cwd, not the project's, because the title says which branch
+    /// "the terminal you are looking at" is on — and a pane that has `cd`ed
+    /// into a submodule or a sibling worktree is on a different one. It comes
+    /// from the kernel (`ProcessInspector`), not from shell integration, so it
+    /// is right even for a shell that reports no cwd or a full-screen program
+    /// holding the foreground.
+    ///
+    /// Answers "" — and so shows no branch — for the cases with no local
+    /// directory to ask about: remote panes (the local process table only
+    /// knows their `ssh` client, and their path names another host) and the
+    /// pinned workspace, which has no project path at all.
+    private var focusedDirectory: String {
+        guard let project = activeProject,
+              !project.isRemote,
+              project.id != PinnedTabs.projectID
+        else { return "" }
+        if let tab = appState.workspaces[project.id]?.activeTab,
+           let paneID = tab.focusedPaneID,
+           let pane = tab.splitRoot.findPane(id: paneID),
+           let cwd = ProcessInspector.foregroundWorkingDirectory(forPane: pane)
+        {
+            return cwd
+        }
+        return ProjectPath.canonicalLocal(project.path)
     }
 }
 
