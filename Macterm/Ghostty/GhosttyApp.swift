@@ -432,7 +432,7 @@ final class GhosttyApp {
         let selection: GhosttyConfigSelection = if Preferences.isTestRun || BenchmarkControl.isEnabled {
             .disabled
         } else {
-            Preferences.shared.ghosttyConfigSelection
+            Preferences.shared.effectiveGhosttyConfigSelection
         }
         let source = GhosttyConfigSource(selection: selection)
         result.missingUserConfigPaths = source.load(
@@ -446,6 +446,14 @@ final class GhosttyApp {
                 return true
             }
         )
+        // One-time: dissolve the automatic default layer into plain path
+        // entries. This load still went through libghostty's default loader
+        // (first-run template creation included); every later load reads the
+        // same files, in the same order, as ordinary list entries the
+        // Settings pane can reorder, edit, or remove individually.
+        if selection.loadsDefaultFiles {
+            Preferences.shared.dissolveGhosttyDefaultLayer()
+        }
         MactermConfig.shared.overridesPath.withCString { ghostty_config_load_file(cfg, $0) }
         ghostty_config_load_recursive_files(cfg)
         ghostty_config_finalize(cfg)

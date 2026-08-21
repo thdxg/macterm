@@ -343,15 +343,15 @@ final class GhosttyCallbacks: @unchecked Sendable {
         let selection = Preferences.shared.ghosttyConfigSelection
         if let customPath = selection.customPaths.last {
             path = (customPath as NSString).expandingTildeInPath
-        } else if selection.loadsDefaultFiles {
+        } else {
+            // Empty list: ask libghostty for its preferred default edit path
+            // so the action still opens (and creates) something sensible.
             let value = ghostty_config_open_path()
             defer { ghostty_string_free(value) }
             guard let pointer = value.ptr, value.len > 0 else { return }
             let bytes = UnsafeBufferPointer(start: pointer, count: Int(value.len)).map { UInt8(bitPattern: $0) }
             guard let resolved = String(bytes: bytes, encoding: .utf8), !resolved.isEmpty else { return }
             path = resolved
-        } else {
-            return
         }
 
         if !FileManager.default.fileExists(atPath: path) {

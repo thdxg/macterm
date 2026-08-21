@@ -119,6 +119,60 @@ struct PreferencesTests {
         ))
     }
 
+    @Test
+    func ghostty_config_load_switch_defaults_on_and_gates_the_effective_selection() {
+        let prior = Preferences.shared.ghosttyConfigFilesEnabled
+        defer { Preferences.shared.ghosttyConfigFilesEnabled = prior }
+
+        // Fresh (wiped) test suite → loading is on.
+        #expect(Preferences.shared.ghosttyConfigFilesEnabled)
+
+        Preferences.shared.ghosttyConfigFilesEnabled = false
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.ghosttyConfigFilesEnabled) as? Bool == false)
+        // Off keeps the stored list intact but hands the loader nothing.
+        #expect(Preferences.shared.effectiveGhosttyConfigSelection == .disabled)
+
+        Preferences.shared.ghosttyConfigFilesEnabled = true
+        #expect(Preferences.shared.effectiveGhosttyConfigSelection == Preferences.shared.ghosttyConfigSelection)
+    }
+
+    /// The one-time migration that makes Ghostty's default files ordinary
+    /// list entries: found locations become tilde-contracted paths ahead of
+    /// the kept customs, custom duplicates fold in, missing candidates are
+    /// skipped, and the automatic flag drops so it never runs twice.
+    @Test
+    func dissolving_the_default_layer_turns_found_locations_into_plain_entries() {
+        let prior = Preferences.shared.ghosttyConfigSelection
+        defer {
+            Preferences.shared.setGhosttyConfig(
+                loadsDefaultFiles: prior.loadsDefaultFiles,
+                customPaths: prior.customPaths
+            )
+        }
+
+        let home = NSHomeDirectory()
+        Preferences.shared.setGhosttyConfig(
+            loadsDefaultFiles: true,
+            customPaths: ["\(home)/dupe", "/kept/extra"]
+        )
+        Preferences.shared.dissolveGhosttyDefaultLayer(locations: [
+            GhosttyConfigSource.DefaultFileLocation(searchedPath: "\(home)/found", resolvedPath: "\(home)/found"),
+            GhosttyConfigSource.DefaultFileLocation(searchedPath: "\(home)/missing", resolvedPath: nil),
+            GhosttyConfigSource.DefaultFileLocation(searchedPath: "\(home)/dupe", resolvedPath: "\(home)/dupe"),
+        ])
+
+        #expect(Preferences.shared.ghosttyConfigSelection == GhosttyConfigSelection(
+            loadsDefaultFiles: false,
+            customPaths: ["~/found", "~/dupe", "/kept/extra"]
+        ))
+
+        // Already dissolved → a later call must be a no-op, whatever it finds.
+        Preferences.shared.dissolveGhosttyDefaultLayer(locations: [
+            GhosttyConfigSource.DefaultFileLocation(searchedPath: "\(home)/late", resolvedPath: "\(home)/late"),
+        ])
+        #expect(Preferences.shared.ghosttyConfigSelection.customPaths == ["~/found", "~/dupe", "/kept/extra"])
+    }
+
     private func isolatedDefaults() throws -> UserDefaults {
         let suiteName = "com.thdxg.macterm.preferences-tests.\(UUID().uuidString)"
         return try #require(UserDefaults(suiteName: suiteName))

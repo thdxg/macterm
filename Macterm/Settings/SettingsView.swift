@@ -458,13 +458,14 @@ private struct GeneralSettings: View {
 
     @State
     private var terminalScrollSpeed: Double = Preferences.shared.terminalScrollSpeed
+    /// One flat, ordered list of config files. Ghostty's default files hold
+    /// no special status here: the first load dissolved the automatic layer
+    /// into plain entries (`Preferences.dissolveGhosttyDefaultLayer`), so by
+    /// the time this pane renders they're ordinary rows like any other.
     @State
-    private var useDefaultGhosttyConfigFiles: Bool = Preferences.shared.ghosttyConfigSelection.loadsDefaultFiles
+    private var ghosttyConfigFilesEnabled: Bool = Preferences.shared.ghosttyConfigFilesEnabled
     @State
     private var customGhosttyConfigPaths: [String] = Preferences.shared.ghosttyConfigSelection.customPaths
-    @State
-    private var defaultGhosttyConfigFiles: [GhosttyConfigSource.DefaultFileLocation] =
-        GhosttyConfigSource.defaultFileLocations()
 
     /// Which custom-path row is being edited inline, with its draft text.
     /// `customGhosttyConfigPaths.count` marks a new entry being typed via
@@ -490,52 +491,44 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Toggle("Load Ghostty config files", isOn: includeDefaultGhosttyConfigFiles)
-
-                if useDefaultGhosttyConfigFiles {
-                    // Only the locations Ghostty actually found — a missing
-                    // candidate is skipped by the loader and adds nothing but
-                    // noise as a row.
-                    ForEach(defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }) { file in
-                        GhosttyDefaultConfigRow(
-                            file: file,
-                            canMoveUp: canMoveDefaultGhosttyConfigFile(file, by: -1),
-                            canMoveDown: canMoveDefaultGhosttyConfigFile(file, by: 1),
-                            onEdit: { beginEditingDefaultGhosttyConfigFile(file) },
-                            onMoveUp: { moveDefaultGhosttyConfigFile(file, by: -1) },
-                            onMoveDown: { moveDefaultGhosttyConfigFile(file, by: 1) },
-                            onRemove: { removeDefaultGhosttyConfigFile(file) }
-                        )
+                Toggle("Load Ghostty config files", isOn: $ghosttyConfigFilesEnabled)
+                    .onChange(of: ghosttyConfigFilesEnabled) { _, enabled in
+                        commitCustomGhosttyConfigEdit()
+                        Preferences.shared.ghosttyConfigFilesEnabled = enabled
+                        GhosttyApp.shared.reloadAndReport()
                     }
-                }
 
-                ForEach(customGhosttyConfigPaths.indices, id: \.self) { index in
-                    if editingCustomGhosttyConfigIndex == index {
+                // The rows stay visible when loading is off — the list is the
+                // user's, the toggle only governs whether it's read — they
+                // just dim and stop taking edits.
+                Group {
+                    ForEach(customGhosttyConfigPaths.indices, id: \.self) { index in
+                        if editingCustomGhosttyConfigIndex == index {
+                            editingCustomGhosttyConfigRow
+                        } else {
+                            GhosttyConfigFileRow(
+                                path: customGhosttyConfigPaths[index],
+                                problem: customGhosttyConfigProblem(customGhosttyConfigPaths[index]),
+                                canMoveUp: index > 0,
+                                canMoveDown: index < customGhosttyConfigPaths.count - 1,
+                                onEdit: { beginEditingCustomGhosttyConfigPath(at: index) },
+                                onMoveUp: { moveCustomGhosttyConfigPath(at: index, by: -1) },
+                                onMoveDown: { moveCustomGhosttyConfigPath(at: index, by: 1) },
+                                onRemove: { removeCustomGhosttyConfigPath(at: index) }
+                            )
+                        }
+                    }
+                    if editingCustomGhosttyConfigIndex == customGhosttyConfigPaths.count {
                         editingCustomGhosttyConfigRow
-                    } else {
-                        GhosttyCustomConfigRow(
-                            path: customGhosttyConfigPaths[index],
-                            problem: customGhosttyConfigProblem(customGhosttyConfigPaths[index]),
-                            canMoveUp: index > 0,
-                            canMoveDown: index < customGhosttyConfigPaths.count - 1,
-                            onEdit: { beginEditingCustomGhosttyConfigPath(at: index) },
-                            onMoveUp: { moveCustomGhosttyConfigPath(at: index, by: -1) },
-                            onMoveDown: { moveCustomGhosttyConfigPath(at: index, by: 1) },
-                            onRemove: { removeCustomGhosttyConfigPath(at: index) }
-                        )
+                    }
+
+                    if customGhosttyConfigPaths.isEmpty, editingCustomGhosttyConfigIndex == nil {
+                        Text("No config files.")
+                            .foregroundStyle(.secondary)
                     }
                 }
-                if editingCustomGhosttyConfigIndex == customGhosttyConfigPaths.count {
-                    editingCustomGhosttyConfigRow
-                }
-
-                if !useDefaultGhosttyConfigFiles,
-                   customGhosttyConfigPaths.isEmpty,
-                   editingCustomGhosttyConfigIndex == nil
-                {
-                    Text("No config files.")
-                        .foregroundStyle(.secondary)
-                }
+                .disabled(!ghosttyConfigFilesEnabled)
+                .opacity(ghosttyConfigFilesEnabled ? 1 : 0.45)
 
                 HStack {
                     Text("Files load from top to bottom; later files override earlier ones.")
@@ -555,6 +548,8 @@ private struct GeneralSettings: View {
                     Menu {
                         Button("Choose Files…") { browseForCustomGhosttyConfigFiles() }
                         Button("Enter Path…") { beginEnteringCustomGhosttyConfigPath() }
+                        Divider()
+                        Button("Ghostty Default Files") { addGhosttyDefaultConfigFiles() }
                     } label: {
                         Label("Add Config File", systemImage: "plus")
                             .labelStyle(.iconOnly)
@@ -562,6 +557,7 @@ private struct GeneralSettings: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
+                    .disabled(!ghosttyConfigFilesEnabled)
                     .help("Add a config file")
                 }
             }
@@ -636,7 +632,6 @@ private struct GeneralSettings: View {
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             hasFullDiskAccess = FullDiskAccess.isGranted()
-            refreshDefaultGhosttyConfigLocations()
         }
         .onChange(of: isCustomGhosttyConfigFieldFocused) { wasFocused, isFocused in
             guard wasFocused, !isFocused else { return }
@@ -665,140 +660,32 @@ private struct GeneralSettings: View {
         .padding(.vertical, 2)
     }
 
-    /// Persist the two config layers together, then reload once.
+    /// Persist the list and reload. The stored selection is always plain
+    /// paths by the time this pane exists — the first load dissolved the
+    /// automatic default layer into entries.
     private func commitGhosttyConfig() {
         let customPaths = customGhosttyConfigPaths.filter { !$0.isEmpty }
-        let selection = GhosttyConfigSelection(
-            loadsDefaultFiles: useDefaultGhosttyConfigFiles,
-            customPaths: customPaths
-        )
+        let selection = GhosttyConfigSelection(loadsDefaultFiles: false, customPaths: customPaths)
         if selection != Preferences.shared.ghosttyConfigSelection {
-            Preferences.shared.setGhosttyConfig(
-                loadsDefaultFiles: useDefaultGhosttyConfigFiles,
-                customPaths: customPaths
-            )
+            Preferences.shared.setGhosttyConfig(loadsDefaultFiles: false, customPaths: customPaths)
         }
         GhosttyApp.shared.reloadAndReport()
-        refreshDefaultGhosttyConfigLocations()
     }
 
-    /// The toggle reports whether Ghostty's own config files are in the list
-    /// at all — through the automatic default layer, or as the explicit
-    /// custom entries a reorder/edit converts them into (the layer's order
-    /// is fixed, so customizing moves the files to the custom layer; the
-    /// toggle staying on reflects that they still load). Setting it either
-    /// way folds custom entries that duplicate a found default out of the
-    /// list, so off→on never lists a file twice: on restores the automatic
-    /// layer, off removes the files from both layers.
-    private var includeDefaultGhosttyConfigFiles: Binding<Bool> {
-        Binding(
-            get: {
-                if useDefaultGhosttyConfigFiles { return true }
-                let searched = defaultGhosttyConfigFiles
-                    .filter { $0.resolvedPath != nil }
-                    .map(\.searchedPath)
-                guard !searched.isEmpty else { return false }
-                let customs = Set(customGhosttyConfigPaths.map { ($0 as NSString).expandingTildeInPath })
-                return searched.allSatisfy { customs.contains($0) }
-            },
-            set: { include in
-                commitCustomGhosttyConfigEdit()
-                useDefaultGhosttyConfigFiles = include
-                removeCustomGhosttyConfigPathsMatchingFoundDefaults()
-                commitGhosttyConfig()
-            }
-        )
-    }
-
-    /// Drops custom entries that point at a location the default layer
-    /// already found — the fold used when the toggle changes, so the same
-    /// file is never listed by both layers.
-    private func removeCustomGhosttyConfigPathsMatchingFoundDefaults() {
-        var found = Set<String>()
-        for file in defaultGhosttyConfigFiles where file.resolvedPath != nil {
-            found.insert(file.searchedPath)
-            if let resolved = file.resolvedPath {
-                found.insert(resolved)
-            }
-        }
-        customGhosttyConfigPaths.removeAll {
-            found.contains(($0 as NSString).expandingTildeInPath)
-        }
-    }
-
-    /// Ghostty's default layer is all-or-nothing in the loader, so per-file
-    /// changes to it first convert the whole layer into explicit custom
-    /// entries: the automatic layer switches off and every FOUND default
-    /// becomes a regular row (minus one being removed), ahead of the existing
-    /// custom entries since defaults load first. The visible toggle stays on
-    /// after a reorder/edit — it reads presence, not the layer flag. Missing
-    /// candidates are never converted — a missing custom file raises a "file
-    /// not found" alert on every reload, which a merely-absent default
-    /// location doesn't deserve. Custom entries that duplicated a converted
-    /// default are folded in rather than kept twice. Callers commit.
-    private func convertDefaultGhosttyConfigFilesToCustom(
-        removing removed: GhosttyConfigSource.DefaultFileLocation? = nil
-    ) {
-        let converted = defaultGhosttyConfigFiles
-            .filter { $0.resolvedPath != nil && $0.searchedPath != removed?.searchedPath }
+    /// Seeds the locations Ghostty itself would load — the set the automatic
+    /// layer once covered — as ordinary entries at the top of the list (they
+    /// load first by convention), skipping any already listed. The escape
+    /// hatch for re-adding a deleted default without typing its path.
+    private func addGhosttyDefaultConfigFiles() {
+        commitCustomGhosttyConfigEdit()
+        let listed = expandedListedGhosttyConfigPaths()
+        let additions = GhosttyConfigSource.defaultFileLocations()
+            .filter { $0.resolvedPath != nil }
+            .filter { !listed.contains($0.searchedPath) && !listed.contains($0.resolvedPath ?? "") }
             .map { ($0.searchedPath as NSString).abbreviatingWithTildeInPath }
-        let convertedExpanded = Set(converted.map { ($0 as NSString).expandingTildeInPath })
-        let keptCustomPaths = customGhosttyConfigPaths.filter {
-            !convertedExpanded.contains(($0 as NSString).expandingTildeInPath)
-        }
-        useDefaultGhosttyConfigFiles = false
-        customGhosttyConfigPaths = converted + keptCustomPaths
-    }
-
-    private func removeDefaultGhosttyConfigFile(_ file: GhosttyConfigSource.DefaultFileLocation) {
-        guard finishPendingCustomGhosttyConfigEdit() else { return }
-        convertDefaultGhosttyConfigFilesToCustom(removing: file)
+        guard !additions.isEmpty else { return }
+        customGhosttyConfigPaths.insert(contentsOf: additions, at: 0)
         commitGhosttyConfig()
-    }
-
-    private func beginEditingDefaultGhosttyConfigFile(_ file: GhosttyConfigSource.DefaultFileLocation) {
-        guard finishPendingCustomGhosttyConfigEdit() else { return }
-        convertDefaultGhosttyConfigFilesToCustom()
-        commitGhosttyConfig()
-        let target = (file.searchedPath as NSString).expandingTildeInPath
-        guard let index = customGhosttyConfigPaths.firstIndex(where: {
-            ($0 as NSString).expandingTildeInPath == target
-        })
-        else { return }
-        editingCustomGhosttyConfigText = customGhosttyConfigPaths[index]
-        editingCustomGhosttyConfigIndex = index
-        isCustomGhosttyConfigFieldFocused = true
-    }
-
-    private func moveDefaultGhosttyConfigFile(
-        _ file: GhosttyConfigSource.DefaultFileLocation,
-        by offset: Int
-    ) {
-        guard finishPendingCustomGhosttyConfigEdit() else { return }
-        convertDefaultGhosttyConfigFilesToCustom()
-        let target = (file.searchedPath as NSString).expandingTildeInPath
-        if let index = customGhosttyConfigPaths.firstIndex(where: {
-            ($0 as NSString).expandingTildeInPath == target
-        }), customGhosttyConfigPaths.indices.contains(index + offset) {
-            customGhosttyConfigPaths.swapAt(index, index + offset)
-        }
-        commitGhosttyConfig()
-    }
-
-    /// Whether a default row's Move item should be enabled: its position in
-    /// the post-conversion list (found defaults, then customs). Approximate
-    /// when a custom entry duplicates a default — the move handler's own
-    /// bounds check is the backstop.
-    private func canMoveDefaultGhosttyConfigFile(
-        _ file: GhosttyConfigSource.DefaultFileLocation,
-        by offset: Int
-    ) -> Bool {
-        let found = defaultGhosttyConfigFiles.filter { $0.resolvedPath != nil }
-        guard let index = found.firstIndex(of: file) else { return false }
-        if offset < 0 {
-            return index > 0
-        }
-        return index < found.count - 1 || !customGhosttyConfigPaths.isEmpty
     }
 
     /// Why a custom entry gets the warning icon, or nil when it's a plausible
@@ -814,20 +701,10 @@ private struct GeneralSettings: View {
         return isDirectory.boolValue ? "Not a file." : nil
     }
 
-    /// Expanded forms of every path the list already shows — the found default
-    /// locations (both the searched path and its resolve target) while the
-    /// toggle is on, plus the committed custom entries — so adds and edits
-    /// refuse duplicates against the whole list, not just the custom layer.
+    /// Expanded forms of every path already in the list, so adds and edits
+    /// refuse duplicates.
     private func expandedListedGhosttyConfigPaths(excludingCustomIndex excluded: Int? = nil) -> Set<String> {
         var listed = Set<String>()
-        if useDefaultGhosttyConfigFiles {
-            for file in defaultGhosttyConfigFiles where file.resolvedPath != nil {
-                listed.insert(file.searchedPath)
-                if let resolved = file.resolvedPath {
-                    listed.insert(resolved)
-                }
-            }
-        }
         for (index, path) in customGhosttyConfigPaths.enumerated() where index != excluded {
             listed.insert((path as NSString).expandingTildeInPath)
         }
@@ -934,80 +811,17 @@ private struct GeneralSettings: View {
         customGhosttyConfigPaths.append(contentsOf: additions)
         commitGhosttyConfig()
     }
-
-    private func refreshDefaultGhosttyConfigLocations() {
-        defaultGhosttyConfigFiles = GhosttyConfigSource.defaultFileLocations()
-    }
 }
 
 // MARK: - Ghostty config rows
 
-/// One of the config files Ghostty's own loader found, listed while the
-/// default-files toggle is on. Edit/Move/Remove convert the whole default
-/// layer into explicit custom entries first, since the loader takes defaults
-/// all-or-nothing. Missing candidate locations aren't listed at all — the
-/// loader skips them silently, so a row would be noise.
-private struct GhosttyDefaultConfigRow: View {
-    let file: GhosttyConfigSource.DefaultFileLocation
-    let canMoveUp: Bool
-    let canMoveDown: Bool
-    let onEdit: () -> Void
-    let onMoveUp: () -> Void
-    let onMoveDown: () -> Void
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text((file.searchedPath as NSString).abbreviatingWithTildeInPath)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(file.searchedPath)
-                if let resolved = file.resolvedPath, resolved != file.searchedPath {
-                    Text("Resolves to \((resolved as NSString).abbreviatingWithTildeInPath)")
-                        .settingsCaption()
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(resolved)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            Menu {
-                Button("Edit Path") { onEdit() }
-
-                Divider()
-
-                Button("Move Up") { onMoveUp() }
-                    .disabled(!canMoveUp)
-
-                Button("Move Down") { onMoveDown() }
-                    .disabled(!canMoveDown)
-
-                Divider()
-
-                Button("Remove", role: .destructive) { onRemove() }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-/// A user-added config file: its path and its actions in a menu — the same
-/// row shape as the Projects pane. Move Up/Down matter here because later
-/// files override earlier ones. A non-nil `problem` swaps the file icon for
-/// a warning triangle with the reason underneath.
-private struct GhosttyCustomConfigRow: View {
+/// One config file in the list: its path and its actions in a menu — the
+/// same row shape as the Projects pane. All entries are equal here (Ghostty's
+/// default files were dissolved into ordinary entries at first load). Move
+/// Up/Down matter because later files override earlier ones. A non-nil
+/// `problem` swaps the file icon for a warning triangle with the reason
+/// underneath.
+private struct GhosttyConfigFileRow: View {
     let path: String
     let problem: String?
     let canMoveUp: Bool
