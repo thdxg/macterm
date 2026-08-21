@@ -1348,7 +1348,22 @@ final class AppState {
         at target: TabDropResolution.Target,
         inProject destProjectID: UUID
     ) {
-        guard let destTab = workspaces[destProjectID]?.activeTab,
+        guard let destTab = workspaces[destProjectID]?.activeTab else { return }
+        mergeTab(tabID, from: sourceProjectID, intoTab: destTab.id, at: target, inProject: destProjectID)
+    }
+
+    /// Merge a tab into a NAMED tab rather than the active one — what a drop
+    /// on a sidebar row means, where the destination is the row under the
+    /// cursor and nothing about the workspace is on screen to aim at (hence
+    /// the caller's fixed `target`, not a cursor-resolved one).
+    func mergeTab(
+        _ tabID: UUID,
+        from sourceProjectID: UUID,
+        intoTab destTabID: UUID,
+        at target: TabDropResolution.Target,
+        inProject destProjectID: UUID
+    ) {
+        guard let destTab = workspaces[destProjectID]?.tabs.first(where: { $0.id == destTabID }),
               destTab.id != tabID,
               let sourceTab = detachTabForMerge(tabID, from: sourceProjectID, to: destProjectID)
         else { return }
@@ -1443,16 +1458,7 @@ final class AppState {
         logger.debug(
             "separatePane: \(paneID, privacy: .public) to=\(destProjectID, privacy: .public) index=\(index ?? -1, privacy: .public)"
         )
-        // Detach without destroying: the same tree/zoom/focus repair as
-        // `removePane`, minus the surface teardown — the pane lives on.
-        sourceTab.splitRoot = remaining
-        if sourceTab.zoomedPaneID == paneID { sourceTab.zoomedPaneID = nil }
-        sourceTab.paneFocusHistory.remove(paneID)
-        if sourceTab.focusedPaneID == paneID {
-            sourceTab.focusedPaneID = sourceTab.nextFocusAfterClose()
-        }
-        if Preferences.shared.autoTilingEnabled { sourceTab.splitRoot.rebalanced() }
-
+        detachPane(pane, from: sourceTab, leaving: remaining)
         if sourceProjectID != destProjectID {
             pane.rebind(projectID: destProjectID)
         }
@@ -1461,6 +1467,69 @@ final class AppState {
         activeProjectID = destProjectID
         recordProjectVisit(destProjectID)
         saveWorkspaces()
+    }
+
+    /// Move a single pane into ANOTHER tab's split tree — the inverse of
+    /// `separatePane`, and the pane-sized sibling of `mergeTab`: what dropping
+    /// a pane on a sidebar tab row means. The `Pane` object is reused, so the
+    /// surface and shell survive the move. `target` is fixed by the caller
+    /// (a sidebar row shows no workspace geometry to aim at), and a pane that
+    /// is its tab's ONLY pane routes through `mergeTab` instead — that case is
+    /// a whole-tab merge, and leaving the emptied tab behind is not.
+    /// No-op when the pane isn't in any workspace or already lives in the
+    /// destination tab.
+    func mergePane(
+        _ paneID: UUID,
+        intoTab destTabID: UUID,
+        inProject destProjectID: UUID,
+        destPath: String,
+        at target: TabDropResolution.Target
+    ) {
+        guard let (sourceProjectID, sourceTab) = locatePane(paneID), sourceTab.id != destTabID else { return }
+        if sourceTab.splitRoot.allPanes().count == 1 {
+            mergeTab(sourceTab.id, from: sourceProjectID, intoTab: destTabID, at: target, inProject: destProjectID)
+            return
+        }
+        // Resolve the destination before detaching, so a failure can't leave
+        // the pane belonging to no tab (same ordering as `separatePane`).
+        ensureWorkspace(projectID: destProjectID, path: destPath)
+        guard let destTab = workspaces[destProjectID]?.tabs.first(where: { $0.id == destTabID }),
+              let pane = sourceTab.splitRoot.findPane(id: paneID),
+              let remaining = sourceTab.splitRoot.removing(paneID: paneID)
+        else { return }
+        logger.debug(
+            "mergePane: \(paneID, privacy: .public) into=\(destTabID, privacy: .public)"
+        )
+        // Snapshot what the detach repairs, so a refused merge can restore the
+        // source tab wholesale — the same rollback shape as `movePane`.
+        let original = (root: sourceTab.splitRoot, focused: sourceTab.focusedPaneID, zoomed: sourceTab.zoomedPaneID)
+        detachPane(pane, from: sourceTab, leaving: remaining)
+        if sourceProjectID != destProjectID {
+            pane.rebind(projectID: destProjectID)
+        }
+        guard destTab.mergeTree(.pane(pane), at: target) else {
+            // The destination tree refused the target: put the pane back
+            // rather than lose its live shell.
+            if sourceProjectID != destProjectID { pane.rebind(projectID: sourceProjectID) }
+            sourceTab.splitRoot = original.root
+            sourceTab.focusedPaneID = original.focused
+            sourceTab.zoomedPaneID = original.zoomed
+            return
+        }
+        finishMerge(intoTab: destTabID, inProject: destProjectID)
+    }
+
+    /// Detach a pane from its tab without destroying it: the same tree/zoom/
+    /// focus repair as `removePane`, minus the surface teardown — the pane
+    /// lives on in whatever tab the caller hands it to.
+    private func detachPane(_ pane: Pane, from sourceTab: TerminalTab, leaving remaining: SplitNode) {
+        sourceTab.splitRoot = remaining
+        if sourceTab.zoomedPaneID == pane.id { sourceTab.zoomedPaneID = nil }
+        sourceTab.paneFocusHistory.remove(pane.id)
+        if sourceTab.focusedPaneID == pane.id {
+            sourceTab.focusedPaneID = sourceTab.nextFocusAfterClose()
+        }
+        if Preferences.shared.autoTilingEnabled { sourceTab.splitRoot.rebalanced() }
     }
 
     /// Find the workspace tab currently holding a pane. Scans every loaded

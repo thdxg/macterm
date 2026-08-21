@@ -13,6 +13,32 @@ private enum SidebarItem: Hashable {
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
+/// The TITLE's coordinate space. Everything the join band needs — the seams
+/// it draws on and the pointer positions it compares them against — is
+/// measured here, so there is no conversion between two spaces to get wrong.
+private let tabTitleSpace = "macterm.sidebar.tabTitle"
+
+/// The width the title has to work with, which decides whether a split tab
+/// shows its panes' names or falls back to counting them.
+private struct TabTitleWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Where a split row actually drew its per-pane segments. The join indicator
+/// has to sit on the divider the user is aiming at, and only the layout knows
+/// where that ended up.
+private struct TabSegmentFramesKey: PreferenceKey {
+    static let defaultValue: [CGRect] = []
+
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
 /// Keeps the sidebar footer above scrolling rows, using the native macOS 26
 /// scroll-edge fade when available.
 private extension View {
@@ -378,33 +404,22 @@ struct SidebarContent: View {
     }
 
     private func tabRow(tab: TerminalTab, index tabIndex: Int, project: Project) -> some View {
-        SidebarTabRow(
+        TabRow(
             tab: tab,
             index: tabIndex + 1,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
+            },
+            onMergeDrop: { item, insertionIndex in
+                receiveMergeDrop(item, into: tab, project: project, at: insertionIndex)
             }
         )
-        .padding(.trailing, rowTrailingInset)
-        // Stretch to the full row and make every point hit-testable: without
-        // this, the drag grab area hugs the label's intrinsic width instead
-        // of covering the whole row.
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
         .tag(SidebarItem.tab(projectID: project.id, tabID: tab.id))
         // Drag a tab out to another project (or reorder within this one). The
         // payload is just IDs — the live tab is looked up on drop, never
         // serialized.
         .draggable(MovableTab(tabID: tab.id, sourceProjectID: project.id))
-        // Deliberately NO drop destination on tab rows. Any destination here
-        // — even one registered for the project payload alone — claims every
-        // drag over the row before the tab ForEach's insertion mechanism sees
-        // it (SwiftUI routes a drag to the topmost target by geometry with no
-        // type fall-through), which kills the native insertion line and broke
-        // tab reordering outright when tried. The cost is that a PROJECT drag
-        // over an expanded section's tab rows has nothing to land on — drop
-        // it on a project header instead. The insertion line won.
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
@@ -477,6 +492,46 @@ struct SidebarContent: View {
             }
         }
         expandedProjects.insert(project.id)
+    }
+
+    /// Apply a drop on a tab row's merge band: the dragged pane (or the whole
+    /// dragged tab) JOINS this tab's split tree — the inverse of dragging a
+    /// pane out to the sidebar, and the gesture that puts two terminals back
+    /// in one tab without aiming at the workspace.
+    ///
+    /// `insertionIndex` is the seam the pointer chose, so the drop decides the
+    /// ORDER inside the tab too, not just which tab. A row whose panes have
+    /// vanished mid-drag resolves to no target and the drop is dropped, rather
+    /// than landing somewhere the user didn't point at.
+    private func receiveMergeDrop(
+        _ item: TabSlotDropItem,
+        into tab: TerminalTab,
+        project: Project,
+        at insertionIndex: Int
+    ) {
+        guard let target = TabMergePlacement.target(
+            insertionIndex: insertionIndex,
+            panes: tab.splitRoot.allPanes().map(\.id)
+        )
+        else { return }
+        switch item {
+        case let .tab(dragged):
+            appState.mergeTab(
+                dragged.tabID,
+                from: dragged.sourceProjectID,
+                intoTab: tab.id,
+                at: target,
+                inProject: project.id
+            )
+        case let .pane(dragged):
+            appState.mergePane(
+                dragged.paneID,
+                intoTab: tab.id,
+                inProject: project.id,
+                destPath: project.path,
+                at: target
+            )
+        }
     }
 
     /// Apply a pane drag-and-drop: the pane leaves its split tree and becomes
@@ -840,6 +895,235 @@ private struct SidebarProjectRow: View {
     }
 }
 
+/// One tab's row: the label, the seams its split segments were drawn at, and
+/// the merge band that uses them.
+///
+/// A view rather than a function on `SidebarContent` because the seams are
+/// measured state: the segments report their frames through a preference, and
+/// the band needs them to draw the indicator on the divider rather than a few
+/// points beside it.
+private struct TabRow: View {
+    let tab: TerminalTab
+    let index: Int
+    let onRename: (String) -> Void
+    let onMergeDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
+
+    var body: some View {
+        // The join band lives INSIDE the row's title (see `SidebarTabRow`),
+        // not as an overlay measured against the row. Two attempts to place it
+        // by geometry both leaked: the tab's icon kept accepting drops, either
+        // because the frame was measured in one space and the drop reported in
+        // another, or because `.position` handed the whole row back as the
+        // target. Making the title the band's parent removes the arithmetic —
+        // the icon is outside it by construction.
+        SidebarTabRow(tab: tab, index: index, onRename: onRename, onMergeDrop: onMergeDrop)
+            .padding(.trailing, rowTrailingInset)
+            // Stretch to the full row and make every point hit-testable:
+            // without this, the drag grab area hugs the label's intrinsic
+            // width instead of covering the whole row.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+    }
+}
+
+/// The merge band across a tab row's middle: drop a pane (or another tab)
+/// here and it joins THIS tab's split tree, at the position you aimed at.
+///
+/// Spanning the row's full width at its vertical CENTER is what gives a drag
+/// three distinct meanings over one row — aim high (the seam under the row
+/// above) to insert a new tab before this one, aim low (the seam over the row
+/// below) to insert after, aim at the body to join. The height is a fraction
+/// rather than an inset so those outer bands stay reachable at any row height:
+/// they belong to the native insertion line, and a band that covered them
+/// would claim the drag first and kill tab reordering (see `tabRow`).
+///
+/// The affordance is an insertion line, not a filled rectangle, because a
+/// filled row can only say "it goes in here" — while a split tab's row draws
+/// one segment per pane, and the seams between them are positions the user can
+/// already see. A line at the nearest seam says WHERE among them it lands.
+private struct TabMergeSlot: View {
+    /// Share of the row height the join band takes, leaving a quarter of the
+    /// row above and below it for the insertion line.
+    private static let heightFraction: CGFloat = 0.5
+    /// Never shrink below a band the pointer can actually land in.
+    private static let minHeight: CGFloat = 10
+
+    let paneIDs: [UUID]
+    /// Where the row drew its segment dividers, empty when it drew none.
+    let seams: [CGFloat]
+    /// `@Sendable @MainActor` because the async payload fallback hands this to
+    /// an item provider's completion, which runs off the main actor: a plain
+    /// closure can't cross that boundary under Swift 6's isolation checking.
+    let onDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
+
+    /// Which seam the pointer is nearest, or nil when no drag is over the
+    /// band. Doubles as the "is targeted" flag — there is no state where the
+    /// line should draw without a position.
+    @State
+    private var insertionIndex: Int?
+
+    var body: some View {
+        GeometryReader { geo in
+            let bandHeight = max(geo.size.height * Self.heightFraction, Self.minHeight)
+            // A row that drew no dividers — a single-pane tab, or one
+            // collapsed to a pane count — offers exactly one position, its
+            // trailing edge: there is nothing visible to land BETWEEN, so the
+            // only honest indicator is "after what is here".
+            let positions = seams.isEmpty ? [geo.size.width] : seams
+            ZStack(alignment: .topLeading) {
+                // The band spans this view, which IS the title area — no
+                // measuring, no coordinate conversion, and the pointer
+                // positions the drop reports are already in the same space as
+                // the seams.
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: bandHeight)
+                    .frame(maxHeight: .infinity, alignment: .center)
+                    .onDrop(
+                        of: [.mactermPaneID, .mactermTab],
+                        delegate: TabMergeDropDelegate(
+                            positions: positions,
+                            appendIndex: paneIDs.count,
+                            hasSeams: !seams.isEmpty,
+                            insertionIndex: $insertionIndex,
+                            onDrop: onDrop
+                        )
+                    )
+
+                if let insertionIndex {
+                    InsertionLine(
+                        x: positions[min(insertionIndex, positions.count - 1)],
+                        height: geo.size.height
+                    )
+                    // Drawn over the whole row while the band that reads the
+                    // drop stays the middle half, so the outer quarters keep
+                    // belonging to the row-order insertion line even though
+                    // this reaches them.
+                    .allowsHitTesting(false)
+                }
+            }
+        }
+    }
+}
+
+/// The join indicator: a vertical rule at the chosen seam, capped with a dot,
+/// matching the shape of the insertion line the List draws between rows so the
+/// two gestures read as one family — that one orders TABS, this one orders the
+/// terminals inside a tab.
+private struct InsertionLine: View {
+    private static let lineWidth: CGFloat = 2
+    private static let dotDiameter: CGFloat = 6
+
+    let x: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(MactermTheme.accent)
+                .frame(width: Self.lineWidth, height: height)
+            Circle()
+                .fill(MactermTheme.accent)
+                .frame(width: Self.dotDiameter, height: Self.dotDiameter)
+                .offset(y: -Self.dotDiameter / 3)
+        }
+        // Half the line width in from either end, so a seam at the row's edge
+        // draws fully inside it rather than half-clipped.
+        .position(x: max(x, Self.lineWidth / 2), y: height / 2)
+        .animation(.easeInOut(duration: 0.08), value: x)
+    }
+}
+
+/// A raw `DropDelegate` rather than `.dropDestination(for:)`, for one reason:
+/// the Transferable form reports no pointer location, and the position within
+/// the row IS the choice being made here. Payloads are therefore decoded the
+/// same way the workspace leaves decode them.
+private struct TabMergeDropDelegate: DropDelegate {
+    /// The x positions the indicator can occupy — the row's real dividers, or
+    /// a single trailing edge when it drew none.
+    let positions: [CGFloat]
+    /// The index a position-less row resolves to: append after every pane.
+    let appendIndex: Int
+    let hasSeams: Bool
+    let insertionIndex: Binding<Int?>
+    let onDrop: @Sendable @MainActor (TabSlotDropItem, Int) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.mactermPaneID, .mactermTab])
+    }
+
+    func dropEntered(info: DropInfo) {
+        update(info)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        // `dropUpdated` fires again AFTER `performDrop`, and updating there
+        // re-showed the indicator on a completed drop and left it stuck on the
+        // row — the same trap `LeafDropDelegate` documents. Only a drag that
+        // is still in flight (entered, not yet dropped) has a position.
+        guard insertionIndex.wrappedValue != nil else { return DropProposal(operation: .forbidden) }
+        update(info)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info _: DropInfo) {
+        insertionIndex.wrappedValue = nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let index = resolvedIndex(at: info.location.x)
+        insertionIndex.wrappedValue = nil
+
+        // A pane's bytes are usually already on the drag pasteboard (the grab
+        // handle writes them eagerly); a sidebar segment's arrive through the
+        // item provider, so both reads exist here as they do on the leaves.
+        if let movable = MovablePane.fromDragPasteboard() {
+            let drop = onDrop
+            MainActor.assumeIsolated { drop(.pane(movable), index) }
+            return true
+        }
+        if let movable = MovableTab.fromDragPasteboard() {
+            let drop = onDrop
+            MainActor.assumeIsolated { drop(.tab(movable), index) }
+            return true
+        }
+        return loadAsync(info: info, index: index)
+    }
+
+    private func loadAsync(info: DropInfo, index: Int) -> Bool {
+        let drop = onDrop
+        if let provider = info.itemProviders(for: [.mactermPaneID]).first {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermPaneID.identifier) { data, _ in
+                guard let data, let movable = MovablePane(payload: data) else { return }
+                Task { @MainActor in
+                    drop(.pane(movable), index)
+                }
+            }
+            return true
+        }
+        guard let provider = info.itemProviders(for: [.mactermTab]).first else { return false }
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.mactermTab.identifier) { data, _ in
+            guard let data, let movable = try? JSONDecoder().decode(MovableTab.self, from: data) else { return }
+            Task { @MainActor in
+                drop(.tab(movable), index)
+            }
+        }
+        return true
+    }
+
+    private func update(_ info: DropInfo) {
+        insertionIndex.wrappedValue = resolvedIndex(at: info.location.x)
+    }
+
+    /// Seam index for a pointer position — or the append slot for a row with
+    /// no dividers, where the single drawn position means "after everything"
+    /// regardless of how many panes are behind it.
+    private func resolvedIndex(at x: CGFloat) -> Int {
+        guard hasSeams else { return appendIndex }
+        return TabMergePlacement.insertionIndex(x: x, seams: positions)
+    }
+}
+
 private struct SidebarTabRow: View {
     let tab: TerminalTab
     let index: Int
@@ -847,6 +1131,38 @@ private struct SidebarTabRow: View {
     /// pinned rows pass "pin" so the icon itself marks the row's kind.
     var iconSymbolOverride: String?
     let onRename: (String) -> Void
+    /// Absent on rows that can't be joined into: a pinned row belongs to no
+    /// project, and both `mergePane` and `mergeTab` resolve their destination
+    /// through one. Those rows carry no join band at all, rather than showing
+    /// an indicator for a drop that would be refused.
+    var onMergeDrop: (@Sendable @MainActor (TabSlotDropItem, Int) -> Void)?
+
+    /// Where this row drew its segment dividers, in the title's own space.
+    @State
+    private var seams: [CGFloat] = []
+
+    /// The title's width, for deciding how many names fit.
+    @State
+    private var titleWidth: CGFloat = 0
+
+    /// Room a segment needs before its title is worth showing. Tuned on
+    /// screen: 44pt held names back while they were still perfectly readable,
+    /// and the fading titles degrade gracefully — a clipped `nvi…` still says
+    /// more than a pane count does.
+    private static let minSegmentWidth: CGFloat = 32
+
+    /// Show one title per pane while they still fit, and count them when they
+    /// don't. The old rule was a fixed "2 or 3 panes", which is the same
+    /// judgement made once for a sidebar that can be dragged from 140pt to
+    /// 280pt: at its widest four names fit comfortably, at its narrowest even
+    /// two are cramped. A user-set title always wins — the user named the
+    /// whole tab, so the tab is what the row should say.
+    private var showsSegments: Bool {
+        let panes = tab.splitRoot.allPanes().count
+        guard tab.customTitle == nil, panes >= 2 else { return false }
+        return titleWidth >= CGFloat(panes) * Self.minSegmentWidth
+    }
+
     @Environment(AppState.self)
     private var appState
     @AppStorage(Preferences.Keys.tabIconSymbol)
@@ -866,8 +1182,47 @@ private struct SidebarTabRow: View {
     @FocusState
     private var focused: Bool
 
-    @ViewBuilder
+    /// The title, and over it the band that joins terminals into this tab.
+    ///
+    /// The band is a child of the TITLE rather than an overlay on the row,
+    /// because the title is exactly the region it should cover: the tab's icon
+    /// names the whole tab and is where the row's own drag lifts from, so it
+    /// must not offer a position among the panes. Two attempts to achieve that
+    /// by measuring frames both leaked the icon back in — one of them because
+    /// the measurement landed on the PROJECT row's title, which has the same
+    /// shape. Parenting removes the arithmetic and the ambiguity.
+    ///
+    /// Expanding to the full width keeps the target usable: a single-pane
+    /// row's title is only as wide as the word in it, and a band that narrow
+    /// made joining two single-pane tabs impossible.
     private var titleContent: some View {
+        rawTitle
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .coordinateSpace(name: tabTitleSpace)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: TabTitleWidthKey.self, value: proxy.size.width)
+                }
+            }
+            .onPreferenceChange(TabTitleWidthKey.self) { width in
+                titleWidth = width
+            }
+            .onPreferenceChange(TabSegmentFramesKey.self) { frames in
+                seams = TabMergePlacement.seams(segmentFrames: frames)
+            }
+            .overlay {
+                if let onMergeDrop {
+                    TabMergeSlot(
+                        paneIDs: tab.splitRoot.allPanes().map(\.id),
+                        seams: seams,
+                        onDrop: onMergeDrop
+                    )
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var rawTitle: some View {
         if isRenaming {
             TextField(tab.autoTitle, text: $renameText)
                 .textFieldStyle(.plain)
@@ -876,7 +1231,7 @@ private struct SidebarTabRow: View {
                 .onExitCommand { cancelRename() }
                 .onAppear { focused = true }
         } else {
-            TabRowTitle(tab: tab)
+            TabRowTitle(tab: tab, showsSegments: showsSegments)
         }
     }
 
@@ -1027,14 +1382,38 @@ private struct PinTabDropZone: View {
 /// their own labels: the row carries one tab icon regardless.
 private struct TabRowTitle: View {
     let tab: TerminalTab
+    /// Whether this row has room to name each pane. Decided by the row, which
+    /// is what measures the title's width — a fixed pane count can't answer it
+    /// for a sidebar the user can drag between 140pt and 280pt.
+    var showsSegments = false
 
     var body: some View {
-        if tab.customTitle == nil, (2 ... 3).contains(tab.splitRoot.allPanes().count) {
+        if showsSegments {
             HStack(spacing: 10) {
                 ForEach(Array(tab.splitRoot.allPanes().enumerated()), id: \.element.id) { i, pane in
                     if i > 0 { Divider() }
                     FadingText(pane.sidebarSegmentTitle)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Hit-testable across the whole segment, not just the
+                        // glyphs: a short title would otherwise leave most of
+                        // its share of the row dragging the tab instead.
+                        .contentShape(Rectangle())
+                        // Each segment lifts its OWN pane. A split tab reads as
+                        // several terminals sharing a row, so dragging the one
+                        // you pointed at moves that one; the row's own drag,
+                        // from the icon and the space around the segments,
+                        // still moves the whole tab.
+                        .draggable(MovablePane(paneID: pane.id))
+                        // Publishes where this segment was drawn, so the join
+                        // indicator can sit on the divider the user aims at.
+                        .background {
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: TabSegmentFramesKey.self,
+                                    value: [proxy.frame(in: .named(tabTitleSpace))]
+                                )
+                            }
+                        }
                 }
             }
         } else {
