@@ -456,6 +456,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // get a `starting` error until installResponders attaches the
         // handler.
         controlServer.start()
+        // Faster tooltips app-wide (macOS defaults to ~1.5s before a .help
+        // tooltip appears). AppKit reads this knob only from the standard
+        // defaults domain, so the Preferences seam can't carry it; register()
+        // puts it in the volatile registration domain — never persisted, and
+        // a user-set value in any real domain still wins — which is why this
+        // doesn't breach the "never UserDefaults.standard in app code" rule.
+        UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 350])
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
         if BenchmarkControl.isEnabled {
             // Under the CI benchmark, the notification-permission alert would
