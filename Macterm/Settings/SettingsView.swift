@@ -490,15 +490,7 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Toggle("Load Ghostty config files", isOn: $useDefaultGhosttyConfigFiles)
-                    .onChange(of: useDefaultGhosttyConfigFiles) { _, loads in
-                        // The per-file handlers below flip this state and
-                        // commit in one step; skip the redundant reload when
-                        // the persisted value already agrees.
-                        guard loads != Preferences.shared.ghosttyConfigSelection.loadsDefaultFiles
-                        else { return }
-                        commitGhosttyConfig()
-                    }
+                Toggle("Load Ghostty config files", isOn: includeDefaultGhosttyConfigFiles)
 
                 if useDefaultGhosttyConfigFiles {
                     // Only the locations Ghostty actually found — a missing
@@ -690,15 +682,60 @@ private struct GeneralSettings: View {
         refreshDefaultGhosttyConfigLocations()
     }
 
+    /// The toggle reports whether Ghostty's own config files are in the list
+    /// at all — through the automatic default layer, or as the explicit
+    /// custom entries a reorder/edit converts them into (the layer's order
+    /// is fixed, so customizing moves the files to the custom layer; the
+    /// toggle staying on reflects that they still load). Setting it either
+    /// way folds custom entries that duplicate a found default out of the
+    /// list, so off→on never lists a file twice: on restores the automatic
+    /// layer, off removes the files from both layers.
+    private var includeDefaultGhosttyConfigFiles: Binding<Bool> {
+        Binding(
+            get: {
+                if useDefaultGhosttyConfigFiles { return true }
+                let searched = defaultGhosttyConfigFiles
+                    .filter { $0.resolvedPath != nil }
+                    .map(\.searchedPath)
+                guard !searched.isEmpty else { return false }
+                let customs = Set(customGhosttyConfigPaths.map { ($0 as NSString).expandingTildeInPath })
+                return searched.allSatisfy { customs.contains($0) }
+            },
+            set: { include in
+                commitCustomGhosttyConfigEdit()
+                useDefaultGhosttyConfigFiles = include
+                removeCustomGhosttyConfigPathsMatchingFoundDefaults()
+                commitGhosttyConfig()
+            }
+        )
+    }
+
+    /// Drops custom entries that point at a location the default layer
+    /// already found — the fold used when the toggle changes, so the same
+    /// file is never listed by both layers.
+    private func removeCustomGhosttyConfigPathsMatchingFoundDefaults() {
+        var found = Set<String>()
+        for file in defaultGhosttyConfigFiles where file.resolvedPath != nil {
+            found.insert(file.searchedPath)
+            if let resolved = file.resolvedPath {
+                found.insert(resolved)
+            }
+        }
+        customGhosttyConfigPaths.removeAll {
+            found.contains(($0 as NSString).expandingTildeInPath)
+        }
+    }
+
     /// Ghostty's default layer is all-or-nothing in the loader, so per-file
     /// changes to it first convert the whole layer into explicit custom
-    /// entries: the toggle flips off and every FOUND default becomes a
-    /// regular row (minus one being removed), ahead of the existing custom
-    /// entries since defaults load first. Missing candidates are never
-    /// converted — a missing custom file raises a "file not found" alert on
-    /// every reload, which a merely-absent default location doesn't deserve.
-    /// Custom entries that duplicated a converted default are folded in
-    /// rather than kept twice. Callers commit.
+    /// entries: the automatic layer switches off and every FOUND default
+    /// becomes a regular row (minus one being removed), ahead of the existing
+    /// custom entries since defaults load first. The visible toggle stays on
+    /// after a reorder/edit — it reads presence, not the layer flag. Missing
+    /// candidates are never converted — a missing custom file raises a "file
+    /// not found" alert on every reload, which a merely-absent default
+    /// location doesn't deserve. Custom entries that duplicated a converted
+    /// default are folded in rather than kept twice. Callers commit.
     private func convertDefaultGhosttyConfigFilesToCustom(
         removing removed: GhosttyConfigSource.DefaultFileLocation? = nil
     ) {
