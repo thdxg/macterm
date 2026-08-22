@@ -49,4 +49,81 @@ struct GhosttyTerminalNSViewTests {
         #expect(GhosttyTerminalNSView.cursor(for: GHOSTTY_MOUSE_SHAPE_WAIT) == nil)
         #expect(GhosttyTerminalNSView.cursor(for: GHOSTTY_MOUSE_SHAPE_PROGRESS) == nil)
     }
+
+    // MARK: - IME composition state
+
+    private func makeView() -> GhosttyTerminalNSView {
+        GhosttyTerminalNSView(
+            paneID: UUID(),
+            workingDirectory: "/tmp",
+            sessionName: "marked-text-test"
+        )
+    }
+
+    /// The mirror has to track AppKit's calls even with no surface attached —
+    /// it used to be gated on one, so a composition begun before the surface
+    /// existed read as not-composing.
+    @Test
+    func markedText_tracksCompositionWithoutASurface() {
+        let view = makeView()
+        #expect(!view.hasMarkedText())
+
+        view.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+
+        #expect(view.hasMarkedText())
+        #expect(view.markedRange() == NSRange(location: 0, length: 1))
+    }
+
+    /// `unmarkText` was gated on a surface too — the damaging direction, since
+    /// a stranded range makes `keyDown` drop every unmodified key.
+    @Test
+    func markedText_unmarkClearsWithoutASurface() {
+        let view = makeView()
+        view.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(view.hasMarkedText())
+
+        view.unmarkText()
+
+        #expect(!view.hasMarkedText())
+        #expect(view.markedRange() == NSRange(location: NSNotFound, length: 0))
+    }
+
+    /// An empty commit is how some input sources abandon a composition, and it
+    /// bailed out ahead of the clear.
+    @Test
+    func markedText_emptyCommitEndsTheComposition() {
+        let view = makeView()
+        view.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(view.hasMarkedText())
+
+        view.insertText("", replacementRange: NSRange(location: NSNotFound, length: 0))
+
+        #expect(!view.hasMarkedText())
+    }
+
+    /// Focus leaving mid-composition is the path with no AppKit guarantee of an
+    /// `unmarkText`, and the one that left a pane unable to type.
+    @Test
+    func markedText_focusLossAbandonsTheComposition() {
+        let view = makeView()
+        view.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(view.hasMarkedText())
+
+        _ = view.resignFirstResponder()
+
+        #expect(!view.hasMarkedText())
+    }
+
+    /// A destroyed surface has nowhere to commit, so the preedit must not
+    /// outlive it into a reattached surface.
+    @Test
+    func markedText_surfaceTeardownAbandonsTheComposition() {
+        let view = makeView()
+        view.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(view.hasMarkedText())
+
+        view.destroySurface()
+
+        #expect(!view.hasMarkedText())
+    }
 }
