@@ -460,10 +460,10 @@ private struct GeneralSettings: View {
     private var terminalScrollSpeed: Double = Preferences.shared.terminalScrollSpeed
     /// The config source is one of two exclusive modes: Ghostty's default
     /// locations (its own loader, its own order) or the user's custom list.
-    /// The toggle picks the mode; the inactive mode's list stays visible but
-    /// dims, so switching back is never a rebuild.
+    /// The toggle picks the mode; the inactive mode's list is kept in state,
+    /// just not shown, so switching back is never a rebuild.
     @State
-    private var useDefaultGhosttyConfigLocations: Bool = Preferences.shared.ghosttyConfigSelection.loadsDefaultFiles
+    private var useCustomGhosttyConfigLocations: Bool = !Preferences.shared.ghosttyConfigSelection.loadsDefaultFiles
     @State
     private var customGhosttyConfigPaths: [String] = Preferences.shared.ghosttyConfigSelection.customPaths
     @State
@@ -493,37 +493,20 @@ private struct GeneralSettings: View {
                 FullDiskAccessBanner()
             }
 
-            Section("Ghostty Config") {
-                Toggle("Use default locations", isOn: $useDefaultGhosttyConfigLocations)
-                    .onChange(of: useDefaultGhosttyConfigLocations) { _, _ in
+            Section {
+                Toggle("Use custom locations", isOn: $useCustomGhosttyConfigLocations)
+                    .onChange(of: useCustomGhosttyConfigLocations) { _, _ in
                         commitCustomGhosttyConfigEdit()
                         commitGhosttyConfig()
                     }
 
-                // The inactive mode's list stays visible but dims. The
-                // dimming modifiers wrap the rows only in the dim branch: an
-                // `.opacity` (even 1.0) over the rows can flatten them into a
-                // layer that swallows the tooltip tracking areas inside.
-                if useDefaultGhosttyConfigLocations {
-                    defaultGhosttyLocationRows
-                } else {
-                    Group {
-                        defaultGhosttyLocationRows
-                    }
-                    .disabled(true)
-                    .opacity(0.45)
-                }
-            }
-
-            Section {
-                if useDefaultGhosttyConfigLocations {
-                    Group {
-                        ghosttyConfigFileRows
-                    }
-                    .disabled(true)
-                    .opacity(0.45)
-                } else {
+                // One list at a time: the toggle swaps the immutable detected
+                // defaults for the editable custom entries. The inactive
+                // mode's list is kept in state, just not shown.
+                if useCustomGhosttyConfigLocations {
                     ghosttyConfigFileRows
+                } else {
+                    defaultGhosttyLocationRows
                 }
 
                 HStack {
@@ -537,10 +520,11 @@ private struct GeneralSettings: View {
                 }
             } header: {
                 HStack {
-                    Text("Custom Locations")
+                    Text("Ghostty Config")
                     Spacer()
                     // Mirrors the Projects pane's add affordance: a plus in the
-                    // header, with the creation paths in its menu.
+                    // header, with the creation paths in its menu. Adds custom
+                    // entries, so it sleeps while the defaults are in use.
                     Menu {
                         Button("Choose Files…") { browseForCustomGhosttyConfigFiles() }
                         Button("Enter Path…") { beginEnteringCustomGhosttyConfigPath() }
@@ -551,7 +535,7 @@ private struct GeneralSettings: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    .disabled(useDefaultGhosttyConfigLocations)
+                    .disabled(!useCustomGhosttyConfigLocations)
                     .help("Add a config file")
                 }
             }
@@ -708,12 +692,12 @@ private struct GeneralSettings: View {
     private func commitGhosttyConfig() {
         let customPaths = customGhosttyConfigPaths.filter { !$0.isEmpty }
         let selection = GhosttyConfigSelection(
-            loadsDefaultFiles: useDefaultGhosttyConfigLocations,
+            loadsDefaultFiles: !useCustomGhosttyConfigLocations,
             customPaths: customPaths
         )
         if selection != Preferences.shared.ghosttyConfigSelection {
             Preferences.shared.setGhosttyConfig(
-                loadsDefaultFiles: useDefaultGhosttyConfigLocations,
+                loadsDefaultFiles: !useCustomGhosttyConfigLocations,
                 customPaths: customPaths
             )
         }
