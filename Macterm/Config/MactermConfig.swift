@@ -12,7 +12,7 @@ private let logger = Logger(subsystem: appBundleID, category: "MactermConfig")
 /// custom-color mode in Settings.
 ///
 /// `GhosttyApp.loadConfig` loads them in this order:
-///   defaults → user's Ghostty config → overrides
+///   defaults → user's Ghostty config files → overrides
 /// libghostty does last-wins merge, so the user wins over our defaults and
 /// our overrides win over the user.
 ///
@@ -131,17 +131,16 @@ final class MactermConfig {
         return FileManager.default.isExecutableFile(atPath: shim) ? dir.path : nil
     }
 
-    /// The user's Ghostty config text, read for merging their
-    /// `shell-integration-features` value into the overrides. nil when the
-    /// user has disabled loading (empty path) or the file is unreadable.
+    /// The user's Ghostty root-config text in load order, read for merging
+    /// their `shell-integration-features` value into the overrides. nil when
+    /// loading is disabled or none of the selected files is readable.
     ///
     /// Static so anything else that must consult the user's *stated* config
     /// reads it the same way — `RemoteTerminfo`'s gate deliberately reads this
     /// raw text rather than the effective post-override value.
     static func userGhosttyConfigText() -> String? {
-        let path = Preferences.shared.expandedUserGhosttyConfigPath
-        guard !path.isEmpty else { return nil }
-        return try? String(contentsOfFile: path, encoding: .utf8)
+        guard !Preferences.isTestRun, !BenchmarkControl.isEnabled else { return nil }
+        return GhosttyConfigSource(selection: Preferences.shared.ghosttyConfigSelection).mergedText()
     }
 
     private func userGhosttyConfigText() -> String? {

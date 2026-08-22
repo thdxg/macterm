@@ -90,37 +90,37 @@ struct PreferencesTests {
     }
 
     @Test
-    func ghostty_config_matches_ghostty_macos_precedence() {
-        let appSupport = "/Application Support/com.mitchellh.ghostty"
-        let xdg = "/xdg/ghostty"
-        let candidates = [
-            "/Application Support/com.mitchellh.ghostty/config.ghostty",
-            "/Application Support/com.mitchellh.ghostty/config",
-            "/xdg/ghostty/config.ghostty",
-            "/xdg/ghostty/config",
-        ]
+    func ghostty_config_defaults_to_automatic_loading() throws {
+        let defaults = try isolatedDefaults()
 
-        for expected in candidates {
-            #expect(Preferences.preferredGhosttyConfigPath(
-                applicationSupportConfigDirectory: appSupport,
-                xdgConfigDirectory: xdg,
-                fileIsNonEmpty: { $0 == expected }
-            ) == expected)
-        }
-
-        #expect(Preferences.preferredGhosttyConfigPath(
-            applicationSupportConfigDirectory: appSupport,
-            xdgConfigDirectory: xdg,
-            fileIsNonEmpty: { _ in true }
-        ) == candidates[0])
+        #expect(Preferences.readGhosttyConfigSelection(from: defaults) == .automatic)
     }
 
     @Test
-    func ghostty_config_defaults_to_current_application_support_path() {
-        #expect(Preferences.preferredGhosttyConfigPath(
-            applicationSupportConfigDirectory: "/Application Support/com.mitchellh.ghostty",
-            xdgConfigDirectory: "/xdg/ghostty",
-            fileIsNonEmpty: { _ in false }
-        ) == "/Application Support/com.mitchellh.ghostty/config.ghostty")
+    func ghostty_config_reads_current_layered_preferences() throws {
+        let defaults = try isolatedDefaults()
+        defaults.set(false, forKey: Preferences.Keys.loadsDefaultGhosttyConfigFiles)
+        defaults.set(["/one", "/two"], forKey: Preferences.Keys.customGhosttyConfigPaths)
+
+        #expect(Preferences.readGhosttyConfigSelection(from: defaults) == GhosttyConfigSelection(
+            loadsDefaultFiles: false,
+            customPaths: ["/one", "/two"]
+        ))
+    }
+
+    @Test(arguments: ["", "/legacy/config.ghostty"])
+    func ghostty_config_migrates_legacy_custom_only_mode(path: String) throws {
+        let defaults = try isolatedDefaults()
+        defaults.set(path, forKey: Preferences.Keys.userGhosttyConfigPath)
+
+        #expect(Preferences.readGhosttyConfigSelection(from: defaults) == GhosttyConfigSelection(
+            loadsDefaultFiles: false,
+            customPaths: path.isEmpty ? [] : [path]
+        ))
+    }
+
+    private func isolatedDefaults() throws -> UserDefaults {
+        let suiteName = "com.thdxg.macterm.preferences-tests.\(UUID().uuidString)"
+        return try #require(UserDefaults(suiteName: suiteName))
     }
 }

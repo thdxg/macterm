@@ -192,13 +192,13 @@ final class GhosttyApp {
 
     // MARK: - Config
 
-    /// Result of a config (re)load. `missingUserConfigPath` is populated when
-    /// the user pointed to a path that doesn't exist on disk — useful to
+    /// Result of a config (re)load. `missingUserConfigPaths` is populated when
+    /// the user pointed to paths that don't exist on disk — useful to
     /// surface from the Settings reload button. `diagnostics` are libghostty's
     /// parse warnings/errors (unknown keys, bad values, etc.). Both are
-    /// empty/nil on a clean reload.
+    /// empty on a clean reload.
     struct ReloadResult {
-        var missingUserConfigPath: String?
+        var missingUserConfigPaths: [String] = []
         var diagnostics: [String]
     }
 
@@ -260,7 +260,7 @@ final class GhosttyApp {
     func reloadAndReport() -> Bool {
         let result = reloadConfig()
         var lines: [String] = []
-        if let missing = result.missingUserConfigPath {
+        for missing in result.missingUserConfigPaths {
             lines.append("File not found: \(missing)")
         }
         if !result.diagnostics.isEmpty {
@@ -269,12 +269,15 @@ final class GhosttyApp {
         guard !lines.isEmpty else { return true }
 
         let alert = NSAlert()
-        alert.messageText =
-            result.missingUserConfigPath != nil
-                ? "Ghostty config not found"
-                : "Issues in your Ghostty config"
+        alert.messageText = if result.missingUserConfigPaths.count > 1 {
+            "Ghostty configs not found"
+        } else if result.missingUserConfigPaths.count == 1 {
+            "Ghostty config not found"
+        } else {
+            "Issues in your Ghostty config"
+        }
         alert.informativeText = lines.joined(separator: "\n\n")
-        alert.alertStyle = result.missingUserConfigPath != nil ? .warning : .informational
+        alert.alertStyle = result.missingUserConfigPaths.isEmpty ? .informational : .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
         return false
@@ -418,24 +421,31 @@ final class GhosttyApp {
 
         // Three-layer ghostty config:
         //   1. Macterm defaults — tasteful first-launch values.
-        //   2. User's Ghostty config — overrides any default. Source of truth
-        //      for all ghostty-shaped settings (theme, font, palette, keybinds,
-        //      shell integration, etc.).
+        //   2. User's Ghostty config files, overriding any default. In automatic
+        //      mode, libghostty loads its default roots.
         //   3. Macterm overrides — keys Macterm absolutely needs to control,
         //      currently just background-opacity/blur for the window-level
         //      translucency contract. Loaded last so it overrides the user.
         // libghostty merges last-wins, so this ordering produces:
         //   Macterm defaults < user's Ghostty config < Macterm overrides
         MactermConfig.shared.defaultsPath.withCString { ghostty_config_load_file(cfg, $0) }
-        let userPath = Preferences.shared.expandedUserGhosttyConfigPath
-        if !userPath.isEmpty {
-            if FileManager.default.fileExists(atPath: userPath) {
-                userPath.withCString { ghostty_config_load_file(cfg, $0) }
-            } else {
-                logger.info("user Ghostty config not found at \(userPath, privacy: .public); skipping")
-                result.missingUserConfigPath = userPath
-            }
+        let selection: GhosttyConfigSelection = if Preferences.isTestRun || BenchmarkControl.isEnabled {
+            .disabled
+        } else {
+            Preferences.shared.ghosttyConfigSelection
         }
+        let source = GhosttyConfigSource(selection: selection)
+        result.missingUserConfigPaths = source.load(
+            loadDefaultFiles: { ghostty_config_load_default_files(cfg) },
+            loadCustomFile: { path in
+                guard FileManager.default.fileExists(atPath: path) else {
+                    logger.info("user Ghostty config not found at \(path, privacy: .public); skipping")
+                    return false
+                }
+                path.withCString { ghostty_config_load_file(cfg, $0) }
+                return true
+            }
+        )
         MactermConfig.shared.overridesPath.withCString { ghostty_config_load_file(cfg, $0) }
         ghostty_config_load_recursive_files(cfg)
         ghostty_config_finalize(cfg)
@@ -528,10 +538,9 @@ final class GhosttyApp {
     private func computeResolvedThemeColors() -> ThemeResolver.Colors? {
         guard let resourcesDir else { return nil }
         // Reconstruct the effective `theme` from the layers we control, matching
-        // libghostty's last-wins merge: our defaults, then the user's config.
+        // libghostty's last-wins merge: our defaults, then the user's root files.
         var configText = (try? String(contentsOfFile: MactermConfig.shared.defaultsPath, encoding: .utf8)) ?? ""
-        let userPath = Preferences.shared.expandedUserGhosttyConfigPath
-        if !userPath.isEmpty, let userText = try? String(contentsOfFile: userPath, encoding: .utf8) {
+        if let userText = MactermConfig.userGhosttyConfigText() {
             configText += "\n" + userText
         }
         guard let themeValue = ThemeResolver.themeValue(inConfigText: configText),
