@@ -665,6 +665,10 @@ final class GhosttyTerminalNSView: NSView {
     func destroySurface() {
         isDestroyed = true
         clearCommandSubmissionEvidence()
+        // A composition in flight has nowhere left to commit — drop it before
+        // the surface goes, so a reattached surface starts uncomposed rather
+        // than inheriting a preedit that can never be resolved.
+        discardMarkedText()
         if let surface { ghostty_surface_free(surface) }
         surface = nil
         accessibilityScreenContentsCache = nil
@@ -872,6 +876,11 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func resignFirstResponder() -> Bool {
+        // Before super, while `inputContext` still resolves to ours. Focus
+        // moves off a pane constantly (tab switch, split focus, palette), and
+        // any of those landing mid-composition would otherwise strand
+        // `_markedRange` and kill plain-key input in this pane for good.
+        discardMarkedText()
         let result = super.resignFirstResponder()
         if result, let surface { ghostty_surface_set_focus(surface, false) }
         if result { syncSecureInputFocus(false) }
@@ -1671,9 +1680,12 @@ extension GhosttyTerminalNSView {
 extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
     func insertText(_ string: Any, replacementRange: NSRange) {
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
-        guard !text.isEmpty else { return }
+        // A commit always ends the composition — including an empty one, which
+        // is how some input sources signal "abandon what you were composing".
+        // Clearing before the empty-text bail keeps `hasMarkedText` honest.
         _markedRange = NSRange(location: NSNotFound, length: 0)
         if let surface { ghostty_surface_preedit(surface, nil, 0) }
+        guard !text.isEmpty else { return }
         if currentKeyEvent != nil {
             keyTextAccumulator.append(text)
         } else if let surface {
@@ -1687,17 +1699,23 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
         }
     }
 
+    /// `_markedRange` mirrors AppKit's composition state, so it is maintained on
+    /// EVERY call the input system makes — never gated on there being a surface.
+    /// A `guard let surface` here used to skip the bookkeeping, which desynced
+    /// the mirror from AppKit in both directions across a `destroySurface()`:
+    /// a composition begun without a surface read as not-composing, and one
+    /// ended without a surface stayed marked forever. The latter is the
+    /// damaging direction — see `discardMarkedText`.
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        guard let surface else { return }
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
         _markedRange = text.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: text.utf16.count)
+        guard let surface else { return }
         text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.utf8.count)) }
     }
 
     func unmarkText() {
-        guard let surface else { return }
         _markedRange = NSRange(location: NSNotFound, length: 0)
-        ghostty_surface_preedit(surface, nil, 0)
+        if let surface { ghostty_surface_preedit(surface, nil, 0) }
     }
 
     func selectedRange() -> NSRange {
@@ -1714,6 +1732,28 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
 
     func hasMarkedText() -> Bool {
         _markedRange.location != NSNotFound
+    }
+
+    /// Abandons an in-flight IME composition, clearing both our mirror of it
+    /// and the input source's own state.
+    ///
+    /// AppKit does not promise an `unmarkText` (or a commit) when focus leaves
+    /// a view mid-composition, and a stranded `_markedRange` is not a cosmetic
+    /// leak: `keyDown`'s composing branch forwards NOTHING for an unmodified
+    /// key — not the translated text, not even an encoded keypress — so the
+    /// pane's keyboard goes dead for ordinary typing while modifier chords keep
+    /// working. Nothing in the view could recover from that state on its own,
+    /// because the only two exits (`insertText`/`unmarkText`) are calls the
+    /// input system makes and it believes the composition is already over.
+    ///
+    /// `discardMarkedText()` is what tells the input source to drop its half;
+    /// our own state is cleared first so a re-entrant callback can't revive it.
+    /// `inputContext` is read before `super.resignFirstResponder()` runs, since
+    /// AppKit returns nil for a view that is no longer the first responder.
+    func discardMarkedText() {
+        guard hasMarkedText() else { return }
+        unmarkText()
+        inputContext?.discardMarkedText()
     }
 
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
