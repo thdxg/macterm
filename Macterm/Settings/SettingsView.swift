@@ -1001,14 +1001,10 @@ private struct NotificationPermissionBanner: View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Notifications are turned off")
+                    Text("Macterm doesn't have notification permission")
                         .font(.system(size: 13, weight: .semibold))
-                    Text(
-                        "Your Ghostty config asks to be notified, but macOS is not "
-                            + "delivering Macterm's notifications. macOS only ever asks "
-                            + "once, so this can only be changed in System Settings."
-                    )
-                    .settingsCaption()
+                    Text("Your Ghostty config is set to deliver notifications.")
+                        .settingsCaption()
                     if let url = NotificationHandler.settingsURL {
                         Button("Open System Settings…") {
                             NSWorkspace.shared.open(url)
