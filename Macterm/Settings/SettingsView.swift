@@ -485,10 +485,23 @@ private struct GeneralSettings: View {
     @State
     private var hasFullDiskAccess: Bool? = FullDiskAccess.isGranted()
 
+    /// True only when the user's Ghostty config asks to be notified AND macOS
+    /// is dropping what Macterm posts. Both halves change only outside this
+    /// window — the config in an editor, the permission in System Settings —
+    /// so it's re-read on activation rather than polled. Starts false: the
+    /// permission read is async, and flashing a warning during the first frame
+    /// would be worse than showing it a beat late.
+    @State
+    private var notificationsBlocked: Bool = false
+
     var body: some View {
         Form {
             if hasFullDiskAccess == false {
                 FullDiskAccessBanner()
+            }
+
+            if notificationsBlocked {
+                NotificationPermissionBanner()
             }
 
             Section {
@@ -605,11 +618,27 @@ private struct GeneralSettings: View {
             // Default files are created and deleted in other apps, so
             // discovery can only have changed while we were inactive.
             defaultGhosttyConfigFiles = GhosttyConfigSource.defaultFileLocations()
+            Task { await refreshNotificationBanner() }
         }
+        .task { await refreshNotificationBanner() }
         .onChange(of: isCustomGhosttyConfigFieldFocused) { wasFocused, isFocused in
             guard wasFocused, !isFocused else { return }
             commitCustomGhosttyConfigEdit()
         }
+    }
+
+    /// Cheap half first: an unreadable or notification-free config skips the
+    /// permission round-trip entirely, and — because the config is the gate —
+    /// a user who never asked for notifications is never told about them.
+    private func refreshNotificationBanner() async {
+        guard NotificationConfigIntent.wantsNotifications(
+            inConfigText: MactermConfig.userGhosttyConfigText()
+        )
+        else {
+            notificationsBlocked = false
+            return
+        }
+        notificationsBlocked = await NotificationHandler.isDelivering() == false
     }
 
     /// The discovered default locations are read-only because Ghostty owns
@@ -946,6 +975,41 @@ private struct FullDiskAccessBanner: View {
                     )
                     .settingsCaption()
                     if let url = FullDiskAccess.settingsURL {
+                        Button("Open System Settings…") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(MactermTheme.warning)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+}
+
+/// Shown when the Ghostty config asks to be notified but macOS won't deliver.
+///
+/// The permission is one-shot: macOS presents its prompt the first time an app
+/// asks and never again, so once it has been answered — or dismissed — the app
+/// cannot re-raise it, and a denied Macterm is silent with nothing on screen to
+/// explain why. System Settings is the only way back, which is what makes this
+/// worth a banner rather than a log line.
+private struct NotificationPermissionBanner: View {
+    var body: some View {
+        Section {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Notifications are turned off")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(
+                        "Your Ghostty config asks to be notified, but macOS is not "
+                            + "delivering Macterm's notifications. macOS only ever asks "
+                            + "once, so this can only be changed in System Settings."
+                    )
+                    .settingsCaption()
+                    if let url = NotificationHandler.settingsURL {
                         Button("Open System Settings…") {
                             NSWorkspace.shared.open(url)
                         }

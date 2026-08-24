@@ -27,29 +27,14 @@ enum ShellIntegrationFeatures {
     static let allFeatures = ["cursor", "sudo", "title", "ssh-env", "ssh-terminfo", "path"]
 
     /// The bool literals ghostty's `parseBool` accepts (`src/cli/args.zig`).
-    private static let trueLiterals: Set<String> = ["1", "t", "T", "true"]
-    private static let falseLiterals: Set<String> = ["0", "f", "F", "false"]
+    private static let trueLiterals = GhosttyConfigText.trueLiterals
+    private static let falseLiterals = GhosttyConfigText.falseLiterals
 
     /// The user's effective `shell-integration-features` value in raw ghostty
-    /// config text. Last occurrence wins and an empty value resets the key to
-    /// its defaults ("not set"), mirroring libghostty's own semantics.
-    /// Comments and blank lines are ignored; a matched pair of surrounding
-    /// double quotes is stripped. nil when the key is never set.
+    /// config text. See `GhosttyConfigText.lastValue` for the semantics
+    /// (last occurrence wins, empty resets to the default, comments skipped).
     static func userValue(inConfigText text: String) -> String? {
-        var result: String?
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("#") { continue }
-            guard let eq = line.firstIndex(of: "=") else { continue }
-            let key = line[line.startIndex ..< eq].trimmingCharacters(in: .whitespaces)
-            guard key == "shell-integration-features" else { continue }
-            var value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
-            if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
-                value = String(value.dropFirst().dropLast())
-            }
-            result = value.isEmpty ? nil : value
-        }
-        return result
+        GhosttyConfigText.lastValue(of: "shell-integration-features", inConfigText: text)
     }
 
     /// ghostty's own defaults for the features it knows, read off

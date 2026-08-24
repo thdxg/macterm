@@ -102,6 +102,38 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Deep link to System Settings > Notifications. The extension identifier
+    /// is read off the installed `NotificationsSettings.appex`, not guessed.
+    /// Optional only to satisfy `URL(string:)` — the literal always parses.
+    nonisolated static let settingsURL =
+        URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
+
+    /// Whether macOS will actually deliver what `post` sends.
+    ///
+    /// `nil` means the question isn't settled — the prompt has not been
+    /// answered, so there is nothing to complain about yet. The Settings banner
+    /// treats that as "no evidence, don't nag", the same rule
+    /// `FullDiskAccess.isGranted` follows.
+    ///
+    /// Authorized-but-muted counts as **not** delivering: an app whose alerts
+    /// the user switched off in System Settings is silent in exactly the way
+    /// the banner exists to explain, and `authorizationStatus` alone would call
+    /// that healthy.
+    nonisolated static func isDelivering() async -> Bool? {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined: return nil
+        case .denied: return false
+        // `.disabled` is the only value that proves nothing will appear;
+        // `.notSupported` says the setting doesn't apply, which is not evidence
+        // against delivery.
+        case .authorized,
+             .provisional,
+             .ephemeral: return settings.alertSetting != .disabled
+        @unknown default: return nil
+        }
+    }
+
     /// Register the pane-notification category. `.customDismissAction` is what
     /// makes the system deliver a *dismissal* to `didReceive` at all — without
     /// it only taps arrive, and `responseRoute` never sees the dismiss case.
