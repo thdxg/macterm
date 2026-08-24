@@ -12,7 +12,7 @@ A pinned tab belongs to no project. It sits above every project in the sidebar a
 
 ## Pinning and unpinning
 
-- **Pin** — drag a tab to the very top of the sidebar: a **Pin Tab** band appears; drop to pin. (Dropping onto an existing pinned row pins at that slot instead.) Also in the tab's right-click menu and the command palette, and bindable in Settings → Keymaps.
+- **Pin** — drag a tab to the very top of the sidebar, above every project, and drop it there (with nothing pinned yet, a **Pin Tab** band appears to mark the spot; after that the insertion line does). (Dropping onto an existing pinned row pins at that slot instead.) Also in the tab's right-click menu and the command palette, and bindable in Settings → Keymaps.
 - **Unpin** — right-click a pinned row → **Unpin Tab**, or drag it into a project section. Unpinning is a *move*: the tab returns to the project it came from (its shells keep running). Nothing is killed by pinning or unpinning.
 
 At pin time Macterm captures the tab's layout the same way **Save Layout** does — splits, each pane's working directory, and whatever command is running becomes the pane's `run:`. The capture then tracks the tab: starting or stopping a process in a pinned pane updates the saved layout (and `pinned.yaml`) within a couple of seconds, and it refreshes once more on quit — so a restore re-runs the last thing the tab was doing.

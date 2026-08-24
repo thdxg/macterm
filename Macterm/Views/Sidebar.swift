@@ -207,17 +207,19 @@ struct SidebarContent: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        // The pin drop zone: a thin strip above the list that expands into a
-        // visible "Pin Tab" band while a tab/pane drag hovers it. It lives
-        // OUTSIDE the List on purpose — a plain view's `.dropDestination` has
-        // none of the outline view's drop hazards (see the notes inside the
-        // List body), and it exists even with zero pinned rows, so the FIRST
-        // pin can be a drag too.
+        // The pin drop zone: a strip above the list. It lives OUTSIDE the
+        // List on purpose — a plain view's `.dropDestination` has none of the
+        // outline view's drop hazards (see the notes inside the List body),
+        // and it exists even with zero pinned rows, so the FIRST pin can be a
+        // drag too. It only draws its "Pin Tab" band in exactly that case:
+        // once a pinned row exists, the native insertion line above it says
+        // the same thing, and the band on top of it is noise.
         .safeAreaInset(edge: .top, spacing: 0) {
             // Same handlers as the insertion line, fixed at the first slot
             // — the strip and the line are one operation, so a routing fix
             // in one can't strand the other.
             PinTabDropZone(
+                showsBand: appState.pinnedRecords.isEmpty,
                 onPinTab: { receivePinnedTabDrop($0, at: 0) },
                 onPinPane: { appState.separatePaneIntoPinned($0.paneID, atRecordIndex: 0) }
             )
@@ -965,20 +967,25 @@ private struct SidebarTabRow: View {
     }
 }
 
-/// The pin drop zone at the top of the sidebar: a near-invisible strip that
-/// expands into a labeled "Pin Tab" band while a tab or pane drag hovers it,
-/// and pins the payload at the first slot on drop. The strip must keep a
-/// nonzero idle height — `isTargeted` only fires once the pointer is over the
-/// target, so a zero-height strip could never be discovered by a drag.
+/// The pin drop zone at the top of the sidebar: a strip that pins a dropped
+/// tab or pane at the first slot. It draws chrome only when there are no
+/// pinned rows yet (`showsBand`) — with rows present the List's own insertion
+/// line already marks the same slot, so the band would just double it. Either
+/// way the strip must keep a nonzero idle height: `isTargeted` only fires once
+/// the pointer is over the target, so a zero-height strip could never be
+/// discovered by a drag.
 private struct PinTabDropZone: View {
+    let showsBand: Bool
     let onPinTab: (MovableTab) -> Void
     let onPinPane: (MovablePane) -> Void
     @State
     private var isTargeted = false
 
+    private var isBandVisible: Bool { showsBand && isTargeted }
+
     var body: some View {
         ZStack {
-            if isTargeted {
+            if isBandVisible {
                 Label("Pin Tab", systemImage: "pin.fill")
                     .font(.callout.weight(.medium))
                     .foregroundStyle(MactermTheme.accent)
@@ -997,7 +1004,7 @@ private struct PinTabDropZone: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: isTargeted ? 38 : 12)
+        .frame(height: isBandVisible ? 38 : 12)
         .contentShape(Rectangle())
         .dropDestination(for: TabSlotDropItem.self) { items, _ in
             for item in items {
