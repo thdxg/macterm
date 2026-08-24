@@ -8,8 +8,9 @@
 #
 # because website/public/assets is a symlink to the repo-root assets/ dir. A
 # context rooted at website/ would copy that symlink dangling; the build stage
-# below materializes it as real files instead. The root .dockerignore keeps the
-# context to just website/ and assets/.
+# below materializes it as real files instead. Dockerfile.dockerignore, beside
+# this file, keeps the context to just website/ and assets/ — its patterns are
+# relative to that root context, not to website/.
 #
 # Bun builds, Caddy serves. The site is static once `bun run build` has
 # rendered the docs and compiled the CSS, so the runtime stage carries no

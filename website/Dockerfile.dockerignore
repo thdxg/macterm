@@ -1,0 +1,24 @@
+# Ignore-file for website/Dockerfile. BuildKit reads `<dockerfile>.dockerignore`
+# next to the Dockerfile in preference to the context root's `.dockerignore`,
+# which is what lets this live beside the only image the repo builds instead of
+# at the repo root.
+#
+# PATTERNS ARE STILL RELATIVE TO THE BUILD CONTEXT — the repository root, not
+# website/ — because website/public/assets is a symlink to assets/ (see the
+# Dockerfile header). Deny everything, then re-admit the two directories the
+# build needs; otherwise the Swift sources and the ~1GB GhosttyKit.xcframework
+# ride along.
+*
+!website/
+!assets/
+
+# Regenerated inside the image by `bun run build` — never copy a host build in.
+website/node_modules/
+website/public/docs/
+website/public/tailwind.css
+website/public/sitemap.xml
+website/public/robots.txt
+
+website/Dockerfile
+website/Dockerfile.dockerignore
+**/.DS_Store

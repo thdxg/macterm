@@ -17,14 +17,12 @@ on:
     paths:
       - "website/**"
       - "assets/**"
-      - ".dockerignore"
       - ".github/workflows/website.yml"
   pull_request:
     branches: [main]
     paths:
       - "website/**"
       - "assets/**"
-      - ".dockerignore"
       - ".github/workflows/website.yml"
   workflow_dispatch:
 
