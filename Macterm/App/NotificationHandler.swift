@@ -12,14 +12,29 @@ private let logger = Logger(subsystem: appBundleID, category: "NotificationHandl
 @MainActor
 final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationHandler()
+    static let authorizationOptions: UNAuthorizationOptions = [.alert, .sound]
+    nonisolated static let foregroundPresentationOptions: UNNotificationPresentationOptions = [.banner, .sound]
     weak var appState: AppState?
 
     func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
+        UNUserNotificationCenter.current().requestAuthorization(options: Self.authorizationOptions) { granted, _ in
             if !granted {
                 logger.notice("Macterm notification authorization denied")
             }
         }
+    }
+
+    static func makeContent(
+        title: String,
+        body: String,
+        userInfo: [AnyHashable: Any]
+    ) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = userInfo
+        return content
     }
 
     nonisolated func userNotificationCenter(
@@ -68,6 +83,6 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
         willPresent _: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([])
+        completionHandler(Self.foregroundPresentationOptions)
     }
 }

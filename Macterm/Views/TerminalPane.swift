@@ -419,14 +419,15 @@ private struct TerminalSurface: NSViewRepresentable {
     /// so the desktop-notification and command-finished paths can't drift and
     /// silently break tap-routing for one of them.
     private static func postPaneNotification(pane: Pane, title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.userInfo = [
-            "paneID": pane.id.uuidString,
-            "projectID": pane.projectID.uuidString,
-            "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
-        ]
+        let content = NotificationHandler.makeContent(
+            title: title,
+            body: body,
+            userInfo: [
+                "paneID": pane.id.uuidString,
+                "projectID": pane.projectID.uuidString,
+                "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
+            ]
+        )
         let request = UNNotificationRequest(
             identifier: "macterm-\(pane.id.uuidString)-\(UUID().uuidString)",
             content: content,
