@@ -41,10 +41,64 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
     private var panesWithNotifications: Set<UUID> = []
 
     func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: Self.authorizationOptions) { granted, _ in
-            if !granted {
-                logger.notice("Macterm notification authorization denied")
+        UNUserNotificationCenter.current().requestAuthorization(options: Self.authorizationOptions) { _, error in
+            // Ghostty logs this error; swallowing it (as this did) makes a
+            // failed request indistinguishable from a refused one.
+            if let error {
+                logger.error("Notification authorization request failed: \(error.localizedDescription, privacy: .public)")
             }
+            Self.logNotificationSettings()
+        }
+    }
+
+    /// Report what the system actually holds for us, because `granted` alone
+    /// answers none of the questions a silent app raises. The system prompts
+    /// **once per app, ever**: after that a request returns the standing answer
+    /// without showing anything, so a denied app looks identical to one that
+    /// was never asked, and only System Settings can undo it. `soundSetting` is
+    /// the other half — an install that granted permission back when Macterm
+    /// requested `[.alert]` alone can be authorized and still mute, which is
+    /// exactly the upgrade path #298 introduced.
+    ///
+    /// Logged at `.notice` only when something is off, so a healthy launch
+    /// stays quiet and a broken one leaves the answer in `mise run logs`.
+    nonisolated private static func logNotificationSettings() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let status = describe(settings.authorizationStatus)
+            let alert = describe(settings.alertSetting)
+            let sound = describe(settings.soundSetting)
+            guard settings.authorizationStatus != .authorized
+                || settings.alertSetting != .enabled
+                || settings.soundSetting != .enabled
+            else {
+                logger.info("Notifications ready (authorization=\(status, privacy: .public))")
+                return
+            }
+            logger.notice("""
+            Notifications degraded: authorization=\(status, privacy: .public) \
+            alert=\(alert, privacy: .public) sound=\(sound, privacy: .public). \
+            Fix in System Settings > Notifications > \(appDisplayName, privacy: .public).
+            """)
+        }
+    }
+
+    nonisolated private static func describe(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "not-determined"
+        case .denied: "denied"
+        case .authorized: "authorized"
+        case .provisional: "provisional"
+        case .ephemeral: "ephemeral"
+        @unknown default: "unknown(\(status.rawValue))"
+        }
+    }
+
+    nonisolated private static func describe(_ setting: UNNotificationSetting) -> String {
+        switch setting {
+        case .notSupported: "not-supported"
+        case .disabled: "disabled"
+        case .enabled: "enabled"
+        @unknown default: "unknown(\(setting.rawValue))"
         }
     }
 
