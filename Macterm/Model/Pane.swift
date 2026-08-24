@@ -755,6 +755,10 @@ final class Pane: Identifiable {
         // Release any secure-input scope this view holds (a pane closed
         // mid-password-prompt must not leave the OS state stuck on).
         view.passwordInput = false
+        // A notification whose pane no longer exists routes nowhere on tap, so
+        // drop any still sitting in Notification Center. Ghostty does the same
+        // when a surface is removed.
+        NotificationHandler.shared.clearDelivered(paneID: id)
         view.destroySurface()
         let scroll = _scrollView
         // Disarm the orphan-healing re-attach BEFORE the removal below —

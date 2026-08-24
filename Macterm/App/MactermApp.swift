@@ -467,6 +467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // handler.
         controlServer.start()
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
+        NotificationHandler.shared.registerCategories()
         if BenchmarkControl.isEnabled {
             // Under the CI benchmark, the notification-permission alert would
             // steal key focus mid-measurement and nobody is there to answer it.

@@ -3,6 +3,11 @@ import UserNotifications
 
 private let logger = Logger(subsystem: appBundleID, category: "NotificationHandler")
 
+/// Owns BOTH ends of a pane notification: the content and `userInfo` written by
+/// `post`, and the routing read back in `didReceive`. They are one contract —
+/// splitting the write across another file is how a key rename silently breaks
+/// tap-routing while everything still compiles.
+///
 /// The delegate methods are `nonisolated` (they can be called off-main) and
 /// hand off to the main actor explicitly via a `Task { @MainActor }`, instead
 /// of a `@preconcurrency` conformance that would silently disable isolation
@@ -14,7 +19,26 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationHandler()
     static let authorizationOptions: UNAuthorizationOptions = [.alert, .sound]
     nonisolated static let foregroundPresentationOptions: UNNotificationPresentationOptions = [.banner, .sound]
+
+    /// The one category every pane notification carries. Bundle-ID-scoped so a
+    /// debug build's registration can't collide with the release app's, the
+    /// same split the logger subsystem uses.
+    nonisolated static let categoryIdentifier = "\(appBundleID).userNotification"
+    /// The explicit "Show" button, alongside clicking the banner body.
+    nonisolated static let showActionIdentifier = "\(appBundleID).userNotification.Show"
+
     weak var appState: AppState?
+
+    /// Panes that have posted a notification which may still be sitting in
+    /// Notification Center. Purely a fast path: `clearDelivered` runs on every
+    /// pane focus change, and without this every one of those would spend an
+    /// XPC round-trip to notificationd only to learn there is nothing to
+    /// remove. (Ghostty guards the same call with its per-surface identifier
+    /// set.) Membership is allowed to be stale in the conservative direction —
+    /// a notification the user dismissed, or that aged out on its own, leaves
+    /// the pane listed and costs one wasted lookup — but never in the other,
+    /// because `post` is the only thing that inserts.
+    private var panesWithNotifications: Set<UUID> = []
 
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: Self.authorizationOptions) { granted, _ in
@@ -24,17 +48,117 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Register the pane-notification category. `.customDismissAction` is what
+    /// makes the system deliver a *dismissal* to `didReceive` at all — without
+    /// it only taps arrive, and `responseRoute` never sees the dismiss case.
+    func registerCategories() {
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(
+                identifier: Self.categoryIdentifier,
+                actions: [UNNotificationAction(identifier: Self.showActionIdentifier, title: "Show")],
+                intentIdentifiers: [],
+                options: [.customDismissAction]
+            ),
+        ])
+    }
+
+    // MARK: - Posting
+
+    /// Post a notification for `pane` — the single path, so the desktop-
+    /// notification and command-finished callers can't drift.
+    func post(pane: Pane, title: String, body: String) {
+        let request = UNNotificationRequest(
+            identifier: Self.identifier(paneID: pane.id),
+            content: Self.makeContent(
+                title: title,
+                subtitle: pane.displayTitle,
+                body: body,
+                userInfo: Self.userInfo(for: pane)
+            ),
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+        panesWithNotifications.insert(pane.id)
+    }
+
+    /// The routing-critical `userInfo` contract, read back by `didReceive`.
+    static func userInfo(for pane: Pane) -> [AnyHashable: Any] {
+        [
+            "paneID": pane.id.uuidString,
+            "projectID": pane.projectID.uuidString,
+            "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
+        ]
+    }
+
     static func makeContent(
         title: String,
+        subtitle: String,
         body: String,
         userInfo: [AnyHashable: Any]
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = title
+        // Which pane fired this — the same name its sidebar row shows, so the
+        // notification and the row the user goes looking for agree (including
+        // the static fallback when auto-naming is off).
+        content.subtitle = subtitle
         content.body = body
         content.sound = .default
+        content.categoryIdentifier = categoryIdentifier
         content.userInfo = userInfo
         return content
+    }
+
+    // MARK: - Identifiers
+
+    /// Every identifier is `macterm-<paneID>-<unique>`, which makes a pane's
+    /// delivered notifications findable by prefix. Ghostty instead keeps the
+    /// live identifiers themselves in a per-surface `Set<String>`; deriving the
+    /// lookup from the pane id means the set above can be a lossy hint rather
+    /// than the source of truth, so a stale entry costs one wasted lookup
+    /// instead of stranding a banner nothing can remove. The UUID suffix keeps
+    /// each post distinct — a reused identifier would REPLACE the delivered
+    /// notification rather than add one.
+    nonisolated static func identifierPrefix(paneID: UUID) -> String {
+        "macterm-\(paneID.uuidString)-"
+    }
+
+    nonisolated static func identifier(paneID: UUID) -> String {
+        identifierPrefix(paneID: paneID) + UUID().uuidString
+    }
+
+    /// Drop this pane's already-delivered notifications from Notification
+    /// Center. Called when the pane takes focus (the user has now seen it, so a
+    /// "Command Finished" banner for it is stale) and when its surface is
+    /// destroyed — both are what Ghostty does in `focusDidChange` and on
+    /// surface removal.
+    func clearDelivered(paneID: UUID) {
+        guard panesWithNotifications.remove(paneID) != nil else { return }
+        let prefix = Self.identifierPrefix(paneID: paneID)
+        UNUserNotificationCenter.current().getDeliveredNotifications { delivered in
+            let stale = delivered.map(\.request.identifier).filter { $0.hasPrefix(prefix) }
+            guard !stale.isEmpty else { return }
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: stale)
+        }
+    }
+
+    // MARK: - Delegate
+
+    /// What a notification response should do. A dismissal must NOT navigate —
+    /// registering `.customDismissAction` is what starts delivering those here,
+    /// and treating every response as a tap would yank the user to a pane
+    /// because they swiped a banner away.
+    enum ResponseRoute: Equatable {
+        case navigate
+        case ignore
+    }
+
+    nonisolated static func responseRoute(for actionIdentifier: String) -> ResponseRoute {
+        switch actionIdentifier {
+        case UNNotificationDefaultActionIdentifier,
+             showActionIdentifier: .navigate
+        default: .ignore
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -49,11 +173,13 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
         // actor. This keeps isolation checking ON instead of papering over the
         // off-main delivery with a `@preconcurrency` conformance.
         let userInfo = response.notification.request.content.userInfo
+        let route = Self.responseRoute(for: response.actionIdentifier)
         let paneIDString = userInfo["paneID"] as? String
         let projectIDString = userInfo["projectID"] as? String
         let isQuickTerminal = userInfo["isQuickTerminal"] as? Bool ?? false
         completionHandler()
 
+        guard case .navigate = route else { return }
         guard let paneIDString, let paneID = UUID(uuidString: paneIDString),
               let projectIDString, let projectID = UUID(uuidString: projectIDString)
         else { return }

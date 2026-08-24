@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import UserNotifications
 
 struct TerminalPane: View {
     let pane: Pane
@@ -232,6 +231,10 @@ private struct TerminalSurface: NSViewRepresentable {
         if focused, !wasFocused {
             AdaptiveTerminalChrome.shared.focusDidChange(to: view)
             view.notifySurfaceFocused()
+            // The user is looking at this pane now, so any banner still sitting
+            // in Notification Center for it is stale. Same point Ghostty clears
+            // a surface's notifications from (`focusDidChange`).
+            NotificationHandler.shared.clearDelivered(paneID: pane.id)
             FocusRestoration.restoreFocus(to: pane.id, finder: { [pane] in pane }, in: view.window)
         } else if !focused, wasFocused {
             view.notifySurfaceUnfocused()
@@ -323,7 +326,7 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onDesktopNotification = { [weak pane, weak view] title, body in
             guard let pane else { return }
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
-            Self.postPaneNotification(pane: pane, title: title, body: body)
+            NotificationHandler.shared.post(pane: pane, title: title, body: body)
         }
         view.onProgressStarted = { [weak pane] in
             guard Preferences.shared.showTabStatusIndicator else { return }
@@ -410,30 +413,8 @@ private struct TerminalSurface: NSViewRepresentable {
             } else {
                 String(format: "Exited with code %d (%@)", exitCode, Self.formatDuration(durationSec))
             }
-            Self.postPaneNotification(pane: pane, title: "Command Finished", body: body)
+            NotificationHandler.shared.post(pane: pane, title: "Command Finished", body: body)
         }
-    }
-
-    /// Post a user notification for a pane, with the single routing-critical
-    /// `userInfo` contract (paneID / projectID / isQuickTerminal) defined ONCE
-    /// so the desktop-notification and command-finished paths can't drift and
-    /// silently break tap-routing for one of them.
-    private static func postPaneNotification(pane: Pane, title: String, body: String) {
-        let content = NotificationHandler.makeContent(
-            title: title,
-            body: body,
-            userInfo: [
-                "paneID": pane.id.uuidString,
-                "projectID": pane.projectID.uuidString,
-                "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
-            ]
-        )
-        let request = UNNotificationRequest(
-            identifier: "macterm-\(pane.id.uuidString)-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
-        )
-        UNUserNotificationCenter.current().add(request)
     }
 
     private static func formatDuration(_ seconds: Double) -> String {
