@@ -66,11 +66,8 @@ struct GhosttyConfigSourceTests {
         #expect(text == "theme = xdg-legacy\ntheme = xdg-current\ntheme = app-current")
     }
 
-    /// The modes are exclusive: default mode delegates to libghostty's own
-    /// loader and never touches the stored custom paths — they're kept for
-    /// the next switch back to custom mode, not loaded alongside.
     @Test
-    func default_mode_ignores_stored_custom_paths() {
+    func custom_files_load_after_defaults_and_report_every_missing_path() {
         let source = GhosttyConfigSource(
             selection: GhosttyConfigSelection(
                 loadsDefaultFiles: true,
@@ -91,18 +88,20 @@ struct GhosttyConfigSourceTests {
         )
 
         #expect(defaultLoadCount == 1)
-        #expect(loadedPaths.isEmpty)
-        #expect(missing.isEmpty)
+        #expect(loadedPaths == ["/custom/first.ghostty", "/custom/second.ghostty"])
+        #expect(missing == loadedPaths)
         #expect(source.pathsForRawInspection == [
             "/xdg/ghostty/config",
             "/xdg/ghostty/config.ghostty",
             "/Library/Application Support/com.mitchellh.ghostty/config",
             "/Library/Application Support/com.mitchellh.ghostty/config.ghostty",
+            "/custom/first.ghostty",
+            "/custom/second.ghostty",
         ])
     }
 
     @Test
-    func custom_mode_loads_paths_in_order_and_reports_every_missing_path() {
+    func custom_files_load_without_defaults_when_the_default_layer_is_disabled() {
         let source = GhosttyConfigSource(
             selection: GhosttyConfigSelection(
                 loadsDefaultFiles: false,
