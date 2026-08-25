@@ -1070,6 +1070,20 @@ private struct TabStatusGlyph: View {
     let index: Int
     var agent: AgentIcon?
     var spinnerOverAgent = true
+    @AppStorage(Preferences.Keys.sidebarIconSize)
+    private var iconSizeRaw = SidebarIconSize.medium.rawValue
+
+    private var size: SidebarIconSize {
+        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
+    }
+
+    /// The spinner is a control, so it steps between AppKit's control sizes
+    /// rather than scaling continuously with the icons. `.mini` (12pt) matches
+    /// a small symbol closely; `.regular` is 32pt, far past even a large one,
+    /// so large stays on `.small` and only its frame grows.
+    private var spinnerControlSize: ControlSize {
+        size == .small ? .mini : .small
+    }
 
     var body: some View {
         switch state {
@@ -1079,11 +1093,12 @@ private struct TabStatusGlyph: View {
                     .foregroundStyle(.secondary)
                     .help("Running")
             } else {
+                let side = 16 * size.glyphScale
                 ProgressView()
-                    .controlSize(.small)
+                    .controlSize(spinnerControlSize)
                     .tint(.secondary)
                     .help("Running")
-                    .frame(width: 16, height: 16)
+                    .frame(width: side, height: side)
             }
         case .done:
             SidebarRowIcon(symbol: symbol, index: index, agent: agent)
@@ -1091,16 +1106,18 @@ private struct TabStatusGlyph: View {
                 .overlay(alignment: .bottomTrailing) {
                     // Opaque (not translucent) so it reads clearly over the
                     // icon and the sidebar background. Nested in a background
-                    // ring so it stays legible over any icon color.
+                    // ring so it stays legible over any icon color. Sized off
+                    // the icon so the dot keeps hugging its corner at every
+                    // icon size instead of floating away from a smaller glyph.
                     Circle()
                         .fill(.background)
-                        .frame(width: 7, height: 7)
+                        .frame(width: 7 * size.glyphScale, height: 7 * size.glyphScale)
                         .overlay(
                             Circle()
                                 .fill(MactermTheme.success)
-                                .frame(width: 5, height: 5)
+                                .frame(width: 5 * size.glyphScale, height: 5 * size.glyphScale)
                         )
-                        .offset(x: 2.5, y: 2.5)
+                        .offset(x: 2.5 * size.glyphScale, y: 2.5 * size.glyphScale)
                 }
                 .help("Done")
         case .idle:
@@ -1134,26 +1151,48 @@ private struct SidebarRowIcon: View {
     let symbol: String
     let index: Int
     var agent: AgentIcon?
+    @AppStorage(Preferences.Keys.sidebarIconSize)
+    private var iconSizeRaw = SidebarIconSize.medium.rawValue
     /// Scales with the user's text size like the sibling SF Symbols do; a
     /// fixed 15pt would stay small next to enlarged row text.
     @ScaledMetric(relativeTo: .body)
     private var agentIconSize: CGFloat = 15
+
+    private var size: SidebarIconSize {
+        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
+    }
 
     var body: some View {
         if let agent {
             // A live AI agent in the tab overrides the user's chosen icon —
             // the logo is a status signal, tinted with the agent's brand color
             // (overriding the row's .secondary tint).
+            let side = agentIconSize * size.glyphScale
             Image(agent.rawValue)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
-                .frame(width: agentIconSize, height: agentIconSize)
+                .frame(width: side, height: side)
                 .foregroundStyle(agent.brandColor)
         } else if Preferences.numberIconChoices.contains(symbol) {
-            NumberGlyph(index: index, variant: symbol)
+            NumberGlyph(index: index, variant: symbol, size: size)
         } else {
             Image(systemName: symbol)
+                .imageScale(size.imageScale)
+        }
+    }
+}
+
+private extension SidebarIconSize {
+    /// SwiftUI's own symbol scaling, which sizes a symbol against whatever font
+    /// the row hands it. `medium` is the default, so the middle case leaves an
+    /// icon exactly the size it was before this preference existed rather than
+    /// pinning it to a point size of our own.
+    var imageScale: Image.Scale {
+        switch self {
+        case .small: .small
+        case .medium: .medium
+        case .large: .large
         }
     }
 }
@@ -1161,18 +1200,29 @@ private struct SidebarRowIcon: View {
 private struct NumberGlyph: View {
     let index: Int
     let variant: String
+    var size: SidebarIconSize = .medium
+    /// The `.body` point size, as a metric so the digits keep tracking the
+    /// user's text size once `glyphScale` has been applied — `imageScale` is
+    /// no help here, since these variants draw text rather than a symbol.
+    @ScaledMetric(relativeTo: .body)
+    private var bodyFontSize: CGFloat = 13
+
+    private var digitFont: Font {
+        .system(size: bodyFontSize * size.glyphScale).monospacedDigit()
+    }
 
     var body: some View {
         if variant == Preferences.numberIconPlain {
             Text("\(index)")
-                .font(.body.monospacedDigit())
+                .font(digitFont)
         } else if let suffix = shapeSuffix, (1 ... 50).contains(index) {
             // SF Symbols ships `1.<shape>` through `50.<shape>`; beyond that,
             // fall back to plain digits so we don't render a missing glyph.
             Image(systemName: "\(index).\(suffix)")
+                .imageScale(size.imageScale)
         } else {
             Text("\(index)")
-                .font(.body.monospacedDigit())
+                .font(digitFont)
         }
     }
 

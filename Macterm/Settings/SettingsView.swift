@@ -1027,6 +1027,7 @@ private struct AppearanceSettings: View {
     // not `@AppStorage`, which would bind to the banned `UserDefaults.standard`.
     @State private var projectIconSymbol: String = Preferences.shared.projectIconSymbol
     @State private var tabIconSymbol: String = Preferences.shared.tabIconSymbol
+    @State private var sidebarIconSize: String = Preferences.shared.sidebarIconSize.rawValue
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
     @State private var showSpinnerOverAgentIcons: Bool = Preferences.shared.showSpinnerOverAgentIcons
@@ -1137,6 +1138,15 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .onChange(of: tabIconSymbol) { _, v in Preferences.shared.tabIconSymbol = v }
+
+                Picker("Icon size", selection: $sidebarIconSize) {
+                    ForEach(SidebarIconSize.allCases) { option in
+                        Text(option.displayName).tag(option.rawValue)
+                    }
+                }
+                .onChange(of: sidebarIconSize) { _, v in
+                    Preferences.shared.sidebarIconSize = SidebarIconSize(rawValue: v) ?? .medium
+                }
 
                 Toggle("Auto-name tabs", isOn: $autoNameTabs)
                     .onChange(of: autoNameTabs) { _, v in
