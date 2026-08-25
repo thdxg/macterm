@@ -41,10 +41,26 @@ private final class ObserverTokenStore: @unchecked Sendable {
 @MainActor @Observable
 final class AppState {
     var activeProjectID: UUID? {
-        didSet { Preferences.shared.activeProjectID = activeProjectID }
+        didSet {
+            Preferences.shared.activeProjectID = activeProjectID
+            // Becoming active IS the reload — `warmFocusedProject` only ever
+            // spawns the focused project's shells — so this is the one choke
+            // point every load path passes through, whether it went via
+            // `selectProject` or set the id directly (a cross-project tab
+            // move, a merge, a global tab cycle).
+            if let activeProjectID { unloadedProjectIDs.remove(activeProjectID) }
+        }
     }
 
     var workspaces: [UUID: Workspace] = [:]
+
+    /// Projects the user unloaded this session: their shells were killed and
+    /// only the layout kept. The sidebar dims their tab rows the way an
+    /// unloaded pinned record's row is dimmed — same meaning, "not running,
+    /// select to bring it back". Deliberately in-memory: after a relaunch
+    /// every project is lazy again, so a persisted mark would dim rows whose
+    /// sessions are merely detached rather than dead.
+    private(set) var unloadedProjectIDs: Set<UUID> = []
 
     /// Ordered pinned-tab records — the sidebar's pinned section. A record
     /// whose id matches a live tab in the pinned workspace
@@ -1021,8 +1037,15 @@ final class AppState {
         if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {
             workspaces[projectID] = restored
         }
+        unloadedProjectIDs.insert(projectID)
         if activeProjectID == projectID { activeProjectID = nil }
         saveWorkspaces()
+    }
+
+    /// Whether the project sits in the unloaded state `unloadProject(_:)`
+    /// leaves behind — its tabs are a layout with no shells behind them.
+    func isProjectUnloaded(_ projectID: UUID) -> Bool {
+        unloadedProjectIDs.contains(projectID)
     }
 
     /// The teardown half of `removeProject`, without the workspace save — so
@@ -1041,6 +1064,7 @@ final class AppState {
             }
         }
         workspaces.removeValue(forKey: projectID)
+        unloadedProjectIDs.remove(projectID)
         if activeProjectID == projectID { activeProjectID = nil }
     }
 

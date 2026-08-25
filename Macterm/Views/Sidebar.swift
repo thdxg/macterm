@@ -312,7 +312,11 @@ struct SidebarContent: View {
                     FadingText(record.displayTitle)
                         .foregroundStyle(.secondary)
                 } icon: {
-                    Image(systemName: "pin.slash")
+                    // The pin stays as-is — the row is still pinned, it just
+                    // isn't running; the dimming is what says so. Swapping in
+                    // `pin.slash` read as "unpinned", which is the one thing
+                    // closing a pinned tab never does.
+                    Image(systemName: "pin")
                         .foregroundStyle(.tertiary)
                 }
                 .help("Not running — select to restore from its saved layout")
@@ -383,6 +387,10 @@ struct SidebarContent: View {
         SidebarTabRow(
             tab: tab,
             index: tabIndex + 1,
+            // An unloaded project keeps its tabs as a layout with no shells
+            // behind them — the same state a closed pinned tab is in, so it
+            // gets the same dimmed treatment.
+            isUnloaded: appState.isProjectUnloaded(project.id),
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
@@ -848,6 +856,10 @@ private struct SidebarTabRow: View {
     /// Fixed icon overriding the user's `tabIconSymbol` preference — the
     /// pinned rows pass "pin" so the icon itself marks the row's kind.
     var iconSymbolOverride: String?
+    /// Dim the row: the tab is a layout with no shells behind it (its project
+    /// was unloaded). Matches the unloaded pinned row's treatment — secondary
+    /// title, tertiary icon, and a tooltip saying what selecting it does.
+    var isUnloaded = false
     let onRename: (String) -> Void
     @Environment(AppState.self)
     private var appState
@@ -942,6 +954,10 @@ private struct SidebarTabRow: View {
         .onChange(of: appState.renamingTabID) { _, id in
             if id == tab.id { beginRename() }
         }
+        // Applied only when unloaded: a live row must inherit the List's own
+        // styling, and forcing `.primary` back would flatten the white label
+        // AppKit gives a selected row.
+        .modifier(UnloadedRowStyle(isUnloaded: isUnloaded))
     }
 
     private func beginRename() {
@@ -1032,6 +1048,23 @@ private struct PinTabDropZone: View {
 /// won't fit legibly, so that row collapses back to a single title with the
 /// pane count (see `sidebarRowTitle`). The segments are a TITLE variant, not
 /// their own labels: the row carries one tab icon regardless.
+/// The dimmed treatment shared by every "not running" sidebar row: a tab
+/// whose project was unloaded, and — spelled out inline, since it has no live
+/// tab to render — a closed pinned tab.
+private struct UnloadedRowStyle: ViewModifier {
+    let isUnloaded: Bool
+
+    func body(content: Content) -> some View {
+        if isUnloaded {
+            content
+                .foregroundStyle(.secondary)
+                .help("Not running — select to load the project again")
+        } else {
+            content
+        }
+    }
+}
+
 private struct TabRowTitle: View {
     let tab: TerminalTab
 

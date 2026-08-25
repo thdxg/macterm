@@ -756,6 +756,47 @@ struct AppStateTests {
     }
 
     @Test
+    func unloadProject_marks_the_project_unloaded() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        #expect(!state.isProjectUnloaded(p.id))
+        state.unloadProject(p.id)
+        // The sidebar reads this to dim the project's tab rows, the same way
+        // a closed pinned tab's row is dimmed.
+        #expect(state.isProjectUnloaded(p.id))
+    }
+
+    @Test
+    func selecting_an_unloaded_project_clears_the_mark() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        state.unloadProject(p.id)
+        state.selectProject(p)
+        #expect(!state.isProjectUnloaded(p.id))
+    }
+
+    @Test
+    func becoming_active_clears_the_mark_without_selectProject() {
+        let state = makeAppState()
+        let p = seedProject(state, name: "p1", path: "/tmp1")
+        _ = seedProject(state, name: "p2", path: "/tmp2")
+        state.unloadProject(p.id)
+        // Every load path makes the project active — a cross-project tab
+        // move or a global tab cycle sets the id directly.
+        state.activeProjectID = p.id
+        #expect(!state.isProjectUnloaded(p.id))
+    }
+
+    @Test
+    func removing_an_unloaded_project_forgets_the_mark() {
+        let state = makeAppState()
+        let p = seedProject(state)
+        state.unloadProject(p.id)
+        state.removeProject(p.id)
+        #expect(!state.isProjectUnloaded(p.id))
+    }
+
+    @Test
     func isProjectLoaded_false_without_views_or_workspace() {
         let state = makeAppState()
         #expect(!state.isProjectLoaded(UUID()))
