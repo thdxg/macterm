@@ -489,8 +489,8 @@ enum WindowAppearance {
     /// The panel's tint deliberately lives here (window `backgroundColor` /
     /// glass tint), not in its SwiftUI content — a tinted SwiftUI background
     /// over an installed glass view would double-tint it, the same
-    /// double-paint problem `macterm-overrides.conf` pins
-    /// `background-opacity = 0` to avoid.
+    /// double-paint problem `macterm-overrides.conf` sets
+    /// `background-default-transparent` to avoid.
     static func syncPanel(_ panel: NSPanel) {
         let opacity = Preferences.shared.windowOpacity
         let bg = MactermTheme.nsBg

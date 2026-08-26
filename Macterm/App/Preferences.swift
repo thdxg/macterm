@@ -381,15 +381,20 @@ final class Preferences {
 
     // MARK: - Window
 
-    /// Macterm-painted window background opacity (0–1). Independent from
-    /// ghostty's renderer — `macterm-overrides.conf` pins `background-opacity
-    /// = 0` so ghostty draws fully transparent, then Macterm composites this
-    /// translucency at the window level. Avoids the double-paint problem when
-    /// both layers tint.
+    /// Macterm-painted window background opacity (0–1). Macterm composites
+    /// this translucency at the window level while `macterm-overrides.conf`
+    /// sets `background-default-transparent` so ghostty never paints the
+    /// default background — avoiding the double-paint problem when both
+    /// layers tint. The value is also written into the overrides as
+    /// `background-opacity`, which ghostty applies to TUI-painted cell
+    /// backgrounds when the user's own `background-opacity-cells` flag is
+    /// on — hence the debounced config reload alongside the instant window
+    /// resync.
     var windowOpacity: Double {
         didSet {
             defaults.set(windowOpacity, forKey: Keys.windowOpacity)
             notifyWindowAppearanceChanged()
+            scheduleGhosttyConfigReload()
         }
     }
 
@@ -490,14 +495,34 @@ final class Preferences {
 
     /// Notify observers that a WINDOW-APPEARANCE pref (opacity/blur/glass)
     /// changed, WITHOUT regenerating the ghostty config or reloading libghostty.
-    /// Those values don't appear in the regenerated files (`background-opacity`
-    /// is pinned to 0 unconditionally) — `WindowAppearance.sync` reads them
-    /// straight from Preferences. Previously these setters ran the full
-    /// `notifyConfigChanged()` (two file writes + a whole-config libghostty
-    /// reload) purely to piggy-back on the `.mactermConfigDidChange` post it
-    /// ends with — heavyweight, and fired continuously while dragging a slider.
+    /// `WindowAppearance.sync` reads these values straight from Preferences.
+    /// Previously these setters ran the full `notifyConfigChanged()` (two file
+    /// writes + a whole-config libghostty reload) purely to piggy-back on the
+    /// `.mactermConfigDidChange` post it ends with — heavyweight, and fired
+    /// continuously while dragging a slider.
+    ///
+    /// One value DOES also live in the regenerated overrides: `windowOpacity`
+    /// is written as ghostty's `background-opacity` (so the user's
+    /// `background-opacity-cells` makes painted cells translucent at the
+    /// window opacity). That side is followed by `scheduleGhosttyConfigReload`
+    /// below — debounced, so slider drags stay on this cheap path and the
+    /// libghostty reload fires once after the value settles.
     private func notifyWindowAppearanceChanged() {
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
+    }
+
+    /// The pending debounced reload for `windowOpacity`'s ghostty-side copy.
+    @ObservationIgnored private var ghosttyOpacityReloadTask: Task<Void, Never>?
+
+    /// Regenerate + reload the ghostty config shortly after the last call,
+    /// so a slider drag costs one whole-config reload instead of dozens.
+    private func scheduleGhosttyConfigReload() {
+        ghosttyOpacityReloadTask?.cancel()
+        ghosttyOpacityReloadTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            self?.notifyConfigChanged()
+        }
     }
 
     // MARK: - Quick terminal

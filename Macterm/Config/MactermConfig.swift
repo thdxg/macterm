@@ -56,11 +56,39 @@ final class MactermConfig {
         ].joined(separator: "\n") + "\n"
         write(Data(defaults.utf8), to: defaultsURL)
 
+        let body = Self.overridesBody(
+            windowOpacity: Preferences.shared.windowOpacity,
+            userConfigText: userGhosttyConfigText(),
+            shimDirectory: Self.sshShimDirectory()
+        )
+        write(Data(body.utf8), to: overridesURL)
+    }
+
+    /// The full text of `macterm-overrides.conf`. Pure — live inputs are
+    /// passed in — so the wire contract with libghostty (most importantly the
+    /// fork's `background-default-transparent` key) is unit-testable without
+    /// touching disk.
+    static func overridesBody(
+        windowOpacity: Double,
+        userConfigText: String?,
+        shimDirectory: String?
+    ) -> String {
         var overrides = [
             // Macterm composites window translucency at the AppKit level —
-            // ghostty must draw a fully transparent terminal or we'd double-
-            // tint. See WindowAppearance.swift.
-            "background-opacity = 0",
+            // ghostty must not paint the default background or we'd double-
+            // tint. See WindowAppearance.swift. This fork key skips exactly
+            // that paint (the same renderer mechanism ghostty's own macOS
+            // glass styles use) while leaving `background-opacity`
+            // meaningful for everything else.
+            "background-default-transparent = true",
+            // The real window opacity, so the user's own
+            // `background-opacity-cells` flag works as ghostty documents it:
+            // TUI-painted cell backgrounds become translucent at the window
+            // opacity. Before the fork key existed this was pinned to 0 —
+            // which that flag multiplies into every painted cell, turning
+            // them invisible instead of translucent. Kept current by the
+            // debounced reload in `Preferences.windowOpacity`.
+            "background-opacity = \(windowOpacity)",
             // We call CGSSetWindowBackgroundBlurRadius ourselves; ghostty's
             // own blur would compose on top of it.
             "background-blur = 0",
@@ -81,8 +109,8 @@ final class MactermConfig {
         // GHOSTTY_BIN_DIR on PATH, and the shim answers nothing but `+ssh` —
         // exposing it as a bare `ghostty` would impersonate the real CLI.
         var disabledFeatures = ["no-path"]
-        if let shimDir = Self.sshShimDirectory() {
-            overrides.append("env = GHOSTTY_BIN_DIR=\(shimDir)")
+        if let shimDirectory {
+            overrides.append("env = GHOSTTY_BIN_DIR=\(shimDirectory)")
         } else {
             disabledFeatures.append(contentsOf: ["no-ssh-env", "no-ssh-terminfo"])
         }
@@ -92,21 +120,21 @@ final class MactermConfig {
         // Re-emit the user's effective value with our forced flags appended
         // so only those change. (#75)
         let value = ShellIntegrationFeatures.overrideValue(
-            userConfigText: userGhosttyConfigText(),
+            userConfigText: userConfigText,
             disabled: disabledFeatures
         )
         if let value {
             overrides.append("shell-integration-features = \(value)")
         }
 
-        let body = overrides.joined(separator: "\n") + "\n"
-        write(Data(body.utf8), to: overridesURL)
+        return overrides.joined(separator: "\n") + "\n"
     }
 
     /// Write a wrapper-config file, logging on failure. These writes are
     /// behavior-changing — a failed overrides write silently breaks the
-    /// translucency contract (`background-opacity = 0` never lands, causing
-    /// double-tinting) — so a swallowed `try?` would leave zero diagnostics.
+    /// translucency contract (`background-default-transparent` never lands,
+    /// causing double-tinting) — so a swallowed `try?` would leave zero
+    /// diagnostics.
     private func write(_ data: Data, to url: URL) {
         do {
             try data.write(to: url, options: .atomic)

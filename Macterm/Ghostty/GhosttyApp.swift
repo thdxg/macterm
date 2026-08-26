@@ -428,8 +428,9 @@ final class GhosttyApp {
         //   2. User's Ghostty config files, overriding any default. In automatic
         //      mode, libghostty loads its default roots.
         //   3. Macterm overrides — keys Macterm absolutely needs to control,
-        //      currently just background-opacity/blur for the window-level
-        //      translucency contract. Loaded last so it overrides the user.
+        //      currently the background keys for the window-level translucency
+        //      contract (default-background paint, opacity value, blur).
+        //      Loaded last so it overrides the user.
         // libghostty merges last-wins, so this ordering produces:
         //   Macterm defaults < user's Ghostty config < Macterm overrides
         MactermConfig.shared.defaultsPath.withCString { ghostty_config_load_file(cfg, $0) }
