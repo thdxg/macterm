@@ -16,7 +16,13 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 #
 # Set GHOSTTYKIT_TAG to another tag (or `latest`) to try one without committing:
 #   GHOSTTYKIT_TAG=latest mise run setup
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-26}"
+# `pinned-2026-08-26` is a byte-identical, immutable copy of build-2026-08-26
+# (upstream 2026-08-25 + downstream patches 0001–0004). The daily tag itself
+# couldn't be pinned on its own UTC day: any same-day push to the fork's main —
+# including the nightly sync — deletes and recreates it with different bytes,
+# the exact asset-swap-under-a-pin hazard documented in AGENTS.md. The next
+# ordinary bump (a past-day daily tag, immutable by then) retires this one.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-pinned-2026-08-26}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
