@@ -84,9 +84,9 @@ final class GhosttyApp {
         rt.supports_selection_clipboard = true
         rt.wakeup_cb = { _ in GhosttyApp.shared.callbacks.wakeup() }
         rt.action_cb = { _, target, action in GhosttyApp.shared.callbacks.action(target: target, action: action) }
-        rt.read_clipboard_cb = { ud, loc, state, mimes, mimesLen, list in
+        rt.read_clipboard_cb = { ud, _, state, mimes, mimesLen, list in
             GhosttyApp.shared.callbacks.readClipboard(
-                ud: ud, location: loc, state: state, mimes: mimes, mimesLen: mimesLen, list: list
+                ud: ud, state: state, mimes: mimes, mimesLen: mimesLen, list: list
             )
         }
         rt.confirm_read_clipboard_cb = { ud, confirm, state, _ in

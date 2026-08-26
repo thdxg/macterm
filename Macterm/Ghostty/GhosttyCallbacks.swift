@@ -405,9 +405,12 @@ final class GhosttyCallbacks: @unchecked Sendable {
     /// too). The Zig side frees the request state unless STARTED is returned,
     /// and a STARTED request must be completed — here that happens
     /// synchronously via `completeClipboardRequest`.
+    ///
+    /// The C callback's `location` is not taken: macOS has no X11-style
+    /// selection/primary clipboard, so every location reads the general
+    /// pasteboard — the same deliberate choice as `writeClipboard`.
     func readClipboard(
         ud: UnsafeMutableRawPointer?,
-        location _: ghostty_clipboard_e,
         state: UnsafeMutableRawPointer?,
         mimes: UnsafePointer<UnsafePointer<CChar>?>?,
         mimesLen: Int,
