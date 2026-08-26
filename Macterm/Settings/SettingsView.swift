@@ -1045,8 +1045,6 @@ private struct AppearanceSettings: View {
     @State
     private var liquidGlassStyle: WindowGlassStyle = Preferences.shared.windowGlassStyle
     @State
-    private var paneDimOpacity: Double = Preferences.shared.paneDimOpacity
-    @State
     private var adaptiveTerminalChrome: Bool = Preferences.shared.adaptiveTerminalChromeEnabled
     /// Inverted view of `Preferences.hideTitleBar`: the control reads as
     /// "Show toolbar" (on by default), the preference stores the hide.
@@ -1107,21 +1105,6 @@ private struct AppearanceSettings: View {
                 Text("Matches the whole window for a single pane; in a split, only each full-screen app's pane changes color.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-
-            Section("Split Panes") {
-                SettingsSlider(
-                    label: "Unfocused dimming",
-                    value: $paneDimOpacity,
-                    range: 0.0 ... Preferences.maxPaneDimOpacity,
-                    step: nil,
-                    display: { "\(Int(($0 / Preferences.maxPaneDimOpacity * 100).rounded()))%" }
-                )
-                .onChange(of: paneDimOpacity) { _, v in
-                    Preferences.shared.paneDimOpacity = v
-                }
-                Text("How dark unfocused panes get in a split layout.")
-                    .settingsCaption()
             }
 
             Section("Sidebar") {

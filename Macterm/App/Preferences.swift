@@ -161,12 +161,6 @@ final class Preferences {
         didSet { defaults.set(terminalScrollSpeed, forKey: Keys.terminalScrollSpeed) }
     }
 
-    /// How dark the overlay on an unfocused split pane gets (0–0.8, 0 = no dimming).
-    /// Capped below 1 so an unfocused pane is never fully black.
-    var paneDimOpacity: Double {
-        didSet { defaults.set(paneDimOpacity, forKey: Keys.paneDimOpacity) }
-    }
-
     // MARK: - Sidebar icons
 
     var projectIconSymbol: String {
@@ -345,9 +339,6 @@ final class Preferences {
         numberIconSquare,
         numberIconPlain,
     ]
-
-    /// Upper bound for `paneDimOpacity` — a fully black overlay reads as broken, not dim.
-    static let maxPaneDimOpacity: Double = 0.8
 
     /// Curated SF Symbols offered in Settings — keeps users from typing invalid names.
     static let projectIconChoices: [String] = [
@@ -611,9 +602,6 @@ final class Preferences {
         self.defaults = defaults
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
         terminalScrollSpeed = Self.clampScrollSpeed(defaults.double(forKey: Keys.terminalScrollSpeed), fallback: 1.0)
-        paneDimOpacity = Self.clampPaneDimOpacity(
-            (defaults.object(forKey: Keys.paneDimOpacity) as? Double) ?? 0.2
-        )
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
         windowBlurRadius = defaults.integer(forKey: Keys.windowBlurRadius)
         windowGlassEnabled = defaults.object(forKey: Keys.windowGlassEnabled) as? Bool ?? false
@@ -695,10 +683,6 @@ final class Preferences {
         return min(max(v, sidebarWidthRange.lowerBound), sidebarWidthRange.upperBound)
     }
 
-    private static func clampPaneDimOpacity(_ v: Double) -> Double {
-        max(0.0, min(maxPaneDimOpacity, v))
-    }
-
     private static func clampScrollSpeed(_ v: Double, fallback: Double) -> Double {
         guard v > 0 else { return fallback }
         return max(0.25, min(3.0, v))
@@ -725,6 +709,13 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.eagerlyStartProjectTabs.enabled")
             defaults.removeObject(forKey: "macterm.session.terminateOnQuit")
             defaults.set(true, forKey: Keys.migrationRetiredToggleKeys)
+        }
+        // The unfocused-split dim is now driven by the user's ghostty config
+        // (`unfocused-split-opacity` / `unfocused-split-fill`), so the
+        // Macterm-side slider key is dead.
+        if !defaults.bool(forKey: Keys.migrationRetiredPaneDimKey) {
+            defaults.removeObject(forKey: "macterm.pane.dimOpacity")
+            defaults.set(true, forKey: Keys.migrationRetiredPaneDimKey)
         }
     }
 
@@ -754,7 +745,6 @@ final class Preferences {
     enum Keys {
         static let autoTiling = "macterm.autoTiling.enabled"
         static let terminalScrollSpeed = "macterm.terminal.scrollSpeed"
-        static let paneDimOpacity = "macterm.pane.dimOpacity"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"
         static let windowGlassEnabled = "macterm.window.glassEnabled"
@@ -795,5 +785,6 @@ final class Preferences {
         static let tabSwitcherPosition = "macterm.toolbar.tabSwitcherPosition"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
         static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"
+        static let migrationRetiredPaneDimKey = "macterm.migration.retired_pane_dim_key"
     }
 }

@@ -64,14 +64,15 @@ enum MactermTheme {
         NSColor(srgbRed: CGFloat(rgb.r) / 255, green: CGFloat(rgb.g) / 255, blue: CGFloat(rgb.b) / 255, alpha: 1)
     }
 
-    /// A translucent overlay that dims an unfocused pane, at the user-configured
-    /// `opacity` (#156). Derived from the theme rather than a fixed black so it
-    /// reads correctly on light themes too: on a light theme, dimming toward the
-    /// (dark) foreground reduces contrast the way black does on a dark theme;
-    /// on a dark theme, black is correct.
+    /// The translucent overlay that dims an unfocused split pane, honoring the
+    /// user's ghostty `unfocused-split-opacity` / `unfocused-split-fill` with
+    /// Ghostty.app's exact semantics. The fill defaults to the theme
+    /// background, so the pane fades toward the background — which reads
+    /// correctly on light themes too, where dimming toward black would not.
     @MainActor
-    static func dimOverlay(opacity: Double) -> Color {
-        colorScheme == .light ? fgAlpha(opacity) : Color.black.opacity(opacity)
+    static var dimOverlay: Color {
+        let app = GhosttyApp.shared
+        return Color(nsColor: app.unfocusedSplitFill.withAlphaComponent(app.unfocusedSplitDimOpacity))
     }
 
     /// Scene-level light/dark scheme. Follows ONLY the resolved config theme,

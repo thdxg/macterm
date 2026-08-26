@@ -137,11 +137,11 @@ private struct SplitLeafView: View {
         )
         .overlay {
             if !isFocused, isSplit, pane.adaptiveBackgroundColor == nil {
-                // Theme-derived dim (not fixed black) so an unfocused pane
-                // dims correctly on light themes too, at the user-configured
-                // opacity (#156). A pane whose TUI supplies its own adaptive
-                // background stays color-accurate even while unfocused.
-                MactermTheme.dimOverlay(opacity: Preferences.shared.paneDimOpacity)
+                // Driven by the user's ghostty `unfocused-split-opacity` /
+                // `unfocused-split-fill`, same as Ghostty.app's split dim. A
+                // pane whose TUI supplies its own adaptive background stays
+                // color-accurate even while unfocused.
+                MactermTheme.dimOverlay
                     .allowsHitTesting(false)
             }
         }

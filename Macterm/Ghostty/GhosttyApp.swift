@@ -322,6 +322,27 @@ final class GhosttyApp {
         return NSColor(srgbRed: CGFloat(c.r) / 255, green: CGFloat(c.g) / 255, blue: CGFloat(c.b) / 255, alpha: 1)
     }
 
+    /// The alpha of the overlay that dims an unfocused split pane, derived
+    /// from the user's `unfocused-split-opacity`. Ghostty defines that key as
+    /// the unfocused *pane's* opacity (1 = no dimming; libghostty clamps it to
+    /// 0.15…1 at load), so the overlay draws at its complement — the same
+    /// reading Ghostty.app applies.
+    var unfocusedSplitDimOpacity: Double {
+        guard let config else { return 0 }
+        var opacity = 1.0
+        let key = "unfocused-split-opacity"
+        guard ghostty_config_get(config, &opacity, key, UInt(key.utf8.count)) else { return 0 }
+        return 1 - opacity
+    }
+
+    /// The color of that overlay (`unfocused-split-fill`). The key is unset by
+    /// default and Ghostty falls back to the theme background, so the dim
+    /// reads as the pane fading toward the background — correct on light and
+    /// dark themes alike.
+    var unfocusedSplitFill: NSColor {
+        configColor("unfocused-split-fill") ?? backgroundColor
+    }
+
     private func configColor(_ key: String) -> NSColor? {
         guard let config else { return nil }
         var color = ghostty_config_color_s()
