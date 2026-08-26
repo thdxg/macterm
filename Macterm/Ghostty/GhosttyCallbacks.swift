@@ -397,24 +397,111 @@ final class GhosttyCallbacks: @unchecked Sendable {
         return byExtension ?? NSWorkspace.shared.urlForApplication(toOpen: .plainText)
     }
 
-    func readClipboard(ud: UnsafeMutableRawPointer?, location: ghostty_clipboard_e, state: UnsafeMutableRawPointer?) -> Bool {
+    /// Serve a clipboard read. Macterm resolves every read to TEXT (file URLs
+    /// become escaped paths, raw images become a temp-PNG path — see
+    /// `readPasteboardText`), so a request is served only when it asks for a
+    /// text representation; paste and OSC 52 reads request exactly
+    /// `text/plain` (apprt/embedded.zig normalizes text-like Kitty mimes to it
+    /// too). The Zig side frees the request state unless STARTED is returned,
+    /// and a STARTED request must be completed — here that happens
+    /// synchronously via `completeClipboardRequest`.
+    func readClipboard(
+        ud: UnsafeMutableRawPointer?,
+        location _: ghostty_clipboard_e,
+        state: UnsafeMutableRawPointer?,
+        mimes: UnsafePointer<UnsafePointer<CChar>?>?,
+        mimesLen: Int,
+        list: Bool
+    ) -> ghostty_clipboard_read_result_e {
         // `ghostty_surface_complete_clipboard_request`'s surface parameter is
         // non-null on the Zig side; a request completing during surface
         // teardown (nil `surface`) is UB, not a graceful no-op. Guard it.
-        guard let view = surfaceView(from: ud), let surface = view.surface else { return false }
-        let text = Self.readPasteboardText() ?? ""
-        // Record the resolved payload, not just the Command-V key code: an
-        // empty/whitespace clipboard must not make a later blank Return look
-        // like a nonempty agent submission.
-        //
-        // Dispatched async BEFORE the synchronous completion below, which is
-        // the ordering the evidence depends on: the main queue runs the record
-        // after this callback returns — so after the paste has reached the
-        // surface — but still before any Return the user types next. Moving it
-        // after the completion call, or making it synchronous, breaks that.
-        DispatchQueue.main.async { view.surfaceDidPasteText(text) }
-        text.withCString { ghostty_surface_complete_clipboard_request(surface, $0, state, false) }
-        return true
+        guard let view = surfaceView(from: ud), let surface = view.surface else {
+            return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED
+        }
+
+        var wantsText = false
+        if let mimes {
+            for i in 0 ..< mimesLen {
+                guard let ptr = mimes[i] else { continue }
+                if String(cString: ptr).hasPrefix("text/") {
+                    wantsText = true
+                    break
+                }
+            }
+        }
+        let text: String? = wantsText ? Self.readPasteboardText() : nil
+
+        if wantsText {
+            // Record the resolved payload, not just the Command-V key code: an
+            // empty/whitespace clipboard must not make a later blank Return
+            // look like a nonempty agent submission.
+            //
+            // Dispatched async BEFORE the synchronous completion below, which
+            // is the ordering the evidence depends on: the main queue runs the
+            // record after this callback returns — so after the paste has
+            // reached the surface — but still before any Return the user types
+            // next. Moving it after the completion call, or making it
+            // synchronous, breaks that.
+            let recorded = text ?? ""
+            DispatchQueue.main.async { view.surfaceDidPasteText(recorded) }
+        }
+
+        // Nothing to serve and no listing requested: the read has nothing to
+        // complete with (returning non-STARTED tells the Zig side to free the
+        // request instead of waiting for a completion).
+        if text == nil, !list {
+            return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
+        }
+
+        Self.completeClipboardRequest(
+            surface,
+            text: text,
+            listsTextPlain: list && Self.hasPasteboardContent(),
+            state: state
+        )
+        return GHOSTTY_CLIPBOARD_READ_STARTED
+    }
+
+    /// Complete a clipboard read with an optional text payload over the
+    /// `ghostty_clipboard_complete_s` wire struct. Synchronous — the C memory
+    /// only has to outlive the call — so the strings are borrowed
+    /// (`withCString`) rather than copied to the heap.
+    private static func completeClipboardRequest(
+        _ surface: ghostty_surface_t,
+        text: String?,
+        listsTextPlain: Bool,
+        state: UnsafeMutableRawPointer?,
+        confirmed: Bool = false
+    ) {
+        "text/plain".withCString { mimePtr in
+            func finish(_ contents: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int) {
+                var availableEntry: UnsafePointer<CChar>? = mimePtr
+                withUnsafePointer(to: &availableEntry) { availableBase in
+                    var complete = ghostty_clipboard_complete_s(
+                        contents: contents,
+                        contents_len: count,
+                        available: listsTextPlain ? availableBase : nil,
+                        available_len: listsTextPlain ? 1 : 0,
+                        confirmed: confirmed,
+                        remember: false
+                    )
+                    ghostty_surface_complete_clipboard_request(surface, &complete, state)
+                }
+            }
+            if let text {
+                text.withCString { textPtr in
+                    var content = ghostty_clipboard_content_s(
+                        mime: mimePtr,
+                        data: textPtr,
+                        len: text.utf8.count
+                    )
+                    withUnsafePointer(to: &content) { finish($0, 1) }
+                }
+            } else {
+                finish(nil, 0)
+            }
+        }
     }
 
     // MARK: - Pasteboard text resolution (shared with GhosttyTerminalNSView)
@@ -529,9 +616,34 @@ final class GhosttyCallbacks: @unchecked Sendable {
         }
     }
 
-    func confirmReadClipboard(ud: UnsafeMutableRawPointer?, content: UnsafePointer<CChar>?, state: UnsafeMutableRawPointer?) {
-        guard let content, let surface = surface(from: ud) else { return }
-        ghostty_surface_complete_clipboard_request(surface, content, state, true)
+    /// A clipboard READ that libghostty's policy says needs user confirmation
+    /// (e.g. OSC 52 with `clipboard-read = ask`). Macterm's long-standing
+    /// behavior is to approve reads without a prompt (only WRITES prompt — see
+    /// `confirmAndWriteClipboard`), so complete with the confirm payload's own
+    /// contents verbatim. Synchronous, so the borrowed C memory stays valid
+    /// for the duration; a payload we can't honor is denied rather than
+    /// dropped, because the Zig side keeps the request state alive waiting
+    /// for one of the two calls.
+    func confirmReadClipboard(
+        ud: UnsafeMutableRawPointer?,
+        confirm: UnsafePointer<ghostty_clipboard_confirm_s>?,
+        state: UnsafeMutableRawPointer?
+    ) {
+        guard let surface = surface(from: ud) else { return }
+        guard let confirm else {
+            ghostty_surface_deny_clipboard_request(surface, state)
+            return
+        }
+        let c = confirm.pointee
+        var complete = ghostty_clipboard_complete_s(
+            contents: c.contents,
+            contents_len: c.contents_len,
+            available: c.available,
+            available_len: c.available_len,
+            confirmed: true,
+            remember: false
+        )
+        ghostty_surface_complete_clipboard_request(surface, &complete, state)
     }
 
     func writeClipboard(
@@ -546,10 +658,16 @@ final class GhosttyCallbacks: @unchecked Sendable {
         // upstream Ghostty on macOS) — hence `location` is intentionally
         // ignored here.
         for item in UnsafeBufferPointer(start: content, count: Int(len)) {
-            guard let data = item.data, let mime = item.mime,
+            guard let data = item.data, let mime = item.mime, item.len > 0,
                   String(cString: mime).hasPrefix("text/plain")
             else { continue }
-            let string = String(cString: data)
+            // The wire data is length-delimited and not necessarily
+            // NUL-terminated (binary-safe since the clipboard API rework).
+            guard let string = String(
+                data: Data(bytes: data, count: item.len),
+                encoding: .utf8
+            )
+            else { continue }
             // libghostty asks the host to CONFIRM before applying an OSC 52
             // write (a remote/TUI program overwriting the user's clipboard).
             // Honor it: prompt before clobbering, instead of writing silently.
