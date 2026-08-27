@@ -31,6 +31,15 @@ jobs:
   # an edit-to-promote at all — the guess that "the event surely reflects the
   # release" is what caused this bug, so don't re-make it in a new spot.
   flag:
+    # The rolling `tip` tag is not a release tag (release-tip.yml owns it), so
+    # skip this whole workflow for it — every other job `needs: flag`, and a
+    # skipped dependency skips them all. Belt-and-braces: release-tip.yml
+    # mutates the tip release with `secrets.GITHUB_TOKEN`, and events raised by
+    # that token don't start new workflow runs, so `release: published` should
+    # never fire for `tip` in the first place. If it ever does, the version gate
+    # below would fail on a tag that isn't `vX.Y.Z` and paint main red for a tip
+    # build that worked fine.
+    if: ${{ github.ref_name != 'tip' }}
     runs-on: ubuntu-latest
     # Explicit: reading a release only needs contents:read, and declaring it
     # keeps the job working if the repo's default workflow token is ever
@@ -100,9 +109,9 @@ jobs:
         run: mise run setup --verbose
 
       # Signs with the stable self-signed release certificate so users' TCC
-      # privacy grants survive updates. Extracted into a composite action so a
-      # second publishing workflow can share it verbatim — the rationale, the
-      # failure modes, and the "never rotate casually" warning live there.
+      # privacy grants survive updates. Shared verbatim with release-tip.yml —
+      # the rationale, the failure modes, and the "never rotate casually"
+      # warning live in the action itself.
       - name: Import signing certificate
         uses: ./.github/actions/import-signing-cert
         with:

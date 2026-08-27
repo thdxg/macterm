@@ -26,13 +26,23 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 /// Which Sparkle appcast channel the updater draws from.
 ///
 /// `stable` maps to Sparkle's default channel (items with no
-/// `<sparkle:channel>`); `beta` additionally allows items tagged
-/// `<sparkle:channel>beta</sparkle:channel>`. The raw values are persisted, so
-/// renaming a case is a stored-preference migration — and `beta`'s raw value is
-/// the channel name sent to Sparkle, matching `betaUpdateChannel`.
+/// `<sparkle:channel>`); `beta` and `tip` additionally allow items tagged with
+/// the matching `<sparkle:channel>`. The raw values are persisted, so renaming a
+/// case is a stored-preference migration — and every non-stable case's raw value
+/// IS the channel name sent to Sparkle (see `betaUpdateChannel` /
+/// `tipUpdateChannel`), so it is a wire-format migration too.
+///
+/// Sparkle always admits the default channel on top of whatever
+/// `allowedChannels` returns, so a beta or tip follower still sees stable items.
+/// That is harmless because the comparison versions can't collide: a beta sorts
+/// below the stable release of the same `X.Y.Z` and a tip sorts above it (see
+/// `sparkle_comparison_version` in scripts/_lib.sh).
 enum UpdateChannel: String, CaseIterable, Identifiable {
     case stable
     case beta
+    /// Every commit on main that passes CI, built and published by
+    /// `.github/workflows/release-tip.yml`. Not release-tested.
+    case tip
 
     var id: String { rawValue }
 
@@ -40,7 +50,24 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
         switch self {
         case .stable: "Stable"
         case .beta: "Beta"
+        case .tip: "Tip"
         }
+    }
+
+    /// The channel this BUILD was cut for, baked into `Info.plist` as
+    /// `MactermUpdateChannel` by `scripts/build.sh`. Used as the default when
+    /// the user has never chosen a channel.
+    ///
+    /// This exists for tip specifically. A tip DMG downloaded by hand from the
+    /// rolling `tip` release would otherwise sit on `stable`, and because a tip
+    /// version outranks every stable release of the same base, Sparkle would
+    /// report "You're up to date" forever — a silent dead end. A beta needs no
+    /// such treatment (it sorts *below* its stable, so the stable release still
+    /// reaches it), which is why `macterm_update_channel` in scripts/_lib.sh
+    /// only ever stamps `tip` or `stable`.
+    static var bundleDefault: UpdateChannel {
+        (Bundle.main.object(forInfoDictionaryKey: "MactermUpdateChannel") as? String)
+            .flatMap(UpdateChannel.init(rawValue:)) ?? .stable
     }
 }
 
@@ -282,9 +309,13 @@ final class Preferences {
     static let defaultSidebarWidth: Double = 180
 
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
-    /// `allowedChannelsForUpdater`, so `.beta` makes prerelease items visible to
-    /// both the scheduled check and "Check for Updates…". Defaults to `.stable`:
-    /// the only channel a fresh install ever sees.
+    /// `allowedChannels(for:)`, so `.beta`/`.tip` make the matching prerelease
+    /// items visible to both the scheduled check and "Check for Updates…".
+    ///
+    /// Defaults to `UpdateChannel.bundleDefault`, which is `.stable` for every
+    /// build except a tip one — so a fresh install of a stable or beta DMG never
+    /// sees anything but stable, while a hand-installed tip DMG follows tip
+    /// instead of dead-ending (see `bundleDefault`).
     ///
     /// Sparkle reads `allowedChannels` fresh on every check, so changing this
     /// takes effect on the next check with no restart.
@@ -681,7 +712,7 @@ final class Preferences {
         sidebarWidth = storedSidebarWidth
         launchSidebarWidth = storedSidebarWidth
         updateChannel = (defaults.string(forKey: Keys.updateChannel))
-            .flatMap(UpdateChannel.init(rawValue:)) ?? .stable
+            .flatMap(UpdateChannel.init(rawValue:)) ?? UpdateChannel.bundleDefault
         tabSwitcherVisibility = (defaults.string(forKey: Keys.tabSwitcherVisibility))
             .flatMap(TabSwitcherVisibility.init(rawValue:)) ?? .whenMultiple
         tabSwitcherPosition = (defaults.string(forKey: Keys.tabSwitcherPosition))

@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>GitCommit</key>
 	<string>$(GIT_COMMIT)</string>
+	<key>MactermUpdateChannel</key>
+	<string>$(MACTERM_UPDATE_CHANNEL)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>LSMinimumSystemVersion</key>

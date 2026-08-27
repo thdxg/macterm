@@ -10,16 +10,28 @@
 #   GITHUB_REPOSITORY      — provided by GitHub Actions (owner/repo)
 #
 # Optional env:
-#   PRERELEASE             — "true" to tag items with <sparkle:channel>beta.
-#                            Only updaters whose allowedChannels includes
-#                            "beta" (Settings → Updates → Channel: Beta)
-#                            can see them; everyone else keeps getting stable.
+#   PRERELEASE             — "true" for a prerelease. Required for any channel.
+#   CHANNEL                — Sparkle channel name for the new items. Empty =
+#                            the default channel (visible to everyone).
+#                            Defaults to "beta" when PRERELEASE is true, which
+#                            is the historical behaviour; release-tip.yml passes
+#                            "tip". Only updaters whose allowedChannels includes
+#                            the name (Settings → Updates → Channel) see them.
+#   ROLLING                — "true" to REPLACE the channel's items instead of
+#                            appending: every existing item carrying $CHANNEL is
+#                            removed before the new one is inserted, so a
+#                            per-commit channel can't grow the feed without
+#                            bound. Also refuses to go backwards (see below).
 #
-# ONE feed, two channels — deliberately not a second appcast file. Sparkle
-# filters channels client-side, so a beta tester's app and a stable user's app
-# read the same URL and diverge only on the delegate's allowedChannels. That
-# also means a tester who opts back out immediately sees stable again, with no
-# feed-URL migration.
+# ONE feed, N channels — deliberately not a file per channel. Sparkle filters
+# channels client-side, so a tip follower, a beta tester and a stable user read
+# the same URL and diverge only on the delegate's allowedChannels. That also
+# means someone who opts back out immediately sees their old channel again, with
+# no feed-URL migration. (This is where we diverge from ghostty, which serves
+# tip.files/release.files appcasts picked by a `feedURLString` delegate because
+# it did not want to share one file. Macterm already shipped the channel-element
+# mechanism for beta and it works, so tip is one more channel rather than a
+# second feed and a second Info.plist SUFeedURL story.)
 #
 # Usage: publish-appcast.sh <dmg_dir>
 
@@ -30,6 +42,24 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 DMG_DIR="${1:-dmgs}"
 PRERELEASE="${PRERELEASE:-false}"
+ROLLING="${ROLLING:-false}"
+# An explicit CHANNEL wins; otherwise a prerelease means beta, preserving the
+# behaviour from before tip existed (release.yml still passes only PRERELEASE).
+CHANNEL="${CHANNEL:-}"
+if [[ -z "$CHANNEL" && "$PRERELEASE" == "true" ]]; then
+  CHANNEL="beta"
+fi
+# A channel-tagged item is invisible to default updaters, so tagging a STABLE
+# release would silently cut off every user who hasn't opted into a channel.
+# Refuse rather than publish an item nobody can see.
+if [[ -n "$CHANNEL" && "$PRERELEASE" != "true" ]]; then
+  echo "error: CHANNEL='$CHANNEL' requires PRERELEASE=true; a stable release must carry no channel" >&2
+  exit 1
+fi
+if [[ "$ROLLING" == "true" && -z "$CHANNEL" ]]; then
+  echo "error: ROLLING=true needs a CHANNEL to scope the replacement to" >&2
+  exit 1
+fi
 # MUST match the app's CFBundleVersion, which build.sh derives with the same
 # helper — Sparkle orders updates by this, not by the display string.
 COMPARISON_VERSION="$(sparkle_comparison_version "$VERSION")"
@@ -98,15 +128,16 @@ if [[ ${#dmgs[@]} -eq 0 ]]; then
   exit 1
 fi
 
-# Prereleases carry <sparkle:channel>beta</sparkle:channel>; stable items carry
+# Prereleases carry <sparkle:channel>NAME</sparkle:channel>; stable items carry
 # no channel element at all (Sparkle's default channel, visible to everyone).
-# The literal "beta" is a wire contract with `betaUpdateChannel` in
-# Macterm/App/Updater.swift — UpdaterChannelTests pins it on the Swift side.
+# The channel literals are a wire contract with `UpdateChannel` in
+# Macterm/App/Preferences.swift — UpdaterChannelTests pins them on the Swift
+# side by reading this script.
 CHANNEL_LINE=""
 TITLE_SUFFIX=""
-if [[ "$PRERELEASE" == "true" ]]; then
-  CHANNEL_LINE=$'\n      <sparkle:channel>beta</sparkle:channel>'
-  TITLE_SUFFIX=" (beta)"
+if [[ -n "$CHANNEL" ]]; then
+  CHANNEL_LINE=$'\n      <sparkle:channel>'"${CHANNEL}"'</sparkle:channel>'
+  TITLE_SUFFIX=" (${CHANNEL})"
 fi
 
 for dmg in "${dmgs[@]}"; do
@@ -158,10 +189,63 @@ if [[ ! -f appcast.xml ]]; then
 HEADER
 fi
 
+# A rolling channel replaces its own items rather than appending. Without this
+# the tip channel would add an <item> per commit to main and the feed every
+# updater downloads on every check would grow without bound — and worse, the
+# stale items would be LIES: a tip build's DMG is pruned off the rolling `tip`
+# release once newer ones exist, so an old item's enclosure 404s. Keeping
+# exactly one tip item means the only tip enclosure the feed names is the one
+# that is definitely still there.
+#
+# (ghostty instead keeps its newest 16 tip items, which it can afford because
+# its enclosures live at immutable per-commit R2 paths that are never deleted.
+# On GitHub release assets there is no such immutable URL, so we keep one.)
+if [[ "$ROLLING" == "true" ]]; then
+  # Refuse to move the channel BACKWARDS. Runs are single-flight
+  # (release-tip.yml's concurrency group), so this should be unreachable — but
+  # if two runs ever did land out of order, silently republishing an older build
+  # would offer every follower a downgrade they can't undo. Exit 0, not 1: it is
+  # a superseded run, not a broken one.
+  PREVIOUS_VERSION=$(awk -v ch="$CHANNEL" '
+    /<item>/ { buf = ""; ver = ""; hit = 0; next }
+    /<\/item>/ { if (hit && ver != "") print ver; next }
+    {
+      if (index($0, "<sparkle:channel>" ch "</sparkle:channel>")) hit = 1
+      if (match($0, /<sparkle:version>[^<]*<\/sparkle:version>/)) {
+        ver = substr($0, RSTART + 17, RLENGTH - 17 - 18)
+      }
+    }
+  ' appcast.xml | LC_ALL=C sort -V | tail -1)
+  if [[ -n "$PREVIOUS_VERSION" ]]; then
+    NEWEST=$(printf '%s\n%s\n' "$PREVIOUS_VERSION" "$COMPARISON_VERSION" | LC_ALL=C sort -V | tail -1)
+    if [[ "$COMPARISON_VERSION" == "$PREVIOUS_VERSION" || "$NEWEST" != "$COMPARISON_VERSION" ]]; then
+      echo "appcast's ${CHANNEL} channel is already at ${PREVIOUS_VERSION}; refusing to publish ${COMPARISON_VERSION} over it"
+      exit 0
+    fi
+  fi
+  # Drop every existing item carrying this channel. Buffer whole <item> blocks
+  # so the decision is made on the block, not a line.
+  awk -v ch="$CHANNEL" '
+    /<item>/ { buf = $0 ORS; in_item = 1; drop = 0; next }
+    in_item {
+      buf = buf $0 ORS
+      if (index($0, "<sparkle:channel>" ch "</sparkle:channel>")) drop = 1
+      if (index($0, "</item>")) {
+        if (!drop) printf "%s", buf
+        in_item = 0
+      }
+      next
+    }
+    { print }
+  ' appcast.xml > appcast.xml.pruned
+  mv appcast.xml.pruned appcast.xml
+fi
+
 # Insert the new <item>s before </channel> — but only if this version isn't
 # already present. Re-running the workflow for the same tag (a common recovery
 # action) would otherwise append a duplicate <item> for the version, leaving
-# Sparkle with two entries for one release.
+# Sparkle with two entries for one release. (Sparkle picks one of a duplicated
+# version arbitrarily, so the wrong pick reports an invalid signature.)
 if grep -q "<sparkle:version>${COMPARISON_VERSION}</sparkle:version>" appcast.xml; then
   echo "appcast already has an entry for ${VERSION}; not inserting a duplicate"
 else
@@ -179,7 +263,9 @@ mkdir -p notes
 cp "$NOTES_HTML_FILE" "$NOTES_REL_PATH"
 
 git add appcast.xml "$NOTES_REL_PATH"
-git commit -m "Publish appcast for ${TAG}"
+# Name the VERSION as well as the tag: a rolling tag is the same string on every
+# publish, so `Publish appcast for tip` alone makes gh-pages history unreadable.
+git commit -m "Publish appcast for ${TAG} (${VERSION})"
 git push origin gh-pages
 
-echo "Published appcast for ${TAG}"
+echo "Published appcast for ${TAG} (${VERSION})"

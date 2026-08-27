@@ -16,6 +16,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 # CFBundleShortVersionString keeps the human-readable $VERSION for display.
 BUILD_NUMBER="$(sparkle_comparison_version "$VERSION")"
 GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+# Baked into Info.plist as MactermUpdateChannel and used as the DEFAULT update
+# channel when the user has never picked one (Preferences.init). A tip DMG
+# installed by hand would otherwise sit on the stable channel and, because a tip
+# version outranks every stable release of the same base, see "You're up to
+# date" forever. See macterm_update_channel in _lib.sh for why beta needs no
+# such treatment.
+MACTERM_UPDATE_CHANNEL="$(macterm_update_channel "$VERSION")"
 SPARKLE_ED_PUBLIC_KEY="${SPARKLE_ED_PUBLIC_KEY:-SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER}"
 
 # Optional stable code-signing identity (a SHA-1 identity hash or a certificate
@@ -61,6 +68,7 @@ xcodebuild \
   MARKETING_VERSION="$VERSION" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   GIT_COMMIT="$GIT_COMMIT" \
+  MACTERM_UPDATE_CHANNEL="$MACTERM_UPDATE_CHANNEL" \
   SPARKLE_ED_PUBLIC_KEY="$SPARKLE_ED_PUBLIC_KEY" \
   ${SIGNING_OVERRIDES[@]+"${SIGNING_OVERRIDES[@]}"} \
   archive \

@@ -1,0 +1,376 @@
+name: Release tip
+
+# The `tip` channel: a universal Release build of every CI-passing commit on
+# main, published to a rolling `tip` prerelease and offered by Sparkle to anyone
+# who set Settings → Updates → Channel to Tip.
+#
+# Modelled on ghostty's release-tip.yml (workflow_run after Test, a force-moved
+# `tip` tag, one permanent prerelease whose assets are overwritten in place), with
+# three deliberate differences:
+#
+#   1. We gate on Test having PASSED. Ghostty's tip fires on Test *completing*
+#      and carries no `conclusion` check anywhere, so it ships builds from red
+#      commits. "Every ci-passing commit" is the whole contract here, so the gate
+#      job below requires both Test and Checks to be green for this exact SHA.
+#   2. Artifacts live on the GitHub release, not a per-commit blob store.
+#      Ghostty writes immutable `/<sha>/Ghostty.dmg` objects to R2 and can
+#      therefore keep 16 tip items in its appcast; we have one mutable release,
+#      so the appcast keeps exactly ONE tip item and old DMGs are pruned.
+#   3. One feed, one more Sparkle channel — not a second appcast file. See the
+#      header of scripts/publish-appcast.sh.
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+    branches: [main]
+  # Manual re-run for a wedged tip (a cancelled publish, a transient gh-pages
+  # push failure). Builds whatever main is at now.
+  workflow_dispatch:
+
+# Single-flight, and deliberately NOT cancel-in-progress. Publishing is a
+# read-modify-write of appcast.xml on gh-pages plus a force-moved tag and an
+# asset swap; two runs interleaving there can leave the feed naming a DMG that
+# was pruned. Queuing costs runner minutes and gains correctness — the same
+# tradeoff ghostty makes, and for the same stated reason.
+concurrency:
+  group: release-tip
+  cancel-in-progress: false
+
+jobs:
+  # Decide whether this commit gets a tip build, before spending ~20 minutes of
+  # macOS runner on it. Ubuntu, seconds, no checkout of the tree beyond git.
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # `workflow_run` fires for failures and cancellations too, and for PR runs of
+    # Test (the `branches:` filter above matches the head branch, so a PR whose
+    # head branch is literally `main` in a fork would slip through — hence the
+    # explicit event check as well).
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.conclusion == 'success')
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      sha: ${{ steps.decide.outputs.sha }}
+    steps:
+      # The SHA to build is the one Test ran against, NOT github.sha (which for
+      # a workflow_run event is main's tip at dispatch time and can already have
+      # moved on to a commit nothing has tested).
+      - name: Resolve target commit
+        id: target
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.sha')
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Target commit: $SHA"
+
+      - uses: actions/checkout@v7
+        with:
+          # Full history AND tags: macterm_tip_version needs the newest vX.Y.Z
+          # tag plus the commit count on top of it, and the skip checks below
+          # diff against the current `tip` tag. `fetch-tags` is explicit rather
+          # than relying on fetch-depth: 0 implying it — with no tags,
+          # macterm_tip_version has no base and the whole channel is dead.
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ steps.target.outputs.sha }}
+
+      # Test passing is not "CI passing" — checks.yml (Format, Lint) is the other
+      # half. Test takes 15–30 minutes against Checks' ~2, so Checks is
+      # essentially always settled by the time we get here; poll briefly anyway
+      # rather than racing it.
+      #
+      # `skipped` counts as passing: both workflows' paths filters skip their
+      # jobs for a change touching no Swift, and the workflow conclusion is then
+      # `success` with nothing having run. That is a legitimately green commit.
+      - name: Require Checks green for this commit
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          for attempt in $(seq 1 20); do
+            CONCLUSION=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/checks.yml/runs?head_sha=$SHA&event=push" \
+              --jq '.workflow_runs[0].conclusion // ""')
+            case "$CONCLUSION" in
+              success|skipped)
+                echo "Checks: $CONCLUSION"
+                exit 0
+                ;;
+              "" | null)
+                echo "Checks not concluded yet for $SHA (attempt $attempt); waiting…"
+                sleep 30
+                ;;
+              *)
+                echo "error: Checks concluded '$CONCLUSION' for $SHA — not a ci-passing commit" >&2
+                exit 1
+                ;;
+            esac
+          done
+          echo "error: Checks never concluded for $SHA after 10 minutes" >&2
+          exit 1
+
+      - name: Decide
+        id: decide
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          skip() { echo "build=false" >> "$GITHUB_OUTPUT"; echo "SKIP: $1"; exit 0; }
+
+          # Already built? The `tip` tag IS the ledger — the publish job moves it
+          # only after the release itself lands, so it points at the commit of
+          # the last SUCCESSFULLY published tip build and a re-delivered
+          # workflow_run costs nothing. (Ghostty gets the same idempotency from
+          # a HEAD against its per-commit R2 object; we have no such object, and
+          # a tag needs no extra state either.)
+          #
+          # A workflow_dispatch deliberately IGNORES the ledger: if a run ever
+          # dies between the tag move and the appcast push, the tag says "built"
+          # while the feed is a build behind, and re-dispatching is the recovery
+          # path. It must not skip itself.
+          if git rev-parse -q --verify refs/tags/tip >/dev/null; then
+            TIP_SHA=$(git rev-parse refs/tags/tip^{commit})
+            if [[ "$TIP_SHA" == "$SHA" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+              skip "tip is already at $SHA"
+            fi
+
+            # Nothing that ships changed since the last tip build. A universal
+            # Release build is ~20 minutes of macOS runner; spending it so
+            # followers can install a byte-identical app with a higher version
+            # number is pure waste. Mirrors ghostty's paths-filter with
+            # `base: tip`, expressed in git so a missing tag is simply "build".
+            CHANGED=$(git diff --name-only "$TIP_SHA" "$SHA" \
+              | grep -vE '^(website/|README\.md|AGENTS\.md|CLAUDE\.md|LICENSE|\.github/(ISSUE_TEMPLATE/|.*\.md$))' \
+              || true)
+            if [[ -z "$CHANGED" ]]; then
+              skip "only docs/website changed since $TIP_SHA"
+            fi
+          fi
+
+          echo "build=true" >> "$GITHUB_OUTPUT"
+          echo "Building tip for $SHA"
+
+  build:
+    name: Build and publish
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    env:
+      # secrets.GITHUB_TOKEN on purpose, not a PAT: events raised by it don't
+      # start new workflow runs, so creating/editing the `tip` release can't
+      # fire release.yml's `release: published` trigger against a tag that isn't
+      # vX.Y.Z. (release.yml also skips `tip` explicitly — belt and braces.)
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: tip
+      # How many past tip DMGs stay attached to the rolling release. The appcast
+      # only ever names the newest, so this is purely for humans and for a
+      # Sparkle download that was already in flight when a new tip landed.
+      KEEP_ASSETS: "3"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # See the gate job's checkout: tags are load-bearing for the version.
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ needs.gate.outputs.sha }}
+
+      - uses: jdx/mise-action@v4.2.5
+
+      # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
+      - name: Cache epoch
+        id: epoch
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # Identical key to test/benchmark/release, so tip rides the cache they
+      # keep warm. DerivedData is deliberately NOT cached: a tip build is a
+      # clean universal Release build, same as a stable one, so the shipped
+      # binary can't inherit a stale incremental artifact.
+      - name: Cache GhosttyKit
+        uses: actions/cache@v6
+        with:
+          path: |
+            GhosttyKit.xcframework
+            Macterm/Resources/ghostty
+            Macterm/Resources/terminfo
+            Macterm/Resources/zmx
+            .ghosttykit-tag
+          # No restore-keys fallback — see test.yml for why a time-rolling key
+          # and a prefix restore-key must never be paired.
+          key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
+
+      - name: Setup GhosttyKit
+        run: mise run setup --verbose
+
+      # The SAME certificate stable and beta releases use. Signing tip with a
+      # different identity (or ad-hoc) would reset the TCC privacy grants of
+      # everyone who follows tip on every single build.
+      - name: Import signing certificate
+        uses: ./.github/actions/import-signing-cert
+        with:
+          certificate-p12: ${{ secrets.MACTERM_SIGNING_CERT_P12 }}
+          certificate-password: ${{ secrets.MACTERM_SIGNING_CERT_PASSWORD }}
+
+      - name: Derive tip version
+        id: version
+        run: |
+          source scripts/_lib.sh
+          VERSION="$(macterm_tip_version)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Tip version: $VERSION  ($(sparkle_comparison_version "$VERSION"))"
+
+      - name: Build universal tip artifact
+        env:
+          SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ -z "$SPARKLE_ED_PUBLIC_KEY" || "$SPARKLE_ED_PUBLIC_KEY" == "SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER" ]]; then
+            echo "error: SPARKLE_ED_PUBLIC_KEY is missing or still set to the local-build placeholder; refusing to build a tip release without auto-updates" >&2
+            exit 1
+          fi
+          # Direct script call, like release.yml: main is already format/lint
+          # and test gated (that is what let us get here), so a tip build needs
+          # only the build itself. build.sh bakes MactermUpdateChannel=tip into
+          # the bundle, so this DMG defaults to following tip even if someone
+          # downloads it by hand.
+          VERSION="$VERSION" ./scripts/build.sh
+
+      # Last chance to notice we've been superseded. Runs queue rather than
+      # cancel, so a commit that landed during this ~20-minute build has its own
+      # run waiting behind us; publishing ours after theirs would move the tag
+      # and the feed backwards. Stop here instead — their run publishes the
+      # newer commit, which is the one anyone wants.
+      - name: Confirm still current
+        id: current
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          HEAD_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.sha')
+          if [[ "$HEAD_SHA" == "$SHA" ]]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "main moved to $HEAD_SHA while building $SHA — skipping publish; that commit's own run does it." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Update the tip release
+        if: steps.current.outputs.superseded != 'true'
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ steps.version.outputs.commit }}
+        run: |
+          BASE_TAG=$(git tag --list 'v*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          SUBJECT=$(git log -1 --format=%s "$SHA")
+          NOTES_FILE="$RUNNER_TEMP/tip-notes.md"
+          # Deliberately not generated release notes: this body is rewritten on
+          # every commit, and `--generate-notes` against a rolling tag produces
+          # a diff-since-the-last-tag list that is wrong the moment the tag
+          # moves. One commit, one link — the same call ghostty makes ("we do
+          # not generate any release notes for these builds"). It is also what
+          # publish-appcast.sh renders into the Sparkle update dialog.
+          cat > "$NOTES_FILE" <<NOTES
+          **Continuous build of \`main\`** — \`$VERSION\` (\`$COMMIT\`)
+
+          $SUBJECT
+
+          [Commit](https://github.com/$GITHUB_REPOSITORY/commit/$SHA) · [Changes since $BASE_TAG](https://github.com/$GITHUB_REPOSITORY/compare/$BASE_TAG...$SHA)
+
+          Tip builds are cut from every commit that passes CI. They are not
+          release-tested — expect breakage, and prefer the stable or beta
+          channel if that matters to you. Set **Settings → Updates → Channel**
+          to **Tip** to follow them automatically.
+          NOTES
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Edit in place rather than delete-and-recreate: the release keeps
+            # its URL, its download counts, and — because --prerelease is
+            # re-asserted every time — can never silently become "Latest".
+            gh release edit "$TAG" \
+              --title 'Macterm tip ("continuous")' \
+              --notes-file "$NOTES_FILE" \
+              --prerelease --draft=false --latest=false
+          else
+            # --target: there is no `tip` tag yet on a first run, and
+            # `gh release create` would otherwise cut it at the default branch's
+            # current HEAD rather than the commit we just built.
+            gh release create "$TAG" \
+              --title 'Macterm tip ("continuous")' \
+              --notes-file "$NOTES_FILE" \
+              --target "$SHA" \
+              --prerelease --latest=false
+          fi
+
+          gh release upload "$TAG" build/*.dmg --clobber
+
+          # Prune older tip DMGs. Every build adds a differently-named asset, so
+          # without this the rolling release accumulates one ~40MB DMG per commit
+          # to main forever. Sort by asset creation time and delete all but the
+          # newest $KEEP_ASSETS — never by parsing the version out of the name.
+          # `while read`, not `mapfile`: mapfile is bash 4+ and macOS's own bash
+          # is 3.2 — don't depend on which bash happens to be first on a runner's
+          # PATH. KEEP_ASSETS reaches jq through `env` for the same reason we
+          # don't interpolate it into the filter: no shell quoting to get wrong.
+          gh release view "$TAG" --json assets \
+            --jq '.assets | map(select(.name | endswith(".dmg"))) | sort_by(.createdAt) | reverse | .[(env.KEEP_ASSETS | tonumber):] | .[].name' \
+            | while read -r asset; do
+                [[ -n "$asset" ]] || continue
+                echo "Pruning stale tip asset: $asset"
+                gh release delete-asset "$TAG" "$asset" --yes
+              done
+
+      - name: Install Sparkle tools
+        if: steps.current.outputs.superseded != 'true'
+        run: |
+          SPARKLE_VERSION="2.9.1"
+          curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
+          mkdir -p sparkle && tar -xf sparkle.tar.xz -C sparkle
+          echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
+
+      # LAST, on purpose: the DMG is already on the release, so the feed can
+      # never name an enclosure that isn't there yet. ROLLING=true replaces the
+      # single tip item instead of appending one per commit.
+      - name: Publish appcast to gh-pages
+        if: steps.current.outputs.superseded != 'true'
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: "true"
+          CHANNEL: tip
+          ROLLING: "true"
+        run: scripts/publish-appcast.sh build
+
+      # Force-move the rolling tag onto this commit — LAST, after everything
+      # else has landed. The tag is the ledger the gate job reads to skip an
+      # already-built commit, so advancing it is the commit point of the whole
+      # publish, and this order makes every failure self-heal on the next merge:
+      # a failed asset upload or a failed gh-pages push leaves the ledger at the
+      # previous commit, so the next automatic run simply redoes this one (the
+      # appcast's own equal-version guard makes the redo a no-op if it was the
+      # tag push that failed). Move it any earlier and a mid-publish failure
+      # leaves the ledger claiming a build nobody can download, with the gate
+      # skipping that commit until someone re-dispatches by hand.
+      #
+      # Annotated (-a) so it carries a date, matching ghostty.
+      - name: Move the tip tag
+        if: steps.current.outputs.superseded != 'true'
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa tip -m "Latest continuous build of main" "$SHA"
+          git push --force origin tip

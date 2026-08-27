@@ -4,9 +4,9 @@ description: >-
   throwaway keychain and export its identity hash as MACTERM_CODESIGN_IDENTITY
   for scripts/build.sh.
 
-# Extracted from release.yml so a second publishing workflow can sign with the
-# SAME certificate rather than duplicating 60 lines of security-critical setup.
-# Behaviour is unchanged from the inline step it replaces.
+# Extracted from release.yml so the tip channel (release-tip.yml) signs with
+# the SAME certificate rather than duplicating 60 lines of security-critical
+# setup. Behaviour is unchanged from the inline step it replaces.
 #
 # WHY a stable certificate at all: macOS TCC keys privacy grants (Documents,
 # Downloads, …) to the app's code-signing designated requirement. Ad-hoc

@@ -26,10 +26,18 @@ xattr -cr /Applications/Macterm.app
 
 Sparkle handles updates from there — Macterm checks daily in the background and verifies an EdDSA signature on each update, so you won't need `xattr` again.
 
-## Beta updates
+## Update channels
 
-Betas ship ahead of stable releases and may be unstable. To receive them, set **Update channel** to **Beta** in Settings → Updates. Macterm then offers beta builds on both the daily background check and **Check for Updates…**; on **Stable** you only ever see stable releases.
+Set **Update channel** in Settings → Updates. The channel governs what any check can see, so it applies equally to the daily background check and to **Check for Updates…**.
 
-Switching back to Stable stops future beta updates but doesn't downgrade a beta you already have — the next stable release above your version replaces it.
+| Channel | What you get |
+| --- | --- |
+| **Stable** | Tagged releases only. The default. |
+| **Beta** | Stable releases plus betas, which ship ahead of a stable release and may be unstable. |
+| **Tip** | Every commit on `main` that passes CI, built within about half an hour of merging. Not release-tested — expect breakage. |
 
-Homebrew always tracks stable releases. `brew upgrade` never installs a beta, so opting in only affects Macterm's own updater.
+Switching to a narrower channel stops future updates from the wider one but never downgrades what you already have; the next release above your version replaces it. Because a tip build is newer than the stable release it was cut from, moving from **Tip** back to **Stable** means waiting for the next stable release.
+
+Tip builds are also downloadable directly from the [`tip` release](https://github.com/thdxg/macterm/releases/tag/tip), which always points at the newest one. A tip `.dmg` follows the tip channel by default, so installing one by hand still keeps you updated.
+
+Homebrew always tracks stable releases. `brew upgrade` never installs a beta or a tip build, so opting in only affects Macterm's own updater.

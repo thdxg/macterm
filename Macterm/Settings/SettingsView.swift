@@ -1713,6 +1713,9 @@ private struct UpdatesSettings: View {
                 .onChange(of: updateChannel) { _, v in
                     updater.updateChannel = UpdateChannel(rawValue: v) ?? .stable
                 }
+
+                Text("Tip builds come from every commit that passes CI and are not release-tested.")
+                    .settingsCaption()
             }
 
             Section("Version") {

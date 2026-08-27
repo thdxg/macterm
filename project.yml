@@ -95,6 +95,11 @@ targets:
         # treats this placeholder as an explicit local-build disable switch.
         SPARKLE_ED_PUBLIC_KEY: SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER
         GIT_COMMIT: GIT_COMMIT_PLACEHOLDER
+        # Which update channel this build belongs to (scripts/build.sh derives
+        # it from the version). `stable` for dev builds, and for every stable
+        # and beta release; `tip` only for a continuous main build. Read as the
+        # DEFAULT for Preferences.updateChannel when the user hasn't picked one.
+        MACTERM_UPDATE_CHANNEL: stable
         # Bundle identifier of the in-bundle frameworks (Sparkle).
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"

@@ -115,25 +115,35 @@ final class Updater {
 
     /// The appcast channel updates are drawn from. Sparkle asks the delegate for
     /// `allowedChannels` on each check, so a change here lands on the next check
-    /// without restarting. Writing the pref is enough — but when leaving `.beta`
-    /// we also reset the update-available flag, since a beta already found is no
-    /// longer an update this app should offer.
+    /// without restarting.
+    ///
+    /// Writing the pref is enough — except that an update already *found* may be
+    /// invisible on the new channel, so the toolbar flag has to be reconsidered.
+    /// Widening from `.stable` can never hide one (Sparkle always admits the
+    /// default channel on top of `allowedChannels`), so that transition keeps
+    /// the flag; every other change clears it and the next check decides again.
     var updateChannel: UpdateChannel {
         get { Preferences.shared.updateChannel }
         set {
+            let previous = Preferences.shared.updateChannel
             Preferences.shared.updateChannel = newValue
-            if newValue != .beta { updateAvailable = false }
+            if previous != .stable, previous != newValue { updateAvailable = false }
         }
     }
 }
 
-/// Sparkle's channel name for pre-release builds. Must match the
-/// `<sparkle:channel>` value written by `scripts/publish-appcast.sh`; the two
-/// are a wire contract, so `UpdaterChannelTests` pins the literal.
+/// Sparkle's channel name for beta builds. Must match the `<sparkle:channel>`
+/// value written by `scripts/publish-appcast.sh`; the two are a wire contract,
+/// so `UpdaterChannelTests` pins the literal.
 ///
 /// Derived from `UpdateChannel.beta` rather than restated, so the persisted
 /// preference value and the wire value can't drift apart.
 let betaUpdateChannel = UpdateChannel.beta.rawValue
+
+/// Sparkle's channel name for continuous builds of `main`. Same wire contract as
+/// `betaUpdateChannel`, written by `.github/workflows/release-tip.yml` via
+/// `publish-appcast.sh`'s `CHANNEL`.
+let tipUpdateChannel = UpdateChannel.tip.rawValue
 
 /// Receives callbacks for *user-initiated* checks (the "Check for Updates…"
 /// menu item / Settings button).
@@ -141,10 +151,10 @@ private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     var onUpdateFound: (() -> Void)?
     var onUpdateCleared: (() -> Void)?
 
-    /// Gates the `beta` channel on the user's selected channel. Sparkle calls
+    /// Gates the prerelease channels on the user's selection. Sparkle calls
     /// this on every check (scheduled and user-initiated alike), so the picker
     /// needs no restart. Returning an empty set means "default channel only" —
-    /// items carrying `<sparkle:channel>beta</sparkle:channel>` stay invisible.
+    /// items carrying any `<sparkle:channel>` stay invisible.
     ///
     /// `nonisolated` + a `MainActor.assumeIsolated` read: Sparkle declares this
     /// delegate method non-isolated and calls it on the main thread, while
@@ -155,6 +165,9 @@ private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
             switch Preferences.shared.updateChannel {
             case .stable: []
             case .beta: [betaUpdateChannel]
+            // Deliberately NOT beta as well: tip is strictly ahead of beta, and
+            // admitting both would only offer a tip follower an older build.
+            case .tip: [tipUpdateChannel]
             }
         }
     }
