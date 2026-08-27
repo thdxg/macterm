@@ -1,0 +1,87 @@
+name: Import signing certificate
+description: >-
+  Import Macterm's stable self-signed release code-signing certificate into a
+  throwaway keychain and export its identity hash as MACTERM_CODESIGN_IDENTITY
+  for scripts/build.sh.
+
+# Extracted from release.yml so a second publishing workflow can sign with the
+# SAME certificate rather than duplicating 60 lines of security-critical setup.
+# Behaviour is unchanged from the inline step it replaces.
+#
+# WHY a stable certificate at all: macOS TCC keys privacy grants (Documents,
+# Downloads, …) to the app's code-signing designated requirement. Ad-hoc
+# signing (what releases shipped with before) bakes the per-build CDHash into
+# that requirement, so every update looked like a new app and dropped every
+# grant. Signing every build with ONE certificate keeps the requirement stable,
+# so grants survive updates — across channels too: a user who follows tip keeps
+# their grants through every tip build, and keeps them again if they move to
+# stable, because it is the same certificate either way.
+#
+# Gatekeeper is unchanged (still self-signed, still needs the first-install
+# xattr) — TCC doesn't require a trusted anchor, only the same cert.
+#
+# Missing secrets FAIL rather than falling back to ad-hoc: a silent fallback
+# would ship an update that resets every user's grants once more, which is
+# exactly the bug this exists to fix — and the next properly-signed release
+# would reset them yet again. The generation recipe lives in AGENTS.md's
+# Releasing section (a once-a-decade ceremony, so no script); never rotate the
+# cert casually (a new cert is one more reset), and back it up like the Sparkle
+# private key.
+
+inputs:
+  certificate-p12:
+    description: Base64-encoded PKCS#12 container (secrets.MACTERM_SIGNING_CERT_P12).
+    required: true
+  certificate-password:
+    description: Password for the container (secrets.MACTERM_SIGNING_CERT_PASSWORD).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Import signing certificate
+      shell: bash
+      env:
+        MACTERM_SIGNING_CERT_P12: ${{ inputs.certificate-p12 }}
+        MACTERM_SIGNING_CERT_PASSWORD: ${{ inputs.certificate-password }}
+      run: |
+        if [[ -z "$MACTERM_SIGNING_CERT_P12" || -z "$MACTERM_SIGNING_CERT_PASSWORD" ]]; then
+          echo "error: MACTERM_SIGNING_CERT_P12 / MACTERM_SIGNING_CERT_PASSWORD repo secrets are not set." >&2
+          echo "Releases are signed with a stable certificate so users' privacy grants survive" >&2
+          echo "updates. Follow the recipe in AGENTS.md's Releasing section to create the cert" >&2
+          echo "and add the secrets." >&2
+          exit 1
+        fi
+        KEYCHAIN="$RUNNER_TEMP/macterm-signing.keychain-db"
+        KEYCHAIN_PASSWORD="$(uuidgen)"
+        P12="$RUNNER_TEMP/macterm-signing.p12"
+        printf '%s' "$MACTERM_SIGNING_CERT_P12" | base64 --decode > "$P12"
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security import "$P12" -k "$KEYCHAIN" -f pkcs12 \
+          -P "$MACTERM_SIGNING_CERT_PASSWORD" -T /usr/bin/codesign
+        # Let codesign reach the key headlessly (no UI to answer a prompt).
+        security set-key-partition-list -S apple-tool:,apple:,codesign: \
+          -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+        security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+        # Trust settings don't travel inside a .p12, and codesign refuses an
+        # identity whose chain doesn't end at a trusted anchor — so trust the
+        # self-signed cert explicitly (runners have passwordless sudo).
+        CERT_PEM="$RUNNER_TEMP/macterm-signing.pem"
+        /usr/bin/openssl pkcs12 -in "$P12" -clcerts -nokeys \
+          -passin env:MACTERM_SIGNING_CERT_PASSWORD -out "$CERT_PEM"
+        sudo security add-trusted-cert -d -r trustRoot \
+          -k /Library/Keychains/System.keychain "$CERT_PEM"
+        # Resolve the identity by hash (unambiguous even if a runner image
+        # ever ships a similarly named cert). find-identity -v requires the
+        # trust added above, so a bad import fails HERE, not mid-build.
+        IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
+          | awk '$2 ~ /^[0-9A-F]{40}$/ {print $2; exit}')"
+        if [[ -z "$IDENTITY" ]]; then
+          echo "error: imported certificate is not a valid code-signing identity:" >&2
+          security find-identity -p codesigning "$KEYCHAIN" >&2
+          exit 1
+        fi
+        echo "MACTERM_CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+        rm -f "$P12" "$CERT_PEM"
