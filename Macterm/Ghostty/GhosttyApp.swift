@@ -300,6 +300,13 @@ final class GhosttyApp {
         return configColor("background") ?? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.14, alpha: 1)
     }
 
+    /// The color space the renderer paints in (the user's
+    /// `window-colorspace`). Sampled pixels and OSC 11 colors have to be
+    /// interpreted in it — see `GhosttyColorSpace`.
+    var surfaceColorSpace: NSColorSpace {
+        GhosttyColorSpace.resolve(userConfigText: MactermConfig.userGhosttyConfigText())
+    }
+
     var effectiveBackgroundColor: NSColor {
         adaptiveBackgroundColor ?? backgroundColor
     }

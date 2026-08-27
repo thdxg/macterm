@@ -83,13 +83,23 @@ final class GhosttyCallbacks: @unchecked Sendable {
                   let view = surfaceView(from: target)
             else { return false }
             let change = action.action.color_change
-            let color = NSColor(
-                srgbRed: CGFloat(change.r) / 255,
+            let components = (
+                red: CGFloat(change.r) / 255,
                 green: CGFloat(change.g) / 255,
-                blue: CGFloat(change.b) / 255,
-                alpha: 1
+                blue: CGFloat(change.b) / 255
             )
-            DispatchQueue.main.async { view.surfaceDidChangeBackgroundColor(color) }
+            // Built on main, in the renderer's own color space (the user's
+            // `window-colorspace`): these are the numbers ghostty will paint
+            // with, so reading them as sRGB would tint the chrome a shade off
+            // the pane it is matching.
+            DispatchQueue.main.async {
+                let color = NSColor(
+                    colorSpace: view.surfaceColorSpace,
+                    components: [components.red, components.green, components.blue, 1],
+                    count: 4
+                )
+                view.surfaceDidChangeBackgroundColor(color)
+            }
             return true
         case GHOSTTY_ACTION_OUTPUT_ACTIVITY:
             // Throttled heartbeat from the pty IO path — fires while the

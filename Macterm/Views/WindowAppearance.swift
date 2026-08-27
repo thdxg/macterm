@@ -98,6 +98,122 @@ func setWindowBackgroundBlur(_ window: NSWindow, radius: Int) {
     _ = cgsSetBlurFnPtr(cgsConnectionFnPtr(), window.windowNumber, Int32(radius))
 }
 
+// MARK: - Tinted backdrop
+
+/// The alpha the renderer paints a cell background with at this window opacity.
+///
+/// ghostty truncates (`@intFromFloat(255 * background_opacity)` in
+/// `renderer/generic.zig`), so a tint carrying the raw preference sits a
+/// fraction of a count above the terminal's own paint. Invisible over a dark
+/// backdrop, but the whole point here is that the two match exactly.
+@MainActor
+func rendererQuantizedAlpha(_ opacity: Double) -> CGFloat {
+    CGFloat(UInt8(clamping: Int(255 * max(0, min(1, opacity))))) / 255
+}
+
+/// The cut a window's tinted backdrop takes where a terminal is painting its
+/// own background at the window opacity.
+///
+/// Both translucency paths need it for the same reason. The tint is one layer
+/// at `opacity`; a TUI's cells are a second layer at the same `opacity` on top
+/// of it, so the pane composites to `1-(1-opacity)²` while the chrome beside it
+/// stays at plain `opacity` — the pane reads near-solid next to a translucent
+/// app. Cutting the tint under the paint leaves exactly one tinted layer
+/// everywhere: the terminal's own inside the paint, the backdrop's outside it.
+/// Only the tint is cut, never the material or blur behind it, so both
+/// surfaces keep the same backdrop.
+struct TintCutout {
+    private let mask = CAShapeLayer()
+    private var holes: [CGRect] = []
+
+    /// Returns true when the regions actually changed — this runs on every
+    /// sample, and rebuilding an identical mask is wasted render work.
+    mutating func set(_ rects: [CGRect]) -> Bool {
+        guard rects != holes else { return false }
+        holes = rects
+        return true
+    }
+
+    /// Cut `view` (a tinted layer) to the regions, which are in `container`'s
+    /// coordinates.
+    func apply(to view: NSView, in container: NSView) {
+        guard let layer = view.layer else { return }
+        guard !holes.isEmpty else {
+            layer.mask = nil
+            return
+        }
+        let path = CGMutablePath()
+        path.addRect(view.bounds)
+        for hole in holes {
+            path.addRect(view.convert(hole, from: container))
+        }
+        mask.frame = view.bounds
+        mask.fillRule = .evenOdd
+        mask.fillColor = NSColor.black.cgColor
+        mask.path = path
+        layer.mask = mask
+    }
+}
+
+/// The flat tinted backdrop for the plain (non-glass) translucency path.
+///
+/// The tint used to be `NSWindow.backgroundColor`, which is simpler but cannot
+/// be cut: AppKit draws it beneath the whole window and no view can subtract
+/// from it. A view can be masked, which is the only reason this exists — it
+/// carries the same color at the same opacity, with the CGS blur still behind
+/// it, and mirrors how the glass path installs `MactermGlassView`.
+final class MactermTintBackdropView: NSView {
+    private let tintView = NSView()
+    private var topConstraint: NSLayoutConstraint!
+    private var cutout = TintCutout()
+
+    init(topOffset: CGFloat) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        tintView.translatesAutoresizingMaskIntoConstraints = false
+        tintView.wantsLayer = true
+        addSubview(tintView)
+        topConstraint = tintView.topAnchor.constraint(equalTo: topAnchor, constant: topOffset)
+        NSLayoutConstraint.activate([
+            topConstraint,
+            tintView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            tintView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            tintView.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Sits behind the content view purely to be looked at; never takes a click.
+    override func hitTest(_: NSPoint) -> NSView? {
+        nil
+    }
+
+    func updateTopInset(_ offset: CGFloat) {
+        topConstraint.constant = offset
+    }
+
+    func configure(backgroundColor: NSColor, backgroundOpacity: Double, cornerRadius: CGFloat?) {
+        tintView.layer?.backgroundColor = backgroundColor
+            .withAlphaComponent(rendererQuantizedAlpha(backgroundOpacity))
+            .cgColor
+        tintView.layer?.cornerRadius = cornerRadius ?? 0
+    }
+
+    func setTintHoles(_ rects: [CGRect]) {
+        guard cutout.set(rects) else { return }
+        cutout.apply(to: tintView, in: self)
+    }
+
+    override func layout() {
+        super.layout()
+        cutout.apply(to: tintView, in: self)
+    }
+}
+
 // MARK: - Liquid glass background
 
 /// A container that hosts a macOS 26 `NSGlassEffectView` (the real liquid
@@ -129,8 +245,10 @@ func setWindowBackgroundBlur(_ window: NSWindow, radius: Int) {
 @available(macOS 26.0, *)
 final class MactermGlassView: NSView {
     private let glassEffectView = NSGlassEffectView()
+    private let tintView = NSView()
     private let tintOverlay = NSView()
     private var topConstraint: NSLayoutConstraint!
+    private var tintCutout = TintCutout()
 
     /// The window opacity the glass is currently configured for. The inactive
     /// tint is scaled by this so the unfocused window honors the user's opacity
@@ -152,12 +270,38 @@ final class MactermGlassView: NSView {
             glassEffectView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
 
-        // The inactive tint sits above the glass and fades in when the window
-        // resigns key, masking the system's inactive-glass desaturation.
+        // The window tint is its own layer above the bare glass material,
+        // rather than `NSGlassEffectView.tintColor`, for one reason: a tint
+        // baked into the material cannot be cut away under a pane whose TUI is
+        // already painting that same color at the same opacity, and that
+        // double layer is what makes such a pane read near-solid beside
+        // chrome at the plain opacity. Cutting the tint keeps the *material*
+        // under the pane, so both surfaces sit on the same backdrop.
+        tintView.translatesAutoresizingMaskIntoConstraints = false
+        tintView.wantsLayer = true
+        addSubview(tintView, positioned: .above, relativeTo: glassEffectView)
+        NSLayoutConstraint.activate([
+            tintView.topAnchor.constraint(equalTo: glassEffectView.topAnchor),
+            tintView.leadingAnchor.constraint(equalTo: glassEffectView.leadingAnchor),
+            tintView.bottomAnchor.constraint(equalTo: glassEffectView.bottomAnchor),
+            tintView.trailingAnchor.constraint(equalTo: glassEffectView.trailingAnchor),
+        ])
+
+        // The inactive tint fades in when the window resigns key, masking the
+        // system's inactive-glass desaturation. It sits *below* the window tint,
+        // i.e. inside the backdrop both the chrome and the terminal composite
+        // over, and is never cut. Above the tint it would be a layer only the
+        // chrome shows at full strength — the terminal's own paint covers it —
+        // so an unfocused window's app area read more opaque than its terminal
+        // (measured: chrome (48,38,76) against grid (52,42,76)). Below the
+        // tint, both surfaces carry exactly one tinted layer over one shared
+        // backdrop, focused or not. The compensation is then visible through
+        // the same share of the window as the desaturation it compensates for,
+        // which is the proportion it should have had all along.
         tintOverlay.translatesAutoresizingMaskIntoConstraints = false
         tintOverlay.wantsLayer = true
         tintOverlay.alphaValue = 0
-        addSubview(tintOverlay, positioned: .above, relativeTo: glassEffectView)
+        addSubview(tintOverlay, positioned: .below, relativeTo: tintView)
         NSLayoutConstraint.activate([
             tintOverlay.topAnchor.constraint(equalTo: glassEffectView.topAnchor),
             tintOverlay.leadingAnchor.constraint(equalTo: glassEffectView.leadingAnchor),
@@ -179,14 +323,41 @@ final class MactermGlassView: NSView {
         isKeyWindow: Bool
     ) {
         glassEffectView.style = style
-        glassEffectView.tintColor = backgroundColor.withAlphaComponent(backgroundOpacity)
         glassEffectView.cornerRadius = cornerRadius ?? 0
+        tintView.layer?.backgroundColor = backgroundColor
+            .withAlphaComponent(rendererQuantizedAlpha(backgroundOpacity))
+            .cgColor
+        tintView.layer?.cornerRadius = cornerRadius ?? 0
         self.backgroundOpacity = CGFloat(backgroundOpacity)
         updateKeyStatus(isKeyWindow, backgroundColor: backgroundColor)
     }
 
     func updateTopInset(_ offset: CGFloat) {
         topConstraint.constant = offset
+    }
+
+    /// Cut the tint away under regions a terminal is already painting itself at
+    /// the window opacity (`rects` in this view's coordinates). The glass
+    /// material stays, so the pane and the chrome sit on the same backdrop.
+    ///
+    /// Only the tint is cut. The inactive overlay is *not*, even though it is
+    /// also a tinted layer: it sits below the content view, so the terminal
+    /// paints over it and both surfaces already share it as backdrop. Cutting
+    /// it removes the glass-desaturation compensation under the pane only,
+    /// which leaves the chrome carrying one layer more than the terminal — an
+    /// unfocused window whose app area reads more opaque than its terminal.
+    func setTintHoles(_ rects: [CGRect]) {
+        guard tintCutout.set(rects) else { return }
+        applyTintHoles()
+    }
+
+    override func layout() {
+        super.layout()
+        applyTintHoles()
+    }
+
+    private func applyTintHoles() {
+        tintCutout.apply(to: tintView, in: self)
     }
 
     func updateKeyStatus(_ isKeyWindow: Bool, backgroundColor: NSColor) {
@@ -251,17 +422,21 @@ enum WindowAppearance {
                 // glass material.
                 window.backgroundColor = .clear
                 setWindowBackgroundBlur(window, radius: 0)
+                removeTintBackdrop(window: window)
                 syncGlass(window: window, backgroundColor: bg, opacity: opacity)
             } else {
-                // The window's backgroundColor is the *only* tinted layer.
-                // Ghostty renders fully transparent, the detail ZStack and
-                // sidebar paint nothing, so the whole interior — including the
-                // strip around the system glass sidebar — reads as one
-                // continuous translucent surface backed by this color.
-                window.backgroundColor = bg.withAlphaComponent(opacity)
+                // One tinted layer for the whole interior — including the strip
+                // around the system glass sidebar — so it reads as a single
+                // continuous translucent surface. It lives in a view rather
+                // than `window.backgroundColor` for one reason: a window's own
+                // background cannot be cut where a terminal paints its
+                // background itself, and that uncut second layer is what makes
+                // such a pane read near-solid. See `TintCutout`.
+                window.backgroundColor = .clear
                 // Apply blur unconditionally; passing 0 clears any previous blur.
                 setWindowBackgroundBlur(window, radius: blurRadius)
                 removeGlass(window: window)
+                syncTintBackdrop(window: window, backgroundColor: bg, opacity: opacity)
             }
         } else {
             window.isOpaque = true
@@ -269,6 +444,7 @@ enum WindowAppearance {
             // Make sure a previous blur is cleared when going opaque.
             setWindowBackgroundBlur(window, radius: 0)
             removeGlass(window: window)
+            removeTintBackdrop(window: window)
         }
 
         // Override the titlebar's private background layer so its color
@@ -502,18 +678,68 @@ enum WindowAppearance {
             if useGlass {
                 panel.backgroundColor = .clear
                 setWindowBackgroundBlur(panel, radius: 0)
+                removeTintBackdrop(window: panel)
                 syncGlass(window: panel, backgroundColor: bg, opacity: opacity)
             } else {
-                panel.backgroundColor = bg.withAlphaComponent(opacity)
+                panel.backgroundColor = .clear
                 setWindowBackgroundBlur(panel, radius: Preferences.shared.windowBlurRadius)
                 removeGlass(window: panel)
+                syncTintBackdrop(window: panel, backgroundColor: bg, opacity: opacity)
             }
         } else {
             panel.isOpaque = true
             panel.backgroundColor = bg
             setWindowBackgroundBlur(panel, radius: 0)
             removeGlass(window: panel)
+            removeTintBackdrop(window: panel)
         }
+    }
+
+    /// Hand the window's tinted backdrop the regions a terminal is painting
+    /// itself, in window coordinates, so the tint is cut away there. An opaque
+    /// window has no tint to cut and is left alone.
+    static func updateTerminalPaintRegions(in window: NSWindow?, rects: [CGRect]) {
+        guard let window else { return }
+        if glassSupported, #available(macOS 26.0, *), let glass = existingGlass(in: window) {
+            glass.setTintHoles(rects.map { glass.convert($0, from: nil) })
+        }
+        guard let backdrop = existingTintBackdrop(in: window) else { return }
+        backdrop.setTintHoles(rects.map { backdrop.convert($0, from: nil) })
+    }
+
+    /// Install (if needed) and configure the flat tinted backdrop for the
+    /// non-glass translucency path. Same placement as the glass view: below the
+    /// content view, filling the window including the area under the titlebar.
+    private static func syncTintBackdrop(window: NSWindow, backgroundColor: NSColor, opacity: Double) {
+        guard let contentView = window.contentView, let themeFrame = contentView.superview else { return }
+
+        let backdrop = existingTintBackdrop(in: window) ?? {
+            let view = MactermTintBackdropView(topOffset: -contentView.safeAreaInsets.top)
+            themeFrame.addSubview(view, positioned: .below, relativeTo: contentView)
+            NSLayoutConstraint.activate([
+                view.topAnchor.constraint(equalTo: themeFrame.topAnchor),
+                view.leadingAnchor.constraint(equalTo: themeFrame.leadingAnchor),
+                view.bottomAnchor.constraint(equalTo: themeFrame.bottomAnchor),
+                view.trailingAnchor.constraint(equalTo: themeFrame.trailingAnchor),
+            ])
+            return view
+        }()
+
+        backdrop.updateTopInset(-contentView.safeAreaInsets.top)
+        backdrop.configure(
+            backgroundColor: backgroundColor,
+            backgroundOpacity: opacity,
+            cornerRadius: windowCornerRadius(window)
+        )
+    }
+
+    private static func removeTintBackdrop(window: NSWindow) {
+        existingTintBackdrop(in: window)?.removeFromSuperview()
+    }
+
+    private static func existingTintBackdrop(in window: NSWindow) -> MactermTintBackdropView? {
+        guard let themeFrame = window.contentView?.superview else { return nil }
+        return themeFrame.subviews.compactMap { $0 as? MactermTintBackdropView }.first
     }
 
     /// Update the inactive-glass tint when the window gains/loses key status.

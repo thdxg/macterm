@@ -225,6 +225,29 @@ final class GhosttyTerminalNSView: NSView {
     /// surface config changes or the terminal restores its configured color.
     private(set) var reportedBackgroundColor: NSColor?
     var sampledDominantBackgroundColor: NSColor?
+    /// The color space the renderer paints this surface in. See
+    /// `GhosttyColorSpace` for why it is read from the user's config text and
+    /// not from the layer.
+    var surfaceColorSpace: NSColorSpace {
+        GhosttyApp.shared.surfaceColorSpace
+    }
+
+    /// Where the sampled color sits in this view, as fractions of the frame
+    /// with a top-left origin (the renderer's own orientation). Only the cell
+    /// grid is painted, so this stops short of the window padding.
+    var sampledPaintedUnitBounds: CGRect?
+
+    /// The sampled paint's frame in this view's coordinates, flipped out of the
+    /// renderer's top-left origin into AppKit's bottom-left one.
+    var sampledPaintedRect: CGRect? {
+        guard let unit = sampledPaintedUnitBounds, !bounds.isEmpty else { return nil }
+        return CGRect(
+            x: bounds.minX + unit.minX * bounds.width,
+            y: bounds.maxY - unit.maxY * bounds.height,
+            width: unit.width * bounds.width,
+            height: unit.height * bounds.height
+        )
+    }
 
     func surfaceDidChangeBackgroundColor(_ color: NSColor) {
         reportedBackgroundColor = color
