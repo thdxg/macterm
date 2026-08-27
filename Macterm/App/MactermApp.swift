@@ -29,7 +29,20 @@ struct MactermApp: App {
         // It must run THIS early: the tooltip machinery can initialize with
         // the first window, which precedes applicationDidFinishLaunching on
         // some launches (see the didBecomeMain note on AppDelegate).
-        UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 350])
+        // Hold a key down in a terminal and macOS's press-and-hold accent
+        // overlay ("é è ê…") steals the repeat, which is wrong in every TUI
+        // that binds a held key to motion — hjkl in helix/vim being the case
+        // that gets reported. Terminals want key repeat, not diacritics.
+        // Ghostty registers exactly this key, which is why the same ghostty
+        // config behaves differently there: the knob is an AppKit default in
+        // OUR process, not anything the config pipeline can carry.
+        // Registration domain again (see above): a user who genuinely wants
+        // the overlay keeps it via `defaults write -g ApplePressAndHoldEnabled
+        // true`, since NSGlobalDomain is searched ahead of registration.
+        UserDefaults.standard.register(defaults: [
+            "NSInitialToolTipDelay": 350,
+            "ApplePressAndHoldEnabled": false,
+        ])
     }
 
     var body: some Scene {
