@@ -82,6 +82,14 @@ jobs:
           # macterm_tip_version has no base and the whole channel is dead.
           fetch-depth: 0
           fetch-tags: true
+          # This job reads commits, trees and tags and never opens a file, so
+          # skip blobs entirely. A full-history clone here drags in ~58MB of
+          # demo videos that live only in HISTORY (assets/demo-*.mov, removed
+          # from the tree long ago) and it measured ~5 minutes on run
+          # 33108265939 — pure waste on every commit to main, for a job whose
+          # real work takes seconds. `git diff --name-only` compares tree
+          # entries, so it needs no blob content.
+          filter: blob:none
           ref: ${{ steps.target.outputs.sha }}
 
       # Test passing is not "CI passing" — checks.yml (Format, Lint) is the other
@@ -246,23 +254,44 @@ jobs:
           # downloads it by hand.
           VERSION="$VERSION" ./scripts/build.sh
 
-      # Last chance to notice we've been superseded. Runs queue rather than
-      # cancel, so a commit that landed during this ~20-minute build has its own
-      # run waiting behind us; publishing ours after theirs would move the tag
-      # and the feed backwards. Stop here instead — their run publishes the
-      # newer commit, which is the one anyone wants.
-      - name: Confirm still current
+      # Am I stale? Ask the LEDGER, not main's HEAD.
+      #
+      # This step used to compare `$SHA` against main's current tip and skip the
+      # publish if main had moved. That was wrong, and it cost a real build: run
+      # 33108018478 built 081e1e4 as 1.24.2-tip.2, #311 merged four minutes in,
+      # and the run threw away a finished 20-minute universal build to report a
+      # green no-op with no release. Any merge landing during a build did that.
+      #
+      # Main moving does NOT make this build unpublishable — it just means a
+      # newer one is queued behind us, and publishing tip.2 now and tip.3 twenty
+      # minutes later is exactly the channel working. The only genuinely stale
+      # case is a tip that has ALREADY been published from a commit at or ahead
+      # of ours, which can only happen if two queued runs land out of order.
+      #
+      # The `tip` tag records precisely that, because it moves LAST, after a
+      # successful publish: if it is not an ancestor of the commit we built, a
+      # newer tip is already out and ours must not overwrite it. A git ref is
+      # also authoritative in a way the published feed is not — GitHub Pages
+      # serves appcast.xml through a CDN, so reading it here could see a stale
+      # copy. (publish-appcast.sh keeps its own version guard against the real
+      # gh-pages branch as the backstop.)
+      #
+      # `is-ancestor` is exact for main because PRs merge via squash only, so the
+      # history is linear. A tip tag EQUAL to our commit passes (a commit is its
+      # own ancestor) — that is the workflow_dispatch republish path, which the
+      # gate job deliberately lets through.
+      - name: Confirm no newer tip is already published
         id: current
-        env:
-          SHA: ${{ needs.gate.outputs.sha }}
         run: |
-          HEAD_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.sha')
-          if [[ "$HEAD_SHA" == "$SHA" ]]; then
-            echo "superseded=false" >> "$GITHUB_OUTPUT"
-          else
+          git fetch --force origin 'refs/tags/tip:refs/tags/tip' 2>/dev/null || true
+          if git rev-parse -q --verify refs/tags/tip >/dev/null \
+            && ! git merge-base --is-ancestor refs/tags/tip HEAD; then
             echo "superseded=true" >> "$GITHUB_OUTPUT"
-            echo "main moved to $HEAD_SHA while building $SHA — skipping publish; that commit's own run does it." \
+            printf 'Skipped: tip is already published at %s, which is not behind this build (%s).\n' \
+              "$(git rev-parse --short refs/tags/tip)" "$(git rev-parse --short HEAD)" \
               | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Update the tip release
@@ -369,8 +398,13 @@ jobs:
         if: steps.current.outputs.superseded != 'true'
         env:
           SHA: ${{ needs.gate.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ steps.version.outputs.commit }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -fa tip -m "Latest continuous build of main" "$SHA"
           git push --force origin tip
+          printf 'Published **%s** (`%s`) to the [tip release](%s/releases/tag/tip).\n' \
+            "$VERSION" "$COMMIT" "https://github.com/$GITHUB_REPOSITORY" \
+            >> "$GITHUB_STEP_SUMMARY"
