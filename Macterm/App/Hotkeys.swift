@@ -203,6 +203,37 @@ enum HotkeyRegistry {
         keyCodeToBaseToken[keyCode]
     }
 
+    /// US-ANSI shifted forms of the symbol/digit keys, mirroring the layout the
+    /// `keyCodes` table itself assumes. Letters shift by uppercasing, so they
+    /// stay out of the table.
+    private static let shiftedSymbols: [String: String] = [
+        "1": "!", "2": "@", "3": "#", "4": "$", "5": "%",
+        "6": "^", "7": "&", "8": "*", "9": "(", "0": ")",
+        "-": "_", "=": "+", "[": "{", "]": "}", "\\": "|",
+        ";": ":", "'": "\"", ",": "<", ".": ">", "/": "?",
+        "`": "~",
+    ]
+
+    /// The literal text a printable key produces, or nil for a key that has no
+    /// text form (arrows, tab, escape, return — libghostty encodes those from
+    /// the keycode alone). `GhosttyTerminalNSView.sendKey` needs this because a
+    /// CLI-driven key has no NSEvent to read `characters` from, and libghostty's
+    /// key encoder emits a printable character only from the event's text —
+    /// keycode + modifiers alone yield nothing for a bare letter.
+    ///
+    /// Resolved from the chord's own token, not the active keyboard layout: the
+    /// `keyCodes` table is US-ANSI, so `pane key a` must type "a" whatever
+    /// layout is installed rather than whatever that hardware key sits under.
+    static func printableText(forKeyCode keyCode: UInt16, shift: Bool) -> String? {
+        guard let token = baseToken(forKeyCode: keyCode) else { return nil }
+        if token == "space" { return " " }
+        guard token.count == 1 else { return nil }
+        guard shift else { return token }
+        if let shifted = shiftedSymbols[token] { return shifted }
+        let upper = token.uppercased()
+        return upper == token ? token : upper
+    }
+
     /// The hardware key code for a base key token (`"c"` → 8), or nil for a
     /// token we don't map — the inverse of `baseToken(forKeyCode:)`. Lets code
     /// that carries its own key codes (`TerminalCommandSubmission`, which stays
@@ -210,6 +241,12 @@ enum HotkeyRegistry {
     /// them to this vocabulary in a test.
     static func keyCode(forToken token: String) -> UInt16? {
         keyCodes[token]
+    }
+
+    /// Every key token the chord grammar accepts. Lets a test sweep the whole
+    /// vocabulary for chords that parse but would deliver nothing.
+    static var allKeyTokens: [String] {
+        Array(keyCodes.keys)
     }
 
     private static let modifierOnlyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62]

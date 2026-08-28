@@ -459,11 +459,12 @@ struct PaneCommand: ParsableCommand {
 
     struct Key: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Send a key chord to a live pane (control/named keys, not text).",
+            abstract: "Send a single key press to a live pane.",
             discussion: """
-            Delivers a single key press through the terminal's key-encoding path \
-            — the counterpart to `pane run`, which pastes text. Use it for control \
-            keys and named keys that have no literal text form.
+            Delivers one key press through the terminal's key-encoding path — the \
+            counterpart to `pane run`, which pastes a whole command line. Use it \
+            for control keys, named keys, and single printable keys a TUI reads as \
+            keystrokes rather than as pasted text.
 
             The chord grammar matches keybinds: modifiers ctrl/cmd/shift/opt joined \
             with '+', then one key token. Examples:
@@ -471,15 +472,22 @@ struct PaneCommand: ParsableCommand {
               macterm pane key ctrl+c          # interrupt the foreground process
               macterm pane key escape          # send Esc to a TUI
               macterm pane key up              # arrow key (mode-aware encoding)
+              macterm pane key j               # a bare printable key (vim-style nav)
+              macterm pane key shift+1         # the shifted character ('!')
+              macterm pane key space           # space bar
               macterm pane key 'ctrl+\\'        # SIGQUIT char (quote for the shell)
               macterm pane key enter           # submit (alias of 'return')
+
+            Option chords stay on the raw encoding path — their character is a \
+            keyboard-layout translation this path can't resolve — so use \
+            `pane run` when you need the literal text Option would compose.
 
             With no pane/tab/session selector it targets the current pane via \
             $MACTERM_SESSION.
             """
         )
 
-        @Argument(help: "The key chord, e.g. ctrl+c, escape, up, ctrl+\\.")
+        @Argument(help: "The key chord, e.g. a, space, ctrl+c, escape, up, ctrl+\\.")
         var chord: String
 
         @OptionGroup var target: PaneTarget

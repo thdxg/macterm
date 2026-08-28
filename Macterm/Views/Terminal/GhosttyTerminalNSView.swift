@@ -1573,10 +1573,15 @@ extension GhosttyTerminalNSView {
     /// Send a single key chord through libghostty's key-*encoding* path — the
     /// same `ghostty_surface_key` route a real `keyDown` takes, NOT the text
     /// paste path `sendText` uses. This is what lets the control CLI deliver a
-    /// control key (`ctrl+c`, `ctrl+\`), a named key (`escape`, `tab`, `up`), or
-    /// any modified chord that has no literal text form. libghostty does the
-    /// mode-dependent encoding (control bytes, application cursor keys, Kitty
-    /// protocol) from `keycode` + `mods`, so callers pass primitives, not bytes.
+    /// control key (`ctrl+c`, `ctrl+\`), a named key (`escape`, `tab`, `up`), a
+    /// printable key (`a`, `space`, `shift+1`), or any modified chord. libghostty
+    /// does the mode-dependent encoding (control bytes, application cursor keys,
+    /// Kitty protocol) from `keycode` + `mods`, so callers pass primitives, not
+    /// bytes — with one exception it cannot derive: **a printable character
+    /// comes only from the event's `text`**. A keycode-and-mods-only event for a
+    /// bare letter encodes to nothing at all and vanishes silently, which is
+    /// exactly what `pane key a` used to do. So printable chords carry the text
+    /// their token names, the same way `keyDown` passes `event.characters`.
     ///
     /// A full press→release cycle is issued so encodings that distinguish the
     /// two (e.g. Kitty keyboard) see a complete event. Returns false when the
@@ -1606,17 +1611,44 @@ extension GhosttyTerminalNSView {
         // letter chords (`ctrl+c` → keycode 8, unshifted 0x63 → 0x03). Named /
         // non-character keys leave it 0 and are driven by keycode alone.
         let codepoint = Self.unshiftedCodepoint(forKeyCode: keyCode)
+        // Ctrl/Cmd/Option chords stay on the keycode-only path: ctrl encodes its
+        // control byte from `unshifted_codepoint`, cmd is never forwarded as
+        // text, and an Option chord's text is a layout translation this path has
+        // no NSEvent to read. Everything else — bare and shift-only printables —
+        // needs its literal character or libghostty emits nothing.
+        let text: String? = flags.isDisjoint(with: [.control, .command, .option])
+            ? HotkeyRegistry.printableText(forKeyCode: keyCode, shift: flags.contains(.shift))
+            : nil
+        // Shift produced the character, so it's consumed — same policy
+        // `keyDown` applies to its own translated text.
+        let consumedMods = text != nil && flags.contains(.shift)
+            ? ghostty_input_mods_e(rawValue: GHOSTTY_MODS_SHIFT.rawValue)
+            : GHOSTTY_MODS_NONE
         for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
             var ke = ghostty_input_key_s()
             ke.action = action
             ke.keycode = UInt32(keyCode)
             ke.mods = mods
-            ke.consumed_mods = GHOSTTY_MODS_NONE
+            ke.consumed_mods = consumedMods
             ke.composing = false
-            ke.text = nil
             ke.unshifted_codepoint = codepoint
-            _ = ghostty_surface_key(surface, ke)
+            // Text rides the press only, mirroring `keyUp`, which never carries
+            // it — a release that repeated the character would type it twice
+            // under any protocol that reports releases.
+            if action == GHOSTTY_ACTION_PRESS, let text {
+                text.withCString { ptr in
+                    ke.text = ptr
+                    _ = ghostty_surface_key(surface, ke)
+                }
+            } else {
+                ke.text = nil
+                _ = ghostty_surface_key(surface, ke)
+            }
         }
+        // Typed characters are the evidence a following `pane key return` reads
+        // to tell a real submission from a bare Return (the AI-agent activity
+        // heuristic), exactly as `keyDown` records its literal text.
+        if let text { recordCommandInput(text) }
         let userModifiers: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
         if TerminalCommandSubmission.isReturn(
             keyCode: keyCode,

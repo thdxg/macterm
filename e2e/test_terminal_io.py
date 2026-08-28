@@ -59,3 +59,45 @@ def test_ctrl_c_interrupts_foreground_program(app, live_pane):
         message="the shell to execute a command after ctrl+c",
     )
     assert f"finished-{nonce}" not in dump()
+
+
+def test_printable_keys_reach_the_running_program(app, live_pane):
+    """A bare printable chord must land as a keystroke. `pane key` sends a
+    keycode + mods with no text, which libghostty encodes for control and
+    named keys but not for a printable character — so `pane key a` used to
+    exit 0 and deliver nothing at all.
+
+    `cat -v` is the reader, and Return is what separates delivery from echo:
+    the marker appears once from the pty's own echo of the typed bytes and a
+    second time when cat writes the line back, so two occurrences prove the
+    characters reached the program, not just the tty."""
+    pane_id = live_pane["id"]
+    nonce = uuid.uuid4().hex[:8]
+
+    def dump():
+        return app.pane_text(pane=pane_id, scrollback=True) or ""
+
+    app.pane_run(
+        f'/bin/sh -c "printf started-%s {nonce}; echo; cat -v"',
+        pane=pane_id,
+    )
+    wait_for(lambda: f"started-{nonce}" in dump(), timeout=60, message="cat to start")
+
+    # Letters and digits from the nonce, then the two chords whose character
+    # comes from somewhere other than the token itself: space, and a shifted
+    # symbol (US-ANSI shift+1 → "!").
+    for chord in list(nonce) + ["space", "shift+1"]:
+        app.cli("pane", "key", chord, "--pane", pane_id)
+    typed = f"{nonce} !"
+    wait_for(
+        lambda: typed in dump(),
+        timeout=30,
+        message=f"the typed characters {typed!r} to echo",
+    )
+
+    app.cli("pane", "key", "return", "--pane", pane_id)
+    wait_for(
+        lambda: dump().count(typed) >= 2,
+        timeout=30,
+        message=f"cat to write {typed!r} back",
+    )

@@ -491,11 +491,12 @@ final class ControlHandler {
     }
 
     /// Send a single key chord to the pane through libghostty's key-encoding
-    /// path (`GhosttyTerminalNSView.sendKey`) — the control-byte / named-key
-    /// counterpart to `pane.run`'s text paste. The chord uses the same
-    /// `HotkeyRegistry` grammar as user keybinds (`ctrl+c`, `escape`, `up`,
-    /// `ctrl+\`), so scripts can drive a TUI or interrupt a process, not just
-    /// type a command. Requires a live surface, same `no_surface` contract.
+    /// path (`GhosttyTerminalNSView.sendKey`) — the single-keypress counterpart
+    /// to `pane.run`'s text paste. The chord uses the same `HotkeyRegistry`
+    /// grammar as user keybinds (`ctrl+c`, `escape`, `up`, `ctrl+\`, and bare
+    /// printables like `j` or `space`), so scripts can drive a TUI or interrupt
+    /// a process, not just type a command. Requires a live surface, same
+    /// `no_surface` contract.
     private func paneKey(_ args: ControlArgs) throws -> ControlData {
         guard let chord = args.key, !chord.isEmpty else {
             throw ControlError(code: .badRequest, message: "pane.key requires a key chord")

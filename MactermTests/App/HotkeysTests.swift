@@ -800,4 +800,61 @@ struct HotkeysTests {
         HotkeyRegistry.setShortcutString("disabled", for: action)
         #expect(Preferences.shared.hotkeyVersion != afterRebind)
     }
+
+    // MARK: - printableText (CLI-driven keys)
+
+    @Test
+    func printable_text_covers_letters_digits_and_space() throws {
+        // libghostty encodes a printable character ONLY from the key event's
+        // text, so `pane key a` delivering nothing was this map returning
+        // nothing. Every chord a user can type as a bare token must resolve.
+        let a = try #require(HotkeyRegistry.parseShortcut("a"))
+        #expect(HotkeyRegistry.printableText(forKeyCode: a.keyCode, shift: false) == "a")
+        let seven = try #require(HotkeyRegistry.parseShortcut("7"))
+        #expect(HotkeyRegistry.printableText(forKeyCode: seven.keyCode, shift: false) == "7")
+        let space = try #require(HotkeyRegistry.parseShortcut("space"))
+        #expect(HotkeyRegistry.printableText(forKeyCode: space.keyCode, shift: false) == " ")
+    }
+
+    @Test
+    func printable_text_applies_shift_us_ansi() throws {
+        let a = try #require(HotkeyRegistry.parseShortcut("shift+a"))
+        #expect(HotkeyRegistry.printableText(forKeyCode: a.keyCode, shift: true) == "A")
+        let one = try #require(HotkeyRegistry.parseShortcut("shift+1"))
+        #expect(HotkeyRegistry.printableText(forKeyCode: one.keyCode, shift: true) == "!")
+        let comma = try #require(HotkeyRegistry.parseShortcut("shift+,"))
+        #expect(HotkeyRegistry.printableText(forKeyCode: comma.keyCode, shift: true) == "<")
+        // Shift on a key with no shifted form must not invent one.
+        let shiftedSpace = try #require(HotkeyRegistry.parseShortcut("shift+space"))
+        #expect(HotkeyRegistry.printableText(forKeyCode: shiftedSpace.keyCode, shift: true) == " ")
+    }
+
+    @Test
+    func printable_text_is_nil_for_keys_libghostty_encodes_itself() throws {
+        // These have no text form: sending one would double-encode against
+        // libghostty's own keycode-driven encoding (ESC, \r, \t, CSI A).
+        for token in ["escape", "return", "enter", "tab", "up", "down", "left", "right"] {
+            let chord = try #require(HotkeyRegistry.parseShortcut(token))
+            #expect(
+                HotkeyRegistry.printableText(forKeyCode: chord.keyCode, shift: false) == nil,
+                "\(token) must stay on the keycode-only path"
+            )
+        }
+    }
+
+    @Test
+    func every_parseable_bare_token_either_types_text_or_is_a_named_key() {
+        // The regression this guards: a token that parses, reports success, and
+        // then silently delivers nothing. A chord is legitimate only if it has
+        // printable text or is one of the keys libghostty encodes by keycode.
+        let namedKeys: Set = ["escape", "return", "enter", "tab", "up", "down", "left", "right"]
+        for token in HotkeyRegistry.allKeyTokens {
+            guard let chord = HotkeyRegistry.parseShortcut(token) else { continue }
+            if namedKeys.contains(token) { continue }
+            #expect(
+                HotkeyRegistry.printableText(forKeyCode: chord.keyCode, shift: false) != nil,
+                "\(token) parses but would deliver nothing"
+            )
+        }
+    }
 }
