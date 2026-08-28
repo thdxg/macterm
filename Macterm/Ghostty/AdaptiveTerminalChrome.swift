@@ -206,6 +206,14 @@ final class AdaptiveTerminalChrome {
 
     private func refreshPresentation(for views: [GhosttyTerminalNSView]) {
         let candidates = views.map(currentCandidate)
+        let window = views.first?.window
+        // The quick terminal is a transient overlay in front of the window
+        // that owns the app-wide tint. Its panes still get their own adaptive
+        // fills, but the window-level state of the window underneath is frozen
+        // while it is up: adopting from the panel would repaint that window in
+        // the panel's color (or, for a plain shell, strip its tint), and its
+        // paint-region holes have to stay with the tint they were cut from.
+        let isOverlayPanel = window is NSPanel
         // An opaquely painted color fills its pane opaquely, including a lone
         // pane: the window-wide tint follows window opacity, so without the
         // fill a translucent seam would remain around the TUI's opaque pixels.
@@ -222,11 +230,11 @@ final class AdaptiveTerminalChrome {
         // `opacity`, which reads as the TUI being far more solid than the app
         // around it. Hand those regions to the backdrop so it cuts its tint
         // there and both surfaces carry exactly one tinted layer.
-        if let previous = lastPaintRegionWindow, previous !== views.first?.window {
+        if let previous = lastPaintRegionWindow, previous !== window, !isOverlayPanel {
             WindowAppearance.updateTerminalPaintRegions(in: previous, rects: [])
         }
         WindowAppearance.updateTerminalPaintRegions(
-            in: views.first?.window,
+            in: window,
             rects: zip(views, candidates).compactMap { view, color in
                 guard let color, Self.paneFill(color) == nil, let rect = view.sampledPaintedRect
                 else { return nil }
@@ -237,6 +245,7 @@ final class AdaptiveTerminalChrome {
         // color stays pane-local and the configured background owns the chrome.
         // The tint is the pure hue: `WindowAppearance` composites it at the
         // window opacity itself.
+        guard !isOverlayPanel else { return }
         GhosttyApp.shared.adoptAdaptiveBackgroundColor(
             candidates.count == 1 ? candidates[0]?.withAlphaComponent(1) : nil
         )

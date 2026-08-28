@@ -7,6 +7,13 @@ enum MactermTheme {
     static var bg: Color { Color(nsColor: nsBg) }
     @MainActor
     static var nsBg: NSColor { GhosttyApp.shared.effectiveBackgroundColor }
+    /// The configured theme background, never the transient adaptive tint.
+    /// Window chrome that is not the window the tint was sampled from has to
+    /// use this: the tint belongs to one window's terminal, and painting it
+    /// onto another (the quick terminal panel) shows a foreign color until the
+    /// next sample takes it away again.
+    @MainActor
+    static var nsConfiguredBg: NSColor { GhosttyApp.shared.backgroundColor }
     @MainActor
     static var fg: Color { Color(nsColor: nsFg) }
     @MainActor

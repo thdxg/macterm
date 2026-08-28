@@ -669,7 +669,15 @@ enum WindowAppearance {
     /// `background-default-transparent` to avoid.
     static func syncPanel(_ panel: NSPanel) {
         let opacity = Preferences.shared.windowOpacity
-        let bg = MactermTheme.nsBg
+        // Deliberately the configured background, not `nsBg`: the adaptive
+        // tint is sampled from the main window's terminal, and the panel is a
+        // separate window whose own panes carry their own adaptive fills.
+        // Tinting it with another window's color painted the quick terminal in
+        // the TUI's background for the frame between it being ordered front
+        // and the next sample (which, monitoring the panel, then cleared it) —
+        // the reported flash. `AdaptiveTerminalChrome` never adopts a
+        // window-wide tint from a panel, so there is nothing to opt into here.
+        let bg = MactermTheme.nsConfiguredBg
         let isTransparent = opacity < 1.0
         let useGlass = glassSupported && Preferences.shared.windowGlassEnabled && isTransparent
 

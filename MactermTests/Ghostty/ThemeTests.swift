@@ -31,6 +31,25 @@ struct ThemeTests {
         #expect(MactermTheme.colorScheme == configScheme)
     }
 
+    /// Regression: the quick terminal panel is a separate window whose panes
+    /// carry their own adaptive fills, but it was painted with the MAIN
+    /// window's tint on the frame it was ordered front — a flash of the
+    /// focused tab's TUI background that the next sample took away again.
+    /// Window chrome that does not own the tint reads the configured
+    /// background instead.
+    @Test
+    func configuredBackgroundIgnoresTheAdaptiveTint() {
+        let configured = MactermTheme.nsConfiguredBg
+        let tint: NSColor = configured.isVisuallyEqual(to: .black) ? .white : .black
+
+        let previous = GhosttyApp.shared.adaptiveBackgroundColor
+        GhosttyApp.shared.adoptAdaptiveBackgroundColor(tint)
+        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous) }
+
+        #expect(MactermTheme.nsBg.isVisuallyEqual(to: tint))
+        #expect(MactermTheme.nsConfiguredBg.isVisuallyEqual(to: configured))
+    }
+
     /// Regression: SwiftUI reaches the observable adaptive tint through the
     /// static `MactermTheme.nsBg` accessor. Keep that dependency intact so a
     /// tint change invalidates in-window chrome without pretending the user's
