@@ -21,7 +21,7 @@ final class SurfaceIncubator {
         // Borderless, never ordered on-screen. A generous size so the warmed
         // surface's backing buffer is non-trivial; the real size is applied when
         // the view moves to the visible window.
-        let win = NSWindow(
+        let win = SurfaceIncubatorWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1024, height: 768),
             styleMask: .borderless,
             backing: .buffered,
@@ -57,3 +57,16 @@ final class SurfaceIncubator {
         pane.nsView?.createSurface()
     }
 }
+
+/// Marks the incubator's window so the window-identity heuristics can tell it
+/// apart from the terminal window.
+///
+/// It is a plain (non-panel) `NSWindow` that lives in `NSApp.windows` and is
+/// never visible — which is *exactly* the shape `AppDelegate` used to use for
+/// "the ordered-out terminal window". Ordering it in shows a blank black
+/// 1024×768 rectangle, and adopting it as the cached terminal window breaks
+/// every key-window-gated hotkey. A marker subclass (mirroring
+/// `QuickTerminalPanel`) makes the exclusion a type check with no side effects
+/// — asking `SurfaceIncubator.shared` would instead *create* the window from
+/// inside a predicate that is asking whether it exists.
+final class SurfaceIncubatorWindow: NSWindow {}

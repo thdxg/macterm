@@ -573,10 +573,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Any window of ours that could be the terminal window. Panels are the
-    /// quick terminal; everything else at launch time is the `WindowGroup`.
+    /// Could `window` be the terminal window?
+    ///
+    /// The heuristic used to be "not an `NSPanel`" — panels are the quick
+    /// terminal, and everything else at launch time is the `WindowGroup`. That
+    /// stopped being true once a pane could be warmed off-screen:
+    /// `SurfaceIncubator`'s window is a plain, permanently invisible `NSWindow`
+    /// in `NSApp.windows`, so it matched both "a window exists" and — worse —
+    /// "the ordered-out terminal window", which `reopenIfNeeded` would then
+    /// order in (a blank black rectangle) and cache as `mainWindow`, killing
+    /// every key-window-gated hotkey for the rest of the run.
+    ///
+    /// Still a heuristic, not an identity: the Settings window is also a plain
+    /// `NSWindow` and still matches. Identity remains the pointer
+    /// `didBecomeMain` cached; this only narrows the fallback used before that
+    /// pointer exists.
+    static func isTerminalWindowCandidate(_ window: NSWindow) -> Bool {
+        !(window is NSPanel) && !(window is SurfaceIncubatorWindow)
+    }
+
+    /// Any window of ours that could be the terminal window.
     private func hasTerminalWindow() -> Bool {
-        windowLister().contains { !($0 is NSPanel) }
+        windowLister().contains(where: Self.isTerminalWindowCandidate)
     }
 
     /// Ask SwiftUI to build the `WindowGroup`'s window when AppKit's launch
@@ -639,7 +657,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Front the terminal window for an explicit user request ("Show Window"),
     /// opening it first if the launch never produced one.
     func showWindow() {
-        if let window = mainWindow ?? windowLister().first(where: { !($0 is NSPanel) }) {
+        if let window = mainWindow ?? windowLister().first(where: Self.isTerminalWindowCandidate) {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return
@@ -775,25 +793,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Bring our (possibly ordered-out) terminal window back. The terminal
     /// window is identified by the pointer `didBecomeMain` cached (the first
-    /// window to become main) — NOT by "not an NSPanel", which also matches the
-    /// Settings window (a plain NSWindow). We never stamp a SwiftUI window's
-    /// identifier (that breaks its window management), so identity is the cached
-    /// pointer; the non-panel heuristic is only a last-resort fallback for
-    /// before the terminal window has ever become main.
+    /// window to become main) — NOT by `isTerminalWindowCandidate`, which also
+    /// matches the Settings window (a plain NSWindow). We never stamp a SwiftUI
+    /// window's identifier (that breaks its window management), so identity is
+    /// the cached pointer; the candidate heuristic is only a last-resort
+    /// fallback for before the terminal window has ever become main.
     func reopenIfNeeded() {
         // If the terminal window is already visible, nothing to do.
         if let cached = mainWindow, cached.isVisible {
             return
         }
         // No cached pointer yet (terminal window never became main): fall back
-        // to the old non-panel visibility check to avoid re-fronting needlessly.
-        if mainWindow == nil, NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
+        // to a visibility check over the candidates to avoid re-fronting
+        // needlessly.
+        if mainWindow == nil, windowLister().contains(where: { $0.isVisible && Self.isTerminalWindowCandidate($0) }) {
             return
         }
 
         // Prefer the cached terminal window; only if it's absent fall back to
-        // the first hidden non-panel window.
-        let target = mainWindow ?? NSApp.windows.first { !$0.isVisible && !($0 is NSPanel) }
+        // the first hidden candidate. The incubator's window is excluded there
+        // by construction: it is permanently invisible, so it would otherwise
+        // always be a match, and ordering it in shows a blank black rectangle.
+        let target = mainWindow ?? windowLister().first { !$0.isVisible && Self.isTerminalWindowCandidate($0) }
         guard let target else {
             // Nothing to re-front. A launch that never brought the app forward
             // leaves SwiftUI with no window at all (see repairMissingWindow),
