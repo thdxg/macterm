@@ -58,6 +58,8 @@ _The command palette (⌘P) jumps to a project, switches tabs, or runs any actio
   A bundled `macterm` command drives the running app, so scripts and AI agents can spawn panes, run commands, and script layouts.
 - **Quick terminal** \
   A global drop-down terminal on a hotkey (<kbd>⌃`</kbd>), for scratch work from anywhere.
+- **Adaptive background** \
+  The window picks up the background color the running program paints. A full-screen TUI tints the whole window to match; in a split, each pane takes its own.
 - **Ghostty compatibility** \
   Reads your existing Ghostty config. Theme, font, keybinds: all of it just works.
 
