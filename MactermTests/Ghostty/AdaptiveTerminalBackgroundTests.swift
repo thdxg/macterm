@@ -339,4 +339,78 @@ struct AdaptiveTerminalBackgroundTests {
         #expect(stabilizer.observe(nil) == nil)
         #expect(stabilizer.observe(nil) == .clear)
     }
+
+    // MARK: - Inference gate
+
+    private func allows(
+        color: Bool = true,
+        overlay: Bool = false,
+        confirmed: Bool = true,
+        sinceOutput: TimeInterval? = nil
+    ) -> Bool {
+        AdaptiveTerminalInferenceGate.allowsObservation(
+            ofColor: color,
+            hasViewerOverlay: overlay,
+            hasConfirmedColor: confirmed,
+            secondsSinceOutput: sinceOutput
+        )
+    }
+
+    @Test
+    func aViewerOverlayBlocksInferenceOutrightSoASelectionCannotBeAdopted() {
+        // The drag case: a selection covers most of the frame and arrives as an
+        // ordinary cell background, so only the overlay predicate can reject it.
+        #expect(allows(overlay: true, sinceOutput: 0) == false)
+        #expect(allows(overlay: true, confirmed: false, sinceOutput: 0) == false)
+    }
+
+    @Test
+    func aViewerOverlayBlocksClearingTooSoThePaneFreezesRatherThanFlashing() {
+        #expect(allows(color: false, overlay: true, sinceOutput: 0) == false)
+    }
+
+    @Test
+    func aConfirmedColorIsProtectedFromOutputFreeRepaints() {
+        #expect(allows(sinceOutput: nil) == false)
+        #expect(allows(sinceOutput: AdaptiveTerminalInferenceGate.outputRecencyWindow + 0.5) == false)
+    }
+
+    @Test
+    func recentOutputLetsAConfirmedColorChange() {
+        #expect(allows(sinceOutput: 0))
+        #expect(allows(sinceOutput: AdaptiveTerminalInferenceGate.outputRecencyWindow))
+    }
+
+    @Test
+    func aPaneWithNothingToProtectStillAdoptsItsFirstColorWithoutRecentOutput() {
+        // A quiet TUI already on screen when the preference is switched on has
+        // no output to point at; the overlay predicate is what keeps this safe.
+        #expect(allows(confirmed: false, sinceOutput: nil))
+    }
+
+    @Test
+    func clearingIsNeverGatedOnOutputSoAnOffScreenExitStillFallsBack() {
+        // A TUI that exits inside an occluded tab is only observed on the way
+        // back, long after its last output. Falling back to the configured
+        // theme is always a valid presentation, so causality guards adoption
+        // only.
+        #expect(allows(color: false, sinceOutput: nil))
+        #expect(allows(color: false, sinceOutput: 600))
+    }
+
+    @Test
+    func stabilizerReportsWhetherAColorIsTheConfirmedPresentation() {
+        var stabilizer = AdaptiveTerminalBackgroundStabilizer()
+        #expect(stabilizer.hasConfirmedColor == false)
+
+        let color = NSColor(srgbRed: 0.1, green: 0.2, blue: 0.3, alpha: 1)
+        #expect(stabilizer.observe(color) == nil)
+        #expect(stabilizer.hasConfirmedColor == false)
+        #expect(stabilizer.observe(color) == .applyColor)
+        #expect(stabilizer.hasConfirmedColor)
+
+        #expect(stabilizer.observe(nil) == nil)
+        #expect(stabilizer.observe(nil) == .clear)
+        #expect(stabilizer.hasConfirmedColor == false)
+    }
 }

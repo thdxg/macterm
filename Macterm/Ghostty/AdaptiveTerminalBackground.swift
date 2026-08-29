@@ -387,6 +387,12 @@ struct AdaptiveTerminalBackgroundStabilizer {
 
     var hasPendingObservation: Bool { pending != nil }
 
+    /// Whether a color — as opposed to the configured theme — is the confirmed
+    /// presentation. The inference gate protects a confirmed color from
+    /// output-free repaints while leaving a pane that has nothing to protect
+    /// free to adopt its first one.
+    var hasConfirmedColor: Bool { current != .clear }
+
     mutating func reset(to color: NSColor?) {
         current = Token(color)
         pending = nil
@@ -406,5 +412,55 @@ struct AdaptiveTerminalBackgroundStabilizer {
         current = observed
         pending = nil
         return color == nil ? .clear : .applyColor
+    }
+}
+
+/// Decides whether an inferred (IOSurface-sampled) observation may reach the
+/// stabilizer at all.
+///
+/// The sampled frame is a *composite*: cells the terminal painted plus whatever
+/// the viewer drew over them. A selection highlight arrives as an ordinary cell
+/// background at the same opacity a TUI's own paint gets, so no statistic over
+/// the pixels — coverage, alpha, geometry — can separate the two. The
+/// distinction is provenance, and it has to come from outside the frame.
+///
+/// Two independent signals carry it, and each covers the other's gap:
+///
+/// - **The overlay predicate** is exact: libghostty answers
+///   `ghostty_surface_has_selection` about the very state that dirtied the
+///   frame. A frame carrying an overlay is not a faithful render of the screen
+///   model, so nothing is inferred from it — the pane freezes on its last
+///   confirmed presentation rather than clearing, because the screen model
+///   itself did not change.
+/// - **Output causality** is the backstop for overlays with no such predicate:
+///   a terminal background only ever changes because the program wrote to the
+///   pty, while a viewer repaint involves no output at all.
+///
+/// Causality guards *adoption* only, never *clearing*. Falling back to the
+/// configured theme is always a valid presentation, whereas adopting a color
+/// the terminal never painted is not — and the asymmetry is also what keeps a
+/// TUI that exits inside an occluded tab clearing on the way back, long after
+/// its last output. It likewise never blocks a pane's first adoption: a quiet
+/// TUI already on screen when the preference was switched on has no recent
+/// output to point at, and the overlay predicate is what keeps that opening
+/// safe.
+enum AdaptiveTerminalInferenceGate {
+    /// How long after a pty output heartbeat a frame is still attributable to
+    /// it. The heartbeat is throttled to 500ms leading-edge and each one arms a
+    /// burst that samples at +0.12s with retries to ~+0.62s, so this covers a
+    /// whole burst plus slack for Metal publishing the finished frame — while
+    /// staying far shorter than any drag a hand can hold.
+    static let outputRecencyWindow: TimeInterval = 1.5
+
+    static func allowsObservation(
+        ofColor isColor: Bool,
+        hasViewerOverlay: Bool,
+        hasConfirmedColor: Bool,
+        secondsSinceOutput: TimeInterval?
+    ) -> Bool {
+        if hasViewerOverlay { return false }
+        guard isColor, hasConfirmedColor else { return true }
+        guard let secondsSinceOutput else { return false }
+        return secondsSinceOutput <= outputRecencyWindow
     }
 }

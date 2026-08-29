@@ -225,6 +225,20 @@ final class GhosttyTerminalNSView: NSView {
     /// surface config changes or the terminal restores its configured color.
     private(set) var reportedBackgroundColor: NSColor?
     var sampledDominantBackgroundColor: NSColor?
+
+    /// Whether the finished frame carries something the *viewer* drew over the
+    /// screen model rather than something the terminal painted.
+    ///
+    /// Selection is the only such overlay libghostty exposes, and it lands in
+    /// the frame as an ordinary cell background at the same opacity a TUI's own
+    /// paint gets — so no statistic over the composite can separate the two,
+    /// and only the terminal's own answer can. Any future overlay belongs here
+    /// beside it rather than in the sampler.
+    var hasViewerOverlay: Bool {
+        guard let surface else { return false }
+        return ghostty_surface_has_selection(surface)
+    }
+
     /// The color space the renderer paints this surface in. See
     /// `GhosttyColorSpace` for why it is read from the user's config text and
     /// not from the layer.

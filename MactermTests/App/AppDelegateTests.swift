@@ -98,4 +98,86 @@ struct AppDelegateTests {
 
         #expect(requests == 1)
     }
+
+    // MARK: - The surface incubator's window is not a terminal window
+
+    /// `SurfaceIncubator` parks off-screen panes in a plain, permanently
+    /// invisible `NSWindow` so their surfaces can be created before the tab is
+    /// ever viewed. It lives in `NSApp.windows` and is not an `NSPanel`, which
+    /// is precisely the shape the window heuristics used to read as "the
+    /// ordered-out terminal window".
+    private func makeIncubatorWindow() -> NSWindow {
+        let window = SurfaceIncubatorWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1024, height: 768),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: true
+        )
+        window.isReleasedWhenClosed = false
+        return window
+    }
+
+    /// A launch that produced no window but has already warmed a pane must
+    /// still ask SwiftUI for one — counting the incubator as "a window exists"
+    /// would disable the #241 repair on exactly the app it is meant to save.
+    @Test
+    func launch_repair_does_not_count_the_incubator_window() {
+        let delegate = AppDelegate()
+        var requests = 0
+        let incubator = makeIncubatorWindow()
+        delegate.windowLister = { [incubator] }
+        delegate.openInitialWindow = { requests += 1 }
+
+        delegate.repairMissingWindow(attempt: AppDelegate.windowRepairAttempts)
+
+        #expect(requests == 1)
+    }
+
+    /// "Show Window" must never front the incubator: it is a blank black
+    /// 1024×768 rectangle, and it is not what the user asked to see.
+    @Test
+    func show_window_never_fronts_the_incubator_window() {
+        let delegate = AppDelegate()
+        var requests = 0
+        let incubator = makeIncubatorWindow()
+        delegate.windowLister = { [incubator] }
+        delegate.openInitialWindow = { requests += 1 }
+
+        delegate.showWindow()
+
+        #expect(requests == 1)
+        #expect(!incubator.isVisible)
+    }
+
+    /// The activation re-front must not adopt the incubator either. Its
+    /// fallback looks for a hidden non-panel window, and the incubator is
+    /// permanently hidden — so it would match on every activation, order in a
+    /// black rectangle, and cache it as `mainWindow`, which is the pointer
+    /// every key-window-gated hotkey reads.
+    @Test
+    func reopen_never_adopts_the_incubator_window() {
+        let delegate = AppDelegate()
+        var requests = 0
+        let incubator = makeIncubatorWindow()
+        delegate.windowLister = { [incubator] }
+        delegate.openInitialWindow = { requests += 1 }
+
+        delegate.reopenIfNeeded()
+
+        #expect(delegate.mainWindow == nil)
+        #expect(!incubator.isVisible)
+        // Nothing frontable was found, so this activation is treated as the
+        // user asking for the window that never got built.
+        #expect(requests == 1)
+    }
+
+    /// The exclusion is the incubator only — the heuristic still has to accept
+    /// an ordinary hidden window, or the #241 repair would fire on an app that
+    /// already has one and open a second.
+    @Test
+    func an_ordinary_hidden_window_is_still_a_terminal_window_candidate() {
+        #expect(AppDelegate.isTerminalWindowCandidate(makeWindow()))
+        #expect(!AppDelegate.isTerminalWindowCandidate(makeIncubatorWindow()))
+        #expect(!AppDelegate.isTerminalWindowCandidate(NSPanel()))
+    }
 }

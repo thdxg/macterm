@@ -30,6 +30,9 @@ final class AdaptiveTerminalChrome {
     static let shared = AdaptiveTerminalChrome()
 
     private var stabilizers: [UUID: AdaptiveTerminalBackgroundStabilizer] = [:]
+    /// When each pane last emitted a pty output heartbeat, which is what makes
+    /// a frame attributable to the program rather than to a viewer repaint.
+    private var lastOutputAt: [UUID: Date] = [:]
     private var sampleTimer: Timer?
     private var retryTimer: Timer?
     private var samplingBurst = AdaptiveTerminalSamplingBurst()
@@ -54,6 +57,7 @@ final class AdaptiveTerminalChrome {
     func preferenceDidDisable() {
         cancelTimers()
         stabilizers.removeAll()
+        lastOutputAt.removeAll()
         let windows = Set(GhosttyTerminalNSView.allLiveViews().compactMap(\.window))
         for view in GhosttyTerminalNSView.allLiveViews() {
             clearPresentation(of: view)
@@ -82,6 +86,10 @@ final class AdaptiveTerminalChrome {
     /// PTY output heartbeat reliably covers TUI startup and redraws. A short
     /// burst lets Metal publish the finished frame before the final sample.
     func terminalDidOutput(_ view: GhosttyTerminalNSView) {
+        // Recorded before the eligibility guard: output is output whether or
+        // not the pane is on screen right now, and a pane that outputs just
+        // before it becomes visible should still count as freshly written to.
+        lastOutputAt[view.paneID] = Date()
         guard shouldHandleEvent(from: view) else { return }
         requestSamplingBurst(delay: 0.12, retries: 2)
     }
@@ -182,6 +190,24 @@ final class AdaptiveTerminalChrome {
             )
         } else {
             nil
+        }
+
+        guard AdaptiveTerminalInferenceGate.allowsObservation(
+            ofColor: candidate != nil,
+            hasViewerOverlay: view.hasViewerOverlay,
+            hasConfirmedColor: stabilizer.hasConfirmedColor,
+            secondsSinceOutput: lastOutputAt[id].map { Date().timeIntervalSince($0) }
+        )
+        else {
+            // Frozen, not cleared: the screen model behind the overlay is
+            // unchanged, so the pane keeps exactly what it was presenting. Any
+            // half-confirmed observation is kept too — it matches again once
+            // the frame is trustworthy. No verification retry is asked for,
+            // which is what stops a held selection from driving a 4 Hz timer
+            // for as long as the user leaves it up; the render event that
+            // accompanies dropping the overlay restarts sampling.
+            stabilizers[id] = stabilizer
+            return false
         }
 
         let change = stabilizer.observe(candidate)
@@ -335,6 +361,7 @@ final class AdaptiveTerminalChrome {
     private func pruneState(keeping views: [GhosttyTerminalNSView]) {
         let active = Set(views.map(\.paneID))
         stabilizers = stabilizers.filter { active.contains($0.key) }
+        lastOutputAt = lastOutputAt.filter { active.contains($0.key) }
     }
 
     private func clearPresentation(of view: GhosttyTerminalNSView) {

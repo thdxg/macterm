@@ -134,12 +134,15 @@ enum BenchmarkControl {
     }
 
     /// The terminal window: the pointer `AppDelegate` cached when the first
-    /// window became main — NOT identified by "not an NSPanel", which also
-    /// matches the Settings window (a plain NSWindow). Falls back to the first
-    /// non-panel window only before that pointer is set (no benchmark command
-    /// arrives before the window exists in practice).
+    /// window became main — NOT identified by `isTerminalWindowCandidate`,
+    /// which also matches the Settings window (a plain NSWindow). Falls back to
+    /// the first candidate window only before that pointer is set (no benchmark
+    /// command arrives before the window exists in practice). The candidate
+    /// check excludes the surface incubator's permanently-invisible window,
+    /// which `open-project` creates on its way to warming panes — miniaturizing
+    /// or fronting *that* would measure the wrong window.
     private static var mainWindow: NSWindow? {
         (NSApp.delegate as? AppDelegate)?.mainWindow
-            ?? NSApp.windows.first { !($0 is NSPanel) }
+            ?? NSApp.windows.first(where: AppDelegate.isTerminalWindowCandidate)
     }
 }
