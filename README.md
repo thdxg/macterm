@@ -28,7 +28,17 @@
   <a href="https://github.com/thdxg/macterm/releases"><b>Releases</b></a>
 </p>
 
-![screenshot](./assets/screenshot.png)
+![Macterm's vertical project sidebar beside an editor and shell split](./assets/screenshot-1.png)
+
+_Projects and their tabs stack vertically in a native sidebar, with pinned tabs kept above them._
+
+![A full-window TUI with the sidebar hidden](./assets/screenshot-2.png)
+
+_Hide the sidebar to give a TUI the whole window; the background adapts to the colors the program paints._
+
+![The command palette open over a split layout](./assets/screenshot-3.png)
+
+_The command palette (⌘P) jumps to a project, switches tabs, or runs any action._
 
 ## Features
 

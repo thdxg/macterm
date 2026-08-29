@@ -11,7 +11,7 @@ public/            Served as static files
   docs/            One HTML file per docs page ── generated, do not edit ──
   tailwind.css     Compiled styles ── generated, do not edit ──
   site.js          Shared behavior (sticky nav, copy buttons, GitHub stats)
-  assets/          Symlink to the repo-root assets/ (icon, screenshot, schema)
+  assets/          Symlink to the repo-root assets/ (icon, screenshots, schema)
 src/
   tailwind.css     Tailwind v4 input + design tokens (@theme) + components
   docs-template.html  Shell each rendered docs page is injected into
