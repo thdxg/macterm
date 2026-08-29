@@ -13,6 +13,7 @@ enum AgentIcon: String, CaseIterable {
     case copilot = "AgentCopilot"
     case grok = "AgentGrok"
     case pi = "AgentPi"
+    case antigravity = "AgentAntigravity"
 
     /// Agent CLI names, matched against a process's kernel `comm` (the
     /// executable's basename, truncated to 15 chars) and its invoked name
@@ -31,6 +32,8 @@ enum AgentIcon: String, CaseIterable {
         "copilot": .copilot,
         "grok": .grok,
         "pi": .pi,
+        "antigravity": .antigravity,
+        "agy": .antigravity,
     ]
 
     /// The agent running as `processName`, or nil for anything else
