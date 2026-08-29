@@ -32,7 +32,6 @@ enum AgentIcon: String, CaseIterable {
         "copilot": .copilot,
         "grok": .grok,
         "pi": .pi,
-        "antigravity": .antigravity,
         "agy": .antigravity,
     ]
 

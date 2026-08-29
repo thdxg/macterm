@@ -14,7 +14,6 @@ struct AgentIconTests {
         #expect(AgentIcon.match(processName: "copilot") == .copilot)
         #expect(AgentIcon.match(processName: "grok") == .grok)
         #expect(AgentIcon.match(processName: "pi") == .pi)
-        #expect(AgentIcon.match(processName: "antigravity") == .antigravity)
         #expect(AgentIcon.match(processName: "agy") == .antigravity)
     }
 
