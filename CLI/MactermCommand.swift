@@ -172,7 +172,7 @@ struct TabCommand: ParsableCommand {
     /// Mirrors PaneCommand.paneSubcommands: the debug-only `merge` verb is
     /// present in debug builds of the CLI and absent in release.
     private static var tabSubcommands: [ParsableCommand.Type] {
-        var subs: [ParsableCommand.Type] = [List.self, New.self, Select.self, Move.self, Close.self]
+        var subs: [ParsableCommand.Type] = [List.self, New.self, Select.self, Move.self, Rename.self, Close.self]
         #if DEBUG
         subs.append(Merge.self)
         #endif
@@ -283,6 +283,45 @@ struct TabCommand: ParsableCommand {
             try runControlCommand(
                 command: "tab.move",
                 args: ControlArgs(project: project, tab: tab, slot: slot),
+                options: options
+            )
+        }
+    }
+
+    struct Rename: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Rename a tab, or reset it to the default automatic title with --reset."
+        )
+
+        @Argument(help: "Tab title, UUID, or index (tab:3).")
+        var tab: String
+
+        @Argument(help: "New title for the tab.")
+        var title: String?
+
+        @Flag(name: .customLong("reset"), help: "Reset to the default automatic title.")
+        var reset = false
+
+        @Option(help: "Project scope. Defaults to the active project.")
+        var project: String?
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            if reset, title != nil {
+                Output.printError("cannot specify both a title and --reset")
+                throw ExitCode(1)
+            }
+            if !reset, title == nil || title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+                Output.printError(
+                    "tab rename requires a title or --reset",
+                    action: "pass a title or --reset to restore automatic naming"
+                )
+                throw ExitCode(1)
+            }
+            try runControlCommand(
+                command: "tab.rename",
+                args: ControlArgs(project: project, tab: tab, title: title, reset: reset),
                 options: options
             )
         }

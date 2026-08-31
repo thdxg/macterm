@@ -46,6 +46,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
 | `tab select <tab>` | Activate a tab (`tab:3`, index, UUID, or exact title). |
 | `tab move <tab> <slot>` | Reorder a tab within its project. `slot` is the tab's **final** 1-based position in `tab list` order (so `tab move tab:4 2` makes it second). Out-of-range slots are an error, never a silent clamp. |
+| `tab rename <tab> [title] [--reset] [--project P]` | Rename a tab, or reset to the automatic default title with `--reset`. |
 | `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. Closing a pinned tab unloads it — sessions end, but its row and saved layout stay, and the next launch starts it again. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |
 | `pane inspect [target]` | Read-only snapshot of a pane's terminal core: grid, cell/surface pixels, scrollback totals, content scale, foreground pid + argv. Needs a live surface. |

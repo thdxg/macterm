@@ -63,6 +63,7 @@ final class ControlHandler {
         case "tab.new": return try tabNew(args)
         case "tab.select": return try tabSelect(args)
         case "tab.move": return try tabMove(args)
+        case "tab.rename": return try tabRename(args)
         case "tab.close": return try tabClose(args)
         case "pane.list": return try paneList(args)
         case "pane.inspect": return try paneInspect(args)
@@ -367,6 +368,43 @@ final class ControlHandler {
         }
         appState.reorderTab(tab.id, inProject: project.id, toIndex: slot > fromIndex ? slot : slot - 1)
         return ControlData(tabs: [tabInfo(tab, index: slot, in: workspace)])
+    }
+
+    private func tabRename(_ args: ControlArgs) throws -> ControlData {
+        guard args.tab != nil else {
+            throw ControlError(code: .badRequest, message: "tab.rename requires a tab selector")
+        }
+        if args.reset == true, args.title != nil {
+            throw ControlError(code: .badRequest, message: "cannot specify both a title and --reset")
+        }
+        let newTitle: String?
+        if args.reset == true {
+            newTitle = nil
+        } else if let rawTitle = args.title {
+            let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw ControlError(
+                    code: .badRequest,
+                    message: "tab title cannot be empty",
+                    action: "pass --reset to restore automatic naming"
+                )
+            }
+            newTitle = trimmed
+        } else {
+            throw ControlError(
+                code: .badRequest,
+                message: "tab.rename requires a title or --reset",
+                action: "pass a title or --reset to restore automatic naming"
+            )
+        }
+
+        let (_, workspace) = try resolveWorkspace(args)
+        let (index, tab) = try resolveTab(args, in: workspace)
+
+        tab.customTitle = newTitle
+        appState.saveWorkspaces()
+
+        return ControlData(tabs: [tabInfo(tab, index: index, in: workspace)])
     }
 
     private func tabClose(_ args: ControlArgs) throws -> ControlData {
@@ -866,7 +904,9 @@ final class ControlHandler {
     /// Accepts `3` or `prefix:3` (the ref form the CLI renders).
     private func parseIndex(_ selector: String, prefix: String) -> Int? {
         var text = Substring(selector)
-        if text.hasPrefix("\(prefix):") { text = text.dropFirst(prefix.count + 1) }
+        if text.hasPrefix("\(prefix):") {
+            text = text.dropFirst(prefix.count + 1)
+        }
         guard let value = Int(text), value >= 1 else { return nil }
         return value
     }
@@ -895,7 +935,9 @@ final class ControlHandler {
         if let selector = args.pane, !selector.isEmpty {
             if let id = UUID(uuidString: selector) {
                 for tab in workspace.tabs {
-                    if let pane = tab.splitRoot.findPane(id: id) { return (tab, pane) }
+                    if let pane = tab.splitRoot.findPane(id: id) {
+                        return (tab, pane)
+                    }
                 }
                 throw ControlError(code: .notFound, message: "no pane with id \(selector)")
             }

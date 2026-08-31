@@ -37,7 +37,9 @@ struct ControlHandlerTests {
     ) -> Project {
         let project = Project(name: name, path: path, sortOrder: projectStore.projects.count)
         projectStore.add(project)
-        if select { appState.selectProject(project) }
+        if select {
+            appState.selectProject(project)
+        }
         return project
     }
 
@@ -494,6 +496,76 @@ struct ControlHandlerTests {
         #expect(unknown.error?.code == .notFound)
 
         #expect(workspace.tabs.map(\.id) == before)
+    }
+
+    // MARK: - tab.rename
+
+    @Test
+    func tab_rename_sets_custom_title_and_persists() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let workspace = try #require(appState.workspaces[project.id])
+        let tab = try #require(workspace.tabs.first)
+        #expect(tab.customTitle == nil)
+
+        let response = await handler.handle(request("tab.rename", args: ControlArgs(tab: "tab:1", title: "Auth Worker")))
+        #expect(response.ok)
+        #expect(response.data?.tabs?.first?.title == "Auth Worker")
+        #expect(tab.customTitle == "Auth Worker")
+        #expect(tab.sidebarTitle == "Auth Worker")
+    }
+
+    @Test
+    func tab_rename_reset_clears_custom_title_and_restores_auto_title() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let workspace = try #require(appState.workspaces[project.id])
+        let tab = try #require(workspace.tabs.first)
+        tab.customTitle = "Custom Name"
+
+        let response = await handler.handle(request("tab.rename", args: ControlArgs(tab: "tab:1", reset: true)))
+        #expect(response.ok)
+        #expect(tab.customTitle == nil)
+        #expect(tab.sidebarTitle == tab.autoTitle)
+    }
+
+    @Test
+    func tab_rename_trims_whitespace() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let workspace = try #require(appState.workspaces[project.id])
+        let tab = try #require(workspace.tabs.first)
+
+        let response = await handler.handle(request("tab.rename", args: ControlArgs(tab: "tab:1", title: "  Trimmed Title  ")))
+        #expect(response.ok)
+        #expect(tab.customTitle == "Trimmed Title")
+    }
+
+    @Test
+    func tab_rename_validates_arguments() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        _ = try #require(appState.workspaces[project.id])
+
+        // Missing tab selector
+        let noTab = await handler.handle(request("tab.rename", args: ControlArgs(title: "New Title")))
+        #expect(noTab.error?.code == .badRequest)
+
+        // Conflicting title and reset
+        let conflict = await handler.handle(request("tab.rename", args: ControlArgs(tab: "tab:1", title: "New Title", reset: true)))
+        #expect(conflict.error?.code == .badRequest)
+
+        // Empty title
+        let empty = await handler.handle(request("tab.rename", args: ControlArgs(tab: "tab:1", title: "   ")))
+        #expect(empty.error?.code == .badRequest)
+
+        // Missing both title and reset
+        let neither = await handler.handle(request("tab.rename", args: ControlArgs(tab: "tab:1")))
+        #expect(neither.error?.code == .badRequest)
+
+        // Unknown tab
+        let unknown = await handler.handle(request("tab.rename", args: ControlArgs(tab: "tab:99", title: "Valid Title")))
+        #expect(unknown.error?.code == .notFound)
     }
 
     // MARK: - pane.split / pane.focus / pane.close / pane.run

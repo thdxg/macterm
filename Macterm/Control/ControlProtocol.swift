@@ -104,6 +104,10 @@ struct ControlArgs: Codable, Equatable {
     /// Destination slot for `tab.move`: the tab's FINAL 1-based position in
     /// `tab list` order, not a drag-and-drop insertion offset.
     var slot: Int?
+    /// Custom title for `tab.rename`.
+    var title: String?
+    /// Reset custom title back to automatic default (`tab.rename`).
+    var reset: Bool?
 
     init(
         project: String? = nil,
@@ -124,7 +128,9 @@ struct ControlArgs: Codable, Equatable {
         key: String? = nil,
         zone: String? = nil,
         dest: String? = nil,
-        slot: Int? = nil
+        slot: Int? = nil,
+        title: String? = nil,
+        reset: Bool? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -145,6 +151,8 @@ struct ControlArgs: Codable, Equatable {
         self.zone = zone
         self.dest = dest
         self.slot = slot
+        self.title = title
+        self.reset = reset
     }
 }
 
