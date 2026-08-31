@@ -471,7 +471,7 @@ final class Preferences {
     /// switcher, update button), the title text, and — a side effect of
     /// SwiftUI removing the window toolbar — the traffic lights. The sidebar
     /// and terminal surface extend to the window's top edge. Tab switching
-    /// stays available via the sidebar and Cmd+1…9; close/minimize/zoom stay
+    /// stays available via the sidebar and Cmd+digit; close/minimize/zoom stay
     /// available from the Window menu. No AppKit private API involved: the
     /// window keeps its normal style mask, so edge-resizing still works.
     var hideTitleBar: Bool {

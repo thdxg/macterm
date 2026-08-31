@@ -1178,7 +1178,7 @@ private struct AppearanceSettings: View {
                     .onChange(of: showToolbar) { _, v in
                         Preferences.shared.hideTitleBar = !v
                     }
-                Text("Hiding it removes the title bar, window buttons, and drag area; switch tabs via the sidebar or ⌘1–9.")
+                Text("Hiding it removes the title bar, window buttons, and drag area; switch tabs via the sidebar or ⌘ and the tab number.")
                     .settingsCaption()
 
                 Group {

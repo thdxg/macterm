@@ -109,13 +109,14 @@ final class QuickTerminalResponder: KeyResponder {
 }
 
 /// App-level hotkeys for the main window: split, close, focus, resize, tab
-/// cycling, project navigation, new tab, new project, Cmd+1-9 tab selection,
-/// etc. Runs after the palette and quick-terminal responders.
+/// cycling, project navigation, new tab, new project, Cmd+digit tab
+/// selection, etc. Runs after the palette and quick-terminal responders.
 @MainActor
 final class MainAppResponder: KeyResponder {
     private let appState: AppState
     private let projectStore: ProjectStore
     weak var mainWindow: NSWindow?
+    private var tabIndexChord = TabIndexChord()
 
     private static let focusActions: [(HotkeyAction, PaneFocusDirection)] = [
         (.focusPaneLeft, .left),
@@ -361,18 +362,39 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        // Cmd+1-9 tab selection. Must check after the configurable hotkeys
+        // Cmd+digit tab selection. Must check after the configurable hotkeys
         // so user bindings take precedence over digits.
+        //
+        // Digits accumulate into a multi-digit number while Command stays
+        // down (see TabIndexChord), so a workspace with more than nine tabs
+        // is fully reachable. Every digit 1-9 is still swallowed even when it
+        // addresses nothing, matching the old single-digit binding; a `0` that
+        // isn't a valid continuation passes through, since on its own it is
+        // ghostty's reset-font-size chord, not ours.
         if flags == .command {
             let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-            if let idx = Int(key), (1 ... 9).contains(idx),
+            if key.count == 1, let digit = Int(key), (0 ... 9).contains(digit),
                let projectID = appState.activeProjectID
             {
-                appState.selectTabByIndex(idx - 1, projectID: projectID)
-                return .handled
+                // Auto-repeat must not accumulate: holding Cmd+1 down is one
+                // request for tab 1, not a walk through 1, 11, 111.
+                guard !event.isARepeat else { return .handled }
+                let tabCount = appState.selectableTabCount(projectID: projectID)
+                if let number = tabIndexChord.press(digit: digit, tabCount: tabCount) {
+                    appState.selectTabByIndex(number - 1, projectID: projectID)
+                    return .handled
+                }
+                return digit == 0 ? .passThrough : .handled
             }
         }
 
         return .passThrough
+    }
+
+    /// Ends an in-flight Cmd+digit run, so the next digit starts a fresh
+    /// number instead of extending the last one. Driven by the flags monitor
+    /// on Command release.
+    func endTabIndexChord() {
+        tabIndexChord.reset()
     }
 }

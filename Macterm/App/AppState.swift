@@ -1609,8 +1609,17 @@ final class AppState {
         }
     }
 
+    /// Tab slots addressable by Cmd+digit — sidebar ROWS in the pinned
+    /// workspace (records, unloaded included) and live tabs elsewhere, the
+    /// same two sources `selectTabByIndex` selects from. It is what bounds
+    /// digit accumulation, so the two must keep counting the same things.
+    func selectableTabCount(projectID: UUID) -> Int {
+        if projectID == PinnedTabs.projectID { return pinnedRecords.count }
+        return workspaces[projectID]?.tabs.count ?? 0
+    }
+
     func selectTabByIndex(_ index: Int, projectID: UUID) {
-        // Cmd+1…9 in the pinned workspace counts SIDEBAR rows (records,
+        // Cmd+digit in the pinned workspace counts SIDEBAR rows (records,
         // unloaded included), matching what the user sees.
         if projectID == PinnedTabs.projectID {
             guard pinnedRecords.indices.contains(index) else { return }

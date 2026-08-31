@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Numbered segmented control in the window title bar that mirrors a fixed
 /// 5-tab sliding window of the active project's tabs. Each segment shows
-/// the tab's 1-based index; Cmd+1…Cmd+9 in `Responders.swift` selects by
-/// that same index.
+/// the tab's 1-based index; Cmd+digit in `Responders.swift` selects by
+/// that same index (multi-digit numbers accumulate while Cmd is held).
 ///
 /// The window centers the active tab when at least two tabs sit on either
 /// side; otherwise it clamps to the start or end of the workspace. The
@@ -13,7 +13,7 @@ import SwiftUI
 /// When tabs sit off either end of the visible window, the first/last
 /// segment is relabelled `…` — a quiet affordance that more tabs exist in
 /// that direction. The segment still selects its underlying tab when
-/// clicked. Cmd+1…Cmd+9 keeps using real tab indices via the keyboard
+/// clicked. Cmd+digit keeps using real tab indices via the keyboard
 /// handler in `Responders.swift`, so shortcuts aren't affected.
 struct TabSwitcherToolbarItem: View {
     @Environment(AppState.self)
@@ -80,7 +80,7 @@ struct TabSwitcherToolbarItem: View {
             // Keyed on the labels rather than `windowTabs.count`: a digit
             // flipping to `⋯` changes the ideal width at a constant count.
             .id(labels.joined(separator: "\u{1F}"))
-            .help("Cmd+1…\(min(9, tabs.count)) to switch tabs")
+            .help("Cmd+1…\(tabs.count) to switch tabs")
         }
     }
 

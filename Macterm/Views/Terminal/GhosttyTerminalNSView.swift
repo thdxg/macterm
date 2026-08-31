@@ -858,7 +858,11 @@ final class GhosttyTerminalNSView: NSView {
         let key = (event.charactersIgnoringModifiers ?? "").lowercased()
         // Always let system Cmd shortcuts through
         if flags == .command, Self.systemKeys.contains(key) { return true }
-        // Cmd+1-9 for tab selection
+        // Cmd+1-9 for tab selection. A backstop only: KeyRouter's monitor
+        // sees these first and swallows them. Cmd+0 is deliberately absent —
+        // it addresses a tab only as the second digit of a multi-digit run
+        // (TabIndexChord), which the monitor has already handled; on its own
+        // it belongs to ghostty as reset-font-size.
         if flags == .command, let n = Int(key), (1 ... 9).contains(n) { return true }
         // A binding the user flagged for passthrough is NOT an app shortcut
         // while a program owns this pane's keyboard — otherwise the key would
