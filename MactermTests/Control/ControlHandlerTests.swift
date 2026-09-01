@@ -711,6 +711,20 @@ struct ControlHandlerTests {
     }
 
     @Test
+    func pane_write_without_surface_is_no_surface() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore)
+        let response = await handler.handle(request("pane.write", args: ControlArgs(text: "git status")))
+        #expect(response.error?.code == .noSurface)
+
+        let empty = await handler.handle(request("pane.write"))
+        #expect(empty.error?.code == .badRequest)
+
+        let emptyText = await handler.handle(request("pane.write", args: ControlArgs(text: "")))
+        #expect(emptyText.error?.code == .badRequest)
+    }
+
+    @Test
     func pane_key_validates_chord_then_needs_surface() async {
         let (handler, appState, projectStore) = makeHandler()
         _ = seedProject(appState, projectStore)

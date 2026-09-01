@@ -370,7 +370,7 @@ struct PaneCommand: ParsableCommand {
     private static var paneSubcommands: [ParsableCommand.Type] {
         var subs: [ParsableCommand.Type] = [
             List.self, Inspect.self, Dump.self, Split.self, Focus.self,
-            Close.self, Run.self, Key.self, Zoom.self, ResizeSplit.self,
+            Close.self, Run.self, Write.self, Key.self, Zoom.self, ResizeSplit.self,
         ]
         #if DEBUG
         subs.append(Resize.self)
@@ -493,6 +493,38 @@ struct PaneCommand: ParsableCommand {
             var args = target.controlArgs()
             args.run = line
             try runControlCommand(command: "pane.run", args: args, options: options)
+        }
+    }
+
+    struct Write: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Type text into a live pane's shell without submitting it (no trailing newline).",
+            discussion: """
+            Pastes literal text into the active shell without pressing Return. Use it \
+            to pre-fill a command prompt, send unsubmitted fragments, or stage text \
+            for the user to review before executing.
+
+            The text is delivered through the terminal's text-paste path (like `pane run`, \
+            but without appending a newline). To submit after writing, either send a newline \
+            in the text or run `macterm pane key return`.
+            """
+        )
+
+        @Argument(parsing: .captureForPassthrough, help: "The text to write into the pane.")
+        var text: [String]
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            let line = text.joined(separator: " ")
+            guard !line.isEmpty else {
+                Output.printError("nothing to write")
+                throw ExitCode(1)
+            }
+            var args = target.controlArgs()
+            args.text = line
+            try runControlCommand(command: "pane.write", args: args, options: options)
         }
     }
 

@@ -72,6 +72,7 @@ final class ControlHandler {
         case "pane.focus": return try paneFocus(args)
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
+        case "pane.write": return try paneWrite(args)
         case "pane.key": return try paneKey(args)
         case "pane.zoom": return try paneZoom(args)
         case "pane.resize-split": return try paneResizeSplit(args)
@@ -519,6 +520,22 @@ final class ControlHandler {
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
         guard let view = target.pane.nsView, view.sendText(command + "\n") else {
+            throw ControlError(
+                code: .noSurface,
+                message: "the pane's terminal isn't live yet",
+                action: "select its tab once so the surface spawns, then retry"
+            )
+        }
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    private func paneWrite(_ args: ControlArgs) throws -> ControlData {
+        guard let text = args.text, !text.isEmpty else {
+            throw ControlError(code: .badRequest, message: "pane.write requires text to write")
+        }
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard let view = target.pane.nsView, view.sendText(text) else {
             throw ControlError(
                 code: .noSurface,
                 message: "the pane's terminal isn't live yet",
