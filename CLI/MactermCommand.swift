@@ -105,8 +105,8 @@ struct Status: ParsableCommand {
 struct ProjectCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "project",
-        abstract: "List, create, and select projects.",
-        subcommands: [List.self, Create.self, Select.self],
+        abstract: "List, create, select, rename, and remove projects.",
+        subcommands: [List.self, Create.self, Select.self, Rename.self, Remove.self],
         defaultSubcommand: List.self
     )
 
@@ -155,6 +155,53 @@ struct ProjectCommand: ParsableCommand {
 
         func run() throws {
             try runControlCommand(command: "project.select", args: ControlArgs(project: project), options: options)
+        }
+    }
+
+    struct Rename: ParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Rename a project.")
+
+        @Argument(help: "Project name, UUID, or index.")
+        var project: String
+
+        @Argument(help: "New name for the project.")
+        var name: String
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                Output.printError("project name cannot be empty")
+                throw ExitCode(1)
+            }
+            try runControlCommand(
+                command: "project.rename",
+                args: ControlArgs(project: project, name: trimmed),
+                options: options
+            )
+        }
+    }
+
+    struct Remove: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Remove a project (kills its panes' zmx sessions)."
+        )
+
+        @Argument(help: "Project name, UUID, or index.")
+        var project: String
+
+        @Flag(help: "Remove even if a pane has a running program.")
+        var force = false
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(
+                command: "project.remove",
+                args: ControlArgs(project: project, force: force),
+                options: options
+            )
         }
     }
 }

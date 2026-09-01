@@ -59,6 +59,8 @@ final class ControlHandler {
         case "project.list": return projectList()
         case "project.create": return try projectCreate(args)
         case "project.select": return try projectSelect(args)
+        case "project.rename": return try projectRename(args)
+        case "project.remove": return try projectRemove(args)
         case "tab.list": return try tabList(args)
         case "tab.new": return try tabNew(args)
         case "tab.select": return try tabSelect(args)
@@ -317,6 +319,54 @@ final class ControlHandler {
             appState.selectProject(project)
         }
         return projectData(project)
+    }
+
+    private func projectRename(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(code: .badRequest, message: "project.rename requires a project selector")
+        }
+        guard let rawName = args.name else {
+            throw ControlError(code: .badRequest, message: "project.rename requires a new name")
+        }
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ControlError(code: .badRequest, message: "project name cannot be empty")
+        }
+        let project = try resolveProject(selector)
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be renamed")
+        }
+        projectStore.rename(id: project.id, to: trimmed)
+        guard let updated = projectStore.projects.first(where: { $0.id == project.id }) else {
+            throw ControlError(code: .internalError, message: "project rename failed")
+        }
+        return projectData(updated)
+    }
+
+    private func projectRemove(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(code: .badRequest, message: "project.remove requires a project selector")
+        }
+        let project = try resolveProject(selector)
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be removed")
+        }
+
+        let busy = appState.workspaces[project.id]?.tabs
+            .flatMap { $0.splitRoot.allPanes() }
+            .contains(where: \.needsConfirmClose) ?? false
+
+        if busy, args.force != true {
+            throw ControlError(
+                code: .busy,
+                message: "a pane in that project has a running program (removing kills its sessions)",
+                action: "re-run with --force to remove anyway"
+            )
+        }
+
+        appState.removeProject(project.id)
+        projectStore.remove(id: project.id)
+        return ControlData()
     }
 
     // MARK: - Tab mutations
