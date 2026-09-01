@@ -368,7 +368,11 @@ struct SidebarContent: View {
             syncSelection()
         }
         .onAppear {
-            if let id = appState.activeProjectID { presentation.expandedProjects.insert(id) }
+            presentation.restoreExpansionOnce(
+                projectIDs: projectStore.projects.map(\.id),
+                activeProjectID: appState.activeProjectID,
+                restoreAllProjects: Preferences.shared.restoreAllProjectsOnLaunch
+            )
             syncSelection()
         }
         .overlay(alignment: .top) {

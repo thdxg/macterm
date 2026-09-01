@@ -35,6 +35,19 @@ struct PreferencesTests {
     }
 
     @Test
+    func restore_all_projects_on_launch_defaults_off_and_round_trips() {
+        let prior = Preferences.shared.restoreAllProjectsOnLaunch
+        defer { Preferences.shared.restoreAllProjectsOnLaunch = prior }
+
+        // Fresh (wiped) test suite → avoid unexpectedly opening every saved
+        // local shell or remote SSH connection.
+        #expect(!Preferences.shared.restoreAllProjectsOnLaunch)
+
+        Preferences.shared.restoreAllProjectsOnLaunch = true
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.restoreAllProjectsOnLaunch) as? Bool == true)
+    }
+
+    @Test
     func installation_id_is_lazily_created_stable_and_label_safe() {
         let first = Preferences.shared.installationID
         // Stable across reads (it's the persistent ownership identity zmx

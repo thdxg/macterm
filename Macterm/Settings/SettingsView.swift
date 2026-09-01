@@ -445,6 +445,7 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
+    @State private var restoreAllProjectsOnLaunch: Bool = Preferences.shared.restoreAllProjectsOnLaunch
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -590,13 +591,18 @@ private struct GeneralSettings: View {
                 .settingsCaption()
             }
 
-            // Shells always keep running after quit and reattach on the next
-            // launch — there's no setting, so the section exists only to report
-            // that persistence is unavailable. It can be silently so (Supacode
-            // shipped the same probe and users only noticed via a buried log
-            // line), which is the whole reason to say it in the UI at all.
-            if ZmxClient.live.executableURL() == nil {
-                Section("Session Persistence") {
+            Section("Session Persistence") {
+                Toggle("Restore and expand every project on launch", isOn: $restoreAllProjectsOnLaunch)
+                    .onChange(of: restoreAllProjectsOnLaunch) { _, v in
+                        Preferences.shared.restoreAllProjectsOnLaunch = v
+                    }
+                Text("Reattaches saved terminals immediately and reveals their tabs in the sidebar.")
+                    .settingsCaption()
+
+                // Persistence can fail silently when zmx is unavailable
+                // (Supacode shipped the same probe and users only noticed via
+                // a buried log line), so keep the warning beside the setting.
+                if ZmxClient.live.executableURL() == nil {
                     Label {
                         Text(zmxUnavailableReason)
                     } icon: {

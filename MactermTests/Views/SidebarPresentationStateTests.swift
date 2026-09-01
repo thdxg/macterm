@@ -55,4 +55,41 @@ struct SidebarPresentationStateTests {
         #expect(state.selection == [.tab(projectID: projectID, tabID: tabID)])
         #expect(state.scrollPosition == .tab(projectID: projectID, tabID: tabID))
     }
+
+    @Test
+    func eager_launch_expands_every_project_only_once() {
+        let state = SidebarPresentationState()
+        let firstID = UUID()
+        let secondID = UUID()
+
+        state.restoreExpansionOnce(
+            projectIDs: [firstID, secondID],
+            activeProjectID: firstID,
+            restoreAllProjects: true
+        )
+        #expect(state.expandedProjects == [firstID, secondID])
+
+        // A later overlay appearance must preserve a user collapse.
+        state.expandedProjects.remove(secondID)
+        state.restoreExpansionOnce(
+            projectIDs: [firstID, secondID],
+            activeProjectID: firstID,
+            restoreAllProjects: true
+        )
+        #expect(state.expandedProjects == [firstID])
+    }
+
+    @Test
+    func lazy_launch_expands_only_the_active_project() {
+        let state = SidebarPresentationState()
+        let activeID = UUID()
+
+        state.restoreExpansionOnce(
+            projectIDs: [activeID, UUID()],
+            activeProjectID: activeID,
+            restoreAllProjects: false
+        )
+
+        #expect(state.expandedProjects == [activeID])
+    }
 }

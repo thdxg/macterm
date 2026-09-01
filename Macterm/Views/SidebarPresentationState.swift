@@ -25,8 +25,27 @@ final class SidebarPresentationState {
     var scrollPosition: SidebarItem?
     var renameText = ""
 
+    private var didRestoreExpansion = false
     private(set) var renameTarget: SidebarRenameTarget?
     private(set) var originalCustomTitle: String?
+
+    /// Seed disclosure state once for the shared native/overlay sidebar. The
+    /// guard matters because a later overlay appearance must not reopen a
+    /// project the user deliberately collapsed after launch.
+    func restoreExpansionOnce(
+        projectIDs: [UUID],
+        activeProjectID: UUID?,
+        restoreAllProjects: Bool
+    ) {
+        guard !didRestoreExpansion else { return }
+        didRestoreExpansion = true
+
+        if restoreAllProjects {
+            expandedProjects.formUnion(projectIDs)
+        } else if let activeProjectID, activeProjectID != PinnedTabs.projectID {
+            expandedProjects.insert(activeProjectID)
+        }
+    }
 
     func beginRename(
         _ target: SidebarRenameTarget,

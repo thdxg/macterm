@@ -652,6 +652,14 @@ final class Preferences {
 
     // MARK: - Session
 
+    /// Start every restored project's terminal surfaces at launch instead of
+    /// waiting for each project to be selected. Off by default: eager restore
+    /// can open many shells or remote SSH connections at once. Launch warming
+    /// stays staggered, with same-host remote panes paced more conservatively.
+    var restoreAllProjectsOnLaunch: Bool {
+        didSet { defaults.set(restoreAllProjectsOnLaunch, forKey: Keys.restoreAllProjectsOnLaunch) }
+    }
+
     /// Persisted so the app re-opens to the last-used project on launch.
     var activeProjectID: UUID? {
         didSet { defaults.set(activeProjectID?.uuidString, forKey: Keys.activeProjectID) }
@@ -741,6 +749,7 @@ final class Preferences {
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         reconnectRemotePanes = defaults.object(forKey: Keys.reconnectRemotePanes) as? Bool ?? true
+        restoreAllProjectsOnLaunch = defaults.object(forKey: Keys.restoreAllProjectsOnLaunch) as? Bool ?? false
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
         sidebarWidth = storedSidebarWidth
@@ -868,6 +877,7 @@ final class Preferences {
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"
+        static let restoreAllProjectsOnLaunch = "macterm.session.restoreAllProjectsOnLaunch"
         static let installationID = "macterm.installationID"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
         static let sidebarWidth = "macterm.sidebar.width"

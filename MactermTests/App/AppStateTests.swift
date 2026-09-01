@@ -1507,6 +1507,168 @@ struct AppStateTests {
         #expect(AppState.panesToWarm(in: ws).isEmpty)
     }
 
+    @Test
+    func panesToWarmAtLaunch_warms_all_background_panes_but_skips_the_visible_tab() {
+        let activeID = UUID()
+        let backgroundID = UUID()
+        let missingID = UUID()
+
+        let visible = Pane(projectPath: "/active", projectID: activeID)
+        let hidden = Pane(projectPath: "/active", projectID: activeID)
+        let activeTab = TerminalTab(id: UUID(), splitRoot: .pane(visible), focusedPaneID: visible.id)
+        let hiddenTab = TerminalTab(id: UUID(), splitRoot: .pane(hidden), focusedPaneID: hidden.id)
+        let activeWorkspace = Workspace(
+            projectID: activeID,
+            tabs: [activeTab, hiddenTab],
+            activeTabID: activeTab.id
+        )
+
+        let backgroundOne = Pane(projectPath: "/background", projectID: backgroundID)
+        let backgroundTwo = Pane(projectPath: "/background", projectID: backgroundID)
+        let backgroundTree = SplitNode.split(SplitBranch(
+            direction: .horizontal,
+            ratio: 0.5,
+            first: .pane(backgroundOne),
+            second: .pane(backgroundTwo)
+        ))
+        let backgroundTab = TerminalTab(id: UUID(), splitRoot: backgroundTree, focusedPaneID: backgroundOne.id)
+        let backgroundWorkspace = Workspace(
+            projectID: backgroundID,
+            tabs: [backgroundTab],
+            activeTabID: backgroundTab.id
+        )
+
+        let warm = AppState.panesToWarmAtLaunch(
+            projectIDs: [activeID, missingID, backgroundID],
+            workspaces: [activeID: activeWorkspace, backgroundID: backgroundWorkspace],
+            activeProjectID: activeID
+        )
+
+        #expect(warm.map(\.id) == [hidden.id, backgroundOne.id, backgroundTwo.id])
+    }
+
+    @Test
+    func panesToWarmAtLaunch_warms_every_pane_when_pinned_tabs_are_active() {
+        let projectID = UUID()
+        let pane = Pane(projectPath: "/background", projectID: projectID)
+        let tab = TerminalTab(id: UUID(), splitRoot: .pane(pane), focusedPaneID: pane.id)
+        let workspace = Workspace(projectID: projectID, tabs: [tab], activeTabID: tab.id)
+
+        let warm = AppState.panesToWarmAtLaunch(
+            projectIDs: [projectID],
+            workspaces: [projectID: workspace],
+            activeProjectID: PinnedTabs.projectID
+        )
+
+        #expect(warm.map(\.id) == [pane.id])
+    }
+
+    @Test
+    func launchWarmSchedule_paces_each_remote_destination_without_slowing_local_panes() {
+        let projectID = UUID()
+        let localOne = Pane(projectPath: "/local", projectID: projectID)
+        let remoteOne = Pane(projectPath: "example:~/one", projectID: projectID)
+        let otherRemoteOne = Pane(projectPath: "other:~/one", projectID: projectID)
+        let remoteTwo = Pane(projectPath: "example:~/two", projectID: projectID)
+        let localTwo = Pane(projectPath: "/local", projectID: projectID)
+        let otherRemoteTwo = Pane(projectPath: "other:~/two", projectID: projectID)
+
+        let schedule = AppState.launchWarmSchedule(
+            [localOne, remoteOne, otherRemoteOne, remoteTwo, localTwo, otherRemoteTwo],
+            // The visible tab is already starting a connection to example.
+            alreadyStartingRemoteDestinations: ["example"]
+        )
+
+        #expect(schedule.map(\.pane.id) == [
+            localOne.id,
+            remoteOne.id,
+            otherRemoteOne.id,
+            remoteTwo.id,
+            localTwo.id,
+            otherRemoteTwo.id,
+        ])
+        #expect(schedule.map(\.delay) == [0, 1, 0.25, 2, 0.5, 1.25])
+    }
+
+    @Test
+    func launchWarmSchedule_starts_the_first_background_remote_destination_immediately() {
+        let projectID = UUID()
+        let first = Pane(projectPath: "example:~/one", projectID: projectID)
+        let second = Pane(projectPath: "example:~/two", projectID: projectID)
+
+        let schedule = AppState.launchWarmSchedule([first, second])
+
+        #expect(schedule.map(\.delay) == [0, 1])
+    }
+
+    @Test
+    func warmRestoredProjects_stamps_remote_zmx_path_before_warming() {
+        let state = makeAppState()
+        let project = Project(
+            name: "remote",
+            path: "example:~/work",
+            zmxPath: "/custom/bin/zmx"
+        )
+        let pane = Pane(projectPath: project.path, projectID: project.id)
+        let tab = TerminalTab(id: UUID(), splitRoot: .pane(pane), focusedPaneID: pane.id)
+        state.workspaces[project.id] = Workspace(
+            projectID: project.id,
+            tabs: [tab],
+            activeTabID: tab.id
+        )
+
+        var warmed: [UUID] = []
+        state.warmPane = { warmedPane in
+            #expect(warmedPane.remoteZmxPath == "/custom/bin/zmx")
+            warmed.append(warmedPane.id)
+        }
+
+        state.warmRestoredProjects([project])
+
+        #expect(warmed == [pane.id])
+        #expect(state.activeProjectID == nil)
+    }
+
+    @Test
+    func warmRestoredProjects_warms_local_background_projects() {
+        let state = makeAppState()
+        let activeProject = Project(name: "active", path: "/tmp/active", sortOrder: 0)
+        let backgroundProject = Project(name: "background", path: "/tmp/background", sortOrder: 1)
+
+        let activePane = Pane(projectPath: activeProject.path, projectID: activeProject.id)
+        let activeTab = TerminalTab(
+            id: UUID(),
+            splitRoot: .pane(activePane),
+            focusedPaneID: activePane.id
+        )
+        state.workspaces[activeProject.id] = Workspace(
+            projectID: activeProject.id,
+            tabs: [activeTab],
+            activeTabID: activeTab.id
+        )
+
+        let backgroundPane = Pane(projectPath: backgroundProject.path, projectID: backgroundProject.id)
+        let backgroundTab = TerminalTab(
+            id: UUID(),
+            splitRoot: .pane(backgroundPane),
+            focusedPaneID: backgroundPane.id
+        )
+        state.workspaces[backgroundProject.id] = Workspace(
+            projectID: backgroundProject.id,
+            tabs: [backgroundTab],
+            activeTabID: backgroundTab.id
+        )
+        state.activeProjectID = activeProject.id
+
+        var warmed: [UUID] = []
+        state.warmPane = { warmed.append($0.id) }
+
+        state.warmRestoredProjects([activeProject, backgroundProject])
+
+        #expect(warmed == [backgroundPane.id])
+        #expect(backgroundPane.remoteZmxPath == nil)
+    }
+
     // MARK: - Quiet-settle
 
     // The poll calls `pane.settleTerminalActivityIfQuiet()` directly (no
