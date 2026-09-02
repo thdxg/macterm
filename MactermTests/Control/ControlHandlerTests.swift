@@ -381,7 +381,7 @@ struct ControlHandlerTests {
     @Test
     func project_rename_updates_name_and_persists() async {
         let (handler, appState, projectStore) = makeHandler()
-        let project = seedProject(appState, projectStore, name: "alpha")
+        _ = seedProject(appState, projectStore, name: "alpha")
 
         let response = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "beta")))
         #expect(response.ok)
@@ -419,6 +419,15 @@ struct ControlHandlerTests {
         // Reject pinned sentinel
         let pinned = await handler.handle(request("project.rename", args: ControlArgs(project: "pinned", name: "custom")))
         #expect(pinned.error?.code == .badRequest)
+
+        // Refuse the sentinel's display name: `resolveProject` matches it
+        // before any user project, so allowing it would strand this project's
+        // name selector on the pinned workspace.
+        let reserved = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "Pinned")))
+        #expect(reserved.error?.code == .badRequest)
+        let reservedCase = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: " pInNeD ")))
+        #expect(reservedCase.error?.code == .badRequest)
+        #expect(projectStore.projects.first?.name == "alpha")
 
         // Unknown project
         let unknown = await handler.handle(request("project.rename", args: ControlArgs(project: "nonexistent", name: "beta")))

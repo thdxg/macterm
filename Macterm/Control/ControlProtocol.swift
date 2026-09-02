@@ -67,7 +67,7 @@ struct ControlArgs: Codable, Equatable {
     var session: String?
     /// Filesystem path (`project.create`).
     var path: String?
-    /// Display name (`project.create`).
+    /// Display name (`project.create`, `project.rename`).
     var name: String?
     /// Also select/activate what was created (`project.create`).
     var select: Bool?
