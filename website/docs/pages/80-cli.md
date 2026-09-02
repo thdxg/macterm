@@ -42,6 +42,8 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
 | `project create <path> [--name N] [--select]` | Add a project for a local directory or an scp-style `[user@]host:dir` [remote spec](/docs/remote-projects) (stored verbatim — a wrong host or dir surfaces in the pane). **Not idempotent** — each run adds a distinct project, even for a directory that already has one; check `project list` first if you want create-or-select. `--select` activates it — and, on first open, applies a matching [layout file](/docs/declarative-layouts). |
 | `project select <name\|uuid\|index>` | Make a project active. `pinned` (or the sentinel UUID) selects the pinned-tabs workspace; every `--project` selector accepts it too. |
+| `project rename <project> <name>` | Rename a project — the same edit as the sidebar row's inline rename, so it touches `projects.json` only and never a [layout file](/docs/declarative-layouts). `Pinned` is reserved for the pinned-tabs workspace. |
+| `project remove <project> [--force]` | Remove a project, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. (Does not delete files on disk.) |
 | `tab list [--project P]` | Tabs of a project (default: active project). |
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
 | `tab select <tab>` | Activate a tab (`tab:3`, index, UUID, or exact title). |
@@ -55,7 +57,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way *from* the target — the same geometry the focus keybinds use. At the outermost edge it's a no-op, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |
-| `pane run <command…> [target]` | Type a command (plus newline) into an **existing** live pane's shell. |
+| `pane run <command…> [--no-submit] [target]` | Type a command (plus newline) into an **existing** live pane's shell. `--no-submit` withholds the newline, leaving the text on the prompt for a human to inspect or for a TUI to submit on its own terms; follow it with `pane key return`, which registers as a real command submission. |
 | `pane key <chord> [target]` | Send one key press (`a`, `space`, `shift+1`, `ctrl+c`, `escape`, `up`, `ctrl+\`) to a live pane through the terminal's key-encoding path — single keystrokes, where `pane run` types a whole command line. |
 | `pane zoom [target]` | Toggle zoom on a pane (the tab renders only that pane while zoomed) — the same action as the zoom keybind. |
 | `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split of that axis around a pane. Absolute geometry, unlike the keybind's relative nudge. |

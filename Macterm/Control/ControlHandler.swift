@@ -59,6 +59,8 @@ final class ControlHandler {
         case "project.list": return projectList()
         case "project.create": return try projectCreate(args)
         case "project.select": return try projectSelect(args)
+        case "project.rename": return try projectRename(args)
+        case "project.remove": return try projectRemove(args)
         case "tab.list": return try tabList(args)
         case "tab.new": return try tabNew(args)
         case "tab.select": return try tabSelect(args)
@@ -319,6 +321,101 @@ final class ControlHandler {
         return projectData(project)
     }
 
+    /// Rename a project — the same `ProjectStore.rename` the sidebar row's
+    /// inline edit calls, so both paths have identical reach: `projects.json`
+    /// only. Layout files are deliberately untouched (nothing but an explicit
+    /// Save Layout rewrites one), and a declaration matches on its `path:`
+    /// rather than its filename, so a rename doesn't orphan it. The name IS a
+    /// layout identity in one narrow case — the `ProjectSlug` tiebreaker that
+    /// picks a project's own file when several projects share a `path:` — so
+    /// renaming such a project changes which file it owns at the next save.
+    private func projectRename(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.rename requires a project selector",
+                action: "run `macterm project list` for targets"
+            )
+        }
+        guard let rawName = args.name else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.rename requires a new name",
+                action: "pass the new name as the second argument"
+            )
+        }
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ControlError(code: .badRequest, message: "project name cannot be empty")
+        }
+        let project = try resolveProject(selector)
+        // Unreachable through the app (the sentinel is not a `ProjectStore`
+        // row, so no sidebar row edits it) — but `resolveProject` accepts
+        // `pinned`, so the CLI is the one way in and has to say no here.
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be renamed")
+        }
+        // `resolveProject` matches the sentinel's display name BEFORE any user
+        // project's, so a project renamed to it becomes unreachable by name
+        // (UUID and index still work, but `--project Pinned` would silently
+        // target the pinned workspace instead). Refuse rather than strand it.
+        guard trimmed.lowercased() != PinnedTabs.displayName.lowercased() else {
+            throw ControlError(
+                code: .badRequest,
+                message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
+                action: "pick another name"
+            )
+        }
+        projectStore.rename(id: project.id, to: trimmed)
+        guard let updated = projectStore.projects.first(where: { $0.id == project.id }) else {
+            throw ControlError(code: .internalError, message: "project rename failed")
+        }
+        return projectData(updated)
+    }
+
+    /// Drop a project's workspace and its `ProjectStore` entry — the same pair
+    /// every in-app removal runs (sidebar row menu, bulk delete, palette,
+    /// Settings → Projects), which is what makes the CLI removal reach exactly
+    /// as far as theirs: panes' zmx sessions die, `projects.json` loses the
+    /// row, and files on disk (the project directory, its layout declaration)
+    /// are untouched. Those paths stage a confirmation dialog for a busy
+    /// project; a headless caller gets a typed `busy` error instead — never a
+    /// dialog the CLI can't answer. Same contract as `tab.close`.
+    private func projectRemove(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.remove requires a project selector",
+                action: "run `macterm project list` for targets"
+            )
+        }
+        let project = try resolveProject(selector)
+        // See `projectRename` — the sentinel is reachable only through this
+        // selector, and tearing the pinned workspace down is never valid.
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be removed")
+        }
+
+        // The same expression `AppState.requestRemoveProject` evaluates before
+        // it decides to stage its dialog, so the CLI refuses exactly when the
+        // app would have asked.
+        let busy = appState.workspaces[project.id]?.tabs
+            .flatMap { $0.splitRoot.allPanes() }
+            .contains(where: \.needsConfirmClose) ?? false
+
+        if busy, args.force != true {
+            throw ControlError(
+                code: .busy,
+                message: "a pane in that project has a running program (removing kills its sessions)",
+                action: "re-run with --force to remove anyway"
+            )
+        }
+
+        appState.removeProject(project.id)
+        projectStore.remove(id: project.id)
+        return ControlData()
+    }
+
     // MARK: - Tab mutations
 
     private func tabNew(_ args: ControlArgs) throws -> ControlData {
@@ -512,13 +609,34 @@ final class ControlHandler {
         return ControlData()
     }
 
+    /// Paste a command line into a live pane's shell. The trailing newline is
+    /// what submits it, and `submit: false` withholds exactly that — leaving
+    /// the text on the prompt for a human to inspect, or for a TUI that
+    /// submits on its own terms. One verb rather than two, because the two
+    /// forms differ by that single character and nothing else.
+    ///
+    /// Withholding it is safe for execution tracking because `sendText` draws
+    /// the same line internally: it records command-submission evidence for
+    /// whatever it delivers but fires `onCommandSubmitted` only when the text
+    /// carries a newline. So an unsubmitted paste leaves the evidence armed
+    /// exactly as typing those characters would, and a following `pane.key`
+    /// Return reads as a REAL submission rather than a bare prompt redraw —
+    /// which is what keeps tab naming and execution state honest across a
+    /// paste-then-Return pair.
     private func paneRun(_ args: ControlArgs) throws -> ControlData {
         guard let command = args.run, !command.isEmpty else {
             throw ControlError(code: .badRequest, message: "pane.run requires a command")
         }
+        // Absent means submit: the flag only ever arrives as an explicit false.
+        return try paneSendText(args, text: args.submit == false ? command : command + "\n")
+    }
+
+    /// Resolve the target pane and paste `text` into it, or report the
+    /// `no_surface` miss.
+    private func paneSendText(_ args: ControlArgs, text: String) throws -> ControlData {
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
-        guard let view = target.pane.nsView, view.sendText(command + "\n") else {
+        guard let view = target.pane.nsView, view.sendText(text) else {
             throw ControlError(
                 code: .noSurface,
                 message: "the pane's terminal isn't live yet",

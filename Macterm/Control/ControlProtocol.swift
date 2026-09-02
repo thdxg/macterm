@@ -67,7 +67,7 @@ struct ControlArgs: Codable, Equatable {
     var session: String?
     /// Filesystem path (`project.create`).
     var path: String?
-    /// Display name (`project.create`).
+    /// Display name (`project.create`, `project.rename`).
     var name: String?
     /// Also select/activate what was created (`project.create`).
     var select: Bool?
@@ -80,7 +80,7 @@ struct ControlArgs: Codable, Equatable {
     /// makes the resolved pane the origin and focuses its neighbour).
     var direction: String?
     /// Skip the busy-confirmation and destructive-plan guards
-    /// (`tab.close`, `pane.close`, `layout.apply`).
+    /// (`project.remove`, `tab.close`, `pane.close`, `layout.apply`).
     var force: Bool?
     /// Grid shape (`grid`); also the target grid for the debug-only
     /// `pane.resize` in-place surface resize.
@@ -108,6 +108,10 @@ struct ControlArgs: Codable, Equatable {
     var title: String?
     /// Reset custom title back to automatic default (`tab.rename`).
     var reset: Bool?
+    /// Whether `pane.run` submits the text it pastes. ABSENT means submit —
+    /// the only value a client ever sends is `false`, to leave the command on
+    /// the prompt — so a caller that predates the flag keeps its behavior.
+    var submit: Bool?
 
     init(
         project: String? = nil,
@@ -130,7 +134,8 @@ struct ControlArgs: Codable, Equatable {
         dest: String? = nil,
         slot: Int? = nil,
         title: String? = nil,
-        reset: Bool? = nil
+        reset: Bool? = nil,
+        submit: Bool? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -153,6 +158,7 @@ struct ControlArgs: Codable, Equatable {
         self.slot = slot
         self.title = title
         self.reset = reset
+        self.submit = submit
     }
 }
 
