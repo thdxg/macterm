@@ -234,7 +234,11 @@ struct AdaptiveTerminalBackgroundTests {
                 in: surface,
                 // Coverage is only the painted middle, so the frame-wide
                 // default would reject it; this test is about the geometry.
+                // The extent gate is off for the same reason — a centered block
+                // is exactly the shape it rejects, and
+                // `centeredContentBlockIsNotAdoptedAsABackground` covers that.
                 minimumCoverage: 0.1,
+                minimumExtent: 0,
                 minimumAlpha: AdaptiveTerminalBackgroundDetector.minimumPaintedAlpha(windowOpacity: 0.9)
             )
         )
@@ -248,6 +252,111 @@ struct AdaptiveTerminalBackgroundTests {
         #expect(bounds.maxY <= painted.maxY)
         #expect(bounds.width >= painted.width * 0.7)
         #expect(bounds.height >= painted.height * 0.7)
+    }
+
+    /// A BGRA8 surface with an axis-aligned painted band, which is every shape
+    /// the geometry gate has to judge: `x`/`y` are the painted range in pixels,
+    /// unpainted (alpha 0) everywhere else.
+    private func surface(
+        width: Int,
+        height: Int,
+        painted: (x: Range<Int>, y: Range<Int>),
+        color: (red: UInt8, green: UInt8, blue: UInt8) = (240, 240, 238)
+    ) throws -> IOSurface {
+        let properties = [
+            kIOSurfaceWidth: NSNumber(value: width),
+            kIOSurfaceHeight: NSNumber(value: height),
+            kIOSurfaceBytesPerElement: NSNumber(value: 4),
+            kIOSurfacePixelFormat: NSNumber(value: kCVPixelFormatType_32BGRA),
+        ] as CFDictionary
+        let surface = try #require(IOSurfaceCreate(properties))
+        var seed: UInt32 = 0
+        #expect(IOSurfaceLock(surface, [], &seed) == kIOReturnSuccess)
+        let base = IOSurfaceGetBaseAddress(surface)
+        let bytesPerRow = IOSurfaceGetBytesPerRow(surface)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let offset = y * bytesPerRow + x * 4
+                let isPainted = painted.x.contains(x) && painted.y.contains(y)
+                base.storeBytes(of: isPainted ? color.blue : 0, toByteOffset: offset, as: UInt8.self)
+                base.storeBytes(of: isPainted ? color.green : 0, toByteOffset: offset + 1, as: UInt8.self)
+                base.storeBytes(of: isPainted ? color.red : 0, toByteOffset: offset + 2, as: UInt8.self)
+                base.storeBytes(of: isPainted ? 255 : 0, toByteOffset: offset + 3, as: UInt8.self)
+            }
+        }
+        #expect(IOSurfaceUnlock(surface, [], &seed) == kIOReturnSuccess)
+        return surface
+    }
+
+    @Test
+    func centeredContentBlockIsNotAdoptedAsABackground() throws {
+        // The reported frame: a white slide filling the middle ~58% of a Helix
+        // pane's height and nearly all of its width. It clears the coverage
+        // vote outright, but the terminal's real background is the unpainted
+        // default above and below it — so there is nothing here to adopt.
+        let frame = try surface(
+            width: 830,
+            height: 995,
+            painted: (x: 20 ..< 810, y: 181 ..< 759)
+        )
+
+        #expect(AdaptiveTerminalBackgroundDetector.dominantColor(in: frame) == nil)
+    }
+
+    @Test
+    func fullBleedBackgroundSurvivesChromeRowsAtItsEdges() throws {
+        // The shape real TUIs draw: a background across the whole grid with a
+        // differently colored tab bar and status line taking the first and
+        // last rows. The gate has to let this through — those rows cost the
+        // background a couple of percent of one axis, not a fifth of it.
+        let height = 400
+        let rowHeight = height / 40
+        let frame = try surface(
+            width: 800,
+            height: height,
+            painted: (x: 0 ..< 800, y: rowHeight ..< (height - rowHeight)),
+            color: (30, 28, 44)
+        )
+
+        let match = try #require(AdaptiveTerminalBackgroundDetector.dominantColor(in: frame))
+        #expect(match.red == 30)
+        #expect(match.green == 28)
+        #expect(match.blue == 44)
+        let bounds = try #require(match.dominantUnitBounds)
+        #expect(bounds.width >= 0.95)
+        #expect(bounds.height >= 0.95)
+    }
+
+    @Test
+    func unpaintedWindowPaddingDoesNotMakeABackgroundLookLikeContent() throws {
+        // Under the default `window-padding-color = background` the padding is
+        // unpainted, so a full-screen TUI's paint stops short of the surface
+        // edge. The color vote's own 5%-per-side inset is what absorbs that.
+        let frame = try surface(
+            width: 600,
+            height: 400,
+            painted: (x: 24 ..< 576, y: 16 ..< 384),
+            color: (12, 40, 60)
+        )
+
+        let match = try #require(AdaptiveTerminalBackgroundDetector.dominantColor(in: frame))
+        #expect(match.red == 12)
+        #expect(match.green == 40)
+        #expect(match.blue == 60)
+    }
+
+    @Test
+    func extentIsJudgedPerAxisSoAFullWidthBandIsStillRejected() {
+        // Area lets a surplus in one axis pay for a deficit in the other, so a
+        // full-width band buys back most of the height it is missing. These two
+        // are indistinguishable by area — 0.720 against 0.7225 — while per axis
+        // they are 0.72 and 0.85, cleanly either side of the threshold.
+        let band = CGRect(x: 0, y: 0.14, width: 1, height: 0.72)
+        let padded = CGRect(x: 0.075, y: 0.075, width: 0.85, height: 0.85)
+        #expect(abs(band.width * band.height - padded.width * padded.height) < 0.005)
+
+        #expect(!AdaptiveTerminalBackgroundDetector.spansLikeBackground(band))
+        #expect(AdaptiveTerminalBackgroundDetector.spansLikeBackground(padded))
     }
 
     @Test

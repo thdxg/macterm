@@ -15,6 +15,10 @@ import IOSurface
 /// separable; the threshold just has to follow the opacity instead of assuming
 /// 255. The surface is premultiplied (`renderer/metal/Pipeline.zig`), so those
 /// pixels also have to be divided back out before their color means anything.
+///
+/// Winning the color vote is necessary but not sufficient: the winner must
+/// also reach across the grid, or it is content painted *on* a background
+/// rather than the background. See `minimumBackgroundExtent`.
 enum AdaptiveTerminalBackgroundDetector {
     struct Pixel: Equatable {
         let red: UInt8
@@ -36,6 +40,16 @@ enum AdaptiveTerminalBackgroundDetector {
         /// suppress its own backdrop under the paint without stranding the
         /// padding on a bare desktop.
         var paintedUnitBounds: CGRect?
+
+        /// The winning color's *own* footprint, as fractions of the sampled
+        /// grid with a top-left origin — the signal that separates a
+        /// background from something drawn on one. Nil when sampled from a
+        /// bare pixel list with no geometry.
+        ///
+        /// Distinct from `paintedUnitBounds`, which is every painted pixel
+        /// regardless of color, walked out to the real edge in surface
+        /// coordinates because a caller cuts its backdrop to it.
+        var dominantUnitBounds: CGRect?
 
         /// The painted color, carrying the alpha it was painted at. Consumers
         /// that need the pure hue (the window tint, which is composited at the
@@ -145,36 +159,143 @@ enum AdaptiveTerminalBackgroundDetector {
         return UInt8(clamping: Int(painted) - 8)
     }
 
+    /// The share of the sampled grid a color has to reach across, in each axis
+    /// independently, before it counts as a *background* rather than as
+    /// something drawn on one.
+    ///
+    /// Coverage alone cannot tell those apart. A slide, a rendered image or a
+    /// program-drawn selection block arrives as ordinary painted cells and can
+    /// easily hold the majority of a frame while the terminal's real background
+    /// is the unpainted default all around it — which is what made a white
+    /// slide filling the middle of a Helix pane repaint the whole window white.
+    /// Geometry does tell them apart, from inside the frame and with no timing,
+    /// ABI or mouse state involved: a background reaches across the grid,
+    /// whereas content is bounded by content.
+    ///
+    /// The threshold is deliberately loose in both directions. Above it stay
+    /// the shapes real TUIs draw — a full-bleed background with a differently
+    /// colored tab bar, status line or both still spans ~0.96 of its axis —
+    /// and the color vote's own 5%-per-side edge inset doubles as an allowance
+    /// for `window-padding`, which is unpainted under the default
+    /// `window-padding-color = background`. Below it stay content blocks, which
+    /// have to leave a fifth of an axis to the terminal's own background to be
+    /// rejected. The known edge is padding larger than about 5% of a small
+    /// pane's short side: that reads as a block and falls back to the
+    /// configured theme, which is a safe presentation rather than a wrong one.
+    static let minimumBackgroundExtent: Double = 0.80
+
+    /// Whether a color's own footprint behaves like a background: reaching
+    /// across the sampled grid in *both* axes.
+    ///
+    /// Judged per axis rather than by area, because "reaches across the grid"
+    /// is an each-axis claim and area lets a surplus in one axis pay for a
+    /// deficit in the other — a full-width band buys back most of the height it
+    /// is missing, until it scores the same as a genuine background sitting
+    /// inside generous padding.
+    static func spansLikeBackground(
+        _ bounds: CGRect,
+        minimumExtent: Double = minimumBackgroundExtent
+    ) -> Bool {
+        Double(bounds.width) >= minimumExtent && Double(bounds.height) >= minimumExtent
+    }
+
+    /// Four bits per component absorb tiny renderer/color-space differences
+    /// without merging visibly distinct backgrounds.
+    private static func bucketKey(_ pixel: Pixel) -> Int {
+        Int(pixel.red >> 4) << 8 | Int(pixel.green >> 4) << 4 | Int(pixel.blue >> 4)
+    }
+
+    private static func isPainted(_ pixel: Pixel, minimumAlpha: UInt8) -> Bool {
+        pixel.alpha >= minimumAlpha && pixel.alpha > 0
+    }
+
     static func dominantColor(
         in pixels: [Pixel],
         minimumCoverage: Double = 0.60,
         minimumAlpha: UInt8 = 230
     ) -> Match? {
+        vote(in: pixels, minimumCoverage: minimumCoverage, minimumAlpha: minimumAlpha)?.match
+    }
+
+    /// The color vote, plus the bucket that won it so a caller holding the
+    /// samples' geometry can ask where that color actually sits.
+    private struct Vote {
+        let match: Match
+        let bucketKey: Int
+    }
+
+    private static func vote(
+        in pixels: [Pixel],
+        minimumCoverage: Double,
+        minimumAlpha: UInt8
+    ) -> Vote? {
         guard !pixels.isEmpty else { return nil }
 
         var buckets: [Int: Bucket] = [:]
-        for pixel in pixels where pixel.alpha >= minimumAlpha && pixel.alpha > 0 {
+        for pixel in pixels where isPainted(pixel, minimumAlpha: minimumAlpha) {
             let straightened = straightened(pixel)
-            // Four bits per component absorb tiny renderer/color-space
-            // differences without merging visibly distinct backgrounds.
-            let key = Int(straightened.red >> 4) << 8
-                | Int(straightened.green >> 4) << 4
-                | Int(straightened.blue >> 4)
+            let key = bucketKey(straightened)
             var bucket = buckets[key, default: Bucket()]
             bucket.add(straightened)
             buckets[key] = bucket
         }
 
-        guard let winner = buckets.values.max(by: { $0.count < $1.count }) else { return nil }
-        let coverage = Double(winner.count) / Double(pixels.count)
-        guard coverage >= minimumCoverage, let representative = winner.representativeColor else { return nil }
+        // Ties break on the lower key rather than on dictionary order, so the
+        // winning bucket — and therefore the geometry gate that reads it — is
+        // the same for the same frame every time.
+        let winner = buckets.min { lhs, rhs in
+            if lhs.value.count != rhs.value.count { return lhs.value.count > rhs.value.count }
+            return lhs.key < rhs.key
+        }
+        guard let winner else { return nil }
+        let coverage = Double(winner.value.count) / Double(pixels.count)
+        guard coverage >= minimumCoverage,
+              let representative = winner.value.representativeColor
+        else { return nil }
 
-        return Match(
-            red: representative.red,
-            green: representative.green,
-            blue: representative.blue,
-            alpha: winner.representativeAlpha,
-            coverage: coverage
+        return Vote(
+            match: Match(
+                red: representative.red,
+                green: representative.green,
+                blue: representative.blue,
+                alpha: winner.value.representativeAlpha,
+                coverage: coverage
+            ),
+            bucketKey: winner.key
+        )
+    }
+
+    /// Where the winning color sits within the sampled grid, in unit
+    /// coordinates with a top-left origin. Measured in sample-index space: the
+    /// grid is uniform, so index spans and pixel spans give the same fractions,
+    /// and indices cannot degenerate to a zero-width denominator.
+    private static func dominantUnitBounds(
+        ofBucket key: Int,
+        samples: [Pixel],
+        columns: Int,
+        rows: Int,
+        minimumAlpha: UInt8
+    ) -> CGRect? {
+        guard columns > 0, rows > 0 else { return nil }
+        var minColumn = Int.max, maxColumn = Int.min
+        var minRow = Int.max, maxRow = Int.min
+        for (index, pixel) in samples.enumerated()
+            where isPainted(pixel, minimumAlpha: minimumAlpha)
+            && bucketKey(straightened(pixel)) == key
+        {
+            let column = index % columns
+            let row = index / columns
+            minColumn = min(minColumn, column)
+            maxColumn = max(maxColumn, column)
+            minRow = min(minRow, row)
+            maxRow = max(maxRow, row)
+        }
+        guard minColumn <= maxColumn, minRow <= maxRow else { return nil }
+        return CGRect(
+            x: CGFloat(minColumn) / CGFloat(columns),
+            y: CGFloat(minRow) / CGFloat(rows),
+            width: CGFloat(maxColumn - minColumn + 1) / CGFloat(columns),
+            height: CGFloat(maxRow - minRow + 1) / CGFloat(rows)
         )
     }
 
@@ -201,6 +322,7 @@ enum AdaptiveTerminalBackgroundDetector {
     static func dominantColor(
         in surface: IOSurface,
         minimumCoverage: Double = 0.60,
+        minimumExtent: Double = minimumBackgroundExtent,
         minimumAlpha: UInt8 = 230
     ) -> Match? {
         let width = IOSurfaceGetWidth(surface)
@@ -232,12 +354,19 @@ enum AdaptiveTerminalBackgroundDetector {
         let yInset = min(height / 20, yStep * 2)
         guard width > xInset * 2, height > yInset * 2 else { return nil }
 
+        // Materialized so the sample list has a known row-major shape: a
+        // sample's index alone then locates it in the grid, which is what the
+        // geometry gate below reads.
+        let columns = Array(stride(from: xInset + xStep / 2, to: width - xInset, by: xStep))
+        let rows = Array(stride(from: yInset + yStep / 2, to: height - yInset, by: yStep))
+        guard !columns.isEmpty, !rows.isEmpty else { return nil }
+
         var pixels: [Pixel] = []
         var positions: [(x: Int, y: Int)] = []
-        pixels.reserveCapacity(4000)
-        positions.reserveCapacity(4000)
-        for y in stride(from: yInset + yStep / 2, to: height - yInset, by: yStep) {
-            for x in stride(from: xInset + xStep / 2, to: width - xInset, by: xStep) {
+        pixels.reserveCapacity(rows.count * columns.count)
+        positions.reserveCapacity(rows.count * columns.count)
+        for y in rows {
+            for x in columns {
                 let offset = y * bytesPerRow + x * bytesPerElement
                 let blue = base.load(fromByteOffset: offset, as: UInt8.self)
                 let green = base.load(fromByteOffset: offset + 1, as: UInt8.self)
@@ -247,12 +376,28 @@ enum AdaptiveTerminalBackgroundDetector {
                 positions.append((x: x, y: y))
             }
         }
-        guard var match = dominantColor(
+        guard let vote = vote(
             in: pixels,
             minimumCoverage: minimumCoverage,
             minimumAlpha: minimumAlpha
         )
         else { return nil }
+        // A color that won the vote without reaching across the grid is
+        // content sitting on the terminal's background, not the background —
+        // so there is nothing to adopt and the configured theme, which is what
+        // the unpainted cells around it are showing, stays the presentation.
+        guard let dominantBounds = dominantUnitBounds(
+            ofBucket: vote.bucketKey,
+            samples: pixels,
+            columns: columns.count,
+            rows: rows.count,
+            minimumAlpha: minimumAlpha
+        ),
+            spansLikeBackground(dominantBounds, minimumExtent: minimumExtent)
+        else { return nil }
+
+        var match = vote.match
+        match.dominantUnitBounds = dominantBounds
         match.paintedUnitBounds = paintedUnitBounds(
             samples: (pixels: pixels, positions: positions),
             minimumAlpha: minimumAlpha,
