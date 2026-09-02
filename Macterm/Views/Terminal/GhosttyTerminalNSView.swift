@@ -212,8 +212,13 @@ final class GhosttyTerminalNSView: NSView {
         // overlay scrollbar UI, never activity detection. Activity comes solely
         // from the occlusion-independent `surfaceDidOutputActivity` heartbeat,
         // which also carries row growth.
-        lastScrollbarSnapshot = ScrollbarSnapshot(total: total, offset: offset, len: len)
+        let wasViewingHistory = lastScrollbarSnapshot?.isViewingHistory == true
+        let snapshot = ScrollbarSnapshot(total: total, offset: offset, len: len)
+        lastScrollbarSnapshot = snapshot
         onScrollbarUpdate?(total, offset, len)
+        if wasViewingHistory, !snapshot.isViewingHistory {
+            AdaptiveTerminalChrome.shared.terminalDidReturnToLiveViewport(self)
+        }
     }
 
     func surfaceDidRender() {
@@ -226,15 +231,14 @@ final class GhosttyTerminalNSView: NSView {
     private(set) var reportedBackgroundColor: NSColor?
     var sampledDominantBackgroundColor: NSColor?
 
-    /// Whether the finished frame carries something the *viewer* drew over the
-    /// screen model rather than something the terminal painted.
+    /// Whether the visible frame is a viewer-modified presentation rather than
+    /// the terminal's live screen model.
     ///
-    /// Selection is the only such overlay libghostty exposes, and it lands in
-    /// the frame as an ordinary cell background at the same opacity a TUI's own
-    /// paint gets — so no statistic over the composite can separate the two,
-    /// and only the terminal's own answer can. Any future overlay belongs here
-    /// beside it rather than in the sampler.
-    var hasViewerOverlay: Bool {
+    /// A native selection adds painted cells over the model; historical
+    /// scrollback replaces the live viewport with old cells. Neither may teach
+    /// adaptive chrome a background, so both freeze inference until removed.
+    var hasViewerTransformation: Bool {
+        if lastScrollbarSnapshot?.isViewingHistory == true { return true }
         guard let surface else { return false }
         return ghostty_surface_has_selection(surface)
     }
@@ -460,6 +464,10 @@ final class GhosttyTerminalNSView: NSView {
         let total: UInt64
         let offset: UInt64
         let len: UInt64
+
+        var isViewingHistory: Bool {
+            total > len && offset < total - len
+        }
     }
 
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)

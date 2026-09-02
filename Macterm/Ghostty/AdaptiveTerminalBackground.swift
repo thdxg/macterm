@@ -2,9 +2,10 @@ import AppKit
 import CoreVideo
 import IOSurface
 
-/// Detects a flat background painted across most of a terminal frame.
-/// Unpainted theme pixels remain part of the denominator, so ordinary shell
-/// content cannot win merely because its handful of glyph pixels are painted.
+/// Detects a painted terminal canvas from both color frequency and frame
+/// topology. Unpainted theme pixels remain part of the denominator, so ordinary
+/// shell content cannot win merely because its handful of glyph pixels are
+/// painted.
 ///
 /// "Painted" is not the same as "opaque": with the user's own
 /// `background-opacity-cells`, ghostty writes explicitly-painted cells at
@@ -133,6 +134,24 @@ enum AdaptiveTerminalBackgroundDetector {
         }
     }
 
+    private struct CanvasCandidate {
+        let key: Int
+        let bucket: Bucket
+    }
+
+    private static let minimumCanvasEdgeSupport = 0.35
+    private static let minimumCanvasSideContinuity = 0.60
+    private static let minimumConnectedShare = 0.75
+    private static let minimumCandidateMargin = 0.08
+
+    private static func colorBucketKey(_ pixel: Pixel) -> Int {
+        // Four bits per component absorb tiny renderer/color-space
+        // differences without merging visibly distinct backgrounds.
+        Int(pixel.red >> 4) << 8
+            | Int(pixel.green >> 4) << 4
+            | Int(pixel.blue >> 4)
+    }
+
     /// The lowest alpha that still counts as a painted cell for a window at
     /// `windowOpacity`. Macterm forces `background-opacity = windowOpacity`,
     /// so a painted cell arrives at either 255 (the default) or
@@ -155,11 +174,7 @@ enum AdaptiveTerminalBackgroundDetector {
         var buckets: [Int: Bucket] = [:]
         for pixel in pixels where pixel.alpha >= minimumAlpha && pixel.alpha > 0 {
             let straightened = straightened(pixel)
-            // Four bits per component absorb tiny renderer/color-space
-            // differences without merging visibly distinct backgrounds.
-            let key = Int(straightened.red >> 4) << 8
-                | Int(straightened.green >> 4) << 4
-                | Int(straightened.blue >> 4)
+            let key = colorBucketKey(straightened)
             var bucket = buckets[key, default: Bucket()]
             bucket.add(straightened)
             buckets[key] = bucket
@@ -176,6 +191,147 @@ enum AdaptiveTerminalBackgroundDetector {
             alpha: winner.representativeAlpha,
             coverage: coverage
         )
+    }
+
+    /// Finds a background-shaped color rather than merely the most numerous
+    /// color in the frame. Terminal content moves vertically, so a real canvas
+    /// must form one connected region that reaches the top and bottom bands and
+    /// remains anchored to at least one side. This lets a persistent main pane
+    /// beat a large side panel while rejecting scrolling output slabs and modal
+    /// blocks even when either covers most of the frame.
+    static func dominantCanvasColor(
+        in pixels: [Pixel],
+        columns: Int,
+        minimumCoverage: Double = 0.35,
+        minimumAlpha: UInt8 = 230
+    ) -> Match? {
+        guard columns > 0, !pixels.isEmpty, pixels.count.isMultiple(of: columns) else { return nil }
+        let rows = pixels.count / columns
+        guard rows > 0 else { return nil }
+
+        var sampleKeys = Array(repeating: -1, count: pixels.count)
+        var buckets: [Int: Bucket] = [:]
+        for (index, pixel) in pixels.enumerated() where pixel.alpha >= minimumAlpha && pixel.alpha > 0 {
+            let straightened = straightened(pixel)
+            let key = colorBucketKey(straightened)
+            sampleKeys[index] = key
+            var bucket = buckets[key, default: Bucket()]
+            bucket.add(straightened)
+            buckets[key] = bucket
+        }
+
+        let qualifying = buckets.compactMap { key, bucket -> CanvasCandidate? in
+            let coverage = Double(bucket.count) / Double(pixels.count)
+            guard coverage >= minimumCoverage,
+                  canvasEvidencePasses(
+                      key: key,
+                      count: bucket.count,
+                      sampleKeys: sampleKeys,
+                      columns: columns,
+                      rows: rows
+                  )
+            else { return nil }
+            return CanvasCandidate(key: key, bucket: bucket)
+        }.sorted { lhs, rhs in
+            if lhs.bucket.count != rhs.bucket.count { return lhs.bucket.count > rhs.bucket.count }
+            return lhs.key < rhs.key
+        }
+
+        guard let winner = qualifying.first,
+              let representative = winner.bucket.representativeColor
+        else { return nil }
+        if qualifying.count > 1 {
+            let margin = Double(winner.bucket.count - qualifying[1].bucket.count) / Double(pixels.count)
+            guard margin >= minimumCandidateMargin else { return nil }
+        }
+
+        return Match(
+            red: representative.red,
+            green: representative.green,
+            blue: representative.blue,
+            alpha: winner.bucket.representativeAlpha,
+            coverage: Double(winner.bucket.count) / Double(pixels.count)
+        )
+    }
+
+    private static func canvasEvidencePasses(
+        key: Int,
+        count: Int,
+        sampleKeys: [Int],
+        columns: Int,
+        rows: Int
+    ) -> Bool {
+        let component = largestComponent(
+            matching: key,
+            sampleKeys: sampleKeys,
+            columns: columns,
+            rows: rows
+        )
+        guard Double(component.count) / Double(count) >= minimumConnectedShare else { return false }
+
+        let members = Set(component)
+        let rowBand = min(rows, max(2, Int(ceil(Double(rows) * 0.06))))
+        let columnBand = min(columns, max(2, Int(ceil(Double(columns) * 0.06))))
+
+        func rowSupport(_ row: Int) -> Double {
+            let start = row * columns
+            let matches = (start ..< start + columns).count(where: members.contains)
+            return Double(matches) / Double(columns)
+        }
+
+        func columnSupport(_ column: Int) -> Double {
+            let matches = stride(from: column, to: sampleKeys.count, by: columns).count(where: members.contains)
+            return Double(matches) / Double(rows)
+        }
+
+        let topSupport = (0 ..< rowBand).map(rowSupport).max() ?? 0
+        let bottomSupport = ((rows - rowBand) ..< rows).map(rowSupport).max() ?? 0
+        let leftSupport = (0 ..< columnBand).map(columnSupport).max() ?? 0
+        let rightSupport = ((columns - columnBand) ..< columns).map(columnSupport).max() ?? 0
+
+        return topSupport >= minimumCanvasEdgeSupport
+            && bottomSupport >= minimumCanvasEdgeSupport
+            && max(leftSupport, rightSupport) >= minimumCanvasSideContinuity
+    }
+
+    private static func largestComponent(
+        matching key: Int,
+        sampleKeys: [Int],
+        columns: Int,
+        rows: Int
+    ) -> [Int] {
+        var visited = Array(repeating: false, count: sampleKeys.count)
+        var largest: [Int] = []
+
+        for start in sampleKeys.indices where sampleKeys[start] == key && !visited[start] {
+            visited[start] = true
+            var queue = [start]
+            var head = 0
+            while head < queue.count {
+                let index = queue[head]
+                head += 1
+                let row = index / columns
+                let column = index % columns
+                // Diagonal adjacency keeps sampled glyph holes from breaking
+                // an otherwise continuous cell background into fragments.
+                for rowDelta in -1 ... 1 {
+                    for columnDelta in -1 ... 1 where rowDelta != 0 || columnDelta != 0 {
+                        let nextRow = row + rowDelta
+                        let nextColumn = column + columnDelta
+                        guard nextRow >= 0, nextRow < rows,
+                              nextColumn >= 0, nextColumn < columns
+                        else { continue }
+                        let next = nextRow * columns + nextColumn
+                        guard !visited[next], sampleKeys[next] == key else { continue }
+                        visited[next] = true
+                        queue.append(next)
+                    }
+                }
+            }
+            if queue.count > largest.count { largest = queue }
+        }
+
+        return largest
     }
 
     /// Divide out the premultiplied alpha so a cell painted at the window
@@ -200,8 +356,9 @@ enum AdaptiveTerminalBackgroundDetector {
     /// detail changes instead of interpreting an unfamiliar layout.
     static func dominantColor(
         in surface: IOSurface,
-        minimumCoverage: Double = 0.60,
-        minimumAlpha: UInt8 = 230
+        minimumCoverage: Double = 0.35,
+        minimumAlpha: UInt8 = 230,
+        requiringCanvas: Bool = true
     ) -> Match? {
         let width = IOSurfaceGetWidth(surface)
         let height = IOSurfaceGetHeight(surface)
@@ -228,16 +385,15 @@ enum AdaptiveTerminalBackgroundDetector {
         let base = IOSurfaceGetBaseAddress(surface)
         let xStep = max(1, width / 80)
         let yStep = max(1, height / 50)
-        let xInset = min(width / 20, xStep * 2)
-        let yInset = min(height / 20, yStep * 2)
-        guard width > xInset * 2, height > yInset * 2 else { return nil }
 
         var pixels: [Pixel] = []
         var positions: [(x: Int, y: Int)] = []
+        var sampledColumns = 0
         pixels.reserveCapacity(4000)
         positions.reserveCapacity(4000)
-        for y in stride(from: yInset + yStep / 2, to: height - yInset, by: yStep) {
-            for x in stride(from: xInset + xStep / 2, to: width - xInset, by: xStep) {
+        for y in stride(from: yStep / 2, to: height, by: yStep) {
+            let rowStart = pixels.count
+            for x in stride(from: xStep / 2, to: width, by: xStep) {
                 let offset = y * bytesPerRow + x * bytesPerElement
                 let blue = base.load(fromByteOffset: offset, as: UInt8.self)
                 let green = base.load(fromByteOffset: offset + 1, as: UInt8.self)
@@ -246,12 +402,26 @@ enum AdaptiveTerminalBackgroundDetector {
                 pixels.append(Pixel(red: red, green: green, blue: blue, alpha: alpha))
                 positions.append((x: x, y: y))
             }
+            let rowColumns = pixels.count - rowStart
+            guard sampledColumns == 0 || sampledColumns == rowColumns else { return nil }
+            sampledColumns = rowColumns
         }
-        guard var match = dominantColor(
-            in: pixels,
-            minimumCoverage: minimumCoverage,
-            minimumAlpha: minimumAlpha
-        )
+        guard sampledColumns > 0 else { return nil }
+        let detected = if requiringCanvas {
+            dominantCanvasColor(
+                in: pixels,
+                columns: sampledColumns,
+                minimumCoverage: minimumCoverage,
+                minimumAlpha: minimumAlpha
+            )
+        } else {
+            dominantColor(
+                in: pixels,
+                minimumCoverage: minimumCoverage,
+                minimumAlpha: minimumAlpha
+            )
+        }
+        guard var match = detected
         else { return nil }
         match.paintedUnitBounds = paintedUnitBounds(
             samples: (pixels: pixels, positions: positions),
@@ -290,12 +460,10 @@ enum AdaptiveTerminalBackgroundDetector {
     /// that the caller's own backdrop must not sit under. An unpainted cell is
     /// alpha 0 (`background-default-transparent`), so the test is unambiguous.
     ///
-    /// The coarse grid only locates the region — its 5% edge inset, there to
-    /// keep edge artifacts out of the color vote, would otherwise stop the
-    /// bounds ~5% short of the real edge, and a caller cutting its tint to
-    /// those bounds leaves a ring where cells and tint both paint: exactly the
-    /// solid frame that gives the mismatch away. So each edge is then walked
-    /// outward a pixel at a time to where the paint actually stops.
+    /// The coarse grid samples tile centers, so its outermost observation still
+    /// stops roughly half a step short of the real edge. A caller cutting its
+    /// tint there would leave a ring where cells and tint both paint, so each
+    /// edge is walked outward pixel by pixel to where the paint actually stops.
     private static func paintedUnitBounds(
         samples: (pixels: [Pixel], positions: [(x: Int, y: Int)]),
         minimumAlpha: UInt8,
@@ -418,21 +586,19 @@ struct AdaptiveTerminalBackgroundStabilizer {
 /// Decides whether an inferred (IOSurface-sampled) observation may reach the
 /// stabilizer at all.
 ///
-/// The sampled frame is a *composite*: cells the terminal painted plus whatever
-/// the viewer drew over them. A selection highlight arrives as an ordinary cell
-/// background at the same opacity a TUI's own paint gets, so no statistic over
-/// the pixels — coverage, alpha, geometry — can separate the two. The
-/// distinction is provenance, and it has to come from outside the frame.
+/// The sampled frame is a *presentation*: live cells plus viewer state. A
+/// selection arrives as an ordinary cell background, while scrolling replaces
+/// the live viewport with historical cells. Neither is evidence about the
+/// terminal's current canvas; that distinction has to come from outside the
+/// frame.
 ///
 /// Two independent signals carry it, and each covers the other's gap:
 ///
-/// - **The overlay predicate** is exact: libghostty answers
-///   `ghostty_surface_has_selection` about the very state that dirtied the
-///   frame. A frame carrying an overlay is not a faithful render of the screen
-///   model, so nothing is inferred from it — the pane freezes on its last
-///   confirmed presentation rather than clearing, because the screen model
-///   itself did not change.
-/// - **Output causality** is the backstop for overlays with no such predicate:
+/// - **The viewer-transformation predicate** is exact: libghostty reports a
+///   selection directly, and its scrollbar snapshot says whether the visible
+///   rows precede the live bottom. Nothing is inferred from either presentation
+///   — the pane freezes rather than learning from an overlay or old output.
+/// - **Output causality** is the backstop for transformations with no predicate:
 ///   a terminal background only ever changes because the program wrote to the
 ///   pty, while a viewer repaint involves no output at all.
 ///
@@ -442,8 +608,8 @@ struct AdaptiveTerminalBackgroundStabilizer {
 /// TUI that exits inside an occluded tab clearing on the way back, long after
 /// its last output. It likewise never blocks a pane's first adoption: a quiet
 /// TUI already on screen when the preference was switched on has no recent
-/// output to point at, and the overlay predicate is what keeps that opening
-/// safe.
+/// output to point at, and the viewer-transformation predicate is what keeps
+/// that opening safe.
 enum AdaptiveTerminalInferenceGate {
     /// How long after a pty output heartbeat a frame is still attributable to
     /// it. The heartbeat is throttled to 500ms leading-edge and each one arms a
@@ -454,11 +620,11 @@ enum AdaptiveTerminalInferenceGate {
 
     static func allowsObservation(
         ofColor isColor: Bool,
-        hasViewerOverlay: Bool,
+        hasViewerTransformation: Bool,
         hasConfirmedColor: Bool,
         secondsSinceOutput: TimeInterval?
     ) -> Bool {
-        if hasViewerOverlay { return false }
+        if hasViewerTransformation { return false }
         guard isColor, hasConfirmedColor else { return true }
         guard let secondsSinceOutput else { return false }
         return secondsSinceOutput <= outputRecencyWindow

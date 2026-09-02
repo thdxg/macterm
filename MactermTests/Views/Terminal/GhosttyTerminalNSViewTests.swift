@@ -50,6 +50,41 @@ struct GhosttyTerminalNSViewTests {
         #expect(GhosttyTerminalNSView.cursor(for: GHOSTTY_MOUSE_SHAPE_PROGRESS) == nil)
     }
 
+    // MARK: - Scrollback provenance
+
+    @Test
+    func scrollbarSnapshot_marksOnlyRowsBeforeTheLiveBottomAsHistory() {
+        let history = GhosttyTerminalNSView.ScrollbarSnapshot(total: 100, offset: 30, len: 40)
+        let bottom = GhosttyTerminalNSView.ScrollbarSnapshot(total: 100, offset: 60, len: 40)
+        let alternateScreen = GhosttyTerminalNSView.ScrollbarSnapshot(total: 40, offset: 0, len: 40)
+
+        #expect(history.isViewingHistory)
+        #expect(!bottom.isViewingHistory)
+        #expect(!alternateScreen.isViewingHistory)
+    }
+
+    @Test
+    func scrollbarSnapshot_handlesOutOfRangeOffsetsWithoutOverflow() {
+        let snapshot = GhosttyTerminalNSView.ScrollbarSnapshot(
+            total: UInt64.max,
+            offset: UInt64.max,
+            len: 1
+        )
+
+        #expect(!snapshot.isViewingHistory)
+    }
+
+    @Test
+    func historicalViewport_isAViewerTransformationWithoutASelection() {
+        let view = makeView()
+
+        view.surfaceDidUpdateScrollbar(total: 100, offset: 30, len: 40)
+        #expect(view.hasViewerTransformation)
+
+        view.surfaceDidUpdateScrollbar(total: 100, offset: 60, len: 40)
+        #expect(!view.hasViewerTransformation)
+    }
+
     // MARK: - IME composition state
 
     private func makeView() -> GhosttyTerminalNSView {

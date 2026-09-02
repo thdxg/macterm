@@ -36,4 +36,14 @@ APP="$DERIVED_DATA/Build/Products/Debug/Macterm.app"
 # SwiftUI creates its window. A directly-exec'd app starts backgrounded and can
 # be denied activation indefinitely, never getting a window — the same reason
 # scripts/benchmark.py launches with `open -n`.
-open -n "$APP"
+#
+# Noninteractive runners commonly export `TERM=dumb` plus `NO_COLOR` for their
+# own command logs. Let Ghostty replace TERM for panes, but do not leak that
+# runner-only NO_COLOR into the GUI app: color-aware TUIs such as Claude then
+# disable ANSI colors even though the terminal advertises truecolor. Preserve an
+# explicitly requested NO_COLOR when a developer launches from a real terminal.
+if [[ "${TERM:-}" == "dumb" && -n "${NO_COLOR+x}" ]]; then
+  env -u NO_COLOR open -n "$APP"
+else
+  open -n "$APP"
+fi

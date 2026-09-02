@@ -12,6 +12,16 @@ struct AdaptiveTerminalBackgroundTests {
         .init(red: red, green: green, blue: blue, alpha: alpha)
     }
 
+    private func grid(
+        columns: Int = 80,
+        rows: Int = 50,
+        pixelAt: (Int, Int) -> AdaptiveTerminalBackgroundDetector.Pixel
+    ) -> [AdaptiveTerminalBackgroundDetector.Pixel] {
+        (0 ..< rows).flatMap { row in
+            (0 ..< columns).map { column in pixelAt(column, row) }
+        }
+    }
+
     @Test
     func dominantOpaqueColorWinsWhenItCoversMostOfFrame() throws {
         let background = Array(repeating: pixel(18, 20, 24), count: 70)
@@ -39,6 +49,91 @@ struct AdaptiveTerminalBackgroundTests {
         let second = Array(repeating: pixel(80, 40, 120), count: 50)
 
         #expect(AdaptiveTerminalBackgroundDetector.dominantColor(in: first + second) == nil)
+    }
+
+    @Test
+    func canvasGeometryAcceptsOpenCodeStyleMainPaneBelowGlobalCoverageThreshold() throws {
+        let background = pixel(10, 10, 10)
+        let secondary = pixel(20, 20, 20)
+        let input = pixel(30, 30, 30)
+        let pixels = grid { column, row in
+            if column >= 56 { return secondary }
+            if (40 ..< 48).contains(row), (2 ..< 54).contains(column) { return input }
+            return background
+        }
+
+        // The main canvas occupies 59.6%, so the old global 60% vote rejected
+        // it. Its left edge still connects broad top and bottom regions.
+        #expect(AdaptiveTerminalBackgroundDetector.dominantColor(in: pixels) == nil)
+        let match = try #require(
+            AdaptiveTerminalBackgroundDetector.dominantCanvasColor(in: pixels, columns: 80)
+        )
+        #expect(match.red == 10)
+        #expect(match.green == 10)
+        #expect(match.blue == 10)
+        #expect(abs(match.coverage - 0.596) < 0.0001)
+    }
+
+    @Test
+    func canvasGeometryRejectsClaudeStyleExpandedOutputDespiteOverwhelmingCoverage() throws {
+        let gray = pixel(70, 70, 70)
+        let unpainted = pixel(0, 0, 0, 0)
+        let pixels = grid { _, row in row < 43 ? gray : unpainted }
+
+        let areaMatch = try #require(AdaptiveTerminalBackgroundDetector.dominantColor(in: pixels))
+        #expect(areaMatch.coverage == 0.86)
+        #expect(AdaptiveTerminalBackgroundDetector.dominantCanvasColor(in: pixels, columns: 80) == nil)
+    }
+
+    @Test
+    func canvasGeometryRejectsLargeCenteredModal() {
+        let modal = pixel(70, 70, 70)
+        let unpainted = pixel(0, 0, 0, 0)
+        let pixels = grid { column, row in
+            (8 ..< 72).contains(column) && (5 ..< 45).contains(row) ? modal : unpainted
+        }
+
+        #expect(AdaptiveTerminalBackgroundDetector.dominantCanvasColor(in: pixels, columns: 80) == nil)
+    }
+
+    @Test
+    func canvasGeometryPrefersAnOuterCanvasOverALargerInteriorPanel() throws {
+        let canvas = pixel(10, 10, 10)
+        let panel = pixel(80, 80, 80)
+        let pixels = grid { column, row in
+            let isCanvas = row < 5 || row >= 45 || column < 8 || column >= 72
+            return isCanvas ? canvas : panel
+        }
+
+        let areaMatch = try #require(AdaptiveTerminalBackgroundDetector.dominantColor(in: pixels))
+        #expect(areaMatch.red == 80)
+        let canvasMatch = try #require(
+            AdaptiveTerminalBackgroundDetector.dominantCanvasColor(in: pixels, columns: 80)
+        )
+        #expect(canvasMatch.red == 10)
+        #expect(canvasMatch.coverage == 0.36)
+    }
+
+    @Test
+    func canvasGeometryAllowsNarrowTitleAndStatusBars() throws {
+        let canvas = pixel(10, 10, 10)
+        let bar = pixel(80, 40, 20)
+        let pixels = grid { _, row in row == 0 || row == 49 ? bar : canvas }
+
+        let match = try #require(
+            AdaptiveTerminalBackgroundDetector.dominantCanvasColor(in: pixels, columns: 80)
+        )
+        #expect(match.red == 10)
+        #expect(match.coverage == 0.96)
+    }
+
+    @Test
+    func canvasGeometryRejectsAmbiguousEqualHalves() {
+        let left = pixel(10, 10, 10)
+        let right = pixel(80, 80, 80)
+        let pixels = grid { column, _ in column < 40 ? left : right }
+
+        #expect(AdaptiveTerminalBackgroundDetector.dominantCanvasColor(in: pixels, columns: 80) == nil)
     }
 
     @Test
@@ -196,6 +291,41 @@ struct AdaptiveTerminalBackgroundTests {
     }
 
     @Test
+    func surfaceSamplingSeesCanvasStripsOutsideWideHeaderAndInputPanels() throws {
+        let width = 800
+        let height = 500
+        let properties = [
+            kIOSurfaceWidth: NSNumber(value: width),
+            kIOSurfaceHeight: NSNumber(value: height),
+            kIOSurfaceBytesPerElement: NSNumber(value: 4),
+            kIOSurfacePixelFormat: NSNumber(value: kCVPixelFormatType_32BGRA),
+        ] as CFDictionary
+        let surface = try #require(IOSurfaceCreate(properties))
+        var seed: UInt32 = 0
+        #expect(IOSurfaceLock(surface, [], &seed) == kIOReturnSuccess)
+        let base = IOSurfaceGetBaseAddress(surface)
+        let bytesPerRow = IOSurfaceGetBytesPerRow(surface)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let isHeader = (10 ..< 55).contains(y) && (20 ..< 780).contains(x)
+                let isInput = (410 ..< 475).contains(y) && (20 ..< 780).contains(x)
+                let value: UInt8 = isHeader ? 20 : (isInput ? 30 : 10)
+                let offset = y * bytesPerRow + x * 4
+                base.storeBytes(of: value, toByteOffset: offset, as: UInt8.self)
+                base.storeBytes(of: value, toByteOffset: offset + 1, as: UInt8.self)
+                base.storeBytes(of: value, toByteOffset: offset + 2, as: UInt8.self)
+                base.storeBytes(of: UInt8(255), toByteOffset: offset + 3, as: UInt8.self)
+            }
+        }
+        #expect(IOSurfaceUnlock(surface, [], &seed) == kIOReturnSuccess)
+
+        let match = try #require(AdaptiveTerminalBackgroundDetector.dominantColor(in: surface))
+        #expect(match.red == 10)
+        #expect(match.green == 10)
+        #expect(match.blue == 10)
+    }
+
+    @Test
     func reportsWherePaintSitsSoTheBackdropCanBeCutUnderItButNotUnderThePadding() throws {
         // A TUI painting the middle of the frame at the window opacity, with an
         // unpainted margin standing in for the window padding. The reported
@@ -235,7 +365,8 @@ struct AdaptiveTerminalBackgroundTests {
                 // Coverage is only the painted middle, so the frame-wide
                 // default would reject it; this test is about the geometry.
                 minimumCoverage: 0.1,
-                minimumAlpha: AdaptiveTerminalBackgroundDetector.minimumPaintedAlpha(windowOpacity: 0.9)
+                minimumAlpha: AdaptiveTerminalBackgroundDetector.minimumPaintedAlpha(windowOpacity: 0.9),
+                requiringCanvas: false
             )
         )
         let bounds = try #require(match.paintedUnitBounds)
@@ -344,29 +475,29 @@ struct AdaptiveTerminalBackgroundTests {
 
     private func allows(
         color: Bool = true,
-        overlay: Bool = false,
+        viewerTransformation: Bool = false,
         confirmed: Bool = true,
         sinceOutput: TimeInterval? = nil
     ) -> Bool {
         AdaptiveTerminalInferenceGate.allowsObservation(
             ofColor: color,
-            hasViewerOverlay: overlay,
+            hasViewerTransformation: viewerTransformation,
             hasConfirmedColor: confirmed,
             secondsSinceOutput: sinceOutput
         )
     }
 
     @Test
-    func aViewerOverlayBlocksInferenceOutrightSoASelectionCannotBeAdopted() {
+    func aViewerTransformationBlocksInferenceOutrightSoASelectionCannotBeAdopted() {
         // The drag case: a selection covers most of the frame and arrives as an
-        // ordinary cell background, so only the overlay predicate can reject it.
-        #expect(allows(overlay: true, sinceOutput: 0) == false)
-        #expect(allows(overlay: true, confirmed: false, sinceOutput: 0) == false)
+        // ordinary cell background, so only provenance can reject it.
+        #expect(allows(viewerTransformation: true, sinceOutput: 0) == false)
+        #expect(allows(viewerTransformation: true, confirmed: false, sinceOutput: 0) == false)
     }
 
     @Test
-    func aViewerOverlayBlocksClearingTooSoThePaneFreezesRatherThanFlashing() {
-        #expect(allows(color: false, overlay: true, sinceOutput: 0) == false)
+    func aViewerTransformationBlocksClearingTooSoThePaneFreezesRatherThanFlashing() {
+        #expect(allows(color: false, viewerTransformation: true, sinceOutput: 0) == false)
     }
 
     @Test
@@ -384,7 +515,7 @@ struct AdaptiveTerminalBackgroundTests {
     @Test
     func aPaneWithNothingToProtectStillAdoptsItsFirstColorWithoutRecentOutput() {
         // A quiet TUI already on screen when the preference is switched on has
-        // no output to point at; the overlay predicate is what keeps this safe.
+        // no output to point at; viewer-state provenance keeps this safe.
         #expect(allows(confirmed: false, sinceOutput: nil))
     }
 

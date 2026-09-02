@@ -94,6 +94,14 @@ final class AdaptiveTerminalChrome {
         requestSamplingBurst(delay: 0.12, retries: 2)
     }
 
+    /// Returning from historical scrollback exposes the live frame again but
+    /// does not necessarily produce pty output. Sample from that transition so
+    /// the frozen presentation settles without requiring a focus change.
+    func terminalDidReturnToLiveViewport(_ view: GhosttyTerminalNSView) {
+        guard shouldHandleEvent(from: view) else { return }
+        requestSamplingBurst(delay: 0, retries: 2)
+    }
+
     /// OSC 11 is explicit terminal-native evidence and takes effect
     /// immediately; inferred IOSurface colors retain two-observation
     /// stabilization.
@@ -194,18 +202,15 @@ final class AdaptiveTerminalChrome {
 
         guard AdaptiveTerminalInferenceGate.allowsObservation(
             ofColor: candidate != nil,
-            hasViewerOverlay: view.hasViewerOverlay,
+            hasViewerTransformation: view.hasViewerTransformation,
             hasConfirmedColor: stabilizer.hasConfirmedColor,
             secondsSinceOutput: lastOutputAt[id].map { Date().timeIntervalSince($0) }
         )
         else {
-            // Frozen, not cleared: the screen model behind the overlay is
-            // unchanged, so the pane keeps exactly what it was presenting. Any
-            // half-confirmed observation is kept too — it matches again once
-            // the frame is trustworthy. No verification retry is asked for,
-            // which is what stops a held selection from driving a 4 Hz timer
-            // for as long as the user leaves it up; the render event that
-            // accompanies dropping the overlay restarts sampling.
+            // Frozen, not cleared: viewer state must not replace the live
+            // presentation. Keep any half-confirmed observation too; it can
+            // match again once the frame is trustworthy. No verification retry
+            // is requested while the transformation remains visible.
             stabilizers[id] = stabilizer
             return false
         }
