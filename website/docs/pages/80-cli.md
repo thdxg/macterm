@@ -42,6 +42,8 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
 | `project create <path> [--name N] [--select]` | Add a project for a local directory or an scp-style `[user@]host:dir` [remote spec](/docs/remote-projects) (stored verbatim — a wrong host or dir surfaces in the pane). **Not idempotent** — each run adds a distinct project, even for a directory that already has one; check `project list` first if you want create-or-select. `--select` activates it — and, on first open, applies a matching [layout file](/docs/declarative-layouts). |
 | `project select <name\|uuid\|index>` | Make a project active. `pinned` (or the sentinel UUID) selects the pinned-tabs workspace; every `--project` selector accepts it too. |
+| `project rename <project> <name>` | Rename a project — the same edit as the sidebar row's inline rename, so it touches `projects.json` only and never a [layout file](/docs/declarative-layouts). `Pinned` is reserved for the pinned-tabs workspace. |
+| `project remove <project> [--force]` | Remove a project, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. (Does not delete files on disk.) |
 | `tab list [--project P]` | Tabs of a project (default: active project). |
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
 | `tab select <tab>` | Activate a tab (`tab:3`, index, UUID, or exact title). |

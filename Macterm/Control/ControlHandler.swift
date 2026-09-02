@@ -59,6 +59,8 @@ final class ControlHandler {
         case "project.list": return projectList()
         case "project.create": return try projectCreate(args)
         case "project.select": return try projectSelect(args)
+        case "project.rename": return try projectRename(args)
+        case "project.remove": return try projectRemove(args)
         case "tab.list": return try tabList(args)
         case "tab.new": return try tabNew(args)
         case "tab.select": return try tabSelect(args)
@@ -318,6 +320,101 @@ final class ControlHandler {
             appState.selectProject(project)
         }
         return projectData(project)
+    }
+
+    /// Rename a project — the same `ProjectStore.rename` the sidebar row's
+    /// inline edit calls, so both paths have identical reach: `projects.json`
+    /// only. Layout files are deliberately untouched (nothing but an explicit
+    /// Save Layout rewrites one), and a declaration matches on its `path:`
+    /// rather than its filename, so a rename doesn't orphan it. The name IS a
+    /// layout identity in one narrow case — the `ProjectSlug` tiebreaker that
+    /// picks a project's own file when several projects share a `path:` — so
+    /// renaming such a project changes which file it owns at the next save.
+    private func projectRename(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.rename requires a project selector",
+                action: "run `macterm project list` for targets"
+            )
+        }
+        guard let rawName = args.name else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.rename requires a new name",
+                action: "pass the new name as the second argument"
+            )
+        }
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ControlError(code: .badRequest, message: "project name cannot be empty")
+        }
+        let project = try resolveProject(selector)
+        // Unreachable through the app (the sentinel is not a `ProjectStore`
+        // row, so no sidebar row edits it) — but `resolveProject` accepts
+        // `pinned`, so the CLI is the one way in and has to say no here.
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be renamed")
+        }
+        // `resolveProject` matches the sentinel's display name BEFORE any user
+        // project's, so a project renamed to it becomes unreachable by name
+        // (UUID and index still work, but `--project Pinned` would silently
+        // target the pinned workspace instead). Refuse rather than strand it.
+        guard trimmed.lowercased() != PinnedTabs.displayName.lowercased() else {
+            throw ControlError(
+                code: .badRequest,
+                message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
+                action: "pick another name"
+            )
+        }
+        projectStore.rename(id: project.id, to: trimmed)
+        guard let updated = projectStore.projects.first(where: { $0.id == project.id }) else {
+            throw ControlError(code: .internalError, message: "project rename failed")
+        }
+        return projectData(updated)
+    }
+
+    /// Drop a project's workspace and its `ProjectStore` entry — the same pair
+    /// every in-app removal runs (sidebar row menu, bulk delete, palette,
+    /// Settings → Projects), which is what makes the CLI removal reach exactly
+    /// as far as theirs: panes' zmx sessions die, `projects.json` loses the
+    /// row, and files on disk (the project directory, its layout declaration)
+    /// are untouched. Those paths stage a confirmation dialog for a busy
+    /// project; a headless caller gets a typed `busy` error instead — never a
+    /// dialog the CLI can't answer. Same contract as `tab.close`.
+    private func projectRemove(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.remove requires a project selector",
+                action: "run `macterm project list` for targets"
+            )
+        }
+        let project = try resolveProject(selector)
+        // See `projectRename` — the sentinel is reachable only through this
+        // selector, and tearing the pinned workspace down is never valid.
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be removed")
+        }
+
+        // The same expression `AppState.requestRemoveProject` evaluates before
+        // it decides to stage its dialog, so the CLI refuses exactly when the
+        // app would have asked.
+        let busy = appState.workspaces[project.id]?.tabs
+            .flatMap { $0.splitRoot.allPanes() }
+            .contains(where: \.needsConfirmClose) ?? false
+
+        if busy, args.force != true {
+            throw ControlError(
+                code: .busy,
+                message: "a pane in that project has a running program (removing kills its sessions)",
+                action: "re-run with --force to remove anyway"
+            )
+        }
+
+        appState.removeProject(project.id)
+        projectStore.remove(id: project.id)
+        return ControlData()
     }
 
     // MARK: - Tab mutations

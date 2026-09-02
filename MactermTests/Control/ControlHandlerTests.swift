@@ -376,6 +376,108 @@ struct ControlHandlerTests {
         #expect(empty.error?.code == .badRequest)
     }
 
+    // MARK: - project.rename / project.remove
+
+    @Test
+    func project_rename_updates_name_and_persists() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "alpha")
+
+        let response = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "beta")))
+        #expect(response.ok)
+        #expect(response.data?.projects?.first?.name == "beta")
+        #expect(projectStore.projects.first?.name == "beta")
+    }
+
+    @Test
+    func project_rename_trims_whitespace() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "alpha")
+
+        let response = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "  trimmed  ")))
+        #expect(response.ok)
+        #expect(projectStore.projects.first?.name == "trimmed")
+    }
+
+    @Test
+    func project_rename_validates_arguments() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "alpha")
+
+        // Missing project
+        let noProject = await handler.handle(request("project.rename", args: ControlArgs(name: "beta")))
+        #expect(noProject.error?.code == .badRequest)
+
+        // Missing name
+        let noName = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha")))
+        #expect(noName.error?.code == .badRequest)
+
+        // Empty name
+        let empty = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "   ")))
+        #expect(empty.error?.code == .badRequest)
+
+        // Reject pinned sentinel
+        let pinned = await handler.handle(request("project.rename", args: ControlArgs(project: "pinned", name: "custom")))
+        #expect(pinned.error?.code == .badRequest)
+
+        // Refuse the sentinel's display name: `resolveProject` matches it
+        // before any user project, so allowing it would strand this project's
+        // name selector on the pinned workspace.
+        let reserved = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "Pinned")))
+        #expect(reserved.error?.code == .badRequest)
+        let reservedCase = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: " pInNeD ")))
+        #expect(reservedCase.error?.code == .badRequest)
+        #expect(projectStore.projects.first?.name == "alpha")
+
+        // Unknown project
+        let unknown = await handler.handle(request("project.rename", args: ControlArgs(project: "nonexistent", name: "beta")))
+        #expect(unknown.error?.code == .notFound)
+    }
+
+    @Test
+    func project_remove_deletes_project_and_workspace() async {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore, name: "alpha")
+        #expect(projectStore.projects.count == 1)
+        #expect(appState.workspaces[project.id] != nil)
+
+        let response = await handler.handle(request("project.remove", args: ControlArgs(project: "alpha")))
+        #expect(response.ok)
+        #expect(projectStore.projects.isEmpty)
+        #expect(appState.workspaces[project.id] == nil)
+    }
+
+    @Test
+    func project_remove_unloaded_project_succeeds() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "alpha", select: false)
+        #expect(projectStore.projects.count == 1)
+
+        let response = await handler.handle(request("project.remove", args: ControlArgs(project: "alpha")))
+        #expect(response.ok)
+        #expect(projectStore.projects.isEmpty)
+    }
+
+    @Test
+    func project_remove_rejects_pinned_project() async {
+        let (handler, _, _) = makeHandler()
+        let response = await handler.handle(request("project.remove", args: ControlArgs(project: "pinned")))
+        #expect(response.error?.code == .badRequest)
+    }
+
+    @Test
+    func project_remove_validates_arguments() async {
+        let (handler, _, _) = makeHandler()
+        let empty = await handler.handle(request("project.remove"))
+        #expect(empty.error?.code == .badRequest)
+
+        let blank = await handler.handle(request("project.remove", args: ControlArgs(project: "   ")))
+        #expect(blank.error?.code == .badRequest)
+
+        let unknown = await handler.handle(request("project.remove", args: ControlArgs(project: "nonexistent")))
+        #expect(unknown.error?.code == .notFound)
+    }
+
     // MARK: - tab.new / tab.select / tab.close
 
     @Test
