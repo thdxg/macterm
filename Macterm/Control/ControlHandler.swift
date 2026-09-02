@@ -74,7 +74,6 @@ final class ControlHandler {
         case "pane.focus": return try paneFocus(args)
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
-        case "pane.write": return try paneWrite(args)
         case "pane.key": return try paneKey(args)
         case "pane.zoom": return try paneZoom(args)
         case "pane.resize-split": return try paneResizeSplit(args)
@@ -610,38 +609,30 @@ final class ControlHandler {
         return ControlData()
     }
 
+    /// Paste a command line into a live pane's shell. The trailing newline is
+    /// what submits it, and `submit: false` withholds exactly that — leaving
+    /// the text on the prompt for a human to inspect, or for a TUI that
+    /// submits on its own terms. One verb rather than two, because the two
+    /// forms differ by that single character and nothing else.
+    ///
+    /// Withholding it is safe for execution tracking because `sendText` draws
+    /// the same line internally: it records command-submission evidence for
+    /// whatever it delivers but fires `onCommandSubmitted` only when the text
+    /// carries a newline. So an unsubmitted paste leaves the evidence armed
+    /// exactly as typing those characters would, and a following `pane.key`
+    /// Return reads as a REAL submission rather than a bare prompt redraw —
+    /// which is what keeps tab naming and execution state honest across a
+    /// paste-then-Return pair.
     private func paneRun(_ args: ControlArgs) throws -> ControlData {
         guard let command = args.run, !command.isEmpty else {
             throw ControlError(code: .badRequest, message: "pane.run requires a command")
         }
-        return try paneSendText(args, text: command + "\n")
-    }
-
-    /// Type text into a live pane WITHOUT the newline `pane.run` appends, so
-    /// it lands on the prompt unsubmitted — pre-filling a command line for a
-    /// human to inspect, or feeding a prompt to a TUI that submits on its own
-    /// terms. The distinction is only the suffix: both ride `sendText`, the
-    /// bracketed-paste path.
-    ///
-    /// That shared path is also what makes a follow-up `pane key return` work
-    /// the way a human's Return does. `sendText` records command-submission
-    /// evidence for whatever it delivers but only fires `onCommandSubmitted`
-    /// when the text carries a newline — so this verb leaves the evidence
-    /// armed and unsubmitted, exactly as typing the same characters would, and
-    /// the Return that follows reads as a real submission rather than a bare
-    /// prompt redraw. Splitting a command across `pane.write` + `pane.key`
-    /// therefore keeps execution tracking and tab naming honest; it is not a
-    /// blind byte pipe that bypasses them.
-    private func paneWrite(_ args: ControlArgs) throws -> ControlData {
-        guard let text = args.text, !text.isEmpty else {
-            throw ControlError(code: .badRequest, message: "pane.write requires text to write")
-        }
-        return try paneSendText(args, text: text)
+        // Absent means submit: the flag only ever arrives as an explicit false.
+        return try paneSendText(args, text: args.submit == false ? command : command + "\n")
     }
 
     /// Resolve the target pane and paste `text` into it, or report the
-    /// `no_surface` miss — the body `pane.run` and `pane.write` share, since
-    /// they differ only in whether the caller's text ends in a newline.
+    /// `no_surface` miss.
     private func paneSendText(_ args: ControlArgs, text: String) throws -> ControlData {
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)

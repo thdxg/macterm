@@ -104,10 +104,10 @@ def test_printable_keys_reach_the_running_program(app, live_pane):
     )
 
 
-def test_written_text_waits_on_the_prompt_until_return(app, live_pane):
-    """`pane write` is `pane run` minus the trailing newline, and the only
-    proof of that is behavioural: the text has to reach the prompt and then
-    sit there. So this asserts both halves — the fragment echoes (it was
+def test_no_submit_text_waits_on_the_prompt_until_return(app, live_pane):
+    """`pane run --no-submit` is `pane run` minus the trailing newline, and the
+    only proof of that is behavioural: the text has to reach the prompt and
+    then sit there. So this asserts both halves — the fragment echoes (it was
     delivered) while the marker it would print stays absent (it did not run),
     and only the following `pane key return` executes it.
 
@@ -121,7 +121,7 @@ def test_written_text_waits_on_the_prompt_until_return(app, live_pane):
     def dump():
         return app.pane_text(pane=pane_id, scrollback=True) or ""
 
-    app.pane_write(f'/bin/sh -c "printf w-%s-ok {nonce}; echo"', pane=pane_id)
+    app.pane_run(f'/bin/sh -c "printf w-%s-ok {nonce}; echo"', pane=pane_id, submit=False)
     # The nonce reaching the screen proves the paste landed; it appears only
     # as the prompt's echo of what was typed, never as command output.
     wait_for(lambda: nonce in dump(), timeout=60, message="the written text to echo")
@@ -130,7 +130,7 @@ def test_written_text_waits_on_the_prompt_until_return(app, live_pane):
     # polls rather than a single instant, so a command that merely started
     # slowly can't pass as one that never started.
     for _ in range(6):
-        assert marker not in dump(), "pane write executed the text without a Return"
+        assert marker not in dump(), "--no-submit executed the text without a Return"
         time.sleep(0.5)
 
     app.cli("pane", "key", "return", "--pane", pane_id)

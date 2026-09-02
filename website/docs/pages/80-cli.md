@@ -57,8 +57,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way *from* the target — the same geometry the focus keybinds use. At the outermost edge it's a no-op, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |
-| `pane run <command…> [target]` | Type a command (plus newline) into an **existing** live pane's shell. |
-| `pane write <text…> [target]` | Type text into an **existing** live pane's shell without submitting it — `pane run` minus the trailing newline, so it lands on the prompt for a human to inspect or for a TUI to submit on its own terms. Follow it with `pane key return` to execute; that Return registers as a real command submission. |
+| `pane run <command…> [--no-submit] [target]` | Type a command (plus newline) into an **existing** live pane's shell. `--no-submit` withholds the newline, leaving the text on the prompt for a human to inspect or for a TUI to submit on its own terms; follow it with `pane key return`, which registers as a real command submission. |
 | `pane key <chord> [target]` | Send one key press (`a`, `space`, `shift+1`, `ctrl+c`, `escape`, `up`, `ctrl+\`) to a live pane through the terminal's key-encoding path — single keystrokes, where `pane run` types a whole command line. |
 | `pane zoom [target]` | Toggle zoom on a pane (the tab renders only that pane while zoomed) — the same action as the zoom keybind. |
 | `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split of that axis around a pane. Absolute geometry, unlike the keybind's relative nudge. |

@@ -252,36 +252,22 @@ class MactermHarness:
     def cli_json(self, *args):
         return json.loads(self.cli(*args, "--json").stdout)
 
-    def pane_run(self, command, pane=None, session=None):
-        """Type `command` (plus newline) into a live pane's shell. Connection
-        and targeting flags are placed BEFORE the command because `pane run`
+    def pane_run(self, command, pane=None, session=None, submit=True):
+        """Type `command` into a live pane's shell, with a trailing newline
+        unless `submit=False` (which leaves it on the prompt). Connection and
+        targeting flags are placed BEFORE the command because `pane run`
         captures everything after its first positional — see cli()."""
         args = [self.cli_path, "pane", "run", "--socket", self.socket]
         if pane:
             args += ["--pane", pane]
         if session:
             args += ["--session", session]
+        if not submit:
+            args.append("--no-submit")
         args.append(command)
         result = sh(args, timeout=60)
         if result.returncode != 0:
             raise HarnessError(f"macterm pane run failed: {result.stderr.strip()}")
-        return result
-
-    def pane_write(self, text, pane=None, session=None):
-        """Type `text` into a live pane's shell WITHOUT a trailing newline, so
-        it sits on the prompt unsubmitted. Flags go BEFORE the text for the
-        same reason pane_run() places them first — `pane write` shares that
-        verb's passthrough capture, which would swallow a trailing --socket
-        into the typed text and send the CLI off to discover a real Macterm."""
-        args = [self.cli_path, "pane", "write", "--socket", self.socket]
-        if pane:
-            args += ["--pane", pane]
-        if session:
-            args += ["--session", session]
-        args.append(text)
-        result = sh(args, timeout=60)
-        if result.returncode != 0:
-            raise HarnessError(f"macterm pane write failed: {result.stderr.strip()}")
         return result
 
     def panes(self, tab=None):

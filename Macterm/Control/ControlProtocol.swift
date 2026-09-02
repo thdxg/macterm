@@ -108,8 +108,10 @@ struct ControlArgs: Codable, Equatable {
     var title: String?
     /// Reset custom title back to automatic default (`tab.rename`).
     var reset: Bool?
-    /// Literal text to write to a pane's terminal without submitting (`pane.write`).
-    var text: String?
+    /// Whether `pane.run` submits the text it pastes. ABSENT means submit —
+    /// the only value a client ever sends is `false`, to leave the command on
+    /// the prompt — so a caller that predates the flag keeps its behavior.
+    var submit: Bool?
 
     init(
         project: String? = nil,
@@ -133,7 +135,7 @@ struct ControlArgs: Codable, Equatable {
         slot: Int? = nil,
         title: String? = nil,
         reset: Bool? = nil,
-        text: String? = nil
+        submit: Bool? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -156,7 +158,7 @@ struct ControlArgs: Codable, Equatable {
         self.slot = slot
         self.title = title
         self.reset = reset
-        self.text = text
+        self.submit = submit
     }
 }
 

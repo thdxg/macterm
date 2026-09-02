@@ -813,17 +813,22 @@ struct ControlHandlerTests {
     }
 
     @Test
-    func pane_write_without_surface_is_no_surface() async {
+    func pane_run_without_submit_still_needs_a_command_and_a_surface() async {
         let (handler, appState, projectStore) = makeHandler()
         _ = seedProject(appState, projectStore)
-        let response = await handler.handle(request("pane.write", args: ControlArgs(text: "git status")))
+        // `--no-submit` changes only the trailing newline, so it inherits
+        // pane.run's guards unchanged. (That the newline is actually withheld
+        // needs a live surface — e2e/test_terminal_io.py proves that half.)
+        let response = await handler.handle(
+            request("pane.run", args: ControlArgs(run: "git status", submit: false))
+        )
         #expect(response.error?.code == .noSurface)
 
-        let empty = await handler.handle(request("pane.write"))
+        let empty = await handler.handle(request("pane.run", args: ControlArgs(submit: false)))
         #expect(empty.error?.code == .badRequest)
 
-        let emptyText = await handler.handle(request("pane.write", args: ControlArgs(text: "")))
-        #expect(emptyText.error?.code == .badRequest)
+        let emptyCommand = await handler.handle(request("pane.run", args: ControlArgs(run: "", submit: false)))
+        #expect(emptyCommand.error?.code == .badRequest)
     }
 
     @Test
