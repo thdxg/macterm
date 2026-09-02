@@ -1002,6 +1002,7 @@ private struct SidebarProjectRow: View {
                         .help(project.path)
                 }
             }
+            .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
         }
     }
 
@@ -1023,6 +1024,11 @@ private struct SidebarProjectRow: View {
         }
     }
 
+    /// The row this header stands for — the same value the enclosing
+    /// `DisclosureGroup` tags itself with, so a title click highlights the
+    /// row the List would have highlighted.
+    private var selectionItem: SidebarItem { .project(project.id) }
+
     private func beginRename() {
         guard isInteractive else { return }
         presentation.beginRename(
@@ -1030,6 +1036,11 @@ private struct SidebarProjectRow: View {
             text: project.name
         )
         appState.renamingProjectID = nil
+    }
+
+    private func select(_ modifiers: NSEvent.ModifierFlags) {
+        guard isInteractive else { return }
+        presentation.selectRow(selectionItem, modifiers: modifiers)
     }
 
     private func commit() {
