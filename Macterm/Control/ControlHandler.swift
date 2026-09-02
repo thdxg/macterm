@@ -517,22 +517,35 @@ final class ControlHandler {
         guard let command = args.run, !command.isEmpty else {
             throw ControlError(code: .badRequest, message: "pane.run requires a command")
         }
-        let (_, workspace) = try resolveWorkspace(args)
-        let target = try resolvePane(args, in: workspace)
-        guard let view = target.pane.nsView, view.sendText(command + "\n") else {
-            throw ControlError(
-                code: .noSurface,
-                message: "the pane's terminal isn't live yet",
-                action: "select its tab once so the surface spawns, then retry"
-            )
-        }
-        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+        return try paneSendText(args, text: command + "\n")
     }
 
+    /// Type text into a live pane WITHOUT the newline `pane.run` appends, so
+    /// it lands on the prompt unsubmitted — pre-filling a command line for a
+    /// human to inspect, or feeding a prompt to a TUI that submits on its own
+    /// terms. The distinction is only the suffix: both ride `sendText`, the
+    /// bracketed-paste path.
+    ///
+    /// That shared path is also what makes a follow-up `pane key return` work
+    /// the way a human's Return does. `sendText` records command-submission
+    /// evidence for whatever it delivers but only fires `onCommandSubmitted`
+    /// when the text carries a newline — so this verb leaves the evidence
+    /// armed and unsubmitted, exactly as typing the same characters would, and
+    /// the Return that follows reads as a real submission rather than a bare
+    /// prompt redraw. Splitting a command across `pane.write` + `pane.key`
+    /// therefore keeps execution tracking and tab naming honest; it is not a
+    /// blind byte pipe that bypasses them.
     private func paneWrite(_ args: ControlArgs) throws -> ControlData {
         guard let text = args.text, !text.isEmpty else {
             throw ControlError(code: .badRequest, message: "pane.write requires text to write")
         }
+        return try paneSendText(args, text: text)
+    }
+
+    /// Resolve the target pane and paste `text` into it, or report the
+    /// `no_surface` miss — the body `pane.run` and `pane.write` share, since
+    /// they differ only in whether the caller's text ends in a newline.
+    private func paneSendText(_ args: ControlArgs, text: String) throws -> ControlData {
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
         guard let view = target.pane.nsView, view.sendText(text) else {

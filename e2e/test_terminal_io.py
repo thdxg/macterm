@@ -8,6 +8,7 @@ nushell tokenize identically (the same trick as the benchmark's workload
 command and RemoteSpawn's wire format).
 """
 
+import time
 import uuid
 
 from _harness import wait_for
@@ -101,3 +102,36 @@ def test_printable_keys_reach_the_running_program(app, live_pane):
         timeout=30,
         message=f"cat to write {typed!r} back",
     )
+
+
+def test_written_text_waits_on_the_prompt_until_return(app, live_pane):
+    """`pane write` is `pane run` minus the trailing newline, and the only
+    proof of that is behavioural: the text has to reach the prompt and then
+    sit there. So this asserts both halves — the fragment echoes (it was
+    delivered) while the marker it would print stays absent (it did not run),
+    and only the following `pane key return` executes it.
+
+    The marker is assembled by printf at runtime, so the typed line the dump
+    also shows can never contain it; a match means the shell ran the command
+    rather than echoing the keystrokes."""
+    pane_id = live_pane["id"]
+    nonce = uuid.uuid4().hex[:12]
+    marker = f"w-{nonce}-ok"
+
+    def dump():
+        return app.pane_text(pane=pane_id, scrollback=True) or ""
+
+    app.pane_write(f'/bin/sh -c "printf w-%s-ok {nonce}; echo"', pane=pane_id)
+    # The nonce reaching the screen proves the paste landed; it appears only
+    # as the prompt's echo of what was typed, never as command output.
+    wait_for(lambda: nonce in dump(), timeout=60, message="the written text to echo")
+
+    # Nothing may execute without a Return. Hold the negative across a few
+    # polls rather than a single instant, so a command that merely started
+    # slowly can't pass as one that never started.
+    for _ in range(6):
+        assert marker not in dump(), "pane write executed the text without a Return"
+        time.sleep(0.5)
+
+    app.cli("pane", "key", "return", "--pane", pane_id)
+    wait_for(lambda: marker in dump(), timeout=30, message=f"marker {marker} after Return")
