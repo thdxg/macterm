@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -54,6 +55,34 @@ final class SidebarPresentationState {
         // it, and the pane that becomes focused asks for first responder on a
         // retry loop that can outlive this gesture. See the flag's own notes.
         FocusRestoration.isEditingInlineName = true
+    }
+
+    /// Apply a click on `item` to the selection, standing in for the List's
+    /// own handling of the clicks it never sees — a press landing on a row's
+    /// title is owned by that title's gesture (see `InlineRenameClickTarget`).
+    ///
+    /// Shift extends the range from `selectionAnchor` rather than adding the
+    /// one row: the selection drives the bulk "Close N Tabs" / "Remove N
+    /// Projects" actions, so inserting alone means clicking row 1 and
+    /// shift-clicking row 5 acts on 2 rows instead of 5. With no usable anchor
+    /// — nothing selected yet, or its row since closed — shift selects just
+    /// the clicked row, as AppKit does.
+    func selectRow(_ item: SidebarItem, modifiers: NSEvent.ModifierFlags) {
+        if modifiers.contains(.command) {
+            if selection.contains(item) {
+                selection.remove(item)
+            } else {
+                selection.insert(item)
+            }
+        } else if modifiers.contains(.shift),
+                  let anchor = selectionAnchor,
+                  anchor != item,
+                  let range = itemRange(from: anchor, to: item)
+        {
+            selection = Set(range)
+        } else {
+            selection = [item]
+        }
     }
 
     /// The inclusive run of visible rows between two items, in visual order —

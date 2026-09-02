@@ -930,6 +930,42 @@ struct SidebarContent: View {
     }
 }
 
+/// Makes a sidebar row's title open its inline rename on a double-click.
+///
+/// A title-level gesture owns the whole tap sequence, so the List row never
+/// sees a click that lands on the text — which is why selection has to be
+/// re-applied here rather than left to the List. Rename rides alongside as a
+/// simultaneous gesture so the first click still selects immediately.
+///
+/// The modifiers come off the event being handled, not the keyboard's live
+/// state whenever the gesture resolves: a Command released together with the
+/// mouse button would otherwise read as a plain click and collapse an
+/// in-progress multi-selection down to the clicked row.
+private struct InlineRenameClickTarget: ViewModifier {
+    let onSelect: (NSEvent.ModifierFlags) -> Void
+    let onBeginRename: () -> Void
+
+    private var modifiers: NSEvent.ModifierFlags {
+        (NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags)
+            .intersection(.deviceIndependentFlagsMask)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onTapGesture { onSelect(modifiers) }
+            .simultaneousGesture(TapGesture(count: 2).onEnded { onBeginRename() })
+    }
+}
+
+extension View {
+    func inlineRenameClickTarget(
+        onSelect: @escaping (NSEvent.ModifierFlags) -> Void,
+        onBeginRename: @escaping () -> Void
+    ) -> some View {
+        modifier(InlineRenameClickTarget(onSelect: onSelect, onBeginRename: onBeginRename))
+    }
+}
+
 private struct SidebarProjectRow: View {
     let project: Project
     let index: Int
@@ -1050,12 +1086,7 @@ private struct SidebarTabRow: View {
                 .onAppear { focused = true }
         } else {
             TabRowTitle(tab: tab)
-                // A title-level double-click gesture owns the tap sequence,
-                // so the List row never sees clicks landing on the text. Give
-                // the title the same selection path explicitly, while keeping
-                // rename simultaneous so the first click selects immediately.
-                .onTapGesture { select() }
-                .simultaneousGesture(TapGesture(count: 2).onEnded { beginRename() })
+                .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
         }
     }
 
@@ -1135,39 +1166,9 @@ private struct SidebarTabRow: View {
         appState.renamingTabID = nil
     }
 
-    /// Stand in for the List's own click handling, which never sees a press
-    /// that lands on the title (see `titleContent`).
-    ///
-    /// Shift has to extend the range between the anchor and this row, not just
-    /// add this row: the selection drives the bulk "Close N Tabs" / "Remove N
-    /// Projects" actions, so inserting one row means clicking 1 and
-    /// shift-clicking 5 closes 2 tabs instead of 5.
-    private func select() {
+    private func select(_ modifiers: NSEvent.ModifierFlags) {
         guard isInteractive else { return }
-        // The event being handled, not the keyboard's state whenever the
-        // gesture happens to resolve — a Command released with the mouse
-        // button would otherwise read as a plain click and collapse an
-        // in-progress multi-selection down to this one row.
-        let current = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
-        let modifiers = current.intersection(.deviceIndependentFlagsMask)
-        if modifiers.contains(.command) {
-            if presentation.selection.contains(selectionItem) {
-                presentation.selection.remove(selectionItem)
-            } else {
-                presentation.selection.insert(selectionItem)
-            }
-        } else if modifiers.contains(.shift),
-                  let anchor = presentation.selectionAnchor,
-                  anchor != selectionItem,
-                  let range = presentation.itemRange(from: anchor, to: selectionItem)
-        {
-            presentation.selection = Set(range)
-        } else {
-            // Includes a shift-click with no usable anchor (nothing selected
-            // yet, or the anchor's row has since gone): AppKit selects just the
-            // clicked row there too.
-            presentation.selection = [selectionItem]
-        }
+        presentation.selectRow(selectionItem, modifiers: modifiers)
     }
 
     private func commit() {
