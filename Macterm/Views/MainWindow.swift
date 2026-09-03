@@ -250,6 +250,10 @@ struct MainWindow: View {
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
+            // After the restore, never before: "is this a fresh install?" is
+            // only answerable once the snapshot is loaded, `pinned.yaml` is
+            // reconciled and a load failure is known (see FirstRunSeed).
+            appState.seedFirstRunIfNeeded(projectStore: projectStore)
         }
         .onContinuousHover(coordinateSpace: .local) { phase in
             handleSidebarPeekHover(phase)

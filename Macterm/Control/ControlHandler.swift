@@ -88,6 +88,7 @@ final class ControlHandler {
         case "session.kill": return try await sessionKill(args)
         case "layout.apply": return try layoutApply(args)
         case "layout.save": return try layoutSave(args)
+        case "tutor.render": return try tutorRender(args)
         default:
             throw ControlError(
                 code: .unknownCommand,
@@ -107,6 +108,23 @@ final class ControlHandler {
             pid: getpid(),
             activeProject: active?.name,
             activeProjectID: active?.id.uuidString
+        ))
+    }
+
+    /// Render a tutorial topic (`macterm tutor`). App-side because the text
+    /// carries the user's LIVE keybindings — see `Tutorial`.
+    private func tutorRender(_ args: ControlArgs) throws -> ControlData {
+        let raw = args.topic ?? Tutorial.Topic.project.rawValue
+        guard let topic = Tutorial.Topic(rawValue: raw) else {
+            throw ControlError(
+                code: .badRequest,
+                message: "unknown tutorial topic \"\(raw)\"",
+                action: "known topics: " + Tutorial.Topic.allCases.map(\.rawValue).joined(separator: ", ")
+            )
+        }
+        return ControlData(tutorial: ControlTutorial(
+            topic: topic.rawValue,
+            text: Tutorial.render(topic: topic, styled: args.styled ?? false)
         ))
     }
 

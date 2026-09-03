@@ -112,6 +112,14 @@ struct ControlArgs: Codable, Equatable {
     /// the only value a client ever sends is `false`, to leave the command on
     /// the prompt — so a caller that predates the flag keeps its behavior.
     var submit: Bool?
+    /// Tutorial topic for `tutor.render` (`project`, `pinned`). The strings
+    /// are `Tutorial.Topic`'s raw values, which also appear in the seeded
+    /// `run:` declarations.
+    var topic: String?
+    /// Whether the rendered tutorial may carry ANSI styling. The APP renders
+    /// the text but only the CLI can see whether its stdout is a tty, so the
+    /// verdict travels with the request.
+    var styled: Bool?
 
     init(
         project: String? = nil,
@@ -135,7 +143,9 @@ struct ControlArgs: Codable, Equatable {
         slot: Int? = nil,
         title: String? = nil,
         reset: Bool? = nil,
-        submit: Bool? = nil
+        submit: Bool? = nil,
+        topic: String? = nil,
+        styled: Bool? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -159,6 +169,8 @@ struct ControlArgs: Codable, Equatable {
         self.title = title
         self.reset = reset
         self.submit = submit
+        self.topic = topic
+        self.styled = styled
     }
 }
 
@@ -215,6 +227,8 @@ struct ControlData: Codable {
     var inspect: ControlPaneInspect?
     /// Terminal cell text (`pane.dump`).
     var dump: ControlPaneDump?
+    /// Rendered tutorial text (`tutor.render`).
+    var tutorial: ControlTutorial?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -223,7 +237,8 @@ struct ControlData: Codable {
         panes: [ControlPaneInfo]? = nil,
         sessions: [ControlSessionInfo]? = nil,
         inspect: ControlPaneInspect? = nil,
-        dump: ControlPaneDump? = nil
+        dump: ControlPaneDump? = nil,
+        tutorial: ControlTutorial? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -232,6 +247,7 @@ struct ControlData: Codable {
         self.sessions = sessions
         self.inspect = inspect
         self.dump = dump
+        self.tutorial = tutorial
     }
 }
 
@@ -342,6 +358,14 @@ struct ControlPaneDump: Codable, Equatable {
     var scrollback: Bool
     /// UTF-8 byte length of `text` (handy for scripts before they slurp it).
     var bytes: Int
+    var text: String
+}
+
+/// One rendered tutorial (`tutor.render`). The text is built app-side from
+/// the user's LIVE keybindings, which is why this is a socket verb at all —
+/// see `Tutorial`.
+struct ControlTutorial: Codable, Equatable {
+    var topic: String
     var text: String
 }
 

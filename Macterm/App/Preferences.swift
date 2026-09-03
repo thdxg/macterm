@@ -356,6 +356,17 @@ final class Preferences {
         return fresh
     }
 
+    /// Whether the first-run seed (`FirstRunSeed`) has already had its say.
+    /// Set on the first launch that can answer the question — whether or not
+    /// it actually seeded — so an existing install is never examined twice
+    /// and a user who removes every project doesn't get a Home project back.
+    /// Like `installationID`: nothing in the UI reads it, so it's a
+    /// read-through rather than `@Observable` state.
+    var hasSeededFirstRun: Bool {
+        get { defaults.bool(forKey: Keys.hasSeededFirstRun) }
+        set { defaults.set(newValue, forKey: Keys.hasSeededFirstRun) }
+    }
+
     /// Slide the hidden sidebar out while the pointer sits at the window's
     /// leading edge, and back in when it leaves (`MainWindow`'s hover peek).
     var peekSidebarWhenHidden: Bool {
@@ -918,6 +929,7 @@ final class Preferences {
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"
         static let installationID = "macterm.installationID"
+        static let hasSeededFirstRun = "macterm.firstRun.seeded"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
         static let sidebarWidth = "macterm.sidebar.width"
         static let updateChannel = "macterm.updates.channel"

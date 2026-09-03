@@ -259,6 +259,12 @@ final class AppState {
     var isTabCycling: Bool { !tabCycleOrder.isEmpty }
 
     private let workspaceStore: WorkspaceStore
+
+    /// Whether the snapshot came back unreadable — the store stays private,
+    /// but its fail-closed verdict is needed outside this file (the first-run
+    /// seed must not mistake an unread snapshot for a fresh install).
+    var snapshotLoadFailed: Bool { workspaceStore.loadFailed }
+
     /// Per-pane attempt gating for the reconnect sweep (#281). Not observed —
     /// pure bookkeeping, no UI reads it.
     @ObservationIgnored
