@@ -8,6 +8,11 @@ import UniformTypeIdentifiers
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
+/// Pulls the project action through the row's protective trailing inset so
+/// its symbol sits the same distance from the sidebar edge as the disclosure
+/// chevron does from the leading edge.
+private let projectActionTrailingOffset: CGFloat = rowTrailingInset + 2
+
 @MainActor
 enum SidebarLayoutMetrics {
     static let topContentMargin: CGFloat = 4
@@ -198,6 +203,8 @@ struct SidebarContent: View {
     private var showNewProjectButton = true
     @Bindable
     private var presentation: SidebarPresentationState
+    @State
+    private var hoveredProjectID: UUID?
     private let isInteractive: Bool
     private let paintsFallbackFooterBackground: Bool
     private let forcesScrollEdgeEffects: Bool
@@ -539,22 +546,51 @@ struct SidebarContent: View {
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
-        SidebarProjectRow(
-            project: project,
-            index: projectIndex + 1,
-            presentation: presentation,
-            isInteractive: isInteractive
-        ) {
-            projectStore.rename(id: project.id, to: $0)
+        let isNewTabButtonVisible = isInteractive && hoveredProjectID == project.id
+        return HStack(spacing: 6) {
+            SidebarProjectRow(
+                project: project,
+                index: projectIndex + 1,
+                presentation: presentation,
+                isInteractive: isInteractive
+            ) {
+                projectStore.rename(id: project.id, to: $0)
+            }
+            Spacer(minLength: 0)
+            Button {
+                createTab(in: project)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.callout.weight(.medium))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .offset(x: projectActionTrailingOffset)
+            .opacity(isNewTabButtonVisible ? 1 : 0)
+            .allowsHitTesting(isNewTabButtonVisible)
+            .accessibilityHidden(!isNewTabButtonVisible)
+            .help("New Tab")
+            .accessibilityLabel("New Tab in \(project.name)")
         }
         .padding(.trailing, rowTrailingInset)
         // Stretch to the full row so the drag grab area (and the drop band in
         // the background below) covers the whole row, not just the label's
         // intrinsic width — same treatment as the tab rows.
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .tag(SidebarItem.project(project.id))
         // Drag the header to reorder projects (replaces the removed `.onMove`).
         .draggable(MovableProject(projectID: project.id))
+        .onHover { isHovering in
+            guard isInteractive else { return }
+            if isHovering {
+                hoveredProjectID = project.id
+            } else if hoveredProjectID == project.id {
+                hoveredProjectID = nil
+            }
+        }
         // ONE drop destination for every payload (see `SidebarDropItem` for
         // why stacking two is a landmine). A TAB dropped here appends to this
         // project — the only drop path for a collapsed or empty project,
@@ -725,11 +761,7 @@ struct SidebarContent: View {
     /// single right-click behaves exactly as before this feature.
     @ViewBuilder
     private func projectMenu(_ project: Project) -> some View {
-        Button("New Tab") {
-            appState.selectProject(project)
-            appState.createTab(projectID: project.id, projectPath: project.path)
-            presentation.expandedProjects.insert(project.id)
-        }
+        Button("New Tab") { createTab(in: project) }
         Button("Copy Path") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(project.path, forType: .string)
@@ -754,6 +786,12 @@ struct SidebarContent: View {
         Button("Remove Project", role: .destructive) {
             appState.requestRemoveProject(project.id) { removeProject(project) }
         }
+    }
+
+    private func createTab(in project: Project) {
+        appState.selectProject(project)
+        appState.createTab(projectID: project.id, projectPath: project.path)
+        presentation.expandedProjects.insert(project.id)
     }
 
     /// A pinned row's menu — two exits with distinct semantics: Unpin (a
