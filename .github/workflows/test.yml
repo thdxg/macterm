@@ -31,6 +31,8 @@ jobs:
               - "scripts/**"
               - "e2e/**"
               - ".github/workflows/test.yml"
+              # The Xcode pin lives here; a bump must rebuild what it governs.
+              - ".github/actions/select-xcode/**"
               - "Macterm/Info.plist"
               - "Macterm/Macterm.entitlements"
 
@@ -44,6 +46,13 @@ jobs:
         uses: actions/checkout@v7
 
       - uses: jdx/mise-action@v4.3.0
+
+      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # currently ships, which is how macterm#340's type-check failure stayed
+      # invisible here. See the action for the full rationale.
+      - name: Select Xcode
+        id: xcode
+        uses: ./.github/actions/select-xcode
 
       # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
       - name: Cache epoch
@@ -124,15 +133,24 @@ jobs:
       # hashing the per-slice static archives would add hundreds of MB of
       # hashing to every job to catch a stale *relink* — which xcodebuild
       # already handles, tracking the archives as link inputs.
+
+      # The Xcode version leads the key for the same reason the framework hash
+      # is in it: .swiftmodule/.pcm products record the compiler that wrote
+      # them, so restoring products built by a different Swift across a pin
+      # bump is the "module file was built by a different version" flavour of
+      # the incident above. The pin makes that version knowable, and having it
+      # in the key is what keeps a bump from silently inheriting the old
+      # toolchain's output. Bumping it starts one cold build, which is fine —
+      # a cold cache only costs time; a stale one breaks the build.
       - name: Restore DerivedData (Debug)
         id: derived
         uses: actions/cache/restore@v6
         with:
           path: build/DerivedData
-          key: derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          key: derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
           restore-keys: |
-            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
-            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
+            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
 
       - name: Test
         run: mise run test --verbose
@@ -166,6 +184,13 @@ jobs:
         uses: actions/checkout@v7
 
       - uses: jdx/mise-action@v4.3.0
+
+      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # currently ships, which is how macterm#340's type-check failure stayed
+      # invisible here. See the action for the full rationale.
+      - name: Select Xcode
+        id: xcode
+        uses: ./.github/actions/select-xcode
 
       # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
       - name: Cache epoch
@@ -201,10 +226,10 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build/DerivedData
-          key: derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          key: derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
           restore-keys: |
-            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
-            derived-debug-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
+            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-debug-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
 
       - name: End-to-end tests
         run: mise run e2e --verbose

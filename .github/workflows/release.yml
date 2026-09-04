@@ -79,6 +79,14 @@ jobs:
 
       - uses: jdx/mise-action@v4.3.0
 
+      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # currently ships, which is how macterm#340's type-check failure stayed
+      # invisible here. See the action for the full rationale. Only this job
+      # compiles — `release` and `bump-cask` never invoke xcodebuild.
+      - name: Select Xcode
+        id: xcode
+        uses: ./.github/actions/select-xcode
+
       # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
       - name: Cache epoch
         id: epoch

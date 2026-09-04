@@ -40,6 +40,8 @@ jobs:
               - "mise.toml"
               - "scripts/**"
               - ".github/workflows/benchmark.yml"
+              # The Xcode pin lives here; a bump must re-measure against it.
+              - ".github/actions/select-xcode/**"
 
   # Fetch the latest main baseline in parallel with the build+sample job. It's
   # pure GitHub API + a download with no dependency on the build, so keeping it
@@ -113,6 +115,13 @@ jobs:
 
       - uses: jdx/mise-action@v4.3.0
 
+      # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
+      # currently ships, which is how macterm#340's type-check failure stayed
+      # invisible here. See the action for the full rationale.
+      - name: Select Xcode
+        id: xcode
+        uses: ./.github/actions/select-xcode
+
       # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
       - name: Cache epoch
         id: epoch
@@ -161,10 +170,10 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build/DerivedData
-          key: derived-release-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
+          key: derived-release-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-${{ github.run_id }}
           restore-keys: |
-            derived-release-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
-            derived-release-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
+            derived-release-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-${{ hashFiles('**/*.swift', 'project.yml') }}-
+            derived-release-xcode${{ steps.xcode.outputs.version }}-${{ hashFiles('GhosttyKit.xcframework/*/Headers/ghostty.h') }}-
 
       - name: Build and benchmark
         run: mise run bench --verbose

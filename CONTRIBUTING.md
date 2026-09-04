@@ -6,6 +6,8 @@ Thanks for your interest in contributing! Macterm is a macOS terminal emulator b
 
 Building requires macOS 26+ and a full install of Xcode 26 (the Command Line Tools alone aren't enough — `xcodebuild` needs the Xcode app to build the macOS app target, and the code compiles against macOS 26 SDK APIs behind `#available` checks). The shipped app itself runs on macOS 14+.
 
+CI compiles on one pinned Xcode (`.github/actions/select-xcode`), so a green run names a toolchain rather than whatever the runner image defaulted to that week. Any Xcode 26 is still fine locally — but note that CI therefore won't catch a failure specific to an older 26.x than the pin, which is how [#340](https://github.com/thdxg/macterm/pull/340) reached main.
+
 ```bash
 mise install
 ```
