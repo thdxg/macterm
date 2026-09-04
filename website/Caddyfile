@@ -39,9 +39,15 @@
 
 	# Nothing here is content-hashed, so the pages themselves revalidate every
 	# time and only the supporting files get a real TTL.
-	@media path /assets/*
+	#
+	# /img/* is the build's generated image derivatives (see build-images.mjs)
+	# and must be listed everywhere /assets/* is: it holds the responsive
+	# screenshots, the favicons, and the OG card that every page references, so
+	# leaving it to the @pages rule below would put `max-age=0` on the images
+	# the whole site is built out of and revalidate each one on every visit.
+	@media path /assets/* /img/*
 	@static path *.css *.js *.xml *.txt
-	@pages not path /assets/* *.css *.js *.xml *.txt
+	@pages not path /assets/* /img/* *.css *.js *.xml *.txt
 	header @media Cache-Control "public, max-age=86400"
 	header @static Cache-Control "public, max-age=3600"
 	header @pages Cache-Control "public, max-age=0, must-revalidate"
