@@ -309,6 +309,13 @@ final class Preferences {
         didSet { defaults.set(autoNameTabs, forKey: Keys.autoNameTabs) }
     }
 
+    /// Give each new project a color tag. Off by default, and consulted at
+    /// creation only — flipping it neither tags existing projects nor clears
+    /// tags already set.
+    var autoAssignProjectColors: Bool {
+        didSet { defaults.set(autoAssignProjectColors, forKey: Keys.autoAssignProjectColors) }
+    }
+
     var showNewProjectButton: Bool {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
     }
@@ -796,6 +803,7 @@ final class Preferences {
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
         showSpinnerOverAgentIcons = defaults.object(forKey: Keys.showSpinnerOverAgentIcons) as? Bool ?? true
         autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
+        autoAssignProjectColors = defaults.object(forKey: Keys.autoAssignProjectColors) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         reconnectRemotePanes = defaults.object(forKey: Keys.reconnectRemotePanes) as? Bool ?? true
@@ -925,6 +933,7 @@ final class Preferences {
         static let showTabStatusIndicator = "macterm.sidebar.showTabStatusIndicator"
         static let showSpinnerOverAgentIcons = "macterm.sidebar.showSpinnerOverAgentIcons"
         static let autoNameTabs = "macterm.tabs.autoName"
+        static let autoAssignProjectColors = "macterm.projects.autoAssignColors"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"

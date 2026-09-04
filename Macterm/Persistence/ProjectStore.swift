@@ -12,6 +12,10 @@ final class ProjectStore {
     /// must never let the next mutation wipe the user's entire project list.
     @ObservationIgnored
     private var loadFailed = false
+    /// Whether `create` tags a new project. Injectable so tests don't mutate
+    /// the shared preference — swift-testing runs suites in parallel.
+    @ObservationIgnored
+    var autoAssignsColors: () -> Bool = { Preferences.shared.autoAssignProjectColors }
 
     init(fileURL: URL = FileStorage.fileURL(filename: "projects.json")) {
         self.fileURL = fileURL
@@ -42,7 +46,10 @@ final class ProjectStore {
     /// user-initiated creation (folder picker, remote sheet, `project create`).
     @discardableResult
     func create(name: String, path: String, zmxPath: String? = nil) -> Project {
-        let project = Project(name: name, path: path, sortOrder: projects.count, zmxPath: zmxPath)
+        var project = Project(name: name, path: path, sortOrder: projects.count, zmxPath: zmxPath)
+        if autoAssignsColors() {
+            project.colorName = ProjectColor.leastUsed(among: projects.map(\.color)).rawValue
+        }
         add(project)
         return project
     }
@@ -62,6 +69,14 @@ final class ProjectStore {
     func rename(id: UUID, to newName: String) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         projects[index].name = newName
+        save()
+    }
+
+    /// Set (or clear, with nil) the project's color tag.
+    func setColor(id: UUID, to color: ProjectColor?) {
+        guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
+        guard projects[index].colorName != color?.rawValue else { return }
+        projects[index].colorName = color?.rawValue
         save()
     }
 

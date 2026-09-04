@@ -26,6 +26,42 @@ struct ProjectStoreTests {
     }
 
     @Test
+    func create_tags_a_new_project_only_when_auto_assign_is_on() {
+        let store = makeStore()
+        // Default (preference off): a new project carries no tag.
+        #expect(store.create(name: "plain", path: "/tmp/a").color == nil)
+
+        store.autoAssignsColors = { true }
+        let first = store.create(name: "auto", path: "/tmp/b")
+        let second = store.create(name: "auto2", path: "/tmp/c")
+
+        #expect(first.color != nil)
+        #expect(second.color != nil)
+        // Distinct: the second sees the first's tag as already used.
+        #expect(first.color != second.color)
+        // The untagged one stays untagged — the setting is read at creation
+        // only, never applied retroactively.
+        #expect(store.projects.first?.color == nil)
+    }
+
+    @Test
+    func set_color_tags_untags_and_persists() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-project-color-\(UUID().uuidString).json")
+        let store = makeStore(fileURL: url)
+        let project = store.create(name: "tagged", path: "/tmp")
+
+        store.setColor(id: project.id, to: .blue)
+        #expect(store.projects.first?.color == .blue)
+        // Written through, not just held in memory: a reopened store sees it.
+        #expect(ProjectStore(fileURL: url).projects.first?.color == .blue)
+
+        store.setColor(id: project.id, to: nil)
+        #expect(store.projects.first?.color == nil)
+        #expect(ProjectStore(fileURL: url).projects.first?.colorName == nil)
+    }
+
+    @Test
     func create_always_appends_even_for_a_matching_path() {
         // Removing the one-project-per-directory constraint: `create` never
         // dedups, so the same directory can back several independent projects.
