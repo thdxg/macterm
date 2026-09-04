@@ -6,7 +6,6 @@ group: Getting started
 description: Macterm — a native macOS terminal with a vertical project sidebar and persistent multiplexing, built on libghostty.
 -->
 
-<p class="eyebrow">Documentation</p>
 
 # Macterm
 

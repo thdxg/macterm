@@ -26,17 +26,6 @@ xattr -cr /Applications/Macterm.app
 
 Sparkle handles updates from there — Macterm checks daily in the background and verifies an EdDSA signature on each update, so you won't need `xattr` again.
 
-## First launch
-
-A fresh install doesn't open on an empty window. Macterm seeds two things, once, and only when there is nothing of yours to seed over:
-
-- a **project on your home directory**, with one tab — named after the directory, exactly like a project you'd add yourself;
-- a **pinned tab** called *Welcome*, in the row above the projects.
-
-Each pane runs [`macterm tutor`](/docs/cli), so the tour arrives as ordinary terminal output: read it, scroll it, `clear` it, or re-run it later with `macterm tutor project` / `macterm tutor pinned`. The keyboard shortcuts it lists are read from your own [keymap](/docs/configuration), not from a hardcoded table.
-
-Neither is special afterwards. The project is a normal project (remove it from the sidebar if you don't want it), and the pinned row unpins like any other. Macterm remembers that it has seeded, so removing them is permanent — and an existing install being upgraded is never seeded at all.
-
 ## Update channels
 
 Set **Update channel** in Settings → Updates. The channel governs what any check can see, so it applies equally to the daily background check and to **Check for Updates…**.
