@@ -9,6 +9,30 @@ import Testing
 struct SurfaceScrollGeometryTests {
     private let cell: CGFloat = 20
 
+    // MARK: - scroll-to-bottom visibility
+
+    @Test
+    func scroll_to_bottom_is_hidden_at_live_edge() {
+        #expect(!SurfaceScrollView.shouldShowScrollToBottom(total: 100, offset: 76, len: 24))
+    }
+
+    @Test
+    func scroll_to_bottom_is_visible_above_live_edge() {
+        #expect(SurfaceScrollView.shouldShowScrollToBottom(total: 100, offset: 75, len: 24))
+        #expect(SurfaceScrollView.shouldShowScrollToBottom(total: 100, offset: 0, len: 24))
+    }
+
+    @Test
+    func scroll_to_bottom_is_hidden_without_scrollback() {
+        #expect(!SurfaceScrollView.shouldShowScrollToBottom(total: 24, offset: 0, len: 24))
+        #expect(!SurfaceScrollView.shouldShowScrollToBottom(total: 0, offset: 0, len: 0))
+    }
+
+    @Test
+    func scroll_to_bottom_handles_degenerate_geometry() {
+        #expect(!SurfaceScrollView.shouldShowScrollToBottom(total: 24, offset: 10, len: 30))
+    }
+
     // MARK: - documentHeight
 
     @Test

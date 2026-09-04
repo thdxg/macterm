@@ -57,6 +57,36 @@ final class SurfaceScrollView: NSScrollView {
     /// Search-match tick marks drawn over the scroller track (see #176).
     private let searchTicks = SearchTickOverlay()
 
+    /// Native, transient affordance for returning to the live terminal output.
+    /// It floats beside (never inside) AppKit's scrollbar track.
+    private lazy var scrollToBottomButton: NSButton = {
+        guard let image = NSImage(
+            systemSymbolName: "arrow.down",
+            accessibilityDescription: "Scroll to Bottom"
+        )
+        else {
+            preconditionFailure("Missing system symbol: arrow.down")
+        }
+        let symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        let button = NSButton(
+            image: image.withSymbolConfiguration(symbolConfiguration) ?? image,
+            target: self,
+            action: #selector(scrollToBottom(_:))
+        )
+        button.bezelStyle = .roundRect
+        button.controlSize = .small
+        button.imagePosition = .imageOnly
+        button.contentTintColor = .controlAccentColor
+        button.toolTip = "Scroll to Bottom"
+        button.setAccessibilityLabel("Scroll to Bottom")
+        button.refusesFirstResponder = true
+        button.alphaValue = 0
+        button.isHidden = true
+        return button
+    }()
+
+    private var isScrollToBottomVisible = false
+
     /// The needle the search core is currently matching (last one actually
     /// sent, not the live field text) and the rows/selection recovered for it.
     private var searchNeedle = ""
@@ -168,6 +198,7 @@ final class SurfaceScrollView: NSScrollView {
         spacer.addSubview(surfaceView)
         documentView = spacer
         addSubview(searchTicks)
+        addSubview(scrollToBottomButton, positioned: .above, relativeTo: nil)
 
         wireObservers()
         surfaceView.onScrollbarUpdate = { [weak self] total, offset, len in
@@ -243,6 +274,21 @@ final class SurfaceScrollView: NSScrollView {
         if let scroller = verticalScroller {
             searchTicks.frame = scroller.frame
         }
+        layoutScrollToBottomButton()
+    }
+
+    private func layoutScrollToBottomButton() {
+        let size = NSSize(width: 34, height: 26)
+        let gap: CGFloat = 8
+        let edgeInset: CGFloat = 12
+        let scrollerLeadingEdge = verticalScroller.flatMap { $0.frame.width > 0 ? $0.frame.minX : nil }
+        let trailingEdge = scrollerLeadingEdge ?? (bounds.maxX - edgeInset)
+        scrollToBottomButton.frame = NSRect(
+            x: trailingEdge - gap - size.width,
+            y: bounds.maxY - edgeInset - size.height,
+            width: size.width,
+            height: size.height
+        )
     }
 
     /// Pin the surface to fill the currently visible rect of the document.
@@ -287,6 +333,7 @@ final class SurfaceScrollView: NSScrollView {
         self.offset = offset
         self.len = len
         synchronize()
+        updateScrollToBottomButton()
         // Tick fractions are row/total, so a scrollback growth shifts them.
         if totalChanged, !searchMatchRows.isEmpty {
             pushSearchTicks()
@@ -411,6 +458,49 @@ final class SurfaceScrollView: NSScrollView {
         ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
+    @objc
+    private func scrollToBottom(_: NSButton) {
+        guard let surface = surfaceView.surface else { return }
+        let bottom = total > len ? total - len : 0
+        offset = bottom
+        lastSentRow = Int(min(bottom, UInt64(Int.max)))
+        synchronize()
+        updateScrollToBottomButton()
+
+        let action = "scroll_to_bottom"
+        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+    }
+
+    private func updateScrollToBottomButton(animated: Bool = true) {
+        let shouldShow = Self.shouldShowScrollToBottom(total: total, offset: offset, len: len)
+        guard shouldShow != isScrollToBottomVisible else { return }
+        isScrollToBottomVisible = shouldShow
+        scrollToBottomButton.isEnabled = shouldShow
+
+        let shouldAnimate = animated
+            && window != nil
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if !shouldAnimate {
+            scrollToBottomButton.alphaValue = shouldShow ? 1 : 0
+            scrollToBottomButton.isHidden = !shouldShow
+            return
+        }
+
+        if shouldShow {
+            scrollToBottomButton.isHidden = false
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            scrollToBottomButton.animator().alphaValue = shouldShow ? 1 : 0
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !shouldShow, !self.isScrollToBottomVisible else { return }
+                self.scrollToBottomButton.isHidden = true
+            }
+        }
+    }
+
     // MARK: - Legacy scroller discoverability
 
     private var scrollerTracking: NSTrackingArea?
@@ -508,6 +598,12 @@ private final class ITermScrollAccumulator {
 // MARK: - Pure geometry
 
 extension SurfaceScrollView {
+    /// Whether live output has moved below the visible terminal viewport.
+    /// Subtraction avoids overflow when libghostty reports large row counts.
+    nonisolated static func shouldShowScrollToBottom(total: UInt64, offset: UInt64, len: UInt64) -> Bool {
+        total > len && offset < total - len
+    }
+
     /// Height of the blank document view (points). At least the viewport height
     /// so there's nothing to scroll when scrollback is empty.
     nonisolated static func documentHeight(total: UInt64, cellHeight: CGFloat, viewportHeight: CGFloat) -> CGFloat {
