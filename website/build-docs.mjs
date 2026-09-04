@@ -18,8 +18,8 @@
 //   -->
 //
 // Markdown conventions:
-//   ```lang title="path"     fenced code -> dark code block; title="" adds a
-//                            filename caption bar.
+//   ```lang title="path"     fenced code -> the shared .cmd block; title=""
+//                            adds a filename caption bar.
 //   > blockquote             the left-ruled aside style.
 
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
@@ -129,13 +129,17 @@ function buildRenderer() {
           ? highlightYaml(text)
           : escapeHtml(text);
 
+      // Shares the .cmd component with the landing page's install commands —
+      // see the "Command blocks" section in src/tailwind.css. With a title the
+      // copy button sits in the caption row; without one it floats over the
+      // code, which is why the caption comes first either way.
       const caption = title
-        ? `<div class="code-block-caption"><span>${escapeHtml(
+        ? `<div class="cmd-caption"><span>${escapeHtml(
             title
-          )}</span><button type="button" data-copy aria-label="Copy" class="code-block-copy">${COPY_SVG}</button></div>`
-        : `<button type="button" data-copy aria-label="Copy" class="code-block-copy">${COPY_SVG}</button>`;
+          )}</span><button type="button" data-copy aria-label="Copy" class="cmd-copy">${COPY_SVG}</button></div>`
+        : `<button type="button" data-copy aria-label="Copy" class="cmd-copy">${COPY_SVG}</button>`;
 
-      return `<div data-block class="code-block">${caption}<pre><code>${body}</code></pre></div>`;
+      return `<div data-block class="cmd">${caption}<pre><code>${body}</code></pre></div>`;
     },
   };
 }
@@ -189,6 +193,25 @@ function renderSidebar(pages, currentSlug) {
     .join("\n");
 }
 
+// ---- Prev / next ----------------------------------------------------------
+// The footer pair at the bottom of every docs page. Order is the pages array's
+// own order — the numeric filename prefix — so it always matches the sidebar a
+// reader just used, and the ends of the run correctly get only one link.
+// Both are plain <a>s, so they are real internal links a crawler follows, not
+// a JS-driven widget.
+function renderPageNav(pages, index) {
+  const prev = pages[index - 1];
+  const next = pages[index + 1];
+  if (!prev && !next) return "";
+  const link = (page, label) =>
+    `<a href="${urlForSlug(page.meta.slug)}">${escapeHtml(label)}</a>`;
+  // The empty <span> holds the grid slot when there is no previous page, so a
+  // lone "next" still sits right rather than sliding left.
+  const left = prev ? link(prev, `\u2190 ${prev.meta.nav}`) : "<span></span>";
+  const right = next ? link(next, `${next.meta.nav} \u2192`) : "<span></span>";
+  return `      <nav class="docs-pagenav">${left}${right}</nav>`;
+}
+
 function main() {
   const files = readdirSync(PAGES_DIR)
     .filter((f) => f.endsWith(".md"))
@@ -208,7 +231,7 @@ function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
 
-  for (const page of pages) {
+  for (const [index, page] of pages.entries()) {
     const content = marked.parse(page.body);
     const sidebar = renderSidebar(pages, page.meta.slug);
     const title =
@@ -221,23 +244,53 @@ function main() {
     const canonical = SITE_URL + urlForSlug(page.meta.slug);
 
     // TechArticle + breadcrumb, so search engines understand the docs tree.
+    //
+    // The SoftwareApplication carries the same @id the landing page's own
+    // JSON-LD uses, so every docs page reinforces one entity rather than
+    // declaring a new nameless app per page — which is what tells Google that
+    // "Macterm" here is this app and not the unrelated 1990s MacTerm/MacTelnet
+    // that currently owns the brand query.
     const jsonld = JSON.stringify({
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "TechArticle",
           headline: page.meta.title,
+          name: page.meta.title,
           description,
           url: canonical,
           inLanguage: "en",
-          isPartOf: { "@type": "WebSite", name: "Macterm", url: SITE_URL + "/" },
-          about: { "@type": "SoftwareApplication", name: "Macterm" },
+          image: SITE_URL + "/img/og.png",
+          isPartOf: {
+            "@type": "WebSite",
+            "@id": SITE_URL + "/#website",
+            name: "Macterm",
+            url: SITE_URL + "/",
+          },
+          about: {
+            "@type": "SoftwareApplication",
+            "@id": SITE_URL + "/#app",
+            name: "Macterm",
+            applicationCategory: "DeveloperApplication",
+            operatingSystem: "macOS 14.0 or later",
+            sameAs: ["https://github.com/thdxg/macterm"],
+          },
         },
         {
           "@type": "BreadcrumbList",
           itemListElement: [
-            { "@type": "ListItem", position: 1, name: "Docs", item: SITE_URL + "/docs/" },
-            { "@type": "ListItem", position: 2, name: page.meta.title, item: canonical },
+            { "@type": "ListItem", position: 1, name: "Macterm", item: SITE_URL + "/" },
+            { "@type": "ListItem", position: 2, name: "Docs", item: SITE_URL + "/docs/" },
+            ...(page.meta.slug === "index"
+              ? []
+              : [
+                  {
+                    "@type": "ListItem",
+                    position: 3,
+                    name: page.meta.title,
+                    item: canonical,
+                  },
+                ]),
           ],
         },
       ],
@@ -250,9 +303,11 @@ function main() {
       .replaceAll("{{DESCRIPTION}}", () => escapeHtml(description))
       .replaceAll("{{CANONICAL}}", () => canonical)
       .replaceAll("{{SITE_URL}}", () => SITE_URL)
+      .replaceAll("{{GROUP}}", () => escapeHtml(page.meta.group))
       .replace("{{JSONLD}}", () => jsonld)
       .replace("<!-- SIDEBAR -->", () => sidebar)
-      .replace("<!-- CONTENT -->", () => content);
+      .replace("<!-- CONTENT -->", () => content)
+      .replace("<!-- PAGENAV -->", () => renderPageNav(pages, index));
 
     writeFileSync(join(OUT_DIR, `${page.meta.slug}.html`), out);
   }
@@ -265,21 +320,54 @@ function main() {
 }
 
 // Emit sitemap.xml (landing + every docs page) and robots.txt into public/.
+//
+// Two things deliberately absent:
+//
+// `changefreq` — Google has said for years that it ignores the element
+// outright, so emitting `weekly` on every URL was pure noise.
+//
+// `lastmod` — there is no honest value available here. Source mtimes are set
+// by `git checkout`, and the Docker build copies them from a fresh clone, so
+// every page would claim to have changed on every deploy. Google discounts a
+// lastmod that behaves that way, and a discounted lastmod is worth less than
+// none: it costs the signal on the pages that genuinely did change. Emitting
+// it properly needs a per-page commit date, which means git history inside the
+// build stage — the Dockerfile copies only website/ and assets/.
+//
+// `priority` is likewise advisory-at-best, but unlike the other two it is
+// cheap, stable, and honest: it says the landing page and docs index matter
+// more than page 9 of the docs, which is true and does not change per build.
 function writeSitemapAndRobots(pages) {
-  const urls = [SITE_URL + "/", ...pages.map((p) => SITE_URL + urlForSlug(p.meta.slug))];
+  const entries = [
+    { url: SITE_URL + "/", priority: "1.0" },
+    ...pages.map((p) => ({
+      url: SITE_URL + urlForSlug(p.meta.slug),
+      priority: p.meta.slug === "index" ? "0.9" : "0.7",
+    })),
+  ];
+
   const sitemap =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    urls
+    entries
       .map(
-        (u) =>
-          `  <url>\n    <loc>${u}</loc>\n    <changefreq>weekly</changefreq>\n  </url>`
+        (e) =>
+          `  <url>\n    <loc>${e.url}</loc>\n    <priority>${e.priority}</priority>\n  </url>`
       )
       .join("\n") +
     `\n</urlset>\n`;
   writeFileSync(join(PUBLIC_DIR, "sitemap.xml"), sitemap);
 
-  const robots = `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`;
+  // Everything is crawlable, /img/ included — those derivatives are what the
+  // pages actually reference now, so blocking them would hide every screenshot
+  // on the site from image search and break the OG card's preview fetch.
+  const robots = [
+    "User-agent: *",
+    "Allow: /",
+    "",
+    `Sitemap: ${SITE_URL}/sitemap.xml`,
+    "",
+  ].join("\n");
   writeFileSync(join(PUBLIC_DIR, "robots.txt"), robots);
 }
 

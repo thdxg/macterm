@@ -8,50 +8,21 @@
 @source "../build-docs.mjs";
 
 /* ---------------------------------------------------------------------------
-   Macterm site design tokens — from the Claude Design redesign handoff.
-   Warm cream canvas, near-black ink, JetBrains Mono for code/meta.
+   Macterm site design tokens. The landing page and the docs share one dark
+   "Classical" system — Rosé Pine ink on a warm-neutral ground, Cormorant
+   Garamond over Lora, JetBrains Mono for code. Only the fonts live here; the
+   colours are scoped to `.landing` below, which both pages set on <body>.
 --------------------------------------------------------------------------- */
 @theme {
-  /* Fonts. Helvetica Neue system stack for UI; JetBrains Mono for code/meta. */
-  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-
-  /* Surfaces */
-  --color-canvas: #f7f5f0; /* page background */
-  /* Light code-block surface — the same warm translucent fill as the landing
-     install pill, so all command/code surfaces match. */
-  --color-code: rgba(23, 21, 15, 0.055);
-
-  /* Ink */
-  --color-ink: #17150f; /* primary text, buttons */
-  --color-body: #4a4539; /* body copy */
-  --color-lede: #3a362d; /* hero lede */
-  --color-muted: #6b6558; /* footer / blockquote */
-  --color-sidebar: #77715f; /* docs sidebar inactive link */
-  --color-label: #a39c8b; /* eyebrow / section labels */
-  --color-meta: #938b7b; /* feature numbers / counts */
-
-  /* Chips & inline code */
-  --color-chip: #e6e0d3; /* inline code / kbd fill */
-  --color-codetext: #17150f; /* code text on the light code surface */
-
-  /* Code-block chrome (light surface) */
-  --color-code-caption: #6b6558; /* filename label */
-  --color-code-btn: #6b6558; /* copy-button glyph */
-
-  /* Syntax highlighting (YAML sample) — darker tones for the light surface. */
-  --color-syn-key: #6b6558;
-  --color-syn-str: #4a4539;
-  --color-syn-val: #77715f;
-  --color-syn-dash: #938b7b;
-  --color-syn-comment: #a39c8b;
+  /* Cormorant Garamond sets display and headings, Lora sets body copy. */
+  --font-display: "Cormorant Garamond", ui-serif, Georgia, serif;
+  --font-serif: "Lora", ui-serif, Georgia, serif;
 }
 
 /* Global chrome that isn't a per-element utility. */
 @layer base {
   :root {
-    /* Shared horizontal rhythm so the nav, page shell, and footer line up
-       across the landing and docs pages. */
     --site-gutter: clamp(20px, 4vw, 40px);
   }
 
@@ -64,397 +35,782 @@
   }
 
   body {
-    background: var(--color-canvas);
-    color: var(--color-ink);
-    /* Sticky footer: lay the page out as a column so the footer can be pushed
-       to the bottom of the viewport on short pages (see .site-footer). Pairs
-       with the min-h-screen utility already on <body>. */
+    background: #19191a;
+    color: #e0def4;
+    /* Lay the page out as a column so the landing footer can be pushed to the
+       bottom of the viewport on short pages. */
     display: flex;
     flex-direction: column;
-  }
-
-  ::selection {
-    background: var(--color-ink);
-    color: var(--color-canvas);
   }
 }
 
 /* Stateful bits toggled by site.js — cleaner as component classes than as a
    pile of inline utilities driven from JS. */
 @layer components {
-  .site-nav {
-    /* Sticky nav: transparent at rest, frosted once scrolled. */
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px var(--site-gutter);
-    background: rgba(247, 245, 240, 0);
-    transition:
-      background 0.3s ease,
-      box-shadow 0.3s ease,
-      backdrop-filter 0.3s ease;
+  /* ══ Landing page — the dark "Classical" redesign ══════════════════════
+     Ported from the Claude Design canvas (Macterm.dc.html). Rosé Pine ink on
+     a warm-neutral #19191a ground, Cormorant Garamond headings over Lora body
+     text. Everything is scoped under `.landing`, which BOTH the landing page
+     and the docs template set on <body> — the docs shell further down reuses
+     these tokens rather than defining a second palette.
+
+     The canvas expressed all of this as inline styles on each element, which
+     is how an artboard has to work. It is reassembled into named classes here
+     because that is what the rest of this stylesheet does, because the hover
+     and focus states an artboard cannot express need somewhere to live, and
+     because the design is fixed-width 1180 and the real page has to survive a
+     phone (see the responsive block at the end). Values are the canvas's,
+     unrounded. */
+  .landing {
+    --l-bg: #19191a;
+    --l-text: #e0def4;
+    --l-rose: #ebbcba;
+    --l-gold: #f6c177;
+    /* Ink at the opacities the canvas uses, named by role rather than repeated
+       as rgba() literals — the lede, a body paragraph, and a caption are three
+       deliberate steps down one ramp. */
+    --l-lede: rgba(224, 222, 244, 0.82);
+    --l-nav: rgba(224, 222, 244, 0.72);
+    --l-body: rgba(224, 222, 244, 0.7);
+    --l-soft: rgba(224, 222, 244, 0.6);
+    --l-faint: rgba(224, 222, 244, 0.45);
+    --l-edge: rgba(255, 255, 255, 0.12);
+    --l-edge-soft: rgba(255, 255, 255, 0.1);
+    --l-edge-firm: rgba(255, 255, 255, 0.15);
+    --l-fill: rgba(255, 255, 255, 0.025);
+    --l-thumb-edge: rgba(224, 222, 244, 0.14);
+    --l-gutter: 40px;
+
+    background: var(--l-bg);
+    color: var(--l-text);
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.6;
   }
-  .site-nav.is-scrolled {
-    background: rgba(247, 245, 240, 0.85);
-    box-shadow: 0 1px 0 rgba(23, 21, 15, 0.08);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+  .landing ::selection {
+    background: rgba(235, 188, 186, 0.24);
+    color: var(--l-text);
   }
-  /* Hamburger toggle — hidden on desktop, shown when the nav links collapse. */
-  .nav-toggle {
-    display: none;
-    flex: none;
-    width: 40px;
-    height: 40px;
-    margin-right: -8px;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 0;
-    border-radius: 9px;
-    color: var(--color-ink);
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .nav-toggle:hover {
-    background: rgba(23, 21, 15, 0.06);
-  }
-  /* Two-line hamburger that morphs into an X when open. */
-  .nav-toggle-icon,
-  .nav-toggle-icon::before,
-  .nav-toggle-icon::after {
-    content: "";
-    display: block;
-    width: 18px;
-    height: 1.5px;
-    background: currentColor;
+  .landing :focus-visible {
+    outline: 2px solid var(--l-rose);
+    outline-offset: 3px;
     border-radius: 2px;
-    transition:
-      transform 0.25s ease,
-      opacity 0.2s ease;
   }
-  .nav-toggle-icon {
-    position: relative;
-  }
-  .nav-toggle-icon::before {
-    position: absolute;
-    top: -5.5px;
-  }
-  .nav-toggle-icon::after {
-    position: absolute;
-    top: 5.5px;
-  }
-  .site-nav.nav-open .nav-toggle-icon {
-    background: transparent;
-  }
-  .site-nav.nav-open .nav-toggle-icon::before {
-    top: 0;
-    transform: rotate(45deg);
-  }
-  .site-nav.nav-open .nav-toggle-icon::after {
-    top: 0;
-    transform: rotate(-45deg);
-  }
+  /* One measure for every band, so the header rule, the hero, and the footer
+     rule all land on the same left and right edges.
 
-  /* On small screens, collapse the nav links into a dropdown panel below the
-     bar, toggled by the hamburger. Above the breakpoint it's a plain flex row. */
-  @media (max-width: 640px) {
-    .site-nav {
-      padding-top: 14px;
-      padding-bottom: 14px;
-    }
-    .site-nav .nav-tag {
-      display: none;
-    }
-    .nav-toggle {
-      display: inline-flex;
-    }
-    .nav-links {
-      position: absolute;
-      top: 100%;
-      right: var(--site-gutter);
-      left: var(--site-gutter);
-      flex-direction: column;
-      align-items: stretch !important;
-      gap: 4px !important;
-      padding: 8px;
-      background: rgba(247, 245, 240, 0.96);
-      border: 1px solid rgba(23, 21, 15, 0.1);
-      border-radius: 14px;
-      box-shadow: 0 12px 32px -12px rgba(23, 21, 15, 0.25);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      /* Hidden until opened. */
-      opacity: 0;
-      transform: translateY(-6px);
-      pointer-events: none;
-      transition:
-        opacity 0.2s ease,
-        transform 0.2s ease;
-    }
-    .site-nav.nav-open .nav-links {
-      opacity: 1;
-      transform: none;
-      pointer-events: auto;
-    }
-    /* Stack each item full-width, left-aligned, comfortable tap targets. */
-    .nav-links > a {
-      width: 100%;
-      box-sizing: border-box;
-      justify-content: flex-start;
-      height: auto;
-      padding: 11px 12px;
-      border-radius: 9px;
-      opacity: 1;
-    }
-    .nav-links > a:not([data-download-latest]):hover {
-      background: rgba(23, 21, 15, 0.05);
-    }
-    /* The Download CTA keeps its filled pill but goes full-width. */
-    .nav-links > a[data-download-latest] {
-      justify-content: center;
-      margin-top: 4px;
-    }
-  }
-
-  /* Docs sidebar active link — set by scroll-spy. */
-  [data-nav-link].is-active {
-    color: var(--color-ink);
-    font-weight: 600;
-  }
-
-  /* Landing feature rows: three columns on desktop, stacked on mobile. */
-  .feature-row {
-    display: grid;
-    grid-template-columns: clamp(48px, 6vw, 64px) 1.1fr 1.2fr;
-    gap: clamp(16px, 3vw, 32px);
-    align-items: start;
-    padding: 34px 0;
-    border-top: 1px solid rgba(23, 21, 15, 0.2);
-  }
-  .feature-row:last-child {
-    border-bottom: 1px solid rgba(23, 21, 15, 0.2);
-  }
-  @media (max-width: 640px) {
-    .feature-row {
-      grid-template-columns: 1fr;
-      gap: 10px;
-      padding: 28px 0;
-    }
-  }
-
-  /* Reveal-on-scroll rows (landing features). */
-  [data-reveal] {
-    opacity: 0;
-    transform: translateY(18px);
-    transition:
-      opacity 0.7s ease,
-      transform 0.7s ease;
-  }
-  [data-reveal].is-revealed {
-    opacity: 1;
-    transform: none;
-  }
-
-  /* ---- Shared footer ---------------------------------------------------- */
-  .site-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    flex-wrap: wrap;
-    padding: 28px var(--site-gutter);
-    font-size: 13px;
-    border-top: 1px solid rgba(23, 21, 15, 0.14);
-    /* Take up the slack in the body flex column so a short page still drops the
-       footer to the bottom of the viewport. */
-    margin-top: auto;
-  }
-  .site-footer nav {
-    display: flex;
-    gap: 22px;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    color: var(--color-muted);
-  }
-  .site-footer nav a {
-    color: var(--color-muted);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .site-footer nav a:hover {
-    color: var(--color-ink);
-  }
-
-  /* ---- Docs shell + sidebar -------------------------------------------- */
-  .docs-shell {
-    display: flex;
-    gap: clamp(28px, 5vw, 64px);
+     `width: 100%` is load-bearing, not belt-and-braces. <body> is a column
+     flex container (the sticky-footer rule in @layer base), so these bands are
+     flex items — and an `auto` inline margin on a flex item cancels the
+     default `align-self: stretch`, leaving the band to shrink-wrap its own
+     content. Without the explicit width every section came out as wide as its
+     longest line and centred independently, so the header rule, the hero, and
+     the footer rule each ended at a different x. */
+  .l-wrap {
     width: 100%;
     max-width: 1180px;
     margin: 0 auto;
-    padding: 0 var(--site-gutter);
-    align-items: flex-start;
-    /* The shell is a flex item of the <body> column; without min-width:0 its
-       flex min-content floor (fixed sidebar + main's max-width) keeps it from
-       shrinking to the viewport, so a wide code block would push the whole
-       shell — and the sticky nav — sideways. width:100% + min-width:0 pins it
-       to the viewport and lets .docs-main shrink; wide code scrolls inside its
-       own pre (overflow-x:auto) instead of shifting the page. */
-    min-width: 0;
-    box-sizing: border-box;
+    padding-inline: var(--l-gutter);
   }
-  .docs-sidebar {
-    position: sticky;
-    top: 64px;
-    flex: none;
-    width: 212px;
-    padding: 40px 0 60px;
-    align-self: flex-start;
-    max-height: calc(100vh - 64px);
-    overflow-y: auto;
-  }
-  .docs-sidebar-group {
-    margin-bottom: 26px;
-  }
-  .docs-sidebar-label {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--color-label);
-    margin-bottom: 12px;
-  }
-  .docs-sidebar a {
-    display: block;
-    font-size: 14px;
-    color: var(--color-sidebar);
+  .l-h {
+    font-family: var(--font-display);
     font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--l-text);
+    margin: 0;
+  }
+
+  /* — header — */
+  .l-header {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    padding-block: 22px;
+    border-bottom: 1px solid var(--l-edge-soft);
+  }
+  .l-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-right: auto;
+    color: var(--l-text);
     text-decoration: none;
-    padding: 5px 0;
-    transition: color 0.15s;
   }
-  .docs-sidebar a:hover {
-    color: var(--color-ink);
+  .l-brand span {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 19px;
+    letter-spacing: 0.01em;
   }
-  .docs-sidebar a.is-active {
-    color: var(--color-ink);
-    font-weight: 600;
+  .l-nav {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
   }
-  /* The sidebar stays pinned left (flex:none); .docs-main fills the rest of the
-     row and centers its 760px reading column within that space (via the auto
-     side margins on the inline-size track), so the content sits centered in the
-     area to the right of the sidebar rather than hugging it. */
-  .docs-main {
-    flex: 1;
-    min-width: 0;
+  .l-nav a {
+    color: var(--l-nav);
+    text-decoration: none;
+    transition: color 0.18s;
+  }
+  .l-nav a:hover {
+    color: var(--l-rose);
+  }
+  .l-nav .l-cta {
+    color: var(--l-rose);
+    border: 1px solid rgba(235, 188, 186, 0.5);
+    border-radius: 4px;
+    padding: 7px 15px;
+    transition:
+      border-color 0.18s,
+      background 0.18s;
+  }
+  .l-nav .l-cta:hover {
+    border-color: var(--l-rose);
+    background: rgba(235, 188, 186, 0.08);
+  }
+
+  /* — hero — */
+  .l-hero {
+    padding-top: 104px;
+  }
+  .l-hero h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(52px, 8vw, 82px);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin: 0 0 30px;
+    color: var(--l-text);
+  }
+  /* The descriptor rides inside the <h1> as its own line: it carries the
+     keywords the bare wordmark can't, and one <h1> per page is worth more to a
+     crawler than a heading plus an orphan paragraph. */
+  .l-hero h1 .l-lede {
+    display: block;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(18px, 2.2vw, 22px);
+    line-height: 1.5;
+    letter-spacing: 0;
+    color: var(--l-lede);
+    margin-top: 30px;
+    max-width: 600px;
+    text-wrap: pretty;
+  }
+  .l-cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px;
+    margin-top: 44px;
+  }
+  .l-download {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--l-rose);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(235, 188, 186, 0.4);
+    padding-bottom: 2px;
+    transition: border-color 0.18s;
+  }
+  .l-download:hover {
+    border-color: var(--l-rose);
+  }
+
+  /* — screenshot gallery — */
+  .l-gallery {
+    padding-top: 80px;
+  }
+  .l-shot {
+    border: 1px solid var(--l-edge);
+    padding: 10px;
+    background: var(--l-fill);
+  }
+  .l-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .l-thumbs {
     display: grid;
-    grid-template-columns: minmax(0, 760px);
-    justify-content: center;
-    padding: 40px 0 120px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-top: 14px;
   }
-  @media (max-width: 768px) {
-    .docs-shell {
-      display: block;
+  .l-thumb {
+    all: unset;
+    cursor: pointer;
+    display: block;
+    padding: 5px;
+    background: var(--l-fill);
+    border: 1px solid var(--l-thumb-edge);
+    opacity: 0.55;
+    transition:
+      opacity 0.18s,
+      border-color 0.18s;
+  }
+  .l-thumb:hover {
+    opacity: 1;
+  }
+  .l-thumb[aria-pressed="true"] {
+    border-color: var(--l-rose);
+    opacity: 1;
+  }
+  .l-thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .l-caption {
+    margin: 16px 0 0;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--l-faint);
+  }
+
+  /* — sections — */
+  .l-section {
+    padding-top: 112px;
+  }
+  .l-section-head {
+    border-bottom: 1px solid var(--l-edge);
+    padding-bottom: 18px;
+    margin-bottom: 56px;
+  }
+  .l-section-head h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 34px;
+    line-height: 1;
+    margin: 0;
+    color: var(--l-text);
+  }
+  .l-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 52px 64px;
+  }
+  /* Scoped to .l-item rather than left bare: the number is a <p>, so a bare
+     .l-num (0,1,0) loses to .l-item p (0,1,1) below and the rose accent
+     silently became body grey. */
+  .l-item .l-num {
+    margin: 0 0 10px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--l-rose);
+    font-variant-numeric: tabular-nums;
+  }
+  .l-item h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 21px;
+    margin: 0 0 10px;
+    color: var(--l-text);
+  }
+  .l-item p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--l-body);
+    text-wrap: pretty;
+  }
+  /* Inline code is rose everywhere, then reset back to plain ink inside the
+     surfaces that are already a code block — the install chips and the docs'
+     fenced blocks. Written as a general rule plus two resets rather than an
+     enumeration of every prose context, because the contexts keep growing and
+     a missed one silently loses the accent. */
+  .landing code {
+    font-family: var(--font-mono);
+    font-size: 0.87em;
+    color: var(--l-rose);
+  }
+  .landing .cmd code {
+    color: var(--l-text);
+  }
+  /* Content links — the underlined rose treatment. Deliberately scoped to the
+     prose contexts instead of a broad `.landing a:not(…)` chain: the nav,
+     brand, docs sidebar, and page-nav are all links too, and every one of them
+     had to be exempted by hand, which meant each new piece of chrome silently
+     arrived wearing an underline. */
+  .l-prose a,
+  .l-item a,
+  .l-install a,
+  .prose-docs a {
+    color: var(--l-rose);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(235, 188, 186, 0.3);
+    transition:
+      color 0.18s,
+      border-color 0.18s;
+  }
+  .l-prose a:hover,
+  .l-item a:hover,
+  .l-install a:hover,
+  .prose-docs a:hover {
+    color: var(--l-gold);
+    border-color: var(--l-gold);
+  }
+
+  /* — prose (the libghostty section) — */
+  .l-prose {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 52px 64px;
+    align-items: start;
+  }
+  .l-prose p {
+    margin: 0 0 18px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--l-body);
+    max-width: 54ch;
+    text-wrap: pretty;
+  }
+  .l-prose p:last-child {
+    margin-bottom: 0;
+  }
+  .l-figure {
+    margin: 0;
+  }
+  .l-figure .l-shot {
+    padding: 8px;
+  }
+  .l-figure figcaption {
+    margin-top: 12px;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--l-faint);
+  }
+
+  /* — install — */
+  .l-install h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 19px;
+    margin: 0 0 14px;
+    color: var(--l-text);
+  }
+  .l-install p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--l-soft);
+    text-wrap: pretty;
+  }
+
+  /* — footer — */
+  .l-footer {
+    margin-top: 112px;
+    padding-block: 26px 60px;
+    border-top: 1px solid var(--l-edge-soft);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 26px;
+  }
+  .l-footer > span {
+    font-family: var(--font-display);
+    font-size: 16px;
+    color: var(--l-soft);
+    margin-right: auto;
+  }
+  .l-footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    font-size: 14px;
+  }
+  .l-footer nav a {
+    color: var(--l-soft);
+    text-decoration: none;
+    border: 0;
+    transition: color 0.18s;
+  }
+  .l-footer nav a:hover {
+    color: var(--l-rose);
+  }
+
+  /* The canvas is a fixed 1180px artboard, so every step down from it is the
+     implementation's own. The gallery is the one piece that genuinely breaks:
+     five thumbnails across a phone are 60px wide and unreadable as images, so
+     they scroll horizontally as a row instead of compressing. */
+  @media (max-width: 900px) {
+    .landing {
+      --l-gutter: 24px;
     }
-    .docs-sidebar {
-      position: static;
-      width: 100%;
-      max-height: none;
-      overflow: visible;
-      padding: 28px 0 8px;
+    .l-hero {
+      padding-top: 64px;
     }
-    .docs-main {
-      padding-top: 8px;
+    .l-gallery {
+      padding-top: 48px;
+    }
+    .l-section {
+      padding-top: 72px;
+    }
+    .l-section-head {
+      margin-bottom: 40px;
+    }
+    .l-grid,
+    .l-prose {
+      gap: 40px;
+    }
+    .l-footer {
+      margin-top: 72px;
+    }
+  }
+  @media (max-width: 640px) {
+    .landing {
+      --l-gutter: 20px;
+    }
+    .l-header {
+      gap: 16px;
+    }
+    .l-nav {
+      gap: 16px;
+    }
+    .l-thumbs {
+      grid-template-columns: repeat(5, 128px);
+      overflow-x: auto;
+      scrollbar-width: none;
+      /* Bleed the scrolling row to the viewport edges so it reads as a strip
+         that continues, rather than one clipped inside the text measure. */
+      margin-inline: calc(var(--l-gutter) * -1);
+      padding-inline: var(--l-gutter);
+    }
+    .l-thumbs::-webkit-scrollbar {
+      display: none;
+    }
+    .cmd--inline {
+      --cmd-font: 12.5px;
+      padding-left: 14px;
     }
   }
 
-  /* ---- Docs prose (rendered from Markdown) ----------------------------- */
+  /* ---- Docs shell + sidebar (dark) -------------------------------------- */
+  /* The docs page from the same Claude Design canvas: the landing's header and
+     ground, with a 212px sticky sidebar beside a 660px reading column. <body>
+     carries .landing here too, so the ground, ink ramp, and Lora/Cormorant
+     pairing above are already in force — only the shell and prose are new. */
+  .docs-shell {
+    display: grid;
+    grid-template-columns: 212px minmax(0, 1fr);
+    gap: 72px;
+    align-items: start;
+    padding-block: 56px 100px;
+    /* The grid is a flex item of the <body> column. Without this the fixed
+       sidebar track plus the article's min-content floor keeps the shell from
+       shrinking to a narrow viewport, and a wide code block shoves the whole
+       page — header included — sideways. */
+    min-width: 0;
+  }
+  .docs-sidebar {
+    position: sticky;
+    top: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .docs-sidebar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .docs-sidebar-label {
+    margin: 0 0 3px;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(224, 222, 244, 0.4);
+  }
+  .docs-sidebar a {
+    font-size: 14px;
+    color: var(--l-nav);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .docs-sidebar a:hover {
+    color: var(--l-rose);
+  }
+  /* The active row is marked by a rose rule in the gutter. The negative margin
+     pulls it outside the sidebar's own text edge so the rule sits beside the
+     column rather than indenting the label. */
+  .docs-sidebar a.is-active {
+    color: var(--l-rose);
+    border-left: 1px solid var(--l-rose);
+    margin-left: -13px;
+    padding-left: 12px;
+  }
+  .docs-main {
+    min-width: 0;
+    max-width: 660px;
+  }
+
+  /* ---- Docs prose (rendered from Markdown) ------------------------------ */
   .prose-docs {
-    color: var(--color-body);
-  }
-  .prose-docs > section {
-    scroll-margin-top: 84px;
-  }
-  .prose-docs .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.06em;
-    color: var(--color-label);
-    margin: 0 0 12px;
-  }
-  .prose-docs h1 {
-    font-size: clamp(34px, 4.5vw, 46px);
-    font-weight: 600;
-    letter-spacing: -0.025em;
-    line-height: 1.05;
-    color: var(--color-ink);
-    margin: 0 0 18px;
-  }
-  .prose-docs h2 {
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--color-ink);
-    margin: 0 0 16px;
-  }
-  .prose-docs h3 {
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--color-ink);
-    margin: 24px 0 10px;
-  }
-  .prose-docs p {
+    color: rgba(224, 222, 244, 0.75);
     font-size: 16px;
     line-height: 1.6;
-    color: var(--color-body);
-    margin: 0 0 14px;
-    max-width: 64ch;
   }
-  /* The intro paragraphs run a touch larger. */
-  .prose-docs #intro p {
-    font-size: 17px;
-    margin-bottom: 16px;
+  .docs-eyebrow {
+    margin: 0 0 22px;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--l-rose);
   }
-  .prose-docs #intro p:last-child {
-    margin-bottom: 0;
+  .prose-docs h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(38px, 5vw, 52px);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    color: var(--l-text);
+    margin: 0 0 26px;
+  }
+  /* The standfirst — the first paragraph after the title — plus the rule that
+     closes the page's opening block. The rule is this paragraph's own border
+     rather than a separate <hr>, because the Markdown never writes one. */
+  .prose-docs h1 + p {
+    font-size: 19px;
+    line-height: 1.55;
+    color: rgba(224, 222, 244, 0.8);
+    text-align: left;
+    hyphens: none;
+    margin: 0 0 34px;
+    padding-bottom: 34px;
+    border-bottom: 1px solid var(--l-edge);
+  }
+  .prose-docs h2 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 26px;
+    line-height: 1.2;
+    color: var(--l-text);
+    margin: 34px 0 14px;
+  }
+  .prose-docs h2:first-of-type {
+    margin-top: 0;
+  }
+  .prose-docs h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 20px;
+    line-height: 1.25;
+    color: var(--l-text);
+    margin: 26px 0 10px;
+  }
+  .prose-docs p {
+    margin: 0 0 20px;
+    text-align: justify;
+    hyphens: auto;
+  }
+  .prose-docs ul,
+  .prose-docs ol {
+    margin: 0 0 20px;
+    padding-left: 20px;
+  }
+  .prose-docs li {
+    margin-bottom: 8px;
+  }
+  .prose-docs li::marker {
+    color: rgba(224, 222, 244, 0.35);
   }
   .prose-docs strong {
+    color: var(--l-text);
     font-weight: 600;
-    color: var(--color-ink);
   }
-  .prose-docs a {
-    color: var(--color-ink);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-  .prose-docs ul {
-    margin: 0 0 14px;
-    padding-left: 22px;
-    color: var(--color-body);
-    font-size: 16px;
-    line-height: 1.7;
-    max-width: 64ch;
+  .prose-docs img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--l-edge);
   }
   .prose-docs hr {
-    border: none;
-    border-top: 1px solid rgba(23, 21, 15, 0.14);
-    margin: 52px 0;
+    border: 0;
+    border-top: 1px solid var(--l-edge);
+    margin: 34px 0;
   }
-  /* Tables: never wider than the content column. A table whose cells don't fit
-     scrolls horizontally within its own box (like code blocks) instead of
-     pushing the page sideways — the mobile-overflow bug. `display:block` on the
-     table makes overflow-x:auto take effect (an unwrapped table ignores it). */
+
+  /* A Markdown blockquote renders as the design's Note callout — a bordered
+     panel with a rose label supplied by CSS, since the Markdown carries no
+     word for it. */
+  .prose-docs blockquote {
+    border: 1px solid var(--l-edge);
+    background: var(--l-fill);
+    padding: 20px 22px;
+    margin: 0 0 26px;
+  }
+  .prose-docs blockquote::before {
+    content: "Note";
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--l-rose);
+  }
+  .prose-docs blockquote p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--l-body);
+    text-align: left;
+    hyphens: none;
+  }
+  .prose-docs blockquote p + p {
+    margin-top: 12px;
+  }
+
+  /* ── Command blocks ─────────────────────────────────────────────────────
+     One component behind every command surface on the site: the hero install
+     pill, the landing Install section, and every fenced block build-docs.mjs
+     generates. These were three near-identical rule sets that had already
+     drifted apart — two font sizes, two copy-button sizes, two border
+     colours, and two different vertical alignments for the same button, which
+     is how the copy button ended up centred in one place and floating high in
+     another.
+
+     Markup, in every case:
+       <div class="cmd" data-block>          the surface; data-block is what
+         <div class="cmd-caption">…</div>      site.js scopes its copy to
+         <pre><code>…</code></pre>           (a bare <code> for one-liners)
+         <button class="cmd-copy" data-copy>
+       </div>
+     `.cmd--inline` is the hero's auto-width pill, where the button sits in a
+     flex row beside the text rather than floating over it. */
+  .cmd {
+    /* Tokens, because the button's offset is derived from them below: change
+       the padding or the type size and the button follows on its own. */
+    --cmd-font: 14px;
+    --cmd-lh: 1.6;
+    --cmd-pad-y: 12px;
+    --cmd-pad-x: 16px;
+    --cmd-btn: 28px;
+
+    position: relative;
+    border: 1px solid var(--l-edge-firm);
+    border-radius: 4px;
+    /* A step above --l-fill: a wall of small mono text needs to separate from
+       the page more firmly than a note panel does. Still a plain white alpha,
+       so it stays on the neutral ground rather than reintroducing rose-pine's
+       purple `surface`. */
+    background: rgba(255, 255, 255, 0.04);
+    margin: 0 0 22px;
+
+    /* Type metrics live on the component, not on the <code>, so the <pre> and
+       the <code> inside it share one strut. When only the <code> carried them
+       the <pre> kept the surrounding prose's 16px, whose taller strut set the
+       line box — so the first line's real centre sat below where the button's
+       offset below computed it, and the button rode 4px high. */
+    font-family: var(--font-mono);
+    font-size: var(--cmd-font);
+    line-height: var(--cmd-lh);
+  }
+  .cmd pre {
+    margin: 0;
+  }
+  .cmd pre,
+  .cmd > code {
+    display: block;
+    /* The right gutter clears the floating button, so a long command scrolls
+       *under* it instead of colliding with it. */
+    padding: var(--cmd-pad-y) calc(var(--cmd-pad-x) + var(--cmd-btn))
+      var(--cmd-pad-y) var(--cmd-pad-x);
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  /* With a caption bar the button lives in that row, so the code below it
+     needs no gutter of its own. */
+  .cmd-caption ~ pre {
+    padding-right: var(--cmd-pad-x);
+  }
+  .cmd code {
+    /* `font-size: inherit` undoes the 0.87em on `.landing code`, which is meant
+       for inline code inside prose and was still shrinking command text to
+       ~12.2px inside this component — visibly smaller than the 14px declared
+       above, and enough to put the code's line box out of step with the <pre>'s
+       strut, which is what left the floating button 1.5px high. */
+    font-size: inherit;
+    /* rose-pine `text` — the base every syntax token is a deviation from. */
+    color: var(--l-text);
+  }
+  .cmd-caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 8px 9px var(--cmd-pad-x);
+    border-bottom: 1px solid var(--l-edge);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--l-faint);
+  }
+  .cmd-copy {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--cmd-btn);
+    height: var(--cmd-btn);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: var(--l-faint);
+    cursor: pointer;
+    transition:
+      color 0.18s,
+      background 0.18s;
+  }
+  .cmd-copy:hover {
+    color: var(--l-rose);
+    background: rgba(235, 188, 186, 0.1);
+  }
+  /* A button with no caption row floats over the code, aligned to the centre
+     of the FIRST LINE — top padding plus half a line box, less half the button
+     — rather than to the centre of the block. That reads as centred on the
+     one-line commands this mostly renders, and stays correctly at the top of a
+     long block, where a block-centred button would drift into the middle of
+     the code. */
+  .cmd > .cmd-copy {
+    position: absolute;
+    top: calc(
+      var(--cmd-pad-y) + (var(--cmd-font) * var(--cmd-lh) / 2) - (var(--cmd-btn) / 2)
+    );
+    right: 8px;
+  }
+
+  /* The hero's pill: auto width, button inline after the text. */
+  .cmd--inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 10px 10px 10px 18px;
+    background: var(--l-fill);
+  }
+  .cmd--inline > code {
+    padding: 0;
+    min-width: 0;
+  }
+  .cmd--inline > .cmd-copy {
+    position: static;
+  }
+
+  /* — tables — */
   .prose-docs table {
     display: block;
     width: 100%;
     max-width: 100%;
     overflow-x: auto;
     border-collapse: collapse;
-    margin: 0 0 20px;
+    margin: 0 0 22px;
     font-size: 14.5px;
     line-height: 1.5;
   }
@@ -462,106 +818,103 @@
   .prose-docs td {
     text-align: left;
     vertical-align: top;
-    padding: 8px 14px 8px 0;
-    border-bottom: 1px solid rgba(23, 21, 15, 0.1);
+    padding: 9px 16px 9px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   }
   .prose-docs th {
-    font-weight: 600;
-    color: var(--color-ink);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 400;
+    color: var(--l-faint);
   }
   .prose-docs td {
-    color: var(--color-body);
-  }
-  .prose-docs blockquote {
-    border-left: 2px solid rgba(23, 21, 15, 0.35);
-    padding: 2px 0 2px 16px;
-    margin: 20px 0;
-    color: var(--color-muted);
-    font-size: 15px;
-    line-height: 1.55;
-    max-width: 60ch;
-  }
-  .prose-docs blockquote p {
-    font-size: 15px;
-    line-height: 1.55;
-    color: var(--color-muted);
-    margin: 0;
-    max-width: none;
-  }
-  /* Inline code + kbd chips. */
-  .prose-docs :not(pre) > code {
-    font-family: var(--font-mono);
-    font-size: 0.86em;
-    background: var(--color-chip);
-    border-radius: 4px;
-    padding: 0.08em 0.34em;
-  }
-  .prose-docs kbd {
-    font-family: var(--font-mono);
-    font-size: 0.82em;
-    background: var(--color-chip);
-    border: 1px solid rgba(23, 21, 15, 0.16);
-    border-radius: 5px;
-    padding: 0.12em 0.45em;
+    color: var(--l-body);
   }
 
-  /* ---- Dark code blocks ------------------------------------------------- */
-  .code-block {
-    position: relative;
-    background: var(--color-code);
-    border-radius: 10px;
-    margin: 0 0 24px;
-  }
-  .code-block pre {
-    margin: 0;
-    padding: 16px 48px 16px 18px;
-    overflow-x: auto;
+  .prose-docs kbd {
     font-family: var(--font-mono);
-    font-size: 13.5px;
-    line-height: 1.6;
-    color: var(--color-codetext);
+    font-size: 0.8em;
+    color: var(--l-text);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 4px;
+    padding: 0.12em 0.4em;
   }
-  .code-block pre code {
-    font-family: inherit;
-    background: none;
-    padding: 0;
-  }
-  .code-block-copy {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    background: rgba(23, 21, 15, 0.05);
-    border: 1px solid rgba(23, 21, 15, 0.1);
-    border-radius: 7px;
-    color: var(--color-code-btn);
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .code-block-copy:hover {
-    background: rgba(23, 21, 15, 0.1);
-  }
-  /* Code block with a filename caption bar. */
-  .code-block-caption {
+
+  /* — prev / next — */
+  .docs-pagenav {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    padding: 11px 12px 11px 16px;
-    border-bottom: 1px solid rgba(23, 21, 15, 0.09);
+    gap: 24px;
+    margin-top: 52px;
+    padding-top: 22px;
+    border-top: 1px solid var(--l-edge);
+    font-size: 14px;
   }
-  .code-block-caption span {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--color-code-caption);
+  .docs-pagenav a {
+    color: var(--l-soft);
+    text-decoration: none;
+    border: 0;
+    transition: color 0.18s;
   }
-  .code-block-caption .code-block-copy {
-    position: static;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
+  .docs-pagenav a:hover {
+    color: var(--l-rose);
+    border: 0;
+  }
+
+  /* Syntax highlighting — Rosé Pine, using the palette's own hues in the roles
+     the theme assigns them rather than tints of the page ink. Comments and
+     punctuation were previously low-alpha whites, which on this ground came
+     out around #575564 and were the unreadable part.
+
+     Only the YAML sample is tokenized (see highlightYaml in build-docs.mjs);
+     every other fenced block renders as plain --l-text, which is already the
+     palette's `text`. */
+  /* `foam` — types and property keys. */
+  .text-syn-key {
+    color: #9ccfd8;
+  }
+  /* `gold` — strings. */
+  .text-syn-str {
+    color: #f6c177;
+  }
+  /* `iris` — constants and unquoted scalars. */
+  .text-syn-val {
+    color: #c4a7e7;
+  }
+  /* `subtle` — punctuation and list dashes. */
+  .text-syn-dash {
+    color: #908caa;
+  }
+  /* `muted` — comments. */
+  .text-syn-comment {
+    color: #6e6a86;
+  }
+
+  @media (max-width: 900px) {
+    .docs-shell {
+      grid-template-columns: 1fr;
+      gap: 0;
+      padding-block: 32px 72px;
+    }
+    .docs-sidebar {
+      position: static;
+      max-height: none;
+      overflow: visible;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 20px 32px;
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+      border-bottom: 1px solid var(--l-edge);
+    }
+    .docs-main {
+      max-width: none;
+    }
+    .prose-docs p {
+      text-align: left;
+      hyphens: none;
+    }
   }
 }
