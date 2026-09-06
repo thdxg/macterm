@@ -45,6 +45,9 @@ struct PanePreview {
     /// The frame's own width/height at capture time, so a card can be shaped
     /// to what was actually captured instead of cropping it to fit.
     let aspectRatio: CGFloat?
+    /// The terminal's column count, so the text fallback can be typeset at the
+    /// scale a real thumbnail of this pane would have been.
+    let columns: Int?
 
     var isEmpty: Bool { image == nil && lines.isEmpty }
 }
@@ -54,8 +57,10 @@ enum PanePreviewCapture {
     /// the headroom keeps a 2x display sharp without holding a full frame.
     static let thumbnailLongEdge: CGFloat = 480
 
-    /// Viewport lines kept for the text fallback.
-    static let fallbackLineLimit = 14
+    /// Viewport rows kept for the text fallback. Generous, because the
+    /// fallback is typeset small enough that a whole screen fits the card —
+    /// the point is to look like the frame we couldn't capture.
+    static let fallbackLineLimit = 80
 
     /// Snapshot `pane` for display in an overlay. Main-actor and synchronous:
     /// it locks the IOSurface read-only for the length of one copy, the same
@@ -66,7 +71,7 @@ enum PanePreviewCapture {
         let background = pane.adaptiveBackgroundColor.map { NSColor(cgColor: $0) ?? MactermTheme.nsBg }
             ?? MactermTheme.nsBg
         guard let view = pane.nsView else {
-            return PanePreview(image: nil, lines: [], background: background, aspectRatio: nil)
+            return PanePreview(image: nil, lines: [], background: background, aspectRatio: nil, columns: nil)
         }
 
         let image = (view.layer?.contents as? IOSurface).flatMap {
@@ -76,7 +81,14 @@ enum PanePreviewCapture {
         // it walks the whole viewport in the core.
         let lines = image == nil ? viewportLines(of: view) : []
         let aspect = image.map { $0.size.width / max($0.size.height, 1) }
-        return PanePreview(image: image, lines: lines, background: background, aspectRatio: aspect)
+        let columns = image == nil ? view.surfaceSize.map { Int($0.columns) } : nil
+        return PanePreview(
+            image: image,
+            lines: lines,
+            background: background,
+            aspectRatio: aspect,
+            columns: columns
+        )
     }
 
     /// Width over height of the region `tab`'s panes occupy on screen, or nil
@@ -99,20 +111,24 @@ enum PanePreviewCapture {
         return union.width / union.height
     }
 
-    /// Trailing non-blank viewport lines, newest last.
+    /// The viewport's rows, top down, with the trailing run of blank lines
+    /// dropped.
+    ///
+    /// Top down and NOT trimmed on the left: these stand in for a picture of
+    /// the screen, so row order and leading indentation are the shape of the
+    /// thing. An earlier cut took the *last* lines and right-aligned nothing
+    /// while the renderer bottom-aligned them, which put a fresh shell's
+    /// prompt at the bottom of the card when the real pane draws it at the top.
     @MainActor
     private static func viewportLines(of view: GhosttyTerminalNSView) -> [String] {
         guard let text = view.readText(scrollback: false) else { return [] }
-        let lines = text
+        var lines = text
             .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { String($0).trimmingCharacters(in: .whitespaces) }
-        // Drop the trailing run of blank lines a mostly-empty viewport ends in,
-        // so the fallback shows the prompt rather than the whitespace under it.
-        var trimmed = lines
-        while let last = trimmed.last, last.isEmpty {
-            trimmed.removeLast()
+            .map { String($0) }
+        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
+            lines.removeLast()
         }
-        return Array(trimmed.suffix(fallbackLineLimit))
+        return Array(lines.prefix(fallbackLineLimit))
     }
 
     /// Downsample the surface's last frame over `background`.

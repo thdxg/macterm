@@ -20,6 +20,14 @@ import SwiftUI
 /// `AppState.cycleRecentTab`). So the strip is the whole interface for the
 /// gesture: it has to show where the next press lands, not just confirm where
 /// the last one did.
+/// One tab in the strip: where it sits in the cycle, its 1-based number in
+/// the workspace (what the numbered tab icons show), and the tab itself.
+struct TabSwitcherEntry {
+    let index: Int
+    let number: Int
+    let tab: TerminalTab
+}
+
 struct TabSwitcherOverlay: View {
     @Environment(AppState.self)
     private var appState
@@ -55,10 +63,13 @@ struct TabSwitcherOverlay: View {
     }
 
     /// The cycle order resolved to live tabs, dropping any that closed
-    /// mid-gesture so the strip can't render a hole.
-    private func tabs(in workspace: Workspace) -> [(index: Int, tab: TerminalTab)] {
+    /// mid-gesture so the strip can't render a hole. Each entry carries the
+    /// tab's own 1-based position in the workspace too, because the numbered
+    /// icon variants show that number — not the tab's place in the cycle.
+    private func tabs(in workspace: Workspace) -> [TabSwitcherEntry] {
         appState.tabCycleTabIDs.enumerated().compactMap { index, id in
-            workspace.tabs.first { $0.id == id }.map { (index, $0) }
+            guard let position = workspace.tabs.firstIndex(where: { $0.id == id }) else { return nil }
+            return TabSwitcherEntry(index: index, number: position + 1, tab: workspace.tabs[position])
         }
     }
 }
@@ -76,7 +87,7 @@ struct TabSwitcherOverlay: View {
 /// many fit is asked of the window rather than hardcoded, so a wide window
 /// shows more of the order and a narrow one still shows a readable card.
 private struct TabSwitcherStrip: View {
-    let entries: [(index: Int, tab: TerminalTab)]
+    let entries: [TabSwitcherEntry]
     let selection: Int
     let availableWidth: CGFloat
     /// Width over height of the region the panes actually fill, so cards are
@@ -118,6 +129,7 @@ private struct TabSwitcherStrip: View {
             ForEach(entries, id: \.tab.id) { entry in
                 TabSwitcherCard(
                     tab: entry.tab,
+                    number: entry.number,
                     isSelected: entry.index == selection,
                     paneAspect: paneAspect
                 )
@@ -164,6 +176,8 @@ private struct TabSwitcherStrip: View {
 /// name, over the tab's title row.
 private struct TabSwitcherCard: View {
     let tab: TerminalTab
+    /// The tab's 1-based number in the workspace, for the numbered tab icons.
+    let number: Int
     let isSelected: Bool
     let paneAspect: CGFloat?
 
@@ -196,9 +210,6 @@ private struct TabSwitcherCard: View {
     private static func boxWidth(forPaneAspect aspect: CGFloat?) -> CGFloat {
         (previewHeight * (aspect ?? fallbackAspect)).rounded() + selectionHalo * 2
     }
-
-    @AppStorage(Preferences.Keys.showAgentIcons)
-    private var showAgentIcons = true
 
     private var cardWidth: CGFloat { Self.width(forPaneAspect: paneAspect) }
 
@@ -237,8 +248,21 @@ private struct TabSwitcherCard: View {
                 )
 
             HStack(spacing: 6) {
-                TabSwitcherGlyph(tab: tab, agent: showAgentIcons ? tab.agentIcon : nil)
-                    .frame(width: 14, height: 14)
+                // The sidebar's own glyph, preferences and all — the chosen
+                // tab icon, the agent logo in its brand color, the running
+                // spinner and the done dot. An earlier cut drew a hardcoded
+                // terminal symbol and its own spinner here, so three of the
+                // four preferences behind it did nothing on these cards.
+                // Deliberately unframed: when the preferences leave nothing
+                // to draw it contributes no view and no spacing, and the
+                // title stays flush with the preview's edge.
+                // Tinted with the title, so the whole row brightens on the
+                // selected card rather than a white title beside a dim icon.
+                TabGlyph(
+                    tab: tab,
+                    index: number,
+                    tint: isSelected ? MactermTheme.fg : MactermTheme.fgMuted
+                )
                 Text(tab.sidebarRowTitle)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? MactermTheme.fg : MactermTheme.fgMuted)
@@ -252,33 +276,6 @@ private struct TabSwitcherCard: View {
         }
         .frame(width: cardWidth)
         .padding(.vertical, 2)
-    }
-}
-
-/// The tab's status/identity glyph, matching the sidebar's vocabulary: a
-/// spinner while something runs, the agent logo when one holds a pane, else a
-/// plain terminal symbol. Kept local (the sidebar's own glyph views are
-/// private to it, and carry sidebar-only sizing preferences).
-private struct TabSwitcherGlyph: View {
-    let tab: TerminalTab
-    let agent: AgentIcon?
-
-    var body: some View {
-        if tab.executionState == .running, agent == nil {
-            ProgressView()
-                .controlSize(.mini)
-                .tint(.secondary)
-        } else if let agent {
-            Image(agent.rawValue)
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(.secondary)
-        } else {
-            Image(systemName: "terminal")
-                .imageScale(.small)
-                .foregroundStyle(.secondary)
-        }
     }
 }
 
@@ -349,8 +346,8 @@ private struct PaneMosaicLeaf: View {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                } else if let lines = preview?.lines, !lines.isEmpty {
-                    PanePreviewText(lines: lines)
+                } else if let preview, !preview.lines.isEmpty {
+                    PanePreviewText(lines: preview.lines, columns: preview.columns)
                 }
             }
             .clipped()
@@ -360,25 +357,47 @@ private struct PaneMosaicLeaf: View {
     }
 }
 
-/// Fallback preview for a pane with no rendered frame: its viewport text,
-/// bottom-aligned like a terminal, at a size that reads as "there is output
-/// here" more than as text to actually read.
+/// Fallback preview for a pane no frame was ever captured from — a tab that
+/// has never been focused this run (see `PanePreview`).
+///
+/// Typeset to stand in for the picture we couldn't take: the pane's own column
+/// count is mapped onto the card's width, so a line lands at the same relative
+/// size a real thumbnail of that pane would have shown, and rows run top down
+/// like the screen they came from. A fixed point size was the earlier cut and
+/// it read as a bug — 5pt text in a 100pt card made an idle shell's prompt
+/// span the whole width, several times larger than the same prompt in the
+/// captured frame beside it, and bottom-aligning it put a fresh shell's prompt
+/// under the card instead of at its top.
 private struct PanePreviewText: View {
     let lines: [String]
+    /// The terminal's width in columns. nil falls back to a typical 80.
+    let columns: Int?
+
+    /// Advance width of a monospaced glyph as a fraction of point size. SF
+    /// Mono and friends sit at 0.6; close enough to place the text at the
+    /// right scale, which is all this needs to do.
+    private static let advanceRatio: CGFloat = 0.6
+    /// Below this the glyphs stop resolving into anything, so the text is
+    /// dropped rather than drawn as grey mush.
+    private static let minimumFontSize: CGFloat = 1.6
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Spacer(minLength: 0)
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                Text(line)
-                    .font(.system(size: 5, design: .monospaced))
-                    .foregroundStyle(MactermTheme.fgMuted)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        GeometryReader { geo in
+            let size = geo.size.width / (CGFloat(max(columns ?? 80, 1)) * Self.advanceRatio)
+            if size >= Self.minimumFontSize {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(line.isEmpty ? " " : line)
+                            .font(.system(size: size, design: .monospaced))
+                            .foregroundStyle(MactermTheme.fgMuted)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
         }
-        .padding(3)
         .clipped()
     }
 }

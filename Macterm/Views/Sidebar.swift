@@ -1015,7 +1015,7 @@ private struct SidebarProjectRow: View {
                 Label {
                     titleContent
                 } icon: {
-                    SidebarRowIcon(symbol: projectIconSymbol, index: index)
+                    TabRowIcon(symbol: projectIconSymbol, index: index)
                 }
             }
         }
@@ -1117,44 +1117,19 @@ private struct SidebarTabRow: View {
                 Label {
                     titleContent
                 } icon: {
-                    if showTabStatusIndicator, tab.executionState != .idle || agentIcon != nil {
-                        // Only give the label an icon while the status glyph
-                        // actually draws something (spinner, done dot, agent
-                        // logo). An idle status with "None" renders the
-                        // sentinel as an invisible Image that still reserves
-                        // the icon column, nudging the title right of every
-                        // other icon-less row.
-                        TabStatusGlyph(
-                            state: tab.executionState,
-                            symbol: iconSymbol,
-                            index: index,
-                            agent: agentIcon,
-                            spinnerOverAgent: showSpinnerOverAgentIcons
-                        )
-                    } else if let agentIcon {
-                        // "None" suppresses the user's icon, not the agent
-                        // logo — a live status signal, like the else branch.
-                        SidebarRowIcon(symbol: iconSymbol, index: index, agent: agentIcon)
-                            .foregroundStyle(.secondary)
-                    }
+                    // `TabGlyph` draws nothing when "None" leaves no live
+                    // signal to show, which is what this branch needs: an
+                    // invisible Image would still reserve the Label's icon
+                    // column, nudging the title right of every other
+                    // icon-less row.
+                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol)
                 }
                 .labelStyle(.titleAndIcon)
             } else {
                 Label {
                     titleContent
                 } icon: {
-                    if showTabStatusIndicator {
-                        TabStatusGlyph(
-                            state: tab.executionState,
-                            symbol: iconSymbol,
-                            index: index,
-                            agent: agentIcon,
-                            spinnerOverAgent: showSpinnerOverAgentIcons
-                        )
-                    } else {
-                        SidebarRowIcon(symbol: iconSymbol, index: index, agent: agentIcon)
-                            .foregroundStyle(.secondary)
-                    }
+                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol)
                 }
             }
         }
@@ -1294,196 +1269,6 @@ private struct TabRowTitle: View {
             }
         } else {
             FadingText(tab.sidebarRowTitle)
-        }
-    }
-}
-
-/// The tab icon with a coexisting status indicator (the maintainer's
-/// suggestion): the user's chosen icon stays put, and status is additive.
-///
-/// - `running`: a small spinner replaces the icon (temporary prominence,
-///   Xcode-build-navigator style) — unless the icon is an AI agent's logo and
-///   the user turned "Show spinner over agent icons" off (#225): agent CLIs
-///   draw their own busy indicator in the tab title, so the logo can stay put.
-/// - `done` (needs attention): the icon with a small solid status dot in the
-///   bottom-trailing corner — like the Messages/FaceTime "available" dot. A
-///   dot reads as "done/positive" without competing with the icon's identity,
-///   and it avoids the heavy, off-platform look of a checkmark glyph badge.
-///   It overlays the agent logo the same way, regardless of the spinner
-///   preference — "unread agent messages" is the signal #225 asked to keep.
-/// - `idle`: the icon as-is.
-private struct TabStatusGlyph: View {
-    let state: TerminalExecutionState
-    let symbol: String
-    let index: Int
-    var agent: AgentIcon?
-    var spinnerOverAgent = true
-    @AppStorage(Preferences.Keys.sidebarIconSize)
-    private var iconSizeRaw = SidebarIconSize.medium.rawValue
-
-    private var size: SidebarIconSize {
-        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
-    }
-
-    /// The spinner is a control, so it steps between AppKit's control sizes
-    /// rather than scaling continuously with the icons. `.mini` (12pt) matches
-    /// a small symbol closely; `.regular` is 32pt, far past even a large one,
-    /// so large stays on `.small` and only its frame grows.
-    private var spinnerControlSize: ControlSize {
-        size == .small ? .mini : .small
-    }
-
-    var body: some View {
-        switch state {
-        case .running:
-            if let agent, !spinnerOverAgent {
-                SidebarRowIcon(symbol: symbol, index: index, agent: agent)
-                    .foregroundStyle(.secondary)
-                    .help("Running")
-            } else {
-                let side = 16 * size.glyphScale
-                ProgressView()
-                    .controlSize(spinnerControlSize)
-                    .tint(.secondary)
-                    .help("Running")
-                    .frame(width: side, height: side)
-            }
-        case .done:
-            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
-                .foregroundStyle(.secondary)
-                .overlay(alignment: .bottomTrailing) {
-                    // Opaque (not translucent) so it reads clearly over the
-                    // icon and the sidebar background. Nested in a background
-                    // ring so it stays legible over any icon color. Sized off
-                    // the icon so the dot keeps hugging its corner at every
-                    // icon size instead of floating away from a smaller glyph.
-                    Circle()
-                        .fill(.background)
-                        .frame(width: 7 * size.glyphScale, height: 7 * size.glyphScale)
-                        .overlay(
-                            Circle()
-                                .fill(MactermTheme.success)
-                                .frame(width: 5 * size.glyphScale, height: 5 * size.glyphScale)
-                        )
-                        .offset(x: 2.5 * size.glyphScale, y: 2.5 * size.glyphScale)
-                }
-                .help("Done")
-        case .idle:
-            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
-                .foregroundStyle(.secondary)
-                .help("Idle")
-        }
-    }
-}
-
-private extension AgentIcon {
-    /// The agent's brand tint. These are vendor identity colors, not theme
-    /// colors, so they're the one deliberate exception to "all colors come
-    /// from MactermTheme". Monochrome brands (Cursor, Grok, opencode) use
-    /// `.primary` so they stay black-on-light / white-on-dark like the brand.
-    var brandColor: Color {
-        switch self {
-        case .claude: Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255) // Anthropic coral
-        case .codex: Color(red: 0xAB / 255, green: 0xAB / 255, blue: 0xAB / 255) // OpenAI light gray
-        case .gemini: Color(red: 0x42 / 255, green: 0x85 / 255, blue: 0xF4 / 255) // Google blue
-        case .copilot: Color(red: 0x89 / 255, green: 0x57 / 255, blue: 0xE5 / 255) // GitHub purple
-        case .antigravity: Color(red: 0x31 / 255, green: 0x86 / 255, blue: 0xFF / 255) // Google Antigravity blue
-        case .opencode,
-             .cursor,
-             .grok,
-             .pi: .primary
-        }
-    }
-}
-
-private struct SidebarRowIcon: View {
-    let symbol: String
-    let index: Int
-    var agent: AgentIcon?
-    @AppStorage(Preferences.Keys.sidebarIconSize)
-    private var iconSizeRaw = SidebarIconSize.medium.rawValue
-    /// Scales with the user's text size like the sibling SF Symbols do; a
-    /// fixed 15pt would stay small next to enlarged row text.
-    @ScaledMetric(relativeTo: .body)
-    private var agentIconSize: CGFloat = 15
-
-    private var size: SidebarIconSize {
-        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
-    }
-
-    var body: some View {
-        if let agent {
-            // A live AI agent in the tab overrides the user's chosen icon —
-            // the logo is a status signal, tinted with the agent's brand color
-            // (overriding the row's .secondary tint).
-            let side = agentIconSize * size.glyphScale
-            Image(agent.rawValue)
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .frame(width: side, height: side)
-                .foregroundStyle(agent.brandColor)
-        } else if Preferences.numberIconChoices.contains(symbol) {
-            NumberGlyph(index: index, variant: symbol, size: size)
-        } else {
-            Image(systemName: symbol)
-                .imageScale(size.imageScale)
-        }
-    }
-}
-
-private extension SidebarIconSize {
-    /// SwiftUI's own symbol scaling, which sizes a symbol against whatever font
-    /// the row hands it. `medium` is the default, so the middle case leaves an
-    /// icon exactly the size it was before this preference existed rather than
-    /// pinning it to a point size of our own.
-    var imageScale: Image.Scale {
-        switch self {
-        case .small: .small
-        case .medium: .medium
-        case .large: .large
-        }
-    }
-}
-
-private struct NumberGlyph: View {
-    let index: Int
-    let variant: String
-    var size: SidebarIconSize = .medium
-    /// The `.body` point size, as a metric so the digits keep tracking the
-    /// user's text size once `glyphScale` has been applied — `imageScale` is
-    /// no help here, since these variants draw text rather than a symbol.
-    @ScaledMetric(relativeTo: .body)
-    private var bodyFontSize: CGFloat = 13
-
-    private var digitFont: Font {
-        .system(size: bodyFontSize * size.glyphScale).monospacedDigit()
-    }
-
-    var body: some View {
-        if variant == Preferences.numberIconPlain {
-            Text("\(index)")
-                .font(digitFont)
-        } else if let suffix = shapeSuffix, (1 ... 50).contains(index) {
-            // SF Symbols ships `1.<shape>` through `50.<shape>`; beyond that,
-            // fall back to plain digits so we don't render a missing glyph.
-            Image(systemName: "\(index).\(suffix)")
-                .imageScale(size.imageScale)
-        } else {
-            Text("\(index)")
-                .font(digitFont)
-        }
-    }
-
-    /// Maps the sentinel token (e.g. `number.circle.fill`) to the suffix used
-    /// by the indexed SF Symbol (e.g. `circle.fill` in `1.circle.fill`).
-    private var shapeSuffix: String? {
-        switch variant {
-        case Preferences.numberIconCircleFill: "circle.fill"
-        case Preferences.numberIconCircle: "circle"
-        case Preferences.numberIconSquareFill: "square.fill"
-        case Preferences.numberIconSquare: "square"
-        default: nil
         }
     }
 }
