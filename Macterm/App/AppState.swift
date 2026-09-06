@@ -1653,7 +1653,16 @@ final class AppState {
             if isVisible, let aspect = PanePreviewCapture.containerAspect(of: tab) {
                 paneContainerAspect = aspect
             }
-            for pane in tab.splitRoot.allPanes() where isVisible || panePreviews[pane.id] == nil {
+            // Re-capture a pane we know nothing about yet, not merely one with
+            // no entry at all. A capture can legitimately come back empty —
+            // the pane has no NSView until `SurfaceIncubator` warms it, no
+            // ghostty surface until that view gets a window and a size, and no
+            // text until its shell prints — and treating the first such answer
+            // as the answer left the card blank for the rest of the run, since
+            // an entry existed and nothing would replace it.
+            for pane in tab.splitRoot.allPanes()
+                where isVisible || panePreviews[pane.id]?.isEmpty ?? true
+            {
                 store(PanePreviewCapture.capture(pane), for: pane.id)
             }
         }
@@ -1683,11 +1692,18 @@ final class AppState {
         }
     }
 
-    /// Keep the best preview we have: a fresh frame always wins, but a capture
-    /// that came back frameless must not erase the frame we already collected
-    /// — that is the whole point of the cache.
+    /// Keep the best preview we have. A capture that came back frameless must
+    /// not erase a frame we already collected — that is the whole point of the
+    /// cache — and one that came back with nothing at all must not erase text
+    /// either, so a pane that goes quiet keeps showing what it last looked
+    /// like rather than blanking.
     private func store(_ preview: PanePreview, for paneID: UUID) {
-        if preview.image == nil, panePreviews[paneID]?.image != nil { return }
+        guard let existing = panePreviews[paneID] else {
+            panePreviews[paneID] = preview
+            return
+        }
+        if preview.image == nil, existing.image != nil { return }
+        if preview.isEmpty, !existing.isEmpty { return }
         panePreviews[paneID] = preview
     }
 
