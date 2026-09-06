@@ -27,10 +27,13 @@ struct TabGlyph: View {
     let index: Int
     /// Per-row override of the icon preference (pinned rows carry their own).
     var symbolOverride: String?
-    /// Color for the symbol and the spinner. An agent logo keeps its brand
-    /// color regardless — that is identity, not state — so this moves the
-    /// user's chosen icon and the status badge only.
-    var tint: Color = .secondary
+    /// Color for the symbol and the spinner, and for an agent logo in place of
+    /// its brand color. nil keeps the hierarchical `.secondary` these glyphs
+    /// have always used — which is NOT the same as passing `Color.secondary`,
+    /// since the hierarchical style resolves against a selected sidebar row's
+    /// own foreground (see `TabStatusGlyph.iconStyle`). The sidebar passes the
+    /// project's tag color; the switcher passes its selected/unselected color.
+    var tint: Color?
 
     @AppStorage(Preferences.Keys.tabIconSymbol)
     private var tabIconSymbol = "terminal"
@@ -44,6 +47,10 @@ struct TabGlyph: View {
     private var symbol: String { symbolOverride ?? tabIconSymbol }
     private var agent: AgentIcon? { showAgentIcons ? tab.agentIcon : nil }
 
+    private var iconStyle: AnyShapeStyle {
+        tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary)
+    }
+
     var body: some View {
         if showTabStatusIndicator, !(symbol == Preferences.noIcon && tab.executionState == .idle && agent == nil) {
             TabStatusGlyph(
@@ -51,14 +58,14 @@ struct TabGlyph: View {
                 symbol: symbol,
                 index: index,
                 agent: agent,
-                spinnerOverAgent: showSpinnerOverAgentIcons,
-                tint: tint
+                tint: tint,
+                spinnerOverAgent: showSpinnerOverAgentIcons
             )
         } else if symbol != Preferences.noIcon || agent != nil {
             // "None" suppresses the user's icon, not the agent logo — that is
             // a live status signal, so it survives the preference.
-            TabRowIcon(symbol: symbol, index: index, agent: agent)
-                .foregroundStyle(tint)
+            TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
+                .foregroundStyle(iconStyle)
         }
     }
 }
@@ -82,11 +89,10 @@ struct TabStatusGlyph: View {
     let symbol: String
     let index: Int
     var agent: AgentIcon?
+    /// The project tag's color, nil when untagged — see
+    /// `SidebarTabRow.tagColor`, or the switcher's selection color.
+    var tint: Color?
     var spinnerOverAgent = true
-    /// Color for the symbol and the spinner; an agent logo keeps its brand
-    /// color. Threaded from `TabGlyph` so the switcher can brighten the
-    /// selected card's icon along with its title.
-    var tint: Color = .secondary
     @AppStorage(Preferences.Keys.sidebarIconSize)
     private var iconSizeRaw = SidebarIconSize.medium.rawValue
 
@@ -102,24 +108,31 @@ struct TabStatusGlyph: View {
         size == .small ? .mini : .small
     }
 
+    /// The tag when tagged, else the hierarchical `.secondary` these glyphs
+    /// have always used — see `SidebarTabRow.iconStyle` for why a `??` here
+    /// would quietly change every untagged row.
+    private var iconStyle: AnyShapeStyle {
+        tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary)
+    }
+
     var body: some View {
         switch state {
         case .running:
             if let agent, !spinnerOverAgent {
-                TabRowIcon(symbol: symbol, index: index, agent: agent)
-                    .foregroundStyle(tint)
+                TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
+                    .foregroundStyle(iconStyle)
                     .help("Running")
             } else {
                 let side = 16 * size.glyphScale
                 ProgressView()
                     .controlSize(spinnerControlSize)
-                    .tint(tint)
+                    .tint(tint ?? .secondary)
                     .help("Running")
                     .frame(width: side, height: side)
             }
         case .done:
-            TabRowIcon(symbol: symbol, index: index, agent: agent)
-                .foregroundStyle(tint)
+            TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
+                .foregroundStyle(iconStyle)
                 .overlay(alignment: .bottomTrailing) {
                     // Opaque (not translucent) so it reads clearly over the
                     // icon and the sidebar background. Nested in a background
@@ -138,8 +151,8 @@ struct TabStatusGlyph: View {
                 }
                 .help("Done")
         case .idle:
-            TabRowIcon(symbol: symbol, index: index, agent: agent)
-                .foregroundStyle(tint)
+            TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
+                .foregroundStyle(iconStyle)
                 .help("Idle")
         }
     }
@@ -169,6 +182,12 @@ struct TabRowIcon: View {
     let symbol: String
     let index: Int
     var agent: AgentIcon?
+    /// The project tag's color, which outranks the agent's brand color: a
+    /// tagged project claims every icon in its rows, so the logo's SHAPE says
+    /// which agent and the color says which project. Coral sitting among a
+    /// red project's icons read as a mistake rather than as a brand. Nil
+    /// (untagged) keeps the brand color.
+    var agentTint: Color?
     @AppStorage(Preferences.Keys.sidebarIconSize)
     private var iconSizeRaw = SidebarIconSize.medium.rawValue
     /// Scales with the user's text size like the sibling SF Symbols do; a
@@ -184,14 +203,15 @@ struct TabRowIcon: View {
         if let agent {
             // A live AI agent in the tab overrides the user's chosen icon —
             // the logo is a status signal, tinted with the agent's brand color
-            // (overriding the row's .secondary tint).
+            // (overriding the row's .secondary tint) unless the project's own
+            // tag claims it.
             let side = agentIconSize * size.glyphScale
             Image(agent.rawValue)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
                 .frame(width: side, height: side)
-                .foregroundStyle(agent.brandColor)
+                .foregroundStyle(agentTint ?? agent.brandColor)
         } else if Preferences.numberIconChoices.contains(symbol) {
             NumberGlyph(index: index, variant: symbol, size: size)
         } else {

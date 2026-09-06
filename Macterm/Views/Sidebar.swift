@@ -511,6 +511,7 @@ struct SidebarContent: View {
             // behind them — the same state a closed pinned tab is in, so it
             // gets the same dimmed treatment.
             isUnloaded: appState.isProjectUnloaded(project.id),
+            projectColor: project.color,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
@@ -736,6 +737,9 @@ struct SidebarContent: View {
         }
         Divider()
         Button("Rename Project") { requestProjectRename(project.id) }
+        ProjectColorMenu(selection: project.color) { color in
+            projectStore.setColor(id: project.id, to: color)
+        }
         Divider()
         // Same reorder calls as Settings → Projects' rows; `toOffset` is in
         // `move(fromOffsets:toOffset:)` convention, hence `+ 2` for down.
@@ -1015,7 +1019,14 @@ private struct SidebarProjectRow: View {
                 Label {
                     titleContent
                 } icon: {
-                    TabRowIcon(symbol: projectIconSymbol, index: index)
+                    // Only when tagged: forcing a color on an untagged row
+                    // would flatten the styling AppKit gives a selected row.
+                    if let color = project.color {
+                        TabRowIcon(symbol: projectIconSymbol, index: index)
+                            .foregroundStyle(MactermTheme.color(for: color))
+                    } else {
+                        TabRowIcon(symbol: projectIconSymbol, index: index)
+                    }
                 }
             }
         }
@@ -1070,6 +1081,11 @@ private struct SidebarTabRow: View {
     /// was unloaded). Matches the unloaded pinned row's treatment — secondary
     /// title, tertiary icon, and a tooltip saying what selecting it does.
     var isUnloaded = false
+    /// The owning project's color tag, drawn on whatever glyph this row's
+    /// icon slot holds — and on nothing at all when it holds none, since a
+    /// tab row never carries a stripe. Nil for an untagged project and for
+    /// the pinned rows, which belong to none.
+    var projectColor: ProjectColor?
     let onRename: (String) -> Void
     @Environment(AppState.self)
     private var appState
@@ -1111,6 +1127,28 @@ private struct SidebarTabRow: View {
         iconSymbolOverride ?? tabIconSymbol
     }
 
+    /// The project tag's color, or nil when the project is untagged — which
+    /// is what leaves an untagged row exactly as it was, agent logos in their
+    /// brand colors included. Also nil while the row is unloaded: the dim IS
+    /// the "no shells behind this" signal, and a saturated tag beside a greyed
+    /// title reads as half-live.
+    @MainActor
+    private var tagColor: Color? {
+        guard !isUnloaded else { return nil }
+        return projectColor.map { MactermTheme.color(for: $0) }
+    }
+
+    /// The icon's style: the tag when tagged, else the hierarchical
+    /// `.secondary` the row has always used. `AnyShapeStyle` because the two
+    /// arms are different style types — a `??` would bind the whole
+    /// expression to `Color` and silently swap `HierarchicalShapeStyle`
+    /// (which resolves against a selected row's own foreground) for the fixed
+    /// `Color.secondary`, changing every UNTAGGED row.
+    @MainActor
+    private var iconStyle: AnyShapeStyle {
+        tagColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary)
+    }
+
     var body: some View {
         Group {
             if iconSymbol == Preferences.noIcon {
@@ -1122,14 +1160,14 @@ private struct SidebarTabRow: View {
                     // invisible Image would still reserve the Label's icon
                     // column, nudging the title right of every other
                     // icon-less row.
-                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol)
+                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol, tint: tagColor)
                 }
                 .labelStyle(.titleAndIcon)
             } else {
                 Label {
                     titleContent
                 } icon: {
-                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol)
+                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol, tint: tagColor)
                 }
             }
         }

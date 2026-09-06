@@ -53,6 +53,22 @@ enum MactermTheme {
         GhosttyApp.shared.paletteColor(at: 2).map { Color(nsColor: $0) } ?? .green
     }
 
+    /// A project's color tag. System colors rather than the ghostty palette —
+    /// see `ProjectColor` for why deriving them from the theme was wrong.
+    @MainActor
+    static func color(for projectColor: ProjectColor) -> Color {
+        switch projectColor {
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .green: .green
+        case .cyan: .cyan
+        case .blue: .blue
+        case .purple: .purple
+        case .pink: .pink
+        }
+    }
+
     /// Scrollbar search-tick colors (NSColor: drawn by an AppKit overlay),
     /// mirroring the renderer's search highlight backgrounds
     /// (`search-background` / `search-selected-background`) so the ticks read
