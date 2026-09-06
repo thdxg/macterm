@@ -934,15 +934,37 @@ final class AppState {
     ///
     /// Callers still `destroySurface()` themselves; this decides only the kill.
     func releaseSessions(_ panes: [Pane]) {
-        let releasing = Set(panes.map(\.id))
-        let retained = Set(
-            allLivePanes()
-                .filter { !releasing.contains($0.id) }
-                .map(\.sessionName)
-        ).union(pendingPinnedSessionNames())
+        let retained = retainedSessionNames(excluding: panes)
         for pane in panes where !retained.contains(pane.sessionName) {
             pane.killPersistentSession(using: zmx)
         }
+    }
+
+    /// The session names still claimed once `releasing` is gone. Shared by
+    /// `releaseSessions` and `closeNeedsConfirmation` so the kill decision and
+    /// the warning about it can never disagree.
+    private func retainedSessionNames(excluding releasing: [Pane]) -> Set<String> {
+        let ids = Set(releasing.map(\.id))
+        return Set(
+            allLivePanes()
+                .filter { !ids.contains($0.id) }
+                .map(\.sessionName)
+        ).union(pendingPinnedSessionNames())
+    }
+
+    /// Whether closing `closing` is worth stopping the user over.
+    ///
+    /// The busy-close guard exists because closing a pane kills its session
+    /// and whatever is running in it. That is no longer true for every pane:
+    /// a pane whose session ANOTHER pane still attaches is only a view going
+    /// away — nothing is killed, and the program keeps running in the other
+    /// view — so warning "closing kills its session" there would be false.
+    ///
+    /// Uses the same retention rule as `releaseSessions`, because what the
+    /// user stands to lose is exactly what that function decides to kill.
+    func closeNeedsConfirmation(_ closing: [Pane]) -> Bool {
+        let retained = retainedSessionNames(excluding: closing)
+        return closing.contains { $0.needsConfirmClose && !retained.contains($0.sessionName) }
     }
 
     private func shouldSweep(_ destination: String, now: Date) -> Bool {
@@ -1911,6 +1933,27 @@ final class AppState {
         return newID
     }
 
+    /// Mirror a pane — add a second pane attached to the same zmx session
+    /// (#345). Both render the same live shell; zmx broadcasts its output to
+    /// every attached client.
+    ///
+    /// The mirror does not take focus (see `TerminalTab.mirror`), and it
+    /// carries no `command`/`shell` (see `Pane.init(mirroring:)`), so it
+    /// attaches to the running session instead of respawning or re-running it.
+    @discardableResult
+    func mirrorPane(
+        _ paneID: UUID,
+        direction: SplitDirection,
+        projectID: UUID
+    ) -> UUID? {
+        guard let ws = workspaces[projectID],
+              let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
+        else { return nil }
+        guard let newID = tab.mirror(paneID: paneID, direction: direction) else { return nil }
+        saveWorkspaces()
+        return newID
+    }
+
     /// Split a pane into an equal `rows`×`columns` grid (see
     /// `TerminalTab.makeGrid`), spawning `command` in each new pane. Every
     /// cell honors the new split directory preference, so a grid and a
@@ -2082,7 +2125,7 @@ final class AppState {
         let pane = workspaces[projectID]?.tabs
             .compactMap { $0.splitRoot.findPane(id: paneID) }
             .first
-        if pane?.needsConfirmClose == true {
+        if let pane, closeNeedsConfirmation([pane]) {
             pendingClosePane = PendingClosePane(paneID: paneID, projectID: projectID)
             return
         }

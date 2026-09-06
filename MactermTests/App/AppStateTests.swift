@@ -93,6 +93,119 @@ struct AppStateTests {
         #expect(tab.focusedPaneID != before)
     }
 
+    // MARK: - Mirroring (#345)
+
+    @Test
+    func mirrorPane_attaches_a_second_pane_to_the_same_session() throws {
+        // The whole point: two panes, one zmx session. `zmx attach` is an
+        // upsert and its daemon broadcasts to every client, so both render the
+        // same live shell.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+        let mirrored = try #require(tab.splitRoot.findPane(id: mirrorID))
+
+        #expect(tab.splitRoot.allPanes().count == 2)
+        #expect(mirrored.sessionName == source.sessionName)
+        #expect(mirrored.sessionID == source.sessionID)
+        // Distinct panes, though — each needs its own surface, because one
+        // NSView cannot live in two view hierarchies.
+        #expect(mirrored.id != source.id)
+    }
+
+    @Test
+    func mirrorPane_does_not_carry_the_sources_command_or_shell() throws {
+        // `command` is injected as initial_input on first surface build, and
+        // hasBuiltSurface is per-Pane — so a mirror carrying it would re-type a
+        // declared layout `run:` into a session already running it.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let withCommand = try #require(state.splitPane(
+            source.id, direction: .horizontal, projectID: p.id, command: "htop"
+        ))
+        let commanded = try #require(tab.splitRoot.findPane(id: withCommand))
+        #expect(commanded.command == "htop")
+
+        let mirrorID = try #require(state.mirrorPane(commanded.id, direction: .vertical, projectID: p.id))
+        let mirrored = try #require(tab.splitRoot.findPane(id: mirrorID))
+
+        #expect(mirrored.command == nil)
+        #expect(mirrored.shell == nil)
+        #expect(mirrored.sessionName == commanded.sessionName)
+    }
+
+    @Test
+    func mirrorPane_does_not_steal_focus() throws {
+        // Unlike split: a mirror is a second view of work the user is already
+        // looking at, so taking focus would move them off the pane they use.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let before = tab.focusedPaneID
+
+        _ = state.mirrorPane(source.id, direction: .horizontal, projectID: p.id)
+
+        #expect(tab.focusedPaneID == before)
+    }
+
+    @Test
+    func mirrorPane_unknown_pane_is_noop() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+
+        #expect(state.mirrorPane(UUID(), direction: .horizontal, projectID: p.id) == nil)
+        #expect(tab.splitRoot.allPanes().count == 1)
+    }
+
+    @Test
+    func closing_a_mirror_made_by_mirrorPane_spares_the_session() async throws {
+        // The end-to-end shape of #348's refcount, driven through the real
+        // mirror path rather than a hand-built pane.
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+
+        state.closePane(mirrorID, projectID: p.id)
+
+        await killed.settleExpectingNone()
+        #expect(await killed.names.isEmpty)
+        #expect(tab.splitRoot.allPanes().count == 1)
+    }
+
+    @Test
+    func closeNeedsConfirmation_is_false_for_a_pane_whose_session_survives() throws {
+        // The busy-close guard says "closing kills its session". For a mirror
+        // that is simply false — the other view keeps the program running —
+        // so a busy mirror must not raise it.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+        let mirrored = try #require(tab.splitRoot.findPane(id: mirrorID))
+
+        // Closing either one alone leaves the other holding the session.
+        #expect(!state.closeNeedsConfirmation([mirrored]))
+        #expect(!state.closeNeedsConfirmation([source]))
+        // Closing BOTH ends it, so the guard applies again — whatever the
+        // panes' own busy verdict is, the retention half must not veto it.
+        #expect(
+            state.closeNeedsConfirmation([source, mirrored])
+                == [source, mirrored].contains(where: \.needsConfirmClose)
+        )
+    }
+
     @Test
     func splitPane_uses_selected_directory() throws {
         let prior = Preferences.shared.newSplitWorkingDirectory

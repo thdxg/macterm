@@ -888,6 +888,38 @@ final class Pane: Identifiable {
         remoteProbeRequest = RemoteProbeRequest(primed: isRemote)
     }
 
+    /// A second pane attached to `source`'s zmx session — the same running
+    /// shell shown twice (#345). `zmx attach` is an upsert and its daemon
+    /// broadcasts output to every client, so both panes render the same live
+    /// session; only one of them (zmx's "leader") drives the pty size.
+    ///
+    /// This exists as its own initializer rather than as a call-site
+    /// convention because two of its arguments are hazards if a caller
+    /// forgets them:
+    ///
+    /// - `command` MUST be nil. It is injected as `initial_input` on the first
+    ///   surface build, and `hasBuiltSurface` is per-`Pane`, not per-session —
+    ///   so a mirror carrying its source's `command` would re-type a declared
+    ///   layout `run:` into a session that is already running it. Same contract
+    ///   as snapshot restore and the #281 reconnect respawn.
+    /// - `shell` MUST be nil for the same reason: the session's shell was
+    ///   chosen when it was created and the mirror only attaches to it.
+    ///
+    /// `env` is dropped too — it is spawn-time input, and the session's shell
+    /// already has the environment it was created with (including
+    /// `MACTERM_SESSION`, which both mirrors therefore report identically).
+    convenience init(mirroring source: Pane) {
+        self.init(
+            projectPath: source.projectPath,
+            projectID: source.projectID,
+            sessionID: source.sessionID,
+            sessionName: source.sessionName
+        )
+        // A host property, not pane identity — re-derived per open exactly as
+        // AppState stamps it, so the mirror can tear down over ssh too.
+        remoteZmxPath = source.remoteZmxPath
+    }
+
     /// Re-point this pane at a new workspace after its tab is moved between
     /// projects (`AppState.moveTab`). Updates ONLY the routing identity — the
     /// `projectID` that notification navigation and the quit sweep key on — so a

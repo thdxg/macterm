@@ -169,6 +169,32 @@ final class TerminalTab: Identifiable {
         return newID
     }
 
+    /// Insert a mirror of `paneID` beside it — a second pane attached to the
+    /// same zmx session (#345). Returns the new pane's ID, or nil when the
+    /// pane isn't in this tab.
+    ///
+    /// Deliberately does NOT focus the new pane, unlike `split`. A mirror is a
+    /// second view of work the user is already looking at, so stealing focus
+    /// would move it away from the pane they are actually using — and, once
+    /// leadership follows focus, would hand the pty size to the new view for
+    /// no reason.
+    func mirror(paneID: UUID, direction: SplitDirection) -> UUID? {
+        guard let source = splitRoot.findPane(id: paneID) else { return nil }
+        let mirrored = Pane(mirroring: source)
+        let (newRoot, inserted) = splitRoot.inserting(
+            pane: mirrored,
+            at: paneID,
+            direction: direction,
+            position: .second
+        )
+        guard inserted else { return nil }
+        splitRoot = newRoot
+        // Inserting reveals a new pane — exit zoom so it's visible.
+        zoomedPaneID = nil
+        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
+        return mirrored.id
+    }
+
     /// Split a pane into a `rows`×`columns` grid of equal cells (row-major),
     /// optionally spawning `command` in every NEW pane. The source pane
     /// becomes the top-left cell and keeps its running shell — a command

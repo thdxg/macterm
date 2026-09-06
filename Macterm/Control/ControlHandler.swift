@@ -71,6 +71,7 @@ final class ControlHandler {
         case "pane.inspect": return try paneInspect(args)
         case "pane.dump": return try paneDump(args)
         case "pane.split": return try paneSplit(args)
+        case "pane.mirror": return try paneMirror(args)
         case "pane.focus": return try paneFocus(args)
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
@@ -552,22 +553,28 @@ final class ControlHandler {
 
     // MARK: - Pane mutations
 
-    private func paneSplit(_ args: ControlArgs) throws -> ControlData {
-        let (project, workspace) = try resolveWorkspace(args)
-        let target = try resolvePane(args, in: workspace)
-        let direction: SplitDirection
+    /// Resolve a `--direction` argument against the pane it will act on.
+    /// Shared by `pane.split` and `pane.mirror` so the two can't drift on what
+    /// `auto` means.
+    private func splitDirection(_ args: ControlArgs, relativeTo pane: Pane) throws -> SplitDirection {
         switch args.direction ?? "auto" {
-        case "right": direction = .horizontal
-        case "down": direction = .vertical
+        case "right": return .horizontal
+        case "down": return .vertical
         case "auto":
             // The UI's auto-split picks the longer on-screen axis from the
             // pane's live NSView bounds; a never-shown pane measures zero and
             // falls back to horizontal — same as TerminalTab.autoSplit.
-            let bounds = target.pane.nsView?.bounds.size ?? .zero
-            direction = bounds.height > bounds.width ? .vertical : .horizontal
+            let bounds = pane.nsView?.bounds.size ?? .zero
+            return bounds.height > bounds.width ? .vertical : .horizontal
         default:
             throw ControlError(code: .badRequest, message: "direction must be right, down, or auto")
         }
+    }
+
+    private func paneSplit(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let direction = try splitDirection(args, relativeTo: target.pane)
         guard let newID = appState.splitPane(
             target.pane.id,
             direction: direction,
@@ -577,6 +584,21 @@ final class ControlHandler {
         ), let newPane = target.tab.splitRoot.findPane(id: newID)
         else {
             throw ControlError(code: .internalError, message: "split failed")
+        }
+        return ControlData(panes: [paneInfo(newPane, in: target.tab, workspace: workspace)])
+    }
+
+    private func paneMirror(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let direction = try splitDirection(args, relativeTo: target.pane)
+        guard let newID = appState.mirrorPane(
+            target.pane.id,
+            direction: direction,
+            projectID: project.id
+        ), let newPane = target.tab.splitRoot.findPane(id: newID)
+        else {
+            throw ControlError(code: .internalError, message: "mirror failed")
         }
         return ControlData(panes: [paneInfo(newPane, in: target.tab, workspace: workspace)])
     }
@@ -623,8 +645,10 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "pane.close requires a pane or session selector")
         }
         let target = try resolvePane(args, in: workspace)
-        let busy = target.pane.needsConfirmClose
-        if busy, args.force != true {
+        // Mirror-aware: a pane whose session another pane still attaches kills
+        // nothing when it closes, so it must not raise a warning that says it
+        // does (see AppState.closeNeedsConfirmation).
+        if appState.closeNeedsConfirmation([target.pane]), args.force != true {
             throw ControlError(
                 code: .busy,
                 message: "that pane has a running program (closing kills its session)",

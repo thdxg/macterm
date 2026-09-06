@@ -417,8 +417,9 @@ struct PaneCommand: ParsableCommand {
     /// boundary; this just hides the verb from `--help` in release.)
     private static var paneSubcommands: [ParsableCommand.Type] {
         var subs: [ParsableCommand.Type] = [
-            List.self, Inspect.self, Dump.self, Split.self, Focus.self,
-            Close.self, Run.self, Key.self, Zoom.self, ResizeSplit.self,
+            List.self, Inspect.self, Dump.self, Split.self, Mirror.self,
+            Focus.self, Close.self, Run.self, Key.self, Zoom.self,
+            ResizeSplit.self,
         ]
         #if DEBUG
         subs.append(Resize.self)
@@ -466,6 +467,24 @@ struct PaneCommand: ParsableCommand {
             args.direction = direction
             args.run = runCommand
             try runControlCommand(command: "pane.split", args: args, options: options)
+        }
+    }
+
+    struct Mirror: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Mirror a pane — show the same session in a second pane."
+        )
+
+        @Option(help: "right, down, or auto (longer on-screen axis).")
+        var direction: String = "auto"
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.direction = direction
+            try runControlCommand(command: "pane.mirror", args: args, options: options)
         }
     }
 
