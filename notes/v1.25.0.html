@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.25.0 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li>Holding the Recent Tab shortcut now shows a strip of the project's tabs, each with a preview of its panes in their real split layout; the tab changes when the shortcut is released. (#346, #347)</li>
+<li>Projects can carry a color that tints the project's sidebar icon and the icons of its tabs, set from the project's context menu or Settings → Projects. (#341)</li>
+<li>A fresh install now opens with a project on your home directory and a pinned Welcome tab, each running a short tour you can read, scroll away, or run again with <code class="notranslate">macterm tutor</code>. (#339)</li>
+<li>New tabs and new splits can each be set to open in the project directory or the active pane's directory. (#337)</li>
+<li>Cmd+number now reaches tabs past 9: keep Command held and type more digits. (#326)</li>
+<li>The hidden sidebar can peek as an overlay that leaves the terminal's size untouched, instead of pushing the panes aside. (#280)</li>
+<li>Projects and tabs can be renamed by double-clicking their title in the sidebar. (#330, #333)</li>
+<li><code class="notranslate">macterm tab rename</code>, <code class="notranslate">macterm project rename</code>, and <code class="notranslate">macterm project remove</code> bring renaming and project removal to the command line. (#323, #327)</li>
+<li><code class="notranslate">macterm pane run --no-submit</code> leaves the text sitting on a pane's prompt instead of running it. (#328, #332)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li>A slide or image filling most of a pane no longer repaints the whole window in its color when Adaptive background is on. (#335)</li>
+</ul>
+<h2>Contributors</h2>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a>, <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/micha-f/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/micha-f">@micha-f</a>, <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/Pavior0/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/Pavior0">@Pavior0</a>, <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/nabilfreeman/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/nabilfreeman">@nabilfreeman</a>, <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/impossibleowl/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/impossibleowl">@impossibleowl</a> and <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/OpenSource03/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/OpenSource03">@OpenSource03</a> for this release.</p>
+</body>
+</html>
