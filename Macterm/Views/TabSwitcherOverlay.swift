@@ -104,6 +104,13 @@ private struct TabSwitcherStrip: View {
     let onClick: (Int) -> Void
 
     private static let spacing: CGFloat = 10
+    /// Inset from the panel's edge to the cards. The preview inside a card
+    /// carries `TabSwitcherCard.selectionHalo` on top of this, so the gap the
+    /// eye actually reads — panel edge to picture — is the sum, equally on
+    /// every side. Anything that pads one axis and not the other shows up
+    /// immediately here: the card used to carry a stray `.padding(.vertical, 2)`
+    /// (left over from a uniform padding that was removed around it), which
+    /// made the top gap 20 against 18 at the sides.
     private static let insets: CGFloat = 14
     /// Left clear on both sides of the panel, so it reads as floating in the
     /// window rather than spanning it.
@@ -194,51 +201,62 @@ private struct TabSwitcherCard: View {
     let isSelected: Bool
     let paneAspect: CGFloat?
 
-    /// Height of the preview area. Fixed, with the width following the pane
-    /// region's real aspect — the other way round (fixed width, derived
-    /// height) makes a portrait window's card taller than the strip.
-    static let previewHeight: CGFloat = 140
+    /// Height of the preview at a comfortably wide pane region. A narrow
+    /// (portrait) one grows TALLER instead of the card growing wider than its
+    /// picture — see `previewHeight(forPaneAspect:)`.
+    private static let basePreviewHeight: CGFloat = 140
+    /// Ceiling on that growth, so an extremely tall pane region can't turn the
+    /// strip into a wall.
+    private static let maxPreviewHeight: CGFloat = 190
+    /// Width a narrow card is grown toward — enough to carry an icon and some
+    /// title. Reached by making the preview taller, NEVER by padding the card
+    /// wider than its picture: a card with surplus width has to distribute it,
+    /// and centering that surplus is what made the side padding drift away
+    /// from the top padding as the window changed shape.
+    private static let widthTarget: CGFloat = 116
     /// Aspect assumed before anything has been measured. Only reachable for a
     /// workspace whose panes have never been on screen this run.
     static let fallbackAspect: CGFloat = 16.0 / 10.0
-    /// Floor on the card's width, so a very narrow (portrait) pane region
-    /// doesn't produce a card too small to carry an icon and any title at all.
-    /// The preview is centered in it and the title row aligns to the preview,
-    /// not to the card — see `body`.
-    private static let minimumWidth: CGFloat = 110
     private static let cornerRadius: CGFloat = 8
     /// Halo left around the preview for the selection fill to show in. Zero
     /// would hide it: the thumbnail is opaque, so a highlight exactly the
     /// preview's size sits entirely behind it.
     private static let selectionHalo: CGFloat = 4
 
-    /// The card's width for a given pane region — the preview at
-    /// `previewHeight` plus its halo, floored by `minimumWidth`.
-    static func width(forPaneAspect aspect: CGFloat?) -> CGFloat {
-        max(minimumWidth, boxWidth(forPaneAspect: aspect))
+    /// Aspect to lay out at, floored so a degenerate measurement can't divide
+    /// the height into something enormous.
+    private static func safeAspect(_ aspect: CGFloat?) -> CGFloat {
+        max(aspect ?? fallbackAspect, 0.2)
     }
 
-    /// Width of the preview plus the halo around it: the card's real content,
-    /// and what the title row is sized and aligned to.
-    private static func boxWidth(forPaneAspect aspect: CGFloat?) -> CGFloat {
-        (previewHeight * (aspect ?? fallbackAspect)).rounded() + selectionHalo * 2
+    /// Preview height for a pane region: the base, grown toward `widthTarget`
+    /// when the region is narrow, capped.
+    static func previewHeight(forPaneAspect aspect: CGFloat?) -> CGFloat {
+        min(maxPreviewHeight, max(basePreviewHeight, widthTarget / safeAspect(aspect)))
+    }
+
+    /// The card's width — exactly its preview plus the halo, at every aspect.
+    /// Keeping the two equal is what makes the panel's padding uniform by
+    /// construction: there is no surplus for a layout to distribute.
+    static func width(forPaneAspect aspect: CGFloat?) -> CGFloat {
+        (previewHeight(forPaneAspect: aspect) * safeAspect(aspect)).rounded() + selectionHalo * 2
     }
 
     private var cardWidth: CGFloat { Self.width(forPaneAspect: paneAspect) }
 
     var body: some View {
-        let boxWidth = Self.boxWidth(forPaneAspect: paneAspect)
-        // Preview and title share a left edge. The VStack is only as wide as
-        // the preview box, so centering it inside `cardWidth` moves the title
-        // with the picture instead of pinning the title to the card's edge and
-        // leaving it adrift of a narrower preview.
+        // Preview, title row and card are all exactly `cardWidth`: the preview
+        // because the card's width is derived from it, the title row because
+        // it asks for the same. Nothing here is wider than its content, so
+        // there is no surplus to center and the panel's padding reads the same
+        // on every side at every window shape.
         VStack(alignment: .leading, spacing: 6) {
             PaneMosaic(node: tab.splitRoot, focusedPaneID: tab.focusedPaneID)
                 // The mosaic gets the pane region's real proportions, so every
                 // leaf inside it gets its own pane's proportions and the
                 // captured frames drop in uncropped.
-                .aspectRatio(paneAspect ?? Self.fallbackAspect, contentMode: .fit)
-                .frame(height: Self.previewHeight)
+                .aspectRatio(Self.safeAspect(paneAspect), contentMode: .fit)
+                .frame(height: Self.previewHeight(forPaneAspect: paneAspect))
                 // The gaps between leaves are the miniature split dividers, so
                 // they need a color of their own. Left transparent they showed
                 // whatever sat behind the card — the selection fill on the
@@ -291,10 +309,8 @@ private struct TabSwitcherCard: View {
             // Inset by the halo so the icon's leading edge lands on the
             // preview's own edge rather than the highlight's.
             .padding(.horizontal, Self.selectionHalo)
-            .frame(width: boxWidth, alignment: .leading)
+            .frame(width: cardWidth, alignment: .leading)
         }
-        .frame(width: cardWidth)
-        .padding(.vertical, 2)
     }
 }
 
