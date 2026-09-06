@@ -140,6 +140,7 @@ jobs:
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
+            .zmx-tag
             .ghosttykit-tag
           # The tag stamp is cached with the artifacts it describes (test.yml).
           #

@@ -219,6 +219,7 @@ jobs:
             Macterm/Resources/ghostty
             Macterm/Resources/terminfo
             Macterm/Resources/zmx
+            .zmx-tag
             .ghosttykit-tag
           # No restore-keys fallback — see test.yml for why a time-rolling key
           # and a prefix restore-key must never be paired.
