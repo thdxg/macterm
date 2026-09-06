@@ -47,6 +47,11 @@ struct PanePreview {
     let aspectRatio: CGFloat?
     /// The terminal's column count, so the text fallback can be typeset at the
     /// scale a real thumbnail of this pane would have been.
+    ///
+    /// For a pane that has never been on screen this is the width it has in
+    /// `SurfaceIncubator`'s window (104 columns), not the width it would have
+    /// in the real one — but it is the width this text was actually laid out
+    /// at, which is what typesetting it needs.
     let columns: Int?
 
     var isEmpty: Bool { image == nil && lines.isEmpty }

@@ -226,6 +226,12 @@ private struct TabSwitcherCard: View {
                 // captured frames drop in uncropped.
                 .aspectRatio(paneAspect ?? Self.fallbackAspect, contentMode: .fit)
                 .frame(height: Self.previewHeight)
+                // The gaps between leaves are the miniature split dividers, so
+                // they need a color of their own. Left transparent they showed
+                // whatever sat behind the card — the selection fill on the
+                // selected one, the glass panel on the rest — which made two
+                // cards of the same layout read as different things.
+                .background(MactermTheme.border)
                 .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
@@ -377,26 +383,34 @@ private struct PanePreviewText: View {
     /// Mono and friends sit at 0.6; close enough to place the text at the
     /// right scale, which is all this needs to do.
     private static let advanceRatio: CGFloat = 0.6
-    /// Below this the glyphs stop resolving into anything, so the text is
-    /// dropped rather than drawn as grey mush.
-    private static let minimumFontSize: CGFloat = 1.6
+    /// Point size the text is typeset at before being scaled down to fit. The
+    /// fitting is a TRANSFORM, not a smaller font: a card leaf can be under
+    /// 50pt wide (a quadrant of a 2x2 split), which works out to well under a
+    /// point per glyph, and asking for a font that small either renders
+    /// nothing or renders wrong. Scaling a comfortably-typeset block keeps the
+    /// geometry exact at any size and can never drop the content — an earlier
+    /// cut computed a font size directly and skipped the text below a 1.6pt
+    /// floor, which left every never-focused SPLIT tab's card blank while
+    /// single-pane cards squeaked over the line at 1.62pt.
+    private static let referenceSize: CGFloat = 6
 
     var body: some View {
         GeometryReader { geo in
-            let size = geo.size.width / (CGFloat(max(columns ?? 80, 1)) * Self.advanceRatio)
-            if size >= Self.minimumFontSize {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                        Text(line.isEmpty ? " " : line)
-                            .font(.system(size: size, design: .monospaced))
-                            .foregroundStyle(MactermTheme.fgMuted)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Spacer(minLength: 0)
+            let width = CGFloat(max(columns ?? 80, 1)) * Self.referenceSize * Self.advanceRatio
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    Text(line.isEmpty ? " " : line)
+                        .font(.system(size: Self.referenceSize, design: .monospaced))
+                        .foregroundStyle(MactermTheme.fgMuted)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                Spacer(minLength: 0)
             }
+            .frame(width: width, alignment: .topLeading)
+            .scaleEffect(geo.size.width / width, anchor: .topLeading)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
         .clipped()
     }
