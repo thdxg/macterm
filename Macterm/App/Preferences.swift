@@ -292,8 +292,9 @@ final class Preferences {
     /// Show a transient tab switcher while the Recent Tab shortcut is held
     /// (#344): a glass strip of the recency-ordered tabs with a preview of
     /// each pane, so a several-tab project shows where the next Ctrl+Tab will
-    /// land. Opt-in — off keeps the plain direct-cycling behavior, and the
-    /// pane snapshots are only captured when it's on.
+    /// land. On by default. Off keeps the plain direct-cycling behavior —
+    /// where each press switches tabs for real rather than moving a selection
+    /// — and skips the pane snapshots entirely, so it costs nothing there.
     var showTabSwitcherOverlay: Bool {
         didSet { defaults.set(showTabSwitcherOverlay, forKey: Keys.showTabSwitcherOverlay) }
     }
@@ -810,7 +811,7 @@ final class Preferences {
             .flatMap(SidebarIconSize.init(rawValue:)) ?? .medium
         showAgentIcons = defaults.object(forKey: Keys.showAgentIcons) as? Bool ?? true
         showTabStatusIndicator = defaults.object(forKey: Keys.showTabStatusIndicator) as? Bool ?? false
-        showTabSwitcherOverlay = defaults.object(forKey: Keys.showTabSwitcherOverlay) as? Bool ?? false
+        showTabSwitcherOverlay = defaults.object(forKey: Keys.showTabSwitcherOverlay) as? Bool ?? true
         showSpinnerOverAgentIcons = defaults.object(forKey: Keys.showSpinnerOverAgentIcons) as? Bool ?? true
         autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         autoAssignProjectColors = defaults.object(forKey: Keys.autoAssignProjectColors) as? Bool ?? false
