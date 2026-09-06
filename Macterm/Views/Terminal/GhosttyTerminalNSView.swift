@@ -1709,6 +1709,48 @@ extension GhosttyTerminalNSView {
 extension GhosttyTerminalNSView {
     /// The live terminal grid + cell/surface pixel dimensions
     /// (`ghostty_surface_size`), or nil when the surface isn't created yet.
+    /// Ask zmx to make this pane's client the session leader (#345), so the
+    /// pty follows THIS pane's size rather than another mirror's.
+    ///
+    /// Refuses before the surface has a real size: `setLeader` answers a claim
+    /// by asking the client for its window size, and a surface that has not
+    /// laid out yet (an off-screen tab, the incubator) would resize the shared
+    /// pty to a placeholder for every mirror at once.
+    ///
+    /// Idempotent by design — zmx's `handleClaim` returns early when the
+    /// client is already leader, sending no size request — so callers may
+    /// claim freely rather than tracking whether it is needed.
+    @discardableResult
+    func sendLeadershipClaim() -> Bool {
+        guard let size = surfaceSize, size.columns > 0, size.rows > 0 else { return false }
+        return sendControlSequence(ZmxLeadership.claimSequence)
+    }
+
+    /// Write raw bytes straight to the pty, recording NONE of the
+    /// command-submission evidence `sendText` does.
+    ///
+    /// That evidence drives `TerminalExecutionTracker` — execution state, the
+    /// tab status glyph, and tab naming via `shellIsAtPrompt` — so a control
+    /// sequence the user never typed must leave it untouched, or a following
+    /// Return would read as submitting content that does not exist.
+    ///
+    /// Rides the key path with only `.text` set: libghostty writes such an
+    /// event's bytes verbatim under both its legacy and kitty encoders (no
+    /// keycode, so no CSI-u translation). NOT `ghostty_surface_text`, which
+    /// routes through the clipboard-paste path and would wrap this in
+    /// bracketed paste and run it past the unsafe-paste check.
+    @discardableResult
+    private func sendControlSequence(_ sequence: String) -> Bool {
+        guard let surface, !sequence.isEmpty else { return false }
+        sequence.withCString { ptr in
+            var ke = ghostty_input_key_s()
+            ke.action = GHOSTTY_ACTION_PRESS
+            ke.text = ptr
+            _ = ghostty_surface_key(surface, ke)
+        }
+        return true
+    }
+
     var surfaceSize: ghostty_surface_size_s? {
         guard let surface else { return nil }
         return ghostty_surface_size(surface)

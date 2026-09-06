@@ -1002,6 +1002,47 @@ final class AppState {
         sessionLeaders[pane.sessionName] = pane.id
     }
 
+    /// Hand this pane's session leadership over because the user moved to it —
+    /// updating our model AND telling zmx, which otherwise only switches leader
+    /// on real keystrokes and so would leave the pty sized for the pane the
+    /// user just left.
+    ///
+    /// The claim is sent unconditionally for a mirrored local pane, not only
+    /// when we believe leadership needs to move. zmx's `handleClaim` is a
+    /// no-op for a client that already leads, so the redundant case is free —
+    /// and sending anyway is what re-synchronises us whenever our model and
+    /// the daemon have drifted (an inferred leader after restore, or a foreign
+    /// `zmx attach` that took leadership without telling us).
+    ///
+    /// Debounced: a claim costs a pty resize, a SIGWINCH and a full TUI
+    /// redraw, and focus is noisy — `mouseDown` reports it twice per click
+    /// (directly and again via `becomeFirstResponder`) and `FocusRestoration`
+    /// retries across run-loop ticks. Cmd-tabbing past a window must not
+    /// reflow the program twice.
+    ///
+    /// **Remote panes are excluded.** Their zmx lives on the host and may
+    /// predate the Claim tag, in which case the client forwards the APC to the
+    /// shell and the user gets garbage on their prompt. Knowing otherwise
+    /// needs a per-host version probe; until then a remote mirror falls back
+    /// to zmx's own behaviour, where typing into it transfers leadership.
+    func claimSessionLeadership(_ pane: Pane) {
+        guard isMirrored(pane) else { return }
+        // Record first so the dim moves with the click rather than after the
+        // debounce — the model is ours to change immediately.
+        noteSessionLeader(pane)
+        guard !pane.isRemote else { return }
+        pendingLeadershipClaim?.cancel()
+        let work = DispatchWorkItem { [weak self, weak pane] in
+            guard let self, let pane, self.isLeader(pane) else { return }
+            pane.nsView?.sendLeadershipClaim()
+        }
+        pendingLeadershipClaim = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.leadershipClaimDebounce, execute: work)
+    }
+
+    private static let leadershipClaimDebounce: TimeInterval = 0.15
+    private var pendingLeadershipClaim: DispatchWorkItem?
+
     /// The panes in `tab` that are mirrors NOT currently driving their
     /// session's size — the ones the UI dims.
     func nonLeaderPaneIDs(in tab: TerminalTab) -> Set<UUID> {
@@ -2525,12 +2566,11 @@ final class AppState {
     func focusPane(_ paneID: UUID, projectID: UUID) {
         guard let tab = workspaces[projectID]?.activeTab else { return }
         tab.focusPane(paneID)
-        // Focusing a mirror is how the user says "drive the size from here".
-        // Keystrokes require focus, and any real keystroke makes zmx's daemon
-        // hand leadership over anyway (its `isUserInput` rule), so recording
-        // it here tracks what the daemon is about to do rather than diverging.
+        // Focusing a mirror is how the user says "drive the size from here",
+        // so tell zmx as well as ourselves — its daemon only switches leader
+        // on real keystrokes, and the user has not typed anything yet.
         if let pane = tab.splitRoot.findPane(id: paneID) {
-            noteSessionLeader(pane)
+            claimSessionLeadership(pane)
         }
     }
 

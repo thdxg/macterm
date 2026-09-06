@@ -279,6 +279,39 @@ struct AppStateTests {
     }
 
     @Test
+    func claiming_leadership_is_a_noop_for_an_unmirrored_pane() throws {
+        // Nothing to claim: the pane is its session's only client, so the
+        // whole mechanism must stay off the hot path of an ordinary focus.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+
+        state.claimSessionLeadership(pane)
+
+        #expect(state.isLeader(pane))
+        #expect(!state.isMirrored(pane))
+    }
+
+    @Test
+    func claiming_leadership_records_it_immediately() throws {
+        // The model updates now, not after the debounce, so the dim moves with
+        // the click. Only the wire message to zmx is deferred.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+        let mirrored = try #require(tab.splitRoot.findPane(id: mirrorID))
+        #expect(state.isLeader(source))
+
+        state.claimSessionLeadership(mirrored)
+
+        #expect(state.isLeader(mirrored))
+        #expect(!state.isLeader(source))
+    }
+
+    @Test
     func closeNeedsConfirmation_is_false_for_a_pane_whose_session_survives() throws {
         // The busy-close guard says "closing kills its session". For a mirror
         // that is simply false — the other view keeps the program running —

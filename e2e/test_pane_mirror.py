@@ -154,3 +154,72 @@ def test_closing_a_mirror_leaves_the_session_running(app, fresh_tab, live_pane):
         timeout=60,
         message=f"marker {marker} after closing the mirror",
     )
+
+
+def _cols(app, pane_id):
+    return app.pane_inspect(pane=pane_id)["cols"]
+
+
+def test_focusing_a_mirror_resizes_the_shared_pty_to_it(app, fresh_tab, live_pane):
+    """The whole chain, end to end: focus -> Macterm claim -> zmx ClaimFilter
+    -> Daemon.handleClaim -> setLeader -> size request -> TIOCSWINSZ.
+
+    zmx sizes the pty from the LEADER's client only, so this asserts what the
+    session's shell itself believes its width is and requires it to follow
+    whichever mirror has focus.
+
+    Two things make the measurement honest.
+
+    The split is deliberately skewed: at 50/50 the two mirrors are the same
+    width, and a working claim would be indistinguishable from a broken one.
+
+    And the size is read from a loop already running in the session rather than
+    by typing a command when we want to know. Typing is precisely what zmx's
+    OWN leadership rule reacts to, so a `pane run` to measure would hand
+    leadership to the pane it was run in and always report that pane's width —
+    the observation would create the result it claims to find.
+    """
+    app.cli("pane", "mirror", "--direction", "right", "--pane", live_pane["id"])
+    panes = wait_for(
+        lambda: (lambda p: p if len(p) == 2 else None)(app.panes(tab=fresh_tab["id"])),
+        message="the mirror",
+    )
+    mirror = next(p for p in panes if p["id"] != live_pane["id"])
+    wait_for(lambda: app.pane_text(pane=mirror["id"]), timeout=60, message="mirror surface")
+
+    app.cli("pane", "resize-split", "--axis", "horizontal", "--ratio", "0.72",
+            "--pane", live_pane["id"])
+    widths = wait_for(
+        lambda: (lambda a, b: (a, b) if a - b > 8 else None)(
+            _cols(app, live_pane["id"]), _cols(app, mirror["id"])
+        ),
+        message="the split to skew so the two mirrors differ in width",
+    )
+    wide, narrow = widths
+
+    # Print the pty size once a second, forever. No `$` and no single quotes,
+    # so every login shell tokenizes it identically.
+    app.pane_run('/bin/sh -c "while true; do stty size; sleep 1; done"', pane=live_pane["id"])
+
+    def latest_pty_cols():
+        text = app.pane_text(pane=live_pane["id"], scrollback=True) or ""
+        for line in reversed(text.splitlines()):
+            parts = line.split()
+            if len(parts) == 2 and all(p.isdigit() for p in parts):
+                return int(parts[1])
+        return None
+
+    def settles_on(expected, why):
+        wait_for(
+            lambda: latest_pty_cols() == expected,
+            timeout=30,
+            message=f"the pty to report {expected} columns ({why})",
+        )
+
+    settles_on(wide, "the loop was started in the wide pane, so it leads")
+
+    app.cli("pane", "focus", "--pane", mirror["id"])
+    settles_on(narrow, "focusing the narrow mirror claims leadership")
+
+    app.cli("pane", "focus", "--pane", live_pane["id"])
+    settles_on(wide, "and focusing back claims it again")
