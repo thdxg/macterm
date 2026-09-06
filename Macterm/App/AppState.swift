@@ -906,11 +906,43 @@ final class AppState {
     /// too (#285), or a sweep would kill the very sessions the materialize
     /// step is about to reattach.
     private func claimedSessionNames() -> Set<String> {
-        Set(workspaces.values
+        Set(allLivePanes().map(\.sessionName))
+            .union(pendingPinnedSessionNames())
+    }
+
+    /// Every pane attached to a session, across ALL workspaces (pinned
+    /// included) — the shared traversal behind `claimedSessionNames` and
+    /// `releaseSessions`.
+    private func allLivePanes() -> [Pane] {
+        workspaces.values
             .flatMap(\.tabs)
             .flatMap { $0.splitRoot.allPanes() }
-            .map(\.sessionName))
-            .union(pendingPinnedSessionNames())
+    }
+
+    /// Give up these panes' claims on their zmx sessions, killing a session
+    /// only when no OTHER pane still attaches it. Several panes may share one
+    /// session (a mirror of the same session shown elsewhere), so a pane going
+    /// away is a *release*, not a kill: the daemon has to outlive it for the
+    /// mirrors that remain, or closing one view of a session would destroy the
+    /// work still on screen in another.
+    ///
+    /// Takes the whole batch at once, because the callers that unload a
+    /// project, close a tab, or drop a layout's panes release many panes
+    /// together — asked one at a time, two mirrors inside one batch would each
+    /// see the other still in the tree, both decline to kill, and leak the
+    /// session as a clients==0 daemon.
+    ///
+    /// Callers still `destroySurface()` themselves; this decides only the kill.
+    func releaseSessions(_ panes: [Pane]) {
+        let releasing = Set(panes.map(\.id))
+        let retained = Set(
+            allLivePanes()
+                .filter { !releasing.contains($0.id) }
+                .map(\.sessionName)
+        ).union(pendingPinnedSessionNames())
+        for pane in panes where !retained.contains(pane.sessionName) {
+            pane.killPersistentSession(using: zmx)
+        }
     }
 
     private func shouldSweep(_ destination: String, now: Date) -> Bool {
@@ -1060,14 +1092,16 @@ final class AppState {
         guard let ws = workspaces[projectID] else { return }
         logger.debug("unloadProject: \(projectID, privacy: .public)")
         let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
-        for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-            // Unload KILLS: with quit now a detach, this is the one action
-            // that stops a whole project's shells while keeping its layout
-            // (the group-kill #113 asked for). A detaching unload would be
-            // a trap — "unloaded" shells silently running forever. The
-            // snapshot keeps the layout; reopening spawns fresh shells in
-            // the saved cwds (`zmx attach` upserts over the dead names).
-            pane.killPersistentSession(using: zmx)
+        let unloading = ws.tabs.flatMap { $0.splitRoot.allPanes() }
+        // Unload KILLS: with quit now a detach, this is the one action that
+        // stops a whole project's shells while keeping its layout (the
+        // group-kill #113 asked for). A detaching unload would be a trap —
+        // "unloaded" shells silently running forever. The snapshot keeps the
+        // layout; reopening spawns fresh shells in the saved cwds (`zmx
+        // attach` upserts over the dead names). A session mirrored outside
+        // this project survives, and its pane keeps it.
+        releaseSessions(unloading)
+        for pane in unloading {
             pane.destroySurface()
         }
         if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {
@@ -1093,9 +1127,11 @@ final class AppState {
         guard projectID != PinnedTabs.projectID else { return }
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
-            for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-                // Project removed for good → its sessions die with it.
-                pane.killPersistentSession(using: zmx)
+            // Project removed for good → its sessions die with it, unless a
+            // session is mirrored by a pane outside this project.
+            let removing = ws.tabs.flatMap { $0.splitRoot.allPanes() }
+            releaseSessions(removing)
+            for pane in removing {
                 pane.destroySurface()
             }
         }
@@ -1295,9 +1331,11 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
         logger.debug("closeTab: \(tabID, privacy: .public) project=\(projectID, privacy: .public)")
-        for pane in tab.splitRoot.allPanes() {
-            // Tab closed for good → its panes' zmx sessions die with it.
-            pane.killPersistentSession(using: zmx)
+        // Tab closed for good → its panes' zmx sessions die with it, unless a
+        // session is mirrored by a pane in another tab or window.
+        let closing = tab.splitRoot.allPanes()
+        releaseSessions(closing)
+        for pane in closing {
             pane.destroySurface()
         }
         ws.closeTab(tabID)
@@ -1950,10 +1988,14 @@ final class AppState {
             return
         }
         logger.debug("closePane: \(paneID, privacy: .public) project=\(projectID, privacy: .public)")
-        // Pane closed for good → its zmx session dies with it. (The
-        // onlyPaneLeft path below re-kills via closeTab; killSession is a
-        // no-op on a missing session, so the overlap is harmless.)
-        tab.splitRoot.findPane(id: paneID)?.killPersistentSession(using: zmx)
+        // Pane closed for good → its zmx session dies with it, unless another
+        // pane mirrors that session. (The onlyPaneLeft path below re-releases
+        // via closeTab; killSession is a no-op on a missing session, so the
+        // overlap is harmless.) The pane is still in the tree here, which is
+        // why releaseSessions excludes the batch it is given.
+        if let closing = tab.splitRoot.findPane(id: paneID) {
+            releaseSessions([closing])
+        }
         reconnectPolicy.forget(paneID)
         switch tab.removePane(paneID) {
         case .onlyPaneLeft:
@@ -2320,9 +2362,11 @@ final class AppState {
         // Destroy surfaces only AFTER the new trees no longer reference them.
         // A layout-dropped pane is gone for good (no declared node claims it),
         // so its zmx session dies too — otherwise it would linger as a
-        // clients==0 daemon.
+        // clients==0 daemon. Unless a pane elsewhere mirrors that session: a
+        // reconcile that drops one of two identical leaves must not kill the
+        // session the surviving one was just matched to.
+        releaseSessions(plan.panesToDestroy)
         for pane in plan.panesToDestroy {
-            pane.killPersistentSession(using: zmx)
             pane.destroySurface()
         }
 

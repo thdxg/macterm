@@ -1707,6 +1707,82 @@ struct AppStateTests {
         #expect(await killed.names == names)
     }
 
+    /// A pane attached to `name`, for building the mirror cases below. Uses
+    /// the same persisted-name init the restore path uses, which is the only
+    /// way two panes can legitimately share a session name today.
+    private func mirrorPane(of name: String, projectID: UUID) -> Pane {
+        Pane(projectPath: "/tmp", projectID: projectID, sessionName: name)
+    }
+
+    @Test
+    func closing_one_of_two_mirrors_spares_the_shared_session() async throws {
+        // Two panes may attach one zmx session (the same session shown in
+        // another window). Closing one is a release, not a kill — the daemon
+        // has to outlive it, or the work still on screen elsewhere dies.
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        let shared = try #require(tab.splitRoot.allPanes().first).sessionName
+
+        let mirrorTab = ws.createTab(projectPath: "/tmp")
+        mirrorTab.splitRoot = .pane(mirrorPane(of: shared, projectID: p.id))
+
+        state.closeTab(mirrorTab.id, projectID: p.id)
+
+        await killed.settleExpectingNone()
+        #expect(await killed.names.isEmpty)
+    }
+
+    @Test
+    func closing_the_last_mirror_kills_the_shared_session() async throws {
+        // The refcount must actually reach zero: with no pane left attached,
+        // the daemon has to die or it lingers as a clients==0 orphan.
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        let shared = try #require(tab.splitRoot.allPanes().first).sessionName
+
+        let mirrorTab = ws.createTab(projectPath: "/tmp")
+        mirrorTab.splitRoot = .pane(mirrorPane(of: shared, projectID: p.id))
+        // A third tab so closing both mirror-holding tabs leaves a valid
+        // workspace behind.
+        _ = ws.createTab(projectPath: "/tmp")
+
+        state.closeTab(mirrorTab.id, projectID: p.id)
+        state.closeTab(tab.id, projectID: p.id)
+
+        await killed.settle(expecting: 1)
+        #expect(await killed.names == [shared])
+    }
+
+    @Test
+    func releasing_two_mirrors_in_one_batch_still_kills_the_session() async throws {
+        // The batch case: asked one at a time, two mirrors inside the SAME
+        // batch would each see the other still in the tree, both decline, and
+        // leak the session. This is why releaseSessions takes the whole batch.
+        let killed = KilledSessions()
+        let state = makeAppState()
+        state.zmx = recordingZmx(into: killed)
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        let shared = try #require(tab.splitRoot.allPanes().first).sessionName
+
+        let mirrorTab = ws.createTab(projectPath: "/tmp")
+        mirrorTab.splitRoot = .pane(mirrorPane(of: shared, projectID: p.id))
+
+        state.unloadProject(p.id)
+
+        await killed.settle(expecting: 1)
+        #expect(await killed.names == [shared])
+    }
+
     @Test
     func closing_remote_pane_routes_kill_over_ssh() async throws {
         // A remote pane's session lives on the remote daemon — a local kill
