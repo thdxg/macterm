@@ -57,20 +57,6 @@ extension NSView {
     }
 }
 
-// MARK: - Color helpers (for the inactive-glass tint)
-
-extension NSColor {
-    /// Returns a copy with its HSB saturation multiplied by `factor` (clamped
-    /// to 0...1). Used to make the inactive-window overlay read as a desaturated
-    /// version of the terminal background, matching Ghostty.
-    func adjustingSaturation(by factor: CGFloat) -> NSColor {
-        guard let hsb = usingColorSpace(.sRGB) else { return self }
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        hsb.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        return NSColor(hue: h, saturation: min(max(s * factor, 0), 1), brightness: b, alpha: a)
-    }
-}
-
 // MARK: - Private CGS blur SPI
 
 /// `CGSSetWindowBackgroundBlurRadius` is a private CoreGraphics API that
@@ -217,26 +203,22 @@ final class MactermTintBackdropView: NSView {
 // MARK: - Liquid glass background
 
 /// A container that hosts a macOS 26 `NSGlassEffectView` (the real liquid
-/// glass material) plus an inactive-window tint overlay. Modeled on Ghostty's
-/// `TerminalGlassView` (`TerminalViewContainer.swift`), with one deliberate
-/// divergence noted below.
+/// glass material) under Macterm's own tint layer. Modeled on Ghostty's
+/// `TerminalGlassView` (`TerminalViewContainer.swift`).
 ///
-/// `NSGlassEffectView` desaturates itself when its window is not key — native
-/// liquid-glass behavior with no API to opt out of (the macOS 26 SDK header
-/// exposes only `tintColor`/`style`/`cornerRadius`). The overlay fades a
-/// saturation-boosted tint of the background *in* as the window resigns key
-/// and back *out* when it regains key. This isn't decoration: with no overlay
-/// the raw system dimming reads as the window becoming markedly more
-/// translucent on unfocus; the fade-in tint tames that. Focused, the tint is
-/// at alpha 0, so the focused glass matches the user's chosen opacity exactly
-/// (a *constant* tint would over-darken the focused window past that opacity).
-///
-/// Divergence from Ghostty: the unfocused tint alpha is scaled by the window
-/// opacity (`tint.opacity * backgroundOpacity`), not the raw `tint.opacity`
-/// Ghostty uses. Macterm exposes a full-range opacity slider, and an unscaled
-/// tint would jump a very-translucent window to a near-opaque unfocused state,
-/// ignoring the slider. Scaling keeps the inactive appearance proportional to
-/// the setting.
+/// **The window's appearance does not depend on key status.** It used to: an
+/// overlay faded a saturation-boosted tint of the background in as the window
+/// resigned key, lifted from the Ghostty of the time, where the tint lived
+/// *inside* the material as `NSGlassEffectView.tintColor` and so took the
+/// material's own inactive desaturation with it — a large enough change to
+/// need compensating for. Macterm's tint is a separate layer above the
+/// material (it has to be, so `TintCutout` can cut it), so it never took that
+/// desaturation, and the overlay was compensating for something that wasn't
+/// happening: an unfocused window visibly gained opacity, the wallpaper behind
+/// it dropping out (measured 39,39,50 → 29,27,39 through the terminal area).
+/// Ghostty has since dropped its overlay too, along with every key-status
+/// callback, so unfocusing now moves only the material itself. Don't
+/// reintroduce a focus-dependent tint here.
 ///
 /// Macterm inserts this below the window's content view, filling the whole
 /// window — including the region under the titlebar (via a negative top inset
@@ -246,15 +228,8 @@ final class MactermTintBackdropView: NSView {
 final class MactermGlassView: NSView {
     private let glassEffectView = NSGlassEffectView()
     private let tintView = NSView()
-    private let tintOverlay = NSView()
     private var topConstraint: NSLayoutConstraint!
     private var tintCutout = TintCutout()
-
-    /// The window opacity the glass is currently configured for. The inactive
-    /// tint is scaled by this so the unfocused window honors the user's opacity
-    /// slider instead of jumping to a fixed tint — a deliberate divergence from
-    /// Ghostty, which uses the raw tint opacity regardless of the setting.
-    private var backgroundOpacity: CGFloat = 1
 
     init(topOffset: CGFloat) {
         super.init(frame: .zero)
@@ -286,28 +261,6 @@ final class MactermGlassView: NSView {
             tintView.bottomAnchor.constraint(equalTo: glassEffectView.bottomAnchor),
             tintView.trailingAnchor.constraint(equalTo: glassEffectView.trailingAnchor),
         ])
-
-        // The inactive tint fades in when the window resigns key, masking the
-        // system's inactive-glass desaturation. It sits *below* the window tint,
-        // i.e. inside the backdrop both the chrome and the terminal composite
-        // over, and is never cut. Above the tint it would be a layer only the
-        // chrome shows at full strength — the terminal's own paint covers it —
-        // so an unfocused window's app area read more opaque than its terminal
-        // (measured: chrome (48,38,76) against grid (52,42,76)). Below the
-        // tint, both surfaces carry exactly one tinted layer over one shared
-        // backdrop, focused or not. The compensation is then visible through
-        // the same share of the window as the desaturation it compensates for,
-        // which is the proportion it should have had all along.
-        tintOverlay.translatesAutoresizingMaskIntoConstraints = false
-        tintOverlay.wantsLayer = true
-        tintOverlay.alphaValue = 0
-        addSubview(tintOverlay, positioned: .below, relativeTo: tintView)
-        NSLayoutConstraint.activate([
-            tintOverlay.topAnchor.constraint(equalTo: glassEffectView.topAnchor),
-            tintOverlay.leadingAnchor.constraint(equalTo: glassEffectView.leadingAnchor),
-            tintOverlay.bottomAnchor.constraint(equalTo: glassEffectView.bottomAnchor),
-            tintOverlay.trailingAnchor.constraint(equalTo: glassEffectView.trailingAnchor),
-        ])
     }
 
     @available(*, unavailable)
@@ -319,8 +272,7 @@ final class MactermGlassView: NSView {
         style: NSGlassEffectView.Style,
         backgroundColor: NSColor,
         backgroundOpacity: Double,
-        cornerRadius: CGFloat?,
-        isKeyWindow: Bool
+        cornerRadius: CGFloat?
     ) {
         glassEffectView.style = style
         glassEffectView.cornerRadius = cornerRadius ?? 0
@@ -328,8 +280,6 @@ final class MactermGlassView: NSView {
             .withAlphaComponent(rendererQuantizedAlpha(backgroundOpacity))
             .cgColor
         tintView.layer?.cornerRadius = cornerRadius ?? 0
-        self.backgroundOpacity = CGFloat(backgroundOpacity)
-        updateKeyStatus(isKeyWindow, backgroundColor: backgroundColor)
     }
 
     func updateTopInset(_ offset: CGFloat) {
@@ -339,13 +289,6 @@ final class MactermGlassView: NSView {
     /// Cut the tint away under regions a terminal is already painting itself at
     /// the window opacity (`rects` in this view's coordinates). The glass
     /// material stays, so the pane and the chrome sit on the same backdrop.
-    ///
-    /// Only the tint is cut. The inactive overlay is *not*, even though it is
-    /// also a tinted layer: it sits below the content view, so the terminal
-    /// paints over it and both surfaces already share it as backdrop. Cutting
-    /// it removes the glass-desaturation compensation under the pane only,
-    /// which leaves the chrome carrying one layer more than the terminal — an
-    /// unfocused window whose app area reads more opaque than its terminal.
     func setTintHoles(_ rects: [CGRect]) {
         guard tintCutout.set(rects) else { return }
         applyTintHoles()
@@ -358,24 +301,6 @@ final class MactermGlassView: NSView {
 
     private func applyTintHoles() {
         tintCutout.apply(to: tintView, in: self)
-    }
-
-    func updateKeyStatus(_ isKeyWindow: Bool, backgroundColor: NSColor) {
-        let tint = tintProperties(for: backgroundColor)
-        tintOverlay.layer?.backgroundColor = tint.color.cgColor
-        // Scale by the window opacity so the inactive tint stays within the
-        // translucency the user chose — otherwise an unfocused window reads as
-        // near-opaque regardless of the opacity slider.
-        tintOverlay.alphaValue = isKeyWindow ? 0 : tint.opacity * backgroundOpacity
-    }
-
-    /// A saturation-boosted tint + opacity for the inactive overlay, lifted
-    /// from Ghostty's `tintProperties`.
-    private func tintProperties(for color: NSColor) -> (color: NSColor, opacity: CGFloat) {
-        let isLight = color.prefersDarkForeground
-        let vibrant = color.adjustingSaturation(by: 1.2)
-        let overlayOpacity: CGFloat = isLight ? 0.35 : 0.85
-        return (vibrant, overlayOpacity)
     }
 }
 
@@ -782,16 +707,6 @@ enum WindowAppearance {
         return themeFrame.subviews.compactMap { $0 as? MactermTintBackdropView }.first
     }
 
-    /// Update the inactive-glass tint when the window gains/loses key status.
-    /// Cheap no-op unless the glass view is currently installed.
-    static func syncKeyStatus(window: NSWindow) {
-        guard glassSupported else { return }
-        if #available(macOS 26.0, *) {
-            guard let glass = existingGlass(in: window) else { return }
-            glass.updateKeyStatus(window.isKeyWindow, backgroundColor: MactermTheme.nsBg)
-        }
-    }
-
     /// Lock the toolbar to icon-only rendering. SwiftUI's NavigationSplitView
     /// toolbar doesn't survive the label display modes: picking "Icon and
     /// Text" from the toolbar's context menu makes AppKit fold the system
@@ -842,8 +757,7 @@ enum WindowAppearance {
             style: officialGlassStyle(Preferences.shared.windowGlassStyle),
             backgroundColor: backgroundColor,
             backgroundOpacity: opacity,
-            cornerRadius: windowCornerRadius(window),
-            isKeyWindow: window.isKeyWindow
+            cornerRadius: windowCornerRadius(window)
         )
     }
 
