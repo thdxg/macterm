@@ -721,7 +721,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if !flags.contains(.command) { mainResponder?.endTabIndexChord() }
             guard let appState, appState.isTabCycling else { return }
-            if !flags.contains(.control),
+            // Commit as soon as ANY modifier the Recent Tab binding needs is
+            // released — read from the live binding rather than hardcoded to
+            // Control, so the action stays rebindable (a `cmd+tab` binding
+            // used to start a cycle that could never commit).
+            let hold = appState.recentTabHoldModifiers
+            if !hold.isEmpty, !flags.isSuperset(of: hold),
                let projectID = appState.activeProjectID
             {
                 appState.commitTabCycle(projectID: projectID)

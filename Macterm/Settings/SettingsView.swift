@@ -1055,6 +1055,7 @@ private struct AppearanceSettings: View {
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
+    @State private var showTabSwitcherOverlay: Bool = Preferences.shared.showTabSwitcherOverlay
     @State private var tabSwitcherPosition: String = Preferences.shared.tabSwitcherPosition.rawValue
     @State
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
@@ -1207,6 +1208,18 @@ private struct AppearanceSettings: View {
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
                 Text("When hidden, create projects via the command palette or context menu.")
                     .settingsCaption()
+            }
+
+            Section("Tab Switching") {
+                Toggle("Show tab previews while cycling", isOn: $showTabSwitcherOverlay)
+                    .onChange(of: showTabSwitcherOverlay) { _, v in
+                        Preferences.shared.showTabSwitcherOverlay = v
+                    }
+                Text(
+                    "Holding the Recent Tab shortcut shows the project's tabs with a preview of each pane, "
+                        + "and moves the selection without switching until you let go."
+                )
+                .settingsCaption()
             }
 
             Section("Toolbar") {

@@ -230,6 +230,13 @@ struct MainWindow: View {
                 CommandPaletteOverlay()
             }
         }
+        // Below the palette (the two can't be up together — cycling commits on
+        // modifier release), above the terminal it describes.
+        .overlay {
+            if appState.isTabCycling, preferences.showTabSwitcherOverlay {
+                TabSwitcherOverlay()
+            }
+        }
         // Above the palette overlay so a toast fired by a palette command isn't
         // covered by the palette's own dismissal animation.
         .overlay {
