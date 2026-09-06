@@ -9,6 +9,10 @@ struct SplitTreeView: View {
     let isActiveProject: Bool
     let projectID: UUID
     let isSplit: Bool
+    /// Panes attached to a session another pane is currently driving — zmx
+    /// non-leaders (#345). They render live output laid out for the leader's
+    /// geometry, so they are dimmed to say "not the live size".
+    let nonLeaderPaneIDs: Set<UUID>
     let onFocusPane: (UUID) -> Void
     let onSplit: (UUID, SplitDirection) -> Void
     let onClosePane: (UUID) -> Void
@@ -27,6 +31,7 @@ struct SplitTreeView: View {
         isActiveProject: Bool,
         projectID: UUID,
         isSplit: Bool = false,
+        nonLeaderPaneIDs: Set<UUID> = [],
         onFocusPane: @escaping (UUID) -> Void,
         onSplit: @escaping (UUID, SplitDirection) -> Void,
         onClosePane: @escaping (UUID) -> Void,
@@ -41,6 +46,7 @@ struct SplitTreeView: View {
         self.isActiveProject = isActiveProject
         self.projectID = projectID
         self.isSplit = isSplit
+        self.nonLeaderPaneIDs = nonLeaderPaneIDs
         self.onFocusPane = onFocusPane
         self.onSplit = onSplit
         self.onClosePane = onClosePane
@@ -58,6 +64,7 @@ struct SplitTreeView: View {
                 isFocused: focusedPaneID == pane.id && isActiveProject,
                 isZoomed: zoomedPaneID == pane.id,
                 isSplit: isSplit,
+                isNonLeaderMirror: nonLeaderPaneIDs.contains(pane.id),
                 onFocus: { onFocusPane(pane.id) },
                 onProcessExit: { onClosePane(pane.id) },
                 onCommandFinished: { onCommandFinished(pane.id) },
@@ -76,6 +83,7 @@ struct SplitTreeView: View {
                     isActiveProject: isActiveProject,
                     projectID: projectID,
                     isSplit: true,
+                    nonLeaderPaneIDs: nonLeaderPaneIDs,
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
                     onClosePane: onClosePane,
@@ -93,6 +101,7 @@ struct SplitTreeView: View {
                     isActiveProject: isActiveProject,
                     projectID: projectID,
                     isSplit: true,
+                    nonLeaderPaneIDs: nonLeaderPaneIDs,
                     onFocusPane: onFocusPane,
                     onSplit: onSplit,
                     onClosePane: onClosePane,
@@ -115,6 +124,7 @@ private struct SplitLeafView: View {
     let isFocused: Bool
     let isZoomed: Bool
     let isSplit: Bool
+    let isNonLeaderMirror: Bool
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
@@ -128,6 +138,7 @@ private struct SplitLeafView: View {
             pane: pane,
             focused: isFocused,
             isZoomed: isZoomed,
+            isNonLeaderMirror: isNonLeaderMirror,
             onFocus: onFocus,
             onProcessExit: onProcessExit,
             onCommandFinished: onCommandFinished,
@@ -136,11 +147,21 @@ private struct SplitLeafView: View {
             onZoomRequest: onZoomRequest
         )
         .overlay {
-            if !isFocused, isSplit, pane.adaptiveBackgroundColor == nil {
+            if isNonLeaderMirror || (!isFocused && isSplit && pane.adaptiveBackgroundColor == nil) {
                 // Driven by the user's ghostty `unfocused-split-opacity` /
                 // `unfocused-split-fill`, same as Ghostty.app's split dim. A
                 // pane whose TUI supplies its own adaptive background stays
                 // color-accurate even while unfocused.
+                //
+                // A non-leader mirror (#345) is dimmed on neither of those
+                // conditions. It is not about focus — it says the pane is not
+                // the one driving the session's pty size, so it is rendering
+                // live output laid out for another pane's geometry. Both of
+                // the split-dim gates are therefore wrong for it: `isSplit` is
+                // false for a single-pane tab and for a zoomed pane, which is
+                // exactly the common mirrored case; and an adaptive background
+                // must not exempt it, since the whole point is to say "this is
+                // not the live size" whatever colour the TUI painted.
                 MactermTheme.dimOverlay
                     .allowsHitTesting(false)
             }

@@ -250,13 +250,15 @@ final class ControlHandler {
         }
         let entries = snapshot.entries
         let leaders = snapshot.leaders
-        let paneBySession = paneIDsBySessionName()
+        let panesBySession = paneIDsBySessionName()
         let infos = entries.map { entry in
-            ControlSessionInfo(
+            let bound = panesBySession[entry.name] ?? []
+            return ControlSessionInfo(
                 name: entry.name,
                 clients: entry.clients,
                 leaderPID: leaders[entry.name],
-                paneID: paneBySession[entry.name]
+                paneID: bound.first,
+                paneIDs: bound.isEmpty ? nil : bound
             )
         }
         return ControlData(sessions: infos)
@@ -693,6 +695,10 @@ final class ControlHandler {
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
+        // Injected input makes zmx hand this client leadership (its
+        // `isUserInput` rule), with no focus change to notice it by — so
+        // record it, or our dim would point at the wrong mirror.
+        appState.noteSessionLeader(target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
@@ -725,6 +731,8 @@ final class ControlHandler {
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
+        // As in paneSendText: a keypress is what zmx switches leader on.
+        appState.noteSessionLeader(target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
@@ -1094,11 +1102,23 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "pass either --session or --pane, not both")
         }
         if let session = args.session, !session.isEmpty {
+            // A mirrored session has several panes, so resolve to the LEADER —
+            // the one driving the pty size, and so the one the user is
+            // interacting with. It is also the only defensible answer for a
+            // bare `$MACTERM_SESSION` self-target: that variable lives in the
+            // session's single shared shell, which cannot know which of its
+            // views the user is looking at. Callers that need a specific
+            // mirror pass `--pane`.
+            var candidates: [(tab: TerminalTab, pane: Pane)] = []
             for tab in workspace.tabs {
-                if let pane = tab.splitRoot.allPanes().first(where: { $0.sessionName == session }) {
-                    return (tab, pane)
+                for pane in tab.splitRoot.allPanes() where pane.sessionName == session {
+                    candidates.append((tab, pane))
                 }
             }
+            if let leading = candidates.first(where: { appState.isLeader($0.pane) }) {
+                return leading
+            }
+            if let first = candidates.first { return first }
             throw ControlError(
                 code: .notFound,
                 message: "no pane in this project runs session \"\(session)\"",
@@ -1178,7 +1198,9 @@ final class ControlHandler {
             process: pane.foregroundProcessName,
             cwd: pane.nsView?.currentPwd ?? pane.projectPath,
             focused: tab.id == workspace.activeTabID && pane.id == tab.focusedPaneID,
-            state: controlState(for: pane.executionState)
+            state: controlState(for: pane.executionState),
+            mirror: appState.isMirrored(pane),
+            leader: appState.isLeader(pane)
         )
     }
 
@@ -1192,15 +1214,27 @@ final class ControlHandler {
         }
     }
 
-    private func paneIDsBySessionName() -> [String: String] {
-        var map: [String: String] = [:]
+    /// Every live pane bound to each session name, leader first.
+    ///
+    /// This used to be a `[String: String]`, one pane per session — which a
+    /// mirrored session silently collapsed, last writer winning in Dictionary
+    /// iteration order, so `session list` reported an arbitrary one of the
+    /// panes and dropped the rest (#345).
+    private func paneIDsBySessionName() -> [String: [String]] {
+        var map: [String: [Pane]] = [:]
         for workspace in appState.workspaces.values {
             for tab in workspace.tabs {
                 for pane in tab.splitRoot.allPanes() {
-                    map[pane.sessionName] = pane.id.uuidString
+                    map[pane.sessionName, default: []].append(pane)
                 }
             }
         }
-        return map
+        // A stable partition, not `sorted`: "leader first" is not a strict
+        // weak ordering, and Swift's sort is undefined for one.
+        return map.mapValues { panes in
+            let leading = panes.filter { appState.isLeader($0) }
+            let following = panes.filter { !appState.isLeader($0) }
+            return (leading + following).map(\.id.uuidString)
+        }
     }
 }

@@ -295,6 +295,12 @@ struct ControlPaneInfo: Codable, Equatable {
     /// for). Optional per the additive-field convention above — nil when
     /// decoded from an older server that predates this field.
     var state: String?
+    /// Whether another pane shows this pane's session (#345). Optional per the
+    /// additive-field convention — nil from a server predating mirroring.
+    var mirror: Bool?
+    /// Whether this pane drives its session's pty size — zmx's "leader"
+    /// client. Always true for an unmirrored pane, which is the only client.
+    var leader: Bool?
 }
 
 struct ControlSessionInfo: Codable, Equatable {
@@ -306,7 +312,15 @@ struct ControlSessionInfo: Codable, Equatable {
     var leaderPID: Int32?
     /// The live pane currently bound to this session, if any (a session with
     /// no pane is an orphan awaiting reap or reattach).
+    ///
+    /// A mirrored session has several — this reports the leader, the pane
+    /// driving its size; see `paneIDs` for all of them. Kept so a client
+    /// predating mirroring still reads a sensible single value.
     var paneID: String?
+    /// Every live pane bound to this session, in tree order (#345). One entry
+    /// for an ordinary session; several once a session is mirrored. Optional
+    /// per the additive-field convention.
+    var paneIDs: [String]?
 }
 
 /// Read-only snapshot of a pane's terminal core (`pane.inspect`). Every field

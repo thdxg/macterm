@@ -6,8 +6,9 @@ than a copy of its text. These tests prove that against the real daemon —
 output typed into one pane has to surface in the other's renderer cells, and
 closing one must leave the session running for the other.
 
-Everything targets `--pane`, never `--session`: mirrors share a session name
-by construction, so a session selector is ambiguous for exactly these panes.
+These target `--pane` throughout: mirrors share a session name by
+construction, so a session selector is ambiguous for exactly these panes. The
+one exception is the test that pins how that ambiguity resolves.
 
 Commands typed into panes must parse in ANY login shell (CI runs bash 3.2, dev
 machines may run nushell), hence the `/bin/sh -c "…"` single-quote-free form
@@ -64,6 +65,60 @@ def test_output_reaches_both_mirrors(app, fresh_tab, live_pane):
             timeout=60,
             message=f"marker {marker} in the {label} pane's dump",
         )
+
+
+def test_the_source_keeps_leadership_when_mirrored(app, fresh_tab, live_pane):
+    """zmx sets a leader only when there is none, so a second client attaching
+    leaves the pty size where it was. `pane list` must say the same."""
+    app.cli("pane", "mirror", "--direction", "right", "--pane", live_pane["id"])
+    panes = app.panes(tab=fresh_tab["id"])
+    by_id = {pane["id"]: pane for pane in panes}
+    mirror_id = next(pid for pid in by_id if pid != live_pane["id"])
+
+    assert all(pane["mirror"] for pane in panes)
+    assert by_id[live_pane["id"]]["leader"] is True
+    assert by_id[mirror_id]["leader"] is False
+
+
+def test_focusing_a_mirror_hands_it_leadership(app, fresh_tab, live_pane):
+    """Leadership follows focus, and follows it back — it does not latch."""
+    app.cli("pane", "mirror", "--direction", "right", "--pane", live_pane["id"])
+    panes = app.panes(tab=fresh_tab["id"])
+    mirror_id = next(p["id"] for p in panes if p["id"] != live_pane["id"])
+
+    for target in (mirror_id, live_pane["id"], mirror_id):
+        app.cli("pane", "focus", "--pane", target)
+        leaders = [p["id"] for p in app.panes(tab=fresh_tab["id"]) if p["leader"]]
+        assert leaders == [target]
+
+
+def test_session_list_reports_every_bound_pane(app, fresh_tab, live_pane):
+    """A mirrored session used to collapse to one arbitrary pane id, last
+    writer winning in Dictionary order. Both must show, leader first."""
+    app.cli("pane", "mirror", "--direction", "right", "--pane", live_pane["id"])
+    panes = app.panes(tab=fresh_tab["id"])
+    mirror_id = next(p["id"] for p in panes if p["id"] != live_pane["id"])
+
+    sessions = app.cli_json("session", "list")["sessions"]
+    entry = next(s for s in sessions if s["name"] == live_pane["session"])
+    assert set(entry["paneIDs"]) == {live_pane["id"], mirror_id}
+    # `paneID` stays the single-value view for older clients, and reports the
+    # leader rather than whichever pane happened to be visited first.
+    assert entry["paneID"] == live_pane["id"]
+    assert entry["paneIDs"][0] == live_pane["id"]
+
+
+def test_session_target_resolves_to_the_leader(app, fresh_tab, live_pane):
+    """Mirrors share a session name, so `--session` is ambiguous by
+    construction. It resolves to the leader — the pane driving the size, and
+    the only defensible answer for a bare $MACTERM_SESSION self-target."""
+    app.cli("pane", "mirror", "--direction", "right", "--pane", live_pane["id"])
+    panes = app.panes(tab=fresh_tab["id"])
+    mirror_id = next(p["id"] for p in panes if p["id"] != live_pane["id"])
+
+    assert app.pane_inspect(session=live_pane["session"])["id"] == live_pane["id"]
+    app.cli("pane", "focus", "--pane", mirror_id)
+    assert app.pane_inspect(session=live_pane["session"])["id"] == mirror_id
 
 
 def test_closing_a_mirror_leaves_the_session_running(app, fresh_tab, live_pane):

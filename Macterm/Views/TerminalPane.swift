@@ -5,6 +5,8 @@ struct TerminalPane: View {
     let pane: Pane
     let focused: Bool
     let isZoomed: Bool
+    /// Dimmed because another pane drives this session's size (#345).
+    var isNonLeaderMirror = false
     let onFocus: () -> Void
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
@@ -39,6 +41,7 @@ struct TerminalPane: View {
                 pane: pane,
                 focused: focused,
                 isZoomed: isZoomed,
+                isNonLeaderMirror: isNonLeaderMirror,
                 // Read here (not just passed through) so the observation
                 // dependency registers: an orphaned-with-no-host bump must
                 // re-render this subtree — see Pane.surfaceReattachTick.
@@ -119,6 +122,9 @@ private struct TerminalSurface: NSViewRepresentable {
     let pane: Pane
     let focused: Bool
     let isZoomed: Bool
+    /// Another pane drives this session's pty size (#345), so this surface's
+    /// frame is laid out for foreign geometry.
+    let isNonLeaderMirror: Bool
     /// Changes force `updateNSView` after an orphaned-with-no-host event.
     let reattachTick: Int
     let onFocus: () -> Void
@@ -228,6 +234,7 @@ private struct TerminalSurface: NSViewRepresentable {
         let wasFocused = context.coordinator.wasFocused
         context.coordinator.wasFocused = focused
         view.isFocused = focused
+        view.rendersForeignGeometry = isNonLeaderMirror
         if focused, !wasFocused {
             AdaptiveTerminalChrome.shared.focusDidChange(to: view)
             view.notifySurfaceFocused()
@@ -277,6 +284,7 @@ private struct TerminalSurface: NSViewRepresentable {
         // the foreground — becomes the pane's display title.
         view.onTitleChange = { [weak pane] title in pane?.receiveReportedTitle(title) }
         view.isFocused = focused
+        view.rendersForeignGeometry = isNonLeaderMirror
 
         view.onSearchStart = { [weak pane, weak view] needle in
             guard let pane else { return }

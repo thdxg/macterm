@@ -938,6 +938,85 @@ final class AppState {
         for pane in panes where !retained.contains(pane.sessionName) {
             pane.killPersistentSession(using: zmx)
         }
+        defer { pruneSessionLeaders() }
+    }
+
+    // MARK: - Mirrored sessions and leadership (#345)
+
+    /// Which pane currently drives each mirrored session's pty size.
+    ///
+    /// zmx allows several clients per session but only one **leader**, whose
+    /// window size it applies to the pty (`handleResize` drops a non-leader's
+    /// size outright). Every client still receives the same broadcast output,
+    /// so a non-leader mirror is live but laid out for someone else's
+    /// geometry — which is what the dim treatment tells the user.
+    ///
+    /// Macterm-authoritative, and only meaningful for a mirrored session.
+    /// Known gap: a foreign `zmx attach` from a real terminal can take
+    /// leadership on its own (any real keystroke does, by zmx's
+    /// `isUserInput` rule) without telling us, leaving this stale. Closing
+    /// that needs a daemon-to-client notification zmx has no tag for.
+    private var sessionLeaders: [String: UUID] = [:]
+
+    /// Every pane attached to `sessionName`, in tree order across all
+    /// workspaces.
+    func panesAttached(to sessionName: String) -> [Pane] {
+        allLivePanes().filter { $0.sessionName == sessionName }
+    }
+
+    /// Whether another pane shows this pane's session — i.e. whether the
+    /// leader distinction means anything for it at all.
+    func isMirrored(_ pane: Pane) -> Bool {
+        var seen = false
+        for candidate in allLivePanes() where candidate.sessionName == pane.sessionName {
+            if seen { return true }
+            seen = true
+        }
+        return false
+    }
+
+    /// Whether `pane` is the one driving its session's pty size. An unmirrored
+    /// pane is trivially the leader — it is the only client.
+    ///
+    /// With no recorded leader (a restored pair, where both panes attached
+    /// before we tracked anything) this infers the first pane in tree order.
+    /// That is best-effort rather than authoritative: zmx makes the FIRST
+    /// client to attach the leader, and restore warms panes in tree order, so
+    /// the two agree in practice — and any real keystroke resynchronises them.
+    func isLeader(_ pane: Pane) -> Bool {
+        let attached = panesAttached(to: pane.sessionName)
+        guard attached.count > 1 else { return true }
+        if let recorded = sessionLeaders[pane.sessionName],
+           attached.contains(where: { $0.id == recorded })
+        {
+            return recorded == pane.id
+        }
+        return attached.first?.id == pane.id
+    }
+
+    /// Record `pane` as its session's leader. Called where the daemon would
+    /// have made it leader anyway — the pane took focus, or input was injected
+    /// into it — so our model tracks zmx's rather than diverging from it.
+    func noteSessionLeader(_ pane: Pane) {
+        guard isMirrored(pane) else { return }
+        sessionLeaders[pane.sessionName] = pane.id
+    }
+
+    /// The panes in `tab` that are mirrors NOT currently driving their
+    /// session's size — the ones the UI dims.
+    func nonLeaderPaneIDs(in tab: TerminalTab) -> Set<UUID> {
+        var ids: Set<UUID> = []
+        for pane in tab.splitRoot.allPanes() where !isLeader(pane) {
+            ids.insert(pane.id)
+        }
+        return ids
+    }
+
+    /// Drop leadership records for sessions nothing attaches any more, so the
+    /// table can't grow across a long run.
+    private func pruneSessionLeaders() {
+        let live = Set(allLivePanes().map(\.sessionName))
+        sessionLeaders = sessionLeaders.filter { live.contains($0.key) }
     }
 
     /// The session names still claimed once `releasing` is gone. Shared by
@@ -1949,7 +2028,13 @@ final class AppState {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
         else { return nil }
-        guard let newID = tab.mirror(paneID: paneID, direction: direction) else { return nil }
+        guard let source = tab.splitRoot.findPane(id: paneID),
+              let newID = tab.mirror(paneID: paneID, direction: direction)
+        else { return nil }
+        // The source stays leader: zmx's handleInit sets a leader only when
+        // there is none, so a second client attaching leaves the pty size
+        // exactly where it was. Recording it keeps our model saying the same.
+        noteSessionLeader(source)
         saveWorkspaces()
         return newID
     }
@@ -2438,7 +2523,15 @@ final class AppState {
     }
 
     func focusPane(_ paneID: UUID, projectID: UUID) {
-        workspaces[projectID]?.activeTab?.focusPane(paneID)
+        guard let tab = workspaces[projectID]?.activeTab else { return }
+        tab.focusPane(paneID)
+        // Focusing a mirror is how the user says "drive the size from here".
+        // Keystrokes require focus, and any real keystroke makes zmx's daemon
+        // hand leadership over anyway (its `isUserInput` rule), so recording
+        // it here tracks what the daemon is about to do rather than diverging.
+        if let pane = tab.splitRoot.findPane(id: paneID) {
+            noteSessionLeader(pane)
+        }
     }
 
     /// Publish presentation-only renderer state through the workspace owner.

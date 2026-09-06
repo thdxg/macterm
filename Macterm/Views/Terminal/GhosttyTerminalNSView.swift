@@ -234,6 +234,18 @@ final class GhosttyTerminalNSView: NSView {
     /// paint gets — so no statistic over the composite can separate the two,
     /// and only the terminal's own answer can. Any future overlay belongs here
     /// beside it rather than in the sampler.
+    /// Whether this surface is showing a session whose pty is sized by a
+    /// DIFFERENT pane — a zmx non-leader mirror (#345).
+    ///
+    /// Distinct from `hasViewerOverlay` even though both make a frame
+    /// untrustworthy to infer from: nothing is drawn over the screen model
+    /// here, the model itself was laid out for another pane's geometry, so the
+    /// painted region says more about the leader's window than about what this
+    /// terminal's background is. Pushed in by `TerminalPane.configure` because
+    /// the NSView has no back-reference to its `Pane`, the same seam the
+    /// keybind-passthrough policy uses.
+    var rendersForeignGeometry = false
+
     var hasViewerOverlay: Bool {
         guard let surface else { return false }
         return ghostty_surface_has_selection(surface)

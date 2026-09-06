@@ -895,6 +895,7 @@ struct WorkspaceView: View {
                 zoomedPaneID: tab.zoomedPaneID,
                 isActiveProject: true,
                 projectID: project.id,
+                nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab),
                 onFocusPane: { appState.focusPane($0, projectID: project.id) },
                 onSplit: { paneID, dir in
                     appState.splitPane(

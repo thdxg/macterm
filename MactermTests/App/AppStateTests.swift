@@ -184,6 +184,101 @@ struct AppStateTests {
     }
 
     @Test
+    func an_unmirrored_pane_is_trivially_its_sessions_leader() throws {
+        // It is the session's only client, so there is nothing to lead.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+
+        #expect(!state.isMirrored(pane))
+        #expect(state.isLeader(pane))
+        #expect(state.nonLeaderPaneIDs(in: tab).isEmpty)
+    }
+
+    @Test
+    func mirroring_leaves_leadership_with_the_source() throws {
+        // zmx's handleInit sets a leader only when there is none, so a second
+        // client attaching leaves the pty size exactly where it was. Our model
+        // has to say the same or the dim would point at the wrong pane.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+        let mirrored = try #require(tab.splitRoot.findPane(id: mirrorID))
+
+        #expect(state.isMirrored(source))
+        #expect(state.isLeader(source))
+        #expect(!state.isLeader(mirrored))
+        #expect(state.nonLeaderPaneIDs(in: tab) == [mirrorID])
+    }
+
+    @Test
+    func focusing_a_mirror_hands_it_leadership() throws {
+        // Focus is how the user says "drive the size from here" — and any real
+        // keystroke (which needs focus) makes zmx hand leadership over anyway.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+        let mirrored = try #require(tab.splitRoot.findPane(id: mirrorID))
+
+        state.focusPane(mirrorID, projectID: p.id)
+
+        #expect(state.isLeader(mirrored))
+        #expect(!state.isLeader(source))
+        #expect(state.nonLeaderPaneIDs(in: tab) == [source.id])
+
+        // And back again — leadership follows focus, it does not latch.
+        state.focusPane(source.id, projectID: p.id)
+        #expect(state.isLeader(source))
+        #expect(!state.isLeader(mirrored))
+    }
+
+    @Test
+    func leadership_falls_back_to_tree_order_when_unrecorded() throws {
+        // A restored pair attached before we tracked anything. zmx makes the
+        // FIRST client to attach the leader and restore warms in tree order,
+        // so tree order is the best-effort match — and exactly one pane must
+        // come out the leader either way.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let tab = try #require(ws.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        tab.splitRoot = .split(SplitBranch(
+            direction: .horizontal,
+            first: .pane(source),
+            second: .pane(mirrorPane(of: source.sessionName, projectID: p.id))
+        ))
+
+        let panes = tab.splitRoot.allPanes()
+        #expect(panes.count == 2)
+        #expect(panes.count(where: { state.isLeader($0) }) == 1)
+        #expect(try state.isLeader(#require(panes.first)))
+    }
+
+    @Test
+    func leadership_survives_the_other_mirror_closing() throws {
+        // Once alone, a pane is the only client and so trivially the leader —
+        // it must never stay dimmed after its twin goes away.
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+        state.focusPane(mirrorID, projectID: p.id)
+        #expect(!state.isLeader(source))
+
+        state.closePane(mirrorID, projectID: p.id)
+
+        #expect(state.isLeader(source))
+        #expect(state.nonLeaderPaneIDs(in: tab).isEmpty)
+    }
+
+    @Test
     func closeNeedsConfirmation_is_false_for_a_pane_whose_session_survives() throws {
         // The busy-close guard says "closing kills its session". For a mirror
         // that is simply false — the other view keeps the program running —
