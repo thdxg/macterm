@@ -6,14 +6,18 @@ import SwiftUI
 /// Transient tab switcher shown while the Recent Tab shortcut is held (#344).
 ///
 /// Deliberately not the command palette: the palette is a search surface with
-/// a text field and a focus handoff, while this is a read-only heads-up
-/// display for a gesture that starts and ends inside one key-hold. It shares
-/// the palette's chrome (`glassPanel`) so the two read as the same family of
-/// floating surfaces, and nothing else — no scrim (the gesture is over in
-/// under a second, and dimming the window the user is switching *within*
-/// hides the very thing they're choosing between), no hit testing (there is
-/// no pointer in this interaction; a click target would only steal the press
-/// that lands after the modifier releases).
+/// a text field and a focus handoff, while this is a heads-up display for a
+/// gesture that starts and ends inside one key-hold. It shares the palette's
+/// chrome (`glassPanel`) so the two read as the same family of floating
+/// surfaces, but not its scrim — the gesture is over in under a second, and
+/// dimming the window the user is switching *within* hides the very thing
+/// they are choosing between.
+///
+/// The panel takes the pointer: hovering a card moves the selection, clicking
+/// one commits to it. Only the panel does — nothing else in the overlay draws
+/// a background, so presses outside it fall through to the terminal
+/// underneath. Note that a click here is necessarily a *modifier*-click, since
+/// releasing the modifier is what ends the gesture.
 ///
 /// With the strip up, cycling moves the selection only — the tab behind it and
 /// the pane holding focus stay put until the modifier is released (see
@@ -36,23 +40,25 @@ struct TabSwitcherOverlay: View {
         if let workspace = activeWorkspace, appState.tabCycleTabIDs.count > 1 {
             let entries = tabs(in: workspace)
             GeometryReader { geo in
-                VStack {
-                    Spacer()
-                    TabSwitcherStrip(
-                        entries: entries,
-                        selection: appState.tabCycleSelection,
-                        availableWidth: geo.size.width,
-                        paneAspect: appState.paneContainerAspect
-                    )
-                    .glassPanel()
-                    // Sits low in the window, out of the terminal's working
-                    // area and clear of the titlebar — the same instinct as
-                    // the palette's 15%-from-top placement, mirrored.
-                    .padding(.bottom, 44)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                TabSwitcherStrip(
+                    entries: entries,
+                    selection: appState.tabCycleSelection,
+                    availableWidth: geo.size.width,
+                    paneAspect: appState.paneContainerAspect,
+                    onHover: { appState.focusTabCycle(at: $0) },
+                    onClick: { index in
+                        guard let projectID = appState.activeProjectID else { return }
+                        appState.commitTabCycle(projectID: projectID, at: index)
+                    }
+                )
+                .glassPanel()
+                // Centered: the strip is the whole interface for the gesture
+                // (the window behind it does not change until release), so it
+                // belongs where the eye already is rather than tucked at an
+                // edge — and centering is also what makes it a plausible
+                // pointer target.
+                .frame(width: geo.size.width, height: geo.size.height)
             }
-            .allowsHitTesting(false)
             .transition(.opacity)
         }
     }
@@ -93,6 +99,9 @@ private struct TabSwitcherStrip: View {
     /// Width over height of the region the panes actually fill, so cards are
     /// shaped like the thing they picture. nil before anything was measured.
     let paneAspect: CGFloat?
+    /// Pointer handlers, both taking a card's index in the cycle order.
+    let onHover: (Int) -> Void
+    let onClick: (Int) -> Void
 
     private static let spacing: CGFloat = 10
     private static let insets: CGFloat = 14
@@ -133,6 +142,10 @@ private struct TabSwitcherStrip: View {
                     isSelected: entry.index == selection,
                     paneAspect: paneAspect
                 )
+                // `.clipped()` below clips hit testing too, so a card in the
+                // peek slots only answers the pointer over its visible sliver.
+                .onHover { if $0 { onHover(entry.index) } }
+                .onTapGesture { onClick(entry.index) }
             }
         }
         .offset(x: -scroll)

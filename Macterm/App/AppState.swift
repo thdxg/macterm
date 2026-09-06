@@ -1691,6 +1691,22 @@ final class AppState {
         panePreviews[paneID] = preview
     }
 
+    /// Point the in-flight cycle at `index` without committing — what hovering
+    /// a card in the switcher does. Out-of-range indices are ignored, since a
+    /// tab can close under the pointer mid-gesture.
+    func focusTabCycle(at index: Int) {
+        guard tabCycleOrder.indices.contains(index) else { return }
+        tabCycleIndex = index
+    }
+
+    /// Commit the cycle straight to `index` — what clicking a card does. The
+    /// modifier may still be held afterwards; the cycle is over either way, so
+    /// its eventual release finds nothing to commit.
+    func commitTabCycle(projectID: UUID, at index: Int) {
+        focusTabCycle(at: index)
+        commitTabCycle(projectID: projectID)
+    }
+
     func commitTabCycle(projectID: UUID) {
         guard !tabCycleOrder.isEmpty, let ws = workspaces[projectID] else {
             tabCycleOrder = []
