@@ -2,7 +2,7 @@
 // public/img/ at build time.
 //
 // Why this exists: assets/ holds the originals the README and the release
-// notes use — 3168x1956 screenshots, ~2.5MB each, and a 1024x1024 icon. The
+// notes use — 3168x1956 screenshots, ~2.5MB each, and the icon glyph. The
 // landing page displays the hero at ~1000 CSS px, so shipping the original
 // meant a 2.5MB LCP image for a 1000px slot. That is the page's largest
 // element, so it *is* the Largest Contentful Paint, and Core Web Vitals is a
@@ -18,7 +18,7 @@
 //   img/<name>-1400.png       the <picture> fallback for a WebP-less client
 // Plus, once:
 //   img/og.png                1200x630 social card, letterboxed on the canvas
-//   img/icon-<size>.png       favicon and apple-touch-icon sizes
+//   img/icon-<size>.png       favicon, apple-touch-icon and header brand mark
 //
 // Reads from public/assets/ rather than ../assets/ because that is the path
 // that exists in both trees: locally it is a symlink to the repo-root assets/,
@@ -57,8 +57,7 @@ const OG = { width: 1200, height: 630, background: "#19191a" };
 const EXPECTED_SCREENSHOTS = 5;
 
 // 180 is the apple-touch-icon size iOS actually asks for; 32 and 16 are the
-// classic favicon rungs. The 1024x1024 original is an 810KB app icon and has
-// no business being either.
+// classic favicon rungs. The 730x730 original has no business being either.
 const ICON_SIZES = [180, 32, 16];
 
 async function buildScreenshots() {
@@ -122,8 +121,12 @@ async function buildOgCard() {
     .toFile(join(OUT_DIR, "og.png"));
 }
 
+// Built from the bare glyph, not the full app icon: the site's brand mark sits
+// on the header's own dark ground and a favicon sits on the browser's, so the
+// icon's background plate would read as a plate rather than as the mark. The
+// glyph is full-bleed in its canvas (729 of 730px), so it needs no re-cropping.
 async function buildIcons() {
-  const input = join(SRC_DIR, "icon.png");
+  const input = join(SRC_DIR, "icon-glyph.png");
   if (!existsSync(input)) {
     throw new Error(`build-images: ${input} is missing — no icons to build`);
   }
