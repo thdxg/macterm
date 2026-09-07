@@ -890,6 +890,25 @@ struct WelcomeView: View {
     }
 }
 
+/// What a non-key window shows in place of a tab whose every pane is a
+/// non-leader (#345): the same sessions are being worked in from another
+/// window. Fills the detail area so a click anywhere on it makes this window
+/// key, which is what claims the tab back and renders the panes again.
+private struct MirroredTabNotice: View {
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("Showing in another window")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MactermTheme.fg)
+            Text("Click to work here")
+                .font(.system(size: 11))
+                .foregroundStyle(MactermTheme.fgMuted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+}
+
 struct EmptyProjectView: View {
     let project: Project
 
@@ -968,8 +987,30 @@ struct WorkspaceView: View {
 
     var body: some View {
         if let view = appState.viewTab(for: project.id, in: windowState) {
-            workspace(view)
+            if standsAside(view) {
+                // Nothing rendered, not a blurred copy: a blur over live panes
+                // read as a slab that did not match the window chrome around
+                // it. With no panes in the hierarchy the tab shows the plain
+                // window backdrop, the same as the toolbar and sidebar, and
+                // the notice says why. Clicking anywhere makes this window key,
+                // which claims the tab and brings the panes back.
+                MirroredTabNotice()
+            } else {
+                workspace(view)
+            }
         }
+    }
+
+    /// Whether this window should show the notice instead of the tab: it is
+    /// not the key window and every pane of its tab is a non-leader — the tab
+    /// is being worked in from another window. The KEY window always renders
+    /// its panes even while they are non-leaders, because its claim can only
+    /// land once the surfaces exist and have a size; hiding them would leave
+    /// the claim refused and the notice up forever.
+    private func standsAside(_ view: AppState.WindowTabView) -> Bool {
+        guard appState.keyWindowID != windowState.id else { return false }
+        let panes = view.tab.splitRoot.allPanes()
+        return !panes.isEmpty && appState.nonLeaderPaneIDs(in: view.tab).count == panes.count
     }
 
     @ViewBuilder

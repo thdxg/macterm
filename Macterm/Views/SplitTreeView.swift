@@ -159,6 +159,8 @@ private struct SplitLeafView: View {
                 // the common mirrored case, and an adaptive background must
                 // not exempt it.
                 NonLeaderBlur()
+                    .overlay(MactermTheme.dimOverlay)
+                    .allowsHitTesting(false)
             } else if !isFocused, isSplit, pane.adaptiveBackgroundColor == nil {
                 // Driven by the user's ghostty `unfocused-split-opacity` /
                 // `unfocused-split-fill`, same as Ghostty.app's split dim. A
@@ -500,25 +502,41 @@ struct ResizeDragBand: NSViewRepresentable {
 
 /// The blur over a non-leader mirror (#345).
 ///
-/// An AppKit view, not SwiftUI's `.blur`: the pane beneath is a
-/// `CAMetalLayer` hosted in an `NSView`, and a within-window
-/// `NSVisualEffectView` is the thing that blurs the window's own layer tree
-/// under it, Metal content included. It sits ON a pane, so it must take no
-/// mouse input of its own — `allowsHitTesting(false)` does not stop a hosted
-/// NSView from winning AppKit hit testing, so `hitTest` is overridden to yield.
+/// The terminal underneath keeps rendering; this only blurs what is composited
+/// beneath it. An AppKit layer with Core Image `backgroundFilters`, not
+/// SwiftUI's `.blur` (which cannot reach a hosted `CAMetalLayer`) and not an
+/// `NSVisualEffectView` (whose materials tint and mostly hide the content —
+/// the first cut used `.hudWindow` and read as an opaque slab). It sits ON a
+/// pane, so it must take no mouse input of its own — `allowsHitTesting(false)`
+/// does not stop a hosted NSView from winning AppKit hit testing, so `hitTest`
+/// is overridden to yield.
 private struct NonLeaderBlur: NSViewRepresentable {
-    func makeNSView(context _: Context) -> NSVisualEffectView {
-        let view = PassthroughVisualEffectView()
-        view.blendingMode = .withinWindow
-        view.material = .hudWindow
-        view.state = .active
-        return view
+    func makeNSView(context _: Context) -> BackdropBlurView {
+        BackdropBlurView()
     }
 
-    func updateNSView(_: NSVisualEffectView, context _: Context) {}
+    func updateNSView(_: BackdropBlurView, context _: Context) {}
 }
 
-private final class PassthroughVisualEffectView: NSVisualEffectView {
+private final class BackdropBlurView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        // Required for Core Image filters on a layer-backed view; without it
+        // `backgroundFilters` is silently ignored.
+        layerUsesCoreImageFilters = true
+        if let blur = CIFilter(name: "CIGaussianBlur") {
+            blur.setValue(6, forKey: kCIInputRadiusKey)
+            layer?.backgroundFilters = [blur]
+        }
+        layer?.masksToBounds = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override func hitTest(_: NSPoint) -> NSView? {
         nil
     }
