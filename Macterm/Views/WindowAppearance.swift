@@ -203,22 +203,24 @@ final class MactermTintBackdropView: NSView {
 // MARK: - Liquid glass background
 
 /// A container that hosts a macOS 26 `NSGlassEffectView` (the real liquid
-/// glass material) under Macterm's own tint layer. Modeled on Ghostty's
-/// `TerminalGlassView` (`TerminalViewContainer.swift`).
+/// glass material) under Macterm's own tint layer. This is the deliberate
+/// divergence from Ghostty, which puts the color *under* its glass (SwiftUI
+/// `.glassEffect`, since fd17869d1): the tint has to sit as a separate layer
+/// above the material so `TintCutout` can cut it out from under a pane.
 ///
-/// **The window's appearance does not depend on key status.** It used to: an
-/// overlay faded a saturation-boosted tint of the background in as the window
-/// resigned key, lifted from the Ghostty of the time, where the tint lived
-/// *inside* the material as `NSGlassEffectView.tintColor` and so took the
-/// material's own inactive desaturation with it — a large enough change to
-/// need compensating for. Macterm's tint is a separate layer above the
-/// material (it has to be, so `TintCutout` can cut it), so it never took that
+/// **The tint does not depend on key status.** It used to: an overlay faded a
+/// saturation-boosted tint of the background in as the window resigned key,
+/// lifted from the Ghostty of the time, where the tint lived *inside* the
+/// material as `NSGlassEffectView.tintColor` and so took the material's own
+/// inactive desaturation with it — a large enough change to need compensating
+/// for. Macterm's tint, being above the material, never took that
 /// desaturation, and the overlay was compensating for something that wasn't
 /// happening: an unfocused window visibly gained opacity, the wallpaper behind
 /// it dropping out (measured 39,39,50 → 29,27,39 through the terminal area).
-/// Ghostty has since dropped its overlay too, along with every key-status
-/// callback, so unfocusing now moves only the material itself. Don't
-/// reintroduce a focus-dependent tint here.
+/// Ghostty has since dropped its overlay too. What remains on unfocus is the
+/// material's own inactive desaturation (and the native sidebar's — blue −5
+/// measured there), which is the only key-status dependency left in the
+/// window's appearance. Don't reintroduce a focus-dependent tint here.
 ///
 /// Macterm inserts this below the window's content view, filling the whole
 /// window — including the region under the titlebar (via a negative top inset
@@ -321,8 +323,10 @@ final class MactermGlassView: NSView {
 enum WindowAppearance {
     /// Apply the current opacity/blur settings to `window`. Safe to call any
     /// time — re-applies idempotently. Should be called after the window is
-    /// onscreen, on theme changes, and on focus changes (AppKit recreates
-    /// titlebar subviews under us in some cases, e.g. tab bar appearing).
+    /// onscreen, on theme changes, when the window becomes main, and around
+    /// fullscreen transitions (AppKit recreates titlebar subviews under us in
+    /// some cases, e.g. tab bar appearing). Not on key changes: nothing here
+    /// depends on key status (see `MactermGlassView`).
     static func sync(window: NSWindow) {
         let opacity = Preferences.shared.windowOpacity
         let blurRadius = Preferences.shared.windowBlurRadius
@@ -809,7 +813,7 @@ enum WindowAppearance {
 
     /// Install (if needed) and configure the liquid-glass background view so it
     /// fills the window behind SwiftUI's content, including the area under the
-    /// titlebar. Follows Ghostty's `updateGlassEffectIfNeeded` pattern.
+    /// titlebar. Installed once per window, then reconfigured in place.
     private static func syncGlass(window: NSWindow, backgroundColor: NSColor, opacity: Double) {
         guard #available(macOS 26.0, *) else { return }
         guard let contentView = window.contentView, let themeFrame = contentView.superview else { return }
