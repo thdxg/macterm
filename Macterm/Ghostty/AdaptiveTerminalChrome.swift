@@ -64,8 +64,8 @@ final class AdaptiveTerminalChrome {
         }
         for window in windows {
             WindowAppearance.updateTerminalPaintRegions(in: window, rects: [])
+            GhosttyApp.shared.adoptAdaptiveBackgroundColor(nil, for: window)
         }
-        GhosttyApp.shared.adoptAdaptiveBackgroundColor(nil)
     }
 
     /// Focus changes accompany tab switches, where the view may not be
@@ -142,7 +142,13 @@ final class AdaptiveTerminalChrome {
         pruneState(keeping: views)
         let shouldContinueBurst = samplingBurst.consumeRetry()
         guard !views.isEmpty else {
-            GhosttyApp.shared.adoptAdaptiveBackgroundColor(nil)
+            // Clear the window we were last painting. Other windows keep the
+            // tint they were sampled with — sampling follows the key window,
+            // so a background window having nothing monitorable right now says
+            // nothing about what it is showing.
+            if let last = lastPaintRegionWindow {
+                GhosttyApp.shared.adoptAdaptiveBackgroundColor(nil, for: last)
+            }
             updateRetryTimer(isNeeded: shouldContinueBurst)
             return
         }
@@ -274,7 +280,8 @@ final class AdaptiveTerminalChrome {
         // window opacity itself.
         guard !isOverlayPanel else { return }
         GhosttyApp.shared.adoptAdaptiveBackgroundColor(
-            candidates.count == 1 ? candidates[0]?.withAlphaComponent(1) : nil
+            candidates.count == 1 ? candidates[0]?.withAlphaComponent(1) : nil,
+            for: window
         )
     }
 

@@ -326,7 +326,9 @@ enum WindowAppearance {
     static func sync(window: NSWindow) {
         let opacity = Preferences.shared.windowOpacity
         let blurRadius = Preferences.shared.windowBlurRadius
-        let bg = MactermTheme.nsBg
+        // This window's own tint (#345) — never the app-wide one, or a
+        // background window paints the focused window's terminal colour.
+        let bg = MactermTheme.nsBg(for: window)
         let isTransparent = opacity < 1.0
 
         // Native fullscreen draws its own opaque grey background; widgets show

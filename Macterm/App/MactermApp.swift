@@ -656,6 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func forgetTerminalWindow(_ window: NSWindow) {
         terminalWindowRefs.removeAll { $0.window == nil || $0.window === window }
+        GhosttyApp.shared.forgetAdaptiveBackgroundColor(for: window)
         if mainWindow === window {
             mainWindow = terminalWindows.first
             mainAppResponder?.mainWindow = mainWindow
