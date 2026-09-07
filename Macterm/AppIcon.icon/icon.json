@@ -1,10 +1,6 @@
 {
   "fill-specializations" : [
     {
-      "value" : "system-light"
-    },
-    {
-      "appearance" : "dark",
       "value" : {
         "solid" : "srgb:0.09804,0.09020,0.14118,1.00000"
       }
