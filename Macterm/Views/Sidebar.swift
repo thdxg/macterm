@@ -8,9 +8,48 @@ import UniformTypeIdentifiers
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
-/// Pulls the hover action through the row's protective trailing inset so its
-/// symbol aligns with the sidebar's native disclosure affordance.
-private let projectActionTrailingOffset: CGFloat = rowTrailingInset + 2
+/// The hit box of a project row's hover-revealed new-tab action.
+private let projectActionSize: CGFloat = 18
+
+/// Gap between a project's title and that action.
+private let projectActionGap: CGFloat = 4
+
+/// The action's inset from the row's trailing edge — NEGATIVE, because it
+/// deliberately sits past `rowTrailingInset` rather than inside it.
+///
+/// That inset exists to stop row *content* reading as overflowing the
+/// selection highlight, and a trailing accessory is not content: the List
+/// draws each row's background (the highlight) well past the line content
+/// stops at, and that strip is exactly where a trailing control belongs.
+/// Respecting the inset instead stranded the plus short of the row's visual
+/// end with an empty gutter to its right.
+///
+/// The target is the row's own visual right end: the trailing edge of the
+/// selection highlight the List draws behind a selected row. That is what
+/// the eye reads as where the row stops, and it sits a few points past the
+/// content region — hence the negative inset. The overhang is MEASURED
+/// against a selected tab row's capsule, because SwiftUI exposes no metric
+/// for a List row's background insets; deriving it from `rowTrailingInset`
+/// instead put the action's box a full half-width past the highlight.
+private let sidebarRowHighlightOverhang: CGFloat = 3
+
+private let projectActionTrailingInset: CGFloat = -sidebarRowHighlightOverhang
+
+/// The title's trailing inset while the action is revealed. `max` is the
+/// contract, not a nicety: the title yields room ONLY if the action's box
+/// would otherwise reach back over it, and can never end up WIDER on hover
+/// than at rest. With the metrics above the box does reach back over the
+/// content stop line, so a revealed title yields 9pt and takes it straight
+/// back — and if the action ever moves far enough right to clear that line
+/// on its own, this collapses to `rowTrailingInset` and the title stops
+/// moving at all, without anything else needing to change.
+private let projectActionRevealedInset: CGFloat = max(
+    rowTrailingInset,
+    projectActionTrailingInset + projectActionSize + projectActionGap
+)
+
+/// How the reveal is animated. Matches `PaneDragDrop`'s hover treatment.
+private let projectActionRevealAnimation: Animation = .easeInOut(duration: 0.12)
 
 @MainActor
 enum SidebarLayoutMetrics {
@@ -200,12 +239,8 @@ struct SidebarContent: View {
     private var projectStore
     @AppStorage(Preferences.Keys.showNewProjectButton)
     private var showNewProjectButton = true
-    @AppStorage(Preferences.Keys.showProjectNewTabButton)
-    private var showProjectNewTabButton = true
     @Bindable
     private var presentation: SidebarPresentationState
-    @State
-    private var hoveredProjectID: UUID?
     private let isInteractive: Bool
     private let paintsFallbackFooterBackground: Bool
     private let forcesScrollEdgeEffects: Bool
@@ -548,31 +583,15 @@ struct SidebarContent: View {
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
-        let showsNewTabButton = isInteractive
-            && showProjectNewTabButton
-            && hoveredProjectID == project.id
-        return projectHeaderLabel(
-            index: projectIndex,
+        SidebarProjectHeader(
             project: project,
-            showsNewTabButton: showsNewTabButton
+            index: projectIndex + 1,
+            presentation: presentation,
+            isInteractive: isInteractive,
+            onRename: { projectStore.rename(id: project.id, to: $0) },
+            onNewTab: { createTab(in: project) }
         )
-        .padding(.trailing, rowTrailingInset)
-        // Stretch to the full row so the drag grab area (and the drop band in
-        // the background below) covers the whole row, not just the label's
-        // intrinsic width — same treatment as the tab rows.
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
         .tag(SidebarItem.project(project.id))
-        // Drag the header to reorder projects (replaces the removed `.onMove`).
-        .draggable(MovableProject(projectID: project.id))
-        .onHover { isHovering in
-            guard isInteractive else { return }
-            if isHovering {
-                hoveredProjectID = project.id
-            } else if hoveredProjectID == project.id {
-                hoveredProjectID = nil
-            }
-        }
         // ONE drop destination for every payload (see `SidebarDropItem` for
         // why stacking two is a landmine). A TAB dropped here appends to this
         // project — the only drop path for a collapsed or empty project,
@@ -602,54 +621,6 @@ struct SidebarContent: View {
             // drop stays on target.
             if targeted { presentation.expandedProjects.insert(project.id) }
         }
-    }
-
-    /// The idle branch is exactly the ordinary project row. The action and
-    /// its spacing enter the layout only while hovered, so a hidden button
-    /// cannot shorten or fade a project name.
-    @ViewBuilder
-    private func projectHeaderLabel(
-        index projectIndex: Int,
-        project: Project,
-        showsNewTabButton: Bool
-    ) -> some View {
-        if showsNewTabButton {
-            HStack(spacing: 0) {
-                projectRow(index: projectIndex, project: project)
-                Spacer(minLength: 0)
-                projectNewTabButton(for: project)
-                    .padding(.leading, 6)
-            }
-        } else {
-            projectRow(index: projectIndex, project: project)
-        }
-    }
-
-    private func projectRow(index projectIndex: Int, project: Project) -> some View {
-        SidebarProjectRow(
-            project: project,
-            index: projectIndex + 1,
-            presentation: presentation,
-            isInteractive: isInteractive
-        ) {
-            projectStore.rename(id: project.id, to: $0)
-        }
-    }
-
-    private func projectNewTabButton(for project: Project) -> some View {
-        Button {
-            createTab(in: project)
-        } label: {
-            Image(systemName: "plus")
-                .font(.callout.weight(.medium))
-                .frame(width: 18, height: 18)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .offset(x: projectActionTrailingOffset)
-        .help("New Tab")
-        .accessibilityLabel("New Tab in \(project.name)")
     }
 
     /// Every visible row in visual order, mirroring the `List` body: the
@@ -1035,6 +1006,220 @@ extension View {
         onBeginRename: @escaping () -> Void
     ) -> some View {
         modifier(InlineRenameClickTarget(onSelect: onSelect, onBeginRename: onBeginRename))
+    }
+}
+
+/// A project's `DisclosureGroup` label: the ordinary project row, plus an
+/// optional new-tab button revealed while the pointer rests on the row.
+///
+/// Three things here are load-bearing, all of them learned from this
+/// feature's first cut (PR #331), which left the sidebar visibly corrupt.
+///
+/// **The reveal is a value change, never a branch.** Nothing is reserved at
+/// rest — an idle row is laid out exactly as it was before this feature, and
+/// on hover the title yields 22pt and takes it straight back. What matters is
+/// HOW: the whole difference between revealed and idle is a padding number,
+/// an opacity and a hit-test flag, all read off one `isRevealed` Bool. There
+/// is not a single `if` in the view tree.
+///
+/// That distinction is the entire bug this feature shipped with the first
+/// time. Expressing the reveal as a `@ViewBuilder` if/else makes a
+/// `_ConditionalContent` whose two branches are different types, and this
+/// view is a `List` row carrying `.tag` and a `.dropDestination`. Swapping
+/// branches does not re-layout the row — it tears the subtree down and builds
+/// a new one, and the `NSTableView` under the outline reuses row views across
+/// the churn: duplicated project rows, a tab row's icon drawn over a project
+/// title, tab rows under a collapsed project. It also reset `FadingText`'s
+/// `@State` width measurements every pointer crossing, so the title
+/// re-measured from zero and re-decided its own fade under the pointer, and
+/// restarted `SidebarProjectRow`'s `@FocusState` and rename `.task`. A
+/// changing WIDTH costs none of that: same view, same identity, one more
+/// layout pass, and `FadingText` simply re-reads a container that genuinely
+/// did get narrower.
+///
+/// **Hover comes from an `NSTrackingArea`, never `.onHover`.** This codebase
+/// has retired `.onHover` twice: it lags on fast pointer motion
+/// (`CommandPalette`) and leaks its exit when the view leaves the hierarchy
+/// mid-hover (`SplitTreeView`, which replaced it with a tracking area). A
+/// dropped exit is what stuck the button on a row the pointer had left and
+/// kept it off the row the pointer was on.
+///
+/// **The hover state lives here, not on `SidebarContent`.** Held one level up
+/// it was read inside the `List` builder, so a single pointer crossing
+/// invalidated the pinned section, every project, and every tab row.
+private struct SidebarProjectHeader: View {
+    let project: Project
+    let index: Int
+    @Bindable
+    var presentation: SidebarPresentationState
+    let isInteractive: Bool
+    let onRename: (String) -> Void
+    let onNewTab: () -> Void
+    @AppStorage(Preferences.Keys.showProjectNewTabButton)
+    private var showProjectNewTabButton = true
+    @State
+    private var isHovered = false
+
+    /// Whether the action occupies the row at all. A user who turns the
+    /// preference off pays none of its width — which is why this branch is
+    /// allowed to restructure the row and the hover state is not.
+    /// The action is showing: the preference is on, the row is live, and the
+    /// pointer is on it. Every difference between a revealed row and an idle
+    /// one is driven off this ONE Bool as a numeric value — a padding, an
+    /// opacity, a hit-test flag — never as a branch in the view tree.
+    private var isRevealed: Bool {
+        isInteractive && showProjectNewTabButton && isHovered
+    }
+
+    var body: some View {
+        SidebarProjectRow(
+            project: project,
+            index: index,
+            presentation: presentation,
+            isInteractive: isInteractive,
+            onRename: onRename
+        )
+        // Stretch to the full row so the drag grab area (and the drop band in
+        // the background of the enclosing header) covers the whole row, not
+        // just the label's intrinsic width — same treatment as the tab rows.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Drag the header to reorder projects (replaces the removed
+        // `.onMove`). Applied to the TITLE, INSIDE the reveal inset below, so
+        // the revealed action is never part of the drag source: a press that
+        // drifts a couple of points on the button would otherwise start a
+        // project drag, and dragging a project by its new-tab button is
+        // nonsense. While idle the inset is zero, so the grab area is the
+        // whole row exactly as it was.
+        .draggable(MovableProject(projectID: project.id))
+        // The action's room opens ONLY while revealed; at rest the title keeps
+        // the ordinary row inset and is laid out precisely as it was before
+        // this feature. The title yields 14pt to the pointer and takes it
+        // straight back.
+        .padding(.trailing, isRevealed ? projectActionRevealedInset : rowTrailingInset)
+        // Overlaid at the trailing edge rather than placed in an `HStack`, so
+        // the button's own position is fixed and only the TITLE's inset
+        // moves — and applied OUTSIDE the title's inset, which is what puts
+        // it at the row's right end instead of a rowTrailingInset gutter's
+        // width short of it. Under an idle row it sits, invisible and inert,
+        // over the title's last few points, which costs that title nothing:
+        // a zero-opacity overlay takes no space and answers no clicks.
+        .overlay(alignment: .trailing) { newTabButton }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RowHoverTracker(isHovered: $isHovered))
+        .animation(projectActionRevealAnimation, value: isRevealed)
+    }
+
+    private var newTabButton: some View {
+        Button(action: onNewTab) {
+            Image(systemName: "plus")
+                .font(.callout.weight(.medium))
+                .frame(width: projectActionSize, height: projectActionSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .opacity(isRevealed ? 1 : 0)
+        // Opacity alone still hit-tests in SwiftUI, and this button sits ON
+        // the title: without this an idle row would hand its last 18pt of
+        // title — a click meant to select or rename the project — to a button
+        // nobody can see.
+        .allowsHitTesting(isRevealed)
+        .padding(.trailing, projectActionTrailingInset)
+        .help("New Tab")
+        // Left reachable by VoiceOver at all times: a pointer-only
+        // affordance is no affordance for a keyboard or VoiceOver user, and
+        // hit testing and accessibility are separate gates.
+        .accessibilityLabel("New Tab in \(project.name)")
+    }
+}
+
+/// Reports pointer enter/exit for the view it backs, through an AppKit
+/// tracking area rather than SwiftUI's `.onHover` — see
+/// `SidebarProjectHeader` for why that distinction matters, and
+/// `PaneDragDrop.DragSourceView` for the same pattern over a pane.
+///
+/// The self-heal in `updateTrackingAreas` is the part worth keeping: a row
+/// that reshapes, scrolls out of view, or loses its window mid-hover never
+/// receives its exit event, and a hover-revealed control that misses one
+/// stays lit on the wrong row for the rest of the session.
+private struct RowHoverTracker: NSViewRepresentable {
+    @Binding var isHovered: Bool
+
+    func makeNSView(context _: Context) -> TrackerView {
+        let view = TrackerView()
+        configure(view)
+        return view
+    }
+
+    func updateNSView(_ view: TrackerView, context _: Context) {
+        configure(view)
+    }
+
+    private func configure(_ view: TrackerView) {
+        view.onHoverChanged = { hovering in isHovered = hovering }
+    }
+
+    final class TrackerView: NSView {
+        var onHoverChanged: ((Bool) -> Void)?
+        private var isInside = false
+
+        /// Transparent to the mouse: the row beneath owns every click, drag,
+        /// scroll and right-click. Tracking-area enter/exit is dispatched by
+        /// geometry and is unaffected by this.
+        override func hitTest(_: NSPoint) -> NSView? {
+            nil
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach { removeTrackingArea($0) }
+            // `.activeInActiveApp` means a BACKGROUND Macterm reveals
+            // nothing on hover — deliberate, and the same choice
+            // `PaneDragDrop` makes: an inactive window should not offer a
+            // one-click action the user can trip over on their way to
+            // focusing it. `.inVisibleRect` keeps the area matched to the
+            // row as the List scrolls without a callback per frame.
+            addTrackingArea(NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            ))
+            // Re-derive the truth on every layout pass, rather than trusting
+            // that an exit event arrived. Deferred because this runs inside
+            // AppKit's layout, and the report writes SwiftUI state.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                report(pointerIsInside)
+            }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window == nil { report(false) }
+        }
+
+        override func mouseEntered(with _: NSEvent) {
+            report(true)
+        }
+
+        override func mouseExited(with _: NSEvent) {
+            report(false)
+        }
+
+        /// Where the pointer actually is, asked of the window rather than
+        /// inferred from the last event we happened to receive.
+        private var pointerIsInside: Bool {
+            guard let window, NSApp.isActive else { return false }
+            let inWindow = window.mouseLocationOutsideOfEventStream
+            return visibleRect.contains(convert(inWindow, from: nil))
+        }
+
+        private func report(_ inside: Bool) {
+            guard inside != isInside else { return }
+            isInside = inside
+            onHoverChanged?(inside)
+        }
     }
 }
 
