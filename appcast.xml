@@ -2,7 +2,7 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Macterm</title>
-    <link>https://thdxg.github.io/macterm/appcast.xml</link>
+    <link>https://macterm.thdxg.dev/appcast.xml</link>
     <description>Updates for Macterm.</description>
     <language>en</language>
     <item>
@@ -317,7 +317,7 @@
       <sparkle:version>1.13.0</sparkle:version>
       <sparkle:shortVersionString>1.13.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.0/Macterm-1.13.0.dmg" type="application/octet-stream" sparkle:edSignature="dPfVqjw0zmiLZ1QLPXSt5YwQpyPKKam5FpeDPAtvc+VpEiM33+nSQT0OeFR6K8OSIJDa/EBHbxIoq/14CPl6AQ==" length="15260946" />
     </item>
@@ -327,7 +327,7 @@
       <sparkle:version>1.13.1</sparkle:version>
       <sparkle:shortVersionString>1.13.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.1/Macterm-1.13.1.dmg" type="application/octet-stream" sparkle:edSignature="y0ohrlG8HALEMgAoLC0kcX7JxVjGSqpsWOCiy5b4OmcszG3IHtLKtDoOREpRtTZdHw/FpGeMEO1CWy7+JFbSCA==" length="15260952" />
     </item>
@@ -337,7 +337,7 @@
       <sparkle:version>1.13.2</sparkle:version>
       <sparkle:shortVersionString>1.13.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.2/Macterm-1.13.2.dmg" type="application/octet-stream" sparkle:edSignature="FxuaSDN7LzBgClTRugXKalpNfLXnVxnY1+yq/Nq1ve/DhMMFteaAcaTeBY7alWVLJaze06NX5e46DXrsUz9gBA==" length="15261079" />
     </item>
@@ -347,7 +347,7 @@
       <sparkle:version>1.13.3</sparkle:version>
       <sparkle:shortVersionString>1.13.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.3/Macterm-1.13.3.dmg" type="application/octet-stream" sparkle:edSignature="sZrK9/l8hHcHpyZF+LL+cLA348MmvpwDUjdeL5Y/Z7RMwX66v69bgRZQx94Kt/Dp1HkJyJbPlpj9g6iYXvRHCg==" length="15441770" />
     </item>
@@ -357,7 +357,7 @@
       <sparkle:version>1.13.4</sparkle:version>
       <sparkle:shortVersionString>1.13.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.4.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.4.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.4</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.4/Macterm-1.13.4.dmg" type="application/octet-stream" sparkle:edSignature="m/D1xAFh9TbX2lh7hIYlz2jUxIXJmo4pL4aaewHYIghbAEtZ9PAQs2wfYFIlH0E15o9ESqkMYHyc2tOtK9eOCw==" length="15441740" />
     </item>
@@ -367,7 +367,7 @@
       <sparkle:version>1.13.5</sparkle:version>
       <sparkle:shortVersionString>1.13.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.5.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.5.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.5</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.5/Macterm-1.13.5.dmg" type="application/octet-stream" sparkle:edSignature="lt6C82cin/gODKIi+t0y/wpkkDGu6hYwrUJH7RjIXJvKVB6zwjAWHpl2xnMb/aTzddwAYz7y3DpjFS7Ity9ACg==" length="15448087" />
     </item>
@@ -377,7 +377,7 @@
       <sparkle:version>1.13.6</sparkle:version>
       <sparkle:shortVersionString>1.13.6</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.6.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.6.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.6</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.6/Macterm-1.13.6.dmg" type="application/octet-stream" sparkle:edSignature="QaQTwGRQdOxd/WyhoVTm17vWrjgkufY1Jg8Z+Tldfz+GIEDx1tI6X7GcF/K5biTxPZ4uFRM48YkfuDrsy/gpAg==" length="15476034" />
     </item>
@@ -387,7 +387,7 @@
       <sparkle:version>1.13.7</sparkle:version>
       <sparkle:shortVersionString>1.13.7</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.7.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.7.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.7</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.7/Macterm-1.13.7.dmg" type="application/octet-stream" sparkle:edSignature="cLTClma8Ew9hGJJeVdbO5ENQPp+AmngNZjQcU/OHgrDo07TdU/GwNre03XPGIjpr4EK+/95XktdmOOR6w6LQDg==" length="15510116" />
     </item>
@@ -397,7 +397,7 @@
       <sparkle:version>1.13.8</sparkle:version>
       <sparkle:shortVersionString>1.13.8</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.13.8.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.13.8.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.13.8</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.13.8/Macterm-1.13.8.dmg" type="application/octet-stream" sparkle:edSignature="n4y9G2zHPKTTVUsR8XyRZ4/jNQiazlsbdj3nYcQpLzLQip9xR2d9MaUXAhLy14xosov2SDxyqnSbOTjeS+qgCg==" length="15509440" />
     </item>
@@ -407,7 +407,7 @@
       <sparkle:version>1.14.0</sparkle:version>
       <sparkle:shortVersionString>1.14.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.14.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.14.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.14.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.14.0/Macterm-1.14.0.dmg" type="application/octet-stream" sparkle:edSignature="z0GfdD2SXWtR0bV71+N29jUrMoeVka41+AxqpmReCDftQGVsByql7ndOv+tErRT5KrrlSMMW9V23955QUhPWCg==" length="15133881" />
     </item>
@@ -417,7 +417,7 @@
       <sparkle:version>1.14.1</sparkle:version>
       <sparkle:shortVersionString>1.14.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.14.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.14.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.14.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.14.1/Macterm-1.14.1.dmg" type="application/octet-stream" sparkle:edSignature="Z7I4xVYLUKZMMReLR2x4Sr9GGhb1O13jq1AA/ufMes1KkG36lA4pYIlMX1fzcmeXHecxa2DGs4A/e0Jj86PhAg==" length="15152986" />
     </item>
@@ -427,7 +427,7 @@
       <sparkle:version>1.15.0</sparkle:version>
       <sparkle:shortVersionString>1.15.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.15.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.15.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.15.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.15.0/Macterm-1.15.0.dmg" type="application/octet-stream" sparkle:edSignature="xnW+6JPEnUhgy5xQ8xu2MOTkddPejMWdZmWVWeqa5pd8+U3tdV163qjWZp/vCTaNe3q7kt23DxJIOLRhpnLbBg==" length="15789770" />
     </item>
@@ -437,7 +437,7 @@
       <sparkle:version>1.15.1</sparkle:version>
       <sparkle:shortVersionString>1.15.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.15.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.15.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.15.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.15.1/Macterm-1.15.1.dmg" type="application/octet-stream" sparkle:edSignature="KyWr4dzHFRXjjcEUvmewhmvyaA8kjD12+qIJ0uPFGS/E5JhFqNOrG9iUOd81LEVVx5L4YzCvXKbpn45BTN/bDg==" length="15789717" />
     </item>
@@ -447,7 +447,7 @@
       <sparkle:version>1.15.2</sparkle:version>
       <sparkle:shortVersionString>1.15.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.15.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.15.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.15.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.15.2/Macterm-1.15.2.dmg" type="application/octet-stream" sparkle:edSignature="qX0BR8/NQCIw4W3/3mWBsC5gWvqftv73DD+xnBkuJNpC4xXVTTG8xxgZ7N/8wGJitebTo9G4LeS6rkRHyPmFAA==" length="15790788" />
     </item>
@@ -457,7 +457,7 @@
       <sparkle:version>1.15.3</sparkle:version>
       <sparkle:shortVersionString>1.15.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.15.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.15.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.15.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.15.3/Macterm-1.15.3.dmg" type="application/octet-stream" sparkle:edSignature="OxeovcEeHN9kcw2LrD2ghobZ4+48cJAN7CynUvqyCGZfTd5r1h9YzfRU5x8/N+CMbv54wLSMMCUUgNOKtFNHAQ==" length="15797733" />
     </item>
@@ -467,7 +467,7 @@
       <sparkle:version>1.15.4</sparkle:version>
       <sparkle:shortVersionString>1.15.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.15.4.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.15.4.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.15.4</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.15.4/Macterm-1.15.4.dmg" type="application/octet-stream" sparkle:edSignature="Gx4ejzs5+DCS8HvVkEHmsRTSzRmVxsxy28KqRXABVzeHDPAaMI/LM3Du5cbnF88e2GCEW8whRZM4HYwuZrdCBg==" length="9060353" />
     </item>
@@ -477,7 +477,7 @@
       <sparkle:version>1.15.5</sparkle:version>
       <sparkle:shortVersionString>1.15.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.15.5.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.15.5.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.15.5</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.15.5/Macterm-1.15.5.dmg" type="application/octet-stream" sparkle:edSignature="j1aaNiEtpu4UGvqZXHm41ec/aJZxdncgS6WLZI6k3Tp5eVDugrQK0m3Ph2T16dbwAwPI/2BfPAfTYg3ei/6eBg==" length="9065712" />
     </item>
@@ -487,7 +487,7 @@
       <sparkle:version>1.15.6</sparkle:version>
       <sparkle:shortVersionString>1.15.6</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.15.6.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.15.6.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.15.6</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.15.6/Macterm-1.15.6.dmg" type="application/octet-stream" sparkle:edSignature="UWTQcx3XkyxFBJsHwNJW/JpHRYkKJbBOVywIdsOuOxUKqMuvTKWLLQfEIQ2JWOujHame+b3Lh0lCwCSpLrz3Dg==" length="9070341" />
     </item>
@@ -497,7 +497,7 @@
       <sparkle:version>1.16.0</sparkle:version>
       <sparkle:shortVersionString>1.16.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.16.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.16.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.16.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.16.0/Macterm-1.16.0.dmg" type="application/octet-stream" sparkle:edSignature="TO4zcCrlYZVZI6xTXbKmwmSNskWE9ZzVjXWVqft+FcaWIAGpShYMWL863JXaM4hjWuQtEC89HWlD6Urtlbe6AA==" length="9099572" />
     </item>
@@ -507,7 +507,7 @@
       <sparkle:version>1.16.1</sparkle:version>
       <sparkle:shortVersionString>1.16.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.16.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.16.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.16.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.16.1/Macterm-1.16.1.dmg" type="application/octet-stream" sparkle:edSignature="5qei6VppYRziL23KaVzrZ+33dwBiSC/j74kxRbzgORrcvUe8ZVx43mnpbnngZC77Z3xhzzq4eq6heStEE7b+Ag==" length="9097991" />
     </item>
@@ -517,7 +517,7 @@
       <sparkle:version>1.17.0</sparkle:version>
       <sparkle:shortVersionString>1.17.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.17.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.17.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.17.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.17.0/Macterm-1.17.0.dmg" type="application/octet-stream" sparkle:edSignature="U844WPnH1ninOmrGlCo2Y4l7GBz/KhudWYArrmWq9/eOz+CCwfPtl2kWk9B3S9z4Yf1nhm1X4+cC2b4LVsJBAw==" length="9107968" />
     </item>
@@ -527,7 +527,7 @@
       <sparkle:version>1.17.1</sparkle:version>
       <sparkle:shortVersionString>1.17.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.17.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.17.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.17.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.17.1/Macterm-1.17.1.dmg" type="application/octet-stream" sparkle:edSignature="wqdd8E4JuDTc9pjTH3RlhyfUipLJybo3U2si8aEX7+muacXheKA68RT1vsZ3o/u/pVYBg+i+IM0m+8rdcWuqCA==" length="9104603" />
     </item>
@@ -537,7 +537,7 @@
       <sparkle:version>1.17.2</sparkle:version>
       <sparkle:shortVersionString>1.17.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.17.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.17.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.17.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.17.2/Macterm-1.17.2.dmg" type="application/octet-stream" sparkle:edSignature="aTMflwOIt5XiwLYLth/07r1OjsCPKflMCbWCFU7eBnt/Nh6O94GL2/5K5l+lA0lvhq6nSkVARIJgPPxnTKISDA==" length="9113589" />
     </item>
@@ -547,7 +547,7 @@
       <sparkle:version>1.17.3</sparkle:version>
       <sparkle:shortVersionString>1.17.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.17.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.17.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.17.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.17.3/Macterm-1.17.3.dmg" type="application/octet-stream" sparkle:edSignature="hkgqOVInipRs24oNb5us9ehJSkXYL/MxqTXURaZrPf3BzkcOD21hnA4Cj1BSujBfmZ971e0KIyAcfjXYjmKfBg==" length="9139687" />
     </item>
@@ -557,7 +557,7 @@
       <sparkle:version>1.18.0</sparkle:version>
       <sparkle:shortVersionString>1.18.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.18.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.18.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.18.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.18.0/Macterm-1.18.0.dmg" type="application/octet-stream" sparkle:edSignature="5wu4goHfAFJj7jinFtKiHucWWBKPnYo2siEtpswo9CSd2EL6HzzEhqxhRXYePW1QgwK/jqppBJ1n1EgHYT1yDA==" length="15985486" />
     </item>
@@ -567,7 +567,7 @@
       <sparkle:version>1.18.1</sparkle:version>
       <sparkle:shortVersionString>1.18.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.18.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.18.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.18.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.18.1/Macterm-1.18.1.dmg" type="application/octet-stream" sparkle:edSignature="XTZZyU9vgravZjdirV+XRITRx9D7Oh7hJWlC6arZHfQ2EiBZUjNqBZyGIXty81bsj8nZHMaeh2hm45ek+9s1Cw==" length="16000090" />
     </item>
@@ -577,7 +577,7 @@
       <sparkle:version>1.18.2</sparkle:version>
       <sparkle:shortVersionString>1.18.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.18.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.18.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.18.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.18.2/Macterm-1.18.2.dmg" type="application/octet-stream" sparkle:edSignature="S6qpP1Zeb7ayGq2peTcQZER6R46p8xbZTSsKBmYn0YG5yOaLNx7piOEPZTqi6SV27tG4frKV2jjojHF8SDyeCA==" length="16006535" />
     </item>
@@ -587,7 +587,7 @@
       <sparkle:version>1.18.3</sparkle:version>
       <sparkle:shortVersionString>1.18.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.18.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.18.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.18.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.18.3/Macterm-1.18.3.dmg" type="application/octet-stream" sparkle:edSignature="BIdN6S/5YpHNygVIPz4U5Nc7S/tvwUIIf9seU9hfXOGqPzqLY3HmLpiijEpqVIDBYCZtKKPSzjNm9J/hrvSICw==" length="17434594" />
     </item>
@@ -597,7 +597,7 @@
       <sparkle:version>1.19.0</sparkle:version>
       <sparkle:shortVersionString>1.19.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.19.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.19.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.19.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.19.0/Macterm-1.19.0.dmg" type="application/octet-stream" sparkle:edSignature="EF0JjkHIG2zV8KxZE1DHuYrjXbP3WYeCqen9FoTKFYzJED0RomAI90lYVkP7j4p5v4ysQ9N2u3lQznoCJJzSAg==" length="17571870" />
     </item>
@@ -607,7 +607,7 @@
       <sparkle:version>1.20.0</sparkle:version>
       <sparkle:shortVersionString>1.20.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.0/Macterm-1.20.0.dmg" type="application/octet-stream" sparkle:edSignature="++l0cQYILbRTYrle1db8W6WmtYtyRvjdR5GwtHkOD2lWPd2fjlg6pE0l8lwUs6O43rx7pVde7y2EkzROd1cdCg==" length="18722976" />
     </item>
@@ -617,7 +617,7 @@
       <sparkle:version>1.20.1</sparkle:version>
       <sparkle:shortVersionString>1.20.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.1/Macterm-1.20.1.dmg" type="application/octet-stream" sparkle:edSignature="tuzQMYDRf4M12mYx1eW+RtbeupJSwmo0vPdNlNMWvv2+jgwa7eYVmaWGjTiKaaqWgoBL8kU4wcBlBsvhl70+Ag==" length="18723945" />
     </item>
@@ -627,7 +627,7 @@
       <sparkle:version>1.20.2</sparkle:version>
       <sparkle:shortVersionString>1.20.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.2/Macterm-1.20.2.dmg" type="application/octet-stream" sparkle:edSignature="2foEQ4za5v0uPNfKQU2zr/WHP1qDTRBXM7yOzgtDhFytH4G/OQtb6vyrakRUEE9rPCeIX8pCNAuYpneTpZJNDw==" length="18727285" />
     </item>
@@ -637,7 +637,7 @@
       <sparkle:version>1.20.3</sparkle:version>
       <sparkle:shortVersionString>1.20.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.3/Macterm-1.20.3.dmg" type="application/octet-stream" sparkle:edSignature="GoLxZWwB/fv2ta1jstG6Vs3jFBltIukus9N5aRDWEoA2gLQZUjxuWTJ/IYzxidr5dpAnPZ2dX3SqZ3TrtJ+7Cw==" length="18826188" />
     </item>
@@ -647,7 +647,7 @@
       <sparkle:version>1.20.4</sparkle:version>
       <sparkle:shortVersionString>1.20.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.4.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.4.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.4</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.4/Macterm-1.20.4.dmg" type="application/octet-stream" sparkle:edSignature="K+YkFLAUDHcZfVjN10DqZkBv9P9CqI3ttsjN1/Q5aqWLQnhoBhcxc3rkTenIK0Jxi695hFYTBtkPuCj9DkmDAw==" length="19186770" />
     </item>
@@ -657,7 +657,7 @@
       <sparkle:version>1.20.5</sparkle:version>
       <sparkle:shortVersionString>1.20.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.5.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.5.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.5</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.5/Macterm-1.20.5.dmg" type="application/octet-stream" sparkle:edSignature="iHTnEVVeCulFhwJI0O97i8sh9eqEAdFw/38JMheBtA0xHvhzeZYrB0+swxVroWeW7wdZn7ulUaI3ooi4aGg6Dw==" length="19209919" />
     </item>
@@ -667,7 +667,7 @@
       <sparkle:version>1.20.6</sparkle:version>
       <sparkle:shortVersionString>1.20.6</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.6.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.6.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.6</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.6/Macterm-1.20.6.dmg" type="application/octet-stream" sparkle:edSignature="vmjnmm6oSHEz/kwpNz8pV+EYkLN9PZ/9UyWnJoDox0CLqEc+jdzgRMraqxT1lorukSjk2nxz0SFGOI6nBgaVCQ==" length="19850932" />
     </item>
@@ -677,7 +677,7 @@
       <sparkle:version>1.20.7</sparkle:version>
       <sparkle:shortVersionString>1.20.7</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.7.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.7.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.7</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.7/Macterm-1.20.7.dmg" type="application/octet-stream" sparkle:edSignature="X1R0luWfr5Pk49erlpFDmTYseOzYlnJC9inceuESvjHeM2fso4u+EFu0gvOhgIhz4RiRPpIoE8ux9YBcr9JOBQ==" length="19250340" />
     </item>
@@ -687,7 +687,7 @@
       <sparkle:version>1.20.8</sparkle:version>
       <sparkle:shortVersionString>1.20.8</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.8.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.8.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.8</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.8/Macterm-1.20.8.dmg" type="application/octet-stream" sparkle:edSignature="c820dThU2uiRAfIa8zuA+Z/YurZF1zSoiqOjreTitW4iVksA2qOuXu261j10PAOPEmXWJo986CGWoE+UeWfDAQ==" length="19255590" />
     </item>
@@ -697,7 +697,7 @@
       <sparkle:version>1.20.9</sparkle:version>
       <sparkle:shortVersionString>1.20.9</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.9.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.9.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.9</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.9/Macterm-1.20.9.dmg" type="application/octet-stream" sparkle:edSignature="xXyeDzD9zTlpFZA7XlATzyjQ+9lcZTXzUZIekybGjTIynDdVmqdn3rjb8dy7UjjQXenu0OUZGZvXQ4WpAC3TCA==" length="19259140" />
     </item>
@@ -707,7 +707,7 @@
       <sparkle:version>1.20.10</sparkle:version>
       <sparkle:shortVersionString>1.20.10</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.20.10.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.20.10.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.20.10</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.20.10/Macterm-1.20.10.dmg" type="application/octet-stream" sparkle:edSignature="0AHIheLRh6J/33LyAGEq8xXxpml1ICzqeykk9eHMgT2sorSW8JFaBXYimjiPGpx2VTZO58SSD1PpN8iXomlGBg==" length="19644239" />
     </item>
@@ -717,7 +717,7 @@
       <sparkle:version>1.21.0</sparkle:version>
       <sparkle:shortVersionString>1.21.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.21.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.21.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.21.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.21.0/Macterm-1.21.0.dmg" type="application/octet-stream" sparkle:edSignature="AWtq44tF1bfrGtWrxPfWEBCSQOlGvZ0XaSTO+floZq12gIoN0JJxwWKcuJuWlTHt0aVf6hEQxacYDo22/cTMDQ==" length="19741420" />
     </item>
@@ -728,7 +728,7 @@
       <sparkle:version>1.22.0.1</sparkle:version>
       <sparkle:shortVersionString>1.22.0-beta.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.22.0-beta.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.22.0-beta.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.22.0-beta.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.22.0-beta.1/Macterm-1.22.0-beta.1.dmg" type="application/octet-stream" sparkle:edSignature="gxOUOYLctEU1IRfYx7wQ7XtvkYT/X6nuagCdL2r3dA7UQI3gTVdtR+vTWqZHEuU04TRT5/tOdtwgLyunl+4ADg==" length="19822407" />
     </item>
@@ -739,7 +739,7 @@
       <sparkle:version>1.22.0.2</sparkle:version>
       <sparkle:shortVersionString>1.22.0-beta.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.22.0-beta.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.22.0-beta.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.22.0-beta.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.22.0-beta.2/Macterm-1.22.0-beta.2.dmg" type="application/octet-stream" sparkle:edSignature="HJBhz4L+wqTG+FN2yrCCXtRS79lH0pH6wvya3tK0mQ/ln9juyvHR+NPzASD3NtdlCtCkyUOQqKHgs631v2ftAQ==" length="19823351" />
     </item>
@@ -750,7 +750,7 @@
       <sparkle:version>1.22.0.3</sparkle:version>
       <sparkle:shortVersionString>1.22.0-beta.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.22.0-beta.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.22.0-beta.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.22.0-beta.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.22.0-beta.3/Macterm-1.22.0-beta.3.dmg" type="application/octet-stream" sparkle:edSignature="FY8fkX2bMJxJARnCtaO7p4ssDBZAk7r4/xrMmAL0E/JaINQF3/SEluUkJmek0cZIuZzxLWnoINzL/A0UPxtbBw==" length="19945117" />
     </item>
@@ -761,7 +761,7 @@
       <sparkle:version>1.22.0.4</sparkle:version>
       <sparkle:shortVersionString>1.22.0-beta.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.22.0-beta.4.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.22.0-beta.4.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.22.0-beta.4</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.22.0-beta.4/Macterm-1.22.0-beta.4.dmg" type="application/octet-stream" sparkle:edSignature="byPO3XG8A1TFucTTmYgvoDMs79z/NvJyJ5ikKB5UJNa3Xv46aeOM2XI2I32vu5KlU8bw1v5S3gioQvnxfFQOCQ==" length="19952621" />
     </item>
@@ -771,7 +771,7 @@
       <sparkle:version>1.22.0.9999</sparkle:version>
       <sparkle:shortVersionString>1.22.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.22.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.22.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.22.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.22.0/Macterm-1.22.0.dmg" type="application/octet-stream" sparkle:edSignature="UfItioK4NSxY7AEq8M/FSRVNCUaz9apRNY7xeUgdrkdFN8WGE1/m7VrvKK+XUHw7Euu8SmHB6JH6tcXVMJCYCQ==" length="19952744" />
     </item>
@@ -781,7 +781,7 @@
       <sparkle:version>1.22.1.9999</sparkle:version>
       <sparkle:shortVersionString>1.22.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.22.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.22.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.22.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.22.1/Macterm-1.22.1.dmg" type="application/octet-stream" sparkle:edSignature="6I18pxGjXzDqQJb0X4Ygb0CZyEKRdFF4WLS46NfwTtuuOoBMGGbZZhYinQClRVkz4MFoo1MUiwIPLpdJelWHBg==" length="20021084" />
     </item>
@@ -792,7 +792,7 @@
       <sparkle:version>1.23.0.1</sparkle:version>
       <sparkle:shortVersionString>1.23.0-beta.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.0-beta.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.0-beta.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.0-beta.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.0-beta.1/Macterm-1.23.0-beta.1.dmg" type="application/octet-stream" sparkle:edSignature="kep3WBMc6NkYENBv/12vO34V16IDnlbnSgsvT/ZSGVYDixLrlLCuZEsv8grI47DHmEJmh0x386jcOSNyECbaAg==" length="20016843" />
     </item>
@@ -803,7 +803,7 @@
       <sparkle:version>1.23.0.2</sparkle:version>
       <sparkle:shortVersionString>1.23.0-beta.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.0-beta.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.0-beta.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.0-beta.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.0-beta.2/Macterm-1.23.0-beta.2.dmg" type="application/octet-stream" sparkle:edSignature="K9IOEXV1mLwmfMt8VVUC8sGOWBSnrwFVpp1lNEJo9Z0bIiljzwWm08s6P3W7PnEU/kzPPfFSyBp3fa0gwPjWCA==" length="20178557" />
     </item>
@@ -814,7 +814,7 @@
       <sparkle:version>1.23.0.3</sparkle:version>
       <sparkle:shortVersionString>1.23.0-beta.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.0-beta.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.0-beta.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.0-beta.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.0-beta.3/Macterm-1.23.0-beta.3.dmg" type="application/octet-stream" sparkle:edSignature="F3BLaHtLc7c8Mcz1fqe/FsStv71X3mubFk01BW5PaleVT4yKfunjjPBQNG+TeBD4QHbWdHZqkvJFhzGkQTfKBA==" length="20266961" />
     </item>
@@ -824,7 +824,7 @@
       <sparkle:version>1.23.0.9999</sparkle:version>
       <sparkle:shortVersionString>1.23.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.0/Macterm-1.23.0.dmg" type="application/octet-stream" sparkle:edSignature="alTtLbmnD7ZxAcsLTShugMn2Sk+F4s70+HidVRB2IpeJkveAjPAoM3Z7QzH1/2Y6M1BxSaHCbUCmPMXyBLHeDg==" length="20266687" />
     </item>
@@ -834,7 +834,7 @@
       <sparkle:version>1.23.1.9999</sparkle:version>
       <sparkle:shortVersionString>1.23.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.1/Macterm-1.23.1.dmg" type="application/octet-stream" sparkle:edSignature="I+e4+Bvpll+m/yebsBvSEKho4scLYECSxEme/ISFh/tpjrDn3KHFCYWp+vT8zTVQyzF3WlnkT2UOLOes7VsFCQ==" length="20279516" />
     </item>
@@ -844,7 +844,7 @@
       <sparkle:version>1.23.2.9999</sparkle:version>
       <sparkle:shortVersionString>1.23.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.2/Macterm-1.23.2.dmg" type="application/octet-stream" sparkle:edSignature="VepTtVEvlo47S9k6U8li5VwWq3nNuhG4z79X0Tblqk/t0TU7k9vTNuU5FXLOya8AHdK4QsfvGr1JEVSQNJ40Cw==" length="20291578" />
     </item>
@@ -854,7 +854,7 @@
       <sparkle:version>1.23.3.9999</sparkle:version>
       <sparkle:shortVersionString>1.23.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.3/Macterm-1.23.3.dmg" type="application/octet-stream" sparkle:edSignature="MNDuKPZIcP6qBNT3X+sDjPQzFOduogTygqoH7tHxsMgTIVaumDMrQbcVtyh7nipbFtiKLGe7AyvbozeP5KwVBA==" length="20308453" />
     </item>
@@ -864,7 +864,7 @@
       <sparkle:version>1.23.4.9999</sparkle:version>
       <sparkle:shortVersionString>1.23.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.4.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.4.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.4</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.4/Macterm-1.23.4.dmg" type="application/octet-stream" sparkle:edSignature="xZNAOofWpu2TRBbNPl10XfjYXjqR2q0b1qPyBqmllFsBQbSdzGDu6u1RurwZUCOOHsoYUsdS21NUQvBnqSQeAA==" length="20331577" />
     </item>
@@ -874,7 +874,7 @@
       <sparkle:version>1.23.5.9999</sparkle:version>
       <sparkle:shortVersionString>1.23.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.23.5.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.23.5.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.23.5</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.23.5/Macterm-1.23.5.dmg" type="application/octet-stream" sparkle:edSignature="9GmlNeFIPsot7snbhWKHE3cASNI0uK9LvwMGY/+Z7MVcEqbLhk4+nTyw59Gz4vgurTc2ri+3NobA9nG2ENbeCg==" length="20360582" />
     </item>
@@ -885,7 +885,7 @@
       <sparkle:version>1.24.0.1</sparkle:version>
       <sparkle:shortVersionString>1.24.0-beta.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.0-beta.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.0-beta.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.0-beta.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.0-beta.1/Macterm-1.24.0-beta.1.dmg" type="application/octet-stream" sparkle:edSignature="mI7sfrMrXpsm3+VEfGJD+g5EnuqpcBVreWGuveFUOEjGrprZLfL2fJzIL4bA6hBSd0jeT7kpmTjggqfrJek4Bg==" length="21373496" />
     </item>
@@ -896,7 +896,7 @@
       <sparkle:version>1.24.0.2</sparkle:version>
       <sparkle:shortVersionString>1.24.0-beta.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.0-beta.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.0-beta.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.0-beta.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.0-beta.2/Macterm-1.24.0-beta.2.dmg" type="application/octet-stream" sparkle:edSignature="zxj7KAg7gpoMWJxXhW+uc5pS2tWAljTGp24yFTK5NILyZ6XFBN4h3eHTI8K1CJJAwYPXLciCmc/OxcS1WYVpBg==" length="20468136" />
     </item>
@@ -907,7 +907,7 @@
       <sparkle:version>1.24.0.3</sparkle:version>
       <sparkle:shortVersionString>1.24.0-beta.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.0-beta.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.0-beta.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.0-beta.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.0-beta.3/Macterm-1.24.0-beta.3.dmg" type="application/octet-stream" sparkle:edSignature="D55ucyW2DPuxkr4Pt9ZsRMUn5fH+dXrNWJXB35QaDRr1OzD2Y/34PC8kJkyaH4mcg85IWAYJN5yy6DYWf0a+DA==" length="20469306" />
     </item>
@@ -918,7 +918,7 @@
       <sparkle:version>1.24.0.4</sparkle:version>
       <sparkle:shortVersionString>1.24.0-beta.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.0-beta.4.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.0-beta.4.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.0-beta.4</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.0-beta.4/Macterm-1.24.0-beta.4.dmg" type="application/octet-stream" sparkle:edSignature="EHmHEk0uWDkn8KLkhrEXlVhAB9M9qBs2wmxY4SlPWdfjXaUrfeKK4KVlEWJZQWaFhont+F03jOAlV/8MgeESAw==" length="20683000" />
     </item>
@@ -929,7 +929,7 @@
       <sparkle:version>1.24.0.5</sparkle:version>
       <sparkle:shortVersionString>1.24.0-beta.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.0-beta.5.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.0-beta.5.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.0-beta.5</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.0-beta.5/Macterm-1.24.0-beta.5.dmg" type="application/octet-stream" sparkle:edSignature="ddhWrsNdV7DtRlbOI7xP4G1YbJCnKzUFVSdWJ+KhPSvW43Y0cEZlYnBbOHzFBmFFhuSVCm40Xxejern5uZj1DQ==" length="20919242" />
     </item>
@@ -939,7 +939,7 @@
       <sparkle:version>1.24.0.9999</sparkle:version>
       <sparkle:shortVersionString>1.24.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.0/Macterm-1.24.0.dmg" type="application/octet-stream" sparkle:edSignature="Wf8YqsrPIYOTqa+oRqvC3TeCP/W9/qewOU9oGbBsbIE5aMur2qVzup2v7Bh7aJjKz5eqJIxPa9ThVF7I85ISBw==" length="20919580" />
     </item>
@@ -949,7 +949,7 @@
       <sparkle:version>1.24.1.9999</sparkle:version>
       <sparkle:shortVersionString>1.24.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.1/Macterm-1.24.1.dmg" type="application/octet-stream" sparkle:edSignature="rawR68CB4TgHGAYfZNVzSLC7GOXBWgq4t0mwbXrXHiTCKJYIOSfY7HZ1zZMZBHhYGDRH17GGZYOdvARrak53AA==" length="21870551" />
     </item>
@@ -959,7 +959,7 @@
       <sparkle:version>1.24.2.9999</sparkle:version>
       <sparkle:shortVersionString>1.24.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.2/Macterm-1.24.2.dmg" type="application/octet-stream" sparkle:edSignature="K6PC9rqXdu7xmJtdRwGGRJAr379r+U9Svx29CicJfceZy9X13z8HA7e6LPSqnrFOdKp6vQTotWRgajEmBRNlBw==" length="20995288" />
     </item>
@@ -969,7 +969,7 @@
       <sparkle:version>1.24.3.9999</sparkle:version>
       <sparkle:shortVersionString>1.24.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.3/Macterm-1.24.3.dmg" type="application/octet-stream" sparkle:edSignature="8pVmPyBomb8R+rfzY7gO8hApPzuUZ93Bvo/WiLeYDI17udP1CyO8x6myqR6fER4ik0jhBWKJ//PCfgwK7YA2BQ==" length="21012538" />
     </item>
@@ -979,7 +979,7 @@
       <sparkle:version>1.24.4.9999</sparkle:version>
       <sparkle:shortVersionString>1.24.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.24.4.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.24.4.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.24.4</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.24.4/Macterm-1.24.4.dmg" type="application/octet-stream" sparkle:edSignature="hh26MFJakchQzSebSWVhS53cI0Upf4rWm5uUrq4E1TBKkujMWe8QL5sUO2Foek+LLpzZ8XN5NuxlfqUSj4j9DA==" length="21033666" />
     </item>
@@ -990,7 +990,7 @@
       <sparkle:version>1.25.0.1</sparkle:version>
       <sparkle:shortVersionString>1.25.0-beta.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.25.0-beta.1.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.25.0-beta.1.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.25.0-beta.1</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.25.0-beta.1/Macterm-1.25.0-beta.1.dmg" type="application/octet-stream" sparkle:edSignature="pSsbINe3wpyD5vL/LJF4ndIGDsG6vfRVsA6J92sPrLm7iC2WUqdtSHzjmqps9XNYjowe+mGp1Nwy/ylIFvatCA==" length="22204829" />
     </item>
@@ -1001,7 +1001,7 @@
       <sparkle:version>1.25.0.2</sparkle:version>
       <sparkle:shortVersionString>1.25.0-beta.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.25.0-beta.2.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.25.0-beta.2.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.25.0-beta.2</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.25.0-beta.2/Macterm-1.25.0-beta.2.dmg" type="application/octet-stream" sparkle:edSignature="EeCFWJg1aZDhKFPu5TWdAawIF2sybMK5McqEDRb6rWwevnE4TiJjXNFuYUXax0eK3HNZAQ1MVgvxb7/2Q3exAA==" length="21295032" />
     </item>
@@ -1012,7 +1012,7 @@
       <sparkle:version>1.25.0.3</sparkle:version>
       <sparkle:shortVersionString>1.25.0-beta.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.25.0-beta.3.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.25.0-beta.3.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.25.0-beta.3</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.25.0-beta.3/Macterm-1.25.0-beta.3.dmg" type="application/octet-stream" sparkle:edSignature="WMOC5SeZ4gQmbAPSuwY8s7R0RP64vVbcANoRdxXHz9zSLFscnKKYzgaZLL/bjUypogTC+0CCmN4/HLbWr8QjDA==" length="22354668" />
     </item>
@@ -1022,7 +1022,7 @@
       <sparkle:version>1.25.0.9999</sparkle:version>
       <sparkle:shortVersionString>1.25.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/v1.25.0.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.25.0.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/v1.25.0</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.25.0/Macterm-1.25.0.dmg" type="application/octet-stream" sparkle:edSignature="C/wQocg59SmQS9dF+kdDq+C+gBmqHQ9Sabu9TzcxJ0PCj5YCqHeQwPLFlSZ+0DX0AbodT0MQmIa20jXrJQDXDQ==" length="22354184" />
     </item>
@@ -1033,7 +1033,7 @@
       <sparkle:version>1.25.0.9999.14</sparkle:version>
       <sparkle:shortVersionString>1.25.0-tip.14</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://thdxg.github.io/macterm/notes/tip.html</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/tip.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/tip</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/tip/Macterm-1.25.0-tip.14.dmg" type="application/octet-stream" sparkle:edSignature="UXLpHltXOZ5FODxjQHHJWrr0JDHOn9TsVq20V6GaygzJvAqRx0ay0MrJEKsChvUndu8fm7+Ml+kwF/lyF3BoBw==" length="22562497" />
     </item>
