@@ -55,6 +55,9 @@ struct ControlRequest: Codable {
 /// unknown/extra fields harmless across versions — the same shape Zentty's
 /// battle-tested `AgentIPCRequest` uses.
 struct ControlArgs: Codable, Equatable {
+    /// Which window a verb acts on: 1-based index (`window:N` order) or its
+    /// id. Absent means the key window (#345).
+    var window: String?
     /// Project selector: name, UUID, or 1-based index as rendered by
     /// `project list`.
     var project: String?
@@ -221,6 +224,8 @@ struct ControlData: Codable {
     var status: ControlStatusInfo?
     var projects: [ControlProjectInfo]?
     var tabs: [ControlTabInfo]?
+    /// Open terminal windows (#345).
+    var windows: [ControlWindowInfo]?
     var panes: [ControlPaneInfo]?
     var sessions: [ControlSessionInfo]?
     /// Read-only terminal-core snapshot (`pane.inspect`).
@@ -234,6 +239,7 @@ struct ControlData: Codable {
         status: ControlStatusInfo? = nil,
         projects: [ControlProjectInfo]? = nil,
         tabs: [ControlTabInfo]? = nil,
+        windows: [ControlWindowInfo]? = nil,
         panes: [ControlPaneInfo]? = nil,
         sessions: [ControlSessionInfo]? = nil,
         inspect: ControlPaneInspect? = nil,
@@ -243,6 +249,7 @@ struct ControlData: Codable {
         self.status = status
         self.projects = projects
         self.tabs = tabs
+        self.windows = windows
         self.panes = panes
         self.sessions = sessions
         self.inspect = inspect
@@ -301,6 +308,18 @@ struct ControlPaneInfo: Codable, Equatable {
     /// Whether this pane drives its session's pty size — zmx's "leader"
     /// client. Always true for an unmirrored pane, which is the only client.
     var leader: Bool?
+}
+
+/// One open terminal window. `project` is what its titlebar and the macOS
+/// Window menu show — each window tracks its own.
+struct ControlWindowInfo: Codable, Equatable {
+    /// 1-based position in creation order, rendered `window:N`.
+    var index: Int
+    var id: String
+    var projectID: String?
+    var project: String?
+    /// Whether this is the window the user is in.
+    var focused: Bool
 }
 
 struct ControlSessionInfo: Codable, Equatable {

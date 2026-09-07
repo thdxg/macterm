@@ -192,6 +192,11 @@ enum TabSlotDropItem: Transferable {
 struct SidebarContent: View {
     @Environment(AppState.self)
     private var appState
+    /// This window's selection (#345) — the sidebar belongs to one window, so
+    /// every "which project" question it asks is about that window, not about
+    /// whichever one happens to be frontmost.
+    @Environment(WindowState.self)
+    private var windowState
     @Environment(ProjectStore.self)
     private var projectStore
     @AppStorage(Preferences.Keys.showNewProjectButton)
@@ -356,18 +361,18 @@ struct SidebarContent: View {
             switch item {
             case let .project(projectID):
                 guard let project = projectStore.projects.first(where: { $0.id == projectID }) else { return }
-                appState.selectProject(project)
+                appState.selectProject(project, in: windowState)
             case let .tab(PinnedTabs.projectID, tabID):
                 // Loaded → select; unloaded → restore from declaration.
                 appState.selectPinnedTab(tabID)
             case let .tab(projectID, tabID):
                 if let project = projectStore.projects.first(where: { $0.id == projectID }) {
-                    appState.selectProject(project)
+                    appState.selectProject(project, in: windowState)
                     appState.selectTab(tabID, projectID: projectID)
                 }
             }
         }
-        .onChange(of: appState.activeProjectID) { _, newID in
+        .onChange(of: windowState.activeProjectID) { _, newID in
             if let newID, newID != PinnedTabs.projectID {
                 presentation.expandedProjects.insert(newID)
             }
@@ -377,7 +382,7 @@ struct SidebarContent: View {
             syncSelection()
         }
         .onAppear {
-            if let id = appState.activeProjectID { presentation.expandedProjects.insert(id) }
+            if let id = windowState.activeProjectID { presentation.expandedProjects.insert(id) }
             syncSelection()
         }
         .overlay(alignment: .top) {
@@ -607,7 +612,7 @@ struct SidebarContent: View {
     }
 
     private var activeTabID: UUID? {
-        guard let pid = appState.activeProjectID else { return nil }
+        guard let pid = windowState.activeProjectID else { return nil }
         return appState.workspaces[pid]?.activeTabID
     }
 
@@ -675,11 +680,11 @@ struct SidebarContent: View {
     }
 
     private func syncSelection() {
-        guard let pid = appState.activeProjectID,
+        guard let pid = windowState.activeProjectID,
               let ws = appState.workspaces[pid],
               let tabID = ws.activeTabID
         else {
-            presentation.selection = appState.activeProjectID.map { [.project($0)] } ?? []
+            presentation.selection = windowState.activeProjectID.map { [.project($0)] } ?? []
             return
         }
         let desired: Set<SidebarItem> = [.tab(projectID: pid, tabID: tabID)]
@@ -727,7 +732,7 @@ struct SidebarContent: View {
     @ViewBuilder
     private func projectMenu(_ project: Project) -> some View {
         Button("New Tab") {
-            appState.selectProject(project)
+            appState.selectProject(project, in: windowState)
             appState.createTab(projectID: project.id, projects: projectStore.projects)
             presentation.expandedProjects.insert(project.id)
         }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -67,6 +68,9 @@ final class ControlHandler {
         case "tab.move": return try tabMove(args)
         case "tab.rename": return try tabRename(args)
         case "tab.close": return try tabClose(args)
+        case "window.list": return windowList()
+        case "window.new": return windowNew()
+        case "window.close": return windowClose()
         case "pane.list": return try paneList(args)
         case "pane.inspect": return try paneInspect(args)
         case "pane.dump": return try paneDump(args)
@@ -150,6 +154,56 @@ final class ControlHandler {
     private func tabList(_ args: ControlArgs) throws -> ControlData {
         let (_, workspace) = try resolveWorkspace(args)
         return ControlData(tabs: tabInfos(in: workspace))
+    }
+
+    // MARK: - Windows (#345)
+
+    private func windowList() -> ControlData {
+        let infos = zip(1..., appState.windows).map { index, window in
+            ControlWindowInfo(
+                index: index,
+                id: window.id.uuidString,
+                projectID: window.activeProjectID?.uuidString,
+                project: windowProjectName(window.activeProjectID),
+                focused: appState.keyWindowID == window.id
+            )
+        }
+        return ControlData(windows: infos)
+    }
+
+    /// What the window's titlebar and the macOS Window menu show for it.
+    private func windowProjectName(_ projectID: UUID?) -> String? {
+        guard let projectID else { return nil }
+        if projectID == PinnedTabs.projectID { return PinnedTabs.project.name }
+        return projectStore.projects.first { $0.id == projectID }?.name
+    }
+
+    /// Resolve `--window` to a specific window, or nil for "the key one".
+    private func resolveWindow(_ args: ControlArgs) throws -> WindowState? {
+        guard let selector = args.window, !selector.isEmpty else { return nil }
+        let windows = appState.windows
+        if let index = Int(selector.hasPrefix("window:")
+            ? String(selector.dropFirst("window:".count))
+            : selector), index >= 1, index <= windows.count
+        {
+            return windows[index - 1]
+        }
+        if let match = windows.first(where: { $0.id.uuidString == selector }) { return match }
+        throw ControlError(
+            code: .notFound,
+            message: "no window \"\(selector)\"",
+            action: "run `macterm window list` for open windows"
+        )
+    }
+
+    private func windowNew() -> ControlData {
+        appState.requestNewWindow()
+        return ControlData()
+    }
+
+    private func windowClose() -> ControlData {
+        appState.appDelegate?.closeFocusedTerminalWindow()
+        return ControlData()
     }
 
     private func paneList(_ args: ControlArgs) throws -> ControlData {
@@ -337,7 +391,9 @@ final class ControlHandler {
             // home directory.
             appState.selectPinnedProject()
         } else {
-            appState.selectProject(project)
+            // `--window` targets a specific one; without it the key window,
+            // which is what a person at the keyboard means.
+            try appState.selectProject(project, in: resolveWindow(args))
         }
         return projectData(project)
     }

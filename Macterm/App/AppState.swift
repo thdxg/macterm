@@ -49,7 +49,195 @@ final class AppState {
             // `selectProject` or set the id directly (a cross-project tab
             // move, a merge, a global tab cycle).
             if let activeProjectID { unloadedProjectIDs.remove(activeProjectID) }
+            // Push into the key window too (#345). Most callers still set this
+            // directly — CLI `project select`, notification navigation, a
+            // cross-project tab move — and the window the user is looking at
+            // has to follow, or it would keep rendering the old project while
+            // everything else moved on.
+            if let keyWindowID, let key = windows.first(where: { $0.id == keyWindowID }),
+               key.activeProjectID != activeProjectID
+            {
+                key.activeProjectID = activeProjectID
+                persistWindows()
+            }
         }
+    }
+
+    // MARK: - Windows (#345)
+
+    /// Every open terminal window's own state, in creation order.
+    ///
+    /// `activeProjectID` above is the KEY window's project — a mirror, kept in
+    /// step by `noteKeyWindow`. Views that render one specific window read
+    /// that window's `WindowState` instead, or a background window would
+    /// redraw itself as whatever the frontmost one is showing.
+    private(set) var windows: [WindowState] = []
+
+    /// The window the user is in. Nil before the first window reports itself,
+    /// and briefly while macOS has no key window (every window hidden).
+    private(set) var keyWindowID: WindowState.ID?
+
+    /// The real `AppDelegate`, handed over by the scene at launch.
+    ///
+    /// NOT `NSApp.delegate as? AppDelegate`: SwiftUI installs its OWN delegate
+    /// — an internal class that happens to be called `AppDelegate` too — which
+    /// forwards to ours, so that cast silently returns nil forever. It is
+    /// silent because every use is an optional chain, which just no-ops.
+    /// `@NSApplicationDelegateAdaptor` gives the scene the genuine instance,
+    /// so pass it in rather than trying to find it.
+    weak var appDelegate: AppDelegate?
+
+    /// Opens another terminal window.
+    ///
+    /// Installed by the scene, because opening a `WindowGroup` window needs
+    /// SwiftUI's `openWindow` environment action and command handlers are not
+    /// views. Nil until the first window's view tree appears — a New Window
+    /// invoked before then is dropped rather than crashing, and by then the
+    /// app has a window anyway.
+    var openNewWindow: (() -> Void)?
+
+    /// Windows the snapshot says were open, minus the one the scene opens for
+    /// itself. Consumed once, by the first window to appear.
+    private var pendingWindowRestores: [WindowSnapshot] = []
+
+    /// Reopen the windows a previous run had, and point the first one at the
+    /// project it was showing.
+    ///
+    /// Called by the first `MainWindow` to appear: the scene always opens one
+    /// window by itself, so that one adopts the first saved entry and only the
+    /// REST are opened. Opening all of them would leave a spare window on
+    /// every launch.
+    func restoreWindows(adopting first: WindowState) {
+        let saved = pendingWindowRestores
+        pendingWindowRestores = []
+        // This runs after `restoreSelection`, which is the first moment the
+        // app knows which project to show — the window registered before that
+        // and so still has none.
+        if first.activeProjectID == nil { first.activeProjectID = activeProjectID }
+        guard !saved.isEmpty else { return }
+        first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
+        if keyWindowID == first.id { activeProjectID = first.activeProjectID }
+        guard saved.count > 1 else { return }
+        logger.info("restoreWindows: reopening \(saved.count - 1, privacy: .public) extra window(s)")
+        // Deferred, and one run-loop hop apart. This runs inside the launch
+        // task, and AppKit ignores an open-untitled request made while it is
+        // still handling launch — asking immediately opened nothing at all.
+        // Spacing them also lets each window register (and adopt its project)
+        // before the next request, since the id is carried in a single slot.
+        for (offset, snapshot) in saved.dropFirst().enumerated() {
+            let delay = Self.windowRestoreDelay * Double(offset + 1)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                nextWindowProjectID = snapshot.activeProjectID
+                requestNewWindow()
+            }
+        }
+    }
+
+    /// Spacing between restored window opens (see `restoreWindows`).
+    private static let windowRestoreDelay: TimeInterval = 0.6
+
+    /// The project the next window to register should adopt, used only by
+    /// `restoreWindows` — a plain `openWindow(id:)` carries no payload.
+    private var nextWindowProjectID: UUID?
+
+    func requestNewWindow() {
+        guard let openNewWindow else {
+            logger.warning("requestNewWindow: no scene handler installed yet")
+            return
+        }
+        openNewWindow()
+    }
+
+    /// One `WindowState` per real window, keyed by its `NSWindow`.
+    ///
+    /// SwiftUI instantiates a view — and its `@State` — more than once per
+    /// window, so a view cannot own this identity: two instances would each
+    /// bring their own `WindowState` for a single window. The `NSWindow` is
+    /// the only thing that is genuinely one-per-window, so the first proposal
+    /// for a given one wins and later instances adopt it.
+    private var windowStatesByNSWindow: [ObjectIdentifier: WindowState] = [:]
+
+    func canonicalWindowState(for nsWindow: NSWindow, proposed: WindowState) -> WindowState {
+        let key = ObjectIdentifier(nsWindow)
+        if let existing = windowStatesByNSWindow[key] { return existing }
+        windowStatesByNSWindow[key] = proposed
+        registerWindow(proposed)
+        return proposed
+    }
+
+    func forgetWindowState(for nsWindow: NSWindow) {
+        let key = ObjectIdentifier(nsWindow)
+        if let state = windowStatesByNSWindow.removeValue(forKey: key) {
+            unregisterWindow(state)
+        }
+    }
+
+    func registerWindow(_ window: WindowState) {
+        guard !windows.contains(where: { $0.id == window.id }) else { return }
+        // A new window opens on whatever the user was last looking at, which
+        // is both the useful default and what a single-window build did.
+        if let restoring = nextWindowProjectID {
+            // Consumed HERE, not at the request: a window registers a beat
+            // after it is asked for (its NSWindow has to attach first), so
+            // clearing this at the call site left it nil by the time the
+            // window arrived and every restored window adopted the frontmost
+            // project instead of its own.
+            window.activeProjectID = restoring
+            nextWindowProjectID = nil
+        } else if window.activeProjectID == nil {
+            window.activeProjectID = activeProjectID
+        }
+        windows.append(window)
+        logger.debug("registerWindow: \(window.id, privacy: .public) count=\(self.windows.count)")
+        persistWindows()
+    }
+
+    func unregisterWindow(_ window: WindowState) {
+        windows.removeAll { $0.id == window.id }
+        if keyWindowID == window.id { keyWindowID = nil }
+        logger.debug("unregisterWindow: \(window.id, privacy: .public) count=\(self.windows.count)")
+        persistWindows()
+    }
+
+    /// Point the app-wide "frontmost project" at this window's.
+    ///
+    /// Everything that asks `activeProjectID` outside a specific window's view
+    /// tree means "the one the user is working in" — the poll cadence, the
+    /// remote foreground probe's frontmost-only rule, which project gets its
+    /// shells warmed. Mirroring here is what keeps all of them right without
+    /// threading a window through each.
+    func noteKeyWindow(_ window: WindowState) {
+        keyWindowID = window.id
+        // A window can become key before it has a project — it registers from
+        // `onAppear`, which runs before the launch task restores the
+        // selection. Adopt in that direction rather than pushing nil outward,
+        // or becoming key would wipe the restored project.
+        if window.activeProjectID == nil {
+            window.activeProjectID = activeProjectID
+        } else if activeProjectID != window.activeProjectID {
+            activeProjectID = window.activeProjectID
+        }
+    }
+
+    /// Point a window at a project, and the app with it when that window is
+    /// the one the user is in.
+    func selectProject(_ projectID: UUID?, in window: WindowState) {
+        window.activeProjectID = projectID
+        if keyWindowID == window.id { activeProjectID = projectID }
+        persistWindows()
+    }
+
+    /// Persist the window list after it changes.
+    ///
+    /// Opening, closing or repointing a window is not otherwise a workspace
+    /// mutation, so nothing else would write it — the list only reached disk
+    /// when some unrelated change happened to save. Gated on the launch
+    /// restore having run, or the windows registering during startup would
+    /// save over the very list they are about to be restored from.
+    private func persistWindows() {
+        guard hasRestoredSelection else { return }
+        saveWorkspaces()
     }
 
     var workspaces: [UUID: Workspace] = [:]
@@ -678,6 +866,7 @@ final class AppState {
         // `pinned.yaml` (the file is authoritative for membership — see
         // AppState+PinnedTabs). Live tabs materialize async, after zmx says
         // which sessions actually survived.
+        pendingWindowRestores = loaded.windows
         restorePinnedState(loaded.pinned, activeTabID: loaded.pinnedActiveTabID)
         reconcilePinnedLayoutAtLaunch(projects: projects)
         if let id = Preferences.shared.activeProjectID {
@@ -735,11 +924,36 @@ final class AppState {
             // the WorkspaceSnapshot.activeTabID every other workspace keeps —
             // carry the selection separately or a relaunch always lands on
             // the first pinned row.
-            pinnedActiveTabID: workspaces[PinnedTabs.projectID]?.activeTabID
+            pinnedActiveTabID: workspaces[PinnedTabs.projectID]?.activeTabID,
+            // Every open window, so a relaunch brings them all back (#345).
+            // Empty is never written as an empty list: windows register as
+            // their views appear, so a save during launch would otherwise
+            // persist "no windows" over a real multi-window setup.
+            windows: windows.isEmpty
+                ? nil
+                : windows.map { WindowSnapshot(activeProjectID: $0.activeProjectID) }
         )
     }
 
     // MARK: - Project
+
+    /// Select a project in a specific window (#345). Everything after the
+    /// selection itself is app-wide — warming shells, sweeping orphans,
+    /// reconnecting remote panes — because those follow the project the user
+    /// is now in, whichever window that is.
+    func selectProject(_ project: Project, in window: WindowState?) {
+        window?.activeProjectID = project.id
+        // Only the key window moves the app-wide mirror; a selection made in a
+        // background window must not repoint polling at it.
+        if window == nil || keyWindowID == window?.id {
+            selectProject(project)
+        } else {
+            recordProjectVisit(project.id)
+            autoApplyLayoutOnFirstOpen(project)
+            ensureWorkspace(projectID: project.id, path: project.path)
+            stampRemoteZmxPath(project)
+        }
+    }
 
     func selectProject(_ project: Project) {
         logger.debug("selectProject: \(project.name, privacy: .public)")
@@ -870,7 +1084,7 @@ final class AppState {
             DispatchQueue.main.async {
                 let window = NSApp.keyWindow
                     ?? NSApp.mainWindow
-                    ?? (NSApp.delegate as? AppDelegate)?.mainWindow
+                    ?? self.appDelegate?.mainWindow
                 FocusRestoration.restoreFocus(to: focusedID, in: tab.splitRoot, window: window)
             }
         }
@@ -2613,9 +2827,7 @@ final class AppState {
     func navigateToPane(_ paneID: UUID, projectID: UUID) {
         guard workspaces[projectID] != nil else {
             NSApp.activate()
-            if let appDelegate = NSApp.delegate as? AppDelegate {
-                appDelegate.reopenIfNeeded()
-            }
+            appDelegate?.reopenIfNeeded()
             return
         }
         activeProjectID = projectID
@@ -2632,9 +2844,7 @@ final class AppState {
                 saveWorkspaces()
             }
         }
-        if let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.reopenIfNeeded()
-        }
+        appDelegate?.reopenIfNeeded()
         NSApp.activate()
         if let tab = workspaces[projectID]?.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) {
             // Resolve the target window INSIDE the deferred continuation:
@@ -2646,7 +2856,7 @@ final class AppState {
             DispatchQueue.main.async {
                 let window = NSApp.keyWindow
                     ?? NSApp.mainWindow
-                    ?? (NSApp.delegate as? AppDelegate)?.mainWindow
+                    ?? self.appDelegate?.mainWindow
                 FocusRestoration.restoreFocus(to: paneID, in: tab.splitRoot, window: window)
             }
         }
