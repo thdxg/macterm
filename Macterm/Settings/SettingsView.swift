@@ -1218,7 +1218,7 @@ private struct AppearanceSettings: View {
                 Text("When hidden, create projects via the command palette or context menu.")
                     .settingsCaption()
 
-                Toggle("Show New Tab button on projects", isOn: $showProjectNewTabButton)
+                Toggle("Show new tab button on projects", isOn: $showProjectNewTabButton)
                     .onChange(of: showProjectNewTabButton) { _, v in
                         Preferences.shared.showProjectNewTabButton = v
                     }
