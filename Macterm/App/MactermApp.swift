@@ -51,11 +51,20 @@ struct MactermApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .modifier(AppColorScheme())
-                .modifier(CloseConfirmationAlerts(appState: appState))
-                .modifier(ProjectConfirmationAlerts(appState: appState))
-                .modifier(LayoutAlerts(appState: appState))
                 .onAppear {
                     appDelegate.appState = appState
+                    // The genuine instance: NSApp.delegate is SwiftUI's own
+                    // forwarding delegate, so casting it never finds ours.
+                    appState.appDelegate = appDelegate
+                    // Open windows through AppKit's open-untitled step — the
+                    // same call #241's repair uses, and the only thing that
+                    // reliably builds a `WindowGroup` window. Giving the group
+                    // an explicit id so `openWindow(id:)` could address it was
+                    // tried first and made SwiftUI open a SECOND window at
+                    // launch, every launch.
+                    appState.openNewWindow = { [weak appDelegate] in
+                        appDelegate?.openInitialWindow()
+                    }
                     appDelegate.projectStore = projectStore
                     NotificationHandler.shared.appState = appState
                     // Termination persists the snapshot AND refreshes the
@@ -68,16 +77,19 @@ struct MactermApp: App {
         .defaultSize(width: 1200, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {
-                // Replace SwiftUI's "New Window" with "Show Window", which
-                // unhides the single Macterm window after the user clicked
-                // the red close button. Without this, hiding the window
-                // leaves no menu/keyboard way to bring it back — only the
-                // dock icon — and even that depends on AppKit reopen
-                // delegation routing back through SwiftUI's WindowGroup.
+                // Rendered from AppCommand like every other action, so the
+                // menu shows whatever the user has bound rather than a
+                // hardcoded chord (New Window defaults to Cmd+N).
+                AppCommandMenuItem(command: .newWindow, appState: appState, projectStore: projectStore)
+                // "Show Window" survives alongside it, for the case New Window
+                // does not cover: every window HIDDEN rather than closed (the
+                // red button orders out to preserve surfaces), where there is
+                // otherwise no menu or keyboard way back — only the Dock icon,
+                // and even that depends on AppKit reopen delegation routing
+                // through SwiftUI's WindowGroup. It no longer takes Cmd+N.
                 Button("Show Window") {
                     appDelegate.showWindow()
                 }
-                .keyboardShortcut("n", modifiers: .command)
                 Divider()
                 AppCommandMenuItem(command: .newTab, appState: appState, projectStore: projectStore, titleOverride: "New Tab")
                 AppCommandMenuItem(command: .openProject, appState: appState, projectStore: projectStore, titleOverride: "Open Project…")
@@ -258,15 +270,21 @@ struct MactermApp: App {
 /// staging call's `DialogHost` — see the enum's doc comment: an ungated binding
 /// presents in BOTH scenes, which opens the settings window just to stack a
 /// duplicate dialog.
-private struct CloseConfirmationAlerts: ViewModifier {
+struct CloseConfirmationAlerts: ViewModifier {
     let appState: AppState
+    /// The window this copy belongs to. Every window's scene carries
+    /// these alerts, so each must present only its own.
+    let windowID: WindowState.ID?
+
+    /// Whether this is the window a dialog should appear in.
+    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
 
     func body(content: Content) -> some View {
         content
             .alert(
                 "Close running process?",
                 isPresented: Binding(
-                    get: { appState.pendingClosePane != nil },
+                    get: { isDialogWindow && appState.pendingClosePane != nil },
                     set: { if !$0 { appState.cancelPendingClosePane() } }
                 )
             ) {
@@ -282,7 +300,7 @@ private struct CloseConfirmationAlerts: ViewModifier {
             .alert(
                 "Close running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingCloseTab != nil },
+                    get: { isDialogWindow && appState.pendingCloseTab != nil },
                     set: { if !$0 { appState.cancelPendingCloseTab() } }
                 )
             ) {
@@ -298,15 +316,21 @@ private struct CloseConfirmationAlerts: ViewModifier {
     }
 }
 
-private struct ProjectConfirmationAlerts: ViewModifier {
+struct ProjectConfirmationAlerts: ViewModifier {
     let appState: AppState
+    /// The window this copy belongs to. Every window's scene carries
+    /// these alerts, so each must present only its own.
+    let windowID: WindowState.ID?
+
+    /// Whether this is the window a dialog should appear in.
+    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
 
     func body(content: Content) -> some View {
         content
             .alert(
                 "Unload project with running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingUnloadProject?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingUnloadProject?.host == .mainWindow },
                     set: { if !$0 { appState.cancelPendingUnloadProject() } }
                 )
             ) {
@@ -322,7 +346,7 @@ private struct ProjectConfirmationAlerts: ViewModifier {
             .alert(
                 "Remove project with running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingRemoveProject?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingRemoveProject?.host == .mainWindow },
                     set: { if !$0 { appState.cancelPendingRemoveProject() } }
                 )
             ) {
@@ -338,7 +362,7 @@ private struct ProjectConfirmationAlerts: ViewModifier {
             .alert(
                 "Remove items with running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingBulkRemove != nil },
+                    get: { isDialogWindow && appState.pendingBulkRemove != nil },
                     set: { if !$0 { appState.cancelPendingBulkRemove() } }
                 )
             ) {
@@ -354,15 +378,21 @@ private struct ProjectConfirmationAlerts: ViewModifier {
     }
 }
 
-private struct LayoutAlerts: ViewModifier {
+struct LayoutAlerts: ViewModifier {
     let appState: AppState
+    /// The window this copy belongs to. Every window's scene carries
+    /// these alerts, so each must present only its own.
+    let windowID: WindowState.ID?
+
+    /// Whether this is the window a dialog should appear in.
+    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
 
     func body(content: Content) -> some View {
         content
             .alert(
                 "Apply layout?",
                 isPresented: Binding(
-                    get: { appState.pendingLayoutApply?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingLayoutApply?.host == .mainWindow },
                     set: { if !$0 { appState.cancelPendingLayoutApply() } }
                 )
             ) {
@@ -380,7 +410,7 @@ private struct LayoutAlerts: ViewModifier {
             .alert(
                 appState.pendingLayoutError?.title ?? "Couldn't apply layout",
                 isPresented: Binding(
-                    get: { appState.pendingLayoutError?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingLayoutError?.host == .mainWindow },
                     set: { if !$0 { appState.pendingLayoutError = nil } }
                 )
             ) {
@@ -601,6 +631,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.appState?.reconnectDroppedRemotePanes(trigger: .wake)
             }
+        }
+    }
+
+    // MARK: - Terminal windows (#345)
+
+    /// Every live terminal window, in creation order.
+    ///
+    /// An EXACT membership test, unlike `isTerminalWindowCandidate` below,
+    /// which is a heuristic that also matches the Settings window. Only a
+    /// `MainWindow` view tree registers here, so the responder chain can ask
+    /// "is the key window one of ours" and get a real answer — the question
+    /// that used to be "is it THE one cached window", which no longer has a
+    /// single answer.
+    ///
+    /// Weak, so a closed window drops out even if its view never reports the
+    /// disappearance.
+    private var terminalWindowRefs: [WeakWindowRef] = []
+
+    private struct WeakWindowRef {
+        weak var window: NSWindow?
+    }
+
+    var terminalWindows: [NSWindow] {
+        terminalWindowRefs.compactMap(\.window)
+    }
+
+    func registerTerminalWindow(_ window: NSWindow) {
+        terminalWindowRefs.removeAll { $0.window == nil }
+        guard !terminalWindowRefs.contains(where: { $0.window === window }) else { return }
+        terminalWindowRefs.append(WeakWindowRef(window: window))
+        // The first window keeps the old identity contract: `mainWindow` is
+        // what every pre-multi-window path still fronts, hides and gates on.
+        if mainWindow == nil {
+            mainWindow = window
+            mainAppResponder?.mainWindow = window
+        }
+    }
+
+    func forgetTerminalWindow(_ window: NSWindow) {
+        terminalWindowRefs.removeAll { $0.window == nil || $0.window === window }
+        GhosttyApp.shared.forgetAdaptiveBackgroundColor(for: window)
+        if mainWindow === window {
+            mainWindow = terminalWindows.first
+            mainAppResponder?.mainWindow = mainWindow
+        }
+    }
+
+    func isTerminalWindow(_ window: NSWindow) -> Bool {
+        terminalWindows.contains { $0 === window }
+    }
+
+    /// Close the window the user is in — really close it, unless it is the
+    /// last visible one, which hides instead. That is the invariant the red
+    /// close button has always kept: surfaces and their running processes
+    /// outlive a hidden window, and an app with a Dock icon and no window at
+    /// all is the #241 dead end.
+    func closeFocusedTerminalWindow() {
+        let visible = terminalWindows.filter(\.isVisible)
+        guard let target = visible.first(where: { $0 === NSApp.keyWindow }) ?? visible.first
+        else { return }
+        if visible.count > 1 {
+            target.close()
+        } else {
+            target.orderOut(nil)
         }
     }
 

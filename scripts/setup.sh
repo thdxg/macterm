@@ -22,7 +22,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # including the nightly sync — deletes and recreates it with different bytes,
 # the exact asset-swap-under-a-pin hazard documented in AGENTS.md. The next
 # ordinary bump (a past-day daily tag, immutable by then) retires this one.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-31}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-09-06}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit

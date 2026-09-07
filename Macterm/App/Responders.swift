@@ -170,7 +170,21 @@ final class MainAppResponder: KeyResponder {
         // pass through until the first `didBecomeMain`. When `mainWindow` is
         // unknown, fall through to normal handling (the terminal window is the
         // only window that can be key that early).
-        if let main = mainWindow, let keyWindow = NSApp.keyWindow, keyWindow !== main,
+        // "A different window" means a NON-TERMINAL window (Settings, an alert
+        // sheet) — not "not the one cached window". With several terminal
+        // windows open (#345) every one of them must take these keys, acting
+        // on whichever is focused; gating on `mainWindow` identity would leave
+        // every window but the first with a dead keymap. `isTerminalWindow` is
+        // an exact registry rather than the `isTerminalWindowCandidate`
+        // heuristic, which also matches Settings.
+        //
+        // The `mainWindow` guard survives for its original reason: before the
+        // first window registers, `isTerminalWindow` answers false for every
+        // window, and without it the terminal window itself would be treated
+        // as "different" — making Cmd+W close the window and Cmd+D pass
+        // through until registration lands.
+        if mainWindow != nil, let keyWindow = NSApp.keyWindow,
+           !(appState.appDelegate?.isTerminalWindow(keyWindow) ?? false),
            !(keyWindow is QuickTerminalPanel)
         {
             if HotkeyRegistry.matches(event, action: .closePane)

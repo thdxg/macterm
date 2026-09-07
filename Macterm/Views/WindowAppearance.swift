@@ -203,22 +203,24 @@ final class MactermTintBackdropView: NSView {
 // MARK: - Liquid glass background
 
 /// A container that hosts a macOS 26 `NSGlassEffectView` (the real liquid
-/// glass material) under Macterm's own tint layer. Modeled on Ghostty's
-/// `TerminalGlassView` (`TerminalViewContainer.swift`).
+/// glass material) under Macterm's own tint layer. This is the deliberate
+/// divergence from Ghostty, which puts the color *under* its glass (SwiftUI
+/// `.glassEffect`, since fd17869d1): the tint has to sit as a separate layer
+/// above the material so `TintCutout` can cut it out from under a pane.
 ///
-/// **The window's appearance does not depend on key status.** It used to: an
-/// overlay faded a saturation-boosted tint of the background in as the window
-/// resigned key, lifted from the Ghostty of the time, where the tint lived
-/// *inside* the material as `NSGlassEffectView.tintColor` and so took the
-/// material's own inactive desaturation with it — a large enough change to
-/// need compensating for. Macterm's tint is a separate layer above the
-/// material (it has to be, so `TintCutout` can cut it), so it never took that
+/// **The tint does not depend on key status.** It used to: an overlay faded a
+/// saturation-boosted tint of the background in as the window resigned key,
+/// lifted from the Ghostty of the time, where the tint lived *inside* the
+/// material as `NSGlassEffectView.tintColor` and so took the material's own
+/// inactive desaturation with it — a large enough change to need compensating
+/// for. Macterm's tint, being above the material, never took that
 /// desaturation, and the overlay was compensating for something that wasn't
 /// happening: an unfocused window visibly gained opacity, the wallpaper behind
 /// it dropping out (measured 39,39,50 → 29,27,39 through the terminal area).
-/// Ghostty has since dropped its overlay too, along with every key-status
-/// callback, so unfocusing now moves only the material itself. Don't
-/// reintroduce a focus-dependent tint here.
+/// Ghostty has since dropped its overlay too. What remains on unfocus is the
+/// material's own inactive desaturation (and the native sidebar's — blue −5
+/// measured there), which is the only key-status dependency left in the
+/// window's appearance. Don't reintroduce a focus-dependent tint here.
 ///
 /// Macterm inserts this below the window's content view, filling the whole
 /// window — including the region under the titlebar (via a negative top inset
@@ -321,12 +323,16 @@ final class MactermGlassView: NSView {
 enum WindowAppearance {
     /// Apply the current opacity/blur settings to `window`. Safe to call any
     /// time — re-applies idempotently. Should be called after the window is
-    /// onscreen, on theme changes, and on focus changes (AppKit recreates
-    /// titlebar subviews under us in some cases, e.g. tab bar appearing).
+    /// onscreen, on theme changes, when the window becomes main, and around
+    /// fullscreen transitions (AppKit recreates titlebar subviews under us in
+    /// some cases, e.g. tab bar appearing). Not on key changes: nothing here
+    /// depends on key status (see `MactermGlassView`).
     static func sync(window: NSWindow) {
         let opacity = Preferences.shared.windowOpacity
         let blurRadius = Preferences.shared.windowBlurRadius
-        let bg = MactermTheme.nsBg
+        // This window's own tint (#345) — never the app-wide one, or a
+        // background window paints the focused window's terminal colour.
+        let bg = MactermTheme.nsBg(for: window)
         let isTransparent = opacity < 1.0
 
         // Native fullscreen draws its own opaque grey background; widgets show
@@ -404,7 +410,49 @@ enum WindowAppearance {
     /// Once per launch, on the first `sync` that finds a split view laid out —
     /// from then on the column carries SwiftUI's in-session metric, which a
     /// user drag owns and which the peek's expand restores.
-    private static var didRestoreSidebarWidth = false
+    /// Windows whose sidebar width has already been restored, and the width
+    /// each is waiting for.
+    ///
+    /// Both were a single app-wide flag and a single stored width, so only the
+    /// FIRST window ever restored and every other opened at SwiftUI's
+    /// content-derived default (#345).
+    private static var restoredSidebarWidthWindows: Set<ObjectIdentifier> = []
+    private static var pendingSidebarWidths: [ObjectIdentifier: () -> CGFloat] = [:]
+
+    /// Tell `sync` what width this window should come up at.
+    ///
+    /// Takes a closure rather than a value, evaluated when the restore
+    /// actually runs. The window arms this as it attaches, which can be either
+    /// side of the launch task that reads the saved width out of the snapshot —
+    /// a value captured here would sometimes be the pre-restore default.
+    ///
+    /// The old single-window code froze `launchSidebarWidth` at launch for a
+    /// related reason: the column lays out, and the geometry hook writes its
+    /// content-derived width over the stored value, before the window is
+    /// styled. `isAwaitingSidebarWidthRestore` closes that off at the source
+    /// instead, so there is nothing to freeze against.
+    static func armSidebarWidthRestore(for window: NSWindow, width: @escaping () -> CGFloat) {
+        let key = ObjectIdentifier(window)
+        guard !restoredSidebarWidthWindows.contains(key) else { return }
+        pendingSidebarWidths[key] = width
+    }
+
+    /// Whether `window` is still waiting to have its sidebar width applied.
+    ///
+    /// While it is, the column is showing SwiftUI's content-derived width, and
+    /// recording that would overwrite the width being restored with the
+    /// default it is meant to replace.
+    static func isAwaitingSidebarWidthRestore(for window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        return pendingSidebarWidths[ObjectIdentifier(window)] != nil
+    }
+
+    static func forgetSidebarWidthRestore(for window: NSWindow) {
+        let key = ObjectIdentifier(window)
+        restoredSidebarWidthWindows.remove(key)
+        pendingSidebarWidths.removeValue(forKey: key)
+        sidebarAutosaveSlots.removeValue(forKey: key)
+    }
 
     /// The actual native sidebar state after AppKit has restored its split-view
     /// autosave. SwiftUI's `columnVisibility` binding can still say `.automatic`
@@ -418,7 +466,9 @@ enum WindowAppearance {
     }
 
     private static func restoreSidebarWidth(window: NSWindow) {
-        guard !didRestoreSidebarWidth,
+        let key = ObjectIdentifier(window)
+        guard !restoredSidebarWidthWindows.contains(key),
+              let pending = pendingSidebarWidths[key],
               let split = window.contentView?.firstSplitView,
               split.arrangedSubviews.count > 1,
               let sidebar = split.owningSplitViewController?.splitViewItems.first
@@ -426,15 +476,15 @@ enum WindowAppearance {
         // Consumed as soon as the split view exists, collapsed or not. `sync`
         // also runs on every window-became-main, so an arm left standing would
         // later snap a width the user had since dragged.
-        didRestoreSidebarWidth = true
-        pinSidebarAutosaveName(split: split)
+        restoredSidebarWidthWindows.insert(key)
+        pendingSidebarWidths.removeValue(forKey: key)
+        pinSidebarAutosaveName(split: split, window: window)
         // A sidebar the user left hidden must stay hidden: moving divider 0 on
         // a collapsed item is what would pop it open on every launch. Showing
         // it mid-session then gives SwiftUI's own width — the next launch with
         // it visible restores properly.
         guard !sidebar.isCollapsed else { return }
-        // The frozen launch value, never the live property — see its doc.
-        let width = CGFloat(Preferences.shared.launchSidebarWidth)
+        let width = pending()
         split.setPosition(width, ofDividerAt: 0)
         logger.info("sidebar width restored to \(width, privacy: .public)")
     }
@@ -540,9 +590,39 @@ enum WindowAppearance {
     /// dependable here.
     private static let sidebarAutosaveName = "MactermMainSidebar"
 
-    private static func pinSidebarAutosaveName(split: NSSplitView) {
-        guard split.autosaveName != sidebarAutosaveName else { return }
-        split.autosaveName = sidebarAutosaveName
+    /// Per-window autosave slots, assigned lowest-free and reused when a
+    /// window closes.
+    ///
+    /// One shared name would have every window writing its frames to the same
+    /// AppKit key, so they fight. A per-window name has to stay BOUNDED,
+    /// though — an unstable one is exactly what produced the unbounded
+    /// `NSSplitView Subview Frames` accumulation `pruneChurnedSidebarAutosaveKeys`
+    /// below exists to clean up (49 keys in one real domain, one per launch).
+    /// A reused slot index is bounded by how many windows are open at once; a
+    /// UUID per window would not be.
+    ///
+    /// Slots colliding across windows would matter if AppKit's autosave were
+    /// the restore path. It is not — `restoreSidebarWidth` is — so this is
+    /// hygiene either way.
+    private static var sidebarAutosaveSlots: [ObjectIdentifier: Int] = [:]
+
+    private static func sidebarAutosaveSlot(for window: NSWindow) -> Int {
+        let key = ObjectIdentifier(window)
+        if let existing = sidebarAutosaveSlots[key] { return existing }
+        let taken = Set(sidebarAutosaveSlots.values)
+        var slot = 0
+        while taken.contains(slot) {
+            slot += 1
+        }
+        sidebarAutosaveSlots[key] = slot
+        return slot
+    }
+
+    private static func pinSidebarAutosaveName(split: NSSplitView, window: NSWindow) {
+        let slot = sidebarAutosaveSlot(for: window)
+        let name = slot == 0 ? sidebarAutosaveName : "\(sidebarAutosaveName).\(slot)"
+        guard split.autosaveName != name else { return }
+        split.autosaveName = name
         pruneChurnedSidebarAutosaveKeys()
     }
 
@@ -733,7 +813,7 @@ enum WindowAppearance {
 
     /// Install (if needed) and configure the liquid-glass background view so it
     /// fills the window behind SwiftUI's content, including the area under the
-    /// titlebar. Follows Ghostty's `updateGlassEffectIfNeeded` pattern.
+    /// titlebar. Installed once per window, then reconfigured in place.
     private static func syncGlass(window: NSWindow, backgroundColor: NSColor, opacity: Double) {
         guard #available(macOS 26.0, *) else { return }
         guard let contentView = window.contentView, let themeFrame = contentView.superview else { return }

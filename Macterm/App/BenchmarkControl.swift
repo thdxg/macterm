@@ -142,7 +142,7 @@ enum BenchmarkControl {
     /// which `open-project` creates on its way to warming panes — miniaturizing
     /// or fronting *that* would measure the wrong window.
     private static var mainWindow: NSWindow? {
-        (NSApp.delegate as? AppDelegate)?.mainWindow
+        appState?.appDelegate?.mainWindow
             ?? NSApp.windows.first(where: AppDelegate.isTerminalWindowCandidate)
     }
 }

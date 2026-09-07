@@ -1,7 +1,10 @@
 import AppKit
 import CoreText
 import GhosttyKit
+import os
 import QuartzCore
+
+private let logger = Logger(subsystem: appBundleID, category: "GhosttyTerminalNSView")
 
 final class GhosttyTerminalNSView: NSView {
     /// In a `.fullSizeContentView` window AppKit keeps a titlebar-height drag
@@ -472,6 +475,19 @@ final class GhosttyTerminalNSView: NSView {
         let total: UInt64
         let offset: UInt64
         let len: UInt64
+
+        /// `total > len` is the alt-screen guard: programs with no scrollback
+        /// (less/vim, a fresh prompt) have nothing to scroll. Every consumer of
+        /// the geometry (wheel handling, scroller clamping, the context menu,
+        /// `pane inspect`) reads it from here so they can't disagree.
+        var hasScrollback: Bool { total > len }
+
+        /// The largest `offset` the viewport can take (0 without scrollback).
+        var maxScrollableRow: UInt64 { hasScrollback ? total - len : 0 }
+
+        /// `offset` is the first visible row counted from the top of scrollback.
+        var canScrollUp: Bool { hasScrollback && offset > 0 }
+        var canScrollDown: Bool { hasScrollback && offset < maxScrollableRow }
     }
 
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
@@ -1328,10 +1344,17 @@ final class GhosttyTerminalNSView: NSView {
 
     private func presentContextMenu(with event: NSEvent) {
         let menu = NSMenu(title: "Terminal")
+        // Auto-enabling would override every `isEnabled` below: with no
+        // `validateMenuItem` on the target, AppKit enables any item whose target
+        // responds to its action, which is what kept Paste enabled on an empty
+        // pasteboard. Off, the explicit states (Paste, Jump to Top/Bottom) hold.
+        menu.autoenablesItems = false
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
         paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
         menu.addItem(paste)
+        menu.addItem(.separator())
+        addScrollNavigationItems(menu)
         menu.addItem(.separator())
         addSplitItem(menu, "Split Right", .horizontal, .second)
         addSplitItem(menu, "Split Left", .horizontal, .first)
@@ -1353,6 +1376,38 @@ final class GhosttyTerminalNSView: NSView {
     @objc
     private func handleZoom() {
         onZoomRequest?()
+    }
+
+    private func addScrollNavigationItems(_ menu: NSMenu) {
+        let jumpToTop = NSMenuItem(title: "Jump to Top", action: #selector(handleJumpToTop), keyEquivalent: "")
+        jumpToTop.target = self
+        jumpToTop.isEnabled = lastScrollbarSnapshot?.canScrollUp ?? false
+        menu.addItem(jumpToTop)
+
+        let jumpToBottom = NSMenuItem(title: "Jump to Bottom", action: #selector(handleJumpToBottom), keyEquivalent: "")
+        jumpToBottom.target = self
+        jumpToBottom.isEnabled = lastScrollbarSnapshot?.canScrollDown ?? false
+        menu.addItem(jumpToBottom)
+    }
+
+    @objc
+    private func handleJumpToTop() {
+        sendBindingAction("scroll_to_top")
+    }
+
+    @objc
+    private func handleJumpToBottom() {
+        sendBindingAction("scroll_to_bottom")
+    }
+
+    /// Run a ghostty keybind action (`scroll_to_top`, `search:foo`, …) against
+    /// this surface. libghostty answers false for an action it can't parse or
+    /// perform, which would otherwise be a silent no-op.
+    func sendBindingAction(_ action: String) {
+        guard let surface else { return }
+        if !ghostty_surface_binding_action(surface, action, UInt(action.utf8.count)) {
+            logger.warning("binding action failed: \(action, privacy: .public)")
+        }
     }
 
     private func addSplitItem(_ menu: NSMenu, _ title: String, _ dir: SplitDirection, _ pos: SplitPosition) {
@@ -1388,27 +1443,19 @@ final class GhosttyTerminalNSView: NSView {
     // MARK: - Search
 
     func sendSearchQuery(_ needle: String) {
-        guard let surface else { return }
-        let action = "search:\(needle)"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("search:\(needle)")
     }
 
     func navigateSearch(direction: SearchDirection) {
-        guard let surface else { return }
-        let action = "navigate_search:\(direction.rawValue)"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("navigate_search:\(direction.rawValue)")
     }
 
     func endSearch() {
-        guard let surface else { return }
-        let action = "end_search"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("end_search")
     }
 
     func startSearch() {
-        guard let surface else { return }
-        let action = "start_search"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("start_search")
     }
 
     enum SearchDirection: String { case next, previous }

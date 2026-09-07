@@ -286,6 +286,10 @@ final class SurfaceScrollView: NSScrollView {
         self.total = total
         self.offset = offset
         self.len = len
+        // The core can scroll on its own (keybinds, the context menu's Jump to
+        // Top/Bottom), so the dedupe row must follow it — otherwise a later
+        // wheel or scroller move landing on the stale row is dropped.
+        lastSentRow = Int(min(offset, UInt64(Int.max)))
         synchronize()
         // Tick fractions are row/total, so a scrollback growth shifts them.
         if totalChanged, !searchMatchRows.isEmpty {
@@ -367,11 +371,17 @@ final class SurfaceScrollView: NSScrollView {
         return true
     }
 
+    /// The scrollback geometry as one value, so the alt-screen and clamping
+    /// predicates come from `ScrollbarSnapshot` rather than being restated here.
+    private var snapshot: GhosttyTerminalNSView.ScrollbarSnapshot {
+        .init(total: total, offset: offset, len: len)
+    }
+
     private func canHandleScrollbackWheel(_ event: NSEvent, cellHeight: CGFloat) -> Bool {
-        // `total > len` is the alt-screen guard: programs with no scrollback
-        // (less/vim, a fresh prompt) have nothing to scroll, so we decline and
-        // let libghostty handle the event (mouse reporting / cursor keys).
-        guard surfaceView.surface != nil, cellHeight > 0, total > len else { return false }
+        // Without scrollback (less/vim, a fresh prompt) there is nothing to
+        // scroll, so we decline and let libghostty handle the event (mouse
+        // reporting / cursor keys).
+        guard surfaceView.surface != nil, cellHeight > 0, snapshot.hasScrollback else { return false }
         return abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX)
     }
 
@@ -396,8 +406,7 @@ final class SurfaceScrollView: NSScrollView {
 
     private func sendScrollToRow(_ requestedRow: Int) {
         guard let surface = surfaceView.surface else { return }
-        let maxScrollable = total > len ? total - len : 0
-        let maxRow = Int(min(maxScrollable, UInt64(Int.max)))
+        let maxRow = Int(min(snapshot.maxScrollableRow, UInt64(Int.max)))
         let row = min(max(0, requestedRow), maxRow)
         guard row != lastSentRow else { return }
         lastSentRow = row

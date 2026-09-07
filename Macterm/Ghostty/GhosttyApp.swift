@@ -38,6 +38,26 @@ final class GhosttyApp {
     /// Opt-in window-wide background inferred from a lone visible terminal
     /// pane. Split-pane colors stay local to their panes, so nil also means
     /// window chrome continues to use the configured Ghostty theme.
+    /// The adaptive TUI tint, PER WINDOW (#345).
+    ///
+    /// Was a single app-wide value. With one window that was the same thing;
+    /// with several it meant every window wore whatever the focused one's
+    /// terminal had painted — and swapped colour again as focus moved. The
+    /// tint belongs to the window it was sampled from, which is the same rule
+    /// `MactermTheme.nsConfiguredBg` already encodes for the quick terminal.
+    ///
+    /// A window keeps its last sampled colour while it is in the background
+    /// (sampling only ever follows the key window), so losing focus does not
+    /// strip a window's tint.
+    private var adaptiveBackgrounds: [WindowTint] = []
+
+    private struct WindowTint {
+        weak var window: NSWindow?
+        var color: NSColor
+    }
+
+    /// The tint of whichever window is currently key, for the few consumers
+    /// that are not painting a specific window (a pane preview, a drag proxy).
     private(set) var adaptiveBackgroundColor: NSColor?
     /// Memoized `resolvedThemeColors()`, keyed on the `configVersion` it was
     /// computed for. Without this, every color accessor re-reads THREE files
@@ -309,6 +329,14 @@ final class GhosttyApp {
 
     var effectiveBackgroundColor: NSColor {
         adaptiveBackgroundColor ?? backgroundColor
+    }
+
+    /// `window`'s own adaptive tint, falling back to the configured theme
+    /// background. What window chrome must use, so one window never paints
+    /// another's terminal colour.
+    func effectiveBackgroundColor(for window: NSWindow?) -> NSColor {
+        guard let window else { return backgroundColor }
+        return adaptiveBackgrounds.first { $0.window === window }?.color ?? backgroundColor
     }
 
     var foregroundColor: NSColor {
@@ -649,13 +677,31 @@ final class GhosttyApp {
     /// Update the temporary chrome tint without touching libghostty's config.
     /// The terminal renderer remains authoritative for its own pixels; this
     /// only brings the native window surfaces into visual alignment.
-    func adoptAdaptiveBackgroundColor(_ color: NSColor?) {
-        if let current = adaptiveBackgroundColor, let color, current.isVisuallyEqual(to: color) {
-            return
+    func adoptAdaptiveBackgroundColor(_ color: NSColor?, for window: NSWindow?) {
+        adaptiveBackgrounds.removeAll { $0.window == nil }
+        let previous = window.flatMap { w in adaptiveBackgrounds.first { $0.window === w }?.color }
+        if let previous, let color, previous.isVisuallyEqual(to: color) { return }
+        guard previous != nil || color != nil else { return }
+        if let window {
+            adaptiveBackgrounds.removeAll { $0.window === window }
+            if let color { adaptiveBackgrounds.append(WindowTint(window: window, color: color)) }
         }
-        guard adaptiveBackgroundColor != nil || color != nil else { return }
-        adaptiveBackgroundColor = color
+        // Mirror for the window-agnostic consumers — a pane preview, a drag
+        // proxy, the tab switcher: transient UI shown over the window the user
+        // is in. The key window's tint when there is one, else the most
+        // recently sampled, since that is the window the sampler was following.
+        adaptiveBackgroundColor = effectiveKeyWindowTint() ?? adaptiveBackgrounds.last?.color
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
+    }
+
+    private func effectiveKeyWindowTint() -> NSColor? {
+        guard let key = NSApp.keyWindow else { return nil }
+        return adaptiveBackgrounds.first { $0.window === key }?.color
+    }
+
+    /// Drop a closed window's tint.
+    func forgetAdaptiveBackgroundColor(for window: NSWindow) {
+        adaptiveBackgrounds.removeAll { $0.window == nil || $0.window === window }
     }
 
     private func nsColor(_ rgb: ResolvedColors.RGB) -> NSColor {

@@ -35,7 +35,7 @@ DIAG_ROOT = REPO / "build" / "e2e" / "diagnostics"
 def pytest_addoption(parser):
     parser.addoption(
         "--app",
-        default=str(REPO / "build" / "DerivedData" / "Build" / "Products" / "Debug" / "Macterm.app"),
+        default=str(REPO / "build" / "DerivedData" / "Build" / "Products" / "Debug" / "Macterm Debug.app"),
         help="Path to the built Macterm.app under test (default: the Debug build)",
     )
 

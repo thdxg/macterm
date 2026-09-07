@@ -12,7 +12,11 @@ private let logger = Logger(subsystem: appBundleID, category: "WorkspacePersiste
 /// is optional, because an older build would restore without pinned tabs and
 /// then SAVE without them — the version gate turns that into refuse-to-save,
 /// so a downgrade preserves pinned state instead of silently dropping it.
-private let currentSchemaVersion = 5
+/// v6 adds `windows`. Same reasoning as v5's bump: the key is optional, but an
+/// older build would restore ignoring the window list and then SAVE without it,
+/// silently collapsing a multi-window setup back to one. The version gate turns
+/// that into refuse-to-save instead.
+private let currentSchemaVersion = 6
 
 /// Top-level on-disk representation. Wraps the workspace array so we can
 /// evolve the file format (add fields, do migrations) without renaming the
@@ -28,6 +32,26 @@ struct WorkspacesFile: Codable {
     /// from `workspaces`, which is where every other workspace keeps its
     /// `activeTabID`.
     var pinnedActiveTabID: UUID?
+    /// Open terminal windows (v6+), in creation order, so quitting and
+    /// relaunching brings them all back rather than just one (#345). Optional
+    /// so a v5 file decodes with nil, which restores the single window the
+    /// scene opens by itself.
+    var windows: [WindowSnapshot]?
+}
+
+/// One window's restorable state (v6+).
+///
+/// The project and the sidebar width. Pane and tab selection are still shared
+/// across windows. The frame stays AppKit's to restore — SwiftUI's
+/// `WindowGroup` already persists window frames through the system's state
+/// restoration, so storing them here would be a second, competing source of
+/// truth. The sidebar width is different: nothing else restores it, because
+/// SwiftUI's own column autosave is unreadable by construction.
+struct WindowSnapshot: Codable {
+    var activeProjectID: UUID?
+    /// The window's sidebar width. Optional so a snapshot written before this
+    /// existed decodes as nil, and the window opens at the app-wide default.
+    var sidebarWidth: Double?
 }
 
 // MARK: - Snapshot types
@@ -160,6 +184,9 @@ final class WorkspaceStore {
         var workspaces: [WorkspaceSnapshot] = []
         var pinned: [PinnedTabSnapshot] = []
         var pinnedActiveTabID: UUID?
+        /// Windows to reopen (v6+); empty for an older file, which means the
+        /// one window the scene opens by itself.
+        var windows: [WindowSnapshot] = []
     }
 
     func load() -> Loaded {
@@ -193,14 +220,16 @@ final class WorkspaceStore {
                 return Loaded(
                     workspaces: migrated.workspaces,
                     pinned: migrated.pinned ?? [],
-                    pinnedActiveTabID: migrated.pinnedActiveTabID
+                    pinnedActiveTabID: migrated.pinnedActiveTabID,
+                    windows: migrated.windows ?? []
                 )
             }
             let migrated = migrate(file)
             return Loaded(
                 workspaces: migrated.workspaces,
                 pinned: migrated.pinned ?? [],
-                pinnedActiveTabID: migrated.pinnedActiveTabID
+                pinnedActiveTabID: migrated.pinnedActiveTabID,
+                windows: migrated.windows ?? []
             )
         } catch let envelopeError {
             // Fallback: pre-envelope format where the file was a bare array of
@@ -220,7 +249,8 @@ final class WorkspaceStore {
     func save(
         _ snapshots: [WorkspaceSnapshot],
         pinned: [PinnedTabSnapshot] = [],
-        pinnedActiveTabID: UUID? = nil
+        pinnedActiveTabID: UUID? = nil,
+        windows: [WindowSnapshot]? = nil
     ) {
         guard !loadFailed else {
             logger.error("Refusing to save workspaces: prior load failed, file preserved")
@@ -231,7 +261,8 @@ final class WorkspaceStore {
                 version: currentSchemaVersion,
                 workspaces: snapshots,
                 pinned: pinned,
-                pinnedActiveTabID: pinnedActiveTabID
+                pinnedActiveTabID: pinnedActiveTabID,
+                windows: windows
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -252,7 +283,8 @@ final class WorkspaceStore {
                 version: 4,
                 workspaces: clearPersistedAttention(in: file.workspaces),
                 pinned: file.pinned,
-                pinnedActiveTabID: file.pinnedActiveTabID
+                pinnedActiveTabID: file.pinnedActiveTabID,
+                windows: file.windows
             )
         }
         return file

@@ -14,6 +14,14 @@ enum MactermTheme {
     /// next sample takes it away again.
     @MainActor
     static var nsConfiguredBg: NSColor { GhosttyApp.shared.backgroundColor }
+    /// `window`'s own background: its adaptive tint if it has one, else the
+    /// configured theme. Window chrome must use this rather than `nsBg`, or
+    /// one window paints another window's terminal colour (#345).
+    @MainActor
+    static func nsBg(for window: NSWindow?) -> NSColor {
+        GhosttyApp.shared.effectiveBackgroundColor(for: window)
+    }
+
     @MainActor
     static var fg: Color { Color(nsColor: nsFg) }
     @MainActor

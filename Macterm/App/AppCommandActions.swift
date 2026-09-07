@@ -238,8 +238,16 @@ extension AppCommand {
             return { ctx.appState.selectPreviousProject(projects: ctx.projectStore.projects) }
         case .toggleSidebar:
             return { ctx.appState.sidebarVisible.toggle() }
+        case .newWindow:
+            return { ctx.appState.requestNewWindow() }
         case .closeWindow:
-            return { (NSApp.delegate as? AppDelegate)?.mainWindow?.orderOut(nil) }
+            // The window the user is in, not a remembered pointer — with
+            // several open, "close the window" can only mean the focused one.
+            // The last one hides rather than closes, which is the invariant
+            // the red close button has always kept: surfaces and their running
+            // processes outlive a hidden window, and an app with a Dock icon
+            // and no window at all is the #241 dead end.
+            return { ctx.appState.appDelegate?.closeFocusedTerminalWindow() }
         case .toggleCommandPalette:
             return { ctx.appState.isCommandPaletteVisible.toggle() }
         case .reloadGhosttyConfig:

@@ -9,12 +9,19 @@ struct MainWindow: View {
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
+    /// This window's own selection state (#345). `@State` so each window
+    /// instance of the `WindowGroup` gets its own, which is what lets two
+    /// windows show different projects.
+    @State
+    private var windowState = WindowState()
     @State
     private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State
     private var detailWidth: CGFloat = .infinity
     @State
     private var preferences = Preferences.shared
+    @State
+    private var attachedWindow: NSWindow?
     @State
     private var windowCornerRadius: CGFloat?
     @State
@@ -223,7 +230,28 @@ struct MainWindow: View {
             hideTitle: chromeHidden,
             windowCornerRadius: $windowCornerRadius,
             windowTopSafeAreaInset: $windowTopSafeAreaInset,
-            initialSidebarVisible: $initialNativeSidebarVisible
+            initialSidebarVisible: $initialNativeSidebarVisible,
+            onWindowAttached: { window in
+                // Register HERE, not in `onAppear`. SwiftUI instantiates a
+                // view — and its `@State` — more than once per real window,
+                // and `onAppear` fires for the throwaway too, which registered
+                // a phantom second window on every launch. An `NSWindow` is
+                // one per actual window, so attachment is the real identity.
+                // Arm before `WindowAppearance.sync` runs inside the styler,
+                // and before the geometry hook writes the column's
+                // content-derived width over the stored value.
+                let resolved = appState.canonicalWindowState(for: window, proposed: windowState)
+                WindowAppearance.armSidebarWidthRestore(for: window) {
+                    CGFloat(resolved.sidebarWidth)
+                }
+                appState.appDelegate?.registerTerminalWindow(window)
+                attachedWindow = window
+                // Adopt the canonical state for this NSWindow. A second view
+                // instance for the same window drops its own and takes the
+                // first one's, so the app never sees a phantom window.
+                windowState = appState.canonicalWindowState(for: window, proposed: windowState)
+            },
+            onWindowBecameKey: { appState.noteKeyWindow(windowState) }
         ))
         .overlay {
             if appState.isCommandPaletteVisible {
@@ -245,10 +273,22 @@ struct MainWindow: View {
         .sheet(isPresented: $appState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }
+        .environment(windowState)
+        // Applied here rather than in the scene so each copy knows WHICH
+        // window it is: they stay grouped in these three modifiers, which is
+        // the rule — the alerts must not scatter back into `body`.
+        .modifier(CloseConfirmationAlerts(appState: appState, windowID: windowState.id))
+        .modifier(ProjectConfirmationAlerts(appState: appState, windowID: windowState.id))
+        .modifier(LayoutAlerts(appState: appState, windowID: windowState.id))
         .onAppear {
             AdaptiveTerminalChrome.shared.mainWindowDidAppear()
         }
         .onDisappear {
+            if let attachedWindow {
+                WindowAppearance.forgetSidebarWidthRestore(for: attachedWindow)
+                appState.forgetWindowState(for: attachedWindow)
+                appState.appDelegate?.forgetTerminalWindow(attachedWindow)
+            }
             cancelDeferredPeek()
             cancelDeferredUnpeek()
             cancelOverlayWindowExit()
@@ -261,6 +301,9 @@ struct MainWindow: View {
             // only answerable once the snapshot is loaded, `pinned.yaml` is
             // reconciled and a load failure is known (see FirstRunSeed).
             appState.seedFirstRunIfNeeded(projectStore: projectStore)
+            // After the restore, so the saved windows' projects exist. This
+            // window adopts the first saved entry and opens the rest (#345).
+            appState.restoreWindows(adopting: windowState)
         }
         .onContinuousHover(coordinateSpace: .local) { phase in
             handleSidebarPeekHover(phase)
@@ -399,7 +442,25 @@ struct MainWindow: View {
     /// (and every frame of an animating peek that lands back where it started)
     /// writes nothing.
     private func persistSidebarWidth(_ width: CGFloat) {
+        // Until the restore has run, the column is showing SwiftUI's
+        // content-derived width; recording it would overwrite the width we are
+        // about to restore with the default it replaces.
+        //
+        // A nil `attachedWindow` counts as "not yet": the geometry hook fires
+        // during layout, BEFORE the styler has found the window, so treating
+        // nil as "nothing pending" let the content-derived width through —
+        // which is exactly how 144 kept landing in the snapshot.
+        guard let attachedWindow,
+              !WindowAppearance.isAwaitingSidebarWidthRestore(for: attachedWindow)
+        else { return }
         let rounded = (Double(width) * 2).rounded() / 2
+        // This window's own width, and the app-wide default a NEW window opens
+        // at — dragging one window's sidebar should not resize another's, but
+        // the next window you open should match what you just set (#345).
+        if abs(rounded - windowState.sidebarWidth) >= 0.5 {
+            windowState.sidebarWidth = rounded
+            appState.noteSidebarWidthChanged()
+        }
         guard abs(rounded - preferences.sidebarWidth) >= 0.5 else { return }
         preferences.sidebarWidth = rounded
     }
@@ -423,7 +484,7 @@ struct MainWindow: View {
                 return
             }
             guard appState.sidebarVisible || activePeekStyle == .resizeTerminal,
-                  let window = (NSApp.delegate as? AppDelegate)?.mainWindow,
+                  let window = attachedWindow,
                   WindowAppearance.setSidebarWidth(targetWidth, window: window)
             else {
                 // Nothing applied the target, so nothing will ever measure it.
@@ -613,7 +674,7 @@ struct MainWindow: View {
             sidebarPresentation.discardRename()
             withAnimation(peekTransitionAnimation) { activePeekStyle = nil }
             DispatchQueue.main.async {
-                guard let window = (NSApp.delegate as? AppDelegate)?.mainWindow,
+                guard let window = attachedWindow,
                       window.isKeyWindow, window.attachedSheet == nil,
                       !appState.isCommandPaletteVisible
                 else { return }
@@ -643,7 +704,7 @@ struct MainWindow: View {
             var stationaryTicks = 0
             while !Task.isCancelled {
                 guard isOverlayPeeking, !appState.sidebarVisible, !isResizingOverlay,
-                      let window = (NSApp.delegate as? AppDelegate)?.mainWindow
+                      let window = attachedWindow
                 else {
                     overlayWindowExitTask = nil
                     return
@@ -703,12 +764,12 @@ struct MainWindow: View {
     }
 
     private var pointerIsOutsideLeadingWindowEdge: Bool {
-        guard let window = (NSApp.delegate as? AppDelegate)?.mainWindow else { return false }
+        guard let window = attachedWindow else { return false }
         return NSEvent.mouseLocation.x <= window.frame.minX + 2
     }
 
     private var pointerIsWithinOverlayRetentionRegion: Bool {
-        guard let window = (NSApp.delegate as? AppDelegate)?.mainWindow else { return false }
+        guard let window = attachedWindow else { return false }
         return SidebarOverlayMetrics.retainsOutsidePointer(
             NSEvent.mouseLocation,
             windowFrame: window.frame,
@@ -732,7 +793,10 @@ struct MainWindow: View {
     }
 
     private var activeProject: Project? {
-        guard let pid = appState.activeProjectID else { return nil }
+        // This window's project, never `appState.activeProjectID` — that
+        // mirrors whichever window is KEY, so a background window would redraw
+        // itself as whatever the frontmost one is showing (#345).
+        guard let pid = windowState.activeProjectID else { return nil }
         // The pinned workspace has no ProjectStore row; render it through the
         // synthetic project.
         if pid == PinnedTabs.projectID { return PinnedTabs.project }
@@ -1010,6 +1074,13 @@ private struct WindowStyler: NSViewRepresentable {
     var windowTopSafeAreaInset: CGFloat
     @Binding
     var initialSidebarVisible: Bool?
+    /// Called once this view's `NSWindow` exists, and again when it goes away.
+    /// The window is how a `MainWindow` identifies itself to the app: the
+    /// responder chain needs an exact "is the key window one of ours" answer
+    /// (#345), and the key window is what points `AppState.activeProjectID` at
+    /// the right window's project.
+    var onWindowAttached: (NSWindow) -> Void = { _ in }
+    var onWindowBecameKey: () -> Void = {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -1054,6 +1125,11 @@ private struct WindowStyler: NSViewRepresentable {
             coordinator.syncWindowTopSafeAreaInset(window: window)
             coordinator.syncInitialSidebarVisibility(window: window)
             coordinator.observe(window: window)
+            coordinator.onWindowBecameKey = onWindowBecameKey
+            onWindowAttached(window)
+            // A window that opens already key never posts didBecomeKey, so
+            // seed the app's notion of the frontmost project from it.
+            if window.isKeyWindow { onWindowBecameKey() }
             // Intercept the close button to hide instead of close,
             // preserving terminal surfaces and running processes.
             coordinator.interceptClose(window: window)
@@ -1140,8 +1216,16 @@ private struct WindowStyler: NSViewRepresentable {
             }
         }
 
+        var onWindowBecameKey: () -> Void = {}
+
+        func windowDidBecomeKey(_ notification: Notification) {
+            onWindowBecameKey()
+            swiftuiDelegate?.windowDidBecomeKey?(notification)
+        }
+
         func windowDidBecomeMain(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
+            onWindowBecameKey()
             WindowAppearance.sync(window: window)
             syncWindowCornerRadius(window: window)
             syncWindowTopSafeAreaInset(window: window)

@@ -82,6 +82,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm
         PRODUCT_NAME: Macterm
+        # Pinned so the Swift module stays `Macterm` even where PRODUCT_NAME
+        # doesn't (Debug builds the bundle as "Macterm Debug.app"). Without
+        # this the module would sanitize to `Macterm_Debug` and every
+        # `@testable import Macterm` would stop resolving.
+        PRODUCT_MODULE_NAME: Macterm
         INFOPLIST_FILE: Macterm/Info.plist
         CODE_SIGN_ENTITLEMENTS: Macterm/Macterm.entitlements
         # Tells actool to render Macterm/AppIcon.icon (Icon Composer source)
@@ -119,9 +124,8 @@ targets:
         # explicitly since the target now compiles an .m file.
         SWIFT_OBJC_BRIDGING_HEADER: Macterm/Macterm-Bridging-Header.h
         CLANG_ENABLE_OBJC_ARC: YES
-        # Display name (Dock / menu bar / Finder) — wired into Info.plist's
-        # CFBundleDisplayName. The bundle *name* (PRODUCT_NAME) stays "Macterm"
-        # in every config so TEST_HOST and on-disk layout don't shift.
+        # Display name (menu bar / Finder "Get Info") — wired into
+        # Info.plist's CFBundleName and CFBundleDisplayName.
         PRODUCT_DISPLAY_NAME: Macterm
       configs:
         Debug:
@@ -130,6 +134,19 @@ targets:
           # cleanly by subsystem (scripts/logs.sh).
           PRODUCT_BUNDLE_IDENTIFIER: com.thdxg.macterm.debug
           PRODUCT_DISPLAY_NAME: Macterm Debug
+          # The *filename* has to move too, because the Dock tile label, the
+          # Cmd-Tab switcher and Finder all read the bundle's filesystem name
+          # and ignore CFBundleDisplayName entirely — a debug build sitting in
+          # the Dock next to the release one was labelled "Macterm" either way.
+          # (A localized InfoPlist.strings does NOT change this; measured.)
+          # Apple's own rule is that the two must agree, so both move together.
+          # Consequences, all handled: EXECUTABLE_NAME follows PRODUCT_NAME, so
+          # Info.plist's CFBundleExecutable is $(EXECUTABLE_NAME) rather than a
+          # literal; PRODUCT_MODULE_NAME is pinned above so the Swift module
+          # name doesn't follow; and everything pointing at the built Debug
+          # bundle by path (MactermTests' TEST_HOST, scripts/run.sh,
+          # scripts/e2e.sh, e2e/conftest.py) names "Macterm Debug.app".
+          PRODUCT_NAME: Macterm Debug
     dependencies:
       # Build ordering only: the post-build script copies the CLI binary into
       # the bundle, so it must exist before the app target finishes.
@@ -225,7 +242,15 @@ targets:
         # skips the heavy launch path (libghostty init, hotkey install,
         # etc.) so the test runner doesn't time out.
         BUNDLE_LOADER: "$(TEST_HOST)"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Macterm.app/Contents/MacOS/Macterm"
+      configs:
+        # Per-config because the app target's PRODUCT_NAME is config-dependent
+        # (Debug ships as "Macterm Debug.app" so the Dock labels it correctly).
+        # $(PRODUCT_NAME) can't be interpolated here — inside this target it
+        # resolves to the *test bundle's* name, not the app's.
+        Debug:
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Macterm Debug.app/Contents/MacOS/Macterm Debug"
+        Release:
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Macterm.app/Contents/MacOS/Macterm"
 
 schemes:
   Macterm:

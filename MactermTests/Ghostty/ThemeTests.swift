@@ -11,6 +11,11 @@ private final class ObservationFlag {
 
 @MainActor
 struct ThemeTests {
+    /// A window to hang the adaptive tint on: it is per-window now (#345), and
+    /// the window-agnostic `MactermTheme.nsBg` mirrors the most recently
+    /// sampled one, which is what these assertions read.
+    private let tintWindow = NSWindow()
+
     /// Regression: the adaptive tint feeding `.preferredColorScheme` made the
     /// app-wide scheme flap whenever a full-screen TUI's background was
     /// adopted or cleared, which destabilized SwiftUI window management (the
@@ -22,8 +27,8 @@ struct ThemeTests {
         let opposite: NSColor = configScheme == .dark ? .white : .black
 
         let previous = GhosttyApp.shared.adaptiveBackgroundColor
-        GhosttyApp.shared.adoptAdaptiveBackgroundColor(opposite)
-        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous) }
+        GhosttyApp.shared.adoptAdaptiveBackgroundColor(opposite, for: tintWindow)
+        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous, for: tintWindow) }
 
         // The in-window chrome color follows the tint…
         #expect(MactermTheme.nsBg.isVisuallyEqual(to: opposite))
@@ -43,8 +48,8 @@ struct ThemeTests {
         let tint: NSColor = configured.isVisuallyEqual(to: .black) ? .white : .black
 
         let previous = GhosttyApp.shared.adaptiveBackgroundColor
-        GhosttyApp.shared.adoptAdaptiveBackgroundColor(tint)
-        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous) }
+        GhosttyApp.shared.adoptAdaptiveBackgroundColor(tint, for: tintWindow)
+        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous, for: tintWindow) }
 
         #expect(MactermTheme.nsBg.isVisuallyEqual(to: tint))
         #expect(MactermTheme.nsConfiguredBg.isVisuallyEqual(to: configured))
@@ -58,7 +63,7 @@ struct ThemeTests {
     func adaptiveTintInvalidatesThemeBackgroundObservation() {
         let previous = GhosttyApp.shared.adaptiveBackgroundColor
         let replacement = previous?.isVisuallyEqual(to: .black) == true ? NSColor.white : .black
-        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous) }
+        defer { GhosttyApp.shared.adoptAdaptiveBackgroundColor(previous, for: tintWindow) }
 
         let flag = ObservationFlag()
         withObservationTracking {
@@ -69,7 +74,7 @@ struct ThemeTests {
             }
         }
 
-        GhosttyApp.shared.adoptAdaptiveBackgroundColor(replacement)
+        GhosttyApp.shared.adoptAdaptiveBackgroundColor(replacement, for: tintWindow)
 
         #expect(flag.wasInvalidated)
     }
