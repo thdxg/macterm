@@ -142,25 +142,34 @@ def test_a_window_reports_its_own_sidebar_width(app):
         assert 100 <= width <= 500, f"width out of any sane range: {width}"
 
 
-def test_two_windows_on_one_tab_mirror_it(app, fresh_tab):
+def test_two_windows_on_one_tab_mirror_it(app):
     """A pane's NSView can live in one window, so two windows on the same tab
     must not fight over it — the second used to come up blank. Instead the
     second window renders a mirror view: `window list` reports the same tab
-    for both, with exactly one marked `mirrored`."""
+    for both, with exactly one marked `mirrored`.
+
+    Everything is addressed by the FIRST window's project and by `--window`:
+    the harness drives the app without necessarily making it active, so
+    "the active project" and "the focused window" are not dependable here.
+    """
     before = len(_windows(app))
+    first = _windows(app)[0]
+    project = first.get("projectID")
+    assert project, f"the first window should show a project: {first}"
+    tab = app.cli_json("tab", "new", "--project", project)["tabs"][0]
     try:
         app.cli("window", "new")
         wait_for(lambda: len(_windows(app)) == before + 1, timeout=30, message="the new window")
-        first = _windows(app)[0]
-        if first.get("projectID"):
-            app.cli("project", "select", first["projectID"], "--window", str(before + 1))
-        app.cli("tab", "select", fresh_tab["id"], "--window", str(before + 1))
+        second = str(before + 1)
+        app.cli("project", "select", project, "--window", second)
+        app.cli("tab", "select", tab["id"], "--project", project, "--window", "1")
+        app.cli("tab", "select", tab["id"], "--project", project, "--window", second)
 
         def mirrored_pair():
             windows = _windows(app)[: before + 1]
             tabs = {w.get("tabID") for w in windows}
             mirrored = [w for w in windows if w.get("mirrored")]
-            return windows if tabs == {fresh_tab["id"]} and len(mirrored) == 1 else None
+            return windows if tabs == {tab["id"]} and len(mirrored) == 1 else None
 
         deadline = time.time() + 15
         while mirrored_pair() is None and time.time() < deadline:
@@ -169,3 +178,6 @@ def test_two_windows_on_one_tab_mirror_it(app, fresh_tab):
         assert mirrored_pair() is not None, f"one real view and one mirror expected: {windows}"
     finally:
         _close_extra_windows(app, before)
+        # The janitor only sweeps the active project's tabs; this one may not
+        # be there.
+        app.cli("tab", "close", tab["id"], "--project", project, "--force", check=False)

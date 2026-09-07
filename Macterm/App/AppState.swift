@@ -334,7 +334,16 @@ final class AppState {
         // of what was open.
         guard !AppTerminationState.isTerminating else { return }
         windows.removeAll { $0.id == window.id }
-        if keyWindowID == window.id { keyWindowID = nil }
+        if keyWindowID == window.id {
+            // The user is always "in" some window while one exists. AppKit
+            // usually makes another window key and reports it, but not while
+            // the app is inactive — a headless harness never sees that report,
+            // and every window then read as unfocused with the app-wide
+            // mirrors stranded. Promote the first; the next real key event
+            // corrects it.
+            keyWindowID = windows.first?.id
+            alignKeyWindowTab()
+        }
         dropShadows(of: window, except: nil)
         reconcileWindowViews()
         logger.debug("unregisterWindow: \(window.id, privacy: .public) count=\(self.windows.count)")
@@ -582,20 +591,37 @@ final class AppState {
         guard let key = keyWindow, let projectID = key.activeProjectID,
               let view = viewTab(for: projectID, in: key)
         else { return }
-        for pane in view.tab.splitRoot.allPanes() {
-            claimSessionLeadership(pane)
+        claimLeadership(forPanesIn: view.tab)
+    }
+
+    /// Claim for a tab's panes, one per session. A tab can hold two panes on
+    /// ONE session (`pane mirror`), and claiming for both would hand the pty
+    /// to whichever came last in tree order — the source lost leadership to
+    /// its own mirror every time the window became key. A session already led
+    /// by a pane of this tab is left as it is; otherwise the tab's focused
+    /// pane on that session claims, else the first.
+    private func claimLeadership(forPanesIn tab: TerminalTab) {
+        let panes = tab.splitRoot.allPanes()
+        var handled: Set<String> = []
+        for pane in panes where !handled.contains(pane.sessionName) {
+            handled.insert(pane.sessionName)
+            let siblings = panes.filter { $0.sessionName == pane.sessionName }
+            guard !siblings.contains(where: { isLeader($0) }) else { continue }
+            let claimant = siblings.first { $0.id == tab.focusedPaneID } ?? pane
+            claimSessionLeadership(claimant)
         }
     }
 
     /// A pane's surface just got its first size. If the pane is on screen in
-    /// the key window's tab it should already lead — the claim that ran when
-    /// the window became key was refused for lack of a size.
+    /// the key window's tab its session should already be led from that tab —
+    /// the claim that ran when the window became key was refused for lack of
+    /// a size.
     func surfaceDidGetSize(paneID: UUID) {
         guard let key = keyWindow, let projectID = key.activeProjectID,
               let view = viewTab(for: projectID, in: key),
-              let pane = view.tab.splitRoot.findPane(id: paneID)
+              view.tab.splitRoot.findPane(id: paneID) != nil
         else { return }
-        claimSessionLeadership(pane)
+        claimLeadership(forPanesIn: view.tab)
     }
 
     /// The workspace hook: its active tab changed by any writer — `createTab`,

@@ -579,6 +579,47 @@ struct WindowStateTests {
     }
 
     @Test
+    func becoming_key_leaves_a_same_tab_mirror_pairs_leader_alone() throws {
+        // `pane mirror` puts two panes on one session in ONE tab. The whole-tab
+        // claim must not hand the pty to whichever pane comes last in tree
+        // order — the source lost leadership to its own mirror on every key
+        // change.
+        let state = makeAppState()
+        var claimed: [UUID] = []
+        state.sendClaim = { claimed.append($0.id)
+            return true
+        }
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let tab = try #require(ws.activeTab)
+        let source = try #require(tab.splitRoot.allPanes().first)
+        _ = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: project.id))
+        let a = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        claimed = []
+
+        state.noteKeyWindow(a)
+
+        #expect(claimed.isEmpty, "the source already leads; nothing moves")
+        #expect(state.isLeader(source))
+    }
+
+    @Test
+    func the_first_remaining_window_becomes_key_when_the_key_window_closes() {
+        // AppKit reports the new key window only while the app is active; a
+        // headless harness never sees it, and every window read as unfocused.
+        let state = makeAppState()
+        let a = WindowState()
+        let b = WindowState()
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(b)
+
+        state.unregisterWindow(b)
+
+        #expect(state.keyWindowID == a.id)
+    }
+
+    @Test
     func a_surface_that_gets_its_size_in_the_key_windows_tab_claims_leadership() throws {
         // The claim on key change is refused until a mirror's surface has a
         // size; the surface-sized report re-sends it.
