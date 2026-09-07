@@ -122,6 +122,7 @@ struct TintCutout {
 
     /// Cut `view` (a tinted layer) to the regions, which are in `container`'s
     /// coordinates.
+    @MainActor
     func apply(to view: NSView, in container: NSView) {
         guard let layer = view.layer else { return }
         guard !holes.isEmpty else {

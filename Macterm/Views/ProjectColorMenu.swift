@@ -10,11 +10,17 @@ import SwiftUI
 /// palette's selection ring is what marks the current color.
 struct ProjectColorMenu: View {
     let selection: ProjectColor?
-    let onSelect: (ProjectColor?) -> Void
+    let onSelect: @MainActor (ProjectColor?) -> Void
 
     var body: some View {
         Menu("Color") {
-            Picker("Color", selection: Binding(get: { selection }, set: onSelect)) {
+            // `Binding.set` is `@isolated(any) @Sendable`, so `onSelect` has to
+            // be main-actor-isolated to reach it without a data-race warning —
+            // but it must be *called* from a closure literal rather than passed
+            // as `set: onSelect`. Handing the function value over directly asks
+            // for a reabstraction thunk into `@isolated(any)`, and IRGen
+            // crashes emitting it (observed on Swift 6.3.3).
+            Picker("Color", selection: Binding(get: { selection }, set: { onSelect($0) })) {
                 ForEach(ProjectColor.allCases, id: \.self) { color in
                     Label(color.displayName, systemImage: "circle.fill")
                         .tint(MactermTheme.color(for: color))
