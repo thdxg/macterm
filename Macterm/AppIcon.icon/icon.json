@@ -15,8 +15,8 @@
       "layers" : [
         {
           "glass" : false,
-          "image-name" : "icon-glyph.png",
-          "name" : "icon-glyph"
+          "image-name" : "glyph.png",
+          "name" : "glyph"
         }
       ],
       "shadow" : {

@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="./assets/icon.png" width="128" />
+  <img src="./assets/icons/dark.png" width="128" />
   <br />
   Macterm
 </h1>

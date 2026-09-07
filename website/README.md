@@ -115,7 +115,7 @@ extensionless resolution the site used to get from Cloudflare's
 > Bun's native HTML serving (`bun ./public/**/*.html`) does derive exactly the
 > right routes, but it is a bundler, not a file server: it tries to resolve
 > every root-absolute `src`/`href` as a build input (500s on `/site.js`,
-> `/tailwind.css`, `/assets/icon.png`), never serves files no page references
+> `/tailwind.css`, `/assets/icons/glyph.png`), never serves files no page references
 > (`sitemap.xml`, `robots.txt`), 404s `/docs/`, and injects an HMR client. It's
 > a dev server for bundled apps, which this site isn't.
 

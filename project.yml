@@ -202,20 +202,6 @@ targets:
           cp "$SRCROOT/scripts/ghostty-shim.sh" "$SHIM_DIR/ghostty"
           chmod +x "$SHIM_DIR/ghostty"
 
-      # Re-render the legacy Contents/Resources/AppIcon.icns in the dark
-      # appearance. actool renders it from the LIGHT appearance and offers no
-      # way to say otherwise, so macOS 14/15 — which predate appearance-aware
-      # icons and read this file rather than the Assets.car — would otherwise
-      # get the light icon permanently. macOS 26 resolves through
-      # CFBundleIconName -> Assets.car and never reads it. See the script.
-      - name: "Darken legacy app icon"
-        basedOnDependencyAnalysis: false
-        script: |
-          set -e
-          "$SRCROOT/scripts/legacy-appicon.sh" \
-            "$SRCROOT/Macterm/AppIcon.icon" \
-            "$BUILT_PRODUCTS_DIR/$WRAPPER_NAME"
-
   # The bundled control CLI (`macterm`). Shares ControlProtocol.swift with the
   # app target so the wire codec can never drift between the two, and
   # SSHWrapper.swift so `macterm ssh` and the app promise the same terminfo

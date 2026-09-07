@@ -126,7 +126,7 @@ async function buildOgCard() {
 // icon's background plate would read as a plate rather than as the mark. The
 // glyph is full-bleed in its canvas (729 of 730px), so it needs no re-cropping.
 async function buildIcons() {
-  const input = join(SRC_DIR, "icon-glyph.png");
+  const input = join(SRC_DIR, "icons", "glyph.png");
   if (!existsSync(input)) {
     throw new Error(`build-images: ${input} is missing — no icons to build`);
   }
