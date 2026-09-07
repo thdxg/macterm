@@ -41,19 +41,23 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `status` | Liveness probe: version, pid, active project. Exits non-zero if no app is reachable. |
 | `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
 | `project create <path> [--name N] [--select]` | Add a project for a local directory or an scp-style `[user@]host:dir` [remote spec](/docs/remote-projects) (stored verbatim — a wrong host or dir surfaces in the pane). **Not idempotent** — each run adds a distinct project, even for a directory that already has one; check `project list` first if you want create-or-select. `--select` activates it — and, on first open, applies a matching [layout file](/docs/declarative-layouts). |
-| `project select <name\|uuid\|index>` | Make a project active. `pinned` (or the sentinel UUID) selects the pinned-tabs workspace; every `--project` selector accepts it too. |
+| `project select <name\|uuid\|index> [--window W]` | Make a project active — in the focused window, or in `--window` (index or id). `pinned` (or the sentinel UUID) selects the pinned-tabs workspace; every `--project` selector accepts it too. |
 | `project rename <project> <name>` | Rename a project — the same edit as the sidebar row's inline rename, so it touches `projects.json` only and never a [layout file](/docs/declarative-layouts). `Pinned` is reserved for the pinned-tabs workspace. |
 | `project remove <project> [--force]` | Remove a project, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. (Does not delete files on disk.) |
 | `tab list [--project P]` | Tabs of a project (default: active project). |
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
-| `tab select <tab>` | Activate a tab (`tab:3`, index, UUID, or exact title). |
+| `tab select <tab> [--window W]` | Activate a tab (`tab:3`, index, UUID, or exact title). `--window` selects it in that window; two windows on one project show different tabs, and a tab shown in another window moves here when the target is the focused window. |
 | `tab move <tab> <slot>` | Reorder a tab within its project. `slot` is the tab's **final** 1-based position in `tab list` order (so `tab move tab:4 2` makes it second). Out-of-range slots are an error, never a silent clamp. |
 | `tab rename <tab> [title] [--reset] [--project P]` | Rename a tab, or reset to the automatic default title with `--reset`. |
 | `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. Closing a pinned tab unloads it — sessions end, but its row and saved layout stay, and the next launch starts it again. |
+| `window list` | Open windows in creation order (`window:1`), each with its project, the tab it shows (`tabID`), sidebar width, and a focus marker. |
+| `window new` | Open another window on the project you were looking at. |
+| `window close [--window W]` | Close a window — the named one, else the focused one. The last visible window hides instead of closing. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |
 | `pane inspect [target]` | Read-only snapshot of a pane's terminal core: grid, cell/surface pixels, scrollback totals, content scale, foreground pid + argv. Needs a live surface. |
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text — the viewport, or the full scrollback with `--scrollback`. Pipeline-friendly (text only). |
 | `pane split [--direction right\|down\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the source's cwd. `auto` picks the longer on-screen axis. |
+| `pane mirror [--direction right\|down\|auto] [target]` | Show the same session in a second pane beside the target. Both render the live shell; the one driving the pty size is zmx's *leader* (focusing a mirror claims it), the other is dimmed. |
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way *from* the target — the same geometry the focus keybinds use. At the outermost edge it's a no-op, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |

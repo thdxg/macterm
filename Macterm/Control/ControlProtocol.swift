@@ -322,6 +322,10 @@ struct ControlWindowInfo: Codable, Equatable {
     var focused: Bool
     /// The window's sidebar width, which is per window (#345).
     var sidebarWidth: Double?
+    /// The tab this window shows in its project — per window, since two
+    /// windows on one project show different tabs (#345). Absent when the
+    /// window has none to show (every tab is on screen in another window).
+    var tabID: String?
 }
 
 struct ControlSessionInfo: Codable, Equatable {

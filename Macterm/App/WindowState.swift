@@ -29,6 +29,19 @@ final class WindowState: Identifiable {
     /// the whole point.
     var activeProjectID: UUID?
 
+    /// The tab this window shows for each project it has visited, keyed by
+    /// project id.
+    ///
+    /// Per window because a pane owns exactly one `NSView`, which can live in
+    /// one view hierarchy: two windows rendering the same tab fought over
+    /// every pane's view and the loser drew nothing. `Workspace.activeTabID`
+    /// stays the KEY window's selection — a mirror of this map, the same
+    /// shape as `AppState.activeProjectID` — so every "the tab the user is
+    /// working in" call site keeps working unchanged, and a window that loses
+    /// its tab to another window falls back through
+    /// `AppState.displayedTab(for:in:)`.
+    var activeTabIDs: [UUID: UUID] = [:]
+
     /// This window's sidebar width.
     ///
     /// Per window because the restore is ours to do — SwiftUI's own column
@@ -40,6 +53,17 @@ final class WindowState: Identifiable {
     /// Seeded from `Preferences.sidebarWidth`, which stays the app-wide
     /// default a NEW window opens at.
     var sidebarWidth: Double
+
+    /// Presentation state that is one-per-window. These used to live on
+    /// `AppState`, which was the same thing with one window; with several,
+    /// every `MainWindow` rendered them, so ⌘K raised a palette in every
+    /// window, the New Remote Project sheet presented on all of them, and
+    /// toggling one sidebar toggled every sidebar. `AppState` keeps mirrors
+    /// of the key window's copy for the app-wide code paths (hotkeys, palette
+    /// commands, the CLI) that mean "the window the user is in".
+    var sidebarVisible = true
+    var isCommandPaletteVisible = false
+    var isNewRemoteProjectSheetPresented = false
 
     init(activeProjectID: UUID? = nil, sidebarWidth: Double? = nil) {
         self.activeProjectID = activeProjectID

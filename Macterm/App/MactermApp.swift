@@ -682,20 +682,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         terminalWindows.contains { $0 === window }
     }
 
-    /// Close the window the user is in — really close it, unless it is the
-    /// last visible one, which hides instead. That is the invariant the red
-    /// close button has always kept: surfaces and their running processes
-    /// outlive a hidden window, and an app with a Dock icon and no window at
-    /// all is the #241 dead end.
+    /// Whether closing `window` should HIDE it instead: only when it is the
+    /// last visible terminal window.
+    ///
+    /// The one close policy, shared by the red close button
+    /// (`windowShouldClose`), ⌘⇧W and the CLI. Hiding preserves surfaces and
+    /// their running processes, and an app with a Dock icon and no window at
+    /// all is the #241 dead end — but hiding is only right for the LAST
+    /// window. The red button used to hide every window, and a hidden second
+    /// window was a zombie: still registered (no `onDisappear` on `orderOut`),
+    /// still persisted and reopened at the next launch, absent from the Window
+    /// menu, and unreachable by Show Window and `reopenIfNeeded`, which both
+    /// stop at `mainWindow`.
+    func hidesInsteadOfClosing(_ window: NSWindow) -> Bool {
+        !terminalWindows.contains { $0.isVisible && $0 !== window }
+    }
+
+    func closeTerminalWindow(_ window: NSWindow) {
+        if hidesInsteadOfClosing(window) {
+            window.orderOut(nil)
+        } else {
+            window.close()
+        }
+    }
+
+    /// Close the window the user is in.
+    ///
+    /// "The user is in" comes from the app's own key-window record first, not
+    /// `NSApp.keyWindow`: that is nil whenever the app is inactive, which is
+    /// exactly the state a CLI call from another terminal finds it in.
     func closeFocusedTerminalWindow() {
         let visible = terminalWindows.filter(\.isVisible)
-        guard let target = visible.first(where: { $0 === NSApp.keyWindow }) ?? visible.first
+        let recorded = appState?.keyWindow.flatMap { appState?.nsWindow(for: $0) }
+        guard let target = recorded.flatMap({ candidate in visible.first { $0 === candidate } })
+            ?? visible.first(where: { $0 === NSApp.keyWindow })
+            ?? visible.first
         else { return }
-        if visible.count > 1 {
-            target.close()
-        } else {
-            target.orderOut(nil)
-        }
+        closeTerminalWindow(target)
     }
 
     /// Could `window` be the terminal window?
@@ -934,6 +957,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func reopenIfNeeded() {
         // If the terminal window is already visible, nothing to do.
         if let cached = mainWindow, cached.isVisible {
+            return
+        }
+        // Any visible terminal window means the app has a window; activation
+        // must not resurrect a hidden one beside it (#345). Hiding is now
+        // reserved for the LAST visible window, but a window hidden by an
+        // older build can still be around, and re-fronting it on every
+        // Cmd-Tab back to the app was what "closing a window, switching apps
+        // and coming back restores it" looked like.
+        if let appState, appState.appDelegate?.terminalWindows.contains(where: \.isVisible) == true {
             return
         }
         // No cached pointer yet (terminal window never became main): fall back

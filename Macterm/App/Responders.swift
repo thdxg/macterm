@@ -364,6 +364,12 @@ final class MainAppResponder: KeyResponder {
             .pinTab,
             .unpinTab,
             .closeTab,
+            // New Window is dispatched here like the others. A hardcoded
+            // "Cmd+N re-fronts the single window" fallback used to sit below
+            // this loop, from before multi-window; it answered `.handled` and
+            // so swallowed the chord before the File menu's New Window item —
+            // the only thing that opened a window — ever saw it.
+            .newWindow,
         ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
@@ -371,16 +377,6 @@ final class MainAppResponder: KeyResponder {
             let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
             guard let run = command.action(in: ctx) else { return .passThrough }
             run()
-            return .handled
-        }
-
-        // Cmd+N re-fronts the single window (SwiftUI's "New Window" is replaced
-        // by "Show Window"). Checked AFTER the configurable hotkeys — same
-        // rationale as Cmd+1-9 below — so a user who rebinds an action to cmd+n
-        // wins over this fixed fallback instead of being silently shadowed.
-        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
-            mainWindow?.makeKeyAndOrderFront(nil)
-            NSApp.activate()
             return .handled
         }
 

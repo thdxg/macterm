@@ -52,6 +52,14 @@ struct WindowSnapshot: Codable {
     /// The window's sidebar width. Optional so a snapshot written before this
     /// existed decodes as nil, and the window opens at the app-wide default.
     var sidebarWidth: Double?
+    /// Whether this was the key window at save time, so a relaunch fronts the
+    /// window the user was in rather than the last one to open. Optional for
+    /// the same reason; nil means "no preference".
+    var isKey: Bool?
+    /// The tab this window was showing in `activeProjectID`. Per window since
+    /// two windows on one project show different tabs (#345); nil falls back
+    /// to the workspace's own `activeTabID`.
+    var activeTabID: UUID?
 }
 
 // MARK: - Snapshot types

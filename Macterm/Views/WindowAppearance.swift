@@ -406,14 +406,30 @@ enum WindowAppearance {
     /// Once per launch, on the first `sync` that finds a split view laid out —
     /// from then on the column carries SwiftUI's in-session metric, which a
     /// user drag owns and which the peek's expand restores.
-    /// Windows whose sidebar width has already been restored, and the width
-    /// each is waiting for.
+    /// Per-window sidebar bookkeeping: whether the width has been restored,
+    /// the width it is waiting for, and its autosave slot.
     ///
-    /// Both were a single app-wide flag and a single stored width, so only the
-    /// FIRST window ever restored and every other opened at SwiftUI's
-    /// content-derived default (#345).
-    private static var restoredSidebarWidthWindows: Set<ObjectIdentifier> = []
-    private static var pendingSidebarWidths: [ObjectIdentifier: () -> CGFloat] = [:]
+    /// These were a single app-wide flag and a single stored width, so only
+    /// the FIRST window ever restored and every other opened at SwiftUI's
+    /// content-derived default (#345). Keyed weakly by the window itself, not
+    /// by `ObjectIdentifier`: an identifier is an address, and a closed
+    /// window's address can be handed to the next window allocated — which
+    /// would then read as already restored, or inherit a slot, if the forget
+    /// path had not run. A weak-keyed table drops the record with the window.
+    private final class SidebarRecord {
+        var restored = false
+        var pendingWidth: (() -> CGFloat)?
+        var autosaveSlot: Int?
+    }
+
+    private static let sidebarRecords = NSMapTable<NSWindow, SidebarRecord>.weakToStrongObjects()
+
+    private static func sidebarRecord(for window: NSWindow) -> SidebarRecord {
+        if let existing = sidebarRecords.object(forKey: window) { return existing }
+        let record = SidebarRecord()
+        sidebarRecords.setObject(record, forKey: window)
+        return record
+    }
 
     /// Tell `sync` what width this window should come up at.
     ///
@@ -428,9 +444,9 @@ enum WindowAppearance {
     /// styled. `isAwaitingSidebarWidthRestore` closes that off at the source
     /// instead, so there is nothing to freeze against.
     static func armSidebarWidthRestore(for window: NSWindow, width: @escaping () -> CGFloat) {
-        let key = ObjectIdentifier(window)
-        guard !restoredSidebarWidthWindows.contains(key) else { return }
-        pendingSidebarWidths[key] = width
+        let record = sidebarRecord(for: window)
+        guard !record.restored else { return }
+        record.pendingWidth = width
     }
 
     /// Whether `window` is still waiting to have its sidebar width applied.
@@ -440,14 +456,11 @@ enum WindowAppearance {
     /// default it is meant to replace.
     static func isAwaitingSidebarWidthRestore(for window: NSWindow?) -> Bool {
         guard let window else { return false }
-        return pendingSidebarWidths[ObjectIdentifier(window)] != nil
+        return sidebarRecords.object(forKey: window)?.pendingWidth != nil
     }
 
     static func forgetSidebarWidthRestore(for window: NSWindow) {
-        let key = ObjectIdentifier(window)
-        restoredSidebarWidthWindows.remove(key)
-        pendingSidebarWidths.removeValue(forKey: key)
-        sidebarAutosaveSlots.removeValue(forKey: key)
+        sidebarRecords.removeObject(forKey: window)
     }
 
     /// The actual native sidebar state after AppKit has restored its split-view
@@ -462,9 +475,9 @@ enum WindowAppearance {
     }
 
     private static func restoreSidebarWidth(window: NSWindow) {
-        let key = ObjectIdentifier(window)
-        guard !restoredSidebarWidthWindows.contains(key),
-              let pending = pendingSidebarWidths[key],
+        guard let record = sidebarRecords.object(forKey: window),
+              !record.restored,
+              let pending = record.pendingWidth,
               let split = window.contentView?.firstSplitView,
               split.arrangedSubviews.count > 1,
               let sidebar = split.owningSplitViewController?.splitViewItems.first
@@ -472,8 +485,8 @@ enum WindowAppearance {
         // Consumed as soon as the split view exists, collapsed or not. `sync`
         // also runs on every window-became-main, so an arm left standing would
         // later snap a width the user had since dragged.
-        restoredSidebarWidthWindows.insert(key)
-        pendingSidebarWidths.removeValue(forKey: key)
+        record.restored = true
+        record.pendingWidth = nil
         pinSidebarAutosaveName(split: split, window: window)
         // A sidebar the user left hidden must stay hidden: moving divider 0 on
         // a collapsed item is what would pop it open on every launch. Showing
@@ -599,18 +612,19 @@ enum WindowAppearance {
     ///
     /// Slots colliding across windows would matter if AppKit's autosave were
     /// the restore path. It is not — `restoreSidebarWidth` is — so this is
-    /// hygiene either way.
-    private static var sidebarAutosaveSlots: [ObjectIdentifier: Int] = [:]
-
+    /// hygiene either way. Stored on the window's `SidebarRecord`.
     private static func sidebarAutosaveSlot(for window: NSWindow) -> Int {
-        let key = ObjectIdentifier(window)
-        if let existing = sidebarAutosaveSlots[key] { return existing }
-        let taken = Set(sidebarAutosaveSlots.values)
+        let record = sidebarRecord(for: window)
+        if let existing = record.autosaveSlot { return existing }
+        var taken: Set<Int> = []
+        for case let other as SidebarRecord in sidebarRecords.objectEnumerator() ?? NSEnumerator() {
+            if let slot = other.autosaveSlot { taken.insert(slot) }
+        }
         var slot = 0
         while taken.contains(slot) {
             slot += 1
         }
-        sidebarAutosaveSlots[key] = slot
+        record.autosaveSlot = slot
         return slot
     }
 

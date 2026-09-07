@@ -324,7 +324,7 @@ struct SidebarContent: View {
                 Menu {
                     Button("Local Folder…") { openProject() }
                     Button("Remote Machine…") {
-                        appState.isNewRemoteProjectSheetPresented = true
+                        windowState.isNewRemoteProjectSheetPresented = true
                     }
                 } label: {
                     Label("New Project", systemImage: "plus")
@@ -368,7 +368,7 @@ struct SidebarContent: View {
             case let .tab(projectID, tabID):
                 if let project = projectStore.projects.first(where: { $0.id == projectID }) {
                     appState.selectProject(project, in: windowState)
-                    appState.selectTab(tabID, projectID: projectID)
+                    appState.selectTab(tabID, projectID: projectID, in: windowState)
                 }
             }
         }
@@ -613,7 +613,8 @@ struct SidebarContent: View {
 
     private var activeTabID: UUID? {
         guard let pid = windowState.activeProjectID else { return nil }
-        return appState.workspaces[pid]?.activeTabID
+        // This window's tab, not the workspace's: that is the key window's.
+        return appState.displayedTab(for: pid, in: windowState)?.id
     }
 
     /// Apply a tab drag-and-drop. `index` is the insertion slot within the
@@ -681,8 +682,7 @@ struct SidebarContent: View {
 
     private func syncSelection() {
         guard let pid = windowState.activeProjectID,
-              let ws = appState.workspaces[pid],
-              let tabID = ws.activeTabID
+              let tabID = activeTabID
         else {
             presentation.selection = windowState.activeProjectID.map { [.project($0)] } ?? []
             return
@@ -721,7 +721,7 @@ struct SidebarContent: View {
             // Right-click on empty space.
             Menu("New Project") {
                 Button("Local Folder…") { openProject() }
-                Button("Remote Machine…") { appState.isNewRemoteProjectSheetPresented = true }
+                Button("Remote Machine…") { windowState.isNewRemoteProjectSheetPresented = true }
             }
         }
     }
@@ -929,12 +929,12 @@ struct SidebarContent: View {
     }
 
     private func requestProjectRename(_ projectID: UUID) {
-        appState.sidebarVisible = true
+        windowState.sidebarVisible = true
         DispatchQueue.main.async { appState.renamingProjectID = projectID }
     }
 
     private func requestTabRename(_ tabID: UUID) {
-        appState.sidebarVisible = true
+        windowState.sidebarVisible = true
         DispatchQueue.main.async { appState.renamingTabID = tabID }
     }
 }

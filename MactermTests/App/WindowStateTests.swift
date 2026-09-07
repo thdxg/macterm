@@ -160,6 +160,328 @@ struct WindowStateTests {
         #expect(b.sidebarWidth == 320)
     }
 
+    // MARK: - Per-window presentation state
+
+    @Test
+    func presentation_flags_belong_to_the_key_window() {
+        // The palette, the sidebar and the remote-project sheet used to be
+        // app-wide, so every window rendered them. The AppState properties are
+        // now mirrors of the key window's copy.
+        let state = makeAppState()
+        let a = WindowState()
+        let b = WindowState()
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+
+        state.isCommandPaletteVisible = true
+        #expect(a.isCommandPaletteVisible)
+        #expect(!b.isCommandPaletteVisible)
+
+        state.sidebarVisible = false
+        #expect(!a.sidebarVisible)
+        #expect(b.sidebarVisible)
+
+        state.noteKeyWindow(b)
+        #expect(!state.isCommandPaletteVisible, "the mirror reads the new key window")
+        #expect(state.sidebarVisible)
+    }
+
+    // MARK: - Windows and termination
+
+    @Test
+    func windows_are_not_unregistered_while_terminating() {
+        // Quit closes every window; each teardown used to unregister and save,
+        // so the termination snapshot was rewritten with one window fewer per
+        // close and a relaunch brought back only one.
+        let state = makeAppState()
+        let a = WindowState()
+        let b = WindowState()
+        state.registerWindow(a)
+        state.registerWindow(b)
+
+        AppTerminationState.isTerminating = true
+        defer { AppTerminationState.isTerminating = false }
+        state.unregisterWindow(b)
+
+        #expect(state.windows.count == 2)
+    }
+
+    @Test
+    func the_key_window_is_recorded_in_the_snapshot() {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let store = WorkspaceStore(fileURL: tmp)
+        let state = AppState(workspaceStore: store, projectFiles: ProjectFileStore(directoryURL: projects))
+        let project = Project(name: "p", path: "/tmp", sortOrder: 0)
+        state.restoreSelection(projects: [project])
+        state.selectProject(project)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(b)
+
+        state.saveWorkspaces()
+
+        let saved = store.load().windows
+        #expect(saved.map(\.isKey) == [false, true])
+    }
+
+    @Test
+    func vacating_a_project_clears_every_window_showing_it() {
+        // Unload tears the shells down; a window still showing the project
+        // would respawn them on the spot through its live surfaces.
+        let state = makeAppState()
+        let project = Project(name: "p", path: "/tmp", sortOrder: 0)
+        state.restoreSelection(projects: [project])
+        state.selectProject(project)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+
+        state.unloadProject(project.id)
+
+        #expect(a.activeProjectID == nil)
+        #expect(b.activeProjectID == nil)
+        #expect(state.activeProjectID == nil)
+    }
+
+    @Test
+    func revealing_a_project_prefers_the_window_already_showing_it() {
+        // A notification click or CLI focus for project Q while the user is in
+        // a window on P must front Q's window, not repoint P's.
+        let state = makeAppState()
+        let p = UUID()
+        let q = UUID()
+        let onP = WindowState(activeProjectID: p)
+        let onQ = WindowState(activeProjectID: q)
+        state.registerWindow(onP)
+        state.registerWindow(onQ)
+        state.noteKeyWindow(onP)
+
+        state.revealProject(q)
+
+        #expect(onP.activeProjectID == p, "the window the user was in keeps its project")
+        #expect(state.keyWindowID == onQ.id)
+        #expect(state.activeProjectID == q)
+    }
+
+    @Test
+    func revealing_an_unshown_project_takes_the_key_window() {
+        let state = makeAppState()
+        let p = UUID()
+        let q = UUID()
+        let window = WindowState(activeProjectID: p)
+        state.registerWindow(window)
+        state.noteKeyWindow(window)
+
+        state.revealProject(q)
+
+        #expect(window.activeProjectID == q)
+    }
+
+    // MARK: - Per-window tab selection
+
+    /// A project with `count` tabs, selected in `state`.
+    private func seedProject(_ state: AppState, tabs count: Int) throws -> (Project, Workspace) {
+        let project = Project(name: "p", path: "/tmp", sortOrder: 0)
+        state.restoreSelection(projects: [project])
+        state.selectProject(project)
+        let ws = try #require(state.workspaces[project.id])
+        for _ in 1 ..< count {
+            _ = ws.createTab(projectPath: "/tmp")
+        }
+        return (project, ws)
+    }
+
+    @Test
+    func two_windows_on_one_project_never_display_the_same_tab() throws {
+        // A pane owns one NSView, which can live in one hierarchy: two windows
+        // rendering the same tab fought over every view and the loser drew
+        // nothing — the reported blank second window.
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 2)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+
+        let shownA = try #require(state.displayedTab(for: project.id, in: a))
+        let shownB = try #require(state.displayedTab(for: project.id, in: b))
+        #expect(shownA.id == ws.activeTabID, "the key window shows the workspace's active tab")
+        #expect(shownA.id != shownB.id)
+    }
+
+    @Test
+    func a_window_with_no_free_tab_displays_nothing() throws {
+        let state = makeAppState()
+        let (project, _) = try seedProject(state, tabs: 1)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+
+        #expect(state.displayedTab(for: project.id, in: a) != nil)
+        #expect(state.displayedTab(for: project.id, in: b) == nil)
+    }
+
+    @Test
+    func the_key_window_takes_the_workspaces_tab_and_the_other_yields() throws {
+        // Steal semantics: selecting, in the key window, the tab a background
+        // window shows moves it here and the other window falls back.
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 2)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let bTab = try #require(state.displayedTab(for: project.id, in: b))
+
+        state.selectTab(bTab.id, projectID: project.id)
+
+        #expect(ws.activeTabID == bTab.id)
+        #expect(state.displayedTab(for: project.id, in: a)?.id == bTab.id)
+        #expect(state.displayedTab(for: project.id, in: b)?.id != bTab.id)
+    }
+
+    @Test
+    func switching_key_window_hands_the_workspace_tab_over_without_swapping() throws {
+        // Cmd-tab between two windows on one project must not swap their
+        // content: each keeps its own tab, and the workspace's active tab
+        // follows whichever is key.
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 2)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let aTab = try #require(state.displayedTab(for: project.id, in: a))
+        let bTab = try #require(state.displayedTab(for: project.id, in: b))
+
+        state.noteKeyWindow(b)
+        #expect(ws.activeTabID == bTab.id)
+        #expect(state.displayedTab(for: project.id, in: a)?.id == aTab.id)
+        #expect(state.displayedTab(for: project.id, in: b)?.id == bTab.id)
+
+        state.noteKeyWindow(a)
+        #expect(ws.activeTabID == aTab.id)
+        #expect(state.displayedTab(for: project.id, in: b)?.id == bTab.id)
+    }
+
+    @Test
+    func creating_a_tab_in_the_key_window_records_it_there() throws {
+        // Every writer of Workspace.activeTabID — create, close, cycle, the
+        // CLI — reaches the key window's record through the workspace hook.
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let a = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.noteKeyWindow(a)
+
+        let created = ws.createTab(projectPath: "/tmp")
+
+        #expect(a.activeTabIDs[project.id] == created.id)
+        #expect(state.displayedTab(for: project.id, in: a)?.id == created.id)
+    }
+
+    @Test
+    func a_background_window_selects_its_own_tab() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 3)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let before = ws.activeTabID
+        let third = ws.tabs[2]
+
+        state.selectTab(third.id, projectID: project.id, in: b)
+
+        #expect(ws.activeTabID == before, "a background selection leaves the key window alone")
+        #expect(state.displayedTab(for: project.id, in: b)?.id == third.id)
+    }
+
+    @Test
+    func mirroring_a_tab_attaches_every_session_a_second_time() throws {
+        // How the same work reaches two windows: the tab renders once, but its
+        // sessions can be attached any number of times.
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let source = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let sourcePane = try #require(source.splitRoot.allPanes().first)
+        _ = try #require(state.splitPane(
+            sourcePane.id,
+            direction: .horizontal, projectID: project.id, projectDirectory: "/tmp"
+        ))
+        let sourceSessions = source.splitRoot.allPanes().map(\.sessionName)
+
+        let mirrorID = try #require(state.mirrorTab(source.id, projectID: project.id, in: b))
+        let mirror = try #require(ws.tabs.first { $0.id == mirrorID })
+
+        #expect(mirror.splitRoot.allPanes().map(\.sessionName) == sourceSessions)
+        #expect(mirror.splitRoot.allPanes().allSatisfy { $0.command == nil })
+        #expect(state.displayedTab(for: project.id, in: b)?.id == mirrorID)
+        #expect(ws.activeTabID == source.id, "the key window keeps its tab")
+        for pane in source.splitRoot.allPanes() {
+            #expect(state.isLeader(pane))
+        }
+        for pane in mirror.splitRoot.allPanes() {
+            #expect(!state.isLeader(pane))
+        }
+    }
+
+    @Test
+    func restored_windows_take_their_entries_in_order() {
+        // The FIFO: each restored window pops its own snapshot entry as it
+        // registers, so the second window gets the second project and so on.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+        let q = Project(name: "q", path: "/tmp/q", sortOrder: 1)
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.restoreSelection(projects: [p, q])
+        writer.selectProject(p)
+        writer.selectProject(q)
+        let w1 = WindowState(activeProjectID: p.id)
+        let w2 = WindowState(activeProjectID: q.id, sidebarWidth: 333)
+        writer.registerWindow(w1)
+        writer.registerWindow(w2)
+        writer.noteKeyWindow(w2)
+        writer.saveWorkspaces()
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.restoreSelection(projects: [p, q])
+        let first = WindowState()
+        reader.registerWindow(first)
+        reader.noteKeyWindow(first)
+        reader.restoreWindows(adopting: first)
+        let second = WindowState()
+        reader.registerWindow(second)
+
+        #expect(first.activeProjectID == p.id)
+        #expect(second.activeProjectID == q.id)
+        #expect(second.sidebarWidth == 333)
+    }
+
     @Test
     func one_window_state_per_nswindow() {
         // SwiftUI instantiates a view — and its @State — more than once per

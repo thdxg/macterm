@@ -406,8 +406,18 @@ final class Workspace: Identifiable {
             // Every selection path (select/peek/adopt/close) lands here — the
             // one funnel that wakes the adaptive foreground poll on tab switch.
             NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+            onActiveTabChanged?()
         }
     }
+
+    /// Fired after `activeTabID` changes, from the same funnel. `AppState`
+    /// installs it to keep the key window's own tab record in step (#345):
+    /// with several windows the active tab is the KEY window's selection, a
+    /// mirror of `WindowState.activeTabIDs`, and every writer above — create,
+    /// close, cycle, the CLI — has to reach that record without knowing about
+    /// windows.
+    @ObservationIgnored
+    var onActiveTabChanged: (() -> Void)?
 
     @ObservationIgnored
     private var tabHistory = RecencyStack<UUID>(limit: 50)

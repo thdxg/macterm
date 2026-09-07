@@ -364,6 +364,11 @@ final class GhosttyTerminalNSView: NSView {
 
     var onFocus: (() -> Void)?
     var onInteraction: (() -> Void)?
+    /// The user typed a key that will reach the pty. Narrower than
+    /// `onInteraction` (which also fires for clicks and scrolls): this is the
+    /// event zmx hands session leadership on, so `AppState` records the pane
+    /// as its session's leader from it (#345).
+    var onUserInput: (() -> Void)?
     /// Bool is best-effort evidence that the submitted prompt contained text.
     ///
     /// CALL ORDER: every path that reports a submission fires `onInteraction`
@@ -1019,6 +1024,11 @@ final class GhosttyTerminalNSView: NSView {
         }
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // What zmx will count as user input: a key that reaches the pty. Cmd
+        // chords are either app shortcuts or encode to nothing, so they are
+        // left out; everything else is close enough to the daemon's own
+        // `isUserInput` rule for the leadership record it feeds (#345).
+        if !flags.contains(.command), !isAppShortcut(event) { onUserInput?() }
         if TerminalCommandSubmission.clearsInputEvidence(
             keyCode: event.keyCode,
             hasControl: flags.contains(.control),
@@ -1587,10 +1597,7 @@ extension GhosttyTerminalNSView {
         onInteraction?()
         recordCommandInput(text)
         text.withCString { ptr in
-            var ke = ghostty_input_key_s()
-            ke.action = GHOSTTY_ACTION_PRESS
-            ke.text = ptr
-            _ = ghostty_surface_key(surface, ke)
+            _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
         }
         if TerminalCommandSubmission.textContainsNewline(text) {
             let hasContent = consumeCommandSubmissionEvidence()
@@ -1743,13 +1750,42 @@ extension GhosttyTerminalNSView {
     private func sendControlSequence(_ sequence: String) -> Bool {
         guard let surface, !sequence.isEmpty else { return false }
         sequence.withCString { ptr in
-            var ke = ghostty_input_key_s()
-            ke.action = GHOSTTY_ACTION_PRESS
-            ke.text = ptr
-            _ = ghostty_surface_key(surface, ke)
+            _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
         }
         return true
     }
+
+    /// A key event that carries ONLY text — the shape `sendText` and the
+    /// leadership claim ride on.
+    ///
+    /// The keycode is set to a value no physical key has, not left at zero. A
+    /// zero-initialised `ghostty_input_key_s` has `keycode == 0`, and on macOS
+    /// virtual keycode 0 is the `A` key (`kVK_ANSI_A`; libghostty's
+    /// `keycodes.zig` maps native `0x0000` to `key_a`), so every text-only
+    /// event used to reach libghostty as a *physical A press* whose text
+    /// happened to be a paste or a control sequence — visible to keybinding
+    /// lookup (an unmodified `a` binding would have swallowed a paste) and to
+    /// the inspector. `0xFFFF` is the table's own "no native code" marker, so
+    /// it resolves to `unidentified`. Encoding is unchanged either way: with no
+    /// kitty entry and no unshifted codepoint both encoders write the text
+    /// verbatim, which is the behaviour these callers rely on.
+    ///
+    /// What this does NOT avoid: libghostty treats any non-modifier key that
+    /// produced bytes as typing — it clears the selection
+    /// (`selection-clear-on-typing`) and scrolls the viewport to the bottom
+    /// (`scroll-to-bottom = keystroke`). That is right for `sendText`, which
+    /// is typing, and is why the leadership claim is sent only when leadership
+    /// actually moves (see `AppState.claimSessionLeadership`).
+    private static func textOnlyKeyEvent(_ text: UnsafePointer<CChar>) -> ghostty_input_key_s {
+        var ke = ghostty_input_key_s()
+        ke.action = GHOSTTY_ACTION_PRESS
+        ke.keycode = unidentifiedKeycode
+        ke.text = text
+        return ke
+    }
+
+    /// See `textOnlyKeyEvent`.
+    private static let unidentifiedKeycode: UInt32 = 0xFFFF
 
     var surfaceSize: ghostty_surface_size_s? {
         guard let surface else { return nil }

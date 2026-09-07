@@ -261,6 +261,13 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onInteraction = { [weak pane] in
             pane?.recordUserInteraction()
         }
+        // Typed input is what zmx moves leadership on, local or remote; the
+        // NSView has no back-reference to its Pane, so this is where the pane
+        // gets attached to the report (see `.terminalUserInput`).
+        view.onUserInput = { [weak pane] in
+            guard let pane else { return }
+            NotificationCenter.default.post(name: .terminalUserInput, object: pane.id)
+        }
         // Order matters: `onInteraction` clears the tracker's in-place start
         // arming that `onCommandSubmitted` sets, and the view calls them in
         // that order. See `GhosttyTerminalNSView.onCommandSubmitted`.

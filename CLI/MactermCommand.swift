@@ -247,13 +247,18 @@ struct WindowCommand: ParsableCommand {
 
     struct Close: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Close the focused window (the last one hides instead)."
+            abstract: "Close a window (the last visible one hides instead)."
         )
+
+        @Option(help: "Window to close (index or id). Defaults to the focused window.")
+        var window: String?
 
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
-            try runControlCommand(command: "window.close", args: ControlArgs(), options: options)
+            var args = ControlArgs()
+            args.window = window
+            try runControlCommand(command: "window.close", args: args, options: options)
         }
     }
 }
@@ -349,14 +354,15 @@ struct TabCommand: ParsableCommand {
         @Option(help: "Project scope. Defaults to the active project.")
         var project: String?
 
+        @Option(help: "Window to select it in (index or id). Defaults to the focused window.")
+        var window: String?
+
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
-            try runControlCommand(
-                command: "tab.select",
-                args: ControlArgs(project: project, tab: tab),
-                options: options
-            )
+            var args = ControlArgs(project: project, tab: tab)
+            args.window = window
+            try runControlCommand(command: "tab.select", args: args, options: options)
         }
     }
 

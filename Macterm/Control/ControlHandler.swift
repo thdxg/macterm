@@ -70,7 +70,7 @@ final class ControlHandler {
         case "tab.close": return try tabClose(args)
         case "window.list": return windowList()
         case "window.new": return windowNew()
-        case "window.close": return windowClose()
+        case "window.close": return try windowClose(args)
         case "pane.list": return try paneList(args)
         case "pane.inspect": return try paneInspect(args)
         case "pane.dump": return try paneDump(args)
@@ -166,7 +166,9 @@ final class ControlHandler {
                 projectID: window.activeProjectID?.uuidString,
                 project: windowProjectName(window.activeProjectID),
                 focused: appState.keyWindowID == window.id,
-                sidebarWidth: window.sidebarWidth
+                sidebarWidth: window.sidebarWidth,
+                tabID: window.activeProjectID
+                    .flatMap { appState.displayedTab(for: $0, in: window)?.id.uuidString }
             )
         }
         return ControlData(windows: infos)
@@ -202,8 +204,14 @@ final class ControlHandler {
         return ControlData()
     }
 
-    private func windowClose() -> ControlData {
-        appState.appDelegate?.closeFocusedTerminalWindow()
+    /// `--window` names the window; without it, the one `window list` reports
+    /// as focused. Resolved through `AppState`'s registry rather than
+    /// `NSApp.keyWindow`, which is nil whenever the app is inactive — exactly
+    /// the state a CLI call from another terminal finds it in — and would
+    /// otherwise fall back to closing the first window while `window list`
+    /// said a different one was focused.
+    private func windowClose(_ args: ControlArgs) throws -> ControlData {
+        try appState.closeWindow(resolveWindow(args))
         return ControlData()
     }
 
@@ -516,7 +524,13 @@ final class ControlHandler {
         }
         let (project, workspace) = try resolveWorkspace(args)
         let (index, tab) = try resolveTab(args, in: workspace)
-        appState.selectTab(tab.id, projectID: project.id)
+        // `--window` selects in that window's own tab record (#345); without
+        // it, the workspace's active tab — the key window's.
+        if let window = try resolveWindow(args) {
+            appState.selectTab(tab.id, projectID: project.id, in: window)
+        } else {
+            appState.selectTab(tab.id, projectID: project.id)
+        }
         return ControlData(tabs: [tabInfo(tab, index: index, in: workspace)])
     }
 
@@ -1278,19 +1292,13 @@ final class ControlHandler {
     /// iteration order, so `session list` reported an arbitrary one of the
     /// panes and dropped the rest (#345).
     private func paneIDsBySessionName() -> [String: [String]] {
-        var map: [String: [Pane]] = [:]
-        for workspace in appState.workspaces.values {
-            for tab in workspace.tabs {
-                for pane in tab.splitRoot.allPanes() {
-                    map[pane.sessionName, default: []].append(pane)
-                }
-            }
-        }
+        // One traversal for the whole table: `isLeader(_:)` alone re-walks
+        // every workspace per call, which made this quadratic in pane count.
         // A stable partition, not `sorted`: "leader first" is not a strict
         // weak ordering, and Swift's sort is undefined for one.
-        return map.mapValues { panes in
-            let leading = panes.filter { appState.isLeader($0) }
-            let following = panes.filter { !appState.isLeader($0) }
+        appState.sessionAttachments().mapValues { panes in
+            let leading = panes.filter { appState.isLeader($0, among: panes) }
+            let following = panes.filter { !appState.isLeader($0, among: panes) }
             return (leading + following).map(\.id.uuidString)
         }
     }
