@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.26.0 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li>Macterm can open several windows, each on its own project: New Window on Cmd+N, Cmd+Shift+W to close one, and quitting and relaunching brings them all back on the projects they were showing. (#353, #359)</li>
+<li>Selecting a tab another window already shows now gives you a live second view of it instead of a blank pane, and a window that isn't driving the shells says so — click it to work there. (#362, #366)</li>
+<li><code class="notranslate">macterm pane mirror</code> opens a second pane onto an existing pane's shell, so one session shows in two views; the view that isn't driving the size is dimmed until you click it. (#348, #349, #350, #352)</li>
+<li>Each window keeps its own sidebar width and visibility, and its own adaptive terminal tint. (#356, #364)</li>
+<li>New window commands: <code class="notranslate">macterm window list</code>, <code class="notranslate">window close</code> and <code class="notranslate">window focus</code>, plus <code class="notranslate">--window</code> on <code class="notranslate">tab select</code> and <code class="notranslate">project select</code>. (#359, #366)</li>
+<li>A new app icon — a four-quadrant split-pane mark on a dark plate. (#363, #367)</li>
+<li>Hovering a project row in the sidebar shows a plus button that opens a new tab in that project. It can be turned off in Settings → Appearance. (#331)</li>
+<li>The terminal context menu now offers Jump to Top and Jump to Bottom, each disabled when you are already at that edge. (#338)</li>
+<li>The sidebar starts at 220 points wide instead of 180, so ordinary project and tab names stop fading early. A width you have already set is left alone. (#357)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li>A translucent window no longer looks more opaque when it loses focus. (#351)</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> and <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/nabilfreeman/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/nabilfreeman">@nabilfreeman</a> for this release.</p>
+</body>
+</html>
