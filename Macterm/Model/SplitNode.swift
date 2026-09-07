@@ -79,6 +79,37 @@ final class SplitBranch: Identifiable {
 
 @MainActor
 extension SplitNode {
+    /// The same tree with every pane replaced by a mirror of it — a second
+    /// pane on the same zmx session (#345). Ratios and directions are copied;
+    /// the mirrors are new `Pane`s with fresh views, so the result can render
+    /// in a different window from the original.
+    func mirrored() -> SplitNode {
+        switch self {
+        case let .pane(pane):
+            .pane(Pane(mirroring: pane))
+        case let .split(branch):
+            .split(SplitBranch(
+                direction: branch.direction,
+                ratio: branch.ratio,
+                first: branch.first.mirrored(),
+                second: branch.second.mirrored()
+            ))
+        }
+    }
+
+    /// Structure plus sessions, ignoring ratios: what a mirror view has to
+    /// match to keep rendering this tree without being rebuilt. A divider drag
+    /// changes ratios only and must not throw the mirrors away.
+    var shapeSignature: String {
+        switch self {
+        case let .pane(pane):
+            return pane.sessionName
+        case let .split(branch):
+            let axis = branch.direction == .horizontal ? "H" : "V"
+            return "\(axis)(\(branch.first.shapeSignature),\(branch.second.shapeSignature))"
+        }
+    }
+
     func splitting(
         paneID: UUID,
         direction: SplitDirection,

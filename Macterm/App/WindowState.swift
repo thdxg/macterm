@@ -38,9 +38,19 @@ final class WindowState: Identifiable {
     /// stays the KEY window's selection — a mirror of this map, the same
     /// shape as `AppState.activeProjectID` — so every "the tab the user is
     /// working in" call site keeps working unchanged, and a window that loses
-    /// its tab to another window falls back through
-    /// `AppState.displayedTab(for:in:)`.
+    /// its tab to another window renders a mirror view of it instead
+    /// (`AppState.viewTab(for:in:)`).
     var activeTabIDs: [UUID: UUID] = [:]
+
+    /// Mirror views this window renders of tabs another window owns, keyed by
+    /// the real tab's id (#345). A pane's NSView lives in one window, so when
+    /// two windows select one tab the second gets a tab of mirror panes in the
+    /// same shape — the same sessions, attached a second time — built and
+    /// rebuilt by `AppState.shadow(of:for:)` as the real tab changes shape.
+    /// Unobserved on purpose: it is written while rendering, and the real
+    /// tab's structure (which IS observed) is what drives re-evaluation.
+    @ObservationIgnored
+    var shadowTabs: [UUID: TerminalTab] = [:]
 
     /// This window's sidebar width.
     ///

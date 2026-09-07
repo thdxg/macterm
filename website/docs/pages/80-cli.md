@@ -46,11 +46,11 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `project remove <project> [--force]` | Remove a project, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. (Does not delete files on disk.) |
 | `tab list [--project P]` | Tabs of a project (default: active project). |
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
-| `tab select <tab> [--window W]` | Activate a tab (`tab:3`, index, UUID, or exact title). `--window` selects it in that window; two windows on one project show different tabs, and a tab shown in another window moves here when the target is the focused window. |
+| `tab select <tab> [--window W]` | Activate a tab (`tab:3`, index, UUID, or exact title). `--window` selects it in that window. Two windows on one project keep independent selections; a window that selects a tab another window already shows renders a mirror view of it (same sessions, attached twice). |
 | `tab move <tab> <slot>` | Reorder a tab within its project. `slot` is the tab's **final** 1-based position in `tab list` order (so `tab move tab:4 2` makes it second). Out-of-range slots are an error, never a silent clamp. |
 | `tab rename <tab> [title] [--reset] [--project P]` | Rename a tab, or reset to the automatic default title with `--reset`. |
 | `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. Closing a pinned tab unloads it — sessions end, but its row and saved layout stay, and the next launch starts it again. |
-| `window list` | Open windows in creation order (`window:1`), each with its project, the tab it shows (`tabID`), sidebar width, and a focus marker. |
+| `window list` | Open windows in creation order (`window:1`), each with its project, the tab it shows (`tabID`, plus `mirrored` when another window owns that tab's panes), sidebar width, and a focus marker. |
 | `window new` | Open another window on the project you were looking at. |
 | `window close [--window W]` | Close a window — the named one, else the focused one. The last visible window hides instead of closing. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |

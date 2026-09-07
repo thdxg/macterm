@@ -330,11 +330,6 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        if HotkeyRegistry.matches(event, action: .closeWindow) {
-            mainWindow?.orderOut(nil)
-            return .handled
-        }
-
         if HotkeyRegistry.matches(event, action: .openProject) {
             _ = appState.openProject(store: projectStore)
             return .handled
@@ -370,6 +365,13 @@ final class MainAppResponder: KeyResponder {
             // so swallowed the chord before the File menu's New Window item —
             // the only thing that opened a window — ever saw it.
             .newWindow,
+            // Close Window likewise: the responder used to answer it with
+            // `mainWindow?.orderOut(nil)`, which HID the first window whatever
+            // window the user was in — and a hidden window stays registered
+            // and persisted, which is how quitting with one window on screen
+            // brought two back. `AppCommand.closeWindow` closes the focused
+            // window under the one close policy.
+            .closeWindow,
         ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })

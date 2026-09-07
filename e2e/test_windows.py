@@ -142,31 +142,30 @@ def test_a_window_reports_its_own_sidebar_width(app):
         assert 100 <= width <= 500, f"width out of any sane range: {width}"
 
 
-def test_two_windows_on_one_project_show_different_tabs(app, fresh_tab):
-    """A pane's NSView can live in one window, so two windows on the same
-    project must never render the same tab — the second used to come up blank.
-    `window list` reports each window's own tab; they must differ, and each
-    must be a real tab of the project."""
+def test_two_windows_on_one_tab_mirror_it(app, fresh_tab):
+    """A pane's NSView can live in one window, so two windows on the same tab
+    must not fight over it — the second used to come up blank. Instead the
+    second window renders a mirror view: `window list` reports the same tab
+    for both, with exactly one marked `mirrored`."""
     before = len(_windows(app))
     try:
         app.cli("window", "new")
         wait_for(lambda: len(_windows(app)) == before + 1, timeout=30, message="the new window")
-        # Put the new window on the same project the first one shows.
         first = _windows(app)[0]
         if first.get("projectID"):
             app.cli("project", "select", first["projectID"], "--window", str(before + 1))
-        time.sleep(1)
+        app.cli("tab", "select", fresh_tab["id"], "--window", str(before + 1))
 
-        def distinct():
-            tabs = [w.get("tabID") for w in _windows(app)[: before + 1]]
-            return tabs if all(tabs) and len(set(tabs)) == len(tabs) else None
+        def mirrored_pair():
+            windows = _windows(app)[: before + 1]
+            tabs = {w.get("tabID") for w in windows}
+            mirrored = [w for w in windows if w.get("mirrored")]
+            return windows if tabs == {fresh_tab["id"]} and len(mirrored) == 1 else None
 
         deadline = time.time() + 15
-        while distinct() is None and time.time() < deadline:
+        while mirrored_pair() is None and time.time() < deadline:
             time.sleep(0.5)
         windows = _windows(app)
-        tabs = [w.get("tabID") for w in windows[: before + 1]]
-        assert all(tabs), f"every window must show a tab: {windows}"
-        assert len(set(tabs)) == len(tabs), f"windows must not share a tab: {windows}"
+        assert mirrored_pair() is not None, f"one real view and one mirror expected: {windows}"
     finally:
         _close_extra_windows(app, before)

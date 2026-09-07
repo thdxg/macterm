@@ -11,6 +11,11 @@ final class TerminalTab: Identifiable {
     /// itself is untouched — clearing this restores the full layout.
     /// Transient: not persisted across launches.
     var zoomedPaneID: UUID?
+    /// For a mirror view of another tab (#345): the `shapeSignature` of the
+    /// real tab it was built from, so `AppState.shadow(of:for:)` can tell a
+    /// still-matching mirror from one the real tab has outgrown.
+    @ObservationIgnored
+    var mirrorShape: String?
     /// Most-recent-first stack of previously focused pane IDs
     /// (excludes the currently focused pane).
     @ObservationIgnored

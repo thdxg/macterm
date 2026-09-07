@@ -168,7 +168,9 @@ final class ControlHandler {
                 focused: appState.keyWindowID == window.id,
                 sidebarWidth: window.sidebarWidth,
                 tabID: window.activeProjectID
-                    .flatMap { appState.displayedTab(for: $0, in: window)?.id.uuidString }
+                    .flatMap { appState.selectedTab(for: $0, in: window)?.id.uuidString },
+                mirrored: window.activeProjectID
+                    .flatMap { appState.viewTab(for: $0, in: window)?.isMirror }
             )
         }
         return ControlData(windows: infos)

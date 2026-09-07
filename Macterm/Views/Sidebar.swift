@@ -650,7 +650,7 @@ struct SidebarContent: View {
     private var activeTabID: UUID? {
         guard let pid = windowState.activeProjectID else { return nil }
         // This window's tab, not the workspace's: that is the key window's.
-        return appState.displayedTab(for: pid, in: windowState)?.id
+        return appState.selectedTab(for: pid, in: windowState)?.id
     }
 
     /// Apply a tab drag-and-drop. `index` is the insertion slot within the
