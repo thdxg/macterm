@@ -219,9 +219,26 @@ struct WindowCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "window",
         abstract: "List, open and close terminal windows.",
-        subcommands: [List.self, New.self, Close.self],
+        subcommands: [List.self, New.self, Focus.self, Close.self],
         defaultSubcommand: List.self
     )
+
+    struct Focus: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Bring a window to the front and make it key."
+        )
+
+        @Argument(help: "Window to focus (index or id).")
+        var window: String
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = ControlArgs()
+            args.window = window
+            try runControlCommand(command: "window.focus", args: args, options: options)
+        }
+    }
 
     struct List: ParsableCommand {
         static let configuration = CommandConfiguration(

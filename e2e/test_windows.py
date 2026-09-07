@@ -181,3 +181,53 @@ def test_two_windows_on_one_tab_mirror_it(app):
         # The janitor only sweeps the active project's tabs; this one may not
         # be there.
         app.cli("tab", "close", tab["id"], "--project", project, "--force", check=False)
+
+
+def test_leadership_follows_window_focus_for_the_whole_tab(app):
+    """Two windows on one tab: focusing a window hands the pty of EVERY pane in
+    the tab to that window's view, and a split made while the mirror window is
+    key (which rebuilds the mirror, detaching its old zmx clients — the state
+    in which zmx makes the next attaching client leader) must not strand
+    leadership. Asserted on the real panes' `leader` flags: false while the
+    mirror window is key, true once the owning window is."""
+    before = len(_windows(app))
+    first = _windows(app)[0]
+    project = first.get("projectID")
+    assert project, f"the first window should show a project: {first}"
+    tab = app.cli_json("tab", "new", "--project", project)["tabs"][0]
+
+    def leaders():
+        return {p["id"]: p["leader"] for p in app.panes(tab=tab["id"])}
+
+    def all_are(value):
+        flags = leaders()
+        return flags if flags and all(v == value for v in flags.values()) else None
+
+    try:
+        source = app.panes(tab=tab["id"])[0]["id"]
+        wait_for(lambda: app.pane_text(pane=source), timeout=60, message="the source surface")
+        app.cli("pane", "split", "--direction", "down", "--pane", source)
+        app.cli("window", "new")
+        wait_for(lambda: len(_windows(app)) == before + 1, timeout=30, message="the new window")
+        second = str(before + 1)
+        app.cli("project", "select", project, "--window", second)
+        app.cli("tab", "select", tab["id"], "--project", project, "--window", "1")
+        app.cli("tab", "select", tab["id"], "--project", project, "--window", second)
+
+        app.cli("window", "focus", second)
+        wait_for(lambda: all_are(False), timeout=30, message="the mirror window to lead every pane")
+
+        # Rebuild the mirror under the mirror window's feet.
+        app.cli("pane", "split", "--direction", "right", "--pane", source)
+        wait_for(lambda: len(leaders()) == 3, timeout=30, message="the third pane")
+        wait_for(lambda: all_are(False), timeout=30, message="the rebuilt mirror to lead again")
+
+        app.cli("window", "focus", "1")
+        wait_for(lambda: all_are(True), timeout=30, message="the owning window to lead every pane")
+
+        app.cli("window", "focus", second)
+        wait_for(lambda: all_are(False), timeout=30, message="leadership to move back with focus")
+    finally:
+        app.cli("window", "focus", "1", check=False)
+        _close_extra_windows(app, before)
+        app.cli("tab", "close", tab["id"], "--project", project, "--force", check=False)

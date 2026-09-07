@@ -52,6 +52,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. Closing a pinned tab unloads it — sessions end, but its row and saved layout stay, and the next launch starts it again. |
 | `window list` | Open windows in creation order (`window:1`), each with its project, the tab it shows (`tabID`, plus `mirrored` when another window owns that tab's panes), sidebar width, and a focus marker. |
 | `window new` | Open another window on the project you were looking at. |
+| `window focus <window>` | Bring a window to the front and make it key. Leadership of a mirrored tab follows it, as it does a click. |
 | `window close [--window W]` | Close a window — the named one, else the focused one. The last visible window hides instead of closing. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |
 | `pane inspect [target]` | Read-only snapshot of a pane's terminal core: grid, cell/surface pixels, scrollback totals, content scale, foreground pid + argv. Needs a live surface. |

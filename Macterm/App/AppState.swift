@@ -259,6 +259,17 @@ final class AppState {
         appDelegate?.forgetTerminalWindow(nsWindow)
     }
 
+    /// Make `window` key — what a click on it does. Goes through AppKit AND
+    /// `noteKeyWindow` directly: an inactive app (a CLI caller from another
+    /// terminal, the e2e harness) posts no key notification, and the model
+    /// has to follow either way.
+    func focusWindow(_ window: WindowState) {
+        if let nsWindow = nsWindow(for: window) {
+            nsWindow.makeKeyAndOrderFront(nil)
+        }
+        noteKeyWindow(window)
+    }
+
     /// Close a window — the named one, else the focused one. The last visible
     /// window hides instead; see `AppDelegate.closeTerminalWindow`.
     func closeWindow(_ window: WindowState?) {
@@ -471,6 +482,21 @@ final class AppState {
     /// change; cheap (windows × tabs), so also from `saveWorkspaces`, which
     /// follows every structural mutation.
     private func reconcileWindowViews() {
+        // Pin every window's selection. A window with no record of its own for
+        // its project falls back to `ws.activeTab` — the KEY window's tab — so
+        // it silently followed the key window's every tab switch: its shadow
+        // was rebuilt each time (new pane ids, surfaces torn down and made
+        // again) and every leadership record for the old mirrors went stale.
+        // A window that has landed on a tab keeps it until it selects another.
+        for window in windows {
+            guard let projectID = window.activeProjectID, projectID != PinnedTabs.projectID,
+                  let ws = workspaces[projectID]
+            else { continue }
+            let valid = window.activeTabIDs[projectID].map { id in ws.tabs.contains { $0.id == id } } ?? false
+            if !valid, let current = ws.activeTabID {
+                window.activeTabIDs[projectID] = current
+            }
+        }
         var owners: [UUID: WindowState.ID] = [:]
         for window in windows {
             guard let projectID = window.activeProjectID,
@@ -524,6 +550,11 @@ final class AppState {
     /// from a view body (`viewTab` rebuilding a shadow mid-render).
     private func retireShadow(_ shadow: TerminalTab) {
         let panes = shadow.splitRoot.allPanes()
+        // Its leadership records die with it. Left in place they point at
+        // panes no longer attached, and `isLeader` then falls back to a guess
+        // the daemon has just contradicted (see `surfaceDidGetSize`).
+        let retired = Set(panes.map(\.id))
+        sessionLeaders = sessionLeaders.filter { !retired.contains($0.value) }
         DispatchQueue.main.async {
             for pane in panes {
                 pane.destroySurface()
@@ -606,7 +637,16 @@ final class AppState {
         for pane in panes where !handled.contains(pane.sessionName) {
             handled.insert(pane.sessionName)
             let siblings = panes.filter { $0.sessionName == pane.sessionName }
-            guard !siblings.contains(where: { isLeader($0) }) else { continue }
+            // Skip only on a RECORDED leader in this tab, never on the inferred
+            // one: `isLeader` falls back to tree order when the record is
+            // stale (a retired mirror's id), and that guess is exactly what a
+            // rebuilt mirror elsewhere has just falsified — zmx hands a fresh
+            // client leadership whenever the previous leader detached.
+            if let recorded = sessionLeaders[pane.sessionName],
+               siblings.contains(where: { $0.id == recorded })
+            {
+                continue
+            }
             let claimant = siblings.first { $0.id == tab.focusedPaneID } ?? pane
             claimSessionLeadership(claimant)
         }
@@ -618,9 +658,19 @@ final class AppState {
     /// a size.
     func surfaceDidGetSize(paneID: UUID) {
         guard let key = keyWindow, let projectID = key.activeProjectID,
-              let view = viewTab(for: projectID, in: key),
-              view.tab.splitRoot.findPane(id: paneID) != nil
+              let view = viewTab(for: projectID, in: key)
         else { return }
+        // A surface coming up ELSEWHERE matters too: its zmx client has just
+        // attached, and the daemon makes a new client leader whenever the
+        // session had none — the state a rebuilt mirror leaves behind, its
+        // old client having detached as the leader. So the key window
+        // re-asserts: the session's record is dropped and its pane claims.
+        if view.tab.splitRoot.findPane(id: paneID) == nil,
+           let elsewhere = allAttachedPanes().first(where: { $0.id == paneID }),
+           isMirrored(elsewhere)
+        {
+            sessionLeaders.removeValue(forKey: elsewhere.sessionName)
+        }
         claimLeadership(forPanesIn: view.tab)
     }
 
@@ -1817,7 +1867,11 @@ final class AppState {
     func claimSessionLeadership(_ pane: Pane) {
         guard isMirrored(pane), !pane.isRemote else { return }
         guard sessionLeaders[pane.sessionName] != pane.id else { return }
-        if sendClaim(pane) { sessionLeaders[pane.sessionName] = pane.id }
+        let delivered = sendClaim(pane)
+        logger.debug(
+            "claim \(pane.sessionName, privacy: .public) by \(pane.id, privacy: .public) delivered=\(delivered, privacy: .public)"
+        )
+        if delivered { sessionLeaders[pane.sessionName] = pane.id }
     }
 
     /// Writes the zmx leadership claim into the pane's pty, reporting whether
