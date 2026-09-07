@@ -320,6 +320,8 @@ struct ControlWindowInfo: Codable, Equatable {
     var project: String?
     /// Whether this is the window the user is in.
     var focused: Bool
+    /// The window's sidebar width, which is per window (#345).
+    var sidebarWidth: Double?
 }
 
 struct ControlSessionInfo: Codable, Equatable {

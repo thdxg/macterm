@@ -237,6 +237,13 @@ struct MainWindow: View {
                 // and `onAppear` fires for the throwaway too, which registered
                 // a phantom second window on every launch. An `NSWindow` is
                 // one per actual window, so attachment is the real identity.
+                // Arm before `WindowAppearance.sync` runs inside the styler,
+                // and before the geometry hook writes the column's
+                // content-derived width over the stored value.
+                let resolved = appState.canonicalWindowState(for: window, proposed: windowState)
+                WindowAppearance.armSidebarWidthRestore(for: window) {
+                    CGFloat(resolved.sidebarWidth)
+                }
                 appState.appDelegate?.registerTerminalWindow(window)
                 attachedWindow = window
                 // Adopt the canonical state for this NSWindow. A second view
@@ -267,11 +274,18 @@ struct MainWindow: View {
             NewRemoteProjectSheet()
         }
         .environment(windowState)
+        // Applied here rather than in the scene so each copy knows WHICH
+        // window it is: they stay grouped in these three modifiers, which is
+        // the rule — the alerts must not scatter back into `body`.
+        .modifier(CloseConfirmationAlerts(appState: appState, windowID: windowState.id))
+        .modifier(ProjectConfirmationAlerts(appState: appState, windowID: windowState.id))
+        .modifier(LayoutAlerts(appState: appState, windowID: windowState.id))
         .onAppear {
             AdaptiveTerminalChrome.shared.mainWindowDidAppear()
         }
         .onDisappear {
             if let attachedWindow {
+                WindowAppearance.forgetSidebarWidthRestore(for: attachedWindow)
                 appState.forgetWindowState(for: attachedWindow)
                 appState.appDelegate?.forgetTerminalWindow(attachedWindow)
             }
@@ -428,7 +442,25 @@ struct MainWindow: View {
     /// (and every frame of an animating peek that lands back where it started)
     /// writes nothing.
     private func persistSidebarWidth(_ width: CGFloat) {
+        // Until the restore has run, the column is showing SwiftUI's
+        // content-derived width; recording it would overwrite the width we are
+        // about to restore with the default it replaces.
+        //
+        // A nil `attachedWindow` counts as "not yet": the geometry hook fires
+        // during layout, BEFORE the styler has found the window, so treating
+        // nil as "nothing pending" let the content-derived width through —
+        // which is exactly how 144 kept landing in the snapshot.
+        guard let attachedWindow,
+              !WindowAppearance.isAwaitingSidebarWidthRestore(for: attachedWindow)
+        else { return }
         let rounded = (Double(width) * 2).rounded() / 2
+        // This window's own width, and the app-wide default a NEW window opens
+        // at — dragging one window's sidebar should not resize another's, but
+        // the next window you open should match what you just set (#345).
+        if abs(rounded - windowState.sidebarWidth) >= 0.5 {
+            windowState.sidebarWidth = rounded
+            appState.noteSidebarWidthChanged()
+        }
         guard abs(rounded - preferences.sidebarWidth) >= 0.5 else { return }
         preferences.sidebarWidth = rounded
     }

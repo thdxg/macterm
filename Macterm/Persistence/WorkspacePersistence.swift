@@ -41,12 +41,17 @@ struct WorkspacesFile: Codable {
 
 /// One window's restorable state (v6+).
 ///
-/// Just the project for now: pane and tab selection are still shared across
-/// windows, and the frame is AppKit's to restore — SwiftUI's `WindowGroup`
-/// already persists window frames through the system's state restoration, so
-/// storing them here would be a second, competing source of truth.
+/// The project and the sidebar width. Pane and tab selection are still shared
+/// across windows. The frame stays AppKit's to restore — SwiftUI's
+/// `WindowGroup` already persists window frames through the system's state
+/// restoration, so storing them here would be a second, competing source of
+/// truth. The sidebar width is different: nothing else restores it, because
+/// SwiftUI's own column autosave is unreadable by construction.
 struct WindowSnapshot: Codable {
     var activeProjectID: UUID?
+    /// The window's sidebar width. Optional so a snapshot written before this
+    /// existed decodes as nil, and the window opens at the app-wide default.
+    var sidebarWidth: Double?
 }
 
 // MARK: - Snapshot types

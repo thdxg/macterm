@@ -29,7 +29,20 @@ final class WindowState: Identifiable {
     /// the whole point.
     var activeProjectID: UUID?
 
-    init(activeProjectID: UUID? = nil) {
+    /// This window's sidebar width.
+    ///
+    /// Per window because the restore is ours to do — SwiftUI's own column
+    /// autosave writes under a name built from a runtime address and can never
+    /// read it back, and `navigationSplitViewColumnWidth`'s `ideal:` is only a
+    /// preference AppKit was measured to ignore. Since we restore it by hand
+    /// anyway, doing so per window costs nothing extra.
+    ///
+    /// Seeded from `Preferences.sidebarWidth`, which stays the app-wide
+    /// default a NEW window opens at.
+    var sidebarWidth: Double
+
+    init(activeProjectID: UUID? = nil, sidebarWidth: Double? = nil) {
         self.activeProjectID = activeProjectID
+        self.sidebarWidth = sidebarWidth ?? Preferences.shared.sidebarWidth
     }
 }

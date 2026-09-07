@@ -116,6 +116,7 @@ final class AppState {
         if first.activeProjectID == nil { first.activeProjectID = activeProjectID }
         guard !saved.isEmpty else { return }
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
+        if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if keyWindowID == first.id { activeProjectID = first.activeProjectID }
         guard saved.count > 1 else { return }
         logger.info("restoreWindows: reopening \(saved.count - 1, privacy: .public) extra window(s)")
@@ -129,6 +130,7 @@ final class AppState {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self else { return }
                 nextWindowProjectID = snapshot.activeProjectID
+                nextWindowSidebarWidth = snapshot.sidebarWidth
                 requestNewWindow()
             }
         }
@@ -136,6 +138,10 @@ final class AppState {
 
     /// Spacing between restored window opens (see `restoreWindows`).
     private static let windowRestoreDelay: TimeInterval = 0.6
+
+    /// The sidebar width the next window to register should adopt (see
+    /// `nextWindowProjectID`).
+    private var nextWindowSidebarWidth: Double?
 
     /// The project the next window to register should adopt, used only by
     /// `restoreWindows` — a plain `openWindow(id:)` carries no payload.
@@ -185,6 +191,10 @@ final class AppState {
             // project instead of its own.
             window.activeProjectID = restoring
             nextWindowProjectID = nil
+            if let width = nextWindowSidebarWidth {
+                window.sidebarWidth = width
+                nextWindowSidebarWidth = nil
+            }
         } else if window.activeProjectID == nil {
             window.activeProjectID = activeProjectID
         }
@@ -198,6 +208,21 @@ final class AppState {
         if keyWindowID == window.id { keyWindowID = nil }
         logger.debug("unregisterWindow: \(window.id, privacy: .public) count=\(self.windows.count)")
         persistWindows()
+    }
+
+    /// Which window should present a confirmation dialog.
+    ///
+    /// The window the user is in, so a busy-close warning appears where they
+    /// clicked rather than in every open window — each window's scene carries
+    /// its own copy of those alerts, and an ungated binding presents in all of
+    /// them (#345). Same failure the `DialogHost.settings` gate already
+    /// prevents for the Settings window.
+    ///
+    /// Falls back to the first window when nothing is key, so a dialog is
+    /// never staged with nowhere to appear — silently swallowing a
+    /// confirmation would leave the action unfinished with no explanation.
+    var dialogWindowID: WindowState.ID? {
+        keyWindowID ?? windows.first?.id
     }
 
     /// Point the app-wide "frontmost project" at this window's.
@@ -227,6 +252,22 @@ final class AppState {
         if keyWindowID == window.id { activeProjectID = projectID }
         persistWindows()
     }
+
+    /// A window's sidebar width changed; get it into the snapshot.
+    ///
+    /// Debounced, because this arrives from a geometry hook that fires
+    /// continuously while the divider is dragged — writing the snapshot per
+    /// frame would be gratuitous file I/O.
+    func noteSidebarWidthChanged() {
+        sidebarWidthPersistTask?.cancel()
+        sidebarWidthPersistTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            self?.persistWindows()
+        }
+    }
+
+    private var sidebarWidthPersistTask: Task<Void, Never>?
 
     /// Persist the window list after it changes.
     ///
@@ -931,7 +972,9 @@ final class AppState {
             // persist "no windows" over a real multi-window setup.
             windows: windows.isEmpty
                 ? nil
-                : windows.map { WindowSnapshot(activeProjectID: $0.activeProjectID) }
+                : windows.map {
+                    WindowSnapshot(activeProjectID: $0.activeProjectID, sidebarWidth: $0.sidebarWidth)
+                }
         )
     }
 

@@ -123,3 +123,20 @@ def test_a_window_reports_the_project_its_title_shows(app, tmp_path_factory):
     focused = [w for w in windows if w["focused"]]
     assert len(focused) == 1, f"exactly one window is key: {windows}"
     assert _project_of(focused[0]), "the key window should name a project"
+
+
+def test_a_window_reports_its_own_sidebar_width(app):
+    """Sidebar width is per window.
+
+    Only the model side is asserted here. Driving a real divider drag needs an
+    Accessibility grant, and the width the harness reads at launch comes from
+    the developer's own debug UserDefaults domain (the harness isolates $HOME
+    and the data dir, but `Preferences.defaults` resolves through the user
+    record), so a fixed expected value would be a machine-specific assertion.
+    `WindowStateTests` covers independence; the restore path is exercised by
+    seeding a snapshot, which needs a second launch this suite does not do.
+    """
+    for window in _windows(app):
+        width = window.get("sidebarWidth")
+        assert width is not None, f"every window reports a width: {window}"
+        assert 100 <= width <= 500, f"width out of any sane range: {width}"

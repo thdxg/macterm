@@ -51,9 +51,6 @@ struct MactermApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .modifier(AppColorScheme())
-                .modifier(CloseConfirmationAlerts(appState: appState))
-                .modifier(ProjectConfirmationAlerts(appState: appState))
-                .modifier(LayoutAlerts(appState: appState))
                 .onAppear {
                     appDelegate.appState = appState
                     // The genuine instance: NSApp.delegate is SwiftUI's own
@@ -273,15 +270,21 @@ struct MactermApp: App {
 /// staging call's `DialogHost` — see the enum's doc comment: an ungated binding
 /// presents in BOTH scenes, which opens the settings window just to stack a
 /// duplicate dialog.
-private struct CloseConfirmationAlerts: ViewModifier {
+struct CloseConfirmationAlerts: ViewModifier {
     let appState: AppState
+    /// The window this copy belongs to. Every window's scene carries
+    /// these alerts, so each must present only its own.
+    let windowID: WindowState.ID?
+
+    /// Whether this is the window a dialog should appear in.
+    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
 
     func body(content: Content) -> some View {
         content
             .alert(
                 "Close running process?",
                 isPresented: Binding(
-                    get: { appState.pendingClosePane != nil },
+                    get: { isDialogWindow && appState.pendingClosePane != nil },
                     set: { if !$0 { appState.cancelPendingClosePane() } }
                 )
             ) {
@@ -297,7 +300,7 @@ private struct CloseConfirmationAlerts: ViewModifier {
             .alert(
                 "Close running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingCloseTab != nil },
+                    get: { isDialogWindow && appState.pendingCloseTab != nil },
                     set: { if !$0 { appState.cancelPendingCloseTab() } }
                 )
             ) {
@@ -313,15 +316,21 @@ private struct CloseConfirmationAlerts: ViewModifier {
     }
 }
 
-private struct ProjectConfirmationAlerts: ViewModifier {
+struct ProjectConfirmationAlerts: ViewModifier {
     let appState: AppState
+    /// The window this copy belongs to. Every window's scene carries
+    /// these alerts, so each must present only its own.
+    let windowID: WindowState.ID?
+
+    /// Whether this is the window a dialog should appear in.
+    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
 
     func body(content: Content) -> some View {
         content
             .alert(
                 "Unload project with running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingUnloadProject?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingUnloadProject?.host == .mainWindow },
                     set: { if !$0 { appState.cancelPendingUnloadProject() } }
                 )
             ) {
@@ -337,7 +346,7 @@ private struct ProjectConfirmationAlerts: ViewModifier {
             .alert(
                 "Remove project with running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingRemoveProject?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingRemoveProject?.host == .mainWindow },
                     set: { if !$0 { appState.cancelPendingRemoveProject() } }
                 )
             ) {
@@ -353,7 +362,7 @@ private struct ProjectConfirmationAlerts: ViewModifier {
             .alert(
                 "Remove items with running processes?",
                 isPresented: Binding(
-                    get: { appState.pendingBulkRemove != nil },
+                    get: { isDialogWindow && appState.pendingBulkRemove != nil },
                     set: { if !$0 { appState.cancelPendingBulkRemove() } }
                 )
             ) {
@@ -369,15 +378,21 @@ private struct ProjectConfirmationAlerts: ViewModifier {
     }
 }
 
-private struct LayoutAlerts: ViewModifier {
+struct LayoutAlerts: ViewModifier {
     let appState: AppState
+    /// The window this copy belongs to. Every window's scene carries
+    /// these alerts, so each must present only its own.
+    let windowID: WindowState.ID?
+
+    /// Whether this is the window a dialog should appear in.
+    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
 
     func body(content: Content) -> some View {
         content
             .alert(
                 "Apply layout?",
                 isPresented: Binding(
-                    get: { appState.pendingLayoutApply?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingLayoutApply?.host == .mainWindow },
                     set: { if !$0 { appState.cancelPendingLayoutApply() } }
                 )
             ) {
@@ -395,7 +410,7 @@ private struct LayoutAlerts: ViewModifier {
             .alert(
                 appState.pendingLayoutError?.title ?? "Couldn't apply layout",
                 isPresented: Binding(
-                    get: { appState.pendingLayoutError?.host == .mainWindow },
+                    get: { isDialogWindow && appState.pendingLayoutError?.host == .mainWindow },
                     set: { if !$0 { appState.pendingLayoutError = nil } }
                 )
             ) {

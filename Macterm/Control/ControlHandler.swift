@@ -165,7 +165,8 @@ final class ControlHandler {
                 id: window.id.uuidString,
                 projectID: window.activeProjectID?.uuidString,
                 project: windowProjectName(window.activeProjectID),
-                focused: appState.keyWindowID == window.id
+                focused: appState.keyWindowID == window.id,
+                sidebarWidth: window.sidebarWidth
             )
         }
         return ControlData(windows: infos)

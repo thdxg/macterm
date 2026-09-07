@@ -109,6 +109,58 @@ struct WindowStateTests {
     }
 
     @Test
+    func a_dialog_belongs_to_the_focused_window() {
+        // Every window's scene carries its own copy of the confirmation
+        // alerts, so an ungated binding presents in ALL of them — the same
+        // failure the DialogHost.settings gate already prevents for Settings.
+        let state = makeAppState()
+        let a = WindowState()
+        let b = WindowState()
+        state.registerWindow(a)
+        state.registerWindow(b)
+
+        state.noteKeyWindow(b)
+        #expect(state.dialogWindowID == b.id)
+
+        state.noteKeyWindow(a)
+        #expect(state.dialogWindowID == a.id)
+    }
+
+    @Test
+    func a_dialog_still_has_somewhere_to_go_with_no_key_window() {
+        // Never nil while a window exists: a staged confirmation with nowhere
+        // to appear leaves the action unfinished and unexplained.
+        let state = makeAppState()
+        let window = WindowState()
+        state.registerWindow(window)
+
+        #expect(state.keyWindowID == nil)
+        #expect(state.dialogWindowID == window.id)
+    }
+
+    @Test
+    func a_new_window_opens_at_the_app_wide_sidebar_width() {
+        let previous = Preferences.shared.sidebarWidth
+        defer { Preferences.shared.sidebarWidth = previous }
+        Preferences.shared.sidebarWidth = 275
+
+        #expect(WindowState().sidebarWidth == 275)
+    }
+
+    @Test
+    func windows_keep_independent_sidebar_widths() {
+        // Dragging one window's sidebar must not resize another's.
+        let state = makeAppState()
+        let a = WindowState(sidebarWidth: 200)
+        let b = WindowState(sidebarWidth: 320)
+        state.registerWindow(a)
+        state.registerWindow(b)
+
+        #expect(a.sidebarWidth == 200)
+        #expect(b.sidebarWidth == 320)
+    }
+
+    @Test
     func one_window_state_per_nswindow() {
         // SwiftUI instantiates a view — and its @State — more than once per
         // real window, so two instances each proposed their own WindowState
