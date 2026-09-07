@@ -50,6 +50,49 @@ struct GhosttyTerminalNSViewTests {
         #expect(GhosttyTerminalNSView.cursor(for: GHOSTTY_MOUSE_SHAPE_PROGRESS) == nil)
     }
 
+    // MARK: - Context-menu scroll navigation
+
+    @Test
+    func scrollNavigation_disablesBothActionsWithoutScrollbackGeometry() {
+        #expect(
+            GhosttyTerminalNSView.scrollNavigationAvailability(for: nil)
+                == .init(canJumpToTop: false, canJumpToBottom: false)
+        )
+        #expect(
+            GhosttyTerminalNSView.scrollNavigationAvailability(
+                for: .init(total: 24, offset: 0, len: 24)
+            ) == .init(canJumpToTop: false, canJumpToBottom: false)
+        )
+        #expect(
+            GhosttyTerminalNSView.scrollNavigationAvailability(
+                for: .init(total: 24, offset: 10, len: 30)
+            ) == .init(canJumpToTop: false, canJumpToBottom: false)
+        )
+    }
+
+    @Test
+    func scrollNavigation_enablesOnlyAvailableDirectionsAtTheBoundaries() {
+        #expect(
+            GhosttyTerminalNSView.scrollNavigationAvailability(
+                for: .init(total: 100, offset: 0, len: 24)
+            ) == .init(canJumpToTop: false, canJumpToBottom: true)
+        )
+        #expect(
+            GhosttyTerminalNSView.scrollNavigationAvailability(
+                for: .init(total: 100, offset: 76, len: 24)
+            ) == .init(canJumpToTop: true, canJumpToBottom: false)
+        )
+    }
+
+    @Test
+    func scrollNavigation_enablesBothActionsBetweenTheBoundaries() {
+        #expect(
+            GhosttyTerminalNSView.scrollNavigationAvailability(
+                for: .init(total: 100, offset: 32, len: 24)
+            ) == .init(canJumpToTop: true, canJumpToBottom: true)
+        )
+    }
+
     // MARK: - IME composition state
 
     private func makeView() -> GhosttyTerminalNSView {

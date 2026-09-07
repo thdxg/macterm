@@ -474,6 +474,24 @@ final class GhosttyTerminalNSView: NSView {
         let len: UInt64
     }
 
+    struct ScrollNavigationAvailability: Equatable {
+        let canJumpToTop: Bool
+        let canJumpToBottom: Bool
+    }
+
+    static func scrollNavigationAvailability(
+        for snapshot: ScrollbarSnapshot?
+    ) -> ScrollNavigationAvailability {
+        guard let snapshot, snapshot.total > snapshot.len else {
+            return ScrollNavigationAvailability(canJumpToTop: false, canJumpToBottom: false)
+        }
+        let bottom = snapshot.total - snapshot.len
+        return ScrollNavigationAvailability(
+            canJumpToTop: snapshot.offset > 0,
+            canJumpToBottom: snapshot.offset < bottom
+        )
+    }
+
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
     private var accessibilityScreenContentsCache: (
         contents: String,
@@ -1328,10 +1346,13 @@ final class GhosttyTerminalNSView: NSView {
 
     private func presentContextMenu(with event: NSEvent) {
         let menu = NSMenu(title: "Terminal")
+        menu.autoenablesItems = false
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
         paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
         menu.addItem(paste)
+        menu.addItem(.separator())
+        addScrollNavigationItems(menu)
         menu.addItem(.separator())
         addSplitItem(menu, "Split Right", .horizontal, .second)
         addSplitItem(menu, "Split Left", .horizontal, .first)
@@ -1353,6 +1374,35 @@ final class GhosttyTerminalNSView: NSView {
     @objc
     private func handleZoom() {
         onZoomRequest?()
+    }
+
+    private func addScrollNavigationItems(_ menu: NSMenu) {
+        let availability = Self.scrollNavigationAvailability(for: lastScrollbarSnapshot)
+
+        let jumpToTop = NSMenuItem(title: "Jump to Top", action: #selector(handleJumpToTop), keyEquivalent: "")
+        jumpToTop.target = self
+        jumpToTop.isEnabled = availability.canJumpToTop
+        menu.addItem(jumpToTop)
+
+        let jumpToBottom = NSMenuItem(title: "Jump to Bottom", action: #selector(handleJumpToBottom), keyEquivalent: "")
+        jumpToBottom.target = self
+        jumpToBottom.isEnabled = availability.canJumpToBottom
+        menu.addItem(jumpToBottom)
+    }
+
+    @objc
+    private func handleJumpToTop() {
+        performScrollNavigationAction("scroll_to_top")
+    }
+
+    @objc
+    private func handleJumpToBottom() {
+        performScrollNavigationAction("scroll_to_bottom")
+    }
+
+    private func performScrollNavigationAction(_ action: String) {
+        guard let surface else { return }
+        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
     private func addSplitItem(_ menu: NSMenu, _ title: String, _ dir: SplitDirection, _ pos: SplitPosition) {
