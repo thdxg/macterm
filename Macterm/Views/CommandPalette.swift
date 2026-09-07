@@ -12,7 +12,7 @@ struct CommandPaletteOverlay: View {
 
     /// Matches the macOS Tahoe window corner radius so the palette reads as a
     /// native floating surface.
-    private static let cornerRadius: CGFloat = 16
+    private static let cornerRadius = GlassPanelMetrics.cornerRadius
 
     var body: some View {
         GeometryReader { geo in
@@ -26,27 +26,10 @@ struct CommandPaletteOverlay: View {
 
                 CommandPalettePanel()
                     .frame(width: 500)
-                    .paletteBackground(cornerRadius: Self.cornerRadius)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                            .strokeBorder(MactermTheme.border, lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 8)
+                    .glassPanel(cornerRadius: Self.cornerRadius)
                     .padding(.top, geo.size.height * 0.15)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-}
-
-private extension View {
-    /// Liquid glass on macOS 26; the closest native material on older systems.
-    @ViewBuilder
-    func paletteBackground(cornerRadius: CGFloat) -> some View {
-        if #available(macOS 26.0, *) {
-            glassEffect(in: .rect(cornerRadius: cornerRadius))
-        } else {
-            background(.regularMaterial, in: .rect(cornerRadius: cornerRadius))
         }
     }
 }

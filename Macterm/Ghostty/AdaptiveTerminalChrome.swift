@@ -195,6 +195,7 @@ final class AdaptiveTerminalChrome {
         guard AdaptiveTerminalInferenceGate.allowsObservation(
             ofColor: candidate != nil,
             hasViewerOverlay: view.hasViewerOverlay,
+            rendersForeignGeometry: view.rendersForeignGeometry,
             hasConfirmedColor: stabilizer.hasConfirmedColor,
             secondsSinceOutput: lastOutputAt[id].map { Date().timeIntervalSince($0) }
         )

@@ -23,6 +23,19 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # the exact asset-swap-under-a-pin hazard documented in AGENTS.md. The next
 # ordinary bump (a past-day daily tag, immutable by then) retires this one.
 GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-31}"
+# The zmx release supplying the bundled session multiplexer. Pinned for the same
+# reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
+# push to its main, so tracking `latest` meant two builds of ONE Macterm commit
+# could ship different zmx binaries — including a tagged release picking up
+# whatever landed that morning. Bumping the multiplexer is now its own
+# reviewable commit.
+#
+# It is a wire dependency, not just a binary: Macterm sends zmx's leadership
+# claim (ZmxLeadership.claimSequence) and a zmx predating that tag forwards the
+# APC to the user's shell as literal garbage instead of switching leader. That
+# is exactly what a stale CI cache did once — `Macterm/Resources/zmx` rides the
+# GhosttyKit cache, whose key hashes THIS file, so a zmx bump must change it.
+ZMX_TAG="${ZMX_TAG:-build-2026-09-06}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
@@ -43,6 +56,8 @@ GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-08-31}"
 # compare against, so an unstamped tree never adopts a bumped pin on its own.
 # That is what the warning is for.
 TAG_STAMP=".ghosttykit-tag"
+# Same idea for zmx, kept separate because the two move independently.
+ZMX_TAG_STAMP=".zmx-tag"
 # Marker for the downloaded upstream resources. The tarball mirrors a real
 # Ghostty.app Resources layout: ghostty/{themes,shell-integration} plus a
 # sibling terminfo/. All come from the tarball — nothing is committed — so its
@@ -191,7 +206,23 @@ fi
 if [[ -d "$RESOURCES_MARKER" ]] && ! $tag_changed; then
   need_resources=false
 fi
-[[ -x "$ZMX_BIN" ]] && need_zmx=false
+# Presence alone is not enough: a checkout (or a restored CI cache) can hold a
+# zmx from before the pin moved, and that binary is wrong in a way nothing else
+# notices — it silently lacks wire features Macterm depends on.
+zmx_stamped_tag=""
+[[ -f "$ZMX_TAG_STAMP" ]] && zmx_stamped_tag=$(cat "$ZMX_TAG_STAMP")
+if [[ -x "$ZMX_BIN" ]]; then
+  if [[ -z "$zmx_stamped_tag" ]]; then
+    # Unstamped: provenance unknown, and every checkout predating the pin looks
+    # like this. Refresh once so it becomes knowable, rather than warning
+    # forever about a binary nobody can identify.
+    echo "Bundled zmx is unstamped (provenance unknown); installing $ZMX_TAG"
+  elif [[ "$zmx_stamped_tag" != "$ZMX_TAG" ]]; then
+    echo "Pinned zmx release changed ($zmx_stamped_tag -> $ZMX_TAG); refreshing"
+  else
+    need_zmx=false
+  fi
+fi
 
 if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
   echo "GhosttyKit, resources, and zmx already present"
@@ -277,15 +308,22 @@ if $need_zmx; then
   # universal app build. Shipped as a tarball (preserves the executable bit
   # through the GitHub asset round-trip) holding a single `zmx` binary;
   # extracted to Macterm/Resources/zmx/zmx (gitignored).
-  ZMX_TAG=$(gh release list --repo "$ZMX_REPO" --limit 1 --json tagName -q ".[0].tagName")
-  if [[ -z "$ZMX_TAG" ]]; then
-    echo "Error: No zmx releases found in $ZMX_REPO" >&2
-    exit 1
+  if [[ "$ZMX_TAG" == "latest" ]]; then
+    resolved_zmx_tag=$(gh release list --repo "$ZMX_REPO" --limit 1 --json tagName -q ".[0].tagName")
+    if [[ -z "$resolved_zmx_tag" ]]; then
+      echo "Error: No zmx releases found in $ZMX_REPO" >&2
+      exit 1
+    fi
+    echo "ZMX_TAG=latest resolved to $resolved_zmx_tag"
+  else
+    resolved_zmx_tag="$ZMX_TAG"
   fi
-  gh release download "$ZMX_TAG" --pattern "zmx-universal-macos.tar.gz" --repo "$ZMX_REPO"
+  gh release download "$resolved_zmx_tag" --pattern "zmx-universal-macos.tar.gz" --repo "$ZMX_REPO"
   rm -rf Macterm/Resources/zmx
   mkdir -p Macterm/Resources/zmx
   tar xzf zmx-universal-macos.tar.gz -C Macterm/Resources/zmx
   chmod +x Macterm/Resources/zmx/zmx
   rm zmx-universal-macos.tar.gz
+  # Stamp only what this run actually installed, mirroring $TAG_STAMP.
+  printf '%s\n' "$resolved_zmx_tag" > "$ZMX_TAG_STAMP"
 fi

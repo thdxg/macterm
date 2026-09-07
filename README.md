@@ -30,20 +30,16 @@
 
 ![Macterm's vertical project sidebar beside an editor and shell split](./assets/screenshot-1.png)
 
-_Projects and their tabs stack vertically in a native sidebar, with pinned tabs kept above them._
-
-![A full-window TUI with the sidebar hidden](./assets/screenshot-2.png)
-
-_Hide the sidebar to give a TUI the whole window; the background adapts to the colors the program paints._
-
-![The command palette open over a split layout](./assets/screenshot-3.png)
-
-_The command palette (⌘P) jumps to a project, switches tabs, or runs any action._
+<p align="center">
+  <a href="https://macterm.thdxg.dev/#gallery"><b>More screenshots →</b></a>
+</p>
 
 ## Features
 
-- **Persistent multiplexing** \
-  Projects, tabs, and split panes are saved and restored on relaunch. Quitting detaches your shells; relaunching brings them back with scrollback and running processes intact.
+- **Session persistence** \
+  Quitting detaches your shells instead of killing them; relaunching brings them back with scrollback and running processes intact.
+- **Multiplexing** \
+  Drag a pane onto another to join them, or separate one into its own tab — by drag or by keybind. Projects, tabs, and split layouts are saved and restored on relaunch.
 - **Remote projects** \
   Open a directory on another machine over SSH. Your shells keep running there, surviving quits, dropped connections, and even a local reboot.
 - **Vertical project sidebar** \

@@ -15,6 +15,21 @@ enum FocusRestoration {
     private static let maxAttempts = 40
     private static let retryInterval: TimeInterval = 0.05
 
+    /// Set while a sidebar row's inline rename field is open (see
+    /// `SidebarPresentationState.beginRename`).
+    ///
+    /// Restoration is a *retry loop*, so it can land long after the call that
+    /// started it. Double-clicking an inactive tab's title both switches tabs
+    /// and opens the rename field in one gesture: the newly activated pane
+    /// transitions to focused, `TerminalSurface.updateNSView` asks for
+    /// restoration, and — when that pane's view isn't in the window yet (an
+    /// unloaded project, a pinned tab rebuilt from its declaration) — the
+    /// retry resolves several ticks later and takes first responder back off
+    /// the caret. The field stays on screen while the keystrokes go to the
+    /// shell. Rename commit and cancel both call `restoreFocusToActivePane()`,
+    /// so the terminal gets focus the moment editing ends.
+    static var isEditingInlineName = false
+
     /// Restore first responder to the pane's NSView inside `window`. If the
     /// view isn't in `window` yet (tree reshape, split tear-down), retry on the
     /// main run loop until it is or we hit the attempt cap. Safe to call from
@@ -35,6 +50,13 @@ enum FocusRestoration {
         in window: NSWindow,
         attempt: Int
     ) {
+        // Paired conditions on purpose: the flag alone would wedge terminal
+        // focus app-wide if a rename ever ended without clearing it (its row
+        // closing mid-edit, say), and the field-editor check alone would break
+        // the search bar, which restores focus *out* of its own text field.
+        if isEditingInlineName, (window.firstResponder as? NSTextView)?.isFieldEditor == true {
+            return
+        }
         if let pane = finder(), let view = pane.nsView, view.window === window {
             window.makeFirstResponder(view)
             view.notifySurfaceFocused()

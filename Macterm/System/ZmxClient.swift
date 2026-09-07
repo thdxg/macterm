@@ -683,6 +683,25 @@ enum ZmxEnvironment {
     }
 }
 
+/// zmx's leadership protocol (#345).
+///
+/// A session may have several attached clients but only one **leader**, whose
+/// window size drives the pty; zmx drops a non-leader's resize outright. The
+/// daemon hands leadership to any client that sends real user input, which
+/// suits a human at a keyboard but gives Macterm no way to say "size the pty
+/// from this pane" when the user merely clicks it — typing would reach their
+/// running program.
+///
+/// So the client watches its stdin for this APC string and turns it into an
+/// IPC Claim instead of forwarding it (zmx's `util.ClaimFilter`). APC because
+/// no keyboard produces one and terminals discard unknown APC, so a stray
+/// sequence reaching a program is inert.
+enum ZmxLeadership {
+    /// Must match `ClaimFilter.sequence` in the zmx fork exactly — it is a wire
+    /// contract between the two, not a local constant.
+    static let claimSequence = "\u{1b}_zmx;claim\u{1b}\\"
+}
+
 /// Resolves how a surface launches under zmx.
 enum ZmxAttach {
     /// The `command-wrapper` argv that wraps a surface's shell in zmx:

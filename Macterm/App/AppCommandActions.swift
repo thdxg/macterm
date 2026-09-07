@@ -115,13 +115,25 @@ extension AppCommand {
             return { ctx.appState.separatePane(paneID, toProject: projectID, destPath: destPath, at: index) }
         case .splitRight:
             guard let projectID else { return nil }
-            return { ctx.appState.splitPane(direction: .horizontal, projectID: projectID) }
+            return {
+                ctx.appState.splitPane(
+                    direction: .horizontal,
+                    projectID: projectID,
+                    projects: ctx.projectStore.projects
+                )
+            }
         case .splitDown:
             guard let projectID else { return nil }
-            return { ctx.appState.splitPane(direction: .vertical, projectID: projectID) }
+            return {
+                ctx.appState.splitPane(
+                    direction: .vertical,
+                    projectID: projectID,
+                    projects: ctx.projectStore.projects
+                )
+            }
         case .splitAuto:
             guard let projectID else { return nil }
-            return { ctx.appState.autoSplitPane(projectID: projectID) }
+            return { ctx.appState.autoSplitPane(projectID: projectID, projects: ctx.projectStore.projects) }
         case .zoomPane:
             guard let projectID else { return nil }
             return { ctx.appState.toggleZoom(projectID: projectID) }

@@ -14,13 +14,24 @@ struct Project: Identifiable, Codable, Hashable {
     /// for local projects. Decodes as nil from older projects.json (absent
     /// key), so it's back-compatible.
     var zmxPath: String?
+    /// Color tag — the `rawValue` of a `ProjectColor`. A String, not the enum,
+    /// so an unknown value (hand-edited json, newer build) reads as untagged
+    /// instead of failing the row's decode. Absent in older projects.json.
+    var colorName: String?
 
-    init(name: String, path: String, sortOrder: Int = 0, zmxPath: String? = nil) {
+    init(
+        name: String,
+        path: String,
+        sortOrder: Int = 0,
+        zmxPath: String? = nil,
+        colorName: String? = nil
+    ) {
         id = UUID()
         self.name = name
         self.path = path
         self.sortOrder = sortOrder
         self.zmxPath = zmxPath
+        self.colorName = colorName
         createdAt = Date()
     }
 
@@ -33,11 +44,15 @@ struct Project: Identifiable, Codable, Hashable {
         self.path = path
         sortOrder = 0
         zmxPath = nil
+        colorName = nil
         createdAt = Date()
     }
 }
 
 extension Project {
+    /// nil when untagged, or tagged with a value this build doesn't know.
+    var color: ProjectColor? { colorName.flatMap(ProjectColor.init(rawValue:)) }
+
     /// Parsed location: `.local` for a directory path, `.remote` for an
     /// scp-style `[user@]host:dir` spec (#104). nil when `path` parses as
     /// neither (a hand-corrupted projects.json entry).

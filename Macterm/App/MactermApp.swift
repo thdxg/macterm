@@ -51,123 +51,9 @@ struct MactermApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .modifier(AppColorScheme())
-                .alert(
-                    "Close running process?",
-                    isPresented: Binding(
-                        get: { appState.pendingClosePane != nil },
-                        set: { if !$0 { appState.cancelPendingClosePane() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingClosePane()
-                    }
-                    Button("Close", role: .destructive) {
-                        appState.confirmPendingClosePane()
-                    }
-                } message: {
-                    Text("A process is still running in this pane. Close it anyway?")
-                }
-                .alert(
-                    "Close running processes?",
-                    isPresented: Binding(
-                        get: { appState.pendingCloseTab != nil },
-                        set: { if !$0 { appState.cancelPendingCloseTab() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingCloseTab()
-                    }
-                    Button("Close", role: .destructive) {
-                        appState.confirmPendingCloseTab()
-                    }
-                } message: {
-                    Text("A process is still running in this tab. Closing the tab ends it.")
-                }
-                // Every alert below that Settings also carries is gated on the
-                // staging call's `DialogHost` — see the enum's doc comment: an
-                // ungated binding presents in BOTH scenes, which opens the
-                // settings window just to stack a duplicate dialog.
-                .alert(
-                    "Unload project with running processes?",
-                    isPresented: Binding(
-                        get: { appState.pendingUnloadProject?.host == .mainWindow },
-                        set: { if !$0 { appState.cancelPendingUnloadProject() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingUnloadProject()
-                    }
-                    Button("Unload", role: .destructive) {
-                        appState.confirmPendingUnloadProject()
-                    }
-                } message: {
-                    Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
-                }
-                .alert(
-                    "Remove project with running processes?",
-                    isPresented: Binding(
-                        get: { appState.pendingRemoveProject?.host == .mainWindow },
-                        set: { if !$0 { appState.cancelPendingRemoveProject() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingRemoveProject()
-                    }
-                    Button("Remove", role: .destructive) {
-                        appState.confirmPendingRemoveProject()
-                    }
-                } message: {
-                    Text("A process is still running in this project. Removing it ends every process in its tabs.")
-                }
-                .alert(
-                    "Remove items with running processes?",
-                    isPresented: Binding(
-                        get: { appState.pendingBulkRemove != nil },
-                        set: { if !$0 { appState.cancelPendingBulkRemove() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingBulkRemove()
-                    }
-                    Button("Remove", role: .destructive) {
-                        appState.confirmPendingBulkRemove()
-                    }
-                } message: {
-                    Text("A process is still running in one of the selected items. Removing them ends every process in their tabs.")
-                }
-                .alert(
-                    "Apply layout?",
-                    isPresented: Binding(
-                        get: { appState.pendingLayoutApply?.host == .mainWindow },
-                        set: { if !$0 { appState.cancelPendingLayoutApply() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingLayoutApply()
-                    }
-                    Button("Apply", role: .destructive) {
-                        appState.confirmPendingLayoutApply()
-                    }
-                } message: {
-                    if let pending = appState.pendingLayoutApply {
-                        Text(pending.confirmationMessage)
-                    }
-                }
-                .alert(
-                    appState.pendingLayoutError?.title ?? "Couldn't apply layout",
-                    isPresented: Binding(
-                        get: { appState.pendingLayoutError?.host == .mainWindow },
-                        set: { if !$0 { appState.pendingLayoutError = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) {
-                        appState.pendingLayoutError = nil
-                    }
-                } message: {
-                    if let pending = appState.pendingLayoutError {
-                        Text(pending.message)
-                    }
-                }
+                .modifier(CloseConfirmationAlerts(appState: appState))
+                .modifier(ProjectConfirmationAlerts(appState: appState))
+                .modifier(LayoutAlerts(appState: appState))
                 .onAppear {
                     appDelegate.appState = appState
                     appDelegate.projectStore = projectStore
@@ -361,6 +247,151 @@ struct MactermApp: App {
                     }
                 }
         }
+    }
+}
+
+/// The main window's confirmation alerts, split across three modifiers because
+/// all seven chained into `MactermApp.body` defeat the type checker on Xcode
+/// 26.3. Add new alerts to one of these — never back into `body`.
+///
+/// Every alert across these three that Settings also carries is gated on the
+/// staging call's `DialogHost` — see the enum's doc comment: an ungated binding
+/// presents in BOTH scenes, which opens the settings window just to stack a
+/// duplicate dialog.
+private struct CloseConfirmationAlerts: ViewModifier {
+    let appState: AppState
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Close running process?",
+                isPresented: Binding(
+                    get: { appState.pendingClosePane != nil },
+                    set: { if !$0 { appState.cancelPendingClosePane() } }
+                )
+            ) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelPendingClosePane()
+                }
+                Button("Close", role: .destructive) {
+                    appState.confirmPendingClosePane()
+                }
+            } message: {
+                Text("A process is still running in this pane. Close it anyway?")
+            }
+            .alert(
+                "Close running processes?",
+                isPresented: Binding(
+                    get: { appState.pendingCloseTab != nil },
+                    set: { if !$0 { appState.cancelPendingCloseTab() } }
+                )
+            ) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelPendingCloseTab()
+                }
+                Button("Close", role: .destructive) {
+                    appState.confirmPendingCloseTab()
+                }
+            } message: {
+                Text("A process is still running in this tab. Closing the tab ends it.")
+            }
+    }
+}
+
+private struct ProjectConfirmationAlerts: ViewModifier {
+    let appState: AppState
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Unload project with running processes?",
+                isPresented: Binding(
+                    get: { appState.pendingUnloadProject?.host == .mainWindow },
+                    set: { if !$0 { appState.cancelPendingUnloadProject() } }
+                )
+            ) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelPendingUnloadProject()
+                }
+                Button("Unload", role: .destructive) {
+                    appState.confirmPendingUnloadProject()
+                }
+            } message: {
+                Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
+            }
+            .alert(
+                "Remove project with running processes?",
+                isPresented: Binding(
+                    get: { appState.pendingRemoveProject?.host == .mainWindow },
+                    set: { if !$0 { appState.cancelPendingRemoveProject() } }
+                )
+            ) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelPendingRemoveProject()
+                }
+                Button("Remove", role: .destructive) {
+                    appState.confirmPendingRemoveProject()
+                }
+            } message: {
+                Text("A process is still running in this project. Removing it ends every process in its tabs.")
+            }
+            .alert(
+                "Remove items with running processes?",
+                isPresented: Binding(
+                    get: { appState.pendingBulkRemove != nil },
+                    set: { if !$0 { appState.cancelPendingBulkRemove() } }
+                )
+            ) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelPendingBulkRemove()
+                }
+                Button("Remove", role: .destructive) {
+                    appState.confirmPendingBulkRemove()
+                }
+            } message: {
+                Text("A process is still running in one of the selected items. Removing them ends every process in their tabs.")
+            }
+    }
+}
+
+private struct LayoutAlerts: ViewModifier {
+    let appState: AppState
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Apply layout?",
+                isPresented: Binding(
+                    get: { appState.pendingLayoutApply?.host == .mainWindow },
+                    set: { if !$0 { appState.cancelPendingLayoutApply() } }
+                )
+            ) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelPendingLayoutApply()
+                }
+                Button("Apply", role: .destructive) {
+                    appState.confirmPendingLayoutApply()
+                }
+            } message: {
+                if let pending = appState.pendingLayoutApply {
+                    Text(pending.confirmationMessage)
+                }
+            }
+            .alert(
+                appState.pendingLayoutError?.title ?? "Couldn't apply layout",
+                isPresented: Binding(
+                    get: { appState.pendingLayoutError?.host == .mainWindow },
+                    set: { if !$0 { appState.pendingLayoutError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    appState.pendingLayoutError = nil
+                }
+            } message: {
+                if let pending = appState.pendingLayoutError {
+                    Text(pending.message)
+                }
+            }
     }
 }
 
@@ -690,7 +721,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if !flags.contains(.command) { mainResponder?.endTabIndexChord() }
             guard let appState, appState.isTabCycling else { return }
-            if !flags.contains(.control),
+            // Commit as soon as ANY modifier the Recent Tab binding needs is
+            // released — read from the live binding rather than hardcoded to
+            // Control, so the action stays rebindable (a `cmd+tab` binding
+            // used to start a cycle that could never commit).
+            let hold = appState.recentTabHoldModifiers
+            if !hold.isEmpty, !flags.isSuperset(of: hold),
                let projectID = appState.activeProjectID
             {
                 appState.commitTabCycle(projectID: projectID)

@@ -8,11 +8,6 @@ import UniformTypeIdentifiers
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
-/// Pulls the project action through the row's protective trailing inset so
-/// its symbol sits the same distance from the sidebar edge as the disclosure
-/// chevron does from the leading edge.
-private let projectActionTrailingOffset: CGFloat = rowTrailingInset + 2
-
 @MainActor
 enum SidebarLayoutMetrics {
     static let topContentMargin: CGFloat = 4
@@ -203,8 +198,6 @@ struct SidebarContent: View {
     private var showNewProjectButton = true
     @Bindable
     private var presentation: SidebarPresentationState
-    @State
-    private var hoveredProjectID: UUID?
     private let isInteractive: Bool
     private let paintsFallbackFooterBackground: Bool
     private let forcesScrollEdgeEffects: Bool
@@ -346,7 +339,16 @@ struct SidebarContent: View {
             // puts the ink an equal ~20.5pt off both the left and bottom edges.
             .padding(.bottom, 20)
         }
+        .onChange(of: orderedItems, initial: true) { _, items in
+            presentation.orderedItems = items
+        }
         .onChange(of: presentation.selection) { _, items in
+            // Whatever collapses the sidebar to a single row becomes the row a
+            // later shift-click extends from — a native click on a row's icon
+            // or padding, a title click, or `syncSelection` after a tab switch.
+            // Watching the selection rather than writing the anchor at each
+            // click site is what keeps ours and AppKit's the same row.
+            if items.count == 1 { presentation.selectionAnchor = items.first }
             // Navigation follows a single selection only. A multi-selection is
             // for bulk actions (delete), so it must not yank the active project
             // or tab around as rows are added to the selection.
@@ -404,6 +406,7 @@ struct SidebarContent: View {
                     tab: tab,
                     index: index + 1,
                     iconSymbolOverride: "pin",
+                    selectionItem: .tab(projectID: PinnedTabs.projectID, tabID: record.id),
                     presentation: presentation,
                     isInteractive: isInteractive,
                     onRename: { newName in
@@ -501,12 +504,14 @@ struct SidebarContent: View {
         SidebarTabRow(
             tab: tab,
             index: tabIndex + 1,
+            selectionItem: .tab(projectID: project.id, tabID: tab.id),
             presentation: presentation,
             isInteractive: isInteractive,
             // An unloaded project keeps its tabs as a layout with no shells
             // behind them — the same state a closed pinned tab is in, so it
             // gets the same dimmed treatment.
             isUnloaded: appState.isProjectUnloaded(project.id),
+            projectColor: project.color,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName
                 appState.saveWorkspaces()
@@ -535,51 +540,22 @@ struct SidebarContent: View {
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
-        let isNewTabButtonVisible = isInteractive && hoveredProjectID == project.id
-        return HStack(spacing: 6) {
-            SidebarProjectRow(
-                project: project,
-                index: projectIndex + 1,
-                presentation: presentation,
-                isInteractive: isInteractive
-            ) {
-                projectStore.rename(id: project.id, to: $0)
-            }
-            Spacer(minLength: 0)
-            Button {
-                createTab(in: project)
-            } label: {
-                Image(systemName: "plus")
-                    .font(.callout.weight(.medium))
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .offset(x: projectActionTrailingOffset)
-            .opacity(isNewTabButtonVisible ? 1 : 0)
-            .allowsHitTesting(isNewTabButtonVisible)
-            .accessibilityHidden(!isNewTabButtonVisible)
-            .help("New Tab")
-            .accessibilityLabel("New Tab in \(project.name)")
+        SidebarProjectRow(
+            project: project,
+            index: projectIndex + 1,
+            presentation: presentation,
+            isInteractive: isInteractive
+        ) {
+            projectStore.rename(id: project.id, to: $0)
         }
         .padding(.trailing, rowTrailingInset)
         // Stretch to the full row so the drag grab area (and the drop band in
         // the background below) covers the whole row, not just the label's
         // intrinsic width — same treatment as the tab rows.
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
         .tag(SidebarItem.project(project.id))
         // Drag the header to reorder projects (replaces the removed `.onMove`).
         .draggable(MovableProject(projectID: project.id))
-        .onHover { isHovering in
-            guard isInteractive else { return }
-            if isHovering {
-                hoveredProjectID = project.id
-            } else if hoveredProjectID == project.id {
-                hoveredProjectID = nil
-            }
-        }
         // ONE drop destination for every payload (see `SidebarDropItem` for
         // why stacking two is a landmine). A TAB dropped here appends to this
         // project — the only drop path for a collapsed or empty project,
@@ -609,6 +585,25 @@ struct SidebarContent: View {
             // drop stays on target.
             if targeted { presentation.expandedProjects.insert(project.id) }
         }
+    }
+
+    /// Every visible row in visual order, mirroring the `List` body: the
+    /// pinned records, then each project's header followed by its tabs while
+    /// that project is expanded. Published to `presentation` so a shift-click
+    /// on a row title can resolve the range between two rows — the List keeps
+    /// its own copy of this order for the clicks it still handles itself.
+    private var orderedItems: [SidebarItem] {
+        var items: [SidebarItem] = appState.pinnedRecords.map {
+            .tab(projectID: PinnedTabs.projectID, tabID: $0.id)
+        }
+        for project in projectStore.projects {
+            items.append(.project(project.id))
+            guard presentation.expandedProjects.contains(project.id) else { continue }
+            items.append(contentsOf: (appState.workspaces[project.id]?.tabs ?? []).map {
+                .tab(projectID: project.id, tabID: $0.id)
+            })
+        }
+        return items
     }
 
     private var activeTabID: UUID? {
@@ -731,13 +726,20 @@ struct SidebarContent: View {
     /// single right-click behaves exactly as before this feature.
     @ViewBuilder
     private func projectMenu(_ project: Project) -> some View {
-        Button("New Tab") { createTab(in: project) }
+        Button("New Tab") {
+            appState.selectProject(project)
+            appState.createTab(projectID: project.id, projects: projectStore.projects)
+            presentation.expandedProjects.insert(project.id)
+        }
         Button("Copy Path") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(project.path, forType: .string)
         }
         Divider()
         Button("Rename Project") { requestProjectRename(project.id) }
+        ProjectColorMenu(selection: project.color) { color in
+            projectStore.setColor(id: project.id, to: color)
+        }
         Divider()
         // Same reorder calls as Settings → Projects' rows; `toOffset` is in
         // `move(fromOffsets:toOffset:)` convention, hence `+ 2` for down.
@@ -756,12 +758,6 @@ struct SidebarContent: View {
         Button("Remove Project", role: .destructive) {
             appState.requestRemoveProject(project.id) { removeProject(project) }
         }
-    }
-
-    private func createTab(in project: Project) {
-        appState.selectProject(project)
-        appState.createTab(projectID: project.id, projectPath: project.path)
-        presentation.expandedProjects.insert(project.id)
     }
 
     /// A pinned row's menu — two exits with distinct semantics: Unpin (a
@@ -938,6 +934,42 @@ struct SidebarContent: View {
     }
 }
 
+/// Makes a sidebar row's title open its inline rename on a double-click.
+///
+/// A title-level gesture owns the whole tap sequence, so the List row never
+/// sees a click that lands on the text — which is why selection has to be
+/// re-applied here rather than left to the List. Rename rides alongside as a
+/// simultaneous gesture so the first click still selects immediately.
+///
+/// The modifiers come off the event being handled, not the keyboard's live
+/// state whenever the gesture resolves: a Command released together with the
+/// mouse button would otherwise read as a plain click and collapse an
+/// in-progress multi-selection down to the clicked row.
+private struct InlineRenameClickTarget: ViewModifier {
+    let onSelect: (NSEvent.ModifierFlags) -> Void
+    let onBeginRename: () -> Void
+
+    private var modifiers: NSEvent.ModifierFlags {
+        (NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags)
+            .intersection(.deviceIndependentFlagsMask)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onTapGesture { onSelect(modifiers) }
+            .simultaneousGesture(TapGesture(count: 2).onEnded { onBeginRename() })
+    }
+}
+
+extension View {
+    func inlineRenameClickTarget(
+        onSelect: @escaping (NSEvent.ModifierFlags) -> Void,
+        onBeginRename: @escaping () -> Void
+    ) -> some View {
+        modifier(InlineRenameClickTarget(onSelect: onSelect, onBeginRename: onBeginRename))
+    }
+}
+
 private struct SidebarProjectRow: View {
     let project: Project
     let index: Int
@@ -974,6 +1006,7 @@ private struct SidebarProjectRow: View {
                         .help(project.path)
                 }
             }
+            .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
         }
     }
 
@@ -986,7 +1019,14 @@ private struct SidebarProjectRow: View {
                 Label {
                     titleContent
                 } icon: {
-                    SidebarRowIcon(symbol: projectIconSymbol, index: index)
+                    // Only when tagged: forcing a color on an untagged row
+                    // would flatten the styling AppKit gives a selected row.
+                    if let color = project.color {
+                        TabRowIcon(symbol: projectIconSymbol, index: index)
+                            .foregroundStyle(MactermTheme.color(for: color))
+                    } else {
+                        TabRowIcon(symbol: projectIconSymbol, index: index)
+                    }
                 }
             }
         }
@@ -995,6 +1035,11 @@ private struct SidebarProjectRow: View {
         }
     }
 
+    /// The row this header stands for — the same value the enclosing
+    /// `DisclosureGroup` tags itself with, so a title click highlights the
+    /// row the List would have highlighted.
+    private var selectionItem: SidebarItem { .project(project.id) }
+
     private func beginRename() {
         guard isInteractive else { return }
         presentation.beginRename(
@@ -1002,6 +1047,11 @@ private struct SidebarProjectRow: View {
             text: project.name
         )
         appState.renamingProjectID = nil
+    }
+
+    private func select(_ modifiers: NSEvent.ModifierFlags) {
+        guard isInteractive else { return }
+        presentation.selectRow(selectionItem, modifiers: modifiers)
     }
 
     private func commit() {
@@ -1023,6 +1073,7 @@ private struct SidebarTabRow: View {
     /// Fixed icon overriding the user's `tabIconSymbol` preference — the
     /// pinned rows pass "pin" so the icon itself marks the row's kind.
     var iconSymbolOverride: String?
+    let selectionItem: SidebarItem
     @Bindable
     var presentation: SidebarPresentationState
     let isInteractive: Bool
@@ -1030,6 +1081,11 @@ private struct SidebarTabRow: View {
     /// was unloaded). Matches the unloaded pinned row's treatment — secondary
     /// title, tertiary icon, and a tooltip saying what selecting it does.
     var isUnloaded = false
+    /// The owning project's color tag, drawn on whatever glyph this row's
+    /// icon slot holds — and on nothing at all when it holds none, since a
+    /// tab row never carries a stripe. Nil for an untagged project and for
+    /// the pinned rows, which belong to none.
+    var projectColor: ProjectColor?
     let onRename: (String) -> Void
     @Environment(AppState.self)
     private var appState
@@ -1057,6 +1113,7 @@ private struct SidebarTabRow: View {
                 .onAppear { focused = true }
         } else {
             TabRowTitle(tab: tab)
+                .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
         }
     }
 
@@ -1070,50 +1127,47 @@ private struct SidebarTabRow: View {
         iconSymbolOverride ?? tabIconSymbol
     }
 
+    /// The project tag's color, or nil when the project is untagged — which
+    /// is what leaves an untagged row exactly as it was, agent logos in their
+    /// brand colors included. Also nil while the row is unloaded: the dim IS
+    /// the "no shells behind this" signal, and a saturated tag beside a greyed
+    /// title reads as half-live.
+    @MainActor
+    private var tagColor: Color? {
+        guard !isUnloaded else { return nil }
+        return projectColor.map { MactermTheme.color(for: $0) }
+    }
+
+    /// The icon's style: the tag when tagged, else the hierarchical
+    /// `.secondary` the row has always used. `AnyShapeStyle` because the two
+    /// arms are different style types — a `??` would bind the whole
+    /// expression to `Color` and silently swap `HierarchicalShapeStyle`
+    /// (which resolves against a selected row's own foreground) for the fixed
+    /// `Color.secondary`, changing every UNTAGGED row.
+    @MainActor
+    private var iconStyle: AnyShapeStyle {
+        tagColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary)
+    }
+
     var body: some View {
         Group {
             if iconSymbol == Preferences.noIcon {
                 Label {
                     titleContent
                 } icon: {
-                    if showTabStatusIndicator, tab.executionState != .idle || agentIcon != nil {
-                        // Only give the label an icon while the status glyph
-                        // actually draws something (spinner, done dot, agent
-                        // logo). An idle status with "None" renders the
-                        // sentinel as an invisible Image that still reserves
-                        // the icon column, nudging the title right of every
-                        // other icon-less row.
-                        TabStatusGlyph(
-                            state: tab.executionState,
-                            symbol: iconSymbol,
-                            index: index,
-                            agent: agentIcon,
-                            spinnerOverAgent: showSpinnerOverAgentIcons
-                        )
-                    } else if let agentIcon {
-                        // "None" suppresses the user's icon, not the agent
-                        // logo — a live status signal, like the else branch.
-                        SidebarRowIcon(symbol: iconSymbol, index: index, agent: agentIcon)
-                            .foregroundStyle(.secondary)
-                    }
+                    // `TabGlyph` draws nothing when "None" leaves no live
+                    // signal to show, which is what this branch needs: an
+                    // invisible Image would still reserve the Label's icon
+                    // column, nudging the title right of every other
+                    // icon-less row.
+                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol, tint: tagColor)
                 }
                 .labelStyle(.titleAndIcon)
             } else {
                 Label {
                     titleContent
                 } icon: {
-                    if showTabStatusIndicator {
-                        TabStatusGlyph(
-                            state: tab.executionState,
-                            symbol: iconSymbol,
-                            index: index,
-                            agent: agentIcon,
-                            spinnerOverAgent: showSpinnerOverAgentIcons
-                        )
-                    } else {
-                        SidebarRowIcon(symbol: iconSymbol, index: index, agent: agentIcon)
-                            .foregroundStyle(.secondary)
-                    }
+                    TabGlyph(tab: tab, index: index, symbolOverride: iconSymbol, tint: tagColor)
                 }
             }
         }
@@ -1134,6 +1188,11 @@ private struct SidebarTabRow: View {
             originalCustomTitle: tab.customTitle
         )
         appState.renamingTabID = nil
+    }
+
+    private func select(_ modifiers: NSEvent.ModifierFlags) {
+        guard isInteractive else { return }
+        presentation.selectRow(selectionItem, modifiers: modifiers)
     }
 
     private func commit() {
@@ -1248,196 +1307,6 @@ private struct TabRowTitle: View {
             }
         } else {
             FadingText(tab.sidebarRowTitle)
-        }
-    }
-}
-
-/// The tab icon with a coexisting status indicator (the maintainer's
-/// suggestion): the user's chosen icon stays put, and status is additive.
-///
-/// - `running`: a small spinner replaces the icon (temporary prominence,
-///   Xcode-build-navigator style) — unless the icon is an AI agent's logo and
-///   the user turned "Show spinner over agent icons" off (#225): agent CLIs
-///   draw their own busy indicator in the tab title, so the logo can stay put.
-/// - `done` (needs attention): the icon with a small solid status dot in the
-///   bottom-trailing corner — like the Messages/FaceTime "available" dot. A
-///   dot reads as "done/positive" without competing with the icon's identity,
-///   and it avoids the heavy, off-platform look of a checkmark glyph badge.
-///   It overlays the agent logo the same way, regardless of the spinner
-///   preference — "unread agent messages" is the signal #225 asked to keep.
-/// - `idle`: the icon as-is.
-private struct TabStatusGlyph: View {
-    let state: TerminalExecutionState
-    let symbol: String
-    let index: Int
-    var agent: AgentIcon?
-    var spinnerOverAgent = true
-    @AppStorage(Preferences.Keys.sidebarIconSize)
-    private var iconSizeRaw = SidebarIconSize.medium.rawValue
-
-    private var size: SidebarIconSize {
-        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
-    }
-
-    /// The spinner is a control, so it steps between AppKit's control sizes
-    /// rather than scaling continuously with the icons. `.mini` (12pt) matches
-    /// a small symbol closely; `.regular` is 32pt, far past even a large one,
-    /// so large stays on `.small` and only its frame grows.
-    private var spinnerControlSize: ControlSize {
-        size == .small ? .mini : .small
-    }
-
-    var body: some View {
-        switch state {
-        case .running:
-            if let agent, !spinnerOverAgent {
-                SidebarRowIcon(symbol: symbol, index: index, agent: agent)
-                    .foregroundStyle(.secondary)
-                    .help("Running")
-            } else {
-                let side = 16 * size.glyphScale
-                ProgressView()
-                    .controlSize(spinnerControlSize)
-                    .tint(.secondary)
-                    .help("Running")
-                    .frame(width: side, height: side)
-            }
-        case .done:
-            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
-                .foregroundStyle(.secondary)
-                .overlay(alignment: .bottomTrailing) {
-                    // Opaque (not translucent) so it reads clearly over the
-                    // icon and the sidebar background. Nested in a background
-                    // ring so it stays legible over any icon color. Sized off
-                    // the icon so the dot keeps hugging its corner at every
-                    // icon size instead of floating away from a smaller glyph.
-                    Circle()
-                        .fill(.background)
-                        .frame(width: 7 * size.glyphScale, height: 7 * size.glyphScale)
-                        .overlay(
-                            Circle()
-                                .fill(MactermTheme.success)
-                                .frame(width: 5 * size.glyphScale, height: 5 * size.glyphScale)
-                        )
-                        .offset(x: 2.5 * size.glyphScale, y: 2.5 * size.glyphScale)
-                }
-                .help("Done")
-        case .idle:
-            SidebarRowIcon(symbol: symbol, index: index, agent: agent)
-                .foregroundStyle(.secondary)
-                .help("Idle")
-        }
-    }
-}
-
-private extension AgentIcon {
-    /// The agent's brand tint. These are vendor identity colors, not theme
-    /// colors, so they're the one deliberate exception to "all colors come
-    /// from MactermTheme". Monochrome brands (Cursor, Grok, opencode) use
-    /// `.primary` so they stay black-on-light / white-on-dark like the brand.
-    var brandColor: Color {
-        switch self {
-        case .claude: Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255) // Anthropic coral
-        case .codex: Color(red: 0xAB / 255, green: 0xAB / 255, blue: 0xAB / 255) // OpenAI light gray
-        case .gemini: Color(red: 0x42 / 255, green: 0x85 / 255, blue: 0xF4 / 255) // Google blue
-        case .copilot: Color(red: 0x89 / 255, green: 0x57 / 255, blue: 0xE5 / 255) // GitHub purple
-        case .antigravity: Color(red: 0x31 / 255, green: 0x86 / 255, blue: 0xFF / 255) // Google Antigravity blue
-        case .opencode,
-             .cursor,
-             .grok,
-             .pi: .primary
-        }
-    }
-}
-
-private struct SidebarRowIcon: View {
-    let symbol: String
-    let index: Int
-    var agent: AgentIcon?
-    @AppStorage(Preferences.Keys.sidebarIconSize)
-    private var iconSizeRaw = SidebarIconSize.medium.rawValue
-    /// Scales with the user's text size like the sibling SF Symbols do; a
-    /// fixed 15pt would stay small next to enlarged row text.
-    @ScaledMetric(relativeTo: .body)
-    private var agentIconSize: CGFloat = 15
-
-    private var size: SidebarIconSize {
-        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
-    }
-
-    var body: some View {
-        if let agent {
-            // A live AI agent in the tab overrides the user's chosen icon —
-            // the logo is a status signal, tinted with the agent's brand color
-            // (overriding the row's .secondary tint).
-            let side = agentIconSize * size.glyphScale
-            Image(agent.rawValue)
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .frame(width: side, height: side)
-                .foregroundStyle(agent.brandColor)
-        } else if Preferences.numberIconChoices.contains(symbol) {
-            NumberGlyph(index: index, variant: symbol, size: size)
-        } else {
-            Image(systemName: symbol)
-                .imageScale(size.imageScale)
-        }
-    }
-}
-
-private extension SidebarIconSize {
-    /// SwiftUI's own symbol scaling, which sizes a symbol against whatever font
-    /// the row hands it. `medium` is the default, so the middle case leaves an
-    /// icon exactly the size it was before this preference existed rather than
-    /// pinning it to a point size of our own.
-    var imageScale: Image.Scale {
-        switch self {
-        case .small: .small
-        case .medium: .medium
-        case .large: .large
-        }
-    }
-}
-
-private struct NumberGlyph: View {
-    let index: Int
-    let variant: String
-    var size: SidebarIconSize = .medium
-    /// The `.body` point size, as a metric so the digits keep tracking the
-    /// user's text size once `glyphScale` has been applied — `imageScale` is
-    /// no help here, since these variants draw text rather than a symbol.
-    @ScaledMetric(relativeTo: .body)
-    private var bodyFontSize: CGFloat = 13
-
-    private var digitFont: Font {
-        .system(size: bodyFontSize * size.glyphScale).monospacedDigit()
-    }
-
-    var body: some View {
-        if variant == Preferences.numberIconPlain {
-            Text("\(index)")
-                .font(digitFont)
-        } else if let suffix = shapeSuffix, (1 ... 50).contains(index) {
-            // SF Symbols ships `1.<shape>` through `50.<shape>`; beyond that,
-            // fall back to plain digits so we don't render a missing glyph.
-            Image(systemName: "\(index).\(suffix)")
-                .imageScale(size.imageScale)
-        } else {
-            Text("\(index)")
-                .font(digitFont)
-        }
-    }
-
-    /// Maps the sentinel token (e.g. `number.circle.fill`) to the suffix used
-    /// by the indexed SF Symbol (e.g. `circle.fill` in `1.circle.fill`).
-    private var shapeSuffix: String? {
-        switch variant {
-        case Preferences.numberIconCircleFill: "circle.fill"
-        case Preferences.numberIconCircle: "circle"
-        case Preferences.numberIconSquareFill: "square.fill"
-        case Preferences.numberIconSquare: "square"
-        default: nil
         }
     }
 }

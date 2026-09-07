@@ -230,6 +230,13 @@ struct MainWindow: View {
                 CommandPaletteOverlay()
             }
         }
+        // Below the palette (the two can't be up together — cycling commits on
+        // modifier release), above the terminal it describes.
+        .overlay {
+            if appState.isTabCycling, preferences.showTabSwitcherOverlay {
+                TabSwitcherOverlay()
+            }
+        }
         // Above the palette overlay so a toast fired by a palette command isn't
         // covered by the palette's own dismissal animation.
         .overlay {
@@ -250,6 +257,10 @@ struct MainWindow: View {
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
+            // After the restore, never before: "is this a fresh install?" is
+            // only answerable once the snapshot is loaded, `pinned.yaml` is
+            // reconciled and a load failure is known (see FirstRunSeed).
+            appState.seedFirstRunIfNeeded(projectStore: projectStore)
         }
         .onContinuousHover(coordinateSpace: .local) { phase in
             handleSidebarPeekHover(phase)
@@ -884,10 +895,15 @@ struct WorkspaceView: View {
                 zoomedPaneID: tab.zoomedPaneID,
                 isActiveProject: true,
                 projectID: project.id,
+                nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab),
                 onFocusPane: { appState.focusPane($0, projectID: project.id) },
                 onSplit: { paneID, dir in
-                    tab.split(paneID: paneID, direction: dir)
-                    appState.saveWorkspaces()
+                    appState.splitPane(
+                        paneID,
+                        direction: dir,
+                        projectID: project.id,
+                        projectDirectory: project.path
+                    )
                 },
                 // This closure is the PROCESS-EXIT path only (SplitTreeView
                 // wires it to the surface's onProcessExit; the user's Cmd+W
@@ -1131,20 +1147,6 @@ private struct WindowStyler: NSViewRepresentable {
             syncWindowTopSafeAreaInset(window: window)
             syncInitialSidebarVisibility(window: window)
             swiftuiDelegate?.windowDidBecomeMain?(notification)
-        }
-
-        func windowDidBecomeKey(_ notification: Notification) {
-            if let window = notification.object as? NSWindow {
-                WindowAppearance.syncKeyStatus(window: window)
-            }
-            swiftuiDelegate?.windowDidBecomeKey?(notification)
-        }
-
-        func windowDidResignKey(_ notification: Notification) {
-            if let window = notification.object as? NSWindow {
-                WindowAppearance.syncKeyStatus(window: window)
-            }
-            swiftuiDelegate?.windowDidResignKey?(notification)
         }
 
         func windowDidEnterFullScreen(_ notification: Notification) {

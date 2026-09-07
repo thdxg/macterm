@@ -258,7 +258,43 @@ final class AppState {
     private var tabCycleIndex: Int = 0
     var isTabCycling: Bool { !tabCycleOrder.isEmpty }
 
+    /// The tab IDs the current cycle walks, most-recent-first, and where in
+    /// that list the gesture currently sits — what the tab switcher overlay
+    /// (#344) renders. Empty when no cycle is in flight.
+    var tabCycleTabIDs: [UUID] { tabCycleOrder }
+    var tabCycleSelection: Int { tabCycleIndex }
+
+    /// Last collected preview per pane, keyed by pane ID — what the tab
+    /// switcher renders.
+    ///
+    /// A cache rather than a capture at gesture time, because a pane only
+    /// holds a rendered frame while it is on screen (see `PanePreview`): by
+    /// the time the switcher wants to show you the tabs you are *not* on,
+    /// their pixels are gone. So the foreground poll collects a frame from
+    /// whatever is visible and this remembers it, and the strip shows each
+    /// tab as it last looked. Panes no frame was ever collected from fall
+    /// back to their live viewport text.
+    private(set) var panePreviews: [UUID: PanePreview] = [:]
+
+    /// Aspect ratio of the region a workspace's panes fill on screen, so the
+    /// switcher's cards can be shaped like the thing they picture rather than
+    /// cropping it. Measured from whichever tab is visible; every tab in the
+    /// workspace fills the same container, so one value shapes the strip.
+    private(set) var paneContainerAspect: CGFloat?
+
+    /// Throttle for the poll-driven collection above. The poll itself runs as
+    /// fast as 250ms in a burst; a thumbnail does not need that.
+    @ObservationIgnored
+    private var lastPanePreviewCapture = Date.distantPast
+    private static let panePreviewInterval: TimeInterval = 0.75
+
     private let workspaceStore: WorkspaceStore
+
+    /// Whether the snapshot came back unreadable — the store stays private,
+    /// but its fail-closed verdict is needed outside this file (the first-run
+    /// seed must not mistake an unread snapshot for a fresh install).
+    var snapshotLoadFailed: Bool { workspaceStore.loadFailed }
+
     /// Per-pane attempt gating for the reconnect sweep (#281). Not observed —
     /// pure bookkeeping, no UI reads it.
     @ObservationIgnored
@@ -530,6 +566,7 @@ final class AppState {
     /// workspaces. Each pane only republishes (and triggers a tab re-render)
     /// when its name actually changes, so this is cheap when nothing's moving.
     func refreshAllForegroundProcesses() {
+        capturePanePreviewsIfDue()
         // Shell/raw-mode detection (KERN_PROCARGS2 + open/tcgetattr per pane)
         // and the quiet-settle only matter when the status indicator is shown;
         // skip them in icon mode so the default poll stays as cheap as before
@@ -869,11 +906,185 @@ final class AppState {
     /// too (#285), or a sweep would kill the very sessions the materialize
     /// step is about to reattach.
     private func claimedSessionNames() -> Set<String> {
-        Set(workspaces.values
+        Set(allLivePanes().map(\.sessionName))
+            .union(pendingPinnedSessionNames())
+    }
+
+    /// Every pane attached to a session, across ALL workspaces (pinned
+    /// included) — the shared traversal behind `claimedSessionNames` and
+    /// `releaseSessions`.
+    private func allLivePanes() -> [Pane] {
+        workspaces.values
             .flatMap(\.tabs)
             .flatMap { $0.splitRoot.allPanes() }
-            .map(\.sessionName))
-            .union(pendingPinnedSessionNames())
+    }
+
+    /// Give up these panes' claims on their zmx sessions, killing a session
+    /// only when no OTHER pane still attaches it. Several panes may share one
+    /// session (a mirror of the same session shown elsewhere), so a pane going
+    /// away is a *release*, not a kill: the daemon has to outlive it for the
+    /// mirrors that remain, or closing one view of a session would destroy the
+    /// work still on screen in another.
+    ///
+    /// Takes the whole batch at once, because the callers that unload a
+    /// project, close a tab, or drop a layout's panes release many panes
+    /// together — asked one at a time, two mirrors inside one batch would each
+    /// see the other still in the tree, both decline to kill, and leak the
+    /// session as a clients==0 daemon.
+    ///
+    /// Callers still `destroySurface()` themselves; this decides only the kill.
+    func releaseSessions(_ panes: [Pane]) {
+        let retained = retainedSessionNames(excluding: panes)
+        for pane in panes where !retained.contains(pane.sessionName) {
+            pane.killPersistentSession(using: zmx)
+        }
+        defer { pruneSessionLeaders() }
+    }
+
+    // MARK: - Mirrored sessions and leadership (#345)
+
+    /// Which pane currently drives each mirrored session's pty size.
+    ///
+    /// zmx allows several clients per session but only one **leader**, whose
+    /// window size it applies to the pty (`handleResize` drops a non-leader's
+    /// size outright). Every client still receives the same broadcast output,
+    /// so a non-leader mirror is live but laid out for someone else's
+    /// geometry — which is what the dim treatment tells the user.
+    ///
+    /// Macterm-authoritative, and only meaningful for a mirrored session.
+    /// Known gap: a foreign `zmx attach` from a real terminal can take
+    /// leadership on its own (any real keystroke does, by zmx's
+    /// `isUserInput` rule) without telling us, leaving this stale. Closing
+    /// that needs a daemon-to-client notification zmx has no tag for.
+    private var sessionLeaders: [String: UUID] = [:]
+
+    /// Every pane attached to `sessionName`, in tree order across all
+    /// workspaces.
+    func panesAttached(to sessionName: String) -> [Pane] {
+        allLivePanes().filter { $0.sessionName == sessionName }
+    }
+
+    /// Whether another pane shows this pane's session — i.e. whether the
+    /// leader distinction means anything for it at all.
+    func isMirrored(_ pane: Pane) -> Bool {
+        var seen = false
+        for candidate in allLivePanes() where candidate.sessionName == pane.sessionName {
+            if seen { return true }
+            seen = true
+        }
+        return false
+    }
+
+    /// Whether `pane` is the one driving its session's pty size. An unmirrored
+    /// pane is trivially the leader — it is the only client.
+    ///
+    /// With no recorded leader (a restored pair, where both panes attached
+    /// before we tracked anything) this infers the first pane in tree order.
+    /// That is best-effort rather than authoritative: zmx makes the FIRST
+    /// client to attach the leader, and restore warms panes in tree order, so
+    /// the two agree in practice — and any real keystroke resynchronises them.
+    func isLeader(_ pane: Pane) -> Bool {
+        let attached = panesAttached(to: pane.sessionName)
+        guard attached.count > 1 else { return true }
+        if let recorded = sessionLeaders[pane.sessionName],
+           attached.contains(where: { $0.id == recorded })
+        {
+            return recorded == pane.id
+        }
+        return attached.first?.id == pane.id
+    }
+
+    /// Record `pane` as its session's leader. Called where the daemon would
+    /// have made it leader anyway — the pane took focus, or input was injected
+    /// into it — so our model tracks zmx's rather than diverging from it.
+    func noteSessionLeader(_ pane: Pane) {
+        guard isMirrored(pane) else { return }
+        sessionLeaders[pane.sessionName] = pane.id
+    }
+
+    /// Hand this pane's session leadership over because the user moved to it —
+    /// updating our model AND telling zmx, which otherwise only switches leader
+    /// on real keystrokes and so would leave the pty sized for the pane the
+    /// user just left.
+    ///
+    /// The claim is sent unconditionally for a mirrored local pane, not only
+    /// when we believe leadership needs to move. zmx's `handleClaim` is a
+    /// no-op for a client that already leads, so the redundant case is free —
+    /// and sending anyway is what re-synchronises us whenever our model and
+    /// the daemon have drifted (an inferred leader after restore, or a foreign
+    /// `zmx attach` that took leadership without telling us).
+    ///
+    /// Debounced: a claim costs a pty resize, a SIGWINCH and a full TUI
+    /// redraw, and focus is noisy — `mouseDown` reports it twice per click
+    /// (directly and again via `becomeFirstResponder`) and `FocusRestoration`
+    /// retries across run-loop ticks. Cmd-tabbing past a window must not
+    /// reflow the program twice.
+    ///
+    /// **Remote panes are excluded.** Their zmx lives on the host and may
+    /// predate the Claim tag, in which case the client forwards the APC to the
+    /// shell and the user gets garbage on their prompt. Knowing otherwise
+    /// needs a per-host version probe; until then a remote mirror falls back
+    /// to zmx's own behaviour, where typing into it transfers leadership.
+    func claimSessionLeadership(_ pane: Pane) {
+        guard isMirrored(pane) else { return }
+        // Record first so the dim moves with the click rather than after the
+        // debounce — the model is ours to change immediately.
+        noteSessionLeader(pane)
+        guard !pane.isRemote else { return }
+        pendingLeadershipClaim?.cancel()
+        let work = DispatchWorkItem { [weak self, weak pane] in
+            guard let self, let pane, self.isLeader(pane) else { return }
+            pane.nsView?.sendLeadershipClaim()
+        }
+        pendingLeadershipClaim = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.leadershipClaimDebounce, execute: work)
+    }
+
+    private static let leadershipClaimDebounce: TimeInterval = 0.15
+    private var pendingLeadershipClaim: DispatchWorkItem?
+
+    /// The panes in `tab` that are mirrors NOT currently driving their
+    /// session's size — the ones the UI dims.
+    func nonLeaderPaneIDs(in tab: TerminalTab) -> Set<UUID> {
+        var ids: Set<UUID> = []
+        for pane in tab.splitRoot.allPanes() where !isLeader(pane) {
+            ids.insert(pane.id)
+        }
+        return ids
+    }
+
+    /// Drop leadership records for sessions nothing attaches any more, so the
+    /// table can't grow across a long run.
+    private func pruneSessionLeaders() {
+        let live = Set(allLivePanes().map(\.sessionName))
+        sessionLeaders = sessionLeaders.filter { live.contains($0.key) }
+    }
+
+    /// The session names still claimed once `releasing` is gone. Shared by
+    /// `releaseSessions` and `closeNeedsConfirmation` so the kill decision and
+    /// the warning about it can never disagree.
+    private func retainedSessionNames(excluding releasing: [Pane]) -> Set<String> {
+        let ids = Set(releasing.map(\.id))
+        return Set(
+            allLivePanes()
+                .filter { !ids.contains($0.id) }
+                .map(\.sessionName)
+        ).union(pendingPinnedSessionNames())
+    }
+
+    /// Whether closing `closing` is worth stopping the user over.
+    ///
+    /// The busy-close guard exists because closing a pane kills its session
+    /// and whatever is running in it. That is no longer true for every pane:
+    /// a pane whose session ANOTHER pane still attaches is only a view going
+    /// away — nothing is killed, and the program keeps running in the other
+    /// view — so warning "closing kills its session" there would be false.
+    ///
+    /// Uses the same retention rule as `releaseSessions`, because what the
+    /// user stands to lose is exactly what that function decides to kill.
+    func closeNeedsConfirmation(_ closing: [Pane]) -> Bool {
+        let retained = retainedSessionNames(excluding: closing)
+        return closing.contains { $0.needsConfirmClose && !retained.contains($0.sessionName) }
     }
 
     private func shouldSweep(_ destination: String, now: Date) -> Bool {
@@ -986,9 +1197,8 @@ final class AppState {
     /// and wants new tabs / persisted state to start there.
     ///
     /// No-op when there's no active project or no resolvable pwd. We don't
-    /// touch open panes or workspaces — those keep their current cwd; only
-    /// future tabs created via `createTab(projectID:projects:)` (which reads
-    /// `project.path`) will land in the new directory.
+    /// touch open panes or workspaces. They keep their current cwd. Future tabs
+    /// use the new directory when "New tab directory" is set to Project.
     func replaceProjectPathWithCurrentDir(projectStore: ProjectStore) {
         guard let projectID = activeProjectID,
               let project = projectStore.projects.first(where: { $0.id == projectID }),
@@ -1024,14 +1234,16 @@ final class AppState {
         guard let ws = workspaces[projectID] else { return }
         logger.debug("unloadProject: \(projectID, privacy: .public)")
         let snapshot = WorkspaceSerializer.snapshot([projectID: ws])
-        for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-            // Unload KILLS: with quit now a detach, this is the one action
-            // that stops a whole project's shells while keeping its layout
-            // (the group-kill #113 asked for). A detaching unload would be
-            // a trap — "unloaded" shells silently running forever. The
-            // snapshot keeps the layout; reopening spawns fresh shells in
-            // the saved cwds (`zmx attach` upserts over the dead names).
-            pane.killPersistentSession(using: zmx)
+        let unloading = ws.tabs.flatMap { $0.splitRoot.allPanes() }
+        // Unload KILLS: with quit now a detach, this is the one action that
+        // stops a whole project's shells while keeping its layout (the
+        // group-kill #113 asked for). A detaching unload would be a trap —
+        // "unloaded" shells silently running forever. The snapshot keeps the
+        // layout; reopening spawns fresh shells in the saved cwds (`zmx
+        // attach` upserts over the dead names). A session mirrored outside
+        // this project survives, and its pane keeps it.
+        releaseSessions(unloading)
+        for pane in unloading {
             pane.destroySurface()
         }
         if let restored = WorkspaceSerializer.restore(from: snapshot, validIDs: [projectID]).first {
@@ -1057,9 +1269,11 @@ final class AppState {
         guard projectID != PinnedTabs.projectID else { return }
         logger.debug("removeProject: \(projectID, privacy: .public)")
         if let ws = workspaces[projectID] {
-            for pane in ws.tabs.flatMap({ $0.splitRoot.allPanes() }) {
-                // Project removed for good → its sessions die with it.
-                pane.killPersistentSession(using: zmx)
+            // Project removed for good → its sessions die with it, unless a
+            // session is mirrored by a pane outside this project.
+            let removing = ws.tabs.flatMap { $0.splitRoot.allPanes() }
+            releaseSessions(removing)
+            for pane in removing {
                 pane.destroySurface()
             }
         }
@@ -1201,26 +1415,48 @@ final class AppState {
     /// `run:` semantics). Returns the new tab's ID, nil when the project has
     /// no live workspace.
     @discardableResult
-    func createTab(projectID: UUID, projectPath: String, command: String? = nil) -> UUID? {
+    func createTab(
+        projectID: UUID,
+        projectPath: String,
+        sessionSlug: String? = nil,
+        command: String? = nil
+    ) -> UUID? {
         guard let ws = workspaces[projectID] else { return nil }
-        let tab = ws.createTab(projectPath: projectPath, command: command)
+        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command)
         logger.debug("createTab: project=\(projectID, privacy: .public) tabs=\(ws.tabs.count, privacy: .public)")
         saveWorkspaces()
         return tab.id
     }
 
-    /// Convenience overload: look up the project's canonical path from the
-    /// given projects list so new tabs always land in the project directory,
-    /// not whatever cwd the last pane drifted to. A new tab in the PINNED
-    /// workspace (no project directory) starts at home; it's pinned from
-    /// birth — `saveWorkspaces` gives it a record.
-    func createTab(projectID: UUID, projects: [Project]) {
-        if projectID == PinnedTabs.projectID {
-            createTab(projectID: projectID, projectPath: PinnedTabs.fallbackRoot)
-            return
+    /// Creates a tab in the directory selected in Settings.
+    /// Active pane falls back to the project path when no local cwd is available.
+    /// The pinned workspace falls back to home.
+    @discardableResult
+    func createTab(projectID: UUID, projects: [Project], command: String? = nil) -> UUID? {
+        guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
+            return nil
         }
-        guard let project = projects.first(where: { $0.id == projectID }) else { return }
-        createTab(projectID: projectID, projectPath: project.path)
+        let activePaneDirectory = focusedPane(for: projectID)?.liveLocalWorkingDirectory()
+        // A brand-new tab has no source pane to inherit from, so an
+        // unusable active-pane cwd (nil) lands in the project directory.
+        let newTabDirectory = Preferences.shared.newTabWorkingDirectory.resolveNewTerminalDirectory(
+            projectDirectory: projectDirectory,
+            activePaneDirectory: activePaneDirectory
+        ) ?? projectDirectory
+        // The cwd is user-selectable, but zmx session grouping remains project-scoped.
+        let projectSessionSlug = (projectDirectory as NSString).lastPathComponent
+        return createTab(
+            projectID: projectID,
+            projectPath: newTabDirectory,
+            sessionSlug: projectSessionSlug,
+            command: command
+        )
+    }
+
+    /// Returns the configured project root, including the synthetic pinned workspace fallback.
+    private func configuredProjectDirectory(projectID: UUID, projects: [Project]) -> String? {
+        if projectID == PinnedTabs.projectID { return PinnedTabs.fallbackRoot }
+        return projects.first(where: { $0.id == projectID })?.path
     }
 
     /// The teardown half of `closeTab`, without the workspace save — so a
@@ -1237,9 +1473,11 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
         logger.debug("closeTab: \(tabID, privacy: .public) project=\(projectID, privacy: .public)")
-        for pane in tab.splitRoot.allPanes() {
-            // Tab closed for good → its panes' zmx sessions die with it.
-            pane.killPersistentSession(using: zmx)
+        // Tab closed for good → its panes' zmx sessions die with it, unless a
+        // session is mirrored by a pane in another tab or window.
+        let closing = tab.splitRoot.allPanes()
+        releaseSessions(closing)
+        for pane in closing {
             pane.destroySurface()
         }
         ws.closeTab(tabID)
@@ -1544,15 +1782,125 @@ final class AppState {
         }
     }
 
+    /// The modifiers the Recent Tab binding is held with, whatever the user
+    /// bound it to — the gesture both the switcher and the deferred commit
+    /// hang off. Read live rather than assumed: `ctrl+tab` is only the
+    /// default, and the commit used to hardcode Control, so rebinding the
+    /// action to `cmd+tab` left a cycle that never committed.
+    ///
+    /// Empty for a bare key, which cannot be *held*: there is no release to
+    /// commit on, so cycling degrades to switching straight away (below).
+    var recentTabHoldModifiers: NSEvent.ModifierFlags {
+        HotkeyRegistry.selectedShortcut(for: .recentTab)?.modifiers ?? []
+    }
+
     func cycleRecentTab(projectID: UUID) {
         guard let ws = workspaces[projectID] else { return }
         if tabCycleOrder.isEmpty {
             tabCycleOrder = ws.recencyOrder()
             tabCycleIndex = 0
+            prepareTabCyclePreviews(in: ws)
         }
         guard tabCycleOrder.count > 1 else { return }
         tabCycleIndex = (tabCycleIndex + 1) % tabCycleOrder.count
+        // A binding with no modifier has no release to commit on, so there is
+        // no hold gesture to preview: switch now and end the cycle.
+        if recentTabHoldModifiers.isEmpty {
+            commitTabCycle(projectID: projectID)
+            return
+        }
+        // With the switcher up, a repeat moves the SELECTION only: the tab
+        // behind it — and the pane holding focus — stays put until the
+        // modifier is released and `commitTabCycle` runs. That is the whole
+        // point of showing the candidates (#344), and it also keeps a long
+        // hold from dragging focus through every tab on the way past.
+        //
+        // Without the switcher there is nothing else to look at, so the
+        // original behavior stands: each press peeks the tab for real.
+        guard !Preferences.shared.showTabSwitcherOverlay else { return }
         ws.peekTab(tabCycleOrder[tabCycleIndex])
+    }
+
+    /// Bring the preview cache up to date for the workspace a cycle is about
+    /// to walk: refresh the visible tab (its frame is live right now) and give
+    /// every other pane a text fallback if nothing was ever collected from it.
+    /// Skipped entirely when the overlay is off, so the default cycling path
+    /// costs nothing.
+    private func prepareTabCyclePreviews(in ws: Workspace) {
+        guard Preferences.shared.showTabSwitcherOverlay else { return }
+        for tab in ws.tabs {
+            let isVisible = tab.id == ws.activeTabID
+            if isVisible, let aspect = PanePreviewCapture.containerAspect(of: tab) {
+                paneContainerAspect = aspect
+            }
+            // Re-capture a pane we know nothing about yet, not merely one with
+            // no entry at all. A capture can legitimately come back empty —
+            // the pane has no NSView until `SurfaceIncubator` warms it, no
+            // ghostty surface until that view gets a window and a size, and no
+            // text until its shell prints — and treating the first such answer
+            // as the answer left the card blank for the rest of the run, since
+            // an entry existed and nothing would replace it.
+            for pane in tab.splitRoot.allPanes()
+                where isVisible || panePreviews[pane.id]?.isEmpty ?? true
+            {
+                store(PanePreviewCapture.capture(pane), for: pane.id)
+            }
+        }
+        // Drop previews of panes that have closed. Checked across every
+        // workspace, not just this one — a cached preview belongs to a pane,
+        // and a pane in another project is still alive.
+        let live = Set(workspaces.values.flatMap { $0.tabs.flatMap { $0.splitRoot.allPanes().map(\.id) } })
+        panePreviews = panePreviews.filter { live.contains($0.key) }
+    }
+
+    /// Collect a frame from whatever is on screen, throttled. Called from the
+    /// foreground poll — the one place that already runs whenever a terminal
+    /// is visible and doing something.
+    private func capturePanePreviewsIfDue() {
+        guard Preferences.shared.showTabSwitcherOverlay,
+              let projectID = activeProjectID,
+              let tab = workspaces[projectID]?.activeTab
+        else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastPanePreviewCapture) >= Self.panePreviewInterval else { return }
+        lastPanePreviewCapture = now
+        if let aspect = PanePreviewCapture.containerAspect(of: tab) {
+            paneContainerAspect = aspect
+        }
+        for pane in tab.splitRoot.allPanes() {
+            store(PanePreviewCapture.capture(pane), for: pane.id)
+        }
+    }
+
+    /// Keep the best preview we have. A capture that came back frameless must
+    /// not erase a frame we already collected — that is the whole point of the
+    /// cache — and one that came back with nothing at all must not erase text
+    /// either, so a pane that goes quiet keeps showing what it last looked
+    /// like rather than blanking.
+    private func store(_ preview: PanePreview, for paneID: UUID) {
+        guard let existing = panePreviews[paneID] else {
+            panePreviews[paneID] = preview
+            return
+        }
+        if preview.image == nil, existing.image != nil { return }
+        if preview.isEmpty, !existing.isEmpty { return }
+        panePreviews[paneID] = preview
+    }
+
+    /// Point the in-flight cycle at `index` without committing — what hovering
+    /// a card in the switcher does. Out-of-range indices are ignored, since a
+    /// tab can close under the pointer mid-gesture.
+    func focusTabCycle(at index: Int) {
+        guard tabCycleOrder.indices.contains(index) else { return }
+        tabCycleIndex = index
+    }
+
+    /// Commit the cycle straight to `index` — what clicking a card does. The
+    /// modifier may still be held afterwards; the cycle is over either way, so
+    /// its eventual release finds nothing to commit.
+    func commitTabCycle(projectID: UUID, at index: Int) {
+        focusTabCycle(at: index)
+        commitTabCycle(projectID: projectID)
     }
 
     func commitTabCycle(projectID: UUID) {
@@ -1636,13 +1984,48 @@ final class AppState {
 
     // MARK: - Splits
 
-    func splitPane(direction: SplitDirection, projectID: UUID) {
+    /// Splits the focused pane using the user's new split directory preference.
+    func splitPane(direction: SplitDirection, projectID: UUID, projects: [Project]) {
         guard let tab = workspaces[projectID]?.activeTab,
-              let paneID = tab.focusedPaneID
+              let paneID = tab.focusedPaneID,
+              let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects)
         else { return }
+        splitPane(
+            paneID,
+            direction: direction,
+            projectID: projectID,
+            projectDirectory: projectDirectory
+        )
+    }
+
+    /// Splits a specific pane using the user's new split directory preference.
+    @discardableResult
+    func splitPane(
+        _ paneID: UUID,
+        direction: SplitDirection,
+        projectID: UUID,
+        projectDirectory: String,
+        command: String? = nil
+    ) -> UUID? {
+        guard let ws = workspaces[projectID],
+              let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
+              let pane = tab.splitRoot.findPane(id: paneID)
+        else { return nil }
+        // nil = inherit (the source pane's live cwd, else its own
+        // `projectPath`) — never coerced to the project root, which would
+        // turn a remote pane's split into a local shell.
+        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+            projectDirectory: projectDirectory,
+            activePaneDirectory: pane.liveLocalWorkingDirectory()
+        )
         logger.debug("splitPane: \(String(describing: direction), privacy: .public) pane=\(paneID, privacy: .public)")
-        tab.split(paneID: paneID, direction: direction)
-        saveWorkspaces()
+        return splitPane(
+            paneID,
+            direction: direction,
+            projectID: projectID,
+            command: command,
+            newPaneWorkingDirectory: newPaneDirectory
+        )
     }
 
     /// Split a SPECIFIC pane — found in whichever of the project's tabs holds
@@ -1654,42 +2037,95 @@ final class AppState {
         _ paneID: UUID,
         direction: SplitDirection,
         projectID: UUID,
-        command: String? = nil
+        command: String? = nil,
+        newPaneWorkingDirectory: String? = nil
     ) -> UUID? {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
         else { return nil }
-        let newID = tab.split(paneID: paneID, direction: direction, command: command)
+        let newID = tab.split(
+            paneID: paneID,
+            direction: direction,
+            command: command,
+            newPaneWorkingDirectory: newPaneWorkingDirectory
+        )
+        saveWorkspaces()
+        return newID
+    }
+
+    /// Mirror a pane — add a second pane attached to the same zmx session
+    /// (#345). Both render the same live shell; zmx broadcasts its output to
+    /// every attached client.
+    ///
+    /// The mirror does not take focus (see `TerminalTab.mirror`), and it
+    /// carries no `command`/`shell` (see `Pane.init(mirroring:)`), so it
+    /// attaches to the running session instead of respawning or re-running it.
+    @discardableResult
+    func mirrorPane(
+        _ paneID: UUID,
+        direction: SplitDirection,
+        projectID: UUID
+    ) -> UUID? {
+        guard let ws = workspaces[projectID],
+              let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
+        else { return nil }
+        guard let source = tab.splitRoot.findPane(id: paneID),
+              let newID = tab.mirror(paneID: paneID, direction: direction)
+        else { return nil }
+        // The source stays leader: zmx's handleInit sets a leader only when
+        // there is none, so a second client attaching leaves the pty size
+        // exactly where it was. Recording it keeps our model saying the same.
+        noteSessionLeader(source)
         saveWorkspaces()
         return newID
     }
 
     /// Split a pane into an equal `rows`×`columns` grid (see
-    /// `TerminalTab.makeGrid`), spawning `command` in each new pane. Returns
-    /// the new pane IDs.
+    /// `TerminalTab.makeGrid`), spawning `command` in each new pane. Every
+    /// cell honors the new split directory preference, so a grid and a
+    /// `Cmd+D` split off the same pane can't disagree about it. Returns the
+    /// new pane IDs.
     @discardableResult
     func makeGrid(
         _ paneID: UUID,
         rows: Int,
         columns: Int,
         projectID: UUID,
+        projectDirectory: String,
         command: String? = nil
     ) -> [UUID] {
         guard let ws = workspaces[projectID],
-              let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
+              let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
+              let pane = tab.splitRoot.findPane(id: paneID)
         else { return [] }
-        let created = tab.makeGrid(paneID: paneID, rows: rows, columns: columns, command: command)
+        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+            projectDirectory: projectDirectory,
+            activePaneDirectory: pane.liveLocalWorkingDirectory()
+        )
+        let created = tab.makeGrid(
+            paneID: paneID,
+            rows: rows,
+            columns: columns,
+            command: command,
+            newPaneWorkingDirectory: newPaneDirectory
+        )
         if !created.isEmpty { saveWorkspaces() }
         return created
     }
 
     /// Split the focused pane along its longer on-screen axis (Ghostty's
     /// `new_split` / BSP behavior). Direction is decided by `TerminalTab.autoSplit`.
-    func autoSplitPane(projectID: UUID) {
+    func autoSplitPane(projectID: UUID, projects: [Project]) {
         guard let tab = workspaces[projectID]?.activeTab,
-              let paneID = tab.focusedPaneID
+              let paneID = tab.focusedPaneID,
+              let pane = tab.focusedPane,
+              let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects)
         else { return }
-        tab.autoSplit(paneID: paneID)
+        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+            projectDirectory: projectDirectory,
+            activePaneDirectory: pane.liveLocalWorkingDirectory()
+        )
+        tab.autoSplit(paneID: paneID, newPaneWorkingDirectory: newPaneDirectory)
         saveWorkspaces()
     }
 
@@ -1721,10 +2157,14 @@ final class AppState {
             return
         }
         logger.debug("closePane: \(paneID, privacy: .public) project=\(projectID, privacy: .public)")
-        // Pane closed for good → its zmx session dies with it. (The
-        // onlyPaneLeft path below re-kills via closeTab; killSession is a
-        // no-op on a missing session, so the overlap is harmless.)
-        tab.splitRoot.findPane(id: paneID)?.killPersistentSession(using: zmx)
+        // Pane closed for good → its zmx session dies with it, unless another
+        // pane mirrors that session. (The onlyPaneLeft path below re-releases
+        // via closeTab; killSession is a no-op on a missing session, so the
+        // overlap is harmless.) The pane is still in the tree here, which is
+        // why releaseSessions excludes the batch it is given.
+        if let closing = tab.splitRoot.findPane(id: paneID) {
+            releaseSessions([closing])
+        }
         reconnectPolicy.forget(paneID)
         switch tab.removePane(paneID) {
         case .onlyPaneLeft:
@@ -1811,7 +2251,7 @@ final class AppState {
         let pane = workspaces[projectID]?.tabs
             .compactMap { $0.splitRoot.findPane(id: paneID) }
             .first
-        if pane?.needsConfirmClose == true {
+        if let pane, closeNeedsConfirmation([pane]) {
             pendingClosePane = PendingClosePane(paneID: paneID, projectID: projectID)
             return
         }
@@ -2091,9 +2531,11 @@ final class AppState {
         // Destroy surfaces only AFTER the new trees no longer reference them.
         // A layout-dropped pane is gone for good (no declared node claims it),
         // so its zmx session dies too — otherwise it would linger as a
-        // clients==0 daemon.
+        // clients==0 daemon. Unless a pane elsewhere mirrors that session: a
+        // reconcile that drops one of two identical leaves must not kill the
+        // session the surviving one was just matched to.
+        releaseSessions(plan.panesToDestroy)
         for pane in plan.panesToDestroy {
-            pane.killPersistentSession(using: zmx)
             pane.destroySurface()
         }
 
@@ -2122,7 +2564,14 @@ final class AppState {
     }
 
     func focusPane(_ paneID: UUID, projectID: UUID) {
-        workspaces[projectID]?.activeTab?.focusPane(paneID)
+        guard let tab = workspaces[projectID]?.activeTab else { return }
+        tab.focusPane(paneID)
+        // Focusing a mirror is how the user says "drive the size from here",
+        // so tell zmx as well as ourselves — its daemon only switches leader
+        // on real keystrokes, and the user has not typed anything yet.
+        if let pane = tab.splitRoot.findPane(id: paneID) {
+            claimSessionLeadership(pane)
+        }
     }
 
     /// Publish presentation-only renderer state through the workspace owner.

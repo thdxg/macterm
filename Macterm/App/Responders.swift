@@ -226,19 +226,27 @@ final class MainAppResponder: KeyResponder {
 
         if HotkeyRegistry.matches(event, action: .splitRight) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.splitPane(direction: .horizontal, projectID: projectID)
+            appState.splitPane(
+                direction: .horizontal,
+                projectID: projectID,
+                projects: projectStore.projects
+            )
             return .handled
         }
 
         if HotkeyRegistry.matches(event, action: .splitDown) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.splitPane(direction: .vertical, projectID: projectID)
+            appState.splitPane(
+                direction: .vertical,
+                projectID: projectID,
+                projects: projectStore.projects
+            )
             return .handled
         }
 
         if HotkeyRegistry.matches(event, action: .splitAuto) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.autoSplitPane(projectID: projectID)
+            appState.autoSplitPane(projectID: projectID, projects: projectStore.projects)
             return .handled
         }
 
