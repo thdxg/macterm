@@ -125,7 +125,12 @@ final class AppState {
     /// window by itself, so that one adopts the first saved entry and only the
     /// REST are opened. Opening all of them would leave a spare window on
     /// every launch.
+    /// Set once `restoreWindows` has run — the moment a window's saved
+    /// sidebar state is known. `WindowAppearance`'s restore waits for it.
+    private(set) var hasRestoredWindows = false
+
     func restoreWindows(adopting first: WindowState) {
+        defer { hasRestoredWindows = true }
         let saved = savedWindowSnapshots
         savedWindowSnapshots = []
         // This runs after `restoreSelection`, which is the first moment the
@@ -135,6 +140,7 @@ final class AppState {
         guard !saved.isEmpty else { return }
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
+        if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
         if let project = first.activeProjectID, let tab = saved[0].activeTabID {
             first.activeTabIDs[project] = tab
         }
@@ -299,6 +305,16 @@ final class AppState {
                 if let tab = restoring.activeTabID { window.activeTabIDs[project] = tab }
             }
             if let width = restoring.sidebarWidth { window.sidebarWidth = width }
+            if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
+        } else if hasRestoredWindows {
+            // A window the user opened, not one being restored: the sidebar
+            // comes up at the app's defaults — shown, at the default width.
+            // `WindowState.init` seeds the width from `Preferences.sidebarWidth`,
+            // which is whatever was LAST dragged in any window (a since-closed
+            // one included); that suits the first window's launch fallback,
+            // not a fresh window.
+            window.sidebarWidth = Preferences.defaultSidebarWidth
+            window.sidebarVisible = true
         }
         // A new window opens on whatever the user was last looking at, which
         // is both the useful default and what a single-window build did.
@@ -551,6 +567,35 @@ final class AppState {
             key.activeTabIDs[projectID] = current
         }
         reconcileWindowViews()
+        claimLeadershipForKeyWindow()
+    }
+
+    /// Leadership follows the KEY WINDOW's tab, all of it (#345).
+    ///
+    /// Two windows on one tab: bringing a window to the front is the user
+    /// saying "this is the view I'm working in", so every pane of the tab it
+    /// shows claims its session — the whole tab becomes leader at once, not
+    /// one pane on the next click. Runs on every key-window and key-tab
+    /// change. A pane whose surface has no size yet refuses the claim; the
+    /// `.terminalSurfaceSized` observer sends it when the surface comes up.
+    private func claimLeadershipForKeyWindow() {
+        guard let key = keyWindow, let projectID = key.activeProjectID,
+              let view = viewTab(for: projectID, in: key)
+        else { return }
+        for pane in view.tab.splitRoot.allPanes() {
+            claimSessionLeadership(pane)
+        }
+    }
+
+    /// A pane's surface just got its first size. If the pane is on screen in
+    /// the key window's tab it should already lead — the claim that ran when
+    /// the window became key was refused for lack of a size.
+    func surfaceDidGetSize(paneID: UUID) {
+        guard let key = keyWindow, let projectID = key.activeProjectID,
+              let view = viewTab(for: projectID, in: key),
+              let pane = view.tab.splitRoot.findPane(id: paneID)
+        else { return }
+        claimSessionLeadership(pane)
     }
 
     /// The workspace hook: its active tab changed by any writer — `createTab`,
@@ -568,6 +613,7 @@ final class AppState {
             target.activeTabIDs.removeValue(forKey: ws.projectID)
         }
         reconcileWindowViews()
+        if target.id == keyWindowID { claimLeadershipForKeyWindow() }
     }
 
     /// Install the hook on every workspace the dictionary holds. Runs from
@@ -1018,6 +1064,10 @@ final class AppState {
                 guard let paneID = note.object as? UUID else { return }
                 MainActor.assumeIsolated { self?.noteUserInput(paneID: paneID) }
             }),
+            (center, center.addObserver(forName: .terminalSurfaceSized, object: nil, queue: .main) { [weak self] note in
+                guard let paneID = note.object as? UUID else { return }
+                MainActor.assumeIsolated { self?.surfaceDidGetSize(paneID: paneID) }
+            }),
             (center, center.addObserver(
                 forName: .terminalQuietSettleDeadline,
                 object: nil,
@@ -1338,7 +1388,8 @@ final class AppState {
                         activeProjectID: window.activeProjectID,
                         sidebarWidth: window.sidebarWidth,
                         isKey: window.id == keyWindowID,
-                        activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id }
+                        activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
+                        sidebarVisible: window.sidebarVisible
                     )
                 }
         )

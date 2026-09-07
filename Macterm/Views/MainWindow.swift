@@ -242,7 +242,13 @@ struct MainWindow: View {
                 // content-derived width over the stored value.
                 let resolved = appState.canonicalWindowState(for: window, proposed: windowState)
                 WindowAppearance.armSidebarWidthRestore(for: window) {
-                    CGFloat(resolved.sidebarWidth)
+                    // nil until the launch task has read the saved windows;
+                    // the restore retries until then.
+                    guard appState.hasRestoredWindows else { return nil }
+                    return WindowAppearance.SidebarRestorePlan(
+                        width: CGFloat(resolved.sidebarWidth),
+                        visible: resolved.sidebarVisible
+                    )
                 }
                 appState.appDelegate?.registerTerminalWindow(window)
                 attachedWindow = window
@@ -317,18 +323,19 @@ struct MainWindow: View {
             handleSidebarPeekHover(phase)
         }
         .onChange(of: initialNativeSidebarVisible) { _, visible in
-            guard let visible else { return }
-            let resolution = SidebarPeekInteraction.launchResolution(
-                nativeVisible: visible,
-                modelVisible: windowState.sidebarVisible
-            )
-            columnVisibility = resolution.columnVisible ? .automatic : .detailOnly
-            if let modelVisible = resolution.modelVisible {
-                initialSidebarVisibilityBeingApplied = modelVisible
-                windowState.sidebarVisible = modelVisible
-            } else {
-                initialSidebarVisibilityBeingApplied = nil
-            }
+            guard visible != nil else { return }
+            // The window's own record decides (#345): a restored window comes
+            // back the way it was saved and a new window comes up with the
+            // sidebar shown. AppKit's autosaved collapse state used to win
+            // here (`SidebarPeekInteraction.launchResolution`), and it is per
+            // autosave SLOT, so a new window inherited whatever the last
+            // window at that slot had left. The column follows the model;
+            // `WindowAppearance.restoreSidebarWidth` uncollapses the native
+            // item to match before applying the width.
+            initialSidebarVisibilityBeingApplied = nil
+            let modelVisible = windowState.sidebarVisible
+            let column: NavigationSplitViewVisibility = modelVisible ? .automatic : .detailOnly
+            if columnVisibility != column { columnVisibility = column }
         }
         .onChange(of: windowState.sidebarVisible) { _, visible in
             let isInitialReconciliation = initialSidebarVisibilityBeingApplied == visible

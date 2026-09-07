@@ -147,21 +147,23 @@ private struct SplitLeafView: View {
             onZoomRequest: onZoomRequest
         )
         .overlay {
-            if isNonLeaderMirror || (!isFocused && isSplit && pane.adaptiveBackgroundColor == nil) {
+            if isNonLeaderMirror {
+                // A non-leader mirror (#345) is BLURRED, not dimmed. It is not
+                // about focus — it says the pane is not the one driving the
+                // session's pty size, so it is rendering live output laid out
+                // for another pane's geometry: a TUI in it is genuinely
+                // garbled. The blur hides that layout and marks the view the
+                // user is not working in; a dim would label it and leave the
+                // garble legible. Neither split-dim gate applies: `isSplit` is
+                // false for a single-pane tab and for a zoomed pane, exactly
+                // the common mirrored case, and an adaptive background must
+                // not exempt it.
+                NonLeaderBlur()
+            } else if !isFocused, isSplit, pane.adaptiveBackgroundColor == nil {
                 // Driven by the user's ghostty `unfocused-split-opacity` /
                 // `unfocused-split-fill`, same as Ghostty.app's split dim. A
                 // pane whose TUI supplies its own adaptive background stays
                 // color-accurate even while unfocused.
-                //
-                // A non-leader mirror (#345) is dimmed on neither of those
-                // conditions. It is not about focus — it says the pane is not
-                // the one driving the session's pty size, so it is rendering
-                // live output laid out for another pane's geometry. Both of
-                // the split-dim gates are therefore wrong for it: `isSplit` is
-                // false for a single-pane tab and for a zoomed pane, which is
-                // exactly the common mirrored case; and an adaptive background
-                // must not exempt it, since the whole point is to say "this is
-                // not the live size" whatever colour the TUI painted.
                 MactermTheme.dimOverlay
                     .allowsHitTesting(false)
             }
@@ -493,5 +495,31 @@ struct ResizeDragBand: NSViewRepresentable {
             guard let target = viewBeneath(event) else { return super.otherMouseUp(with: event) }
             target.otherMouseUp(with: event)
         }
+    }
+}
+
+/// The blur over a non-leader mirror (#345).
+///
+/// An AppKit view, not SwiftUI's `.blur`: the pane beneath is a
+/// `CAMetalLayer` hosted in an `NSView`, and a within-window
+/// `NSVisualEffectView` is the thing that blurs the window's own layer tree
+/// under it, Metal content included. It sits ON a pane, so it must take no
+/// mouse input of its own — `allowsHitTesting(false)` does not stop a hosted
+/// NSView from winning AppKit hit testing, so `hitTest` is overridden to yield.
+private struct NonLeaderBlur: NSViewRepresentable {
+    func makeNSView(context _: Context) -> NSVisualEffectView {
+        let view = PassthroughVisualEffectView()
+        view.blendingMode = .withinWindow
+        view.material = .hudWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_: NSVisualEffectView, context _: Context) {}
+}
+
+private final class PassthroughVisualEffectView: NSVisualEffectView {
+    override func hitTest(_: NSPoint) -> NSView? {
+        nil
     }
 }

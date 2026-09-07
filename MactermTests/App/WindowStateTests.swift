@@ -498,6 +498,7 @@ struct WindowStateTests {
         writer.selectProject(q)
         let w1 = WindowState(activeProjectID: p.id)
         let w2 = WindowState(activeProjectID: q.id, sidebarWidth: 333)
+        w2.sidebarVisible = false
         writer.registerWindow(w1)
         writer.registerWindow(w2)
         writer.noteKeyWindow(w2)
@@ -515,6 +516,96 @@ struct WindowStateTests {
         #expect(first.activeProjectID == p.id)
         #expect(second.activeProjectID == q.id)
         #expect(second.sidebarWidth == 333)
+        #expect(!second.sidebarVisible, "sidebar visibility is the window's own, restored with it")
+    }
+
+    @Test
+    func a_window_the_user_opens_comes_up_at_the_default_sidebar_state() {
+        // Not at whatever was last dragged in some other (possibly since
+        // closed) window, and never collapsed.
+        let previous = Preferences.shared.sidebarWidth
+        defer { Preferences.shared.sidebarWidth = previous }
+        Preferences.shared.sidebarWidth = 333
+        let state = makeAppState()
+        let project = Project(name: "p", path: "/tmp", sortOrder: 0)
+        state.restoreSelection(projects: [project])
+        let first = WindowState()
+        state.registerWindow(first)
+        state.noteKeyWindow(first)
+        state.restoreWindows(adopting: first)
+        #expect(state.hasRestoredWindows)
+
+        let opened = WindowState()
+        opened.sidebarVisible = false
+        state.registerWindow(opened)
+
+        #expect(opened.sidebarWidth == Preferences.defaultSidebarWidth)
+        #expect(opened.sidebarVisible)
+    }
+
+    @Test
+    func becoming_key_claims_leadership_for_every_pane_of_the_windows_tab() throws {
+        // Leadership is per tab, driven by the key window: fronting the other
+        // window must hand the pty to all of its panes at once, without a
+        // click in each.
+        let state = makeAppState()
+        var claimed: [UUID] = []
+        state.sendClaim = { claimed.append($0.id)
+            return true
+        }
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let source = try #require(real.splitRoot.allPanes().first)
+        _ = try #require(state.splitPane(
+            source.id, direction: .horizontal, projectID: project.id, projectDirectory: "/tmp"
+        ))
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let mirror = try #require(state.viewTab(for: project.id, in: b)).tab
+        claimed = []
+
+        state.noteKeyWindow(b)
+        #expect(Set(claimed) == Set(mirror.splitRoot.allPanes().map(\.id)))
+        #expect(state.nonLeaderPaneIDs(in: real) == Set(real.splitRoot.allPanes().map(\.id)))
+        #expect(state.nonLeaderPaneIDs(in: mirror).isEmpty)
+
+        claimed = []
+        state.noteKeyWindow(a)
+        #expect(Set(claimed) == Set(real.splitRoot.allPanes().map(\.id)))
+        #expect(state.nonLeaderPaneIDs(in: real).isEmpty)
+    }
+
+    @Test
+    func a_surface_that_gets_its_size_in_the_key_windows_tab_claims_leadership() throws {
+        // The claim on key change is refused until a mirror's surface has a
+        // size; the surface-sized report re-sends it.
+        let state = makeAppState()
+        var deliverable = false
+        var claimed: [UUID] = []
+        state.sendClaim = { pane in
+            guard deliverable else { return false }
+            claimed.append(pane.id)
+            return true
+        }
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(b)
+        let mirrorPane = try #require(state.viewTab(for: project.id, in: b)?.tab.splitRoot.allPanes().first)
+        #expect(claimed.isEmpty, "nothing recorded while undeliverable")
+        #expect(try state.isLeader(#require(real.splitRoot.allPanes().first)))
+
+        deliverable = true
+        state.surfaceDidGetSize(paneID: mirrorPane.id)
+
+        #expect(claimed == [mirrorPane.id])
+        #expect(state.isLeader(mirrorPane))
     }
 
     @Test

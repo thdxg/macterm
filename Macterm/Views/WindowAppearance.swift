@@ -420,9 +420,16 @@ enum WindowAppearance {
     /// window's address can be handed to the next window allocated — which
     /// would then read as already restored, or inherit a slot, if the forget
     /// path had not run. A weak-keyed table drops the record with the window.
+    /// What a window's sidebar should come up as, once the app knows.
+    struct SidebarRestorePlan {
+        let width: CGFloat
+        let visible: Bool
+    }
+
     private final class SidebarRecord {
         var restored = false
-        var pendingWidth: (() -> CGFloat)?
+        /// nil until the snapshot has been read — the restore waits for it.
+        var plan: (() -> SidebarRestorePlan?)?
         var autosaveSlot: Int?
     }
 
@@ -435,35 +442,54 @@ enum WindowAppearance {
         return record
     }
 
-    /// Tell `sync` what width this window should come up at.
+    /// Tell the restore what this window's sidebar should come up as.
     ///
-    /// Takes a closure rather than a value, evaluated when the restore
-    /// actually runs. The window arms this as it attaches, which can be either
-    /// side of the launch task that reads the saved width out of the snapshot —
-    /// a value captured here would sometimes be the pre-restore default.
+    /// `plan` is evaluated when the restore actually runs and may answer nil
+    /// for "not yet": the window arms this as it attaches, which is before the
+    /// launch task has read the saved windows out of the snapshot — a value
+    /// captured here was sometimes the pre-restore default, and the first cut
+    /// of this restored 144 over 144.
     ///
-    /// The old single-window code froze `launchSidebarWidth` at launch for a
-    /// related reason: the column lays out, and the geometry hook writes its
-    /// content-derived width over the stored value, before the window is
-    /// styled. `isAwaitingSidebarWidthRestore` closes that off at the source
-    /// instead, so there is nothing to freeze against.
-    static func armSidebarWidthRestore(for window: NSWindow, width: @escaping () -> CGFloat) {
+    /// The restore is then RETRIED across run-loop ticks until it lands.
+    /// `sync` runs at attach and on became-main; at attach the split view is
+    /// usually not laid out yet, so a window that never became main sat at
+    /// SwiftUI's content-derived minimum until the user focused it — the
+    /// reported "restored window has a minimum-width sidebar until I click
+    /// it". Bounded, so a window that never lays out cannot spin.
+    static func armSidebarWidthRestore(for window: NSWindow, plan: @escaping () -> SidebarRestorePlan?) {
         let record = sidebarRecord(for: window)
         guard !record.restored else { return }
-        record.pendingWidth = width
+        record.plan = plan
+        retrySidebarRestore(window, remaining: 80)
     }
 
-    /// Whether `window` is still waiting to have its sidebar width applied.
+    private static func retrySidebarRestore(_ window: NSWindow, remaining: Int) {
+        guard remaining > 0 else {
+            logger.warning("sidebar restore gave up: split view never became ready")
+            return
+        }
+        Task { @MainActor [weak window] in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard let window, let record = sidebarRecords.object(forKey: window), !record.restored else { return }
+            restoreSidebarWidth(window: window)
+            if !record.restored { retrySidebarRestore(window, remaining: remaining - 1) }
+        }
+    }
+
+    /// Whether `window` is still waiting to have its sidebar restored.
     ///
     /// While it is, the column is showing SwiftUI's content-derived width, and
     /// recording that would overwrite the width being restored with the
     /// default it is meant to replace.
     static func isAwaitingSidebarWidthRestore(for window: NSWindow?) -> Bool {
-        guard let window else { return false }
-        return sidebarRecords.object(forKey: window)?.pendingWidth != nil
+        guard let window, let record = sidebarRecords.object(forKey: window) else { return false }
+        return record.plan != nil && !record.restored
     }
 
     static func forgetSidebarWidthRestore(for window: NSWindow) {
+        if let slot = sidebarRecords.object(forKey: window)?.autosaveSlot {
+            clearSidebarAutosave(slot: slot)
+        }
         sidebarRecords.removeObject(forKey: window)
     }
 
@@ -481,25 +507,34 @@ enum WindowAppearance {
     private static func restoreSidebarWidth(window: NSWindow) {
         guard let record = sidebarRecords.object(forKey: window),
               !record.restored,
-              let pending = record.pendingWidth,
               let split = window.contentView?.firstSplitView,
               split.arrangedSubviews.count > 1,
               let sidebar = split.owningSplitViewController?.splitViewItems.first
         else { return }
-        // Consumed as soon as the split view exists, collapsed or not. `sync`
-        // also runs on every window-became-main, so an arm left standing would
-        // later snap a width the user had since dragged.
-        record.restored = true
-        record.pendingWidth = nil
+        // The snapshot has not been read yet: the retry comes back.
+        guard let plan = record.plan?() else { return }
         pinSidebarAutosaveName(split: split, window: window)
-        // A sidebar the user left hidden must stay hidden: moving divider 0 on
-        // a collapsed item is what would pop it open on every launch. Showing
-        // it mid-session then gives SwiftUI's own width — the next launch with
-        // it visible restores properly.
-        guard !sidebar.isCollapsed else { return }
-        let width = pending()
-        split.setPosition(width, ofDividerAt: 0)
-        logger.info("sidebar width restored to \(width, privacy: .public)")
+        // The window's own record decides visibility (#345), not the state
+        // AppKit autosaved for this slot. A hidden sidebar has no width to
+        // restore: consume, and leave it collapsed for SwiftUI's column
+        // binding, which follows the same record.
+        if !plan.visible {
+            record.restored = true
+            record.plan = nil
+            return
+        }
+        // Visible by record but collapsed on screen — AppKit's autosaved
+        // state, or SwiftUI mid-uncollapse. Moving divider 0 on a collapsed
+        // item is what used to pop hidden sidebars open on every launch, so
+        // uncollapse deliberately first; the width lands on the next pass.
+        if sidebar.isCollapsed {
+            sidebar.isCollapsed = false
+            return
+        }
+        record.restored = true
+        record.plan = nil
+        split.setPosition(plan.width, ofDividerAt: 0)
+        logger.info("sidebar width restored to \(plan.width, privacy: .public)")
     }
 
     /// Move the live main-window sidebar divider to an explicit width.
@@ -632,12 +667,30 @@ enum WindowAppearance {
         return slot
     }
 
+    private static func autosaveName(forSlot slot: Int) -> String {
+        slot == 0 ? sidebarAutosaveName : "\(sidebarAutosaveName).\(slot)"
+    }
+
     private static func pinSidebarAutosaveName(split: NSSplitView, window: NSWindow) {
-        let slot = sidebarAutosaveSlot(for: window)
-        let name = slot == 0 ? sidebarAutosaveName : "\(sidebarAutosaveName).\(slot)"
+        let name = autosaveName(forSlot: sidebarAutosaveSlot(for: window))
         guard split.autosaveName != name else { return }
         split.autosaveName = name
         pruneChurnedSidebarAutosaveKeys()
+    }
+
+    /// Drop the frames AppKit autosaved for a closed window's slot.
+    ///
+    /// Slots are reused, and setting `autosaveName` on a new window's split
+    /// view REAPPLIES whatever the last window at that slot saved — which is
+    /// how a new window inherited a closed window's collapsed sidebar and
+    /// width. Skipped while terminating: the launch path still reads slot 0
+    /// before the window's own record takes over. Reads `UserDefaults.standard`
+    /// for the same reason `pruneChurnedSidebarAutosaveKeys` does — that is
+    /// the only domain AppKit wrote it to — and is likewise skipped under a
+    /// test run.
+    private static func clearSidebarAutosave(slot: Int) {
+        guard !AppTerminationState.isTerminating, !Preferences.isTestRun else { return }
+        UserDefaults.standard.removeObject(forKey: "NSSplitView Subview Frames \(autosaveName(forSlot: slot))")
     }
 
     /// Drop the per-launch keys written before the name was pinned. Matched on

@@ -60,6 +60,11 @@ struct WindowSnapshot: Codable {
     /// two windows on one project show different tabs (#345); nil falls back
     /// to the workspace's own `activeTabID`.
     var activeTabID: UUID?
+    /// Whether the sidebar was shown. Per window, and owned here rather than
+    /// left to AppKit's split-view autosave, which is per autosave slot and so
+    /// leaked one window's collapsed state into the next window at that slot.
+    /// nil (an older snapshot) means shown.
+    var sidebarVisible: Bool?
 }
 
 // MARK: - Snapshot types

@@ -268,6 +268,10 @@ private struct TerminalSurface: NSViewRepresentable {
             guard let pane else { return }
             NotificationCenter.default.post(name: .terminalUserInput, object: pane.id)
         }
+        view.onSurfaceSized = { [weak pane] in
+            guard let pane else { return }
+            NotificationCenter.default.post(name: .terminalSurfaceSized, object: pane.id)
+        }
         // Order matters: `onInteraction` clears the tracker's in-place start
         // arming that `onCommandSubmitted` sets, and the view calls them in
         // that order. See `GhosttyTerminalNSView.onCommandSubmitted`.

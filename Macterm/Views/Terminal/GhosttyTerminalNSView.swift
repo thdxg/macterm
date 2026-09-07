@@ -372,6 +372,11 @@ final class GhosttyTerminalNSView: NSView {
     /// event zmx hands session leadership on, so `AppState` records the pane
     /// as its session's leader from it (#345).
     var onUserInput: (() -> Void)?
+    /// The surface has a real size for the first time — from here on a zmx
+    /// leadership claim can be delivered (`sendLeadershipClaim` refuses before
+    /// it). Fired once per surface.
+    var onSurfaceSized: (() -> Void)?
+    private var hasReportedSurfaceSize = false
     /// Bool is best-effort evidence that the submitted prompt contained text.
     ///
     /// CALL ORDER: every path that reports a submission fires `onInteraction`
@@ -879,6 +884,10 @@ final class GhosttyTerminalNSView: NSView {
         }
         ghostty_surface_set_content_scale(surface, scale, scale)
         ghostty_surface_set_size(surface, UInt32(scaledSize.width), UInt32(scaledSize.height))
+        if !hasReportedSurfaceSize {
+            hasReportedSurfaceSize = true
+            onSurfaceSized?()
+        }
     }
 
     // MARK: - App shortcut detection
