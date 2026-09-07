@@ -1,52 +1,11 @@
 // Shared behavior for the Macterm marketing site + docs.
 // Every feature is opt-in by DOM presence, so one script drives both pages.
-
-// --- Sticky top-bar: transparent at the top, frosted once scrolled. ---
-(function stickyNav() {
-  const nav = document.querySelector("[data-nav-bar]");
-  if (!nav) return;
-  // Landing scrolls a little further before frosting than docs does.
-  const threshold = Number(nav.dataset.navThreshold || 10);
-  const onScroll = () => {
-    const y = window.scrollY || document.documentElement.scrollTop || 0;
-    nav.classList.toggle("is-scrolled", y > threshold);
-  };
-  window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
-})();
-
-// --- Mobile nav: hamburger toggles the collapsed nav links panel. ---
-(function mobileNav() {
-  const nav = document.querySelector("[data-nav-bar]");
-  const toggle = nav && nav.querySelector("[data-nav-toggle]");
-  if (!nav || !toggle) return;
-
-  const setOpen = (open) => {
-    nav.classList.toggle("nav-open", open);
-    toggle.setAttribute("aria-expanded", String(open));
-  };
-  const close = () => setOpen(false);
-
-  toggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setOpen(!nav.classList.contains("nav-open"));
-  });
-  // Close when a link in the panel is chosen.
-  nav.querySelectorAll(".nav-links a").forEach((a) =>
-    a.addEventListener("click", close)
-  );
-  // Close on outside click and Escape.
-  document.addEventListener("click", (e) => {
-    if (nav.classList.contains("nav-open") && !nav.contains(e.target)) close();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  // Reset if the viewport grows back to the desktop layout.
-  window.addEventListener("resize", () => {
-    if (window.innerWidth > 640) close();
-  });
-})();
+//
+// The sticky-nav, hamburger, and reveal-on-scroll modules were dropped with the
+// dark redesign: its header is a plain bordered bar with three links that wrap
+// on a phone, and nothing fades in on scroll. Reveal-on-scroll in particular is
+// worth not bringing back — it starts content at opacity 0, so a JS failure
+// leaves the page blank rather than merely unanimated.
 
 // --- Copy-to-clipboard for code chips/blocks. ---
 // A [data-copy] button copies the <code> inside its enclosing [data-block]
@@ -85,28 +44,53 @@
   });
 })();
 
-// --- Reveal-on-scroll for [data-reveal] rows (landing feature list). ---
-(function revealOnScroll() {
-  const items = Array.from(document.querySelectorAll("[data-reveal]"));
-  if (!items.length) return;
-  const reveal = (el) => el.classList.add("is-revealed");
-  if (!("IntersectionObserver" in window)) {
-    items.forEach(reveal);
-    return;
-  }
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((en) => {
-        if (!en.isIntersecting) return;
-        const i = items.indexOf(en.target);
-        en.target.style.transitionDelay = Math.min(i, 3) * 0.06 + "s";
-        reveal(en.target);
-        io.unobserve(en.target);
-      });
-    },
-    { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
-  );
-  items.forEach((el) => io.observe(el));
+// --- Landing screenshot gallery: thumbnails swap the framed shot above. ---
+//
+// The markup ships showing the first screenshot with its caption already
+// written, so the section is complete and indexable before this runs — the
+// thumbnails just stop being interactive without JS.
+//
+// The swap has to rewrite the <source>'s srcset, not only the <img>'s src: the
+// browser picks from <source> whenever it supports WebP, so changing src alone
+// would leave every visitor on modern Safari or Chrome looking at the first
+// screenshot no matter which thumbnail they clicked.
+//
+// The targets are collected document-wide rather than from inside the gallery,
+// because the "Built on libghostty" figure further down mirrors the same
+// selection. Each target keeps its own `sizes` — only srcset, src, alt, and
+// caption text are rewritten — so the small figure still picks a small rung.
+(function screenshotGallery() {
+  const root = document.querySelector("[data-gallery]");
+  if (!root) return;
+  const sources = document.querySelectorAll("[data-shot-source]");
+  const imgs = document.querySelectorAll("[data-shot-main]");
+  const captions = document.querySelectorAll("[data-shot-caption]");
+  const thumbs = Array.from(root.querySelectorAll("[data-shot]"));
+  if (!sources.length || !imgs.length || !thumbs.length) return;
+
+  // The rungs build-images.mjs emits. Kept in step with WIDTHS there — a rung
+  // named here that the build didn't write is a 404 on click.
+  const WIDTHS = [640, 1000, 1400, 2200, 3132];
+  const srcsetFor = (base) =>
+    WIDTHS.map((w) => `/img/${base}-${w}.webp ${w}w`).join(", ");
+
+  const select = (btn) => {
+    const base = btn.dataset.shot;
+    const srcset = srcsetFor(base);
+    sources.forEach((s) => {
+      s.srcset = srcset;
+    });
+    imgs.forEach((i) => {
+      i.src = `/img/${base}-1400.png`;
+      i.alt = btn.dataset.alt || "";
+    });
+    captions.forEach((c) => {
+      c.textContent = btn.dataset.caption || "";
+    });
+    thumbs.forEach((t) => t.setAttribute("aria-pressed", String(t === btn)));
+  };
+
+  thumbs.forEach((btn) => btn.addEventListener("click", () => select(btn)));
 })();
 
 // --- Live GitHub stats: fill star + download counts, reveal their containers,

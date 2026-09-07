@@ -22,6 +22,7 @@ enum Output {
         if let sessions = data.sessions { renderSessions(sessions) }
         if let inspect = data.inspect { renderInspect(inspect) }
         if let dump = data.dump { renderDump(dump) }
+        if let tutorial = data.tutorial { print(tutorial.text) }
     }
 
     private static func renderStatus(_ status: ControlStatusInfo) {

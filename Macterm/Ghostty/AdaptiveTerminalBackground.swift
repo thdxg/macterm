@@ -600,10 +600,18 @@ enum AdaptiveTerminalInferenceGate {
     static func allowsObservation(
         ofColor isColor: Bool,
         hasViewerOverlay: Bool,
+        rendersForeignGeometry: Bool,
         hasConfirmedColor: Bool,
         secondsSinceOutput: TimeInterval?
     ) -> Bool {
         if hasViewerOverlay { return false }
+        // A non-leader mirror's frame was laid out for the leader's geometry,
+        // so its painted region describes that window rather than this
+        // terminal's background. Same treatment as an overlay — freeze on the
+        // last confirmed presentation rather than adopt or clear — for a
+        // different reason, kept separate so neither justification is
+        // mistaken for the other.
+        if rendersForeignGeometry { return false }
         guard isColor, hasConfirmedColor else { return true }
         guard let secondsSinceOutput else { return false }
         return secondsSinceOutput <= outputRecencyWindow

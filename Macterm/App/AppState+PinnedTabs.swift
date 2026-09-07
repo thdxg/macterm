@@ -298,8 +298,9 @@ extension AppState {
               let tab = ws.tabs.first(where: { $0.id == tabID })
         else { return }
         logger.info("unloadPinnedTab: \(tabID, privacy: .public)")
-        for pane in tab.splitRoot.allPanes() {
-            pane.killPersistentSession(using: zmx)
+        let unloading = tab.splitRoot.allPanes()
+        releaseSessions(unloading)
+        for pane in unloading {
             pane.destroySurface()
         }
         ws.closeTab(tabID)

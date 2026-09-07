@@ -11,6 +11,7 @@ Macterm/Resources/*
 # GHOSTTYKIT_TAG in setup.sh refreshes them instead of the presence checks
 # silently keeping the old copy. Per-checkout state, not source.
 .ghosttykit-tag
+.zmx-tag
 
 build/
 __pycache__/

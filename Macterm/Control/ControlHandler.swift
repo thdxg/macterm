@@ -71,6 +71,7 @@ final class ControlHandler {
         case "pane.inspect": return try paneInspect(args)
         case "pane.dump": return try paneDump(args)
         case "pane.split": return try paneSplit(args)
+        case "pane.mirror": return try paneMirror(args)
         case "pane.focus": return try paneFocus(args)
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
@@ -88,6 +89,7 @@ final class ControlHandler {
         case "session.kill": return try await sessionKill(args)
         case "layout.apply": return try layoutApply(args)
         case "layout.save": return try layoutSave(args)
+        case "tutor.render": return try tutorRender(args)
         default:
             throw ControlError(
                 code: .unknownCommand,
@@ -107,6 +109,23 @@ final class ControlHandler {
             pid: getpid(),
             activeProject: active?.name,
             activeProjectID: active?.id.uuidString
+        ))
+    }
+
+    /// Render a tutorial topic (`macterm tutor`). App-side because the text
+    /// carries the user's LIVE keybindings — see `Tutorial`.
+    private func tutorRender(_ args: ControlArgs) throws -> ControlData {
+        let raw = args.topic ?? Tutorial.Topic.project.rawValue
+        guard let topic = Tutorial.Topic(rawValue: raw) else {
+            throw ControlError(
+                code: .badRequest,
+                message: "unknown tutorial topic \"\(raw)\"",
+                action: "known topics: " + Tutorial.Topic.allCases.map(\.rawValue).joined(separator: ", ")
+            )
+        }
+        return ControlData(tutorial: ControlTutorial(
+            topic: topic.rawValue,
+            text: Tutorial.render(topic: topic, styled: args.styled ?? false)
         ))
     }
 
@@ -231,13 +250,15 @@ final class ControlHandler {
         }
         let entries = snapshot.entries
         let leaders = snapshot.leaders
-        let paneBySession = paneIDsBySessionName()
+        let panesBySession = paneIDsBySessionName()
         let infos = entries.map { entry in
-            ControlSessionInfo(
+            let bound = panesBySession[entry.name] ?? []
+            return ControlSessionInfo(
                 name: entry.name,
                 clients: entry.clients,
                 leaderPID: leaders[entry.name],
-                paneID: paneBySession[entry.name]
+                paneID: bound.first,
+                paneIDs: bound.isEmpty ? nil : bound
             )
         }
         return ControlData(sessions: infos)
@@ -420,8 +441,12 @@ final class ControlHandler {
 
     private func tabNew(_ args: ControlArgs) throws -> ControlData {
         let (project, workspace) = try resolveWorkspace(args)
-        guard let tabID = appState.createTab(projectID: project.id, projectPath: project.path, command: args.run),
-              let index = workspace.tabs.firstIndex(where: { $0.id == tabID })
+        guard let tabID = appState.createTab(
+            projectID: project.id,
+            projects: projectStore.projects,
+            command: args.run
+        ),
+            let index = workspace.tabs.firstIndex(where: { $0.id == tabID })
         else {
             throw ControlError(code: .internalError, message: "tab creation failed")
         }
@@ -530,27 +555,52 @@ final class ControlHandler {
 
     // MARK: - Pane mutations
 
-    private func paneSplit(_ args: ControlArgs) throws -> ControlData {
-        let (project, workspace) = try resolveWorkspace(args)
-        let target = try resolvePane(args, in: workspace)
-        let direction: SplitDirection
+    /// Resolve a `--direction` argument against the pane it will act on.
+    /// Shared by `pane.split` and `pane.mirror` so the two can't drift on what
+    /// `auto` means.
+    private func splitDirection(_ args: ControlArgs, relativeTo pane: Pane) throws -> SplitDirection {
         switch args.direction ?? "auto" {
-        case "right": direction = .horizontal
-        case "down": direction = .vertical
+        case "right": return .horizontal
+        case "down": return .vertical
         case "auto":
             // The UI's auto-split picks the longer on-screen axis from the
             // pane's live NSView bounds; a never-shown pane measures zero and
             // falls back to horizontal — same as TerminalTab.autoSplit.
-            let bounds = target.pane.nsView?.bounds.size ?? .zero
-            direction = bounds.height > bounds.width ? .vertical : .horizontal
+            let bounds = pane.nsView?.bounds.size ?? .zero
+            return bounds.height > bounds.width ? .vertical : .horizontal
         default:
             throw ControlError(code: .badRequest, message: "direction must be right, down, or auto")
         }
+    }
+
+    private func paneSplit(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let direction = try splitDirection(args, relativeTo: target.pane)
         guard let newID = appState.splitPane(
-            target.pane.id, direction: direction, projectID: project.id, command: args.run
+            target.pane.id,
+            direction: direction,
+            projectID: project.id,
+            projectDirectory: project.path,
+            command: args.run
         ), let newPane = target.tab.splitRoot.findPane(id: newID)
         else {
             throw ControlError(code: .internalError, message: "split failed")
+        }
+        return ControlData(panes: [paneInfo(newPane, in: target.tab, workspace: workspace)])
+    }
+
+    private func paneMirror(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let direction = try splitDirection(args, relativeTo: target.pane)
+        guard let newID = appState.mirrorPane(
+            target.pane.id,
+            direction: direction,
+            projectID: project.id
+        ), let newPane = target.tab.splitRoot.findPane(id: newID)
+        else {
+            throw ControlError(code: .internalError, message: "mirror failed")
         }
         return ControlData(panes: [paneInfo(newPane, in: target.tab, workspace: workspace)])
     }
@@ -597,8 +647,10 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "pane.close requires a pane or session selector")
         }
         let target = try resolvePane(args, in: workspace)
-        let busy = target.pane.needsConfirmClose
-        if busy, args.force != true {
+        // Mirror-aware: a pane whose session another pane still attaches kills
+        // nothing when it closes, so it must not raise a warning that says it
+        // does (see AppState.closeNeedsConfirmation).
+        if appState.closeNeedsConfirmation([target.pane]), args.force != true {
             throw ControlError(
                 code: .busy,
                 message: "that pane has a running program (closing kills its session)",
@@ -643,6 +695,10 @@ final class ControlHandler {
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
+        // Injected input makes zmx hand this client leadership (its
+        // `isUserInput` rule), with no focus change to notice it by — so
+        // record it, or our dim would point at the wrong mirror.
+        appState.noteSessionLeader(target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
@@ -675,6 +731,8 @@ final class ControlHandler {
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
+        // As in paneSendText: a keypress is what zmx switches leader on.
+        appState.noteSessionLeader(target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
@@ -832,7 +890,12 @@ final class ControlHandler {
         let (project, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
         let created = appState.makeGrid(
-            target.pane.id, rows: rows, columns: cols, projectID: project.id, command: args.run
+            target.pane.id,
+            rows: rows,
+            columns: cols,
+            projectID: project.id,
+            projectDirectory: project.path,
+            command: args.run
         )
         guard !created.isEmpty else {
             throw ControlError(code: .internalError, message: "grid produced no panes")
@@ -1039,11 +1102,23 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "pass either --session or --pane, not both")
         }
         if let session = args.session, !session.isEmpty {
+            // A mirrored session has several panes, so resolve to the LEADER —
+            // the one driving the pty size, and so the one the user is
+            // interacting with. It is also the only defensible answer for a
+            // bare `$MACTERM_SESSION` self-target: that variable lives in the
+            // session's single shared shell, which cannot know which of its
+            // views the user is looking at. Callers that need a specific
+            // mirror pass `--pane`.
+            var candidates: [(tab: TerminalTab, pane: Pane)] = []
             for tab in workspace.tabs {
-                if let pane = tab.splitRoot.allPanes().first(where: { $0.sessionName == session }) {
-                    return (tab, pane)
+                for pane in tab.splitRoot.allPanes() where pane.sessionName == session {
+                    candidates.append((tab, pane))
                 }
             }
+            if let leading = candidates.first(where: { appState.isLeader($0.pane) }) {
+                return leading
+            }
+            if let first = candidates.first { return first }
             throw ControlError(
                 code: .notFound,
                 message: "no pane in this project runs session \"\(session)\"",
@@ -1123,7 +1198,9 @@ final class ControlHandler {
             process: pane.foregroundProcessName,
             cwd: pane.nsView?.currentPwd ?? pane.projectPath,
             focused: tab.id == workspace.activeTabID && pane.id == tab.focusedPaneID,
-            state: controlState(for: pane.executionState)
+            state: controlState(for: pane.executionState),
+            mirror: appState.isMirrored(pane),
+            leader: appState.isLeader(pane)
         )
     }
 
@@ -1137,15 +1214,27 @@ final class ControlHandler {
         }
     }
 
-    private func paneIDsBySessionName() -> [String: String] {
-        var map: [String: String] = [:]
+    /// Every live pane bound to each session name, leader first.
+    ///
+    /// This used to be a `[String: String]`, one pane per session — which a
+    /// mirrored session silently collapsed, last writer winning in Dictionary
+    /// iteration order, so `session list` reported an arbitrary one of the
+    /// panes and dropped the rest (#345).
+    private func paneIDsBySessionName() -> [String: [String]] {
+        var map: [String: [Pane]] = [:]
         for workspace in appState.workspaces.values {
             for tab in workspace.tabs {
                 for pane in tab.splitRoot.allPanes() {
-                    map[pane.sessionName] = pane.id.uuidString
+                    map[pane.sessionName, default: []].append(pane)
                 }
             }
         }
-        return map
+        // A stable partition, not `sorted`: "leader first" is not a strict
+        // weak ordering, and Swift's sort is undefined for one.
+        return map.mapValues { panes in
+            let leading = panes.filter { appState.isLeader($0) }
+            let following = panes.filter { !appState.isLeader($0) }
+            return (leading + following).map(\.id.uuidString)
+        }
     }
 }

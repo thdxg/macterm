@@ -224,8 +224,11 @@ private struct ProjectRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            // `AnyShapeStyle` because the two arms are different style types
+            // (a concrete `Color` and the hierarchical `.secondary`), which a
+            // `??` can't reconcile on its own.
             Image(systemName: project.isRemote ? "network" : "folder")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(project.color.map { AnyShapeStyle(MactermTheme.color(for: $0)) } ?? AnyShapeStyle(.secondary))
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -262,6 +265,12 @@ private struct ProjectRow: View {
                     appState.noteLayoutFilesChanged()
                 }
                 .disabled(appState.workspaces[project.id] == nil)
+
+                Divider()
+
+                ProjectColorMenu(selection: project.color) { color in
+                    projectStore.setColor(id: project.id, to: color)
+                }
 
                 Divider()
 

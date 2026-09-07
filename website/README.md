@@ -9,6 +9,7 @@ a container image.
 public/            Served as static files
   index.html       Landing page (hand-authored)
   docs/            One HTML file per docs page ── generated, do not edit ──
+  img/             Web-sized image derivatives ── generated, do not edit ──
   tailwind.css     Compiled styles ── generated, do not edit ──
   site.js          Shared behavior (sticky nav, copy buttons, GitHub stats)
   assets/          Symlink to the repo-root assets/ (icon, screenshots, schema)
@@ -17,11 +18,82 @@ src/
   docs-template.html  Shell each rendered docs page is injected into
 docs/
   pages/*.md       Docs content — one Markdown file per page
+build-images.mjs   Resizes assets/*.png → public/img/ (responsive WebP +
+                   fallback PNG, the OG card, and favicon sizes)
 build-docs.mjs     Renders docs/pages/*.md → public/docs/<slug>.html;
                    also emits public/sitemap.xml and public/robots.txt
+check-seo.mjs      Build-time guard: fails the build if the landing page's FAQ
+                   markup and its FAQPage JSON-LD disagree, or if index.html's
+                   canonical/og:url drift from SITE_URL
 Caddyfile          How the built site is served — used by dev and prod alike
 Dockerfile         Multi-stage image — Bun builds it, Caddy serves it
 ```
+
+### Design
+
+Both the landing page and the docs run one dark **"Classical"** system, ported
+from a Claude Design canvas: Rosé Pine ink on a warm-neutral `#19191a` ground,
+Cormorant Garamond display over Lora body text, JetBrains Mono for code. Only
+the fonts live in `@theme`; every colour is scoped under `.landing`, which both
+`public/index.html` and `src/docs-template.html` set on `<body>`, so the docs
+shell reuses the landing's tokens instead of defining a second palette.
+
+The canvas expresses a design as inline styles per element, which is what an
+artboard has to do. Those are reassembled into named `.l-*` classes in
+`src/tailwind.css` — hover and focus states have nowhere to live on an
+artboard, and the canvas is a fixed 1180px, so every responsive step below that
+is the implementation's own.
+
+**Every command surface is one component, `.cmd`** — the hero's install pill
+(`.cmd--inline`), the landing Install section, and every fenced block
+`build-docs.mjs` emits. They began as three near-identical rule sets and drifted
+into two font sizes, two copy-button sizes, two border colours, and two
+different vertical alignments for the same button. The component owns its type
+metrics so the `<pre>` and the `<code>` share one strut, and the floating copy
+button's offset is derived from those tokens in `calc()` — it aligns to the
+centre of the *first line*, which reads as centred on a one-line command and
+stays at the top of a long block. Change the padding or the type size and the
+button follows on its own.
+
+### Images
+
+`assets/` holds the originals the README and release notes use — 3132×1780
+screenshots at ~2MB each. The pages never reference those directly:
+`build-images.mjs` renders them into `public/img/` as a responsive WebP
+`srcset` (640/1000/1400/2200/3132w) plus a 1400w PNG fallback, and the landing page
+picks a rung with `<picture>`. The hero went from a 2.5MB PNG to 53KB at 1×
+and 142KB at 2×, which is the difference between failing and passing Largest
+Contentful Paint.
+
+It also emits `img/og.png` — the 1200×630 social card, letterboxed on the
+site's own ground rather than cropped — and `img/icon-{16,32,180}.png`, so the
+favicon is not the 810KB 1024×1024 app icon.
+
+Replace a screenshot by dropping a new one into `assets/`; every derivative is
+regenerated on the next build, so they cannot go stale. `public/img/` is
+gitignored.
+
+The landing gallery is **five** screenshots, in this order — sidebar, command
+palette, settings, full-screen TUI, quick terminal — and its captions are
+written into `index.html` against those positions. The build prints a warning
+naming any that are missing, because the gallery hard-codes five thumbnails, so
+a missing source is a 404 in production rather than a shorter gallery.
+
+The figure in the "Built on libghostty" section mirrors the gallery's
+selection. Both carry the same `data-shot-*` hooks and `site.js` rewrites every
+one it finds, but each keeps its own `sizes`, so the small figure still resolves
+to a small rung. The `Caddyfile` gives `/img/*` the same TTL as `/assets/*` — keep
+the two paths listed together in both its `@media` and `@pages` matchers, or
+the images every page loads fall through to the no-cache `@pages` rule.
+
+> `index.html` is hand-authored and no build step rewrites it, so anything it
+> states twice can drift silently. `check-seo.mjs` guards the two that matter:
+> its canonical/`og:url` against `SITE_URL`, and — if a FAQ is ever added back
+> — the visible `.l-qa` markup against its `FAQPage` JSON-LD, which Google
+> requires to match verbatim. Having neither FAQ half is fine; having one
+> without the other fails the build, because schema with no visible text is
+> ineligible for the rich result and is the kind of thing that earns a manual
+> action.
 
 The canonical production origin lives in one place — the `SITE_URL` constant at
 the top of `build-docs.mjs` — and feeds the docs canonical tags, Open Graph
@@ -31,7 +103,10 @@ sync with `SITE_URL` if the domain ever changes.
 
 The docs are a **multi-page site**. Each `docs/pages/*.md` becomes one page;
 files are ordered by their numeric filename prefix (`10-installation.md`). The
-sidebar links across all pages and marks the current one active. The
+sidebar links across all pages and marks the current one with a rose rule in
+the gutter, and `build-docs.mjs` emits the group name as the page's eyebrow
+plus prev/next links from that same order. A Markdown blockquote renders as the
+design's bordered **Note** callout, its label supplied by CSS. The
 `Caddyfile`'s `try_files` rule serves `public/docs/install.html` at the clean
 URL `/docs/install`, and `public/docs/index.html` at `/docs/` — the
 extensionless resolution the site used to get from Cloudflare's

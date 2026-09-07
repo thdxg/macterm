@@ -112,6 +112,14 @@ struct ControlArgs: Codable, Equatable {
     /// the only value a client ever sends is `false`, to leave the command on
     /// the prompt — so a caller that predates the flag keeps its behavior.
     var submit: Bool?
+    /// Tutorial topic for `tutor.render` (`project`, `pinned`). The strings
+    /// are `Tutorial.Topic`'s raw values, which also appear in the seeded
+    /// `run:` declarations.
+    var topic: String?
+    /// Whether the rendered tutorial may carry ANSI styling. The APP renders
+    /// the text but only the CLI can see whether its stdout is a tty, so the
+    /// verdict travels with the request.
+    var styled: Bool?
 
     init(
         project: String? = nil,
@@ -135,7 +143,9 @@ struct ControlArgs: Codable, Equatable {
         slot: Int? = nil,
         title: String? = nil,
         reset: Bool? = nil,
-        submit: Bool? = nil
+        submit: Bool? = nil,
+        topic: String? = nil,
+        styled: Bool? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -159,6 +169,8 @@ struct ControlArgs: Codable, Equatable {
         self.title = title
         self.reset = reset
         self.submit = submit
+        self.topic = topic
+        self.styled = styled
     }
 }
 
@@ -215,6 +227,8 @@ struct ControlData: Codable {
     var inspect: ControlPaneInspect?
     /// Terminal cell text (`pane.dump`).
     var dump: ControlPaneDump?
+    /// Rendered tutorial text (`tutor.render`).
+    var tutorial: ControlTutorial?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -223,7 +237,8 @@ struct ControlData: Codable {
         panes: [ControlPaneInfo]? = nil,
         sessions: [ControlSessionInfo]? = nil,
         inspect: ControlPaneInspect? = nil,
-        dump: ControlPaneDump? = nil
+        dump: ControlPaneDump? = nil,
+        tutorial: ControlTutorial? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -232,6 +247,7 @@ struct ControlData: Codable {
         self.sessions = sessions
         self.inspect = inspect
         self.dump = dump
+        self.tutorial = tutorial
     }
 }
 
@@ -279,6 +295,12 @@ struct ControlPaneInfo: Codable, Equatable {
     /// for). Optional per the additive-field convention above — nil when
     /// decoded from an older server that predates this field.
     var state: String?
+    /// Whether another pane shows this pane's session (#345). Optional per the
+    /// additive-field convention — nil from a server predating mirroring.
+    var mirror: Bool?
+    /// Whether this pane drives its session's pty size — zmx's "leader"
+    /// client. Always true for an unmirrored pane, which is the only client.
+    var leader: Bool?
 }
 
 struct ControlSessionInfo: Codable, Equatable {
@@ -290,7 +312,15 @@ struct ControlSessionInfo: Codable, Equatable {
     var leaderPID: Int32?
     /// The live pane currently bound to this session, if any (a session with
     /// no pane is an orphan awaiting reap or reattach).
+    ///
+    /// A mirrored session has several — this reports the leader, the pane
+    /// driving its size; see `paneIDs` for all of them. Kept so a client
+    /// predating mirroring still reads a sensible single value.
     var paneID: String?
+    /// Every live pane bound to this session, in tree order (#345). One entry
+    /// for an ordinary session; several once a session is mirrored. Optional
+    /// per the additive-field convention.
+    var paneIDs: [String]?
 }
 
 /// Read-only snapshot of a pane's terminal core (`pane.inspect`). Every field
@@ -342,6 +372,14 @@ struct ControlPaneDump: Codable, Equatable {
     var scrollback: Bool
     /// UTF-8 byte length of `text` (handy for scripts before they slurp it).
     var bytes: Int
+    var text: String
+}
+
+/// One rendered tutorial (`tutor.render`). The text is built app-side from
+/// the user's LIVE keybindings, which is why this is a socket verb at all —
+/// see `Tutorial`.
+struct ControlTutorial: Codable, Equatable {
+    var topic: String
     var text: String
 }
 

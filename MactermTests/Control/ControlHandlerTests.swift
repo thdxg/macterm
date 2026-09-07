@@ -189,7 +189,7 @@ struct ControlHandlerTests {
     func pane_list_walks_splits_and_marks_focus() async {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.splitPane(direction: .horizontal, projectID: project.id)
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
         let response = await handler.handle(request("pane.list"))
         let panes = response.data?.panes
         #expect(panes?.count == 2)
@@ -225,7 +225,7 @@ struct ControlHandlerTests {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
         appState.createTab(projectID: project.id, projectPath: project.path)
-        appState.splitPane(direction: .vertical, projectID: project.id)
+        appState.splitPane(direction: .vertical, projectID: project.id, projects: [project])
 
         let all = await handler.handle(request("pane.list"))
         #expect(all.data?.panes?.count == 3)
@@ -482,18 +482,34 @@ struct ControlHandlerTests {
 
     @Test
     func tab_new_creates_selects_and_reports() async throws {
+        let prior = Preferences.shared.newTabWorkingDirectory
+        defer { Preferences.shared.newTabWorkingDirectory = prior }
+        Preferences.shared.newTabWorkingDirectory = .activePaneDirectory
+
         let (handler, appState, projectStore) = makeHandler()
-        let project = seedProject(appState, projectStore)
-        let response = await handler.handle(request("tab.new", args: ControlArgs(run: "btop")))
+        let project = seedProject(appState, projectStore, name: "target", path: "/target-project")
+        let targetPane = try #require(appState.workspaces[project.id]?.activeTab?.focusedPane)
+        targetPane.ensureNSView().currentPwd = "/target-project/src"
+        let activeProject = seedProject(appState, projectStore, name: "active", path: "/active-project")
+        let activePane = try #require(appState.workspaces[activeProject.id]?.activeTab?.focusedPane)
+        activePane.ensureNSView().currentPwd = "/active-project/elsewhere"
+
+        let response = await handler.handle(request(
+            "tab.new",
+            args: ControlArgs(project: project.id.uuidString, run: "btop")
+        ))
         #expect(response.ok)
         let info = try #require(response.data?.tabs?.first)
         #expect(info.index == 2)
         #expect(info.active == true)
         let workspace = try #require(appState.workspaces[project.id])
         #expect(workspace.tabs.count == 2)
+        let newPane = try #require(workspace.tabs.last?.focusedPane)
+        #expect(newPane.projectPath == "/target-project/src")
+        #expect(newPane.sessionSlug == "target-project")
         // The declared command reaches the new tab's pane (spawns via
         // initial_input when the surface is created).
-        #expect(workspace.tabs.last?.splitRoot.allPanes().first?.command == "btop")
+        #expect(newPane.command == "btop")
     }
 
     @Test
@@ -699,16 +715,29 @@ struct ControlHandlerTests {
 
     @Test
     func pane_split_targets_session_selector() async throws {
+        let prior = Preferences.shared.newSplitWorkingDirectory
+        defer { Preferences.shared.newSplitWorkingDirectory = prior }
+        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
+
         let (handler, appState, projectStore) = makeHandler()
-        let project = seedProject(appState, projectStore)
+        let project = seedProject(appState, projectStore, path: "/project")
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
         let source = try #require(tab.splitRoot.allPanes().first)
+        source.ensureNSView().currentPwd = "/project/source"
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
+        let focusedPane = try #require(tab.focusedPane)
+        focusedPane.ensureNSView().currentPwd = "/project/focused"
 
         let response = await handler.handle(request(
             "pane.split", args: ControlArgs(session: source.sessionName, direction: "down")
         ))
         #expect(response.ok)
-        #expect(tab.splitRoot.allPanes().count == 2)
+        let newInfo = try #require(response.data?.panes?.first)
+        let newID = try #require(UUID(uuidString: newInfo.id))
+        let newPane = try #require(tab.splitRoot.findPane(id: newID))
+        #expect(newPane.projectPath == "/project/source")
+        #expect(newPane.sessionSlug == source.sessionSlug)
+        #expect(tab.splitRoot.allPanes().count == 3)
 
         let both = await handler.handle(request(
             "pane.split", args: ControlArgs(pane: "pane:1", session: source.sessionName, direction: "down")
@@ -719,6 +748,28 @@ struct ControlHandlerTests {
             "pane.split", args: ControlArgs(session: "macterm-nope-000000000000", direction: "down")
         ))
         #expect(unknown.error?.code == .notFound)
+    }
+
+    @Test
+    func pane_split_remote_source_falls_back_to_project_directory() async throws {
+        let prior = Preferences.shared.newSplitWorkingDirectory
+        defer { Preferences.shared.newSplitWorkingDirectory = prior }
+        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
+
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore, path: "devbox:~/repo")
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let source = try #require(tab.focusedPane)
+        source.ensureNSView().currentPwd = "/repo/src"
+
+        let response = await handler.handle(request("pane.split", args: ControlArgs(direction: "right")))
+
+        #expect(response.ok)
+        let newInfo = try #require(response.data?.panes?.first)
+        let newID = try #require(UUID(uuidString: newInfo.id))
+        let newPane = try #require(tab.splitRoot.findPane(id: newID))
+        #expect(newPane.projectPath == project.path)
+        #expect(newPane.sessionSlug == source.sessionSlug)
     }
 
     @Test
@@ -749,7 +800,7 @@ struct ControlHandlerTests {
         let project = seedProject(appState, projectStore)
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
         let left = try #require(tab.splitRoot.allPanes().first)
-        appState.splitPane(direction: .horizontal, projectID: project.id)
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
         let panes = tab.splitRoot.allPanes()
         #expect(panes.count == 2)
         let right = try #require(panes.last)
@@ -785,7 +836,7 @@ struct ControlHandlerTests {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
-        appState.splitPane(direction: .horizontal, projectID: project.id)
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
         #expect(tab.splitRoot.allPanes().count == 2)
 
         let bare = await handler.handle(request("pane.close"))
@@ -913,7 +964,7 @@ struct ControlHandlerTests {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
         // A horizontal split gives a horizontal-axis branch at the root.
-        appState.splitPane(direction: .horizontal, projectID: project.id)
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
         let focused = try #require(tab.focusedPaneID)
 
@@ -932,7 +983,7 @@ struct ControlHandlerTests {
     func pane_resize_split_validates_axis_and_ratio() async throws {
         let (handler, appState, projectStore) = makeHandler()
         let project = seedProject(appState, projectStore)
-        appState.splitPane(direction: .horizontal, projectID: project.id)
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
         let focused = try #require(tab.focusedPaneID).uuidString
 
@@ -958,7 +1009,7 @@ struct ControlHandlerTests {
         let project = seedProject(appState, projectStore)
         // Only a horizontal split exists; asking to resize a vertical split
         // around the pane finds no matching branch.
-        appState.splitPane(direction: .horizontal, projectID: project.id)
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
         let focused = try #require(tab.focusedPaneID).uuidString
 

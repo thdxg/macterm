@@ -454,15 +454,29 @@ struct AdaptiveTerminalBackgroundTests {
     private func allows(
         color: Bool = true,
         overlay: Bool = false,
+        foreignGeometry: Bool = false,
         confirmed: Bool = true,
         sinceOutput: TimeInterval? = nil
     ) -> Bool {
         AdaptiveTerminalInferenceGate.allowsObservation(
             ofColor: color,
             hasViewerOverlay: overlay,
+            rendersForeignGeometry: foreignGeometry,
             hasConfirmedColor: confirmed,
             secondsSinceOutput: sinceOutput
         )
+    }
+
+    @Test
+    func aNonLeaderMirrorBlocksInferenceBecauseItsFrameIsSizedForAnotherPane() {
+        // A mirror renders live output laid out for the LEADER's geometry, so
+        // its painted region describes that window rather than this terminal's
+        // background — adopting from it would retint this window to whatever
+        // the other one happens to be showing. Blocked whatever else is true,
+        // including a fresh output heartbeat (which is the one thing that
+        // rescues the ordinary no-confirmed-colour case).
+        #expect(allows(foreignGeometry: true, sinceOutput: 0) == false)
+        #expect(allows(foreignGeometry: true, confirmed: false, sinceOutput: 0) == false)
     }
 
     @Test

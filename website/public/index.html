@@ -3,31 +3,49 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Macterm — a native macOS terminal that remembers</title>
-  <meta name="description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty. Quit anytime; your projects, tabs, and split panes come back exactly as you left them." />
+  <title>Macterm — a macOS terminal emulator with session persistence</title>
+  <meta name="description" content="Macterm is a free, open-source macOS terminal emulator built on libghostty. Persistent sessions, built-in multiplexing, split panes, and a vertical project sidebar. Quit anytime — your projects, tabs, and shells come back exactly as you left them." />
   <meta name="keywords" content="macOS terminal, terminal emulator, libghostty, Ghostty, tmux alternative, terminal multiplexer, session persistence, split panes, native macOS app" />
-  <meta name="theme-color" content="#f7f5f0" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="theme-color" content="#19191a" />
   <link rel="canonical" href="https://macterm.thdxg.dev/" />
 
-  <link rel="icon" type="image/png" href="/assets/icon.png" />
-  <link rel="apple-touch-icon" href="/assets/icon.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/img/icon-16.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
 
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Macterm" />
-  <meta property="og:title" content="Macterm — a native macOS terminal that remembers" />
-  <meta property="og:description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty." />
+  <meta property="og:title" content="Macterm — a macOS terminal emulator with session persistence" />
+  <meta property="og:description" content="A free, open-source macOS terminal built on libghostty — persistent sessions, built-in multiplexing, and a vertical project sidebar." />
   <meta property="og:url" content="https://macterm.thdxg.dev/" />
-  <meta property="og:image" content="https://macterm.thdxg.dev/assets/screenshot-1.png" />
+  <meta property="og:image" content="https://macterm.thdxg.dev/img/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Macterm running on macOS — a vertical project sidebar beside an editor and a shell split." />
+  <meta property="og:locale" content="en_US" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Macterm — a native macOS terminal that remembers" />
-  <meta name="twitter:description" content="A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty." />
-  <meta name="twitter:image" content="https://macterm.thdxg.dev/assets/screenshot-1.png" />
+  <meta name="twitter:title" content="Macterm — a macOS terminal emulator with session persistence" />
+  <meta name="twitter:description" content="A free, open-source macOS terminal built on libghostty — persistent sessions, built-in multiplexing, and a vertical project sidebar." />
+  <meta name="twitter:image" content="https://macterm.thdxg.dev/img/og.png" />
+  <meta name="twitter:image:alt" content="Macterm running on macOS — a vertical project sidebar beside an editor and a shell split." />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <!-- The Classical pair the design is set in. Cormorant Garamond carries the
+       display sizes, Lora the body copy; JetBrains Mono stays for the command
+       chips, matching the docs. -->
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Lora:wght@400;500&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="/tailwind.css" />
+
+  <!-- The hero screenshot is the LCP element, prioritized with
+       fetchpriority="high" on the <img> itself rather than a <link rel=preload>
+       carrying a duplicate imagesrcset. The <img> is near the top of <body>, so
+       the preload scanner reaches it in the same pass it would reach a preload
+       link — the link would buy no head start, while giving the responsive
+       srcset a second place to be resolved (and to drift out of sync with the
+       <picture> below it). One srcset, one resolution. -->
 
   <script type="application/ld+json">
   {
@@ -35,146 +53,235 @@
     "@graph": [
       {
         "@type": "SoftwareApplication",
+        "@id": "https://macterm.thdxg.dev/#app",
         "name": "Macterm",
+        "alternateName": "Macterm terminal",
         "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "macOS 14+",
+        "applicationSubCategory": "Terminal Emulator",
+        "operatingSystem": "macOS 14.0 or later",
+        "softwareRequirements": "macOS 14 (Sonoma) or later",
         "url": "https://macterm.thdxg.dev/",
         "downloadUrl": "https://github.com/thdxg/macterm/releases/latest",
-        "description": "A native macOS terminal with a vertical project sidebar and persistent multiplexing, built on libghostty.",
+        "installUrl": "https://macterm.thdxg.dev/docs/install",
+        "screenshot": "https://macterm.thdxg.dev/img/og.png",
+        "sameAs": ["https://github.com/thdxg/macterm"],
+        "description": "A native macOS terminal emulator built on libghostty, with persistent shell sessions, built-in multiplexing, split panes, and a vertical project sidebar. Reads your existing Ghostty config.",
+        "featureList": [
+          "Session persistence — shells detach on quit and reattach on relaunch",
+          "Built-in terminal multiplexing without tmux",
+          "Remote projects over SSH with panes that persist on the host",
+          "Vertical project sidebar",
+          "Pinned tabs that restart themselves",
+          "Command palette",
+          "Declarative YAML workspace layouts",
+          "A control CLI for scripts and AI agents",
+          "Global drop-down quick terminal",
+          "Adaptive window background",
+          "Reads an existing Ghostty config"
+        ],
         "license": "https://opensource.org/licenses/MIT",
+        "isAccessibleForFree": true,
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
       },
       {
         "@type": "WebSite",
+        "@id": "https://macterm.thdxg.dev/#website",
         "name": "Macterm",
-        "url": "https://macterm.thdxg.dev/"
+        "url": "https://macterm.thdxg.dev/",
+        "description": "A native macOS terminal emulator built on libghostty, with persistent sessions and built-in multiplexing.",
+        "inLanguage": "en",
+        "about": { "@id": "https://macterm.thdxg.dev/#app" }
       }
     ]
   }
   </script>
 </head>
-<body class="font-sans text-ink [overflow-x:hidden] min-h-screen">
+<body class="landing">
 
-  <!-- sticky top bar -->
-  <nav data-nav-bar data-nav-threshold="16" class="site-nav">
-    <a href="https://github.com/thdxg/macterm" class="flex items-center gap-[9px] no-underline text-ink">
-      <img src="/assets/icon.png" width="28" height="28" alt="Macterm" class="block rounded-[7px]" />
-      <span class="font-semibold text-[17px] tracking-[-0.01em] leading-none">Macterm</span>
+  <header class="l-wrap l-header">
+    <a href="/" class="l-brand" aria-label="Macterm home">
+      <img src="/img/icon-180.png" width="26" height="26" alt="" />
+      <span>Macterm</span>
     </a>
-    <div class="nav-links flex items-center" style="gap:clamp(14px,3vw,26px)" id="nav-links">
-      <a href="/docs/" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">Docs</a>
-      <a href="https://github.com/thdxg/macterm" class="nav-secondary text-ink no-underline text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100">GitHub ↗</a>
-      <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center h-9 box-border px-[18px] rounded-full bg-ink text-canvas no-underline text-[14px] font-medium transition-opacity hover:opacity-[0.88]">Download</a>
-    </div>
-    <button type="button" data-nav-toggle class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
-      <span class="nav-toggle-icon" aria-hidden="true"></span>
-    </button>
-  </nav>
+    <nav class="l-nav">
+      <a href="/docs/">Docs</a>
+      <a href="https://github.com/thdxg/macterm">GitHub</a>
+      <a data-download-latest class="l-cta" href="https://github.com/thdxg/macterm/releases/latest">Download</a>
+    </nav>
+  </header>
 
-  <main id="main">
-    <!-- hero: screenshot + text on one screen, centered -->
-    <section class="box-border flex flex-col items-center justify-center" style="min-height:calc(100vh - 70px);gap:clamp(24px,4.5vh,52px);padding:clamp(24px,4vh,56px) var(--site-gutter)">
-      <figure class="m-0 w-full flex justify-center" style="max-width:1000px">
-        <img src="/assets/screenshot-1.png" alt="Macterm running on macOS — vertical project sidebar, an editor, and a shell split" class="w-full block rounded-[12px]" style="max-height:54vh;object-fit:contain;box-shadow:0 40px 90px -50px rgba(0,0,0,.4)" />
-      </figure>
-      <div class="text-center">
-        <h1 class="font-sans font-medium leading-none tracking-[-0.03em] m-0" style="font-size:clamp(28px,3.6vw,42px)">Macterm</h1>
-        <p class="font-normal leading-[1.5] tracking-[-0.005em] text-lede mt-4 mb-0 mx-auto" style="font-size:clamp(15px,1.7vw,18px);max-width:40ch">
-          A macOS terminal with session persistence, smart multiplexing, and native UI, built on libghostty.
-        </p>
-        <div class="flex justify-center items-center gap-4 mt-[34px] flex-wrap">
-          <div class="flex items-center gap-[10px] h-[52px] box-border font-mono text-[13px] text-ink rounded-full" style="padding:0 8px 0 20px;background:rgba(23,21,15,.055)">
-            <code class="whitespace-nowrap">brew install --cask thdxg/tap/macterm</code>
-            <button type="button" data-copy aria-label="Copy install command" class="flex-none inline-flex items-center justify-center w-8 h-8 bg-transparent border-0 rounded-full text-ink cursor-pointer transition-colors hover:bg-[rgba(23,21,15,0.08)]">
-              <svg data-i="copy" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              <svg data-i="check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M20 6 9 17l-5-5"/></svg>
-            </button>
-          </div>
-          <a data-download-latest href="https://github.com/thdxg/macterm/releases/latest" class="inline-flex items-center justify-center gap-[9px] h-[52px] box-border bg-ink text-canvas no-underline font-medium text-[15px] px-[26px] rounded-full transition-opacity hover:opacity-[0.88]">Download for macOS ↓</a>
+  <main>
+    <section class="l-wrap l-hero">
+      <h1>
+        Macterm
+        <span class="l-lede">A beautiful macOS terminal with vertical tabs, session persistence, and native UI. Built on libghostty</span>
+      </h1>
+
+      <div class="l-cta-row">
+        <div data-block class="cmd cmd--inline">
+          <code>brew install --cask thdxg/tap/macterm</code>
+          <button type="button" data-copy class="cmd-copy" aria-label="Copy install command">
+            <svg data-i="copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg data-i="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
         </div>
-        <p data-stats-line hidden class="font-mono text-[12.5px] text-meta mt-[18px] mb-0 flex items-center justify-center gap-[14px] flex-wrap">
-          <span data-stat-stars hidden class="inline-flex items-center gap-[5px]">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.786 1.401 8.169L12 18.896l-7.335 3.869 1.401-8.169L.132 9.21l8.2-1.192z"/></svg>
-            <span><span data-stat-stars-num>0</span> stars</span>
-          </span>
-          <span data-stat-downloads hidden class="inline-flex items-center gap-[5px]">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span><span data-stat-downloads-num>0</span> downloads</span>
-          </span>
-        </p>
+        <a data-download-latest class="l-download" href="https://github.com/thdxg/macterm/releases/latest">Download for macOS ↓</a>
       </div>
     </section>
 
-    <!-- features -->
-    <section class="mx-auto" style="max-width:1180px;padding:clamp(88px,12vw,140px) var(--site-gutter) 48px">
-      <div class="flex justify-between items-baseline mb-6">
-        <h2 class="text-[22px] font-medium m-0">Features</h2>
-        <span class="font-mono text-[12px] text-meta">eleven of them</span>
+    <!-- Screenshot gallery. The thumbnails swap the frame above them; the
+         markup ships showing the first shot, so it is complete without JS. -->
+    <section id="gallery" class="l-wrap l-gallery" data-gallery>
+      <div class="l-shot">
+        <picture>
+          <source data-shot-source type="image/webp" srcset="/img/screenshot-1-640.webp 640w, /img/screenshot-1-1000.webp 1000w, /img/screenshot-1-1400.webp 1400w, /img/screenshot-1-2200.webp 2200w, /img/screenshot-1-3132.webp 3132w" sizes="(max-width: 1180px) 100vw, 1100px" />
+          <img data-shot-main src="/img/screenshot-1-1400.png" width="3132" height="1780" fetchpriority="high" decoding="async" alt="Macterm running on macOS — vertical project sidebar, an editor, and a shell split" />
+        </picture>
       </div>
-      <div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">01</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Session persistence</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Quitting detaches your shells instead of killing them. Relaunch; they come back — scrollback and running processes intact.</p>
+      <div class="l-thumbs" aria-label="Screenshots">
+        <button type="button" class="l-thumb" aria-pressed="true" data-shot="screenshot-1"
+          data-alt="Macterm running on macOS — vertical project sidebar, an editor, and a shell split"
+          data-caption="The vertical project sidebar — projects and their tabs, stacked where there's room to read them.">
+          <img src="/img/screenshot-1-640.webp" width="3132" height="1780" loading="lazy" decoding="async" alt="Vertical project sidebar, an editor, and a shell split" style="aspect-ratio:3132/1780" />
+        </button>
+        <button type="button" class="l-thumb" aria-pressed="false" data-shot="screenshot-2"
+          data-alt="Macterm's command palette"
+          data-caption="⌘P — every action a keystroke away, each row showing its keybind.">
+          <img src="/img/screenshot-2-640.webp" width="3132" height="1780" loading="lazy" decoding="async" alt="Command palette" style="aspect-ratio:3132/1780" />
+        </button>
+        <button type="button" class="l-thumb" aria-pressed="false" data-shot="screenshot-3"
+          data-alt="Macterm's settings window"
+          data-caption="A native Settings window on top of your Ghostty configs.">
+          <img src="/img/screenshot-3-640.webp" width="3132" height="1780" loading="lazy" decoding="async" alt="Settings" style="aspect-ratio:3132/1780" />
+        </button>
+        <button type="button" class="l-thumb" aria-pressed="false" data-shot="screenshot-4"
+          data-alt="A full-screen TUI in Macterm"
+          data-caption="Adaptive background — the window takes on the color the running program paints.">
+          <img src="/img/screenshot-4-640.webp" width="3132" height="1780" loading="lazy" decoding="async" alt="A full-screen TUI" style="aspect-ratio:3132/1780" />
+        </button>
+        <button type="button" class="l-thumb" aria-pressed="false" data-shot="screenshot-5"
+          data-alt="The quick terminal dropped down over the desktop"
+          data-caption="The quick terminal — drops down from anywhere on a keybind.">
+          <img src="/img/screenshot-5-640.webp" width="3132" height="1780" loading="lazy" decoding="async" alt="Quick terminal" style="aspect-ratio:3132/1780" />
+        </button>
+      </div>
+      <p class="l-caption" data-shot-caption>The vertical project sidebar — projects and their tabs, stacked where there's room to read them.</p>
+    </section>
+
+    <section class="l-wrap l-section">
+      <div class="l-section-head"><h2>Features</h2></div>
+      <div class="l-grid">
+        <div class="l-item">
+          <p class="l-num">01</p>
+          <h3>Session persistence</h3>
+          <p>Quitting detaches your shells instead of killing them. Relaunch; they come back — scrollback and running processes intact.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">02</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Multiplexing</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Drag a pane onto another to join them, or separate one into its own tab — by drag or by keybind. Projects, tabs, and split layouts are saved and restored on relaunch.</p>
+        <div class="l-item">
+          <p class="l-num">02</p>
+          <h3>Multiplexing</h3>
+          <p>Drag a pane onto another to join them, or separate one into its own tab — by drag or by keybind.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">03</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Remote projects</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Open a directory on another machine over SSH. Panes persist <em>on the host</em>, surviving quits, dropped connections, even a local reboot.</p>
+        <div class="l-item">
+          <p class="l-num">03</p>
+          <h3>Remote projects</h3>
+          <p>Open a directory on another machine over SSH. Panes persist <em>on the host</em>, surviving quits, dropped connections, even a local reboot.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">04</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Vertical project sidebar</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Organize projects and their tabs in a native macOS sidebar, stacked vertically where there's actually room to read them.</p>
+        <div class="l-item">
+          <p class="l-num">04</p>
+          <h3>Vertical project sidebar</h3>
+          <p>Organize projects and their tabs in a native macOS sidebar, stacked vertically where there's actually room to read them.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">05</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Pinned tabs</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Pin a tab above your projects to keep it running — it starts on every launch, and restores itself with its command if the session dies.</p>
+        <div class="l-item">
+          <p class="l-num">05</p>
+          <h3>Pinned tabs</h3>
+          <p>Pin a tab above your projects to keep it running — it starts on every launch, and restores itself with its command if the session dies.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">06</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Command palette</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Press <kbd class="font-mono bg-chip border border-[rgba(23,21,15,0.16)] rounded-[5px]" style="font-size:.8em;padding:.1em .4em">⌘P</kbd> to split panes, switch projects, or open a directory — every action a keystroke away.</p>
+        <div class="l-item">
+          <p class="l-num">06</p>
+          <h3>Command palette</h3>
+          <p>Press <code>⌘P</code> to split panes, switch projects, or open a directory — every action a keystroke away.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">07</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Declarative layouts</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Describe a project's tabs, splits, and per-pane commands in <code class="font-mono" style="font-size:.85em">~/.config/macterm/projects/</code>. Open it; the workspace builds itself.</p>
+        <div class="l-item">
+          <p class="l-num">07</p>
+          <h3>Declarative layouts</h3>
+          <p>Describe a project's tabs, splits, and per-pane commands in <code>~/.config/macterm/projects/</code>. Open it; the workspace builds itself.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">08</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Control CLI</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">A bundled <code class="font-mono" style="font-size:.85em">macterm</code> command drives the running app over a socket — so scripts and AI agents can spawn panes and run commands.</p>
+        <div class="l-item">
+          <p class="l-num">08</p>
+          <h3>Control CLI</h3>
+          <p>A bundled <code>macterm</code> command drives the running app over a socket — so scripts and AI agents can spawn panes and run commands.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">09</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Quick terminal</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">A global terminal that drops down from anywhere with a hotkey, then gets out of your way when you're done.</p>
+        <div class="l-item">
+          <p class="l-num">09</p>
+          <h3>Quick terminal</h3>
+          <p>A global terminal that drops down from anywhere with a hotkey, then gets out of your way when you're done.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">10</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Adaptive background</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">The window picks up the background color the running program paints. A full-screen TUI tints the whole window to match; in a split, each pane takes its own.</p>
+        <div class="l-item">
+          <p class="l-num">10</p>
+          <h3>Adaptive background</h3>
+          <p>The window picks up the background color the running program paints.</p>
         </div>
-        <div data-reveal class="feature-row">
-          <span class="font-mono text-[13px] text-meta">11</span>
-          <h3 class="font-sans font-medium leading-[1.02] tracking-[-0.02em] m-0" style="font-size:clamp(24px,3.4vw,40px)">Ghostty compatibility</h3>
-          <p class="text-[16px] leading-[1.5] text-body m-0" style="max-width:46ch">Reads your existing <code class="font-mono" style="font-size:.85em">ghostty/config</code>. Theme, font, keybinds — all of it just works.</p>
+        <div class="l-item">
+          <p class="l-num">11</p>
+          <h3>Ghostty compatibility</h3>
+          <p>Reads your existing <code>ghostty/config</code>. Theme, font, keybinds — all of it just works.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="ghostty" class="l-wrap l-section">
+      <div class="l-section-head"><h2>Built on libghostty</h2></div>
+      <div class="l-prose">
+        <div>
+          <p>Macterm's terminal is <a href="https://ghostty.org">libghostty</a> — the same engine behind Ghostty, linked directly rather than reimplemented. GPU rendering, escape-sequence handling, font shaping, and key encoding are Ghostty's, so a TUI that draws correctly there draws correctly here.</p>
+          <p>What Macterm adds is everything around it: a vertical project sidebar, tabs and splits that outlive the app, <a href="/docs/remote-projects">persistent projects on remote machines</a>, and much more. It reads your existing <a href="/docs/configuration">Ghostty config</a> unchanged — theme, font, palette, keybinds — so switching costs you no configuration.</p>
+          <p>More on the relationship in <a href="/docs/ghostty">Macterm vs. Ghostty</a>, and on replacing your multiplexer in <a href="/docs/tmux">Macterm vs. tmux</a>.</p>
+        </div>
+        <!-- Mirrors whatever the gallery above has selected — same data-shot-*
+             hooks, its own `sizes` for the narrower slot. -->
+        <figure class="l-figure">
+          <div class="l-shot">
+            <picture>
+              <source data-shot-source type="image/webp" srcset="/img/screenshot-1-640.webp 640w, /img/screenshot-1-1000.webp 1000w, /img/screenshot-1-1400.webp 1400w" sizes="(max-width: 900px) 100vw, 540px" />
+              <img data-shot-main src="/img/screenshot-1-1400.png" width="3132" height="1780" loading="lazy" decoding="async" alt="Macterm running on macOS — vertical project sidebar, an editor, and a shell split" />
+            </picture>
+          </div>
+          <figcaption data-shot-caption>The vertical project sidebar — projects and their tabs, stacked where there's room to read them.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="install" class="l-wrap l-section">
+      <div class="l-section-head"><h2>Install</h2></div>
+      <div class="l-grid l-install">
+        <div>
+          <h3>Homebrew</h3>
+          <div data-block class="cmd">
+            <code>brew install --cask thdxg/tap/macterm</code>
+            <button type="button" data-copy class="cmd-copy" aria-label="Copy install command">
+              <svg data-i="copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg data-i="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M20 6 9 17l-5-5"/></svg>
+            </button>
+          </div>
+          <p>The cask strips the Gatekeeper quarantine attribute on install, so the app launches without extra prompts.</p>
+        </div>
+        <div>
+          <h3>From Releases</h3>
+          <div data-block class="cmd">
+            <code>xattr -cr /Applications/Macterm.app</code>
+            <button type="button" data-copy class="cmd-copy" aria-label="Copy quarantine command">
+              <svg data-i="copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg data-i="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M20 6 9 17l-5-5"/></svg>
+            </button>
+          </div>
+          <p>Download the latest <code>.dmg</code> from <a href="https://github.com/thdxg/macterm/releases">Releases</a>, drag Macterm to Applications, then clear the quarantine flag once. Sparkle handles updates from there.</p>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- footer -->
-  <footer class="site-footer">
-    <span class="font-semibold text-ink">Macterm</span>
+  <footer class="l-wrap l-footer">
+    <span>Macterm</span>
     <nav>
+      <a href="/docs/">Docs</a>
       <a href="https://github.com/thdxg/macterm">GitHub</a>
       <a href="https://github.com/thdxg/macterm/releases">Releases</a>
       <a href="https://ghostty.org">Ghostty</a>
