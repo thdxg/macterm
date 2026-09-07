@@ -1,21 +1,22 @@
 {
-  "fill" : {
-    "solid" : "srgb:0.09804,0.09020,0.14118,1.00000"
-  },
+  "fill-specializations" : [
+    {
+      "value" : "system-light"
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "solid" : "srgb:0.09804,0.09020,0.14118,1.00000"
+      }
+    }
+  ],
   "groups" : [
     {
       "layers" : [
         {
-          "glass" : true,
-          "image-name" : "icon-raw.png",
-          "name" : "icon-raw",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
+          "glass" : false,
+          "image-name" : "icon-glyph.png",
+          "name" : "icon-glyph"
         }
       ],
       "shadow" : {
