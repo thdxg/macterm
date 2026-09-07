@@ -34,4 +34,4 @@ if [ ! -x "$VENV/bin/pytest" ]; then
 fi
 
 "$VENV/bin/pytest" e2e -v \
-  --app "$DERIVED_DATA/Build/Products/Debug/Macterm.app"
+  --app "$DERIVED_DATA/Build/Products/Debug/Macterm Debug.app"
