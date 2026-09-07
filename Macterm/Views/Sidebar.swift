@@ -8,6 +8,10 @@ import UniformTypeIdentifiers
 /// trailing inset at its root so all of them stop at the same edge.
 private let rowTrailingInset: CGFloat = 10
 
+/// Pulls the hover action through the row's protective trailing inset so its
+/// symbol aligns with the sidebar's native disclosure affordance.
+private let projectActionTrailingOffset: CGFloat = rowTrailingInset + 2
+
 @MainActor
 enum SidebarLayoutMetrics {
     static let topContentMargin: CGFloat = 4
@@ -196,8 +200,12 @@ struct SidebarContent: View {
     private var projectStore
     @AppStorage(Preferences.Keys.showNewProjectButton)
     private var showNewProjectButton = true
+    @AppStorage(Preferences.Keys.showProjectNewTabButton)
+    private var showProjectNewTabButton = true
     @Bindable
     private var presentation: SidebarPresentationState
+    @State
+    private var hoveredProjectID: UUID?
     private let isInteractive: Bool
     private let paintsFallbackFooterBackground: Bool
     private let forcesScrollEdgeEffects: Bool
@@ -540,22 +548,31 @@ struct SidebarContent: View {
     }
 
     private func projectHeader(index projectIndex: Int, project: Project) -> some View {
-        SidebarProjectRow(
+        let showsNewTabButton = isInteractive
+            && showProjectNewTabButton
+            && hoveredProjectID == project.id
+        return projectHeaderLabel(
+            index: projectIndex,
             project: project,
-            index: projectIndex + 1,
-            presentation: presentation,
-            isInteractive: isInteractive
-        ) {
-            projectStore.rename(id: project.id, to: $0)
-        }
+            showsNewTabButton: showsNewTabButton
+        )
         .padding(.trailing, rowTrailingInset)
         // Stretch to the full row so the drag grab area (and the drop band in
         // the background below) covers the whole row, not just the label's
         // intrinsic width — same treatment as the tab rows.
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .tag(SidebarItem.project(project.id))
         // Drag the header to reorder projects (replaces the removed `.onMove`).
         .draggable(MovableProject(projectID: project.id))
+        .onHover { isHovering in
+            guard isInteractive else { return }
+            if isHovering {
+                hoveredProjectID = project.id
+            } else if hoveredProjectID == project.id {
+                hoveredProjectID = nil
+            }
+        }
         // ONE drop destination for every payload (see `SidebarDropItem` for
         // why stacking two is a landmine). A TAB dropped here appends to this
         // project — the only drop path for a collapsed or empty project,
@@ -585,6 +602,54 @@ struct SidebarContent: View {
             // drop stays on target.
             if targeted { presentation.expandedProjects.insert(project.id) }
         }
+    }
+
+    /// The idle branch is exactly the ordinary project row. The action and
+    /// its spacing enter the layout only while hovered, so a hidden button
+    /// cannot shorten or fade a project name.
+    @ViewBuilder
+    private func projectHeaderLabel(
+        index projectIndex: Int,
+        project: Project,
+        showsNewTabButton: Bool
+    ) -> some View {
+        if showsNewTabButton {
+            HStack(spacing: 0) {
+                projectRow(index: projectIndex, project: project)
+                Spacer(minLength: 0)
+                projectNewTabButton(for: project)
+                    .padding(.leading, 6)
+            }
+        } else {
+            projectRow(index: projectIndex, project: project)
+        }
+    }
+
+    private func projectRow(index projectIndex: Int, project: Project) -> some View {
+        SidebarProjectRow(
+            project: project,
+            index: projectIndex + 1,
+            presentation: presentation,
+            isInteractive: isInteractive
+        ) {
+            projectStore.rename(id: project.id, to: $0)
+        }
+    }
+
+    private func projectNewTabButton(for project: Project) -> some View {
+        Button {
+            createTab(in: project)
+        } label: {
+            Image(systemName: "plus")
+                .font(.callout.weight(.medium))
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .offset(x: projectActionTrailingOffset)
+        .help("New Tab")
+        .accessibilityLabel("New Tab in \(project.name)")
     }
 
     /// Every visible row in visual order, mirroring the `List` body: the
@@ -726,11 +791,7 @@ struct SidebarContent: View {
     /// single right-click behaves exactly as before this feature.
     @ViewBuilder
     private func projectMenu(_ project: Project) -> some View {
-        Button("New Tab") {
-            appState.selectProject(project)
-            appState.createTab(projectID: project.id, projects: projectStore.projects)
-            presentation.expandedProjects.insert(project.id)
-        }
+        Button("New Tab") { createTab(in: project) }
         Button("Copy Path") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(project.path, forType: .string)
@@ -758,6 +819,13 @@ struct SidebarContent: View {
         Button("Remove Project", role: .destructive) {
             appState.requestRemoveProject(project.id) { removeProject(project) }
         }
+    }
+
+    /// Shared by the context menu and its optional hover shortcut.
+    private func createTab(in project: Project) {
+        appState.selectProject(project)
+        appState.createTab(projectID: project.id, projects: projectStore.projects)
+        presentation.expandedProjects.insert(project.id)
     }
 
     /// A pinned row's menu — two exits with distinct semantics: Unpin (a

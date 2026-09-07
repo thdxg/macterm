@@ -330,6 +330,11 @@ final class Preferences {
         didSet { defaults.set(showNewProjectButton, forKey: Keys.showNewProjectButton) }
     }
 
+    /// Show a New Tab button while the pointer rests on a project row.
+    var showProjectNewTabButton: Bool {
+        didSet { defaults.set(showProjectNewTabButton, forKey: Keys.showProjectNewTabButton) }
+    }
+
     /// Allow non-interactive background ssh connections to remote-project
     /// hosts: the foreground probe (live tab names, busy-close verdicts,
     /// layout `run:` capture) and the opt-in terminfo install. On by default.
@@ -816,6 +821,7 @@ final class Preferences {
         autoNameTabs = defaults.object(forKey: Keys.autoNameTabs) as? Bool ?? true
         autoAssignProjectColors = defaults.object(forKey: Keys.autoAssignProjectColors) as? Bool ?? false
         showNewProjectButton = defaults.object(forKey: Keys.showNewProjectButton) as? Bool ?? true
+        showProjectNewTabButton = defaults.object(forKey: Keys.showProjectNewTabButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         reconnectRemotePanes = defaults.object(forKey: Keys.reconnectRemotePanes) as? Bool ?? true
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
@@ -947,6 +953,7 @@ final class Preferences {
         static let autoNameTabs = "macterm.tabs.autoName"
         static let autoAssignProjectColors = "macterm.projects.autoAssignColors"
         static let showNewProjectButton = "macterm.sidebar.showNewProjectButton"
+        static let showProjectNewTabButton = "macterm.sidebar.showProjectNewTabButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"
         static let installationID = "macterm.installationID"
