@@ -407,7 +407,7 @@ final class Preferences {
     /// `MainWindow`'s `navigationSplitViewColumnWidth` so a stored value can
     /// never fall outside what the column accepts.
     static let sidebarWidthRange: ClosedRange<Double> = 140 ... 400
-    static let defaultSidebarWidth: Double = 180
+    static let defaultSidebarWidth: Double = 220
 
     /// Which appcast channel auto-updates come from. Read by `Updater`'s
     /// `allowedChannels(for:)`, so `.beta`/`.tip` make the matching prerelease

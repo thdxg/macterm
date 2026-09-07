@@ -94,6 +94,7 @@ struct PreferencesTests {
     @Test
     func sidebar_width_is_clamped_to_the_column_bounds() {
         let range = Preferences.sidebarWidthRange
+        #expect(Preferences.defaultSidebarWidth == 220)
         #expect(Preferences.clampSidebarWidth(nil) == Preferences.defaultSidebarWidth)
         #expect(Preferences.clampSidebarWidth(0) == Preferences.defaultSidebarWidth)
         #expect(Preferences.clampSidebarWidth(range.lowerBound - 40) == range.lowerBound)
