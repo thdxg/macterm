@@ -182,11 +182,10 @@ final class ControlHandler {
             )
         }
         let snap = view.scrollbarSnapshot
-        // The alt-screen heuristic mirrors SurfaceScrollView.canHandleScrollbackWheel:
-        // `total > len` means there IS scrollback (normal screen); otherwise
-        // we're on the alt screen / a fresh prompt. Undefined until a snapshot
+        // No scrollback means the alt screen / a fresh prompt (the same predicate
+        // the wheel handler and context menu read). Undefined until a snapshot
         // arrives, so it tracks the snapshot's own nil-ness.
-        let altScreen = snap.map { $0.total <= $0.len }
+        let altScreen = snap.map { !$0.hasScrollback }
         let pid = ProcessInspector.resolvedForegroundPID(forPane: pane)
         let argv = pid.flatMap { ProcessInspector.argv(pid: $0) }
         let inspect = ControlPaneInspect(

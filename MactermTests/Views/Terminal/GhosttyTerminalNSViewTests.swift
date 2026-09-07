@@ -52,45 +52,37 @@ struct GhosttyTerminalNSViewTests {
 
     // MARK: - Context-menu scroll navigation
 
+    private typealias Snapshot = GhosttyTerminalNSView.ScrollbarSnapshot
+
     @Test
     func scrollNavigation_disablesBothActionsWithoutScrollbackGeometry() {
-        #expect(
-            GhosttyTerminalNSView.scrollNavigationAvailability(for: nil)
-                == .init(canJumpToTop: false, canJumpToBottom: false)
-        )
-        #expect(
-            GhosttyTerminalNSView.scrollNavigationAvailability(
-                for: .init(total: 24, offset: 0, len: 24)
-            ) == .init(canJumpToTop: false, canJumpToBottom: false)
-        )
-        #expect(
-            GhosttyTerminalNSView.scrollNavigationAvailability(
-                for: .init(total: 24, offset: 10, len: 30)
-            ) == .init(canJumpToTop: false, canJumpToBottom: false)
-        )
+        // Alt screen (total == len) and a snapshot whose viewport is larger than
+        // the buffer both mean "no scrollback"; neither may underflow.
+        for snapshot in [Snapshot(total: 24, offset: 0, len: 24), Snapshot(total: 24, offset: 10, len: 30)] {
+            #expect(!snapshot.hasScrollback)
+            #expect(snapshot.maxScrollableRow == 0)
+            #expect(!snapshot.canScrollUp)
+            #expect(!snapshot.canScrollDown)
+        }
     }
 
     @Test
     func scrollNavigation_enablesOnlyAvailableDirectionsAtTheBoundaries() {
-        #expect(
-            GhosttyTerminalNSView.scrollNavigationAvailability(
-                for: .init(total: 100, offset: 0, len: 24)
-            ) == .init(canJumpToTop: false, canJumpToBottom: true)
-        )
-        #expect(
-            GhosttyTerminalNSView.scrollNavigationAvailability(
-                for: .init(total: 100, offset: 76, len: 24)
-            ) == .init(canJumpToTop: true, canJumpToBottom: false)
-        )
+        let top = Snapshot(total: 100, offset: 0, len: 24)
+        #expect(top.maxScrollableRow == 76)
+        #expect(!top.canScrollUp)
+        #expect(top.canScrollDown)
+
+        let bottom = Snapshot(total: 100, offset: 76, len: 24)
+        #expect(bottom.canScrollUp)
+        #expect(!bottom.canScrollDown)
     }
 
     @Test
     func scrollNavigation_enablesBothActionsBetweenTheBoundaries() {
-        #expect(
-            GhosttyTerminalNSView.scrollNavigationAvailability(
-                for: .init(total: 100, offset: 32, len: 24)
-            ) == .init(canJumpToTop: true, canJumpToBottom: true)
-        )
+        let middle = Snapshot(total: 100, offset: 32, len: 24)
+        #expect(middle.canScrollUp)
+        #expect(middle.canScrollDown)
     }
 
     // MARK: - IME composition state
