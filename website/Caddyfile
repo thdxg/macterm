@@ -2,11 +2,16 @@
 # built from website/Dockerfile and by `bun run dev`, so what you preview
 # locally is what production runs.
 #
-# The one rule this file exists for is `try_files`: the docs are a multi-page
-# site linked by extensionless URLs (/docs/install), and those are canonical
-# everywhere — sitemap, OG tags, every sidebar link. It maps them onto
-# public/docs/install.html, which is what Cloudflare's `auto-trailing-slash`
-# html handling did before this site was containerized.
+# Two rules are why this file exists rather than a bare file server.
+#
+# `try_files`: the docs are a multi-page site linked by extensionless URLs
+# (/docs/install), and those are canonical everywhere — sitemap, OG tags, every
+# sidebar link. It maps them onto public/docs/install.html, which is what
+# Cloudflare's `auto-trailing-slash` html handling did before this site was
+# containerized.
+#
+# The `@updates` proxy: the Sparkle appcast is not part of this site's build.
+# See the block itself for the whole story.
 {
 	admin off
 	# TLS is terminated by whatever fronts the container, not here.
@@ -28,13 +33,85 @@
 	# are the same page as /docs/install and /docs/, not rival copies of it.
 	@index_html path_regexp index_html ^(.*)/index\.html$
 	redir @index_html {re.index_html.1}/ 301
-	@html_ext path_regexp html_ext ^(.*)\.html$
+	# /notes/* is excluded: those are proxied (below), and their `.html` is a
+	# real part of the upstream path — stripping it would proxy a URL that does
+	# not exist on the branch. Every published <sparkle:releaseNotesLink> names
+	# the extension, so this is a wire contract, not a style choice.
+	@html_ext {
+		path_regexp html_ext ^(.*)\.html$
+		not path /notes/*
+	}
 	redir @html_ext {re.html_ext.1} 301
 
 	# Liveness for the container runtime, matched before any file lookup.
 	respond /healthz 200 {
 		body "ok"
 		close
+	}
+
+	# ── Sparkle update feed ───────────────────────────────────────────────
+	# appcast.xml and its per-version release-notes pages are the only things
+	# served here that this image does not contain. They are written at RELEASE
+	# time by scripts/publish-appcast.sh — long after the image was built — so
+	# baking them in would mean rebuilding and redeploying the site on every
+	# release and on every tip build, and the feed would lag each one by that
+	# whole cycle. The gh-pages BRANCH stays the store instead and is proxied
+	# from here: a branch is readable without a GitHub Pages site, so the
+	# publish script keeps its git read-modify-write untouched, and the feed is
+	# live the instant the workflow pushes.
+	#
+	# This is also what makes the migration off Pages free: while Pages is
+	# still enabled for the installs whose baked-in SUFeedURL points at
+	# thdxg.github.io, both URLs serve the same bytes from the same commit, so
+	# the old and new feeds cannot drift apart.
+	@updates path /appcast.xml /notes/*
+	handle @updates {
+		# raw.githubusercontent serves EVERY path as `text/plain` with its own
+		# nosniff, which renders a notes page as its own HTML source in Sparkle's
+		# update dialog. The real type has to be reasserted here.
+		#
+		# Every set below uses `>` — a DEFERRED set, applied as the response is
+		# sent. A plain set is applied IMMEDIATELY, which is before reverse_proxy
+		# copies the upstream's headers in, so both values survive onto the
+		# response: measured, that shipped two X-Content-Type-Options and would
+		# have shipped two Content-Types. Deferring is what makes ours the one
+		# that wins. The site-wide nosniff below is a plain set for that same
+		# reason, so this block restates it deferred rather than inheriting a
+		# duplicate.
+		@appcast path /appcast.xml
+		header @appcast >Content-Type "application/xml; charset=utf-8"
+		header /notes/* >Content-Type "text/html; charset=utf-8"
+		header >X-Content-Type-Options nosniff
+
+		# A day's checks from one install cost one request, and this proxy is a
+		# single IP to the upstream, so give any cache in front of us something to
+		# hold. Upstream is already ~5 min behind its own CDN; 15 min on top is
+		# invisible against a 24h check interval (SUScheduledCheckInterval).
+		header >Cache-Control "public, max-age=900"
+
+		reverse_proxy https://raw.githubusercontent.com {
+			rewrite /thdxg/macterm/gh-pages{uri}
+			header_up Host raw.githubusercontent.com
+
+			# Where the bytes come from is not part of the contract with Sparkle,
+			# and this site strips `Server` for the same reason — so drop raw's CDN
+			# bookkeeping. Expires goes with it: it carries the upstream's own
+			# 5-minute TTL and would sit on the response contradicting the
+			# Cache-Control above. Etag stays (it makes revalidation work), and so
+			# do the upstream's CSP/X-Frame-Options/HSTS — a notes page is now
+			# served as real HTML into a WebView, so a restrictive policy on it is
+			# worth keeping rather than stripping.
+			header_down -Expires
+			header_down -Source-Age
+			header_down -Via
+			header_down -X-Cache
+			header_down -X-Cache-Hits
+			header_down -X-Fastly-Request-Id
+			header_down -X-Served-By
+			header_down -X-Timer
+			header_down -X-Github-Request-Id
+			header_down -X-Github-Edge-Region
+		}
 	}
 
 	# Nothing here is content-hashed, so the pages themselves revalidate every
@@ -45,9 +122,16 @@
 	# screenshots, the favicons, and the OG card that every page references, so
 	# leaving it to the @pages rule below would put `max-age=0` on the images
 	# the whole site is built out of and revalidate each one on every visit.
+	#
+	# The proxied update feed sets its own TTL above, so /appcast.xml and
+	# /notes/* are kept out of all three matchers — two `header` directives
+	# both naming Cache-Control on one response is not a decision, it's a race.
 	@media path /assets/* /img/*
-	@static path *.css *.js *.xml *.txt
-	@pages not path /assets/* /img/* *.css *.js *.xml *.txt
+	@static {
+		path *.css *.js *.xml *.txt
+		not path /appcast.xml
+	}
+	@pages not path /assets/* /img/* *.css *.js *.xml *.txt /notes/*
 	header @media Cache-Control "public, max-age=86400"
 	header @static Cache-Control "public, max-age=0, must-revalidate"
 	header @pages Cache-Control "public, max-age=0, must-revalidate"

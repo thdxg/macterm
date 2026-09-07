@@ -279,9 +279,10 @@ jobs:
       # The `tip` tag records precisely that, because it moves LAST, after a
       # successful publish: if it is not an ancestor of the commit we built, a
       # newer tip is already out and ours must not overwrite it. A git ref is
-      # also authoritative in a way the published feed is not — GitHub Pages
-      # serves appcast.xml through a CDN, so reading it here could see a stale
-      # copy. (publish-appcast.sh keeps its own version guard against the real
+      # also authoritative in a way the published feed is not — the feed is
+      # read through two CDNs (Cloudflare in front of the site, and raw
+      # githubusercontent behind it), so reading it here could see a stale copy.
+      # (publish-appcast.sh keeps its own version guard against the real
       # gh-pages branch as the backstop.)
       #
       # `is-ancestor` is exact for main because PRs merge via squash only, so the
@@ -380,7 +381,7 @@ jobs:
       # LAST, on purpose: the DMG is already on the release, so the feed can
       # never name an enclosure that isn't there yet. ROLLING=true replaces the
       # single tip item instead of appending one per commit.
-      - name: Publish appcast to gh-pages
+      - name: Publish appcast
         if: steps.current.outputs.superseded != 'true'
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}

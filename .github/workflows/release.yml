@@ -219,8 +219,11 @@ jobs:
 
       # ── Appcast generation ────────────────────────────────────────────
       # Sparkle's `sign_update` produces an EdDSA signature for each DMG.
-      # We then append a new <item> to the appcast on the gh-pages branch,
-      # which is served as https://thdxg.github.io/macterm/appcast.xml.
+      # We then append a new <item> to the appcast on the gh-pages branch.
+      # That branch is the STORE, not a website: macterm.thdxg.dev proxies it
+      # (website/Caddyfile), so the feed is live the moment this push lands
+      # rather than waiting on a site rebuild. GitHub Pages no longer serves
+      # it — see scripts/publish-appcast.sh for why the push is unchanged.
       #
       # BOTH stable and prerelease publish here now — one feed, two channels.
       # A prerelease's <item> carries <sparkle:channel>beta</sparkle:channel>,
@@ -234,7 +237,7 @@ jobs:
           mkdir -p sparkle && tar -xf sparkle.tar.xz -C sparkle
           echo "$PWD/sparkle/bin" >> "$GITHUB_PATH"
 
-      - name: Publish appcast to gh-pages
+      - name: Publish appcast
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           VERSION: ${{ steps.release.outputs.version }}

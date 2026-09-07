@@ -63,7 +63,7 @@
 	<key>NSSystemAdministrationUsageDescription</key>
 	<string>A process running in Macterm's terminal requires elevated privileges.</string>
 	<key>SUFeedURL</key>
-	<string>https://thdxg.github.io/macterm/appcast.xml</string>
+	<string>https://macterm.thdxg.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_ED_PUBLIC_KEY)</string>
 	<key>SUEnableInstallerLauncherService</key>

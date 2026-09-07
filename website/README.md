@@ -119,6 +119,51 @@ extensionless resolution the site used to get from Cloudflare's
 > (`sitemap.xml`, `robots.txt`), 404s `/docs/`, and injects an HMR client. It's
 > a dev server for bundled apps, which this site isn't.
 
+### Sparkle update feed
+
+`/appcast.xml` and `/notes/<tag>.html` are the only URLs this site serves that
+the image does **not** contain. They are written at release time by
+`scripts/publish-appcast.sh` to the repo's `gh-pages` branch, so the
+`Caddyfile`'s `@updates` block proxies them off that branch through
+`raw.githubusercontent.com` rather than serving files. `gh-pages` is a store,
+not a website — reading a branch needs no GitHub Pages site.
+
+Baking them into the image instead would mean rebuilding and redeploying the
+site on every release *and every tip build* (tip publishes per commit to main),
+with the feed lagging each one by the whole build-plus-Flux cycle. Proxying
+keeps the publish script's git read-modify-write untouched and the feed live
+the moment the workflow pushes.
+
+Three things in that block are load-bearing, and all three were measured rather
+than reasoned about:
+
+- **Content types must be reasserted.** `raw.githubusercontent` serves every
+  path as `text/plain` with `nosniff`, which renders a notes page as its own
+  HTML source inside Sparkle's update dialog.
+- **The reassertion uses `>`, Caddy's *deferred* set.** A plain `header` set is
+  applied immediately — before `reverse_proxy` copies the upstream's headers in
+  — so both values survive onto the response. That shipped two
+  `X-Content-Type-Options` and would have shipped two `Content-Type`s.
+- **`/notes/*` is exempt from the `.html`-stripping redirect.** Every published
+  `<sparkle:releaseNotesLink>` names the extension, so stripping it would 301 to
+  a path that does not exist on the branch. That exemption is a wire contract,
+  not a style choice.
+
+The `Cache-Control` set there is the response's only one — `/appcast.xml` and
+`/notes/*` are kept out of the `@static`/`@pages` matchers below, because two
+`header` directives naming the same field is a race, not a decision. Upstream's
+CDN bookkeeping (`X-Cache`, `X-Served-By`, `X-Github-*`, and an `Expires` that
+would contradict our TTL) is stripped for the same reason the site strips
+`Server`; `Etag` and the upstream's CSP/`X-Frame-Options` are kept, the latter
+because a notes page is now served as real HTML into a WebView.
+
+> The origin here is a wire contract with the app: `SUFeedURL` in
+> `Macterm/Info.plist`, `SITE_URL` in `scripts/publish-appcast.sh`, and
+> `SITE_URL` in `build-docs.mjs` must all name this site.
+> `UpdaterChannelTests.the_update_feed_and_the_website_name_one_origin` pins
+> them, because an installed app polls the URL it was *built* with forever and a
+> feed that 404s reports nothing at all.
+
 ### GitHub stats
 
 The star count, total download count, and the Download button's link to the
