@@ -767,4 +767,78 @@ struct WindowStateTests {
         #expect(a !== b)
         #expect(state.windows.count == 2)
     }
+
+    @Test
+    func a_window_on_the_pinned_workspace_follows_its_active_tab() throws {
+        // Cmd+T on a pinned tab created the tab and the sidebar selected it,
+        // but the window kept rendering the old one: a per-window record for
+        // the sentinel (seeded by the restore paths) was read by
+        // `selectedTab` while nothing maintained it — the workspace hook,
+        // reconcile and align all skip the pinned workspace.
+        let state = makeAppState()
+        state.zmx = .noop
+        state.warmPane = { _ in }
+        _ = try seedProject(state, tabs: 1)
+        state.ensurePinnedWorkspace()
+        // Through AppState so the tabs get pinned records (selection is
+        // record-aware), as Cmd+T's `createTab` does.
+        let first = try #require(state.createTab(projectID: PinnedTabs.projectID, projectPath: "/tmp"))
+        let window = WindowState(activeProjectID: PinnedTabs.projectID)
+        state.registerWindow(window)
+        state.noteKeyWindow(window)
+        window.activeTabIDs[PinnedTabs.projectID] = first
+
+        let created = try #require(state.createTab(projectID: PinnedTabs.projectID, projectPath: "/tmp"))
+
+        #expect(state.selectedTab(for: PinnedTabs.projectID, in: window)?.id == created)
+        #expect(state.viewTab(for: PinnedTabs.projectID, in: window)?.tab.id == created)
+        state.selectTab(first, projectID: PinnedTabs.projectID, in: window)
+        #expect(state.selectedTab(for: PinnedTabs.projectID, in: window)?.id == first)
+    }
+
+    @Test
+    func restoring_a_window_on_the_pinned_workspace_records_no_tab_for_it() async throws {
+        // The pinned selection is restored through the workspace
+        // (`pinnedActiveTabID`); the window snapshot's copy of it must not
+        // become a stale per-window record.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.zmx = .noop
+        writer.warmPane = { _ in }
+        writer.restoreSelection(projects: [p])
+        writer.selectProject(p)
+        writer.ensurePinnedWorkspace()
+        let firstPinned = try #require(writer.createTab(projectID: PinnedTabs.projectID, projectPath: "/tmp"))
+        _ = try #require(writer.createTab(projectID: PinnedTabs.projectID, projectPath: "/tmp"))
+        writer.selectTab(firstPinned, projectID: PinnedTabs.projectID)
+        let w = WindowState(activeProjectID: PinnedTabs.projectID)
+        writer.registerWindow(w)
+        writer.noteKeyWindow(w)
+        writer.saveWorkspaces()
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.zmx = .noop
+        reader.warmPane = { _ in }
+        reader.restoreSelection(projects: [p])
+        await reader.materializeRestoredPinnedTabs()
+        let restored = WindowState()
+        reader.registerWindow(restored)
+        reader.noteKeyWindow(restored)
+        reader.restoreWindows(adopting: restored)
+
+        #expect(restored.activeProjectID == PinnedTabs.projectID)
+        #expect(restored.activeTabIDs[PinnedTabs.projectID] == nil)
+        let pinned = try #require(reader.pinnedWorkspace)
+        #expect(pinned.tabs.count == 2)
+        #expect(reader.selectedTab(for: PinnedTabs.projectID, in: restored)?.id == pinned.activeTabID)
+
+        let created = pinned.createTab(projectPath: "/tmp")
+        #expect(reader.selectedTab(for: PinnedTabs.projectID, in: restored)?.id == created.id)
+    }
 }

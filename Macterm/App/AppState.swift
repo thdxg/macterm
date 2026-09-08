@@ -141,9 +141,7 @@ final class AppState {
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
-        if let project = first.activeProjectID, let tab = saved[0].activeTabID {
-            first.activeTabIDs[project] = tab
-        }
+        recordRestoredTab(saved[0].activeTabID, in: first)
         if keyWindowID == first.id {
             activeProjectID = first.activeProjectID
             alignKeyWindowTab()
@@ -304,6 +302,15 @@ final class AppState {
         noteKeyWindow(showing)
     }
 
+    /// Seed a restored window's tab record from its snapshot entry. The pinned
+    /// workspace is skipped: its selection is the workspace's own (restored
+    /// via `pinnedActiveTabID`), and a per-window entry for it is read by
+    /// nothing and maintained by nothing — see `selectedTab(for:in:)`.
+    private func recordRestoredTab(_ tabID: UUID?, in window: WindowState) {
+        guard let project = window.activeProjectID, project != PinnedTabs.projectID, let tabID else { return }
+        window.activeTabIDs[project] = tabID
+    }
+
     func registerWindow(_ window: WindowState) {
         guard !windows.contains(where: { $0.id == window.id }) else { return }
         if !pendingWindowRestores.isEmpty {
@@ -313,7 +320,7 @@ final class AppState {
             let restoring = pendingWindowRestores.removeFirst()
             if let project = restoring.activeProjectID {
                 window.activeProjectID = project
-                if let tab = restoring.activeTabID { window.activeTabIDs[project] = tab }
+                recordRestoredTab(restoring.activeTabID, in: window)
             }
             if let width = restoring.sidebarWidth { window.sidebarWidth = width }
             if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
@@ -418,9 +425,22 @@ final class AppState {
     /// that tab still exists, else the workspace's active tab. Two windows may
     /// select the same tab — `viewTab(for:in:)` decides which one renders the
     /// real panes and which a mirror of them.
+    ///
+    /// The pinned workspace has no per-window selection: every window on it
+    /// shows its active tab. Nothing maintains a map entry for it — the
+    /// workspace hook, `reconcileWindowViews` and `alignKeyWindowTab` all skip
+    /// the sentinel, and `selectTab(_:projectID:in:)` routes it through the
+    /// workspace — so a record there could only ever be stale. One was: the
+    /// restore paths seeded it from the snapshot, and this then rendered that
+    /// tab no matter which pinned tab was active, so Cmd+T on a pinned tab
+    /// created a tab the sidebar selected while the window kept showing the
+    /// old one.
     func selectedTab(for projectID: UUID, in window: WindowState) -> TerminalTab? {
         guard let ws = workspaces[projectID] else { return nil }
-        if let id = window.activeTabIDs[projectID], let tab = ws.tabs.first(where: { $0.id == id }) {
+        if projectID != PinnedTabs.projectID,
+           let id = window.activeTabIDs[projectID],
+           let tab = ws.tabs.first(where: { $0.id == id })
+        {
             return tab
         }
         return ws.activeTab
