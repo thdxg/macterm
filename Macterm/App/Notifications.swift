@@ -9,6 +9,15 @@ extension Notification.Name {
     /// poll: tab switch, OSC title, user interaction, execution-state
     /// transition. Observed by `AppState.notePollEvent()`.
     static let terminalPollEvent = Notification.Name("MactermTerminalPollEvent")
+    /// The user typed into a pane (`object` is the pane's id). Posted for keys
+    /// that reach the pty — what zmx's `isUserInput` will hand leadership on —
+    /// so `AppState` can record the pane as its session's leader (#345).
+    static let terminalUserInput = Notification.Name("MactermTerminalUserInput")
+    /// A pane's surface received its first real size (`object` is the pane's
+    /// id) — the moment a leadership claim can be delivered to it (#345):
+    /// a claim before this is refused, and a mirror that came up in the key
+    /// window would otherwise never take the pty.
+    static let terminalSurfaceSized = Notification.Name("MactermTerminalSurfaceSized")
     /// A final IO heartbeat's quiet deadline. Unlike ordinary poll events,
     /// this must force one poll even when coalescing and window occlusion would
     /// otherwise leave the timer paused.

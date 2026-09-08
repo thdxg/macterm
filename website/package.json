@@ -5,8 +5,10 @@
   "description": "Marketing site and docs for Macterm — built by Bun, served by Caddy.",
   "scripts": {
     "build:docs": "bun build-docs.mjs",
+    "build:img": "bun build-images.mjs",
     "build:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --minify",
-    "build": "bun run build:docs && bun run build:css",
+    "check:seo": "bun check-seo.mjs",
+    "build": "bun run build:img && bun run build:docs && bun run build:css && bun run check:seo",
     "watch:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --watch",
     "serve": "PORT=${PORT:-8765} SITE_ROOT=$PWD/public caddy run --config Caddyfile",
     "dev": "bun run build && bun run serve",
@@ -16,6 +18,7 @@
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
     "marked": "^18.0.5",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4.1.0"
   }
 }

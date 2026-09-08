@@ -445,7 +445,9 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
-    @State private var restoreAllProjectsOnLaunch: Bool = Preferences.shared.restoreAllProjectsOnLaunch
+    @State private var attachAllProjectsOnLaunch: Bool = Preferences.shared.attachAllProjectsOnLaunch
+    @State private var newTabWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newTabWorkingDirectory
+    @State private var newSplitWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newSplitWorkingDirectory
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -547,6 +549,24 @@ private struct GeneralSettings: View {
             }
 
             Section("Terminal") {
+                Picker("New tab directory", selection: $newTabWorkingDirectory) {
+                    ForEach(NewTerminalWorkingDirectory.allCases) { directory in
+                        Text(directory.displayName).tag(directory)
+                    }
+                }
+                .onChange(of: newTabWorkingDirectory) { _, directory in
+                    Preferences.shared.newTabWorkingDirectory = directory
+                }
+
+                Picker("New split directory", selection: $newSplitWorkingDirectory) {
+                    ForEach(NewTerminalWorkingDirectory.allCases) { directory in
+                        Text(directory.displayName).tag(directory)
+                    }
+                }
+                .onChange(of: newSplitWorkingDirectory) { _, directory in
+                    Preferences.shared.newSplitWorkingDirectory = directory
+                }
+
                 SettingsSlider(
                     label: "Scroll speed",
                     value: $terminalScrollSpeed,
@@ -592,12 +612,15 @@ private struct GeneralSettings: View {
             }
 
             Section("Session Persistence") {
-                Toggle("Restore and expand every project on launch", isOn: $restoreAllProjectsOnLaunch)
-                    .onChange(of: restoreAllProjectsOnLaunch) { _, v in
-                        Preferences.shared.restoreAllProjectsOnLaunch = v
+                Toggle("Attach all project terminals on launch", isOn: $attachAllProjectsOnLaunch)
+                    .onChange(of: attachAllProjectsOnLaunch) { _, v in
+                        Preferences.shared.attachAllProjectsOnLaunch = v
                     }
-                Text("Reattaches saved terminals immediately and reveals their tabs in the sidebar.")
-                    .settingsCaption()
+                Text(
+                    "Connects every restored terminal instead of waiting until its project is selected. "
+                        + "This may open multiple local shells or SSH connections."
+                )
+                .settingsCaption()
 
                 // Persistence can fail silently when zmx is unavailable
                 // (Supacode shipped the same probe and users only noticed via
@@ -1038,9 +1061,12 @@ private struct AppearanceSettings: View {
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
     @State private var showSpinnerOverAgentIcons: Bool = Preferences.shared.showSpinnerOverAgentIcons
     @State private var autoNameTabs: Bool = Preferences.shared.autoNameTabs
+    @State private var autoAssignProjectColors: Bool = Preferences.shared.autoAssignProjectColors
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
+    @State private var showProjectNewTabButton: Bool = Preferences.shared.showProjectNewTabButton
     @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
+    @State private var showTabSwitcherOverlay: Bool = Preferences.shared.showTabSwitcherOverlay
     @State private var tabSwitcherPosition: String = Preferences.shared.tabSwitcherPosition.rawValue
     @State
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
@@ -1162,6 +1188,13 @@ private struct AppearanceSettings: View {
                 Text("Names tabs after the running program. When off, tabs show the shell or host name.")
                     .settingsCaption()
 
+                Toggle("Auto-assign project colors", isOn: $autoAssignProjectColors)
+                    .onChange(of: autoAssignProjectColors) { _, v in
+                        Preferences.shared.autoAssignProjectColors = v
+                    }
+                Text("Gives each new project the least-used color. Existing projects keep whatever they have.")
+                    .settingsCaption()
+
                 Toggle("Show AI agent icons", isOn: $showAgentIcons)
                     .onChange(of: showAgentIcons) { _, v in
                         Preferences.shared.showAgentIcons = v
@@ -1193,6 +1226,25 @@ private struct AppearanceSettings: View {
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
                 Text("When hidden, create projects via the command palette or context menu.")
                     .settingsCaption()
+
+                Toggle("Show new tab button on projects", isOn: $showProjectNewTabButton)
+                    .onChange(of: showProjectNewTabButton) { _, v in
+                        Preferences.shared.showProjectNewTabButton = v
+                    }
+                Text("Shows the button while the pointer rests on a project row.")
+                    .settingsCaption()
+            }
+
+            Section("Tab Switching") {
+                Toggle("Show tab previews while cycling", isOn: $showTabSwitcherOverlay)
+                    .onChange(of: showTabSwitcherOverlay) { _, v in
+                        Preferences.shared.showTabSwitcherOverlay = v
+                    }
+                Text(
+                    "Holding the Recent Tab shortcut shows the project's tabs with a preview of each pane, "
+                        + "and moves the selection without switching until you let go."
+                )
+                .settingsCaption()
             }
 
             Section("Toolbar") {

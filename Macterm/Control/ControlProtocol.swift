@@ -55,6 +55,9 @@ struct ControlRequest: Codable {
 /// unknown/extra fields harmless across versions — the same shape Zentty's
 /// battle-tested `AgentIPCRequest` uses.
 struct ControlArgs: Codable, Equatable {
+    /// Which window a verb acts on: 1-based index (`window:N` order) or its
+    /// id. Absent means the key window (#345).
+    var window: String?
     /// Project selector: name, UUID, or 1-based index as rendered by
     /// `project list`.
     var project: String?
@@ -67,7 +70,7 @@ struct ControlArgs: Codable, Equatable {
     var session: String?
     /// Filesystem path (`project.create`).
     var path: String?
-    /// Display name (`project.create`).
+    /// Display name (`project.create`, `project.rename`).
     var name: String?
     /// Also select/activate what was created (`project.create`).
     var select: Bool?
@@ -80,7 +83,7 @@ struct ControlArgs: Codable, Equatable {
     /// makes the resolved pane the origin and focuses its neighbour).
     var direction: String?
     /// Skip the busy-confirmation and destructive-plan guards
-    /// (`tab.close`, `pane.close`, `layout.apply`).
+    /// (`project.remove`, `tab.close`, `pane.close`, `layout.apply`).
     var force: Bool?
     /// Grid shape (`grid`); also the target grid for the debug-only
     /// `pane.resize` in-place surface resize.
@@ -108,6 +111,18 @@ struct ControlArgs: Codable, Equatable {
     var title: String?
     /// Reset custom title back to automatic default (`tab.rename`).
     var reset: Bool?
+    /// Whether `pane.run` submits the text it pastes. ABSENT means submit —
+    /// the only value a client ever sends is `false`, to leave the command on
+    /// the prompt — so a caller that predates the flag keeps its behavior.
+    var submit: Bool?
+    /// Tutorial topic for `tutor.render` (`project`, `pinned`). The strings
+    /// are `Tutorial.Topic`'s raw values, which also appear in the seeded
+    /// `run:` declarations.
+    var topic: String?
+    /// Whether the rendered tutorial may carry ANSI styling. The APP renders
+    /// the text but only the CLI can see whether its stdout is a tty, so the
+    /// verdict travels with the request.
+    var styled: Bool?
 
     init(
         project: String? = nil,
@@ -130,7 +145,10 @@ struct ControlArgs: Codable, Equatable {
         dest: String? = nil,
         slot: Int? = nil,
         title: String? = nil,
-        reset: Bool? = nil
+        reset: Bool? = nil,
+        submit: Bool? = nil,
+        topic: String? = nil,
+        styled: Bool? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -153,6 +171,9 @@ struct ControlArgs: Codable, Equatable {
         self.slot = slot
         self.title = title
         self.reset = reset
+        self.submit = submit
+        self.topic = topic
+        self.styled = styled
     }
 }
 
@@ -203,29 +224,37 @@ struct ControlData: Codable {
     var status: ControlStatusInfo?
     var projects: [ControlProjectInfo]?
     var tabs: [ControlTabInfo]?
+    /// Open terminal windows (#345).
+    var windows: [ControlWindowInfo]?
     var panes: [ControlPaneInfo]?
     var sessions: [ControlSessionInfo]?
     /// Read-only terminal-core snapshot (`pane.inspect`).
     var inspect: ControlPaneInspect?
     /// Terminal cell text (`pane.dump`).
     var dump: ControlPaneDump?
+    /// Rendered tutorial text (`tutor.render`).
+    var tutorial: ControlTutorial?
 
     init(
         status: ControlStatusInfo? = nil,
         projects: [ControlProjectInfo]? = nil,
         tabs: [ControlTabInfo]? = nil,
+        windows: [ControlWindowInfo]? = nil,
         panes: [ControlPaneInfo]? = nil,
         sessions: [ControlSessionInfo]? = nil,
         inspect: ControlPaneInspect? = nil,
-        dump: ControlPaneDump? = nil
+        dump: ControlPaneDump? = nil,
+        tutorial: ControlTutorial? = nil
     ) {
         self.status = status
         self.projects = projects
         self.tabs = tabs
+        self.windows = windows
         self.panes = panes
         self.sessions = sessions
         self.inspect = inspect
         self.dump = dump
+        self.tutorial = tutorial
     }
 }
 
@@ -273,6 +302,31 @@ struct ControlPaneInfo: Codable, Equatable {
     /// for). Optional per the additive-field convention above — nil when
     /// decoded from an older server that predates this field.
     var state: String?
+    /// Whether another pane shows this pane's session (#345). Optional per the
+    /// additive-field convention — nil from a server predating mirroring.
+    var mirror: Bool?
+    /// Whether this pane drives its session's pty size — zmx's "leader"
+    /// client. Always true for an unmirrored pane, which is the only client.
+    var leader: Bool?
+}
+
+/// One open terminal window. `project` is what its titlebar and the macOS
+/// Window menu show — each window tracks its own.
+struct ControlWindowInfo: Codable, Equatable {
+    /// 1-based position in creation order, rendered `window:N`.
+    var index: Int
+    var id: String
+    var projectID: String?
+    var project: String?
+    /// Whether this is the window the user is in.
+    var focused: Bool
+    /// The window's sidebar width, which is per window (#345).
+    var sidebarWidth: Double?
+    /// The tab this window has selected in its project — per window (#345).
+    var tabID: String?
+    /// Whether this window renders a mirror view of that tab because another
+    /// window owns its panes (#345): the same sessions attached a second time.
+    var mirrored: Bool?
 }
 
 struct ControlSessionInfo: Codable, Equatable {
@@ -284,7 +338,15 @@ struct ControlSessionInfo: Codable, Equatable {
     var leaderPID: Int32?
     /// The live pane currently bound to this session, if any (a session with
     /// no pane is an orphan awaiting reap or reattach).
+    ///
+    /// A mirrored session has several — this reports the leader, the pane
+    /// driving its size; see `paneIDs` for all of them. Kept so a client
+    /// predating mirroring still reads a sensible single value.
     var paneID: String?
+    /// Every live pane bound to this session, in tree order (#345). One entry
+    /// for an ordinary session; several once a session is mirrored. Optional
+    /// per the additive-field convention.
+    var paneIDs: [String]?
 }
 
 /// Read-only snapshot of a pane's terminal core (`pane.inspect`). Every field
@@ -336,6 +398,14 @@ struct ControlPaneDump: Codable, Equatable {
     var scrollback: Bool
     /// UTF-8 byte length of `text` (handy for scripts before they slurp it).
     var bytes: Int
+    var text: String
+}
+
+/// One rendered tutorial (`tutor.render`). The text is built app-side from
+/// the user's LIVE keybindings, which is why this is a socket verb at all —
+/// see `Tutorial`.
+struct ControlTutorial: Codable, Equatable {
+    var topic: String
     var text: String
 }
 

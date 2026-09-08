@@ -5,7 +5,11 @@
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleExecutable</key>
-	<string>Macterm</string>
+	<!-- Follows PRODUCT_NAME, which is config-dependent: Debug builds the
+	     bundle as "Macterm Debug.app" (with a matching executable) so the Dock
+	     tile, Cmd-Tab and Finder label it "Macterm Debug" — all three read the
+	     bundle's filename and ignore CFBundleDisplayName. -->
+	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_DISPLAY_NAME)</string>
 	<key>CFBundleDisplayName</key>
@@ -59,7 +63,7 @@
 	<key>NSSystemAdministrationUsageDescription</key>
 	<string>A process running in Macterm's terminal requires elevated privileges.</string>
 	<key>SUFeedURL</key>
-	<string>https://thdxg.github.io/macterm/appcast.xml</string>
+	<string>https://macterm.thdxg.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_ED_PUBLIC_KEY)</string>
 	<key>SUEnableInstallerLauncherService</key>

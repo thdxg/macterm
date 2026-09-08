@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -59,16 +60,23 @@ final class ControlHandler {
         case "project.list": return projectList()
         case "project.create": return try projectCreate(args)
         case "project.select": return try projectSelect(args)
+        case "project.rename": return try projectRename(args)
+        case "project.remove": return try projectRemove(args)
         case "tab.list": return try tabList(args)
         case "tab.new": return try tabNew(args)
         case "tab.select": return try tabSelect(args)
         case "tab.move": return try tabMove(args)
         case "tab.rename": return try tabRename(args)
         case "tab.close": return try tabClose(args)
+        case "window.list": return windowList()
+        case "window.new": return windowNew()
+        case "window.close": return try windowClose(args)
+        case "window.focus": return try windowFocus(args)
         case "pane.list": return try paneList(args)
         case "pane.inspect": return try paneInspect(args)
         case "pane.dump": return try paneDump(args)
         case "pane.split": return try paneSplit(args)
+        case "pane.mirror": return try paneMirror(args)
         case "pane.focus": return try paneFocus(args)
         case "pane.close": return try paneClose(args)
         case "pane.run": return try paneRun(args)
@@ -86,6 +94,7 @@ final class ControlHandler {
         case "session.kill": return try await sessionKill(args)
         case "layout.apply": return try layoutApply(args)
         case "layout.save": return try layoutSave(args)
+        case "tutor.render": return try tutorRender(args)
         default:
             throw ControlError(
                 code: .unknownCommand,
@@ -105,6 +114,23 @@ final class ControlHandler {
             pid: getpid(),
             activeProject: active?.name,
             activeProjectID: active?.id.uuidString
+        ))
+    }
+
+    /// Render a tutorial topic (`macterm tutor`). App-side because the text
+    /// carries the user's LIVE keybindings — see `Tutorial`.
+    private func tutorRender(_ args: ControlArgs) throws -> ControlData {
+        let raw = args.topic ?? Tutorial.Topic.project.rawValue
+        guard let topic = Tutorial.Topic(rawValue: raw) else {
+            throw ControlError(
+                code: .badRequest,
+                message: "unknown tutorial topic \"\(raw)\"",
+                action: "known topics: " + Tutorial.Topic.allCases.map(\.rawValue).joined(separator: ", ")
+            )
+        }
+        return ControlData(tutorial: ControlTutorial(
+            topic: topic.rawValue,
+            text: Tutorial.render(topic: topic, styled: args.styled ?? false)
         ))
     }
 
@@ -129,6 +155,77 @@ final class ControlHandler {
     private func tabList(_ args: ControlArgs) throws -> ControlData {
         let (_, workspace) = try resolveWorkspace(args)
         return ControlData(tabs: tabInfos(in: workspace))
+    }
+
+    // MARK: - Windows (#345)
+
+    private func windowList() -> ControlData {
+        let infos = zip(1..., appState.windows).map { index, window in
+            ControlWindowInfo(
+                index: index,
+                id: window.id.uuidString,
+                projectID: window.activeProjectID?.uuidString,
+                project: windowProjectName(window.activeProjectID),
+                focused: appState.keyWindowID == window.id,
+                sidebarWidth: window.sidebarWidth,
+                tabID: window.activeProjectID
+                    .flatMap { appState.selectedTab(for: $0, in: window)?.id.uuidString },
+                mirrored: window.activeProjectID
+                    .flatMap { appState.viewTab(for: $0, in: window)?.isMirror }
+            )
+        }
+        return ControlData(windows: infos)
+    }
+
+    /// What the window's titlebar and the macOS Window menu show for it.
+    private func windowProjectName(_ projectID: UUID?) -> String? {
+        guard let projectID else { return nil }
+        if projectID == PinnedTabs.projectID { return PinnedTabs.project.name }
+        return projectStore.projects.first { $0.id == projectID }?.name
+    }
+
+    /// Resolve `--window` to a specific window, or nil for "the key one".
+    private func resolveWindow(_ args: ControlArgs) throws -> WindowState? {
+        guard let selector = args.window, !selector.isEmpty else { return nil }
+        let windows = appState.windows
+        if let index = Int(selector.hasPrefix("window:")
+            ? String(selector.dropFirst("window:".count))
+            : selector), index >= 1, index <= windows.count
+        {
+            return windows[index - 1]
+        }
+        if let match = windows.first(where: { $0.id.uuidString == selector }) { return match }
+        throw ControlError(
+            code: .notFound,
+            message: "no window \"\(selector)\"",
+            action: "run `macterm window list` for open windows"
+        )
+    }
+
+    private func windowNew() -> ControlData {
+        appState.requestNewWindow()
+        return ControlData()
+    }
+
+    /// Make a window key — what clicking it does — so leadership and the
+    /// app-wide mirrors follow it.
+    private func windowFocus(_ args: ControlArgs) throws -> ControlData {
+        guard let window = try resolveWindow(args) else {
+            throw ControlError(code: .badRequest, message: "window.focus requires a window selector")
+        }
+        appState.focusWindow(window)
+        return ControlData()
+    }
+
+    /// `--window` names the window; without it, the one `window list` reports
+    /// as focused. Resolved through `AppState`'s registry rather than
+    /// `NSApp.keyWindow`, which is nil whenever the app is inactive — exactly
+    /// the state a CLI call from another terminal finds it in — and would
+    /// otherwise fall back to closing the first window while `window list`
+    /// said a different one was focused.
+    private func windowClose(_ args: ControlArgs) throws -> ControlData {
+        try appState.closeWindow(resolveWindow(args))
+        return ControlData()
     }
 
     private func paneList(_ args: ControlArgs) throws -> ControlData {
@@ -161,11 +258,10 @@ final class ControlHandler {
             )
         }
         let snap = view.scrollbarSnapshot
-        // The alt-screen heuristic mirrors SurfaceScrollView.canHandleScrollbackWheel:
-        // `total > len` means there IS scrollback (normal screen); otherwise
-        // we're on the alt screen / a fresh prompt. Undefined until a snapshot
+        // No scrollback means the alt screen / a fresh prompt (the same predicate
+        // the wheel handler and context menu read). Undefined until a snapshot
         // arrives, so it tracks the snapshot's own nil-ness.
-        let altScreen = snap.map { $0.total <= $0.len }
+        let altScreen = snap.map { !$0.hasScrollback }
         let pid = ProcessInspector.resolvedForegroundPID(forPane: pane)
         let argv = pid.flatMap { ProcessInspector.argv(pid: $0) }
         let inspect = ControlPaneInspect(
@@ -229,13 +325,15 @@ final class ControlHandler {
         }
         let entries = snapshot.entries
         let leaders = snapshot.leaders
-        let paneBySession = paneIDsBySessionName()
+        let panesBySession = paneIDsBySessionName()
         let infos = entries.map { entry in
-            ControlSessionInfo(
+            let bound = panesBySession[entry.name] ?? []
+            return ControlSessionInfo(
                 name: entry.name,
                 clients: entry.clients,
                 leaderPID: leaders[entry.name],
-                paneID: paneBySession[entry.name]
+                paneID: bound.first,
+                paneIDs: bound.isEmpty ? nil : bound
             )
         }
         return ControlData(sessions: infos)
@@ -314,17 +412,118 @@ final class ControlHandler {
             // home directory.
             appState.selectPinnedProject()
         } else {
-            appState.selectProject(project)
+            // `--window` targets a specific one; without it the key window,
+            // which is what a person at the keyboard means.
+            try appState.selectProject(project, in: resolveWindow(args))
         }
         return projectData(project)
+    }
+
+    /// Rename a project — the same `ProjectStore.rename` the sidebar row's
+    /// inline edit calls, so both paths have identical reach: `projects.json`
+    /// only. Layout files are deliberately untouched (nothing but an explicit
+    /// Save Layout rewrites one), and a declaration matches on its `path:`
+    /// rather than its filename, so a rename doesn't orphan it. The name IS a
+    /// layout identity in one narrow case — the `ProjectSlug` tiebreaker that
+    /// picks a project's own file when several projects share a `path:` — so
+    /// renaming such a project changes which file it owns at the next save.
+    private func projectRename(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.rename requires a project selector",
+                action: "run `macterm project list` for targets"
+            )
+        }
+        guard let rawName = args.name else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.rename requires a new name",
+                action: "pass the new name as the second argument"
+            )
+        }
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ControlError(code: .badRequest, message: "project name cannot be empty")
+        }
+        let project = try resolveProject(selector)
+        // Unreachable through the app (the sentinel is not a `ProjectStore`
+        // row, so no sidebar row edits it) — but `resolveProject` accepts
+        // `pinned`, so the CLI is the one way in and has to say no here.
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be renamed")
+        }
+        // `resolveProject` matches the sentinel's display name BEFORE any user
+        // project's, so a project renamed to it becomes unreachable by name
+        // (UUID and index still work, but `--project Pinned` would silently
+        // target the pinned workspace instead). Refuse rather than strand it.
+        guard trimmed.lowercased() != PinnedTabs.displayName.lowercased() else {
+            throw ControlError(
+                code: .badRequest,
+                message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
+                action: "pick another name"
+            )
+        }
+        projectStore.rename(id: project.id, to: trimmed)
+        guard let updated = projectStore.projects.first(where: { $0.id == project.id }) else {
+            throw ControlError(code: .internalError, message: "project rename failed")
+        }
+        return projectData(updated)
+    }
+
+    /// Drop a project's workspace and its `ProjectStore` entry — the same pair
+    /// every in-app removal runs (sidebar row menu, bulk delete, palette,
+    /// Settings → Projects), which is what makes the CLI removal reach exactly
+    /// as far as theirs: panes' zmx sessions die, `projects.json` loses the
+    /// row, and files on disk (the project directory, its layout declaration)
+    /// are untouched. Those paths stage a confirmation dialog for a busy
+    /// project; a headless caller gets a typed `busy` error instead — never a
+    /// dialog the CLI can't answer. Same contract as `tab.close`.
+    private func projectRemove(_ args: ControlArgs) throws -> ControlData {
+        guard let selector = args.project, !selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(
+                code: .badRequest,
+                message: "project.remove requires a project selector",
+                action: "run `macterm project list` for targets"
+            )
+        }
+        let project = try resolveProject(selector)
+        // See `projectRename` — the sentinel is reachable only through this
+        // selector, and tearing the pinned workspace down is never valid.
+        guard project.id != PinnedTabs.projectID else {
+            throw ControlError(code: .badRequest, message: "the pinned section cannot be removed")
+        }
+
+        // The same expression `AppState.requestRemoveProject` evaluates before
+        // it decides to stage its dialog, so the CLI refuses exactly when the
+        // app would have asked.
+        let busy = appState.workspaces[project.id]?.tabs
+            .flatMap { $0.splitRoot.allPanes() }
+            .contains(where: \.needsConfirmClose) ?? false
+
+        if busy, args.force != true {
+            throw ControlError(
+                code: .busy,
+                message: "a pane in that project has a running program (removing kills its sessions)",
+                action: "re-run with --force to remove anyway"
+            )
+        }
+
+        appState.removeProject(project.id)
+        projectStore.remove(id: project.id)
+        return ControlData()
     }
 
     // MARK: - Tab mutations
 
     private func tabNew(_ args: ControlArgs) throws -> ControlData {
         let (project, workspace) = try resolveWorkspace(args)
-        guard let tabID = appState.createTab(projectID: project.id, projectPath: project.path, command: args.run),
-              let index = workspace.tabs.firstIndex(where: { $0.id == tabID })
+        guard let tabID = appState.createTab(
+            projectID: project.id,
+            projects: projectStore.projects,
+            command: args.run
+        ),
+            let index = workspace.tabs.firstIndex(where: { $0.id == tabID })
         else {
             throw ControlError(code: .internalError, message: "tab creation failed")
         }
@@ -337,7 +536,13 @@ final class ControlHandler {
         }
         let (project, workspace) = try resolveWorkspace(args)
         let (index, tab) = try resolveTab(args, in: workspace)
-        appState.selectTab(tab.id, projectID: project.id)
+        // `--window` selects in that window's own tab record (#345); without
+        // it, the workspace's active tab — the key window's.
+        if let window = try resolveWindow(args) {
+            appState.selectTab(tab.id, projectID: project.id, in: window)
+        } else {
+            appState.selectTab(tab.id, projectID: project.id)
+        }
         return ControlData(tabs: [tabInfo(tab, index: index, in: workspace)])
     }
 
@@ -433,27 +638,52 @@ final class ControlHandler {
 
     // MARK: - Pane mutations
 
-    private func paneSplit(_ args: ControlArgs) throws -> ControlData {
-        let (project, workspace) = try resolveWorkspace(args)
-        let target = try resolvePane(args, in: workspace)
-        let direction: SplitDirection
+    /// Resolve a `--direction` argument against the pane it will act on.
+    /// Shared by `pane.split` and `pane.mirror` so the two can't drift on what
+    /// `auto` means.
+    private func splitDirection(_ args: ControlArgs, relativeTo pane: Pane) throws -> SplitDirection {
         switch args.direction ?? "auto" {
-        case "right": direction = .horizontal
-        case "down": direction = .vertical
+        case "right": return .horizontal
+        case "down": return .vertical
         case "auto":
             // The UI's auto-split picks the longer on-screen axis from the
             // pane's live NSView bounds; a never-shown pane measures zero and
             // falls back to horizontal — same as TerminalTab.autoSplit.
-            let bounds = target.pane.nsView?.bounds.size ?? .zero
-            direction = bounds.height > bounds.width ? .vertical : .horizontal
+            let bounds = pane.nsView?.bounds.size ?? .zero
+            return bounds.height > bounds.width ? .vertical : .horizontal
         default:
             throw ControlError(code: .badRequest, message: "direction must be right, down, or auto")
         }
+    }
+
+    private func paneSplit(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let direction = try splitDirection(args, relativeTo: target.pane)
         guard let newID = appState.splitPane(
-            target.pane.id, direction: direction, projectID: project.id, command: args.run
+            target.pane.id,
+            direction: direction,
+            projectID: project.id,
+            projectDirectory: project.path,
+            command: args.run
         ), let newPane = target.tab.splitRoot.findPane(id: newID)
         else {
             throw ControlError(code: .internalError, message: "split failed")
+        }
+        return ControlData(panes: [paneInfo(newPane, in: target.tab, workspace: workspace)])
+    }
+
+    private func paneMirror(_ args: ControlArgs) throws -> ControlData {
+        let (project, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let direction = try splitDirection(args, relativeTo: target.pane)
+        guard let newID = appState.mirrorPane(
+            target.pane.id,
+            direction: direction,
+            projectID: project.id
+        ), let newPane = target.tab.splitRoot.findPane(id: newID)
+        else {
+            throw ControlError(code: .internalError, message: "mirror failed")
         }
         return ControlData(panes: [paneInfo(newPane, in: target.tab, workspace: workspace)])
     }
@@ -500,8 +730,10 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "pane.close requires a pane or session selector")
         }
         let target = try resolvePane(args, in: workspace)
-        let busy = target.pane.needsConfirmClose
-        if busy, args.force != true {
+        // Mirror-aware: a pane whose session another pane still attaches kills
+        // nothing when it closes, so it must not raise a warning that says it
+        // does (see AppState.closeNeedsConfirmation).
+        if appState.closeNeedsConfirmation([target.pane]), args.force != true {
             throw ControlError(
                 code: .busy,
                 message: "that pane has a running program (closing kills its session)",
@@ -512,19 +744,44 @@ final class ControlHandler {
         return ControlData()
     }
 
+    /// Paste a command line into a live pane's shell. The trailing newline is
+    /// what submits it, and `submit: false` withholds exactly that — leaving
+    /// the text on the prompt for a human to inspect, or for a TUI that
+    /// submits on its own terms. One verb rather than two, because the two
+    /// forms differ by that single character and nothing else.
+    ///
+    /// Withholding it is safe for execution tracking because `sendText` draws
+    /// the same line internally: it records command-submission evidence for
+    /// whatever it delivers but fires `onCommandSubmitted` only when the text
+    /// carries a newline. So an unsubmitted paste leaves the evidence armed
+    /// exactly as typing those characters would, and a following `pane.key`
+    /// Return reads as a REAL submission rather than a bare prompt redraw —
+    /// which is what keeps tab naming and execution state honest across a
+    /// paste-then-Return pair.
     private func paneRun(_ args: ControlArgs) throws -> ControlData {
         guard let command = args.run, !command.isEmpty else {
             throw ControlError(code: .badRequest, message: "pane.run requires a command")
         }
+        // Absent means submit: the flag only ever arrives as an explicit false.
+        return try paneSendText(args, text: args.submit == false ? command : command + "\n")
+    }
+
+    /// Resolve the target pane and paste `text` into it, or report the
+    /// `no_surface` miss.
+    private func paneSendText(_ args: ControlArgs, text: String) throws -> ControlData {
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
-        guard let view = target.pane.nsView, view.sendText(command + "\n") else {
+        guard let view = target.pane.nsView, view.sendText(text) else {
             throw ControlError(
                 code: .noSurface,
                 message: "the pane's terminal isn't live yet",
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
+        // Injected input makes zmx hand this client leadership (its
+        // `isUserInput` rule), with no focus change to notice it by — so
+        // record it, or our dim would point at the wrong mirror.
+        appState.noteSessionLeader(target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
@@ -557,6 +814,8 @@ final class ControlHandler {
                 action: "select its tab once so the surface spawns, then retry"
             )
         }
+        // As in paneSendText: a keypress is what zmx switches leader on.
+        appState.noteSessionLeader(target.pane)
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
@@ -714,7 +973,12 @@ final class ControlHandler {
         let (project, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
         let created = appState.makeGrid(
-            target.pane.id, rows: rows, columns: cols, projectID: project.id, command: args.run
+            target.pane.id,
+            rows: rows,
+            columns: cols,
+            projectID: project.id,
+            projectDirectory: project.path,
+            command: args.run
         )
         guard !created.isEmpty else {
             throw ControlError(code: .internalError, message: "grid produced no panes")
@@ -921,11 +1185,23 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "pass either --session or --pane, not both")
         }
         if let session = args.session, !session.isEmpty {
+            // A mirrored session has several panes, so resolve to the LEADER —
+            // the one driving the pty size, and so the one the user is
+            // interacting with. It is also the only defensible answer for a
+            // bare `$MACTERM_SESSION` self-target: that variable lives in the
+            // session's single shared shell, which cannot know which of its
+            // views the user is looking at. Callers that need a specific
+            // mirror pass `--pane`.
+            var candidates: [(tab: TerminalTab, pane: Pane)] = []
             for tab in workspace.tabs {
-                if let pane = tab.splitRoot.allPanes().first(where: { $0.sessionName == session }) {
-                    return (tab, pane)
+                for pane in tab.splitRoot.allPanes() where pane.sessionName == session {
+                    candidates.append((tab, pane))
                 }
             }
+            if let leading = candidates.first(where: { appState.isLeader($0.pane) }) {
+                return leading
+            }
+            if let first = candidates.first { return first }
             throw ControlError(
                 code: .notFound,
                 message: "no pane in this project runs session \"\(session)\"",
@@ -1005,7 +1281,9 @@ final class ControlHandler {
             process: pane.foregroundProcessName,
             cwd: pane.nsView?.currentPwd ?? pane.projectPath,
             focused: tab.id == workspace.activeTabID && pane.id == tab.focusedPaneID,
-            state: controlState(for: pane.executionState)
+            state: controlState(for: pane.executionState),
+            mirror: appState.isMirrored(pane),
+            leader: appState.isLeader(pane)
         )
     }
 
@@ -1019,15 +1297,21 @@ final class ControlHandler {
         }
     }
 
-    private func paneIDsBySessionName() -> [String: String] {
-        var map: [String: String] = [:]
-        for workspace in appState.workspaces.values {
-            for tab in workspace.tabs {
-                for pane in tab.splitRoot.allPanes() {
-                    map[pane.sessionName] = pane.id.uuidString
-                }
-            }
+    /// Every live pane bound to each session name, leader first.
+    ///
+    /// This used to be a `[String: String]`, one pane per session — which a
+    /// mirrored session silently collapsed, last writer winning in Dictionary
+    /// iteration order, so `session list` reported an arbitrary one of the
+    /// panes and dropped the rest (#345).
+    private func paneIDsBySessionName() -> [String: [String]] {
+        // One traversal for the whole table: `isLeader(_:)` alone re-walks
+        // every workspace per call, which made this quadratic in pane count.
+        // A stable partition, not `sorted`: "leader first" is not a strict
+        // weak ordering, and Swift's sort is undefined for one.
+        appState.sessionAttachments().mapValues { panes in
+            let leading = panes.filter { appState.isLeader($0, among: panes) }
+            let following = panes.filter { !appState.isLeader($0, among: panes) }
+            return (leading + following).map(\.id.uuidString)
         }
-        return map
     }
 }

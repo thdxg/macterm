@@ -66,6 +66,55 @@ struct UpdaterChannelTests {
         ))
     }
 
+    /// The feed's ORIGIN is a wire contract in the same way a channel name is,
+    /// and a worse one to get wrong: `SUFeedURL` is baked into each shipped
+    /// `Info.plist`, so an installed app polls whatever it was built with
+    /// forever. If the app's origin and the publisher's diverge, the app checks
+    /// a URL nobody writes to and reports "up to date" for the rest of its life
+    /// — silently, since a feed that 404s surfaces nothing on a scheduled check.
+    ///
+    /// That is not hypothetical: this feed used to live on GitHub Pages, and
+    /// taking that site down stranded every install pinned to it. The three
+    /// files below cannot import each other, so this pins them together.
+    @Test
+    func the_update_feed_and_the_website_name_one_origin() throws {
+        let root = repoRoot()
+        let infoPlist = try String(
+            contentsOf: root.appendingPathComponent("Macterm/Info.plist"),
+            encoding: .utf8
+        )
+        let publishScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/publish-appcast.sh"),
+            encoding: .utf8
+        )
+        let siteBuild = try String(
+            contentsOf: root.appendingPathComponent("website/build-docs.mjs"),
+            encoding: .utf8
+        )
+
+        // The website's own canonical origin is the authority; the app fetches
+        // from it and the publisher writes URLs against it.
+        let siteURL = "https://macterm.thdxg.dev"
+        #expect(siteBuild.contains("const SITE_URL = \"\(siteURL)\";"))
+        #expect(infoPlist.contains("<string>\(siteURL)/appcast.xml</string>"))
+        #expect(publishScript.contains("SITE_URL=\"\(siteURL)\""))
+
+        // The notes URL keeps its `.html`, which website/Caddyfile exempts from
+        // the redirect that strips the extension everywhere else. Drop either
+        // half and every published <sparkle:releaseNotesLink> 301s to a path
+        // that does not exist on the branch.
+        let caddyfile = try String(
+            contentsOf: root.appendingPathComponent("website/Caddyfile"),
+            encoding: .utf8
+        )
+        #expect(publishScript.contains(#"NOTES_REL_PATH="notes/${TAG}.html""#))
+        #expect(caddyfile.contains("not path /notes/*"))
+        // ...and that the site proxies both paths at all, rather than serving
+        // them out of an image built long before the release that writes them.
+        #expect(caddyfile.contains("@updates path /appcast.xml /notes/*"))
+        #expect(caddyfile.contains("rewrite /thdxg/macterm/gh-pages{uri}"))
+    }
+
     /// `publish-appcast.sh` no longer hardcodes a channel name — it interpolates
     /// `$CHANNEL`, which its callers supply: `release.yml` leaves it unset (so
     /// the script derives `beta` from `PRERELEASE`) and `release-tip.yml` passes

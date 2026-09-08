@@ -9,12 +9,19 @@ struct MainWindow: View {
     private var appState
     @Environment(ProjectStore.self)
     private var projectStore
+    /// This window's own selection state (#345). `@State` so each window
+    /// instance of the `WindowGroup` gets its own, which is what lets two
+    /// windows show different projects.
+    @State
+    private var windowState = WindowState()
     @State
     private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State
     private var detailWidth: CGFloat = .infinity
     @State
     private var preferences = Preferences.shared
+    @State
+    private var attachedWindow: NSWindow?
     @State
     private var windowCornerRadius: CGFloat?
     @State
@@ -107,13 +114,13 @@ struct MainWindow: View {
 
     private var peekExitPadding: CGFloat { SidebarOverlayMetrics.hoverExitPadding }
     private var isNativeSidebarInteractive: Bool {
-        appState.sidebarVisible || activePeekStyle == .resizeTerminal
+        windowState.sidebarVisible || activePeekStyle == .resizeTerminal
     }
 
     var body: some View {
         // Derive bindings to the @Observable AppState via @Bindable (the
         // Observation-era idiom) rather than a hand-rolled Binding(get:set:).
-        @Bindable var appState = appState
+        @Bindable var windowState = windowState
         // Read in body, not inside the toolbar builder, so the Observation
         // dependency is registered and a Settings change re-places the item.
         let switcherPosition = preferences.tabSwitcherPosition
@@ -204,7 +211,7 @@ struct MainWindow: View {
             }
         }
         .overlay(alignment: .leading) {
-            if isOverlayPeeking, !appState.sidebarVisible {
+            if isOverlayPeeking, !windowState.sidebarVisible {
                 SidebarOverlayPanel(
                     width: sidebarWidth,
                     chromeHidden: chromeHidden,
@@ -223,11 +230,57 @@ struct MainWindow: View {
             hideTitle: chromeHidden,
             windowCornerRadius: $windowCornerRadius,
             windowTopSafeAreaInset: $windowTopSafeAreaInset,
-            initialSidebarVisible: $initialNativeSidebarVisible
+            initialSidebarVisible: $initialNativeSidebarVisible,
+            onWindowAttached: { window in
+                // Register HERE, not in `onAppear`. SwiftUI instantiates a
+                // view — and its `@State` — more than once per real window,
+                // and `onAppear` fires for the throwaway too, which registered
+                // a phantom second window on every launch. An `NSWindow` is
+                // one per actual window, so attachment is the real identity.
+                // Arm before `WindowAppearance.sync` runs inside the styler,
+                // and before the geometry hook writes the column's
+                // content-derived width over the stored value.
+                let resolved = appState.canonicalWindowState(for: window, proposed: windowState)
+                WindowAppearance.armSidebarWidthRestore(for: window) {
+                    // nil until the launch task has read the saved windows;
+                    // the restore retries until then.
+                    guard appState.hasRestoredWindows else { return nil }
+                    return WindowAppearance.SidebarRestorePlan(
+                        width: CGFloat(resolved.sidebarWidth),
+                        visible: resolved.sidebarVisible
+                    )
+                }
+                appState.appDelegate?.registerTerminalWindow(window)
+                attachedWindow = window
+                // Adopt the canonical state for this NSWindow. A second view
+                // instance for the same window drops its own and takes the
+                // first one's, so the app never sees a phantom window.
+                windowState = appState.canonicalWindowState(for: window, proposed: windowState)
+            },
+            // Resolve the state THROUGH the window, not from the captured
+            // `windowState`: this closure is built by whichever view instance
+            // SwiftUI happened to evaluate, and a throwaway instance's own
+            // state is never registered — noting it as key left the app's
+            // key-window record pointing at a phantom.
+            onWindowBecameKey: { window in
+                appState.noteKeyWindow(appState.canonicalWindowState(for: window, proposed: windowState))
+            },
+            shouldHideOnClose: { appState.appDelegate?.hidesInsteadOfClosing($0) ?? true }
         ))
         .overlay {
-            if appState.isCommandPaletteVisible {
+            if windowState.isCommandPaletteVisible {
                 CommandPaletteOverlay()
+            }
+        }
+        // Below the palette (the two can't be up together — cycling commits on
+        // modifier release), above the terminal it describes.
+        .overlay {
+            // Only in the window the user is cycling in (#345): the cycle
+            // state is app-wide, and ungated every window drew the strip.
+            if appState.isTabCycling, preferences.showTabSwitcherOverlay,
+               appState.keyWindowID == windowState.id
+            {
+                TabSwitcherOverlay()
             }
         }
         // Above the palette overlay so a toast fired by a palette command isn't
@@ -235,13 +288,21 @@ struct MainWindow: View {
         .overlay {
             ToastOverlay()
         }
-        .sheet(isPresented: $appState.isNewRemoteProjectSheetPresented) {
+        .sheet(isPresented: $windowState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }
+        .environment(windowState)
+        // Applied here rather than in the scene so each copy knows WHICH
+        // window it is: they stay grouped in these three modifiers, which is
+        // the rule — the alerts must not scatter back into `body`.
+        .modifier(CloseConfirmationAlerts(appState: appState, windowID: windowState.id))
+        .modifier(ProjectConfirmationAlerts(appState: appState, windowID: windowState.id))
+        .modifier(LayoutAlerts(appState: appState, windowID: windowState.id))
         .onAppear {
             AdaptiveTerminalChrome.shared.mainWindowDidAppear()
         }
         .onDisappear {
+            if let attachedWindow { appState.windowDidClose(attachedWindow) }
             cancelDeferredPeek()
             cancelDeferredUnpeek()
             cancelOverlayWindowExit()
@@ -250,25 +311,33 @@ struct MainWindow: View {
         .task {
             guard !appState.hasRestoredSelection else { return }
             appState.restoreSelection(projects: projectStore.projects)
+            // After the restore, never before: "is this a fresh install?" is
+            // only answerable once the snapshot is loaded, `pinned.yaml` is
+            // reconciled and a load failure is known (see FirstRunSeed).
+            appState.seedFirstRunIfNeeded(projectStore: projectStore)
+            // After the restore, so the saved windows' projects exist. This
+            // window adopts the first saved entry and opens the rest (#345).
+            appState.restoreWindows(adopting: windowState)
         }
         .onContinuousHover(coordinateSpace: .local) { phase in
             handleSidebarPeekHover(phase)
         }
         .onChange(of: initialNativeSidebarVisible) { _, visible in
-            guard let visible else { return }
-            let resolution = SidebarPeekInteraction.launchResolution(
-                nativeVisible: visible,
-                modelVisible: appState.sidebarVisible
-            )
-            columnVisibility = resolution.columnVisible ? .automatic : .detailOnly
-            if let modelVisible = resolution.modelVisible {
-                initialSidebarVisibilityBeingApplied = modelVisible
-                appState.sidebarVisible = modelVisible
-            } else {
-                initialSidebarVisibilityBeingApplied = nil
-            }
+            guard visible != nil else { return }
+            // The window's own record decides (#345): a restored window comes
+            // back the way it was saved and a new window comes up with the
+            // sidebar shown. AppKit's autosaved collapse state used to win
+            // here (`SidebarPeekInteraction.launchResolution`), and it is per
+            // autosave SLOT, so a new window inherited whatever the last
+            // window at that slot had left. The column follows the model;
+            // `WindowAppearance.restoreSidebarWidth` uncollapses the native
+            // item to match before applying the width.
+            initialSidebarVisibilityBeingApplied = nil
+            let modelVisible = windowState.sidebarVisible
+            let column: NavigationSplitViewVisibility = modelVisible ? .automatic : .detailOnly
+            if columnVisibility != column { columnVisibility = column }
         }
-        .onChange(of: appState.sidebarVisible) { _, visible in
+        .onChange(of: windowState.sidebarVisible) { _, visible in
             let isInitialReconciliation = initialSidebarVisibilityBeingApplied == visible
             if isInitialReconciliation { initialSidebarVisibilityBeingApplied = nil }
             cancelDeferredPeek()
@@ -317,7 +386,7 @@ struct MainWindow: View {
                         columnVisible: visibility != .detailOnly
                     ) {
                         activePeekStyle = nil
-                        appState.sidebarVisible = true
+                        windowState.sidebarVisible = true
                     }
                     return
                 }
@@ -328,21 +397,21 @@ struct MainWindow: View {
                 // the flag before collapsing).
                 if visibility == .detailOnly {
                     activePeekStyle = nil
-                    appState.sidebarVisible = true
+                    windowState.sidebarVisible = true
                 }
                 return
             }
             let visible = visibility != .detailOnly
-            if appState.sidebarVisible != visible {
-                appState.sidebarVisible = visible
+            if windowState.sidebarVisible != visible {
+                windowState.sidebarVisible = visible
             }
         }
         .onChange(of: preferences.sidebarPeekStyle) { oldStyle, newStyle in
             guard oldStyle != newStyle else { return }
             cancelDeferredPeek()
             cancelOverlayWindowExit()
-            if !appState.sidebarVisible { cancelSidebarWidthHandoff() }
-            guard isPeeking, !appState.sidebarVisible else { return }
+            if !windowState.sidebarVisible { cancelSidebarWidthHandoff() }
+            guard isPeeking, !windowState.sidebarVisible else { return }
             // The presentation that began the peek owns its full transition.
             // Finish it before the new preference can start a fresh peek.
             suppressPeekUntilExit = true
@@ -358,7 +427,7 @@ struct MainWindow: View {
                 }
             }
         }
-        .onChange(of: appState.isCommandPaletteVisible) { _, visible in
+        .onChange(of: windowState.isCommandPaletteVisible) { _, visible in
             guard !visible else { return }
             // Run a post-dismiss action if one was registered, otherwise return
             // focus to the active terminal pane so typing resumes immediately.
@@ -388,7 +457,25 @@ struct MainWindow: View {
     /// (and every frame of an animating peek that lands back where it started)
     /// writes nothing.
     private func persistSidebarWidth(_ width: CGFloat) {
+        // Until the restore has run, the column is showing SwiftUI's
+        // content-derived width; recording it would overwrite the width we are
+        // about to restore with the default it replaces.
+        //
+        // A nil `attachedWindow` counts as "not yet": the geometry hook fires
+        // during layout, BEFORE the styler has found the window, so treating
+        // nil as "nothing pending" let the content-derived width through —
+        // which is exactly how 144 kept landing in the snapshot.
+        guard let attachedWindow,
+              !WindowAppearance.isAwaitingSidebarWidthRestore(for: attachedWindow)
+        else { return }
         let rounded = (Double(width) * 2).rounded() / 2
+        // This window's own width, and the app-wide default a NEW window opens
+        // at — dragging one window's sidebar should not resize another's, but
+        // the next window you open should match what you just set (#345).
+        if abs(rounded - windowState.sidebarWidth) >= 0.5 {
+            windowState.sidebarWidth = rounded
+            appState.noteSidebarWidthChanged()
+        }
         guard abs(rounded - preferences.sidebarWidth) >= 0.5 else { return }
         preferences.sidebarWidth = rounded
     }
@@ -411,8 +498,8 @@ struct MainWindow: View {
             } catch {
                 return
             }
-            guard appState.sidebarVisible || activePeekStyle == .resizeTerminal,
-                  let window = (NSApp.delegate as? AppDelegate)?.mainWindow,
+            guard windowState.sidebarVisible || activePeekStyle == .resizeTerminal,
+                  let window = attachedWindow,
                   WindowAppearance.setSidebarWidth(targetWidth, window: window)
             else {
                 // Nothing applied the target, so nothing will ever measure it.
@@ -455,7 +542,7 @@ struct MainWindow: View {
             lastHoverPoint = point
             cancelOverlayWindowExit()
             if isResizingOverlay { return }
-            guard !appState.sidebarVisible else { return }
+            guard !windowState.sidebarVisible else { return }
             // Toggleable in Settings → Appearance → Sidebar. Checked here, not
             // at the modifier, so flipping it off mid-peek still retracts.
             guard preferences.peekSidebarWhenHidden else {
@@ -484,7 +571,7 @@ struct MainWindow: View {
             let exitPoint = lastHoverPoint
             let exitedLeadingWindowEdge = pointerIsOutsideLeadingWindowEdge
             let recoverFastOverlayEntry = !isPeeking
-                && !appState.sidebarVisible
+                && !windowState.sidebarVisible
                 && preferences.peekSidebarWhenHidden
                 && preferences.sidebarPeekStyle == .overlayTerminal
                 && !suppressPeekUntilExit
@@ -532,7 +619,7 @@ struct MainWindow: View {
                 } else {
                     lastHoverPoint.map { $0.x <= peekStripWidth } ?? false
                 }
-                guard !isPeeking, !appState.sidebarVisible,
+                guard !isPeeking, !windowState.sidebarVisible,
                       preferences.peekSidebarWhenHidden, !suppressPeekUntilExit,
                       preferences.sidebarPeekStyle == style,
                       pointerEligible
@@ -602,9 +689,9 @@ struct MainWindow: View {
             sidebarPresentation.discardRename()
             withAnimation(peekTransitionAnimation) { activePeekStyle = nil }
             DispatchQueue.main.async {
-                guard let window = (NSApp.delegate as? AppDelegate)?.mainWindow,
+                guard let window = attachedWindow,
                       window.isKeyWindow, window.attachedSheet == nil,
-                      !appState.isCommandPaletteVisible
+                      !windowState.isCommandPaletteVisible
                 else { return }
                 appState.restoreFocusToActivePane()
             }
@@ -631,8 +718,8 @@ struct MainWindow: View {
             var lastPointer: CGPoint?
             var stationaryTicks = 0
             while !Task.isCancelled {
-                guard isOverlayPeeking, !appState.sidebarVisible, !isResizingOverlay,
-                      let window = (NSApp.delegate as? AppDelegate)?.mainWindow
+                guard isOverlayPeeking, !windowState.sidebarVisible, !isResizingOverlay,
+                      let window = attachedWindow
                 else {
                     overlayWindowExitTask = nil
                     return
@@ -692,12 +779,12 @@ struct MainWindow: View {
     }
 
     private var pointerIsOutsideLeadingWindowEdge: Bool {
-        guard let window = (NSApp.delegate as? AppDelegate)?.mainWindow else { return false }
+        guard let window = attachedWindow else { return false }
         return NSEvent.mouseLocation.x <= window.frame.minX + 2
     }
 
     private var pointerIsWithinOverlayRetentionRegion: Bool {
-        guard let window = (NSApp.delegate as? AppDelegate)?.mainWindow else { return false }
+        guard let window = attachedWindow else { return false }
         return SidebarOverlayMetrics.retainsOutsidePointer(
             NSEvent.mouseLocation,
             windowFrame: window.frame,
@@ -721,7 +808,10 @@ struct MainWindow: View {
     }
 
     private var activeProject: Project? {
-        guard let pid = appState.activeProjectID else { return nil }
+        // This window's project, never `appState.activeProjectID` — that
+        // mirrors whichever window is KEY, so a background window would redraw
+        // itself as whatever the frontmost one is showing (#345).
+        guard let pid = windowState.activeProjectID else { return nil }
         // The pinned workspace has no ProjectStore row; render it through the
         // synthetic project.
         if pid == PinnedTabs.projectID { return PinnedTabs.project }
@@ -800,6 +890,25 @@ struct WelcomeView: View {
     }
 }
 
+/// What a non-key window shows in place of a tab whose every pane is a
+/// non-leader (#345): the same sessions are being worked in from another
+/// window. Fills the detail area so a click anywhere on it makes this window
+/// key, which is what claims the tab back and renders the panes again.
+private struct MirroredTabNotice: View {
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("Showing in another window")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MactermTheme.fg)
+            Text("Click to work here")
+                .font(.system(size: 11))
+                .foregroundStyle(MactermTheme.fgMuted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+}
+
 struct EmptyProjectView: View {
     let project: Project
 
@@ -861,6 +970,12 @@ struct WorkspaceView: View {
     let project: Project
     @Environment(AppState.self)
     private var appState
+    /// This window's own view of the project (#345). Never `ws.activeTab`:
+    /// that is the KEY window's, and a pane's one NSView can only be in one
+    /// window — so when another window owns the selected tab this renders a
+    /// mirror of it, and every callback maps back onto the real tab.
+    @Environment(WindowState.self)
+    private var windowState
     /// The pane currently dragged by its grab handle, bubbled up via
     /// `DraggingPaneKey` so the dragged pane's own leaf drops its target.
     @State
@@ -871,85 +986,161 @@ struct WorkspaceView: View {
     private var dropResolution: TabDropResolution?
 
     var body: some View {
-        if let ws = appState.workspaces[project.id], let tab = ws.activeTab {
-            let renderedNode: SplitNode = {
-                if let zoomID = tab.zoomedPaneID, let pane = tab.splitRoot.findPane(id: zoomID) {
-                    return .pane(pane)
-                }
-                return tab.splitRoot
-            }()
-            SplitTreeView(
-                node: renderedNode,
-                focusedPaneID: tab.focusedPaneID,
-                zoomedPaneID: tab.zoomedPaneID,
-                isActiveProject: true,
-                projectID: project.id,
-                onFocusPane: { appState.focusPane($0, projectID: project.id) },
-                onSplit: { paneID, dir in
-                    tab.split(paneID: paneID, direction: dir)
-                    appState.saveWorkspaces()
-                },
-                // This closure is the PROCESS-EXIT path only (SplitTreeView
-                // wires it to the surface's onProcessExit; the user's Cmd+W
-                // goes through Responders → requestClosePane directly).
-                // handleProcessExit classifies a remote pane's exit
-                // (drop → keep for the reconnect sweep, #281) and routes a
-                // real end through paneProcessExited, where a pinned tab's
-                // last pane unloads the tab instead of closing it (#285).
-                onClosePane: { appState.handleProcessExit($0, projectID: project.id) },
-                onCommandFinished: { paneID in
-                    appState.acknowledgeFinishedCommandIfActive(paneID: paneID, projectID: project.id)
-                },
-                onAdaptiveBackgroundChange: { paneID, color in
-                    appState.setAdaptiveBackgroundColor(color, paneID: paneID, projectID: project.id)
-                },
-                onToggleZoom: { tab.toggleZoom(paneID: $0) },
-                paneDrop: PaneDropContext(
-                    root: renderedNode,
-                    resolution: $dropResolution,
-                    draggedPaneID: draggedPaneID,
-                    renderedTabID: tab.id,
-                    onMovePane: { paneID, target in
-                        if tab.movePane(paneID, to: target) {
-                            appState.saveWorkspaces()
-                        }
-                    },
-                    onMergeTab: { movable, target in
-                        appState.mergeTab(
-                            movable.tabID,
-                            from: movable.sourceProjectID,
-                            at: target,
-                            inProject: project.id
-                        )
-                    }
-                )
-            )
-            .id(renderedNode.id)
-            // Pane grab-handle drags and sidebar tab drags are both captured
-            // per leaf (see LeafDropDelegate for why there is no whole-area
-            // target), sharing one resolution rendered here (#227). Uses
-            // `renderedNode`, not `tab.splitRoot`: while zoomed the user sees
-            // one pane, so a drop should read as a local split of it, not of
-            // the hidden layout.
-            .overlay {
-                WorkspaceDropPreview(resolution: dropResolution)
-            }
-            .onPreferenceChange(DraggingPaneKey.self) { value in
-                MainActor.assumeIsolated {
-                    draggedPaneID = value
-                    // A drag that ended without a valid drop leaves no exited
-                    // event behind; clear any stray preview.
-                    if value == nil { dropResolution = nil }
-                }
-            }
-            .overlay(alignment: .topTrailing) {
-                if tab.zoomedPaneID != nil {
-                    ZoomIndicator(onExit: { appState.toggleZoom(projectID: project.id) })
-                        .padding(8)
-                        .transition(.opacity)
-                }
+        if let view = appState.viewTab(for: project.id, in: windowState) {
+            if standsAside(view) {
+                // Nothing rendered, not a blurred copy: a blur over live panes
+                // read as a slab that did not match the window chrome around
+                // it. With no panes in the hierarchy the tab shows the plain
+                // window backdrop, the same as the toolbar and sidebar, and
+                // the notice says why. Clicking anywhere makes this window key,
+                // which claims the tab and brings the panes back.
+                MirroredTabNotice()
+            } else {
+                workspace(view)
             }
         }
+    }
+
+    /// Whether this window should show the notice instead of the tab: it is
+    /// not the key window and every pane of its tab is a non-leader — the tab
+    /// is being worked in from another window. The KEY window always renders
+    /// its panes even while they are non-leaders, because its claim can only
+    /// land once the surfaces exist and have a size; hiding them would leave
+    /// the claim refused and the notice up forever.
+    private func standsAside(_ view: AppState.WindowTabView) -> Bool {
+        guard appState.keyWindowID != windowState.id else { return false }
+        let panes = view.tab.splitRoot.allPanes()
+        return !panes.isEmpty && appState.nonLeaderPaneIDs(in: view.tab).count == panes.count
+    }
+
+    @ViewBuilder
+    private func workspace(_ view: AppState.WindowTabView) -> some View {
+        let tab = view.tab
+        let real = view.real
+        // Position maps the real tab's focus and zoom onto the view (an
+        // identity for the real view); callbacks map view panes back.
+        let focusedPaneID = real.focusedPaneID.flatMap { appState.viewPaneID(forReal: $0, in: view) }
+        let zoomedPaneID = real.zoomedPaneID.flatMap { appState.viewPaneID(forReal: $0, in: view) }
+        let renderedNode = renderedNode(of: tab, zoomedPaneID: zoomedPaneID)
+        SplitTreeView(
+            node: renderedNode,
+            focusedPaneID: focusedPaneID,
+            zoomedPaneID: zoomedPaneID,
+            isActiveProject: true,
+            projectID: project.id,
+            nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab),
+            onFocusPane: { paneID in focus(paneID, in: view) },
+            onSplit: { paneID, dir in split(paneID, direction: dir, in: view) },
+            // This closure is the PROCESS-EXIT path only (SplitTreeView
+            // wires it to the surface's onProcessExit; the user's Cmd+W
+            // goes through Responders → requestClosePane directly).
+            // handleProcessExit classifies a remote pane's exit
+            // (drop → keep for the reconnect sweep, #281) and routes a
+            // real end through paneProcessExited, where a pinned tab's
+            // last pane unloads the tab instead of closing it (#285).
+            //
+            // A mirror's exit is NOT routed: its client dying alone is a
+            // detach, and when the session itself ends the real pane's
+            // own exit closes the tab, taking this view with it.
+            onClosePane: { paneID in
+                if !view.isMirror { appState.handleProcessExit(paneID, projectID: project.id) }
+            },
+            onCommandFinished: { paneID in acknowledge(paneID, in: view) },
+            onAdaptiveBackgroundChange: { paneID, color in adopt(color, paneID: paneID, in: view) },
+            onToggleZoom: { paneID in toggleZoom(paneID, in: view) },
+            paneDrop: dropContext(for: view, renderedNode: renderedNode)
+        )
+        .id(renderedNode.id)
+        // Pane grab-handle drags and sidebar tab drags are both captured
+        // per leaf (see LeafDropDelegate for why there is no whole-area
+        // target), sharing one resolution rendered here (#227). Uses
+        // `renderedNode`, not `tab.splitRoot`: while zoomed the user sees
+        // one pane, so a drop should read as a local split of it, not of
+        // the hidden layout.
+        .overlay {
+            WorkspaceDropPreview(resolution: dropResolution)
+        }
+        .onPreferenceChange(DraggingPaneKey.self) { value in
+            MainActor.assumeIsolated {
+                draggedPaneID = value
+                // A drag that ended without a valid drop leaves no exited
+                // event behind; clear any stray preview.
+                if value == nil { dropResolution = nil }
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if zoomedPaneID != nil {
+                ZoomIndicator(onExit: { appState.toggleZoom(projectID: project.id) })
+                    .padding(8)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func renderedNode(of tab: TerminalTab, zoomedPaneID: UUID?) -> SplitNode {
+        if let zoomedPaneID, let pane = tab.splitRoot.findPane(id: zoomedPaneID) {
+            return .pane(pane)
+        }
+        return tab.splitRoot
+    }
+
+    private func focus(_ paneID: UUID, in view: AppState.WindowTabView) {
+        if view.isMirror {
+            appState.focusMirroredPane(paneID, in: view)
+        } else {
+            appState.focusPane(paneID, projectID: project.id)
+        }
+    }
+
+    private func split(_ paneID: UUID, direction: SplitDirection, in view: AppState.WindowTabView) {
+        guard let realID = appState.realPaneID(for: paneID, in: view) else { return }
+        appState.splitPane(realID, direction: direction, projectID: project.id, projectDirectory: project.path)
+    }
+
+    private func acknowledge(_ paneID: UUID, in view: AppState.WindowTabView) {
+        guard let realID = appState.realPaneID(for: paneID, in: view) else { return }
+        appState.acknowledgeFinishedCommandIfActive(paneID: realID, projectID: project.id)
+    }
+
+    private func adopt(_ color: CGColor?, paneID: UUID, in view: AppState.WindowTabView) {
+        if view.isMirror {
+            appState.setAdaptiveBackgroundColor(color, paneID: paneID, in: view.tab)
+        } else {
+            appState.setAdaptiveBackgroundColor(color, paneID: paneID, projectID: project.id)
+        }
+    }
+
+    private func toggleZoom(_ paneID: UUID, in view: AppState.WindowTabView) {
+        guard let realID = appState.realPaneID(for: paneID, in: view) else { return }
+        view.real.toggleZoom(paneID: realID)
+    }
+
+    /// Rearranging happens on the real tab; a mirror view follows its shape
+    /// but accepts no drops of its own.
+    private func dropContext(for view: AppState.WindowTabView, renderedNode: SplitNode) -> PaneDropContext {
+        let tab = view.tab
+        var context = PaneDropContext(
+            root: renderedNode,
+            resolution: $dropResolution,
+            draggedPaneID: draggedPaneID,
+            renderedTabID: view.real.id,
+            onMovePane: { paneID, target in
+                guard !view.isMirror else { return }
+                if tab.movePane(paneID, to: target) {
+                    appState.saveWorkspaces()
+                }
+            },
+            onMergeTab: { movable, target in
+                appState.mergeTab(
+                    movable.tabID,
+                    from: movable.sourceProjectID,
+                    at: target,
+                    inProject: project.id
+                )
+            }
+        )
+        if view.isMirror { context.onMergeTab = nil }
+        return context
     }
 }
 
@@ -994,6 +1185,16 @@ private struct WindowStyler: NSViewRepresentable {
     var windowTopSafeAreaInset: CGFloat
     @Binding
     var initialSidebarVisible: Bool?
+    /// Called once this view's `NSWindow` exists, and again when it goes away.
+    /// The window is how a `MainWindow` identifies itself to the app: the
+    /// responder chain needs an exact "is the key window one of ours" answer
+    /// (#345), and the key window is what points `AppState.activeProjectID` at
+    /// the right window's project.
+    var onWindowAttached: (NSWindow) -> Void = { _ in }
+    var onWindowBecameKey: (NSWindow) -> Void = { _ in }
+    /// Whether the red close button should hide the window rather than close
+    /// it — the app's one close policy (`AppDelegate.hidesInsteadOfClosing`).
+    var shouldHideOnClose: (NSWindow) -> Bool = { _ in true }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -1038,6 +1239,12 @@ private struct WindowStyler: NSViewRepresentable {
             coordinator.syncWindowTopSafeAreaInset(window: window)
             coordinator.syncInitialSidebarVisibility(window: window)
             coordinator.observe(window: window)
+            coordinator.onWindowBecameKey = onWindowBecameKey
+            coordinator.shouldHideOnClose = shouldHideOnClose
+            onWindowAttached(window)
+            // A window that opens already key never posts didBecomeKey, so
+            // seed the app's notion of the frontmost project from it.
+            if window.isKeyWindow { onWindowBecameKey(window) }
             // Intercept the close button to hide instead of close,
             // preserving terminal surfaces and running processes.
             coordinator.interceptClose(window: window)
@@ -1124,27 +1331,22 @@ private struct WindowStyler: NSViewRepresentable {
             }
         }
 
+        var onWindowBecameKey: (NSWindow) -> Void = { _ in }
+        var shouldHideOnClose: (NSWindow) -> Bool = { _ in true }
+
+        func windowDidBecomeKey(_ notification: Notification) {
+            if let window = notification.object as? NSWindow { onWindowBecameKey(window) }
+            swiftuiDelegate?.windowDidBecomeKey?(notification)
+        }
+
         func windowDidBecomeMain(_ notification: Notification) {
             guard let window = notification.object as? NSWindow else { return }
+            onWindowBecameKey(window)
             WindowAppearance.sync(window: window)
             syncWindowCornerRadius(window: window)
             syncWindowTopSafeAreaInset(window: window)
             syncInitialSidebarVisibility(window: window)
             swiftuiDelegate?.windowDidBecomeMain?(notification)
-        }
-
-        func windowDidBecomeKey(_ notification: Notification) {
-            if let window = notification.object as? NSWindow {
-                WindowAppearance.syncKeyStatus(window: window)
-            }
-            swiftuiDelegate?.windowDidBecomeKey?(notification)
-        }
-
-        func windowDidResignKey(_ notification: Notification) {
-            if let window = notification.object as? NSWindow {
-                WindowAppearance.syncKeyStatus(window: window)
-            }
-            swiftuiDelegate?.windowDidResignKey?(notification)
         }
 
         func windowDidEnterFullScreen(_ notification: Notification) {
@@ -1176,6 +1378,10 @@ private struct WindowStyler: NSViewRepresentable {
             // shutting down, let the window actually close so the process can
             // exit instead of leaving an invisible window holding the app open.
             if AppTerminationState.isTerminating { return true }
+            // Only the LAST visible terminal window hides (#345); any other
+            // really closes, exactly as ⌘⇧W does. Hiding a second window made
+            // it a zombie — see `AppDelegate.hidesInsteadOfClosing`.
+            guard shouldHideOnClose(sender) else { return true }
             sender.orderOut(nil)
             return false
         }

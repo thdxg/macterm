@@ -18,10 +18,12 @@ enum Output {
         if let status = data.status { renderStatus(status) }
         if let projects = data.projects { renderProjects(projects) }
         if let tabs = data.tabs { renderTabs(tabs) }
+        if let windows = data.windows { renderWindows(windows) }
         if let panes = data.panes { renderPanes(panes) }
         if let sessions = data.sessions { renderSessions(sessions) }
         if let inspect = data.inspect { renderInspect(inspect) }
         if let dump = data.dump { renderDump(dump) }
+        if let tutorial = data.tutorial { print(tutorial.text) }
     }
 
     private static func renderStatus(_ status: ControlStatusInfo) {
@@ -53,6 +55,17 @@ enum Output {
                 tab.active ? "*" : " ",
                 tab.title,
                 "\(tab.paneCount) pane\(tab.paneCount == 1 ? "" : "s")",
+            ]
+        }
+        printColumns(rows)
+    }
+
+    private static func renderWindows(_ windows: [ControlWindowInfo]) {
+        let rows = windows.map { window -> [String] in
+            [
+                "window:\(window.index)",
+                window.focused ? "*" : " ",
+                window.project ?? "(no project)",
             ]
         }
         printColumns(rows)

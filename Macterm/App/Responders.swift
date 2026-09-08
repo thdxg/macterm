@@ -170,7 +170,21 @@ final class MainAppResponder: KeyResponder {
         // pass through until the first `didBecomeMain`. When `mainWindow` is
         // unknown, fall through to normal handling (the terminal window is the
         // only window that can be key that early).
-        if let main = mainWindow, let keyWindow = NSApp.keyWindow, keyWindow !== main,
+        // "A different window" means a NON-TERMINAL window (Settings, an alert
+        // sheet) — not "not the one cached window". With several terminal
+        // windows open (#345) every one of them must take these keys, acting
+        // on whichever is focused; gating on `mainWindow` identity would leave
+        // every window but the first with a dead keymap. `isTerminalWindow` is
+        // an exact registry rather than the `isTerminalWindowCandidate`
+        // heuristic, which also matches Settings.
+        //
+        // The `mainWindow` guard survives for its original reason: before the
+        // first window registers, `isTerminalWindow` answers false for every
+        // window, and without it the terminal window itself would be treated
+        // as "different" — making Cmd+W close the window and Cmd+D pass
+        // through until registration lands.
+        if mainWindow != nil, let keyWindow = NSApp.keyWindow,
+           !(appState.appDelegate?.isTerminalWindow(keyWindow) ?? false),
            !(keyWindow is QuickTerminalPanel)
         {
             if HotkeyRegistry.matches(event, action: .closePane)
@@ -226,19 +240,27 @@ final class MainAppResponder: KeyResponder {
 
         if HotkeyRegistry.matches(event, action: .splitRight) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.splitPane(direction: .horizontal, projectID: projectID)
+            appState.splitPane(
+                direction: .horizontal,
+                projectID: projectID,
+                projects: projectStore.projects
+            )
             return .handled
         }
 
         if HotkeyRegistry.matches(event, action: .splitDown) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.splitPane(direction: .vertical, projectID: projectID)
+            appState.splitPane(
+                direction: .vertical,
+                projectID: projectID,
+                projects: projectStore.projects
+            )
             return .handled
         }
 
         if HotkeyRegistry.matches(event, action: .splitAuto) {
             guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.autoSplitPane(projectID: projectID)
+            appState.autoSplitPane(projectID: projectID, projects: projectStore.projects)
             return .handled
         }
 
@@ -308,11 +330,6 @@ final class MainAppResponder: KeyResponder {
             return .handled
         }
 
-        if HotkeyRegistry.matches(event, action: .closeWindow) {
-            mainWindow?.orderOut(nil)
-            return .handled
-        }
-
         if HotkeyRegistry.matches(event, action: .openProject) {
             _ = appState.openProject(store: projectStore)
             return .handled
@@ -342,6 +359,19 @@ final class MainAppResponder: KeyResponder {
             .pinTab,
             .unpinTab,
             .closeTab,
+            // New Window is dispatched here like the others. A hardcoded
+            // "Cmd+N re-fronts the single window" fallback used to sit below
+            // this loop, from before multi-window; it answered `.handled` and
+            // so swallowed the chord before the File menu's New Window item —
+            // the only thing that opened a window — ever saw it.
+            .newWindow,
+            // Close Window likewise: the responder used to answer it with
+            // `mainWindow?.orderOut(nil)`, which HID the first window whatever
+            // window the user was in — and a hidden window stays registered
+            // and persisted, which is how quitting with one window on screen
+            // brought two back. `AppCommand.closeWindow` closes the focused
+            // window under the one close policy.
+            .closeWindow,
         ] {
             guard HotkeyRegistry.matches(event, action: action),
                   let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
@@ -349,16 +379,6 @@ final class MainAppResponder: KeyResponder {
             let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
             guard let run = command.action(in: ctx) else { return .passThrough }
             run()
-            return .handled
-        }
-
-        // Cmd+N re-fronts the single window (SwiftUI's "New Window" is replaced
-        // by "Show Window"). Checked AFTER the configurable hotkeys — same
-        // rationale as Cmd+1-9 below — so a user who rebinds an action to cmd+n
-        // wins over this fixed fallback instead of being silently shadowed.
-        if flags == .command, (event.charactersIgnoringModifiers ?? "").lowercased() == "n" {
-            mainWindow?.makeKeyAndOrderFront(nil)
-            NSApp.activate()
             return .handled
         }
 

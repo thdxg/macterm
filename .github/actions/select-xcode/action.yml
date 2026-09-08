@@ -1,0 +1,51 @@
+name: Select Xcode
+description: >
+  Point the job at a pinned Xcode rather than whatever the runner image
+  currently defaults to, and expose the version so build-product caches can key
+  on it.
+
+# The pin exists because the runner image's default moves on its own. CI ran
+# unpinned until macterm#340: `MactermApp.body` failed to type-check on Xcode
+# 26.3 while compiling fine on the 26.6 that `macos-26` happened to default to,
+# so nothing here could see it. Pinning doesn't by itself test the older Xcode
+# a contributor may have — CONTRIBUTING.md asks only for "Xcode 26" — but it
+# does mean a green run names a toolchain, and that a future image bump is a
+# reviewable one-line change instead of a silent one.
+
+inputs:
+  version:
+    description: >
+      Xcode version to select, spelled as it appears in
+      /Applications/Xcode_<version>.app on the runner image.
+    required: false
+    default: "26.6"
+
+outputs:
+  version:
+    description: The selected Xcode version. Feed it to any build-product cache key.
+    value: ${{ inputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode ${{ inputs.version }}
+      shell: bash
+      env:
+        XCODE_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        DEV_DIR="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+
+        # Hard-fail rather than fall through to the default. Runner images drop
+        # older Xcodes as they age, so this WILL fire one day — and a silent
+        # fallback to whatever is default is exactly the unpinned behaviour the
+        # action exists to remove. The failure should read as "bump the pin",
+        # not as a mystery compile error somewhere downstream.
+        if [[ ! -d "$DEV_DIR" ]]; then
+          echo "::error::Xcode ${XCODE_VERSION} is not on this runner ($DEV_DIR). Bump the default in .github/actions/select-xcode/action.yml to one of the versions below."
+          ls -d /Applications/Xcode*.app || true
+          exit 1
+        fi
+
+        echo "DEVELOPER_DIR=$DEV_DIR" >> "$GITHUB_ENV"
+        "$DEV_DIR/usr/bin/xcodebuild" -version

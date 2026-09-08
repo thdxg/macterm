@@ -496,6 +496,14 @@ final class QuickTerminalSplitState {
     func closePane(_ paneID: UUID) {
         // Quick-terminal panes are ephemeral: closing one is permanent, so its
         // zmx session dies with it (transient hide/show never reaches here).
+        //
+        // This is the one kill that does NOT go through
+        // `AppState.releaseSessions`, and it is exempt by construction rather
+        // than by oversight: quick-terminal panes carry
+        // `ZmxSessionName.quickTerminalSlug`, so their session names can never
+        // equal a workspace pane's, and this state owns no AppState reference
+        // to consult. Nothing can mirror one, so there is never another
+        // claimant to refcount against.
         tab.splitRoot.findPane(id: paneID)?.killPersistentSession(using: .live)
         switch tab.removePane(paneID) {
         case .onlyPaneLeft:

@@ -9,10 +9,14 @@ import SwiftUI
 struct CommandPaletteOverlay: View {
     @Environment(AppState.self)
     private var appState
+    /// The palette is a per-window overlay (#345): dismissal closes THIS
+    /// window's palette, not whichever window happens to be key.
+    @Environment(WindowState.self)
+    private var windowState
 
     /// Matches the macOS Tahoe window corner radius so the palette reads as a
     /// native floating surface.
-    private static let cornerRadius: CGFloat = 16
+    private static let cornerRadius = GlassPanelMetrics.cornerRadius
 
     var body: some View {
         GeometryReader { geo in
@@ -21,32 +25,15 @@ struct CommandPaletteOverlay: View {
                 Color.black.opacity(0.001)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        appState.isCommandPaletteVisible = false
+                        windowState.isCommandPaletteVisible = false
                     }
 
                 CommandPalettePanel()
                     .frame(width: 500)
-                    .paletteBackground(cornerRadius: Self.cornerRadius)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                            .strokeBorder(MactermTheme.border, lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 8)
+                    .glassPanel(cornerRadius: Self.cornerRadius)
                     .padding(.top, geo.size.height * 0.15)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-}
-
-private extension View {
-    /// Liquid glass on macOS 26; the closest native material on older systems.
-    @ViewBuilder
-    func paletteBackground(cornerRadius: CGFloat) -> some View {
-        if #available(macOS 26.0, *) {
-            glassEffect(in: .rect(cornerRadius: cornerRadius))
-        } else {
-            background(.regularMaterial, in: .rect(cornerRadius: cornerRadius))
         }
     }
 }
@@ -56,6 +43,8 @@ private extension View {
 struct CommandPalettePanel: View {
     @Environment(AppState.self)
     private var appState
+    @Environment(WindowState.self)
+    private var windowState
     @Environment(ProjectStore.self)
     private var projectStore
 
@@ -251,7 +240,7 @@ struct CommandPalettePanel: View {
             completeQuery()
         }
         .onKeyPress(.escape) {
-            appState.isCommandPaletteVisible = false
+            windowState.isCommandPaletteVisible = false
             return .handled
         }
     }
@@ -359,7 +348,7 @@ struct CommandPalettePanel: View {
         // Executing a command finishes the task, so the next open should start
         // fresh — only a dismissal (Escape / click-outside) preserves the query.
         query = ""
-        appState.isCommandPaletteVisible = false
+        windowState.isCommandPaletteVisible = false
         item.action()
     }
 }

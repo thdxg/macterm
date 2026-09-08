@@ -115,13 +115,25 @@ extension AppCommand {
             return { ctx.appState.separatePane(paneID, toProject: projectID, destPath: destPath, at: index) }
         case .splitRight:
             guard let projectID else { return nil }
-            return { ctx.appState.splitPane(direction: .horizontal, projectID: projectID) }
+            return {
+                ctx.appState.splitPane(
+                    direction: .horizontal,
+                    projectID: projectID,
+                    projects: ctx.projectStore.projects
+                )
+            }
         case .splitDown:
             guard let projectID else { return nil }
-            return { ctx.appState.splitPane(direction: .vertical, projectID: projectID) }
+            return {
+                ctx.appState.splitPane(
+                    direction: .vertical,
+                    projectID: projectID,
+                    projects: ctx.projectStore.projects
+                )
+            }
         case .splitAuto:
             guard let projectID else { return nil }
-            return { ctx.appState.autoSplitPane(projectID: projectID) }
+            return { ctx.appState.autoSplitPane(projectID: projectID, projects: ctx.projectStore.projects) }
         case .zoomPane:
             guard let projectID else { return nil }
             return { ctx.appState.toggleZoom(projectID: projectID) }
@@ -226,8 +238,16 @@ extension AppCommand {
             return { ctx.appState.selectPreviousProject(projects: ctx.projectStore.projects) }
         case .toggleSidebar:
             return { ctx.appState.sidebarVisible.toggle() }
+        case .newWindow:
+            return { ctx.appState.requestNewWindow() }
         case .closeWindow:
-            return { (NSApp.delegate as? AppDelegate)?.mainWindow?.orderOut(nil) }
+            // The window the user is in, not a remembered pointer — with
+            // several open, "close the window" can only mean the focused one.
+            // The last one hides rather than closes, which is the invariant
+            // the red close button has always kept: surfaces and their running
+            // processes outlive a hidden window, and an app with a Dock icon
+            // and no window at all is the #241 dead end.
+            return { ctx.appState.appDelegate?.closeFocusedTerminalWindow() }
         case .toggleCommandPalette:
             return { ctx.appState.isCommandPaletteVisible.toggle() }
         case .reloadGhosttyConfig:

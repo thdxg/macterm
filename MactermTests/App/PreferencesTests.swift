@@ -35,16 +35,28 @@ struct PreferencesTests {
     }
 
     @Test
-    func restore_all_projects_on_launch_defaults_off_and_round_trips() {
-        let prior = Preferences.shared.restoreAllProjectsOnLaunch
-        defer { Preferences.shared.restoreAllProjectsOnLaunch = prior }
+    func attach_all_projects_on_launch_defaults_off_and_round_trips() {
+        let prior = Preferences.shared.attachAllProjectsOnLaunch
+        defer { Preferences.shared.attachAllProjectsOnLaunch = prior }
 
-        // Fresh (wiped) test suite → avoid unexpectedly opening every saved
-        // local shell or remote SSH connection.
-        #expect(!Preferences.shared.restoreAllProjectsOnLaunch)
+        // Fresh tests must not unexpectedly open every saved local shell or
+        // remote SSH connection.
+        #expect(!Preferences.shared.attachAllProjectsOnLaunch)
 
-        Preferences.shared.restoreAllProjectsOnLaunch = true
-        #expect(Preferences.defaults.object(forKey: Preferences.Keys.restoreAllProjectsOnLaunch) as? Bool == true)
+        Preferences.shared.attachAllProjectsOnLaunch = true
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.attachAllProjectsOnLaunch) as? Bool == true)
+    }
+
+    @Test
+    func project_new_tab_button_defaults_on_and_round_trips() {
+        let prior = Preferences.shared.showProjectNewTabButton
+        defer { Preferences.shared.showProjectNewTabButton = prior }
+
+        // Fresh (wiped) test suite preserves the hover shortcut by default.
+        #expect(Preferences.shared.showProjectNewTabButton)
+
+        Preferences.shared.showProjectNewTabButton = false
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.showProjectNewTabButton) as? Bool == false)
     }
 
     @Test
@@ -107,6 +119,7 @@ struct PreferencesTests {
     @Test
     func sidebar_width_is_clamped_to_the_column_bounds() {
         let range = Preferences.sidebarWidthRange
+        #expect(Preferences.defaultSidebarWidth == 220)
         #expect(Preferences.clampSidebarWidth(nil) == Preferences.defaultSidebarWidth)
         #expect(Preferences.clampSidebarWidth(0) == Preferences.defaultSidebarWidth)
         #expect(Preferences.clampSidebarWidth(range.lowerBound - 40) == range.lowerBound)

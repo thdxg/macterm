@@ -11,6 +11,11 @@ final class TerminalTab: Identifiable {
     /// itself is untouched — clearing this restores the full layout.
     /// Transient: not persisted across launches.
     var zoomedPaneID: UUID?
+    /// For a mirror view of another tab (#345): the `shapeSignature` of the
+    /// real tab it was built from, so `AppState.shadow(of:for:)` can tell a
+    /// still-matching mirror from one the real tab has outgrown.
+    @ObservationIgnored
+    var mirrorShape: String?
     /// Most-recent-first stack of previously focused pane IDs
     /// (excludes the currently focused pane).
     @ObservationIgnored
@@ -125,8 +130,15 @@ final class TerminalTab: Identifiable {
     /// new pane in the `.second` position. Returns the new pane ID if created.
     /// A `command` spawns in the new pane via libghostty's `initial_input`
     /// (the layout `run:` path — typed into the fresh shell verbatim).
+    /// `newPaneWorkingDirectory` overrides cwd inheritance without changing
+    /// the source pane's project-scoped session slug.
     @discardableResult
-    func split(paneID: UUID, direction: SplitDirection, command: String? = nil) -> UUID? {
+    func split(
+        paneID: UUID,
+        direction: SplitDirection,
+        command: String? = nil,
+        newPaneWorkingDirectory: String? = nil
+    ) -> UUID? {
         // Bail before any side effect if the pane isn't in this tab — otherwise
         // an unknown ID would clear the user's zoom and rebalance ratios for a
         // split that never happens (mirrors toggleZoom/makeGrid's guard).
@@ -138,11 +150,13 @@ final class TerminalTab: Identifiable {
         // REMOTE pane, `currentPwd` is a remote-filesystem path with no host
         // prefix — inheriting it would spawn the sibling as a LOCAL shell in a
         // bogus dir instead of a remote zmx session — so skip the live cwd and
-        // inherit the scp-style `projectPath` verbatim.
-        let livePwd = pane.isRemote
-            ? nil
-            : (pane.nsView?.currentPwd ?? ProcessInspector.foregroundWorkingDirectory(forPane: pane))
-        let sourcePath = livePwd ?? pane.projectPath
+        // inherit the scp-style `projectPath` verbatim. An explicit
+        // `newPaneWorkingDirectory` (the "Project" split preference) wins over
+        // the whole chain; the preference resolver passes nil rather than the
+        // project root whenever it has no usable LOCAL cwd, precisely so the
+        // remote/unattached cases keep falling through to it.
+        let livePwd = pane.liveLocalWorkingDirectory()
+        let sourcePath = newPaneWorkingDirectory ?? livePwd ?? pane.projectPath
         let sourceProjectID = pane.projectID
         let (newRoot, newID) = splitRoot.splitting(
             paneID: paneID,
@@ -160,13 +174,47 @@ final class TerminalTab: Identifiable {
         return newID
     }
 
+    /// Insert a mirror of `paneID` beside it — a second pane attached to the
+    /// same zmx session (#345). Returns the new pane's ID, or nil when the
+    /// pane isn't in this tab.
+    ///
+    /// Deliberately does NOT focus the new pane, unlike `split`. A mirror is a
+    /// second view of work the user is already looking at, so stealing focus
+    /// would move it away from the pane they are actually using — and, once
+    /// leadership follows focus, would hand the pty size to the new view for
+    /// no reason.
+    func mirror(paneID: UUID, direction: SplitDirection) -> UUID? {
+        guard let source = splitRoot.findPane(id: paneID) else { return nil }
+        let mirrored = Pane(mirroring: source)
+        let (newRoot, inserted) = splitRoot.inserting(
+            pane: mirrored,
+            at: paneID,
+            direction: direction,
+            position: .second
+        )
+        guard inserted else { return nil }
+        splitRoot = newRoot
+        // Inserting reveals a new pane — exit zoom so it's visible.
+        zoomedPaneID = nil
+        if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
+        return mirrored.id
+    }
+
     /// Split a pane into a `rows`×`columns` grid of equal cells (row-major),
     /// optionally spawning `command` in every NEW pane. The source pane
     /// becomes the top-left cell and keeps its running shell — a command
     /// can only be injected at spawn (`initial_input`), so the caller runs
-    /// text into it separately if needed. Returns the new pane IDs.
+    /// text into it separately if needed. `newPaneWorkingDirectory` overrides
+    /// cwd inheritance for every new cell, exactly as in `split`. Returns the
+    /// new pane IDs.
     @discardableResult
-    func makeGrid(paneID: UUID, rows: Int, columns: Int, command: String? = nil) -> [UUID] {
+    func makeGrid(
+        paneID: UUID,
+        rows: Int,
+        columns: Int,
+        command: String? = nil,
+        newPaneWorkingDirectory: String? = nil
+    ) -> [UUID] {
         guard rows >= 1, columns >= 1, rows * columns > 1,
               splitRoot.findPane(id: paneID) != nil
         else { return [] }
@@ -176,7 +224,12 @@ final class TerminalTab: Identifiable {
         var rowHeads = [paneID]
         for _ in 1 ..< rows {
             guard let previous = rowHeads.last,
-                  let newID = split(paneID: previous, direction: .vertical, command: command)
+                  let newID = split(
+                      paneID: previous,
+                      direction: .vertical,
+                      command: command,
+                      newPaneWorkingDirectory: newPaneWorkingDirectory
+                  )
             else { break }
             rowHeads.append(newID)
             created.append(newID)
@@ -184,7 +237,13 @@ final class TerminalTab: Identifiable {
         for head in rowHeads {
             var current = head
             for _ in 1 ..< columns {
-                guard let newID = split(paneID: current, direction: .horizontal, command: command) else { break }
+                guard let newID = split(
+                    paneID: current,
+                    direction: .horizontal,
+                    command: command,
+                    newPaneWorkingDirectory: newPaneWorkingDirectory
+                )
+                else { break }
                 created.append(newID)
                 current = newID
             }
@@ -201,10 +260,14 @@ final class TerminalTab: Identifiable {
     /// splits top/bottom. Falls back to a horizontal split when the focused
     /// pane's NSView isn't attached yet and has no measurable bounds.
     @discardableResult
-    func autoSplit(paneID: UUID) -> UUID? {
+    func autoSplit(paneID: UUID, newPaneWorkingDirectory: String? = nil) -> UUID? {
         let bounds = splitRoot.findPane(id: paneID)?.nsView?.bounds.size ?? .zero
         let direction: SplitDirection = bounds.height > bounds.width ? .vertical : .horizontal
-        return split(paneID: paneID, direction: direction)
+        return split(
+            paneID: paneID,
+            direction: direction,
+            newPaneWorkingDirectory: newPaneWorkingDirectory
+        )
     }
 
     /// Adjust the nearest matching-axis split ratio around the focused pane.
@@ -348,8 +411,18 @@ final class Workspace: Identifiable {
             // Every selection path (select/peek/adopt/close) lands here — the
             // one funnel that wakes the adaptive foreground poll on tab switch.
             NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
+            onActiveTabChanged?()
         }
     }
+
+    /// Fired after `activeTabID` changes, from the same funnel. `AppState`
+    /// installs it to keep the key window's own tab record in step (#345):
+    /// with several windows the active tab is the KEY window's selection, a
+    /// mirror of `WindowState.activeTabIDs`, and every writer above — create,
+    /// close, cycle, the CLI — has to reach that record without knowing about
+    /// windows.
+    @ObservationIgnored
+    var onActiveTabChanged: (() -> Void)?
 
     @ObservationIgnored
     private var tabHistory = RecencyStack<UUID>(limit: 50)
@@ -381,8 +454,13 @@ final class Workspace: Identifiable {
     }
 
     @discardableResult
-    func createTab(projectPath: String, command: String? = nil) -> TerminalTab {
-        let tab = TerminalTab(projectPath: projectPath, projectID: projectID, command: command)
+    func createTab(projectPath: String, sessionSlug: String? = nil, command: String? = nil) -> TerminalTab {
+        let tab = TerminalTab(
+            projectPath: projectPath,
+            projectID: projectID,
+            sessionSlug: sessionSlug,
+            command: command
+        )
         tabs.append(tab)
         if let current = activeTabID { tabHistory.push(current) }
         activeTabID = tab.id

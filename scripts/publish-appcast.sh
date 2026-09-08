@@ -2,6 +2,13 @@
 # Sign each DMG with Sparkle's sign_update, then append a new <item> per DMG
 # to appcast.xml on the gh-pages branch.
 #
+# The gh-pages BRANCH is the store; it is no longer served by GitHub Pages.
+# macterm.thdxg.dev proxies /appcast.xml and /notes/* straight off the branch
+# (see the @updates block in website/Caddyfile), which is why this script still
+# does an ordinary git read-modify-write and why the feed is live the moment
+# this push lands — there is no site rebuild or deploy in the path. Reading a
+# branch needs no Pages site, so nothing here changed when Pages went away.
+#
 # Required env:
 #   SPARKLE_ED_PRIVATE_KEY — EdDSA private key (Sparkle format)
 #   VERSION                — e.g. 1.8.0, or 0.9.0-beta.1 for a prerelease
@@ -65,9 +72,15 @@ fi
 COMPARISON_VERSION="$(sparkle_comparison_version "$VERSION")"
 PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
 REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
-PAGES_URL="https://thdxg.github.io/macterm"
+# Where a Sparkle client is told to FETCH these files from. Keep it in step with
+# SUFeedURL in Macterm/Info.plist and SITE_URL in website/build-docs.mjs — all
+# three name the same origin. (Enclosures stay on GitHub release assets below;
+# only the feed and its notes pages come from the site.)
+SITE_URL="https://macterm.thdxg.dev"
 NOTES_REL_PATH="notes/${TAG}.html"
-NOTES_URL="${PAGES_URL}/${NOTES_REL_PATH}"
+# The `.html` is load-bearing: website/Caddyfile exempts /notes/* from the
+# redirect that strips `.html` everywhere else, precisely so this URL resolves.
+NOTES_URL="${SITE_URL}/${NOTES_REL_PATH}"
 
 # Fetch the GitHub Release body (Markdown) and render to HTML via the GitHub
 # API's Markdown endpoint. Sparkle's update dialog loads this URL into a
@@ -181,7 +194,7 @@ if [[ ! -f appcast.xml ]]; then
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Macterm</title>
-    <link>https://thdxg.github.io/macterm/appcast.xml</link>
+    <link>https://macterm.thdxg.dev/appcast.xml</link>
     <description>Updates for Macterm.</description>
     <language>en</language>
   </channel>

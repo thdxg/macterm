@@ -1,7 +1,10 @@
 import AppKit
 import CoreText
 import GhosttyKit
+import os
 import QuartzCore
+
+private let logger = Logger(subsystem: appBundleID, category: "GhosttyTerminalNSView")
 
 final class GhosttyTerminalNSView: NSView {
     /// In a `.fullSizeContentView` window AppKit keeps a titlebar-height drag
@@ -234,6 +237,18 @@ final class GhosttyTerminalNSView: NSView {
     /// paint gets — so no statistic over the composite can separate the two,
     /// and only the terminal's own answer can. Any future overlay belongs here
     /// beside it rather than in the sampler.
+    /// Whether this surface is showing a session whose pty is sized by a
+    /// DIFFERENT pane — a zmx non-leader mirror (#345).
+    ///
+    /// Distinct from `hasViewerOverlay` even though both make a frame
+    /// untrustworthy to infer from: nothing is drawn over the screen model
+    /// here, the model itself was laid out for another pane's geometry, so the
+    /// painted region says more about the leader's window than about what this
+    /// terminal's background is. Pushed in by `TerminalPane.configure` because
+    /// the NSView has no back-reference to its `Pane`, the same seam the
+    /// keybind-passthrough policy uses.
+    var rendersForeignGeometry = false
+
     var hasViewerOverlay: Bool {
         guard let surface else { return false }
         return ghostty_surface_has_selection(surface)
@@ -352,6 +367,16 @@ final class GhosttyTerminalNSView: NSView {
 
     var onFocus: (() -> Void)?
     var onInteraction: (() -> Void)?
+    /// The user typed a key that will reach the pty. Narrower than
+    /// `onInteraction` (which also fires for clicks and scrolls): this is the
+    /// event zmx hands session leadership on, so `AppState` records the pane
+    /// as its session's leader from it (#345).
+    var onUserInput: (() -> Void)?
+    /// The surface has a real size for the first time — from here on a zmx
+    /// leadership claim can be delivered (`sendLeadershipClaim` refuses before
+    /// it). Fired once per surface.
+    var onSurfaceSized: (() -> Void)?
+    private var hasReportedSurfaceSize = false
     /// Bool is best-effort evidence that the submitted prompt contained text.
     ///
     /// CALL ORDER: every path that reports a submission fires `onInteraction`
@@ -460,6 +485,19 @@ final class GhosttyTerminalNSView: NSView {
         let total: UInt64
         let offset: UInt64
         let len: UInt64
+
+        /// `total > len` is the alt-screen guard: programs with no scrollback
+        /// (less/vim, a fresh prompt) have nothing to scroll. Every consumer of
+        /// the geometry (wheel handling, scroller clamping, the context menu,
+        /// `pane inspect`) reads it from here so they can't disagree.
+        var hasScrollback: Bool { total > len }
+
+        /// The largest `offset` the viewport can take (0 without scrollback).
+        var maxScrollableRow: UInt64 { hasScrollback ? total - len : 0 }
+
+        /// `offset` is the first visible row counted from the top of scrollback.
+        var canScrollUp: Bool { hasScrollback && offset > 0 }
+        var canScrollDown: Bool { hasScrollback && offset < maxScrollableRow }
     }
 
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
@@ -846,6 +884,10 @@ final class GhosttyTerminalNSView: NSView {
         }
         ghostty_surface_set_content_scale(surface, scale, scale)
         ghostty_surface_set_size(surface, UInt32(scaledSize.width), UInt32(scaledSize.height))
+        if !hasReportedSurfaceSize {
+            hasReportedSurfaceSize = true
+            onSurfaceSized?()
+        }
     }
 
     // MARK: - App shortcut detection
@@ -1007,6 +1049,11 @@ final class GhosttyTerminalNSView: NSView {
         }
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // What zmx will count as user input: a key that reaches the pty. Cmd
+        // chords are either app shortcuts or encode to nothing, so they are
+        // left out; everything else is close enough to the daemon's own
+        // `isUserInput` rule for the leadership record it feeds (#345).
+        if !flags.contains(.command), !isAppShortcut(event) { onUserInput?() }
         if TerminalCommandSubmission.clearsInputEvidence(
             keyCode: event.keyCode,
             hasControl: flags.contains(.control),
@@ -1316,10 +1363,17 @@ final class GhosttyTerminalNSView: NSView {
 
     private func presentContextMenu(with event: NSEvent) {
         let menu = NSMenu(title: "Terminal")
+        // Auto-enabling would override every `isEnabled` below: with no
+        // `validateMenuItem` on the target, AppKit enables any item whose target
+        // responds to its action, which is what kept Paste enabled on an empty
+        // pasteboard. Off, the explicit states (Paste, Jump to Top/Bottom) hold.
+        menu.autoenablesItems = false
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
         paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
         menu.addItem(paste)
+        menu.addItem(.separator())
+        addScrollNavigationItems(menu)
         menu.addItem(.separator())
         addSplitItem(menu, "Split Right", .horizontal, .second)
         addSplitItem(menu, "Split Left", .horizontal, .first)
@@ -1341,6 +1395,38 @@ final class GhosttyTerminalNSView: NSView {
     @objc
     private func handleZoom() {
         onZoomRequest?()
+    }
+
+    private func addScrollNavigationItems(_ menu: NSMenu) {
+        let jumpToTop = NSMenuItem(title: "Jump to Top", action: #selector(handleJumpToTop), keyEquivalent: "")
+        jumpToTop.target = self
+        jumpToTop.isEnabled = lastScrollbarSnapshot?.canScrollUp ?? false
+        menu.addItem(jumpToTop)
+
+        let jumpToBottom = NSMenuItem(title: "Jump to Bottom", action: #selector(handleJumpToBottom), keyEquivalent: "")
+        jumpToBottom.target = self
+        jumpToBottom.isEnabled = lastScrollbarSnapshot?.canScrollDown ?? false
+        menu.addItem(jumpToBottom)
+    }
+
+    @objc
+    private func handleJumpToTop() {
+        sendBindingAction("scroll_to_top")
+    }
+
+    @objc
+    private func handleJumpToBottom() {
+        sendBindingAction("scroll_to_bottom")
+    }
+
+    /// Run a ghostty keybind action (`scroll_to_top`, `search:foo`, …) against
+    /// this surface. libghostty answers false for an action it can't parse or
+    /// perform, which would otherwise be a silent no-op.
+    func sendBindingAction(_ action: String) {
+        guard let surface else { return }
+        if !ghostty_surface_binding_action(surface, action, UInt(action.utf8.count)) {
+            logger.warning("binding action failed: \(action, privacy: .public)")
+        }
     }
 
     private func addSplitItem(_ menu: NSMenu, _ title: String, _ dir: SplitDirection, _ pos: SplitPosition) {
@@ -1376,27 +1462,19 @@ final class GhosttyTerminalNSView: NSView {
     // MARK: - Search
 
     func sendSearchQuery(_ needle: String) {
-        guard let surface else { return }
-        let action = "search:\(needle)"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("search:\(needle)")
     }
 
     func navigateSearch(direction: SearchDirection) {
-        guard let surface else { return }
-        let action = "navigate_search:\(direction.rawValue)"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("navigate_search:\(direction.rawValue)")
     }
 
     func endSearch() {
-        guard let surface else { return }
-        let action = "end_search"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("end_search")
     }
 
     func startSearch() {
-        guard let surface else { return }
-        let action = "start_search"
-        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        sendBindingAction("start_search")
     }
 
     enum SearchDirection: String { case next, previous }
@@ -1575,10 +1653,7 @@ extension GhosttyTerminalNSView {
         onInteraction?()
         recordCommandInput(text)
         text.withCString { ptr in
-            var ke = ghostty_input_key_s()
-            ke.action = GHOSTTY_ACTION_PRESS
-            ke.text = ptr
-            _ = ghostty_surface_key(surface, ke)
+            _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
         }
         if TerminalCommandSubmission.textContainsNewline(text) {
             let hasContent = consumeCommandSubmissionEvidence()
@@ -1697,6 +1772,77 @@ extension GhosttyTerminalNSView {
 extension GhosttyTerminalNSView {
     /// The live terminal grid + cell/surface pixel dimensions
     /// (`ghostty_surface_size`), or nil when the surface isn't created yet.
+    /// Ask zmx to make this pane's client the session leader (#345), so the
+    /// pty follows THIS pane's size rather than another mirror's.
+    ///
+    /// Refuses before the surface has a real size: `setLeader` answers a claim
+    /// by asking the client for its window size, and a surface that has not
+    /// laid out yet (an off-screen tab, the incubator) would resize the shared
+    /// pty to a placeholder for every mirror at once.
+    ///
+    /// Idempotent by design — zmx's `handleClaim` returns early when the
+    /// client is already leader, sending no size request — so callers may
+    /// claim freely rather than tracking whether it is needed.
+    @discardableResult
+    func sendLeadershipClaim() -> Bool {
+        guard let size = surfaceSize, size.columns > 0, size.rows > 0 else { return false }
+        return sendControlSequence(ZmxLeadership.claimSequence)
+    }
+
+    /// Write raw bytes straight to the pty, recording NONE of the
+    /// command-submission evidence `sendText` does.
+    ///
+    /// That evidence drives `TerminalExecutionTracker` — execution state, the
+    /// tab status glyph, and tab naming via `shellIsAtPrompt` — so a control
+    /// sequence the user never typed must leave it untouched, or a following
+    /// Return would read as submitting content that does not exist.
+    ///
+    /// Rides the key path with only `.text` set: libghostty writes such an
+    /// event's bytes verbatim under both its legacy and kitty encoders (no
+    /// keycode, so no CSI-u translation). NOT `ghostty_surface_text`, which
+    /// routes through the clipboard-paste path and would wrap this in
+    /// bracketed paste and run it past the unsafe-paste check.
+    @discardableResult
+    private func sendControlSequence(_ sequence: String) -> Bool {
+        guard let surface, !sequence.isEmpty else { return false }
+        sequence.withCString { ptr in
+            _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
+        }
+        return true
+    }
+
+    /// A key event that carries ONLY text — the shape `sendText` and the
+    /// leadership claim ride on.
+    ///
+    /// The keycode is set to a value no physical key has, not left at zero. A
+    /// zero-initialised `ghostty_input_key_s` has `keycode == 0`, and on macOS
+    /// virtual keycode 0 is the `A` key (`kVK_ANSI_A`; libghostty's
+    /// `keycodes.zig` maps native `0x0000` to `key_a`), so every text-only
+    /// event used to reach libghostty as a *physical A press* whose text
+    /// happened to be a paste or a control sequence — visible to keybinding
+    /// lookup (an unmodified `a` binding would have swallowed a paste) and to
+    /// the inspector. `0xFFFF` is the table's own "no native code" marker, so
+    /// it resolves to `unidentified`. Encoding is unchanged either way: with no
+    /// kitty entry and no unshifted codepoint both encoders write the text
+    /// verbatim, which is the behaviour these callers rely on.
+    ///
+    /// What this does NOT avoid: libghostty treats any non-modifier key that
+    /// produced bytes as typing — it clears the selection
+    /// (`selection-clear-on-typing`) and scrolls the viewport to the bottom
+    /// (`scroll-to-bottom = keystroke`). That is right for `sendText`, which
+    /// is typing, and is why the leadership claim is sent only when leadership
+    /// actually moves (see `AppState.claimSessionLeadership`).
+    private static func textOnlyKeyEvent(_ text: UnsafePointer<CChar>) -> ghostty_input_key_s {
+        var ke = ghostty_input_key_s()
+        ke.action = GHOSTTY_ACTION_PRESS
+        ke.keycode = unidentifiedKeycode
+        ke.text = text
+        return ke
+    }
+
+    /// See `textOnlyKeyEvent`.
+    private static let unidentifiedKeycode: UInt32 = 0xFFFF
+
     var surfaceSize: ghostty_surface_size_s? {
         guard let surface else { return nil }
         return ghostty_surface_size(surface)

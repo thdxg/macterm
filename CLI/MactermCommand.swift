@@ -15,10 +15,12 @@ struct MactermCommand: ParsableCommand {
             Status.self,
             ProjectCommand.self,
             TabCommand.self,
+            WindowCommand.self,
             PaneCommand.self,
             Grid.self,
             SessionCommand.self,
             LayoutCommand.self,
+            TutorCommand.self,
             SSHCommand.self,
         ]
     )
@@ -105,8 +107,8 @@ struct Status: ParsableCommand {
 struct ProjectCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "project",
-        abstract: "List, create, and select projects.",
-        subcommands: [List.self, Create.self, Select.self],
+        abstract: "List, create, select, rename, and remove projects.",
+        subcommands: [List.self, Create.self, Select.self, Rename.self, Remove.self],
         defaultSubcommand: List.self
     )
 
@@ -151,15 +153,132 @@ struct ProjectCommand: ParsableCommand {
         @Argument(help: "Project name, UUID, or index.")
         var project: String
 
+        @Option(help: "Window to select it in (index or id). Defaults to the focused window.")
+        var window: String?
+
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
-            try runControlCommand(command: "project.select", args: ControlArgs(project: project), options: options)
+            var args = ControlArgs(project: project)
+            args.window = window
+            try runControlCommand(command: "project.select", args: args, options: options)
+        }
+    }
+
+    struct Rename: ParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Rename a project.")
+
+        @Argument(help: "Project name, UUID, or index.")
+        var project: String
+
+        @Argument(help: "New name for the project.")
+        var name: String
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                Output.printError("project name cannot be empty")
+                throw ExitCode(1)
+            }
+            try runControlCommand(
+                command: "project.rename",
+                args: ControlArgs(project: project, name: trimmed),
+                options: options
+            )
+        }
+    }
+
+    struct Remove: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Remove a project (kills its panes' zmx sessions)."
+        )
+
+        @Argument(help: "Project name, UUID, or index.")
+        var project: String
+
+        @Flag(help: "Remove even if a pane has a running program.")
+        var force = false
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(
+                command: "project.remove",
+                args: ControlArgs(project: project, force: force),
+                options: options
+            )
         }
     }
 }
 
 // MARK: - Tab
+
+struct WindowCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "window",
+        abstract: "List, open and close terminal windows.",
+        subcommands: [List.self, New.self, Focus.self, Close.self],
+        defaultSubcommand: List.self
+    )
+
+    struct Focus: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Bring a window to the front and make it key."
+        )
+
+        @Argument(help: "Window to focus (index or id).")
+        var window: String
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = ControlArgs()
+            args.window = window
+            try runControlCommand(command: "window.focus", args: args, options: options)
+        }
+    }
+
+    struct List: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "List open windows and the project each is showing."
+        )
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(command: "window.list", args: ControlArgs(), options: options)
+        }
+    }
+
+    struct New: ParsableCommand {
+        static let configuration = CommandConfiguration(abstract: "Open another window.")
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(command: "window.new", args: ControlArgs(), options: options)
+        }
+    }
+
+    struct Close: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Close a window (the last visible one hides instead)."
+        )
+
+        @Option(help: "Window to close (index or id). Defaults to the focused window.")
+        var window: String?
+
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = ControlArgs()
+            args.window = window
+            try runControlCommand(command: "window.close", args: args, options: options)
+        }
+    }
+}
 
 struct TabCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -252,14 +371,15 @@ struct TabCommand: ParsableCommand {
         @Option(help: "Project scope. Defaults to the active project.")
         var project: String?
 
+        @Option(help: "Window to select it in (index or id). Defaults to the focused window.")
+        var window: String?
+
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
-            try runControlCommand(
-                command: "tab.select",
-                args: ControlArgs(project: project, tab: tab),
-                options: options
-            )
+            var args = ControlArgs(project: project, tab: tab)
+            args.window = window
+            try runControlCommand(command: "tab.select", args: args, options: options)
         }
     }
 
@@ -369,8 +489,9 @@ struct PaneCommand: ParsableCommand {
     /// boundary; this just hides the verb from `--help` in release.)
     private static var paneSubcommands: [ParsableCommand.Type] {
         var subs: [ParsableCommand.Type] = [
-            List.self, Inspect.self, Dump.self, Split.self, Focus.self,
-            Close.self, Run.self, Key.self, Zoom.self, ResizeSplit.self,
+            List.self, Inspect.self, Dump.self, Split.self, Mirror.self,
+            Focus.self, Close.self, Run.self, Key.self, Zoom.self,
+            ResizeSplit.self,
         ]
         #if DEBUG
         subs.append(Resize.self)
@@ -418,6 +539,24 @@ struct PaneCommand: ParsableCommand {
             args.direction = direction
             args.run = runCommand
             try runControlCommand(command: "pane.split", args: args, options: options)
+        }
+    }
+
+    struct Mirror: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Mirror a pane — show the same session in a second pane."
+        )
+
+        @Option(help: "right, down, or auto (longer on-screen axis).")
+        var direction: String = "auto"
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.direction = direction
+            try runControlCommand(command: "pane.mirror", args: args, options: options)
         }
     }
 
@@ -475,11 +614,34 @@ struct PaneCommand: ParsableCommand {
 
     struct Run: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Type a command into a live pane's shell (adds a newline)."
+            abstract: "Type a command into a live pane's shell (adds a newline).",
+            discussion: """
+            Pastes a command line into an existing pane's shell and submits it.
+
+            `--no-submit` withholds the trailing newline, so the text lands on \
+            the prompt unsubmitted — pre-filling a command for a human to \
+            inspect, or feeding a TUI that submits on its own terms. Follow it \
+            with `macterm pane key return` to execute; that Return registers as \
+            a real command submission, exactly as if the text had been typed.
+
+            Both forms ride the terminal's paste path. Reach for `pane key` \
+            instead when you need a real key *event* — a control byte \
+            (`ctrl+c`) or a named key (`escape`, `up`) — which no text can \
+            express.
+
+            With no pane/tab/session selector it targets the current pane via \
+            $MACTERM_SESSION.
+            """
         )
 
         @Argument(parsing: .captureForPassthrough, help: "The command line to run.")
         var command: [String]
+
+        @Flag(
+            name: .customLong("no-submit"),
+            help: "Leave the text on the prompt instead of running it (omits the trailing newline)."
+        )
+        var noSubmit = false
 
         @OptionGroup var target: PaneTarget
         @OptionGroup var options: ConnectionOptions
@@ -492,6 +654,9 @@ struct PaneCommand: ParsableCommand {
             }
             var args = target.controlArgs()
             args.run = line
+            // Sent only when withholding submission: an ABSENT `submit` means
+            // submit, so the wire keeps working for a client predating the flag.
+            if noSubmit { args.submit = false }
             try runControlCommand(command: "pane.run", args: args, options: options)
         }
     }

@@ -308,3 +308,18 @@ struct ZmxReapOrphansDriverTests {
         #expect(killed.value.isEmpty)
     }
 }
+
+@MainActor
+struct ZmxLeadershipTests {
+    @Test
+    func claimSequenceMatchesTheZmxWireContract() {
+        // A wire contract with the zmx fork's `util.ClaimFilter.sequence`, not
+        // a local constant: the client scans stdin for these exact bytes, so a
+        // drift here means claims are silently typed into the user's shell
+        // instead of switching leadership.
+        #expect(ZmxLeadership.claimSequence == "\u{1b}_zmx;claim\u{1b}\\")
+        // APC, so no keyboard can produce it and terminals discard it unknown.
+        #expect(ZmxLeadership.claimSequence.hasPrefix("\u{1b}_"))
+        #expect(ZmxLeadership.claimSequence.hasSuffix("\u{1b}\\"))
+    }
+}
