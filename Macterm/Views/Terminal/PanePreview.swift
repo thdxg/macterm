@@ -5,92 +5,61 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "PanePreview")
 
-/// A frozen visual snapshot of one pane's contents, cheap enough to render in
-/// a transient overlay (the tab switcher) and stable enough that the overlay
-/// doesn't re-sample per frame.
+/// A visual snapshot of one pane's contents, cheap enough to render in a
+/// transient overlay (the tab switcher) and re-sampled a few times a second
+/// while that overlay is up.
 ///
-/// Two sources, in order of fidelity:
+/// The picture is the rendered frame: ghostty's surface layer is an
+/// `IOSurfaceLayer` whose `contents` is the last frame it drew (the same
+/// handle `AdaptiveTerminalChrome` samples for the adaptive background), so a
+/// thumbnail needs no renderer of our own — just a downsampled copy.
 ///
-/// - **The rendered frame.** ghostty's surface layer is an `IOSurfaceLayer`
-///   whose `contents` is the last frame it drew (the same handle
-///   `AdaptiveTerminalChrome` samples for the adaptive background), so a real
-///   thumbnail needs no renderer of our own — just a downsampled copy.
-///
-///   **Only a pane whose renderer is awake has one.** Measured: an inactive
-///   tab's panes keep their NSView (it is pane-owned, warmed by
-///   `SurfaceIncubator`) but their `layer.contents` is nil — ghostty does not
-///   leave a frame parked in an occluded surface. So the frames are collected
-///   *while* each tab is visible and remembered (`AppState.panePreviews`, a
-///   cache filled by the foreground poll), which is what a card shows the
-///   instant the switcher opens. From then on the cards are live: the cycle
-///   sets `GhosttyTerminalNSView.rendersForPreview` on every offered pane,
-///   which reports the surface visible so libghostty draws it again, and
-///   re-samples them all on a timer until the gesture commits — so a tab that
-///   is printing in the background is seen printing, not as it last looked.
-///
-/// - **The viewport text.** `ghostty_surface_read_text` on the visible region,
-///   which is the terminal core's own state and therefore always current, and
-///   is the fallback for a pane no frame was ever collected from — a tab
-///   restored from a snapshot and never visited this run.
+/// **Only a pane whose renderer is awake has one.** Measured: an inactive
+/// tab's panes keep their NSView (it is pane-owned, warmed by
+/// `SurfaceIncubator`) but their `layer.contents` is nil — ghostty does not
+/// leave a frame parked in an occluded surface. So the switcher sets
+/// `GhosttyTerminalNSView.rendersForPreview` on every pane it offers, which
+/// reports the surface visible so libghostty draws it again, and samples them
+/// all on a timer until the gesture commits (`AppState.beginLivePreviews`).
+/// A card therefore shows its tab as it is now; the only moment it has no
+/// frame is the tick or two between the wake-up and the renderer's first
+/// draw, which the overlay's fade-in covers. (An earlier design sampled the
+/// visible tab from the foreground poll and typeset a viewport-text fallback
+/// for tabs never seen; both existed only because off-screen panes could not
+/// be sampled, and went when they could.)
 ///
 /// The image is composited over the pane's effective background because
 /// `background-default-transparent` means unpainted cells arrive at alpha 0 —
 /// sampled raw, a thumbnail would be glyphs floating on glass.
 struct PanePreview {
     /// Downsampled copy of the pane's last rendered frame, already composited
-    /// over `background`. nil when nothing has rendered.
+    /// over `background`. nil when nothing has rendered yet.
     let image: NSImage?
-    /// Trailing viewport lines, for the no-frame fallback.
-    let lines: [String]
     /// The pane's effective background — the card's fill either way, so an
     /// image-less card still reads as that pane's terminal.
     let background: NSColor
     /// The frame's own width/height at capture time, so a card can be shaped
     /// to what was actually captured instead of cropping it to fit.
     let aspectRatio: CGFloat?
-    /// The terminal's column count, so the text fallback can be typeset at the
-    /// scale a real thumbnail of this pane would have been.
-    ///
-    /// For a pane that has never been on screen this is the width it has in
-    /// `SurfaceIncubator`'s window (104 columns), not the width it would have
-    /// in the real one — but it is the width this text was actually laid out
-    /// at, which is what typesetting it needs.
-    let columns: Int?
     /// Identity of the IOSurface `image` was sampled from. The renderer
     /// presents from a swap chain of three, so a new frame always lands in a
     /// different surface than the last — which makes "same surface as before"
     /// a reliable "nothing new was drawn" and lets the live sampling skip the
-    /// copy for a pane that is sitting still. nil for a text fallback.
+    /// copy for a pane that is sitting still. nil when there is no frame.
     let frameID: IOSurfaceID?
 
-    init(
-        image: NSImage?,
-        lines: [String],
-        background: NSColor,
-        aspectRatio: CGFloat?,
-        columns: Int?,
-        frameID: IOSurfaceID? = nil
-    ) {
+    init(image: NSImage?, background: NSColor, aspectRatio: CGFloat?, frameID: IOSurfaceID? = nil) {
         self.image = image
-        self.lines = lines
         self.background = background
         self.aspectRatio = aspectRatio
-        self.columns = columns
         self.frameID = frameID
     }
-
-    var isEmpty: Bool { image == nil && lines.isEmpty }
 }
 
 enum PanePreviewCapture {
     /// Long edge of the stored thumbnail, in points. Cards render far smaller;
     /// the headroom keeps a 2x display sharp without holding a full frame.
     static let thumbnailLongEdge: CGFloat = 480
-
-    /// Viewport rows kept for the text fallback. Generous, because the
-    /// fallback is typeset small enough that a whole screen fits the card —
-    /// the point is to look like the frame we couldn't capture.
-    static let fallbackLineLimit = 80
 
     /// Snapshot `pane` for display in an overlay. Main-actor and synchronous:
     /// it locks the IOSurface read-only for the length of one copy, the same
@@ -106,7 +75,7 @@ enum PanePreviewCapture {
         let background = pane.adaptiveBackgroundColor.map { NSColor(cgColor: $0) ?? MactermTheme.nsBg }
             ?? MactermTheme.nsBg
         guard let view = pane.nsView else {
-            return PanePreview(image: nil, lines: [], background: background, aspectRatio: nil, columns: nil)
+            return PanePreview(image: nil, background: background, aspectRatio: nil)
         }
 
         let surface = view.layer?.contents as? IOSurface
@@ -118,17 +87,11 @@ enum PanePreviewCapture {
         let image = surface.flatMap {
             thumbnail(from: $0, colorSpace: view.surfaceColorSpace, over: background)
         }
-        // The text read is the fallback, so skip it whenever a frame exists —
-        // it walks the whole viewport in the core.
-        let lines = image == nil ? viewportLines(of: view) : []
         let aspect = image.map { $0.size.width / max($0.size.height, 1) }
-        let columns = image == nil ? view.surfaceSize.map { Int($0.columns) } : nil
         return PanePreview(
             image: image,
-            lines: lines,
             background: background,
             aspectRatio: aspect,
-            columns: columns,
             frameID: image == nil ? nil : surface.map { IOSurfaceGetID($0) }
         )
     }
@@ -151,26 +114,6 @@ enum PanePreviewCapture {
         let union = frames.dropFirst().reduce(first) { $0.union($1) }
         guard union.width > 0, union.height > 0 else { return nil }
         return union.width / union.height
-    }
-
-    /// The viewport's rows, top down, with the trailing run of blank lines
-    /// dropped.
-    ///
-    /// Top down and NOT trimmed on the left: these stand in for a picture of
-    /// the screen, so row order and leading indentation are the shape of the
-    /// thing. An earlier cut took the *last* lines and right-aligned nothing
-    /// while the renderer bottom-aligned them, which put a fresh shell's
-    /// prompt at the bottom of the card when the real pane draws it at the top.
-    @MainActor
-    private static func viewportLines(of view: GhosttyTerminalNSView) -> [String] {
-        guard let text = view.readText(scrollback: false) else { return [] }
-        var lines = text
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { String($0) }
-        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
-            lines.removeLast()
-        }
-        return Array(lines.prefix(fallbackLineLimit))
     }
 
     /// Downsample the surface's last frame over `background`.

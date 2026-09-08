@@ -381,66 +381,11 @@ private struct PaneMosaicLeaf: View {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                } else if let preview, !preview.lines.isEmpty {
-                    PanePreviewText(lines: preview.lines, columns: preview.columns)
                 }
             }
             .clipped()
             // The focused pane is marked the way the split view marks it: the
             // others are dimmed rather than this one being highlighted.
             .overlay(isFocused ? Color.clear : Color.black.opacity(0.22))
-    }
-}
-
-/// Fallback preview for a pane no frame was ever captured from — a tab that
-/// has never been focused this run (see `PanePreview`).
-///
-/// Typeset to stand in for the picture we couldn't take: the pane's own column
-/// count is mapped onto the card's width, so a line lands at the same relative
-/// size a real thumbnail of that pane would have shown, and rows run top down
-/// like the screen they came from. A fixed point size was the earlier cut and
-/// it read as a bug — 5pt text in a 100pt card made an idle shell's prompt
-/// span the whole width, several times larger than the same prompt in the
-/// captured frame beside it, and bottom-aligning it put a fresh shell's prompt
-/// under the card instead of at its top.
-private struct PanePreviewText: View {
-    let lines: [String]
-    /// The terminal's width in columns. nil falls back to a typical 80.
-    let columns: Int?
-
-    /// Advance width of a monospaced glyph as a fraction of point size. SF
-    /// Mono and friends sit at 0.6; close enough to place the text at the
-    /// right scale, which is all this needs to do.
-    private static let advanceRatio: CGFloat = 0.6
-    /// Point size the text is typeset at before being scaled down to fit. The
-    /// fitting is a TRANSFORM, not a smaller font: a card leaf can be under
-    /// 50pt wide (a quadrant of a 2x2 split), which works out to well under a
-    /// point per glyph, and asking for a font that small either renders
-    /// nothing or renders wrong. Scaling a comfortably-typeset block keeps the
-    /// geometry exact at any size and can never drop the content — an earlier
-    /// cut computed a font size directly and skipped the text below a 1.6pt
-    /// floor, which left every never-focused SPLIT tab's card blank while
-    /// single-pane cards squeaked over the line at 1.62pt.
-    private static let referenceSize: CGFloat = 6
-
-    var body: some View {
-        GeometryReader { geo in
-            let width = CGFloat(max(columns ?? 80, 1)) * Self.referenceSize * Self.advanceRatio
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    Text(line.isEmpty ? " " : line)
-                        .font(.system(size: Self.referenceSize, design: .monospaced))
-                        .foregroundStyle(MactermTheme.fgMuted)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(width: width, alignment: .topLeading)
-            .scaleEffect(geo.size.width / width, anchor: .topLeading)
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-        }
-        .clipped()
     }
 }
