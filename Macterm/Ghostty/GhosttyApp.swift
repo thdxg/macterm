@@ -89,6 +89,12 @@ final class GhosttyApp {
             logger.error("ghostty_init failed")
             return
         }
+        // ghostty_init just ran `setlocale(LC_ALL, "")` on this process. A
+        // comma-decimal LC_NUMERIC crashes macOS 27's SwiftUI toolbar at
+        // launch (#370) — see ProcessLocale for the full account. Must run
+        // before the first window can build its toolbar, i.e. here.
+        let numericLocale = ProcessLocale.pinNumericToC()
+        logger.info("LC_NUMERIC pinned to C (libghostty had set \(numericLocale, privacy: .public))")
         let (cfgOpt, _) = loadConfig()
         guard let cfg = cfgOpt else {
             logger.error("ghostty_config_new failed")
