@@ -970,12 +970,15 @@ final class AppState {
     /// switcher renders.
     ///
     /// A cache rather than a capture at gesture time, because a pane only
-    /// holds a rendered frame while it is on screen (see `PanePreview`): by
-    /// the time the switcher wants to show you the tabs you are *not* on,
+    /// holds a rendered frame while its renderer is awake (see `PanePreview`):
+    /// by the time the switcher wants to show you the tabs you are *not* on,
     /// their pixels are gone. So the foreground poll collects a frame from
-    /// whatever is visible and this remembers it, and the strip shows each
-    /// tab as it last looked. Panes no frame was ever collected from fall
-    /// back to their live viewport text.
+    /// whatever is visible and this remembers it, which is what the strip
+    /// shows in the first instant. For the rest of the gesture the cache is
+    /// LIVE: `beginLivePreviews` wakes the renderer of every offered pane and
+    /// re-samples them all on a timer until the cycle commits, so a card
+    /// pictures its tab as it is now, not as it was last left. Panes no frame
+    /// was ever collected from fall back to their live viewport text.
     private(set) var panePreviews: [UUID: PanePreview] = [:]
 
     /// Aspect ratio of the region a workspace's panes fill on screen, so the
@@ -989,6 +992,21 @@ final class AppState {
     @ObservationIgnored
     private var lastPanePreviewCapture = Date.distantPast
     private static let panePreviewInterval: TimeInterval = 0.75
+
+    /// The panes whose renderers a cycle in flight is keeping awake
+    /// (`GhosttyTerminalNSView.rendersForPreview`), and the timer re-sampling
+    /// them. Remembered as panes, not looked up from the cycle order: a tab
+    /// that closes mid-gesture must still get its override cleared. Both are
+    /// empty whenever no cycle is showing the switcher.
+    @ObservationIgnored
+    private var livePreviewPanes: [Pane] = []
+    @ObservationIgnored
+    private var livePreviewTimer: Timer?
+    /// Sampling cadence while the switcher is up. Fast enough to read as the
+    /// terminal moving; the copy per pane is a downsample of one frame.
+    static let livePreviewInterval: TimeInterval = 0.2
+    /// Whether a cycle is currently re-sampling its cards.
+    var isLivePreviewing: Bool { livePreviewTimer != nil }
 
     private let workspaceStore: WorkspaceStore
 
@@ -2705,6 +2723,50 @@ final class AppState {
         // and a pane in another project is still alive.
         let live = Set(workspaces.values.flatMap { $0.tabs.flatMap { $0.splitRoot.allPanes().map(\.id) } })
         panePreviews = panePreviews.filter { live.contains($0.key) }
+        beginLivePreviews(in: ws)
+    }
+
+    /// Keep the cards current for as long as the gesture lasts: wake the
+    /// renderer of every pane the cycle offers and re-sample them all on a
+    /// timer. An off-screen pane's renderer is parked (`syncOcclusion`) and
+    /// holds no frame, so without the wake-up there would be nothing new to
+    /// sample; waking it makes libghostty rebuild and draw at once, and the
+    /// pty has kept the screen current all along. Every pane is woken, the
+    /// visible tab's included — it is on screen anyway, and one rule beats
+    /// tracking which tab that is. Undone by `endLivePreviews`.
+    private func beginLivePreviews(in ws: Workspace) {
+        endLivePreviews()
+        let cycleTabs = tabCycleOrder.compactMap { id in ws.tabs.first { $0.id == id } }
+        livePreviewPanes = cycleTabs.flatMap { $0.splitRoot.allPanes() }
+        for pane in livePreviewPanes {
+            pane.nsView?.rendersForPreview = true
+        }
+        let timer = Timer(timeInterval: Self.livePreviewInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.captureLivePreviews() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        livePreviewTimer = timer
+    }
+
+    /// One sampling tick. Each pane's last preview is handed back in so a
+    /// pane whose renderer drew nothing since is returned as is — the copy
+    /// is the cost here, and only the panes that are actually moving pay it.
+    private func captureLivePreviews() {
+        for pane in livePreviewPanes {
+            store(PanePreviewCapture.capture(pane, reusing: panePreviews[pane.id]), for: pane.id)
+        }
+    }
+
+    /// Park the renderers `beginLivePreviews` woke and stop sampling. Runs on
+    /// every way a cycle ends, so a renderer can never be left awake behind a
+    /// tab nobody is looking at.
+    private func endLivePreviews() {
+        livePreviewTimer?.invalidate()
+        livePreviewTimer = nil
+        for pane in livePreviewPanes {
+            pane.nsView?.rendersForPreview = false
+        }
+        livePreviewPanes = []
     }
 
     /// Collect a frame from whatever is on screen, throttled. Called from the
@@ -2758,6 +2820,7 @@ final class AppState {
     }
 
     func commitTabCycle(projectID: UUID) {
+        endLivePreviews()
         guard !tabCycleOrder.isEmpty, let ws = workspaces[projectID] else {
             tabCycleOrder = []
             return

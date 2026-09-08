@@ -2510,6 +2510,69 @@ struct AppStateTests {
         #expect(state.pendingCloseTab == nil)
         #expect(ws.tabs.count == 1)
     }
+
+    // MARK: - Tab switcher live previews
+
+    /// A cycle showing the switcher wakes the renderer of every pane it
+    /// offers and samples them until the modifier is released — an off-screen
+    /// renderer is parked and holds no frame, so without this the cards would
+    /// freeze at whatever each tab looked like when it was last left.
+    @Test
+    func cycling_with_the_switcher_keeps_offered_panes_rendering_until_commit() throws {
+        let prior = Preferences.shared.showTabSwitcherOverlay
+        defer { Preferences.shared.showTabSwitcherOverlay = prior }
+        Preferences.shared.showTabSwitcherOverlay = true
+
+        let state = makeAppState()
+        let project = seedProject(state)
+        let ws = try #require(state.workspaces[project.id])
+        let first = try #require(ws.activeTab?.focusedPane)
+        state.createTab(projectID: project.id, projects: [project])
+        let second = try #require(ws.activeTab?.focusedPane)
+        let firstView = first.ensureNSView()
+        let secondView = second.ensureNSView()
+
+        state.cycleRecentTab(projectID: project.id)
+
+        #expect(state.isTabCycling)
+        #expect(state.isLivePreviewing)
+        #expect(firstView.rendersForPreview)
+        #expect(secondView.rendersForPreview)
+
+        state.commitTabCycle(projectID: project.id)
+
+        #expect(!state.isTabCycling)
+        #expect(!state.isLivePreviewing)
+        #expect(!firstView.rendersForPreview)
+        #expect(!secondView.rendersForPreview)
+    }
+
+    /// With the overlay off there are no cards to keep current, so the
+    /// default cycling path must not wake a single off-screen renderer.
+    @Test
+    func cycling_without_the_switcher_wakes_no_renderer() throws {
+        let prior = Preferences.shared.showTabSwitcherOverlay
+        defer { Preferences.shared.showTabSwitcherOverlay = prior }
+        Preferences.shared.showTabSwitcherOverlay = false
+
+        let state = makeAppState()
+        let project = seedProject(state)
+        let ws = try #require(state.workspaces[project.id])
+        let first = try #require(ws.activeTab?.focusedPane)
+        state.createTab(projectID: project.id, projects: [project])
+        let second = try #require(ws.activeTab?.focusedPane)
+        let firstView = first.ensureNSView()
+        let secondView = second.ensureNSView()
+
+        state.cycleRecentTab(projectID: project.id)
+
+        #expect(state.isTabCycling)
+        #expect(!state.isLivePreviewing)
+        #expect(!firstView.rendersForPreview)
+        #expect(!secondView.rendersForPreview)
+
+        state.commitTabCycle(projectID: project.id)
+    }
 }
 
 /// Actor recording killed session names across the fire-and-forget kill tasks.

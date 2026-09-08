@@ -16,14 +16,17 @@ private let logger = Logger(subsystem: appBundleID, category: "PanePreview")
 ///   `AdaptiveTerminalChrome` samples for the adaptive background), so a real
 ///   thumbnail needs no renderer of our own — just a downsampled copy.
 ///
-///   **Only a pane that is currently on screen has one.** Measured: an
-///   inactive tab's panes keep their NSView (it is pane-owned, warmed by
+///   **Only a pane whose renderer is awake has one.** Measured: an inactive
+///   tab's panes keep their NSView (it is pane-owned, warmed by
 ///   `SurfaceIncubator`) but their `layer.contents` is nil — ghostty does not
-///   leave a frame parked in an occluded surface. So a switcher cannot sample
-///   the tabs it is offering; the frames have to be collected *while* each tab
-///   is visible and remembered. That is what `AppState.panePreviews` is: a
-///   cache filled by the foreground poll, showing each tab as it last looked,
-///   the same bargain Mission Control makes.
+///   leave a frame parked in an occluded surface. So the frames are collected
+///   *while* each tab is visible and remembered (`AppState.panePreviews`, a
+///   cache filled by the foreground poll), which is what a card shows the
+///   instant the switcher opens. From then on the cards are live: the cycle
+///   sets `GhosttyTerminalNSView.rendersForPreview` on every offered pane,
+///   which reports the surface visible so libghostty draws it again, and
+///   re-samples them all on a timer until the gesture commits — so a tab that
+///   is printing in the background is seen printing, not as it last looked.
 ///
 /// - **The viewport text.** `ghostty_surface_read_text` on the visible region,
 ///   which is the terminal core's own state and therefore always current, and
@@ -53,6 +56,28 @@ struct PanePreview {
     /// in the real one — but it is the width this text was actually laid out
     /// at, which is what typesetting it needs.
     let columns: Int?
+    /// Identity of the IOSurface `image` was sampled from. The renderer
+    /// presents from a swap chain of three, so a new frame always lands in a
+    /// different surface than the last — which makes "same surface as before"
+    /// a reliable "nothing new was drawn" and lets the live sampling skip the
+    /// copy for a pane that is sitting still. nil for a text fallback.
+    let frameID: IOSurfaceID?
+
+    init(
+        image: NSImage?,
+        lines: [String],
+        background: NSColor,
+        aspectRatio: CGFloat?,
+        columns: Int?,
+        frameID: IOSurfaceID? = nil
+    ) {
+        self.image = image
+        self.lines = lines
+        self.background = background
+        self.aspectRatio = aspectRatio
+        self.columns = columns
+        self.frameID = frameID
+    }
 
     var isEmpty: Bool { image == nil && lines.isEmpty }
 }
@@ -69,17 +94,28 @@ enum PanePreviewCapture {
 
     /// Snapshot `pane` for display in an overlay. Main-actor and synchronous:
     /// it locks the IOSurface read-only for the length of one copy, the same
-    /// way the adaptive-background sampler does, and is called once per pane
-    /// when a switcher gesture begins rather than per frame.
+    /// way the adaptive-background sampler does, and is called per pane a few
+    /// times a second while a switcher gesture is held rather than per frame.
+    ///
+    /// `previous` is the preview last stored for this pane: when the surface
+    /// on the layer is the very one it was sampled from, nothing has been
+    /// drawn since and it is returned as is — the live sampling's whole cost
+    /// is the copy, and a pane at rest should cost it nothing.
     @MainActor
-    static func capture(_ pane: Pane) -> PanePreview {
+    static func capture(_ pane: Pane, reusing previous: PanePreview? = nil) -> PanePreview {
         let background = pane.adaptiveBackgroundColor.map { NSColor(cgColor: $0) ?? MactermTheme.nsBg }
             ?? MactermTheme.nsBg
         guard let view = pane.nsView else {
             return PanePreview(image: nil, lines: [], background: background, aspectRatio: nil, columns: nil)
         }
 
-        let image = (view.layer?.contents as? IOSurface).flatMap {
+        let surface = view.layer?.contents as? IOSurface
+        if let surface, let previous, previous.image != nil,
+           previous.frameID == IOSurfaceGetID(surface), previous.background == background
+        {
+            return previous
+        }
+        let image = surface.flatMap {
             thumbnail(from: $0, colorSpace: view.surfaceColorSpace, over: background)
         }
         // The text read is the fallback, so skip it whenever a frame exists —
@@ -92,7 +128,8 @@ enum PanePreviewCapture {
             lines: lines,
             background: background,
             aspectRatio: aspect,
-            columns: columns
+            columns: columns,
+            frameID: image == nil ? nil : surface.map { IOSurfaceGetID($0) }
         )
     }
 
@@ -160,24 +197,37 @@ enum PanePreviewCapture {
 
         var seed: UInt32 = 0
         guard IOSurfaceLock(surface, [.readOnly], &seed) == kIOReturnSuccess else { return nil }
-        // `makeImage` copies, so the CGImage outlives the unlock.
-        let frame: CGImage? = {
-            defer { IOSurfaceUnlock(surface, [.readOnly], &seed) }
-            guard let ctx = CGContext(
-                data: IOSurfaceGetBaseAddress(surface),
+        defer { IOSurfaceUnlock(surface, [.readOnly], &seed) }
+        // The frame is wrapped, not copied: the provider reads the locked
+        // surface memory directly and the only pixels written are the
+        // thumbnail's own. `composite` draws synchronously into its own
+        // context, so nothing reads through the provider after the unlock.
+        // An earlier cut went through `CGContext.makeImage`, a full-frame copy
+        // that at several megabytes per pane, several times a second, was
+        // most of what the live sampling cost.
+        let bytesPerRow = IOSurfaceGetBytesPerRow(surface)
+        guard let provider = CGDataProvider(
+            dataInfo: nil,
+            data: IOSurfaceGetBaseAddress(surface),
+            size: bytesPerRow * height,
+            releaseData: { _, _, _ in }
+        ),
+            let frame = CGImage(
                 width: width,
                 height: height,
                 bitsPerComponent: 8,
-                bytesPerRow: IOSurfaceGetBytesPerRow(surface),
+                bitsPerPixel: 32,
+                bytesPerRow: bytesPerRow,
                 space: cgColorSpace,
                 // BGRA, premultiplied — what the renderer writes.
-                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-                    | CGImageByteOrderInfo.order32Little.rawValue
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue
+                    | CGImageByteOrderInfo.order32Little.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: true,
+                intent: .defaultIntent
             )
-            else { return nil }
-            return ctx.makeImage()
-        }()
-        guard let frame else { return nil }
+        else { return nil }
 
         return composite(frame, over: background, colorSpace: cgColorSpace)
     }
@@ -210,7 +260,10 @@ enum PanePreviewCapture {
         let rect = CGRect(origin: .zero, size: size)
         ctx.setFillColor((background.usingColorSpace(.sRGB) ?? background).cgColor)
         ctx.fill(rect)
-        ctx.interpolationQuality = .high
+        // Medium, not high: the card shows this at a fraction of its size
+        // again, and high-quality resampling of a full retina frame was the
+        // other half of the live sampling's cost.
+        ctx.interpolationQuality = .medium
         ctx.draw(frame, in: rect)
         guard let out = ctx.makeImage() else { return nil }
         // Point size == pixel size: the card scales it down further, and NSImage

@@ -730,11 +730,31 @@ final class GhosttyTerminalNSView: NSView {
     ///
     /// The bool is "visible" (matches Ghostty's own `updateOcclusionState`):
     /// true when the surface's window reports `.visible`, false otherwise —
-    /// including when the view has no window at all.
+    /// including when the view has no window at all. `rendersForPreview`
+    /// overrides that verdict for as long as it is set.
     private func syncOcclusion() {
         guard let surface else { return }
-        let visible = window?.occlusionState.contains(.visible) ?? false
+        let visible = rendersForPreview || (window?.occlusionState.contains(.visible) ?? false)
         ghostty_surface_set_occlusion(surface, visible)
+    }
+
+    /// Keep the renderer drawing while this surface is off screen, so its
+    /// frame can be sampled — what the tab switcher sets on every pane of the
+    /// tabs it is offering while the gesture is held (`PanePreview`).
+    ///
+    /// Reported to libghostty as "visible": the renderer parks its display
+    /// link the moment a surface is occluded and does not leave a frame
+    /// behind, so an off-screen pane has no pixels to picture until it is
+    /// told otherwise. Flipping it back on makes the renderer rebuild the
+    /// cells and draw at once (its `.visible` mailbox message), so no separate
+    /// refresh is needed, and clearing it re-derives occlusion from the window
+    /// as before. A detached view keeps its last frame size, so the frame it
+    /// draws has the pane's real proportions rather than the incubator's.
+    var rendersForPreview = false {
+        didSet {
+            guard oldValue != rendersForPreview else { return }
+            syncOcclusion()
+        }
     }
 
     func destroySurface() {
