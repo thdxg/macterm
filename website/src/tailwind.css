@@ -170,6 +170,39 @@
     border-color: var(--l-rose);
     background: rgba(235, 188, 186, 0.08);
   }
+  /* A live figure riding beside a nav label — the star count on GitHub, the
+     all-releases download total on Download — filled by site.js's loadStats
+     and revealed only once a number has landed (`hidden` until then, so a
+     failed or rate-limited fetch leaves the label exactly as it was). Set in
+     the mono at a step down and one ink step fainter than the label, behind a
+     hairline, so it reads as data attached to the word rather than as a
+     second word; `.l-nav`'s tabular-nums is what keeps the header from
+     shifting when a cached figure is replaced by a fresh one. It is inline —
+     no `display` of its own — so the [hidden] reset stays in charge. */
+  .l-nav .l-count {
+    margin-left: 9px;
+    padding-left: 9px;
+    border-left: 1px solid var(--l-edge);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    color: var(--l-soft);
+    transition: color 0.18s;
+  }
+  .l-nav a:hover .l-count {
+    color: inherit;
+  }
+  /* The glyph sits on the text baseline rather than the box's middle, so it
+     lines up with the digits' x-height instead of floating above them. */
+  .l-count-icon {
+    display: inline-block;
+    vertical-align: -1px;
+    margin-right: 5px;
+  }
+  .l-nav .l-cta .l-count {
+    border-left-color: rgba(235, 188, 186, 0.35);
+    color: rgba(235, 188, 186, 0.78);
+  }
 
   /* — hero — */
   .l-hero {
@@ -470,6 +503,13 @@
     }
     .l-nav {
       gap: 16px;
+    }
+    /* The header has no room to spare on a phone: measured at 375px, brand +
+       three links fill the row to the gutter with nothing left, and the two
+       counts add ~90px, so they overflowed the viewport and squeezed the
+       wordmark into "Docs". Below this breakpoint the labels stand alone. */
+    .l-nav .l-count {
+      display: none;
     }
     .l-thumbs {
       grid-template-columns: repeat(5, 128px);
