@@ -3648,9 +3648,34 @@ final class AppState {
 
     // MARK: - Focus
 
+    /// Hand first responder back to the pane the user is working in — the
+    /// palette closing, a sidebar rename ending, the overlay sidebar
+    /// collapsing.
+    ///
+    /// Resolved THROUGH the key window's view (#345): a window showing a
+    /// mirror of the tab renders the mirror's panes, not the real tab's, and
+    /// the real focused pane's NSView lives in the OTHER window — so the
+    /// window-blind lookup asked for a view that window does not contain and
+    /// silently retried until it gave up, leaving the mirror window typing
+    /// nowhere. The real view resolves to itself, so this is the same call it
+    /// always was for a single window.
+    ///
+    /// Only for a window that is actually KEY. "The pane the user is working
+    /// in" is otherwise a guess, and the fallback below is what every caller
+    /// has always got: with the quick terminal up, the panel holds key and its
+    /// own restore paths own the focus.
     func restoreFocusToActivePane() {
-        guard let projectID = activeProjectID,
-              let tab = workspaces[projectID]?.activeTab,
+        guard let projectID = activeProjectID else { return }
+        if let window = keyOrFirstWindow,
+           let nsWindow = nsWindow(for: window), nsWindow.isKeyWindow,
+           let view = viewTab(for: projectID, in: window),
+           let realPaneID = view.real.focusedPaneID,
+           let paneID = viewPaneID(forReal: realPaneID, in: view)
+        {
+            FocusRestoration.restoreFocus(to: paneID, in: view.tab.splitRoot, window: nsWindow)
+            return
+        }
+        guard let tab = workspaces[projectID]?.activeTab,
               let paneID = tab.focusedPaneID
         else { return }
         FocusRestoration.restoreFocus(
