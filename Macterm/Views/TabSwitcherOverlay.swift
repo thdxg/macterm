@@ -315,12 +315,13 @@ private struct TabSwitcherCard: View {
                 // captured frames drop in uncropped.
                 .aspectRatio(Self.safeAspect(paneAspect), contentMode: .fit)
                 .frame(height: Self.previewHeight(forPaneAspect: paneAspect))
-                // The gaps between leaves are the miniature split dividers, so
-                // they need a color of their own. Left transparent they showed
-                // whatever sat behind the card — the selection fill on the
-                // selected one, the glass panel on the rest — which made two
-                // cards of the same layout read as different things.
-                .background(MactermTheme.border)
+                // The gaps between leaves are the miniature split dividers,
+                // and they are deliberately untinted: whatever sits behind the
+                // card shows through them — the selection fill on the selected
+                // one, the glass panel on the rest — so a divider reads as a
+                // gap in the picture rather than as a drawn line. That does
+                // mean two cards of the same layout differ by their backdrop,
+                // which is the intent, not a regression to fix with a fill.
                 .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
