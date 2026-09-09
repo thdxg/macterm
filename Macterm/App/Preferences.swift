@@ -741,6 +741,13 @@ final class Preferences {
 
     // MARK: - Session
 
+    /// Attach every restored project's terminal surfaces at launch instead of
+    /// waiting for each project to be selected. Off by default because this
+    /// can open many local shells or SSH connections.
+    var attachAllProjectsOnLaunch: Bool {
+        didSet { defaults.set(attachAllProjectsOnLaunch, forKey: Keys.attachAllProjectsOnLaunch) }
+    }
+
     /// Persisted so the app re-opens to the last-used project on launch.
     var activeProjectID: UUID? {
         didSet { defaults.set(activeProjectID?.uuidString, forKey: Keys.activeProjectID) }
@@ -842,6 +849,7 @@ final class Preferences {
         showProjectNewTabButton = defaults.object(forKey: Keys.showProjectNewTabButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         reconnectRemotePanes = defaults.object(forKey: Keys.reconnectRemotePanes) as? Bool ?? true
+        attachAllProjectsOnLaunch = defaults.object(forKey: Keys.attachAllProjectsOnLaunch) as? Bool ?? false
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
         sidebarWidth = storedSidebarWidth
@@ -981,6 +989,7 @@ final class Preferences {
         static let showProjectNewTabButton = "macterm.sidebar.showProjectNewTabButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"
+        static let attachAllProjectsOnLaunch = "macterm.session.attachAllProjectsOnLaunch"
         static let installationID = "macterm.installationID"
         static let hasSeededFirstRun = "macterm.firstRun.seeded"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"

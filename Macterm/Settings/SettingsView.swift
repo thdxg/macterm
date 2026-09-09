@@ -445,6 +445,7 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
+    @State private var attachAllProjectsOnLaunch: Bool = Preferences.shared.attachAllProjectsOnLaunch
     @State private var newTabWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newTabWorkingDirectory
     @State private var newSplitWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newSplitWorkingDirectory
 
@@ -610,13 +611,21 @@ private struct GeneralSettings: View {
                 .settingsCaption()
             }
 
-            // Shells always keep running after quit and reattach on the next
-            // launch — there's no setting, so the section exists only to report
-            // that persistence is unavailable. It can be silently so (Supacode
-            // shipped the same probe and users only noticed via a buried log
-            // line), which is the whole reason to say it in the UI at all.
-            if ZmxClient.live.executableURL() == nil {
-                Section("Session Persistence") {
+            Section("Session Persistence") {
+                Toggle("Attach all project terminals on launch", isOn: $attachAllProjectsOnLaunch)
+                    .onChange(of: attachAllProjectsOnLaunch) { _, v in
+                        Preferences.shared.attachAllProjectsOnLaunch = v
+                    }
+                Text(
+                    "Connects every restored terminal instead of waiting until its project is selected. "
+                        + "This may open multiple local shells or SSH connections."
+                )
+                .settingsCaption()
+
+                // Persistence can fail silently when zmx is unavailable
+                // (Supacode shipped the same probe and users only noticed via
+                // a buried log line), so keep the warning beside the setting.
+                if ZmxClient.live.executableURL() == nil {
                     Label {
                         Text(zmxUnavailableReason)
                     } icon: {

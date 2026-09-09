@@ -52,6 +52,19 @@ struct PreferencesTests {
     }
 
     @Test
+    func attach_all_projects_on_launch_defaults_off_and_round_trips() {
+        let prior = Preferences.shared.attachAllProjectsOnLaunch
+        defer { Preferences.shared.attachAllProjectsOnLaunch = prior }
+
+        // Fresh tests must not unexpectedly open every saved local shell or
+        // remote SSH connection.
+        #expect(!Preferences.shared.attachAllProjectsOnLaunch)
+
+        Preferences.shared.attachAllProjectsOnLaunch = true
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.attachAllProjectsOnLaunch) as? Bool == true)
+    }
+
+    @Test
     func project_new_tab_button_defaults_on_and_round_trips() {
         let prior = Preferences.shared.showProjectNewTabButton
         defer { Preferences.shared.showProjectNewTabButton = prior }

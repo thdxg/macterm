@@ -1997,6 +1997,108 @@ struct AppStateTests {
         #expect(AppState.panesToWarm(in: ws).isEmpty)
     }
 
+    @Test
+    func panesToWarmAtLaunch_includes_every_restored_pane_in_project_order() {
+        let firstID = UUID()
+        let backgroundID = UUID()
+        let missingID = UUID()
+
+        let first = Pane(projectPath: "/first", projectID: firstID)
+        let firstTab = TerminalTab(id: UUID(), splitRoot: .pane(first), focusedPaneID: first.id)
+        let firstWorkspace = Workspace(
+            projectID: firstID,
+            tabs: [firstTab],
+            activeTabID: firstTab.id
+        )
+
+        let backgroundOne = Pane(projectPath: "/background", projectID: backgroundID)
+        let backgroundTwo = Pane(projectPath: "/background", projectID: backgroundID)
+        let backgroundTree = SplitNode.split(SplitBranch(
+            direction: .horizontal,
+            ratio: 0.5,
+            first: .pane(backgroundOne),
+            second: .pane(backgroundTwo)
+        ))
+        let backgroundTab = TerminalTab(id: UUID(), splitRoot: backgroundTree, focusedPaneID: backgroundOne.id)
+        let backgroundWorkspace = Workspace(
+            projectID: backgroundID,
+            tabs: [backgroundTab],
+            activeTabID: backgroundTab.id
+        )
+
+        let warm = AppState.panesToWarmAtLaunch(
+            projectIDs: [firstID, missingID, backgroundID],
+            workspaces: [firstID: firstWorkspace, backgroundID: backgroundWorkspace]
+        )
+
+        #expect(warm.map(\.id) == [first.id, backgroundOne.id, backgroundTwo.id])
+    }
+
+    @Test
+    func warmRestoredProjects_stamps_remote_zmx_path_and_preserves_selection() {
+        let state = makeAppState()
+        let project = Project(
+            name: "remote",
+            path: "example:~/work",
+            zmxPath: "/custom/bin/zmx"
+        )
+        let selectionBeforeWarm = state.activeProjectID
+        let pane = Pane(projectPath: project.path, projectID: project.id)
+        let tab = TerminalTab(id: UUID(), splitRoot: .pane(pane), focusedPaneID: pane.id)
+        state.workspaces[project.id] = Workspace(
+            projectID: project.id,
+            tabs: [tab],
+            activeTabID: tab.id
+        )
+
+        var warmed: [UUID] = []
+        state.warmPane = { warmedPane in
+            #expect(warmedPane.remoteZmxPath == "/custom/bin/zmx")
+            warmed.append(warmedPane.id)
+        }
+
+        state.warmRestoredProjects([project])
+
+        #expect(warmed == [pane.id])
+        #expect(state.activeProjectID == selectionBeforeWarm)
+    }
+
+    @Test
+    func restoreSelection_only_attaches_a_single_tab_project_when_enabled() {
+        let priorAttach = Preferences.shared.attachAllProjectsOnLaunch
+        let priorActive = Preferences.shared.activeProjectID
+        defer {
+            Preferences.shared.attachAllProjectsOnLaunch = priorAttach
+            Preferences.shared.activeProjectID = priorActive
+        }
+        Preferences.shared.activeProjectID = nil
+
+        let project = Project(name: "restored", path: "/tmp/restored")
+        let pane = Pane(projectPath: project.path, projectID: project.id)
+        let tab = TerminalTab(id: UUID(), splitRoot: .pane(pane), focusedPaneID: pane.id)
+        let workspace = Workspace(projectID: project.id, tabs: [tab], activeTabID: tab.id)
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-attach-launch-\(UUID().uuidString).json")
+        let store = WorkspaceStore(fileURL: storeURL)
+        store.save(WorkspaceSerializer.snapshot([project.id: workspace]))
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+
+        Preferences.shared.attachAllProjectsOnLaunch = false
+        let lazyState = makeAppState(store: store)
+        var lazyWarm: [UUID] = []
+        lazyState.warmPane = { lazyWarm.append($0.id) }
+        lazyState.restoreSelection(projects: [project])
+        #expect(lazyWarm.isEmpty)
+
+        Preferences.shared.attachAllProjectsOnLaunch = true
+        let eagerState = makeAppState(store: store)
+        var eagerWarm: [UUID] = []
+        eagerState.warmPane = { eagerWarm.append($0.id) }
+        eagerState.restoreSelection(projects: [project])
+        #expect(eagerWarm.count == 1)
+        #expect(eagerWarm.first == eagerState.workspaces[project.id]?.activeTab?.focusedPaneID)
+    }
+
     // MARK: - Quiet-settle
 
     // The poll calls `pane.settleTerminalActivityIfQuiet()` directly (no

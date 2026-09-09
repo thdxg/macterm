@@ -1403,6 +1403,7 @@ final class AppState {
     func restoreSelection(projects: [Project]) {
         logger.info("restoreSelection: \(projects.count, privacy: .public) projects")
         hasRestoredSelection = true
+        let attachAllProjects = Preferences.shared.attachAllProjectsOnLaunch
         let loaded = workspaceStore.load()
         let valid = Set(projects.map(\.id))
         // Restore every project's snapshot — including layout-file projects.
@@ -1436,8 +1437,11 @@ final class AppState {
                 // Reattaching remote panes need the zmx path before warm/render.
                 stampRemoteZmxPath(project)
                 acknowledgeActiveTab(projectID: id)
-                warmFocusedProject()
+                if !attachAllProjects { warmFocusedProject() }
             }
+        }
+        if attachAllProjects {
+            warmRestoredProjects(projects)
         }
         // Sweep crash/force-quit orphans: kill zero-client macterm-* sessions
         // no restored pane claims. Attach-aware and fail-closed (a failed
@@ -1559,6 +1563,24 @@ final class AppState {
         warmStaggered(Self.panesToWarm(in: ws))
     }
 
+    /// Attach every restored ordinary project's terminal surfaces without
+    /// changing the selected project. The incubator is idempotent, so panes
+    /// that a restored window renders at the same time simply reuse the same
+    /// surface. One existing stagger covers the whole launch batch.
+    func warmRestoredProjects(_ projects: [Project]) {
+        for project in projects where workspaces[project.id] != nil {
+            // Background remote panes never pass through selectProject, so
+            // stamp their configured zmx path before their surfaces spawn.
+            stampRemoteZmxPath(project)
+        }
+        let panes = Self.panesToWarmAtLaunch(
+            projectIDs: projects.map(\.id),
+            workspaces: workspaces
+        )
+        logger.info("warmRestoredProjects: attaching \(panes.count, privacy: .public) pane(s)")
+        warmStaggered(panes)
+    }
+
     /// Start panes' shells off-screen, staggered 125ms apart: each warm is a
     /// login shell (PAM, rc files) and — when restoring — a `zmx attach`
     /// reattaching a daemon, and firing them all in one tick multiplies
@@ -1589,6 +1611,19 @@ final class AppState {
         workspace.tabs
             .filter { $0.id != workspace.activeTabID }
             .flatMap { $0.splitRoot.allPanes() }
+    }
+
+    /// Every canonical pane in restored project/sidebar order. Window mirrors
+    /// are intentionally absent: they are additional views of these sessions,
+    /// not another restored project terminal.
+    static func panesToWarmAtLaunch(
+        projectIDs: [UUID],
+        workspaces: [UUID: Workspace]
+    ) -> [Pane] {
+        projectIDs.flatMap { projectID -> [Pane] in
+            guard let workspace = workspaces[projectID] else { return [] }
+            return workspace.tabs.flatMap { $0.splitRoot.allPanes() }
+        }
     }
 
     // MARK: - Remote reconnect (#281)
