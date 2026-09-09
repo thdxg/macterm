@@ -193,7 +193,9 @@ private struct TerminalSurface: NSViewRepresentable {
             }
             if focused {
                 AdaptiveTerminalChrome.shared.focusDidChange(to: view)
-                FocusRestoration.restoreFocus(to: pane.id, finder: { pane }, in: view.window)
+                // Not `in: view.window`: the host may not be in the window yet
+                // (see restoreFocusWhenAttached).
+                FocusRestoration.restoreFocusWhenAttached(to: pane.id, finder: { pane })
             }
         }
         context.coordinator.wasFocused = focused
@@ -242,7 +244,7 @@ private struct TerminalSurface: NSViewRepresentable {
             // in Notification Center for it is stale. Same point Ghostty clears
             // a surface's notifications from (`focusDidChange`).
             NotificationHandler.shared.clearDelivered(paneID: pane.id)
-            FocusRestoration.restoreFocus(to: pane.id, finder: { [pane] in pane }, in: view.window)
+            FocusRestoration.restoreFocusWhenAttached(to: pane.id, finder: { [pane] in pane })
         } else if !focused, wasFocused {
             view.notifySurfaceUnfocused()
         }
