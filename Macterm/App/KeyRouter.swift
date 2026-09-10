@@ -54,6 +54,13 @@ final class KeyRouter {
     }
 
     private func dispatch(_ event: NSEvent) -> Bool {
+        // One owner per chord: a chord Carbon holds as a system-wide hot key
+        // belongs to `GlobalHotkeys`, which will run its action from the
+        // hot-key event. Yielding it here is what stops a global-flagged
+        // binding firing twice while Macterm is frontmost. Consumed rather
+        // than passed through, so the chord never reaches a terminal surface
+        // and types instead.
+        if GlobalHotkeys.shared.yieldsToCarbon(event) { return true }
         for responder in responders {
             switch responder.handle(event) {
             case .handled: return true
