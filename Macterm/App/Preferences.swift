@@ -377,6 +377,20 @@ final class Preferences {
         didSet { defaults.set(reconnectRemotePanes, forKey: Keys.reconnectRemotePanes) }
     }
 
+    /// Whether Shortcuts, Spotlight and the `shortcuts` CLI may drive the app
+    /// through its App Intents (`Macterm/Intents/`). Defaults to `.ask` —
+    /// Ghostty's own default for the equivalent `macos-shortcuts` key.
+    ///
+    /// This is a `Preferences` value rather than a ghostty config key even
+    /// though Ghostty spells it as one: the intents create projects, close
+    /// tabs and type into shells, none of which libghostty has any stake in,
+    /// and inventing a ghostty key Ghostty doesn't define would break the
+    /// "the user is the source of truth for every ghostty setting" contract.
+    /// See `ShortcutsAccess`.
+    var shortcutsAccess: ShortcutsAccess {
+        didSet { defaults.set(shortcutsAccess.rawValue, forKey: Keys.shortcutsAccess) }
+    }
+
     /// Stable per-installation identity, lazily created on first use. Stamped
     /// onto remote zmx sessions as a `macterm.owner` label so the orphan sweep
     /// can tell OUR sessions apart from another machine's on a shared host
@@ -842,6 +856,10 @@ final class Preferences {
         showProjectNewTabButton = defaults.object(forKey: Keys.showProjectNewTabButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         reconnectRemotePanes = defaults.object(forKey: Keys.reconnectRemotePanes) as? Bool ?? true
+        // An unrecognized stored value (a newer build's case, a hand-edited
+        // domain) falls back to the conservative default rather than failing.
+        shortcutsAccess = (defaults.string(forKey: Keys.shortcutsAccess))
+            .flatMap(ShortcutsAccess.init(rawValue:)) ?? .ask
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
         sidebarWidth = storedSidebarWidth
@@ -981,6 +999,7 @@ final class Preferences {
         static let showProjectNewTabButton = "macterm.sidebar.showProjectNewTabButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"
+        static let shortcutsAccess = "macterm.intents.shortcutsAccess"
         static let installationID = "macterm.installationID"
         static let hasSeededFirstRun = "macterm.firstRun.seeded"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
