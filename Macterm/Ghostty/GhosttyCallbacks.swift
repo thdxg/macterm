@@ -238,9 +238,17 @@ final class GhosttyCallbacks: @unchecked Sendable {
         case GHOSTTY_ACTION_RING_BELL:
             // BEL. The `title`/`border` bell-features are per-tab UI Macterm
             // doesn't implement; the app-level features (beep, custom sound,
-            // dock attention) are handled here for any surface.
+            // dock bounce) are handled here for any surface. The pane is told
+            // too, so the `attention` feature's other half — the Dock badge
+            // counting tabs with an unacknowledged bell — knows which tab rang.
             guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
-            DispatchQueue.main.async { Self.ringBell() }
+            // The app-level features still ring for a surface with no view of
+            // its own; only the badge needs to know which pane it was.
+            let view = surfaceView(from: target)
+            DispatchQueue.main.async {
+                view?.onBell?()
+                Self.ringBell()
+            }
             return true
         case GHOSTTY_ACTION_OPEN_CONFIG:
             // The `open_config` keybind. Macterm's source of truth is the
@@ -326,7 +334,9 @@ final class GhosttyCallbacks: @unchecked Sendable {
 
     /// Ring the terminal bell per the user's `bell-features`: the system
     /// beep, an optional custom sound, and a dock-bounce attention request
-    /// (which macOS shows only while the app is inactive).
+    /// (which macOS shows only while the app is inactive). `attention`'s Dock
+    /// badge is not rung from here — it is derived state, kept current by
+    /// `AppState.syncDockBadge` from the panes' bell flags.
     @MainActor
     private static func ringBell() {
         let features = GhosttyApp.shared.bellFeatures

@@ -1117,6 +1117,20 @@ final class AppState {
     @ObservationIgnored
     var isAppActive: () -> Bool = { NSApp?.isActive ?? false }
 
+    /// The two seams of the Dock badge (`AppState+BellBadge.swift`), injectable
+    /// so tests can drive the feature set and read the label without the
+    /// developer's real ghostty config or the hosting app's Dock tile. The
+    /// default writer is the ONE AppKit write, `BellBadge.apply`.
+    @ObservationIgnored
+    var bellFeatures: () -> GhosttyApp.BellFeatures = { GhosttyApp.shared.bellFeatures }
+    @ObservationIgnored
+    var dockBadgeWriter: (String?) -> Void = { BellBadge.apply($0) }
+    /// The label last handed to `dockBadgeWriter`, so a sync that changes
+    /// nothing costs no AppKit round-trip (the badge is re-derived on every
+    /// structural save). Written only by `syncDockBadge`.
+    @ObservationIgnored
+    var dockBadgeLabel: String?
+
     /// Any on-screen window counts — including the quick terminal's
     /// non-activating panel. The surface incubator's window is ordered out and
     /// never becomes visible, so it never keeps polling alive.
@@ -1211,8 +1225,16 @@ final class AppState {
                 using: onQuietSettleDeadline
             )),
             (center, center.addObserver(
-                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: onEvent
-            )),
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    // Coming to the front is both a poll event and the user
+                    // looking at whatever tab is showing — which is what
+                    // acknowledges its bell (`AppState+BellBadge`).
+                    self?.acknowledgeBellsInActiveTab()
+                    self?.notePollEvent()
+                }
+            }),
             (center, center.addObserver(
                 forName: NSApplication.didResignActiveNotification, object: nil, queue: .main, using: onEvent
             )),
@@ -1233,6 +1255,18 @@ final class AppState {
                     self?.zmxRetryBudget = 8
                     self?.notePollEvent()
                 }
+            }),
+            // The Dock badge (`BellBadge`) is derived state: re-derived when a
+            // pane's bell flag flips either way, and when a config reload may
+            // have brought the `attention` feature in or taken it out.
+            (center, center.addObserver(
+                forName: .terminalBellStateDidChange, object: nil, queue: .main
+            ) { [weak self] note in
+                guard let paneID = note.object as? UUID else { return }
+                MainActor.assumeIsolated { self?.paneBellStateDidChange(paneID: paneID) }
+            }),
+            (center, center.addObserver(forName: .mactermConfigDidChange, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.syncDockBadge() }
             }),
         ]
         pollEventObservers = tokens.map(\.1)
@@ -1528,6 +1562,8 @@ final class AppState {
                     )
                 }
         )
+        // A closed or unloaded tab takes its bell out of the count with it.
+        syncDockBadge()
     }
 
     // MARK: - Project
@@ -3720,6 +3756,9 @@ final class AppState {
         guard projectID == activeProjectID,
               let tab = workspaces[projectID]?.activeTab
         else { return false }
+        // The bell rides the same "looking at the active tab" verdict, but is
+        // transient — it never decides the save below.
+        tab.acknowledgeBell()
         let didAcknowledgeCompletion = tab.acknowledgeCommandCompletion()
         if didAcknowledgeCompletion, saveImmediately {
             saveWorkspaces()

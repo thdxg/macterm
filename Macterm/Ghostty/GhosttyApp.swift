@@ -468,7 +468,7 @@ final class GhosttyApp {
     /// The user's `bell-features` set. Same bit layout as Ghostty.app's
     /// `BellFeatures`; `title` and `border` exist in the config but Macterm
     /// implements only the app-level features (see `GhosttyCallbacks`'s
-    /// `RING_BELL` case).
+    /// `RING_BELL` case) plus `attention`'s Dock badge (`BellBadge`).
     struct BellFeatures: OptionSet {
         let rawValue: CUnsignedInt
         static let system = BellFeatures(rawValue: 1 << 0)
