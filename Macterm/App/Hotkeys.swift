@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Foundation
 import os
 
@@ -64,6 +65,17 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     /// rebind and a passthrough change don't clobber each other.
     var passthroughDefaultsKey: String { "macterm.hotkey.\(rawValue).passthrough" }
 
+    /// Per-action opt-in (default off): register this binding's chord as a
+    /// system-wide hot key so it fires while another app is frontmost (see
+    /// `GlobalHotkeys`). Its own key for the same reason as passthrough.
+    var globalDefaultsKey: String { "macterm.hotkey.\(rawValue).global" }
+
+    /// Global by construction, with no flag to turn off: the quick terminal
+    /// exists to be summoned from other apps, and its chord has been a Carbon
+    /// hot key since the feature shipped — unflagging it would be a silent
+    /// regression of that. Settings shows its checkbox ticked and disabled.
+    var isAlwaysGlobal: Bool { self == .toggleQuickTerminal }
+
     var defaultShortcut: String {
         switch self {
         case .newTab: "cmd+t"
@@ -125,7 +137,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     }
 }
 
-struct HotkeyShortcut: Identifiable {
+struct HotkeyShortcut: Identifiable, Equatable {
     let id: String
     let keyCode: UInt16 // Hardware keyCode for Carbon global hotkey registration.
     let keyToken: String // Logical key token used for local NSEvent matching.
@@ -137,6 +149,22 @@ struct HotkeyShortcut: Identifiable {
               token == keyToken
         else { return false }
         return event.modifierFlags.intersection(HotkeyRegistry.comparableModifierMask) == modifiers
+    }
+
+    /// The key as `RegisterEventHotKey` wants it: the hardware code. A global
+    /// hot key is matched by position rather than by the character it types,
+    /// which is what the `keyCodes` table (US-ANSI) already assumes.
+    var carbonKeyCode: UInt32 { UInt32(keyCode) }
+
+    /// Cocoa modifier flags translated to Carbon's bitmask. Carbon's hot-key
+    /// API predates Cocoa and uses its own constants.
+    var carbonModifiers: UInt32 {
+        var mods: UInt32 = 0
+        if modifiers.contains(.command) { mods |= UInt32(cmdKey) }
+        if modifiers.contains(.option) { mods |= UInt32(optionKey) }
+        if modifiers.contains(.control) { mods |= UInt32(controlKey) }
+        if modifiers.contains(.shift) { mods |= UInt32(shiftKey) }
+        return mods
     }
 }
 
@@ -444,6 +472,16 @@ enum HotkeyRegistry {
         // Skipping this leaves a cleared shortcut still firing from the menu,
         // which beats KeyRouter to the event.
         HotkeyMenuSync.sync()
+        // A global-flagged action's Carbon registration follows its chord: the
+        // old chord is released and the new one registered (a cleared binding
+        // just unregisters). Called here, AFTER the cache invalidation, rather
+        // than from a `UserDefaults.didChangeNotification` observer — that
+        // notification's timing relative to this write is not ours to rely on,
+        // and an observer that reads `selectedShortcut` before the stale entry
+        // is dropped sees the OLD chord and misses the rebind entirely. (The
+        // quick terminal's own observer, which this replaces, worked around
+        // exactly that by comparing binding ids.)
+        GlobalHotkeys.shared.sync()
     }
 
     /// Actions the user flagged to pass through to a running program.
@@ -476,6 +514,40 @@ enum HotkeyRegistry {
     static func setPassesThroughToPrograms(_ enabled: Bool, for action: HotkeyAction) {
         Preferences.defaults.set(enabled, forKey: action.passthroughDefaultsKey)
         passthroughCache.withLock { $0 = nil }
+        // The two flags contradict each other — a Carbon registration takes
+        // the chord before any pane sees it — so a global registration is
+        // refused while passthrough is on. Re-sync so flipping either flag
+        // settles the pair (and clears or raises the refusal) immediately.
+        GlobalHotkeys.shared.sync()
+    }
+
+    /// Actions whose chord is registered system-wide: the user-flagged ones
+    /// plus the always-global quick terminal. Cached like `passthroughActions`,
+    /// and read by `GlobalHotkeys.sync` on every rebind and flag change.
+    private static let globalCache = OSAllocatedUnfairLock<[HotkeyAction]?>(initialState: nil)
+
+    static func globalActions() -> [HotkeyAction] {
+        globalCache.withLock { cache in
+            if let cache { return cache }
+            let flagged = HotkeyAction.allCases.filter(isGlobal)
+            cache = flagged
+            return flagged
+        }
+    }
+
+    static func isGlobal(_ action: HotkeyAction) -> Bool {
+        action.isAlwaysGlobal || Preferences.defaults.bool(forKey: action.globalDefaultsKey)
+    }
+
+    /// Flag or unflag `action` as global and reconcile the Carbon
+    /// registrations at once, so the toggle in Settings takes effect without a
+    /// relaunch. A no-op for an always-global action.
+    @MainActor
+    static func setGlobal(_ enabled: Bool, for action: HotkeyAction) {
+        guard !action.isAlwaysGlobal else { return }
+        Preferences.defaults.set(enabled, forKey: action.globalDefaultsKey)
+        globalCache.withLock { $0 = nil }
+        GlobalHotkeys.shared.sync()
     }
 
     static func isValidShortcutString(_ shortcut: String) -> Bool {

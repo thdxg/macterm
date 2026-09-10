@@ -1,9 +1,8 @@
 import AppKit
-import Carbon
 import os
 import SwiftUI
 
-private let hotkeyLogger = Logger(subsystem: appBundleID, category: "QuickTerminalHotkey")
+private let logger = Logger(subsystem: appBundleID, category: "QuickTerminal")
 
 /// Orders the quick-terminal panel key + front, absorbing any Objective-C
 /// exception AppKit raises mid-ordering, and reports whether the panel made it
@@ -16,7 +15,7 @@ private let hotkeyLogger = Logger(subsystem: appBundleID, category: "QuickTermin
 @MainActor
 private func orderPanelFront(_ panel: NSPanel) -> Bool {
     guard let exception = catchingObjCException({ panel.makeKeyAndOrderFront(nil) }) else { return true }
-    hotkeyLogger
+    logger
         .error(
             "makeKeyAndOrderFront raised \(exception.name.rawValue, privacy: .public): \(exception.reason ?? "no reason", privacy: .public)"
         )
@@ -32,11 +31,6 @@ final class QuickTerminalService: NSObject {
     var panelRef: QuickTerminalPanel? { panel }
     private var hostingView: NSHostingView<QuickTerminalView>?
     private(set) var isVisible = false
-    private var carbonHotKeyRef: EventHotKeyRef?
-    private var carbonEventHandler: EventHandlerRef?
-    /// String form of the shortcut we currently have registered with Carbon,
-    /// so `userDefaultsDidChange` can detect rebinds and re-register.
-    private var lastRegisteredShortcutID: String?
     /// The app that was frontmost just before we showed the quick terminal.
     /// Captured so we can re-activate it on hide if Macterm somehow took over —
     /// without this, dismissing the panel would leave focus on Macterm even
@@ -54,16 +48,6 @@ final class QuickTerminalService: NSObject {
             name: .autoTilingEnabledDidChange,
             object: nil
         )
-        // Observe UserDefaults broadly so a Settings → Keymaps rebind of the
-        // global shortcut takes effect immediately. didChangeNotification
-        // fires on any key change; we filter by comparing the registered
-        // binding against the current one.
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(userDefaultsDidChange),
-            name: UserDefaults.didChangeNotification,
-            object: nil
-        )
         // Re-apply the window appearance (opacity/blur/glass) when a Ghostty
         // config or appearance pref changes so the visible panel picks up
         // Settings adjustments without needing to be re-shown.
@@ -73,27 +57,12 @@ final class QuickTerminalService: NSObject {
             name: .mactermConfigDidChange,
             object: nil
         )
-        registerHotKey()
     }
 
     @objc
     private func reapplyAppearance() {
         guard let panel, isVisible else { return }
         WindowAppearance.syncPanel(panel)
-    }
-
-    @objc
-    private func userDefaultsDidChange() {
-        // Re-register on hotkey-binding changes so a Settings → Keymaps
-        // rebind takes effect immediately, not after restart. A cleared
-        // binding unregisters and registers nothing — that's how the user
-        // opts out of the quick terminal.
-        let currentBindingID = lastRegisteredShortcutID
-        let newBindingID = HotkeyRegistry.selectedShortcut(for: .toggleQuickTerminal)?.id
-        if currentBindingID != newBindingID {
-            unregisterHotKey()
-            registerHotKey()
-        }
     }
 
     @objc
@@ -115,98 +84,6 @@ final class QuickTerminalService: NSObject {
         } else {
             show()
         }
-    }
-
-    // MARK: - Hot key
-
-    private func registerHotKey() {
-        // Idempotent: skip if EITHER Carbon resource is already installed.
-        // Guarding only on `carbonHotKeyRef` (the LAST resource acquired) left
-        // a window where a prior failed registration had installed the handler
-        // but not the hotkey — re-entry would then install a SECOND handler and
-        // orphan the first. Guarding on the handler too closes that.
-        guard carbonHotKeyRef == nil, carbonEventHandler == nil else { return }
-        guard let shortcut = HotkeyRegistry.selectedShortcut(for: .toggleQuickTerminal) else {
-            // User cleared the binding — nothing to register. The shortcut
-            // is also unavailable in-app; toggling via the palette or menu
-            // command still works.
-            return
-        }
-
-        var hotKeyID = EventHotKeyID()
-        hotKeyID.signature = OSType(0x4D55_5859)
-        hotKeyID.id = 1
-
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
-            guard let userData else { return OSStatus(eventNotHandledErr) }
-            var id = EventHotKeyID()
-            GetEventParameter(
-                event,
-                EventParamName(kEventParamDirectObject),
-                EventParamType(typeEventHotKeyID),
-                nil,
-                MemoryLayout<EventHotKeyID>.size,
-                nil,
-                &id
-            )
-            if id.id == 1 {
-                let svc = Unmanaged<QuickTerminalService>.fromOpaque(userData).takeUnretainedValue()
-                DispatchQueue.main.async { svc.toggle() }
-            }
-            return noErr
-        }, 1, &spec, selfPtr, &carbonEventHandler)
-        guard installStatus == noErr else {
-            hotkeyLogger.error("InstallEventHandler failed: \(installStatus, privacy: .public)")
-            carbonEventHandler = nil
-            return
-        }
-
-        let registerStatus = RegisterEventHotKey(
-            UInt32(shortcut.keyCode),
-            Self.carbonModifiers(from: shortcut.modifiers),
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &carbonHotKeyRef
-        )
-        guard registerStatus == noErr else {
-            // Roll back the handler so state stays all-or-nothing — otherwise a
-            // later re-entry would orphan this handler. (The shortcut may be
-            // owned by another app; the palette/menu toggle still works.)
-            hotkeyLogger.error("RegisterEventHotKey failed: \(registerStatus, privacy: .public)")
-            if let handler = carbonEventHandler {
-                RemoveEventHandler(handler)
-                carbonEventHandler = nil
-            }
-            carbonHotKeyRef = nil
-            return
-        }
-        lastRegisteredShortcutID = shortcut.id
-    }
-
-    /// Translate Cocoa modifier flags to Carbon's bitmask. Carbon's hot-key
-    /// API predates Cocoa and uses its own constants.
-    private static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
-        var mods: UInt32 = 0
-        if flags.contains(.command) { mods |= UInt32(cmdKey) }
-        if flags.contains(.option) { mods |= UInt32(optionKey) }
-        if flags.contains(.control) { mods |= UInt32(controlKey) }
-        if flags.contains(.shift) { mods |= UInt32(shiftKey) }
-        return mods
-    }
-
-    private func unregisterHotKey() {
-        if let ref = carbonHotKeyRef {
-            UnregisterEventHotKey(ref)
-            carbonHotKeyRef = nil
-        }
-        if let handler = carbonEventHandler {
-            RemoveEventHandler(handler)
-            carbonEventHandler = nil
-        }
-        lastRegisteredShortcutID = nil
     }
 
     // MARK: - Show / Hide

@@ -25,7 +25,7 @@ GPU rendering, escape-sequence handling, scrollback and reflow, font shaping, an
 
 ## Your config carries over
 
-Macterm reads your existing Ghostty config from the same locations Ghostty does — theme, font, palette, keybinds. Nothing is copied or converted; it is the same file.
+Macterm reads your existing Ghostty config from the same locations Ghostty does — theme, font, palette, keybinds, even a custom app icon (`macos-icon = custom`). Nothing is copied or converted; it is the same file.
 
 A short list of keys is overridden, all of them window chrome Macterm draws itself. [Configuration](/docs/configuration) lists them.
 
