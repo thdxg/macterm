@@ -43,7 +43,7 @@
 - **Remote projects** \
   Open a directory on another machine over SSH. Your shells keep running there, surviving quits, dropped connections, and even a local reboot.
 - **Vertical project sidebar** \
-  Organize projects and their tabs in a native macOS sidebar, stacked vertically where there's room to read them.
+  Organize projects and their tabs in a native macOS sidebar, stacked vertically where there's room to read them. Right-click any folder in Finder → Services → **New Macterm Project Here** to add one without leaving Finder.
 - **Pinned tabs** \
   Pin a tab above your projects to keep it running: it starts on every launch, and restores itself with its command if the session dies.
 - **Command palette** \

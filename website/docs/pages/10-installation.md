@@ -26,6 +26,12 @@ xattr -cr /Applications/Macterm.app
 
 Sparkle handles updates from there — Macterm checks daily in the background and verifies an EdDSA signature on each update, so you won't need `xattr` again.
 
+## Finder integration
+
+Macterm registers a Finder service. Right-click a folder (or the background of a Finder window) and choose **Services → New Macterm Project Here** to add that folder as a project and jump to it — Macterm launches first if it isn't running. Selecting a file uses the folder it sits in, and selecting several folders adds one project each.
+
+macOS lists the service as soon as the app has been launched once. If it doesn't appear, enable it under System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
+
 ## Update channels
 
 Set **Update channel** in Settings → Updates. The channel governs what any check can see, so it applies equally to the daily background check and to **Check for Updates…**.

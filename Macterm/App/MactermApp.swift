@@ -469,6 +469,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// left the socket answering `starting` forever.
     private let controlServer = ControlSocketServer(socketPath: ControlSocketServer.defaultSocketPath())
     private var controlHandler: ControlHandler?
+    /// Finder's Services menu ("New Macterm Project Here"); registered as
+    /// `NSApp.servicesProvider` at launch and handed its targets in
+    /// `installResponders`. Requests in between are queued by the provider.
+    let finderServices = FinderServiceProvider()
 
     /// Test seam: the window list the missing-window repair consults.
     var windowLister: () -> [NSWindow] = { NSApp.windows }
@@ -540,6 +544,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // get a `starting` error until installResponders attaches the
         // handler.
         controlServer.start()
+        // Registering here is what lets a Services-menu pick launch the app:
+        // AppKit delivers the pending request as soon as the provider exists.
+        NSApp.servicesProvider = finderServices
         UNUserNotificationCenter.current().delegate = NotificationHandler.shared
         NotificationHandler.shared.registerCategories()
         if BenchmarkControl.isEnabled {
@@ -825,6 +832,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let handler = ControlHandler(appState: appState, projectStore: projectStore)
         controlHandler = handler
         controlServer.attach { raw in await handler.handle(raw) }
+        finderServices.attach(appState: appState, projectStore: projectStore)
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
