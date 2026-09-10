@@ -204,6 +204,11 @@ final class ControlHandler {
 
     private func windowNew() -> ControlData {
         appState.requestNewWindow()
+        // Under `macos-hidden` there is no Dock tile and no ⌘-Tab entry, so an
+        // unactivated new window could be seen but never typed into. Only the
+        // explicit request activates — the window RESTORE path deliberately
+        // does not, since a login relaunch must not pull focus.
+        MacosHidden.activateForWindowRequest()
         return ControlData()
     }
 
