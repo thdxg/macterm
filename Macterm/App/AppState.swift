@@ -295,6 +295,11 @@ final class AppState {
         if let nsWindow = nsWindow(for: window) {
             nsWindow.makeKeyAndOrderFront(nil)
         }
+        // An accessory app (`macos-hidden`) has neither a Dock tile nor a
+        // ⌘-Tab entry, so ordering the window front is only half the request:
+        // without activation nothing can be typed into it and there is no way
+        // for the user to finish the job by hand.
+        MacosHidden.activateForWindowRequest()
         noteKeyWindow(window)
     }
 
@@ -325,6 +330,8 @@ final class AppState {
         }
         if keyWindowID != showing.id, let nsWindow = nsWindow(for: showing) {
             nsWindow.makeKeyAndOrderFront(nil)
+            // See `focusWindow`: an accessory app can't be reached any other way.
+            MacosHidden.activateForWindowRequest()
         }
         // Becoming key mirrors the project; do it directly as well, for the
         // common caller that runs while the app is inactive and whose key

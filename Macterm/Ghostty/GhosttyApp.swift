@@ -516,6 +516,27 @@ final class GhosttyApp {
         configBool("macos-secure-input-indication", default: true)
     }
 
+    /// `macos-hidden`: whether the app runs as an accessory (no Dock tile, no
+    /// menu bar, no ⌘-Tab entry). Applied by `AppDelegate.applyActivationPolicy`.
+    var macosHidden: MacosHidden {
+        MacosHidden.resolve(configValue: configEnum(MacosHidden.key))
+    }
+
+    /// Read an enum-valued key as its ghostty tag name.
+    ///
+    /// Deliberately NOT `configString`: libghostty writes an enum's `@tagName`
+    /// as a bare NUL-terminated pointer, while `configString` hands it a
+    /// `ghostty_string_s` whose `len` then stays 0 — which is why the same call
+    /// reads *empty* for `window-colorspace` (see `GhosttyColorSpace`, which
+    /// went to the raw config text instead). Ghostty.app's own Swift reads
+    /// `macos-hidden` exactly this way.
+    private func configEnum(_ key: String) -> String? {
+        guard let config else { return nil }
+        var value: UnsafePointer<CChar>?
+        guard ghostty_config_get(config, &value, key, UInt(key.utf8.count)), let value else { return nil }
+        return String(cString: value)
+    }
+
     private func loadConfig() -> (ghostty_config_t?, ReloadResult) {
         var result = ReloadResult(diagnostics: [])
         guard let cfg = ghostty_config_new() else { return (nil, result) }

@@ -475,6 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowObserver: Any?
     private var activateObserver: Any?
+    private var configObserver: Any?
     private var appFocusObservers: [Any] = []
     private var reconnectObservers: [Any] = []
     private var mainAppResponder: MainAppResponder?
@@ -576,9 +577,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             NotificationHandler.shared.requestAuthorization()
         }
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+        // libghostty first: the activation policy comes out of the user's
+        // config (`macos-hidden`), so the config has to be loaded before the
+        // policy can be decided. This line used to sit two below.
         _ = GhosttyApp.shared
+        applyActivationPolicy(activating: true)
+        // Re-apply on every config change. `.mactermConfigDidChange` fires
+        // more often than a file reload (a window-opacity drag posts it too),
+        // which is harmless: `applyActivationPolicy` only calls AppKit when
+        // the policy actually disagrees with the config.
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .mactermConfigDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyActivationPolicy(activating: false) }
+        }
         _ = QuickTerminalService.shared
         KeyRouter.shared.install()
         // After the key router, so the local monitor is in place before any
@@ -831,6 +845,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastInitialWindowRequest = Date()
         openInitialWindow()
+    }
+
+    /// Apply the user's ghostty `macos-hidden`: `.regular` (a Dock tile, a menu
+    /// bar, a ⌘-Tab entry) or `.accessory` (none of the three).
+    ///
+    /// Read from the config every time rather than cached, so a reload moves it
+    /// — the same two moments Ghostty.app applies the key. Setting the policy
+    /// AppKit already has is skipped, which is what makes the reload observer
+    /// safe to fire on every `.mactermConfigDidChange`.
+    ///
+    /// Accessory mode is deliberately narrower here than in Ghostty.app, which
+    /// creates no window at all in it: Macterm still builds its window, because
+    /// `MainWindow.onAppear` is what installs the responders and attaches the
+    /// control-socket handler. A windowless Macterm is #241's dead end, and an
+    /// accessory app has no Dock click left to escape it with — the quick
+    /// terminal's hotkey would be the only way in, and the CLI would answer
+    /// `starting` forever.
+    ///
+    /// `activating` is set only for the launch call, and it keeps the
+    /// `NSApp.activate()` the app has always done there. A later transition
+    /// *into* `.regular` activates too: AppKit hands an app the menu bar when
+    /// it activates, so a formerly-accessory app that merely changes policy sits
+    /// there without one.
+    ///
+    /// A launch that lands on `.accessory` does **not** end up frontmost, and
+    /// that is macOS, not a missing call: becoming an accessory hands the front
+    /// straight back (measured on a foreground `open` launch — `isActive` was
+    /// already false right after, and neither a plain `activate()` nor a forced
+    /// `activate(ignoringOtherApps: true)`, deferred a run-loop turn, held it).
+    /// So an accessory launch comes up with its window on screen but unfocused;
+    /// the quick terminal, a click, or `macterm window focus` — which does take
+    /// the front, see `MacosHidden.activateForWindowRequest` — is the way in.
+    func applyActivationPolicy(activating: Bool) {
+        let hidden = GhosttyApp.shared.macosHidden
+        let policy = hidden.activationPolicy
+        let previous = NSApp.activationPolicy()
+        if previous != policy {
+            logger.info("macos-hidden = \(hidden.rawValue, privacy: .public); activation policy applied")
+            NSApp.setActivationPolicy(policy)
+        }
+        guard activating || (previous == .accessory && policy == .regular) else { return }
+        NSApp.activate()
     }
 
     /// Front the terminal window for an explicit user request ("Show Window"),
