@@ -32,6 +32,8 @@ Macterm registers a Finder service. Right-click a folder (or the background of a
 
 macOS lists the service as soon as the app has been launched once. If it doesn't appear, enable it under System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
 
+Macterm also opens folders directly. Right-click a folder and choose **Open With → Macterm**, drop a folder onto Macterm's Dock icon, or run `open -a Macterm ~/code/myproject` from any shell — each adds the folder as a new project and switches to it, launching Macterm first if needed. A folder always becomes a project, never a tab in an existing one; opening the same folder again adds a second project on it, just like the folder picker, and several folders at once become one project each. Files aren't handled — Macterm isn't offered for them in Open With, and one passed to `open -a` is ignored.
+
 ## Update channels
 
 Set **Update channel** in Settings → Updates. The channel governs what any check can see, so it applies equally to the daily background check and to **Check for Updates…**.
