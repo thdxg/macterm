@@ -445,6 +445,7 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
+    @State private var shortcutsAccess: ShortcutsAccess = Preferences.shared.shortcutsAccess
     @State private var newTabWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newTabWorkingDirectory
     @State private var newSplitWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newSplitWorkingDirectory
 
@@ -606,6 +607,22 @@ private struct GeneralSettings: View {
                 Text(
                     "Reattaches a disconnected pane's session when you wake "
                         + "the Mac or return to the app."
+                )
+                .settingsCaption()
+            }
+
+            Section("Shortcuts") {
+                Picker("Allow Shortcuts to control \(appDisplayName)", selection: $shortcutsAccess) {
+                    ForEach(ShortcutsAccess.allCases) { access in
+                        Text(access.displayName).tag(access)
+                    }
+                }
+                .onChange(of: shortcutsAccess) { _, v in
+                    Preferences.shared.shortcutsAccess = v
+                }
+                Text(
+                    "Shortcuts and Spotlight actions can create projects and tabs, "
+                        + "and type into your terminals. Ask confirms once per launch."
                 )
                 .settingsCaption()
             }

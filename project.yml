@@ -158,6 +158,7 @@ targets:
         product: Sparkle
       - package: Yams
         product: Yams
+      - sdk: AppIntents.framework
       - sdk: AppKit.framework
       - sdk: Carbon.framework
       - sdk: CoreGraphics.framework

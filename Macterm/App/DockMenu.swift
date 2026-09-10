@@ -26,12 +26,14 @@ enum DockMenu {
         }
     }
 
-    /// What a pick does before the command runs.
+    /// What an invocation from OUTSIDE the app does before the command runs.
     ///
-    /// The Dock menu is reached from outside the app: unlike a menu-bar pick,
-    /// nothing has activated Macterm or fronted a window by the time the item
-    /// fires, and choosing a Dock menu item does not activate the app on its
-    /// own.
+    /// The Dock menu is the original caller and still names this type: unlike a
+    /// menu-bar pick, nothing has activated Macterm or fronted a window by the
+    /// time the item fires, and choosing a Dock menu item does not activate the
+    /// app on its own. An App Intent (`Macterm/Intents/`) arrives in exactly
+    /// that state, so it shares this table rather than deciding again — see
+    /// `AppDelegate.performExternalCommand`.
     enum Preparation: Equatable {
         /// Run the command as-is. The quick terminal is a non-activating
         /// panel that manages focus itself — activating the app here would
@@ -49,8 +51,13 @@ enum DockMenu {
 
     static func preparation(for command: AppCommand) -> Preparation {
         switch command {
+        // The palette renders inside the terminal window and its visibility is
+        // a mirror of the key window's, so toggling it with no window fronted
+        // would flip a flag nothing draws. Not reachable from the Dock menu
+        // itself — it is here for the App Intent.
         case .newTab,
-             .openProject: .frontTerminalWindow
+             .openProject,
+             .toggleCommandPalette: .frontTerminalWindow
         case .toggleQuickTerminal: .none
         default: .activate
         }
@@ -87,13 +94,22 @@ extension AppDelegate {
         performDockMenuCommand(command)
     }
 
-    /// Run a Dock menu pick: prepare (see `DockMenu.Preparation`), then run
-    /// the command's own action. The action is resolved AFTER preparing —
-    /// fronting a window makes it key, which is what `activeProjectID`
-    /// mirrors — and a command that stopped applying between the right-click
-    /// and the pick is a no-op rather than a crash.
     func performDockMenuCommand(_ command: AppCommand) {
-        guard let appState, let projectStore else { return }
+        performExternalCommand(command, source: "dock menu")
+    }
+
+    /// Run a command that arrived from outside the app: prepare (see
+    /// `DockMenu.Preparation`), then run the command's own action.
+    ///
+    /// The action is resolved AFTER preparing — fronting a window makes it key,
+    /// which is what `activeProjectID` mirrors — and a command that stopped
+    /// applying in between (the Dock menu is built on right-click and picked a
+    /// moment later; a shortcut was written days ago) is a no-op rather than a
+    /// crash. Returns whether the action ran, which is what the App Intent
+    /// reports back to Shortcuts.
+    @discardableResult
+    func performExternalCommand(_ command: AppCommand, source: StaticString) -> Bool {
+        guard let appState, let projectStore else { return false }
         switch DockMenu.preparation(for: command) {
         case .none:
             break
@@ -104,10 +120,11 @@ extension AppDelegate {
         }
         let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
         guard let action = command.action(in: ctx) else {
-            logger.info("dock menu: \(command.rawValue, privacy: .public) does not apply right now")
-            return
+            logger.info("\(source, privacy: .public): \(command.rawValue, privacy: .public) does not apply right now")
+            return false
         }
-        logger.info("dock menu: \(command.rawValue, privacy: .public)")
+        logger.info("\(source, privacy: .public): \(command.rawValue, privacy: .public)")
         action()
+        return true
     }
 }

@@ -833,6 +833,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controlHandler = handler
         controlServer.attach { raw in await handler.handle(raw) }
         finderServices.attach(appState: appState, projectStore: projectStore)
+        // App Intents are instantiated by the system, so this is the only way
+        // they reach the app's state — same as the Finder service, and for the
+        // same reason (a shortcut can launch us, and its `perform()` arrives
+        // before the launch restore has run).
+        MactermIntentHost.shared.attach(appState: appState, projectStore: projectStore)
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
