@@ -404,6 +404,11 @@ final class GhosttyTerminalNSView: NSView {
     var onSearchTotal: ((Int?) -> Void)?
     var onSearchSelected: ((Int?) -> Void)?
     var onDesktopNotification: ((String, String) -> Void)?
+    /// The surface rang BEL (`GHOSTTY_ACTION_RING_BELL`). The app-level
+    /// features (beep, sound, dock bounce) are handled in `GhosttyCallbacks`
+    /// for every surface; this is the per-pane half — the pane marks itself
+    /// as ringing so the Dock badge can count its tab (`Pane.ringBell`).
+    var onBell: (() -> Void)?
     var onCommandFinished: ((Int16, UInt64) -> Void)?
     var onProgressStarted: (() -> Void)?
     var onProgressFinished: (() -> Void)?
