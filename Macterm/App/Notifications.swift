@@ -18,6 +18,10 @@ extension Notification.Name {
     /// a claim before this is refused, and a mirror that came up in the key
     /// window would otherwise never take the pty.
     static let terminalSurfaceSized = Notification.Name("MactermTerminalSurfaceSized")
+    /// A pane's `hasUnacknowledgedBell` flipped (`object` is the pane's id).
+    /// Observed by `AppState`, which acknowledges it on the spot when the pane
+    /// is already being looked at and re-derives the Dock badge (`BellBadge`).
+    static let terminalBellStateDidChange = Notification.Name("MactermTerminalBellStateDidChange")
     /// A final IO heartbeat's quiet deadline. Unlike ordinary poll events,
     /// this must force one poll even when coalescing and window occlusion would
     /// otherwise leave the timer paused.

@@ -133,6 +133,32 @@ final class Pane: Identifiable {
     /// persisted.
     var hoverURL: String?
 
+    /// The pane rang BEL and nobody has looked at it since. Set by `ringBell`
+    /// (the `GHOSTTY_ACTION_RING_BELL` route), cleared by `acknowledgeBell` —
+    /// which the same events that acknowledge a finished command drive: the
+    /// tab being selected or already on screen in the active app, the pane
+    /// taking focus, any user interaction with it. Feeds the Dock badge
+    /// (`BellBadge`); like ghostty's per-surface flag it is live state only,
+    /// never persisted. Every change is announced on
+    /// `.terminalBellStateDidChange` so `AppState` can re-derive the badge.
+    private(set) var hasUnacknowledgedBell = false {
+        didSet {
+            guard hasUnacknowledgedBell != oldValue else { return }
+            NotificationCenter.default.post(name: .terminalBellStateDidChange, object: id)
+        }
+    }
+
+    func ringBell() {
+        hasUnacknowledgedBell = true
+    }
+
+    @discardableResult
+    func acknowledgeBell() -> Bool {
+        guard hasUnacknowledgedBell else { return false }
+        hasUnacknowledgedBell = false
+        return true
+    }
+
     /// Bumped when the pane's scroll view finds itself orphaned with no
     /// living container to heal into (#227 — SwiftUI can deallocate a
     /// transient container outright, killing the weak re-attach pointer).
@@ -448,6 +474,9 @@ final class Pane: Identifiable {
     func recordUserInteraction() {
         executionTracker.recordUserInteraction()
         acknowledgeCommandCompletion()
+        // Typing into or clicking the pane is the user looking at it — the
+        // same event ghostty clears its bell on (`keyDown`).
+        acknowledgeBell()
         // Keystrokes are the strongest "about to launch something" signal —
         // and the only one available while the non-activating quick terminal
         // has keyboard focus without app focus.
@@ -730,10 +759,17 @@ final class Pane: Identifiable {
     /// Tear down the ghostty surface and null out callbacks. Call when the
     /// pane is removed from the tree. Safe to call multiple times.
     func destroySurface() {
+        // A pane with no surface has nothing left to acknowledge — an unloaded
+        // project's panes stay in the tree, and their bells must not keep the
+        // Dock badged for shells that no longer exist (ghostty's window-close
+        // analogue: a final bell-off transition). Before the guard, so a pane
+        // torn down before its view ever existed still settles.
+        acknowledgeBell()
         guard let view = _nsView else { return }
         // Null callbacks before destroy so any in-flight ghostty events
         // triggered by destroySurface() itself can't re-enter.
         view.onProcessExit = nil
+        view.onBell = nil
         view.onTitleChange = nil
         view.onSearchStart = nil
         view.onSearchEnd = nil

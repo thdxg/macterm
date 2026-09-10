@@ -36,6 +36,29 @@
 	<string>NSApplication</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
+	<!-- Folders only: Finder's "Open With", a drop on the Dock icon and
+	     `open -a Macterm <dir>` all deliver the folder as a document, which
+	     AppDelegate.application(_:open:) turns into a project. Alternate rank
+	     keeps Finder the default opener; no file types are declared, so a
+	     file is never offered to Macterm. Mirrors Ghostty's entry. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folders</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.directory</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Spotlight keyword, so "Terminal" finds the app (as Ghostty does). -->
+	<key>MDItemKeywords</key>
+	<string>Terminal</string>
 <key>NSAppleEventsUsageDescription</key>
 	<string>A process running in Macterm's terminal would like to use AppleScript.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

@@ -1479,14 +1479,20 @@ private struct KeymapSettings: View {
     @State
     private var passthrough: [String: Bool] = [:]
     @State
+    private var global: [String: Bool] = [:]
+    @State
     private var capturingActionID: String?
 
-    /// Column geometry, shared by the header and every row so the three columns
+    /// Observed so a chord the system refuses to register shows its reason
+    /// under the row the moment the toggle or the rebind lands.
+    private let globalHotkeys = GlobalHotkeys.shared
+
+    /// Column geometry, shared by the header and every row so the four columns
     /// actually line up. The keybind width lives on the *button*, not on its
     /// label, so the header measures the same box the border draws.
     ///
     /// Alignment holds only because the header and every row are built as the
-    /// SAME four children — title, flexible spacer, then three fixed-width
+    /// SAME five children — title, flexible spacer, then four fixed-width
     /// boxes — with an explicit `columnGap`. Both are load-bearing: SwiftUI's
     /// default `HStack` spacing varies with the *types* of the adjacent views
     /// (two Texts space differently than a Text and a Button), and because the
@@ -1494,6 +1500,7 @@ private struct KeymapSettings: View {
     /// one wider trailing view shifts that row's columns out of line with the
     /// header. Don't add a control to a row without giving it a box here.
     private static let columnGap: CGFloat = 8
+    private static let globalColumn: CGFloat = 60
     private static let passthroughColumn: CGFloat = 92
     private static let keybindColumn: CGFloat = 140
     private static let clearColumn: CGFloat = 20
@@ -1507,6 +1514,13 @@ private struct KeymapSettings: View {
     When one of the programs listed at the top of this tab is running in the \
     focused pane, send this chord to it instead of running the action. \
     Everywhere else the action still runs.
+    """
+
+    private static let globalTitle = "Global"
+    private static let globalHelp = """
+    Register this chord system-wide, so it runs the action while another app \
+    is frontmost. The chord then belongs to Macterm everywhere — no other app \
+    can see it, and it can no longer pass through to a program.
     """
 
     /// Titles of the *other* actions that share `action`'s binding, for the
@@ -1547,8 +1561,8 @@ private struct KeymapSettings: View {
                     prompt: Text(verbatim: "nvim, hx")
                 )
                 Text(
-                    "Keybinds checked below yield to these programs instead of running "
-                        + "their action. Match the name shown in the tab title; separate with commas."
+                    "Keybinds with Pass to TUI checked below yield to these programs instead "
+                        + "of running their action. Match the name shown in the tab title; separate with commas."
                 )
                 .settingsCaption()
             }
@@ -1577,12 +1591,15 @@ private struct KeymapSettings: View {
         .onAppear {
             var map: [String: String] = [:]
             var flags: [String: Bool] = [:]
+            var globals: [String: Bool] = [:]
             for action in HotkeyAction.allCases {
                 map[action.id] = HotkeyRegistry.selectedShortcutString(for: action)
                 flags[action.id] = HotkeyRegistry.passesThroughToPrograms(for: action)
+                globals[action.id] = HotkeyRegistry.isGlobal(action)
             }
             values = map
             passthrough = flags
+            global = globals
         }
         .onDisappear {
             capturingActionID = nil
@@ -1597,6 +1614,8 @@ private struct KeymapSettings: View {
         HStack(spacing: Self.columnGap) {
             Text("Action")
             Spacer(minLength: 0)
+            Text(Self.globalTitle)
+                .frame(width: Self.globalColumn, alignment: .center)
             Text(Self.passthroughTitle)
                 .frame(width: Self.passthroughColumn, alignment: .center)
             Text("Keybind")
@@ -1620,6 +1639,16 @@ private struct KeymapSettings: View {
         )
     }
 
+    private func globalBinding(_ action: HotkeyAction) -> Binding<Bool> {
+        Binding(
+            get: { action.isAlwaysGlobal || global[action.id] == true },
+            set: { enabled in
+                global[action.id] = enabled
+                HotkeyRegistry.setGlobal(enabled, for: action)
+            }
+        )
+    }
+
     @ViewBuilder
     private func hotkeyRow(_ action: HotkeyAction) -> some View {
         let partners = conflictPartners(for: action)
@@ -1629,6 +1658,16 @@ private struct KeymapSettings: View {
             HStack(spacing: Self.columnGap) {
                 Text(action.title)
                 Spacer(minLength: 0)
+
+                Toggle("", isOn: globalBinding(action))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    // The quick terminal is global by construction — shown
+                    // ticked so the row tells the truth, disabled because
+                    // there is nothing to decide.
+                    .disabled(action.isAlwaysGlobal)
+                    .frame(width: Self.globalColumn, alignment: .center)
+                    .help(Self.globalHelp)
 
                 Toggle("", isOn: passthroughBinding(action))
                     .labelsHidden()
@@ -1689,6 +1728,16 @@ private struct KeymapSettings: View {
 
             if !partners.isEmpty {
                 Text("Conflicts with \(partners.joined(separator: ", "))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(MactermTheme.warning)
+            }
+
+            // A flagged chord the system would not give us. Said here rather
+            // than left silent: the binding still works inside Macterm, so
+            // nothing looks broken until the user tries it from another app —
+            // where the keystroke never reaches us at all.
+            if let refusal = globalHotkeys.refusals[action] {
+                Text(refusal.message)
                     .font(.system(size: 11))
                     .foregroundStyle(MactermTheme.warning)
             }

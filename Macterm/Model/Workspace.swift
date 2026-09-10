@@ -92,6 +92,25 @@ final class TerminalTab: Identifiable {
         return didAcknowledge
     }
 
+    /// Whether any pane of this tab rang BEL and hasn't been looked at since.
+    /// The tab is the unit the Dock badge counts (`BellBadge.tabCount`).
+    var hasUnacknowledgedBell: Bool {
+        splitRoot.allPanes().contains(where: \.hasUnacknowledgedBell)
+    }
+
+    /// Looking at the tab acknowledges every pane's bell, not just the
+    /// focused pane's — the same whole-tab rule `acknowledgeCommandCompletion`
+    /// follows, for the same reason: a split pane that rang would otherwise
+    /// keep the badge up while the user sits right next to it.
+    @discardableResult
+    func acknowledgeBell() -> Bool {
+        var didAcknowledge = false
+        for pane in splitRoot.allPanes() {
+            didAcknowledge = pane.acknowledgeBell() || didAcknowledge
+        }
+        return didAcknowledge
+    }
+
     init(projectPath: String, projectID: UUID, sessionSlug: String? = nil, command: String? = nil) {
         id = UUID()
         let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug, command: command)
@@ -500,6 +519,9 @@ final class Workspace: Identifiable {
         guard let tab = tabs.first(where: { $0.id == tabID }) else { return false }
         if let current = activeTabID, current != tabID { tabHistory.push(current) }
         activeTabID = tabID
+        // Selecting a tab is looking at it: its bell is seen (transient, so
+        // it never feeds the save decision the return value drives).
+        tab.acknowledgeBell()
         return tab.acknowledgeCommandCompletion()
     }
 
