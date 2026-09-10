@@ -1088,5 +1088,16 @@
       <link>https://github.com/thdxg/macterm/releases/tag/tip</link>
       <enclosure url="https://github.com/thdxg/macterm/releases/download/tip/Macterm-1.26.3-tip.8.dmg" type="application/octet-stream" sparkle:edSignature="UNZJU6w0ZQiTTaxBNFng2Nez6aup45fzXFqwNEIqTC7ROslRrMrDzkAQQ+ZtFPoOG84KbPOtso9E2MLUCGO8Cw==" length="22878065" />
     </item>
+    <item>
+      <title>Macterm 1.27.0-beta.1 (beta)</title>
+      <pubDate>Thu, 10 Sep 2026 16:15:24 +0000</pubDate>
+      <sparkle:channel>beta</sparkle:channel>
+      <sparkle:version>1.27.0.1</sparkle:version>
+      <sparkle:shortVersionString>1.27.0-beta.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/v1.27.0-beta.1.html</sparkle:releaseNotesLink>
+      <link>https://github.com/thdxg/macterm/releases/tag/v1.27.0-beta.1</link>
+      <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.27.0-beta.1/Macterm-1.27.0-beta.1.dmg" type="application/octet-stream" sparkle:edSignature="fOwjdifhWZp6fztOPnjtJWLwTJ6uWvswxzmUVQg+edeAqLhfRuflVSBAuqd9WZzAfEuQ32k91mOmHDctjiiSBQ==" length="23017578" />
+    </item>
   </channel>
 </rss>

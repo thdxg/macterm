@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.27.0-beta.1 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li>Right-clicking a folder in Finder offers <strong>Services → New Macterm Project Here</strong>, which adds it as a project and switches to it. (#379)</li>
+<li>Folders open in Macterm as new projects — from Finder's <strong>Open With</strong>, a drop on the Dock icon, or the command line. (#382)</li>
+<li>Right-clicking the Dock icon offers New Window, New Tab, New Project and Toggle Quick Terminal. (#381)</li>
+<li>Any keybind can be marked global in Settings → Keymaps, so it fires while another app is frontmost. (#385)</li>
+<li>A bell in a tab you aren't looking at badges the Dock icon with how many tabs are waiting, under <code class="notranslate">bell-features = attention</code>. (#384)</li>
+<li>Macterm wears the custom app icon your ghostty config names, and follows it across a config reload. (#383)</li>
+<li><code class="notranslate">macos-hidden</code> runs Macterm with no Dock icon and no menu bar, for a quick-terminal-only setup. (#386)</li>
+<li>Shortcuts and Spotlight can drive Macterm through thirteen new actions, from creating a project to reading what a pane is showing. (#387)</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>The first shortcut to reach Macterm asks whether to allow it. The answer lives in Settings → General.</li>
+<li>Under <code class="notranslate">macos-hidden</code> there is no menu bar, so Settings, Quit and Check for Updates are reachable only by keybind or the <code class="notranslate">macterm</code> command.</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> for this release.</p>
+</body>
+</html>
