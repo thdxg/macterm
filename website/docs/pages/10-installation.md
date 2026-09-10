@@ -32,6 +32,10 @@ Macterm registers a Finder service. Right-click a folder (or the background of a
 
 macOS lists the service as soon as the app has been launched once. If it doesn't appear, enable it under System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
 
+## Dock menu
+
+Right-click (or click and hold) Macterm's Dock icon for **New Window**, **New Tab**, **New Project…** and **Toggle Quick Terminal**. New Tab acts on the project you were last in. Both it and New Project… bring a terminal window forward first — including one you had closed — so either is also a way back to a hidden window. New Tab is greyed out until you have a project; Toggle Quick Terminal leaves whatever app you're in focused, just as its hotkey does.
+
 ## Update channels
 
 Set **Update channel** in Settings → Updates. The channel governs what any check can see, so it applies equally to the daily background check and to **Check for Updates…**.
