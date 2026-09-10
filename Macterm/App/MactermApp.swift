@@ -581,6 +581,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = GhosttyApp.shared
         _ = QuickTerminalService.shared
         KeyRouter.shared.install()
+        // After the key router, so the local monitor is in place before any
+        // chord can be yielded to Carbon. This also registers the quick
+        // terminal's own chord — it is the one always-global action.
+        GlobalHotkeys.shared.install()
         // Dock-icon click on a hidden window: SwiftUI's
         // @NSApplicationDelegateAdaptor swallows applicationShouldHandleReopen,
         // and `didBecomeActiveNotification` doesn't always fire (e.g. when
@@ -853,6 +857,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controlHandler = handler
         controlServer.attach { raw in await handler.handle(raw) }
         finderServices.attach(appState: appState, projectStore: projectStore)
+        // A global chord fired before this point can only toggle the quick
+        // terminal; every other action needs the workspace this hands over.
+        GlobalHotkeys.shared.attach(appState: appState, projectStore: projectStore)
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
