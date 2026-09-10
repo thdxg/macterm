@@ -129,8 +129,38 @@ final class AppState {
     /// sidebar state is known. `WindowAppearance`'s restore waits for it.
     private(set) var hasRestoredWindows = false
 
+    /// Work parked by `performWhenRestored` until the launch restore is done.
+    /// Ignored for observation: appending here is bookkeeping, not state a
+    /// view renders.
+    @ObservationIgnored private var deferredUntilRestored: [@MainActor () -> Void] = []
+
+    /// Run `work` now if the launch restore has finished, else right after it
+    /// does. For a request that reaches the app from outside during launch — a
+    /// Finder service that launched it, say — acting immediately would have
+    /// `restoreSelection` overwrite whatever the request selected a beat
+    /// later; acting after `restoreWindows` is the first moment the request's
+    /// effect sticks.
+    func performWhenRestored(_ work: @escaping @MainActor () -> Void) {
+        if hasRestoredWindows {
+            work()
+        } else {
+            deferredUntilRestored.append(work)
+        }
+    }
+
+    private func runDeferredUntilRestored() {
+        let work = deferredUntilRestored
+        deferredUntilRestored = []
+        for item in work {
+            item()
+        }
+    }
+
     func restoreWindows(adopting first: WindowState) {
-        defer { hasRestoredWindows = true }
+        defer {
+            hasRestoredWindows = true
+            runDeferredUntilRestored()
+        }
         let saved = savedWindowSnapshots
         savedWindowSnapshots = []
         // This runs after `restoreSelection`, which is the first moment the

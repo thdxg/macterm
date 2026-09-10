@@ -74,6 +74,33 @@
 	<integer>86400</integer>
 	<key>SUAllowsAutomaticUpdates</key>
 	<true/>
+	<!-- Finder's Services menu (right-click a folder → Services). The label
+	     follows the display name so the Debug app registers its own item
+	     beside the release one instead of colliding with it. NSMessage names
+	     the @objc method on FinderServiceProvider; the send types and
+	     required context mirror Ghostty's "New Ghostty Tab Here" entry. -->
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>New $(PRODUCT_DISPLAY_NAME) Project Here</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>newProjectHere</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+				<string>public.plain-text</string>
+			</array>
+		</dict>
+	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
