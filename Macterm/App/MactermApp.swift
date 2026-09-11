@@ -309,9 +309,11 @@ struct CloseConfirmationAlerts: ViewModifier {
                 Button("Cancel", role: .cancel) {
                     appState.cancelPendingClosePane()
                 }
+                .keyboardShortcut(.cancelAction)
                 Button("Close", role: .destructive) {
                     appState.confirmPendingClosePane()
                 }
+                .keyboardShortcut(.defaultAction)
             } message: {
                 Text("A process is still running in this pane. Close it anyway?")
             }
@@ -325,9 +327,11 @@ struct CloseConfirmationAlerts: ViewModifier {
                 Button("Cancel", role: .cancel) {
                     appState.cancelPendingCloseTab()
                 }
+                .keyboardShortcut(.cancelAction)
                 Button("Close", role: .destructive) {
                     appState.confirmPendingCloseTab()
                 }
+                .keyboardShortcut(.defaultAction)
             } message: {
                 Text("A process is still running in this tab. Closing the tab ends it.")
             }
