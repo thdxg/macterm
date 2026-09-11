@@ -112,7 +112,9 @@ struct ProjectsSettings: View {
             )
         ) {
             Button("Cancel", role: .cancel) { layoutPendingDeletion = nil }
+                .keyboardShortcut(.cancelAction)
             Button("Remove", role: .destructive) { confirmDeletion() }
+                .keyboardShortcut(.defaultAction)
         } message: {
             Text("“\(layoutPendingDeletion?.filename ?? "")” will be deleted. Projects using it are kept, but lose their saved layout.")
         }

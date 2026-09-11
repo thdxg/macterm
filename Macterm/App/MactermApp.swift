@@ -221,9 +221,11 @@ struct MactermApp: App {
                     Button("Cancel", role: .cancel) {
                         appState.cancelPendingUnloadProject()
                     }
+                    .keyboardShortcut(.cancelAction)
                     Button("Unload", role: .destructive) {
                         appState.confirmPendingUnloadProject()
                     }
+                    .keyboardShortcut(.defaultAction)
                 } message: {
                     Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
                 }
@@ -237,9 +239,11 @@ struct MactermApp: App {
                     Button("Cancel", role: .cancel) {
                         appState.cancelPendingRemoveProject()
                     }
+                    .keyboardShortcut(.cancelAction)
                     Button("Remove", role: .destructive) {
                         appState.confirmPendingRemoveProject()
                     }
+                    .keyboardShortcut(.defaultAction)
                 } message: {
                     Text("A process is still running in this project. Removing it ends every process in its tabs.")
                 }
@@ -253,9 +257,11 @@ struct MactermApp: App {
                     Button("Cancel", role: .cancel) {
                         appState.cancelPendingLayoutApply()
                     }
+                    .keyboardShortcut(.cancelAction)
                     Button("Apply", role: .destructive) {
                         appState.confirmPendingLayoutApply()
                     }
+                    .keyboardShortcut(.defaultAction)
                 } message: {
                     if let pending = appState.pendingLayoutApply {
                         Text(pending.confirmationMessage)
@@ -359,9 +365,11 @@ struct ProjectConfirmationAlerts: ViewModifier {
                 Button("Cancel", role: .cancel) {
                     appState.cancelPendingUnloadProject()
                 }
+                .keyboardShortcut(.cancelAction)
                 Button("Unload", role: .destructive) {
                     appState.confirmPendingUnloadProject()
                 }
+                .keyboardShortcut(.defaultAction)
             } message: {
                 Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
             }
@@ -375,9 +383,11 @@ struct ProjectConfirmationAlerts: ViewModifier {
                 Button("Cancel", role: .cancel) {
                     appState.cancelPendingRemoveProject()
                 }
+                .keyboardShortcut(.cancelAction)
                 Button("Remove", role: .destructive) {
                     appState.confirmPendingRemoveProject()
                 }
+                .keyboardShortcut(.defaultAction)
             } message: {
                 Text("A process is still running in this project. Removing it ends every process in its tabs.")
             }
@@ -391,9 +401,11 @@ struct ProjectConfirmationAlerts: ViewModifier {
                 Button("Cancel", role: .cancel) {
                     appState.cancelPendingBulkRemove()
                 }
+                .keyboardShortcut(.cancelAction)
                 Button("Remove", role: .destructive) {
                     appState.confirmPendingBulkRemove()
                 }
+                .keyboardShortcut(.defaultAction)
             } message: {
                 Text("A process is still running in one of the selected items. Removing them ends every process in their tabs.")
             }
@@ -421,9 +433,11 @@ struct LayoutAlerts: ViewModifier {
                 Button("Cancel", role: .cancel) {
                     appState.cancelPendingLayoutApply()
                 }
+                .keyboardShortcut(.cancelAction)
                 Button("Apply", role: .destructive) {
                     appState.confirmPendingLayoutApply()
                 }
+                .keyboardShortcut(.defaultAction)
             } message: {
                 if let pending = appState.pendingLayoutApply {
                     Text(pending.confirmationMessage)
