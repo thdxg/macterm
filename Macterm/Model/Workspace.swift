@@ -129,9 +129,9 @@ final class TerminalTab: Identifiable {
 
     //
     // These live on TerminalTab so both the main-window workspace flow and the
-    // quick terminal can share the same split-tree mutation logic. Callers that
-    // need persistence (AppState) handle saveWorkspaces themselves after calling
-    // these; the quick terminal doesn't persist.
+    // quick terminal can share the same split-tree mutation logic. Persistence
+    // is the caller's: AppState calls saveWorkspaces itself after each, and
+    // QuickTerminalSplitState reports through `onStructureChange`.
 
     /// Toggle zoom for `paneID`. While zoomed, the tab renders only that pane;
     /// toggling off (or zooming a different pane) restores the full split view.

@@ -2610,6 +2610,167 @@ struct AppStateTests {
 
         state.commitTabCycle(projectID: project.id)
     }
+
+    // MARK: - Quick terminal persistence
+
+    /// A store on disk plus an AppState adopting its own quick terminal, so
+    /// nothing here writes into the panel's shared split state.
+    private func makeQuickTerminalFixture(
+        quick: QuickTerminalSplitState = QuickTerminalSplitState()
+    ) throws -> (state: AppState, quick: QuickTerminalSplitState, storeURL: URL, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: quick
+        )
+        return (state, quick, storeURL, dir)
+    }
+
+    /// The quick terminal's own mutations persist the moment they happen — a
+    /// split in the panel is as durable as a split in a workspace, not
+    /// something that waits for quit (a crash would otherwise lose the tree
+    /// and orphan the new pane's session).
+    @Test
+    func a_quick_terminal_split_persists_its_tab_with_session_names_verbatim() throws {
+        let (state, quick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        state.restoreSelection(projects: [])
+
+        try quick.split(paneID: #require(quick.focusedPaneID), direction: .vertical)
+        let names = Set(quick.tab.splitRoot.allPanes().map(\.sessionName))
+        #expect(names.count == 2)
+
+        let saved = try #require(WorkspaceStore(fileURL: storeURL).load().quickTerminal)
+        #expect(saved.id == quick.tab.id)
+        let restored = WorkspaceSerializer.restoreTab(saved, projectID: QuickTerminalService.projectID)
+        #expect(Set(restored.splitRoot.allPanes().map(\.sessionName)) == names)
+    }
+
+    /// Launch hands the persisted tab back to the panel: same tab id, same
+    /// session names (the reattach identity), each pane respawning in the cwd
+    /// it was in rather than the home directory a fresh tab starts from.
+    @Test
+    func restoreSelection_hands_the_persisted_quick_terminal_back_to_the_panel() throws {
+        let (writer, writerQuick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writerQuick.split(paneID: #require(writerQuick.focusedPaneID), direction: .horizontal)
+        let expectedNames = Set(writerQuick.tab.splitRoot.allPanes().map(\.sessionName))
+        writer.saveWorkspaces()
+
+        let fresh = QuickTerminalSplitState()
+        let bornWith = fresh.tab.id
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: fresh
+        )
+        state.restoreSelection(projects: [])
+
+        #expect(fresh.tab.id == writerQuick.tab.id)
+        #expect(fresh.tab.id != bornWith)
+        #expect(Set(fresh.tab.splitRoot.allPanes().map(\.sessionName)) == expectedNames)
+        #expect(fresh.tab.splitRoot.allPanes().allSatisfy { $0.projectID == QuickTerminalService.projectID })
+        #expect(fresh.tab.focusedPaneID != nil)
+    }
+
+    /// A restore that arrives after the panel has already been shown this run
+    /// is refused: the live tab's sessions would be orphaned by the swap, and
+    /// the fresh tab is the one now worth persisting.
+    @Test
+    func restoreSelection_keeps_a_quick_terminal_that_is_already_on_screen() throws {
+        let (writer, writerQuick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        writer.saveWorkspaces()
+        let persistedID = writerQuick.tab.id
+
+        let shown = QuickTerminalSplitState()
+        let livePane = try #require(shown.tab.focusedPane)
+        _ = livePane.ensureNSView()
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: shown
+        )
+        state.restoreSelection(projects: [])
+
+        #expect(shown.tab.id != persistedID)
+        #expect(shown.tab.focusedPane === livePane)
+    }
+
+    /// Until the launch restore has run, `workspaces` is empty — a save then
+    /// would write that emptiness over the file about to be restored. The
+    /// panel's hotkey works from the first moment of launch, so a split made
+    /// in that window must wait for the next save rather than cause one.
+    @Test
+    func a_quick_terminal_split_before_the_launch_restore_saves_nothing() throws {
+        let (_, quick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sentinel = """
+        {"version": 6, "workspaces": [], "pinned": [], "windows": []}
+        """
+        try sentinel.write(to: storeURL, atomically: true, encoding: .utf8)
+
+        try quick.split(paneID: #require(quick.focusedPaneID), direction: .vertical)
+
+        #expect(try String(contentsOf: storeURL, encoding: .utf8) == sentinel)
+    }
+
+    /// A file from before the section existed leaves the fresh tab alone.
+    @Test
+    func restoreSelection_without_a_quick_terminal_section_leaves_the_fresh_tab() throws {
+        let (_, quick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try """
+        {"version": 6, "workspaces": [], "pinned": [], "windows": []}
+        """.write(to: storeURL, atomically: true, encoding: .utf8)
+        let bornWith = quick.tab.id
+
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: quick
+        )
+        state.restoreSelection(projects: [])
+        #expect(quick.tab.id == bornWith)
+    }
+
+    /// The launch sweep kills zero-client `macterm-*` sessions nobody claims.
+    /// The quick terminal's restored panes attach only when the panel is
+    /// first shown, so they ARE zero-client at exactly that moment — and must
+    /// count as claims, or the sweep would destroy the sessions the panel is
+    /// about to reattach. A genuinely unclaimed session still dies.
+    @Test
+    func the_launch_sweep_spares_the_restored_quick_terminals_sessions() async throws {
+        let (writer, writerQuick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writerQuick.split(paneID: #require(writerQuick.focusedPaneID), direction: .horizontal)
+        let quickNames = Set(writerQuick.tab.splitRoot.allPanes().map(\.sessionName))
+        writer.saveWorkspaces()
+
+        let orphan = "macterm-quick-0123456789ab"
+        #expect(!quickNames.contains(orphan))
+        let killed = KilledSessions()
+        var zmx = recordingZmx(into: killed)
+        zmx.listSessionsWithClients = {
+            (quickNames.sorted() + [orphan]).map {
+                ZmxSessionListParser.Entry(name: $0, clients: 0, owner: nil)
+            }
+        }
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: QuickTerminalSplitState()
+        )
+        state.zmx = zmx
+        state.restoreSelection(projects: [])
+
+        await killed.settle(expecting: 1)
+        #expect(await killed.names == [orphan])
+    }
 }
 
 /// Actor recording killed session names across the fire-and-forget kill tasks.

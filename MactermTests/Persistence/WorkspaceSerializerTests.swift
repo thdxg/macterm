@@ -189,6 +189,59 @@ struct WorkspaceSerializerTests {
         #expect(restored[0].tabs[0].splitRoot.allPanes().count == 2)
     }
 
+    // MARK: - Quick terminal section
+
+    /// The quick terminal's tab rides in its own section of the file, with
+    /// the session names verbatim — that is what lets the panel reattach its
+    /// shells after a relaunch.
+    @Test
+    func quick_terminal_tab_round_trips_via_WorkspaceStore_on_disk() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = WorkspaceStore(fileURL: tmp)
+
+        let quick = TerminalTab(
+            projectPath: "/tmp",
+            projectID: QuickTerminalService.projectID,
+            sessionSlug: ZmxSessionName.quickTerminalSlug
+        )
+        try quick.split(paneID: #require(quick.focusedPaneID), direction: .horizontal)
+        let names = Set(quick.splitRoot.allPanes().map(\.sessionName))
+        #expect(names.count == 2)
+        #expect(names.allSatisfy { $0.hasPrefix("macterm-quick-") })
+
+        store.save([], quickTerminal: WorkspaceSerializer.snapshotTab(quick))
+        let loaded = store.load()
+        let snapshot = try #require(loaded.quickTerminal)
+        #expect(snapshot.id == quick.id)
+
+        let restored = WorkspaceSerializer.restoreTab(snapshot, projectID: QuickTerminalService.projectID)
+        #expect(Set(restored.splitRoot.allPanes().map(\.sessionName)) == names)
+        #expect(restored.splitRoot.allPanes().allSatisfy { $0.sessionSlug == ZmxSessionName.quickTerminalSlug })
+        #expect(restored.splitRoot.allPanes().allSatisfy { $0.projectID == QuickTerminalService.projectID })
+    }
+
+    /// A file from before the section existed loads with no quick terminal,
+    /// and one saved without a quick terminal reads back the same way — the
+    /// key is optional in both directions and never a decode failure.
+    @Test
+    func a_file_without_a_quick_terminal_section_loads_nil() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let v6 = """
+        {"version": 6, "workspaces": [], "pinned": [], "windows": []}
+        """
+        try v6.write(to: tmp, atomically: true, encoding: .utf8)
+        let store = WorkspaceStore(fileURL: tmp)
+        #expect(store.load().quickTerminal == nil)
+        #expect(!store.loadFailed)
+
+        store.save([])
+        #expect(store.load().quickTerminal == nil)
+    }
+
     @Test
     func load_v3_file_clears_persisted_attention_bits() throws {
         let tmp = FileManager.default.temporaryDirectory

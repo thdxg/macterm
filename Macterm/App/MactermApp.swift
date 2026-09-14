@@ -968,33 +968,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_: Notification) {
         controlServer.stop()
         onTerminate?()
-        // Quit is always a DETACH: workspace panes' sessions survive and
-        // reattach on relaunch (the snapshot saved by onTerminate carries each
-        // pane's session identity). Quick-terminal sessions are ephemeral —
-        // never persisted — so they're the only ones killed here; leaving them
-        // would only feed the next launch's reaper. Those are local, so no
-        // remote sweep is needed. The kills block briefly so they land before
-        // the process exits (a detached Task is never scheduled during
-        // teardown), bounded by ZmxClient's timeouts.
-        let names = QuickTerminalService.shared.splitState.tab.splitRoot.allPanes().map(\.sessionName)
-        (appState?.zmx ?? .live).killSessionsBlocking(names)
+        // Quit is always a DETACH: every pane's session survives and reattaches
+        // on relaunch — the quick terminal's included, since the snapshot saved
+        // by onTerminate carries its tab alongside the workspaces. Nothing is
+        // killed here; a session nobody claims next launch is the reaper's.
     }
 
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
-        // Silent quit when persistence is active: workspace sessions detach
-        // and reattach next launch, so there's nothing to confirm for them.
-        // The full prompt returns only when zmx is unavailable (sessions
-        // genuinely die with the app). Quick-terminal sessions are ephemeral
-        // and die on every quit, so a busy quick-terminal pane still confirms
-        // even on a silent quit — the confirmation follows the destruction.
+        // Silent quit when persistence is active: sessions detach and reattach
+        // next launch, so there's nothing to confirm — the quick terminal's
+        // panes are persisted too, so a command running in one is no more
+        // interrupted by quit than one in a workspace pane. The full prompt
+        // returns only when zmx is unavailable (sessions genuinely die with
+        // the app).
         let persistenceActive = (appState?.zmx ?? .live).isBundled()
         if persistenceActive {
-            let qtRows = collectQuickTerminalRows()
-            if qtRows.isEmpty || QuitConfirmation.runModal(rows: qtRows) {
-                AppTerminationState.isTerminating = true
-                return .terminateNow
-            }
-            return .terminateCancel
+            AppTerminationState.isTerminating = true
+            return .terminateNow
         }
 
         let rows = collectRunningProcessRows()
@@ -1041,9 +1031,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return rows
     }
 
-    /// Quick-terminal panes with a running foreground process. Split out
-    /// because a silent (persistence-active) quit still confirms these: the
-    /// quick terminal's sessions are ephemeral and die on every quit.
+    /// Quick-terminal panes with a running foreground process, for the
+    /// no-persistence prompt above (the panel's tab lives outside
+    /// `workspaces`, so the workspace walk never sees it).
     private func collectQuickTerminalRows() -> [RunningProcessRow] {
         var rows: [RunningProcessRow] = []
         let qtTab = QuickTerminalService.shared.splitState.tab

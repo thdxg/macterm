@@ -37,6 +37,14 @@ struct WorkspacesFile: Codable {
     /// so a v5 file decodes with nil, which restores the single window the
     /// scene opens by itself.
     var windows: [WindowSnapshot]?
+    /// The quick terminal's one tab, so its zmx sessions reattach on relaunch
+    /// exactly as workspace panes do. Optional, and deliberately NOT a schema
+    /// bump, unlike `pinned` and `windows`: the version gate exists to stop an
+    /// older build from saving away state it cannot see, but an older build
+    /// killed every quick-terminal session on quit by design, so a downgrade
+    /// losing them is that build's normal behavior rather than data loss —
+    /// not worth freezing the user's whole workspace persistence over.
+    var quickTerminal: TabSnapshot?
 }
 
 /// One window's restorable state (v6+).
@@ -200,6 +208,9 @@ final class WorkspaceStore {
         /// Windows to reopen (v6+); empty for an older file, which means the
         /// one window the scene opens by itself.
         var windows: [WindowSnapshot] = []
+        /// The quick terminal's tab; nil for a file written before it was
+        /// persisted.
+        var quickTerminal: TabSnapshot?
     }
 
     func load() -> Loaded {
@@ -234,7 +245,8 @@ final class WorkspaceStore {
                     workspaces: migrated.workspaces,
                     pinned: migrated.pinned ?? [],
                     pinnedActiveTabID: migrated.pinnedActiveTabID,
-                    windows: migrated.windows ?? []
+                    windows: migrated.windows ?? [],
+                    quickTerminal: migrated.quickTerminal
                 )
             }
             let migrated = migrate(file)
@@ -242,7 +254,8 @@ final class WorkspaceStore {
                 workspaces: migrated.workspaces,
                 pinned: migrated.pinned ?? [],
                 pinnedActiveTabID: migrated.pinnedActiveTabID,
-                windows: migrated.windows ?? []
+                windows: migrated.windows ?? [],
+                quickTerminal: migrated.quickTerminal
             )
         } catch let envelopeError {
             // Fallback: pre-envelope format where the file was a bare array of
@@ -263,7 +276,8 @@ final class WorkspaceStore {
         _ snapshots: [WorkspaceSnapshot],
         pinned: [PinnedTabSnapshot] = [],
         pinnedActiveTabID: UUID? = nil,
-        windows: [WindowSnapshot]? = nil
+        windows: [WindowSnapshot]? = nil,
+        quickTerminal: TabSnapshot? = nil
     ) {
         guard !loadFailed else {
             logger.error("Refusing to save workspaces: prior load failed, file preserved")
@@ -275,7 +289,8 @@ final class WorkspaceStore {
                 workspaces: snapshots,
                 pinned: pinned,
                 pinnedActiveTabID: pinnedActiveTabID,
-                windows: windows
+                windows: windows,
+                quickTerminal: quickTerminal
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -297,7 +312,8 @@ final class WorkspaceStore {
                 workspaces: clearPersistedAttention(in: file.workspaces),
                 pinned: file.pinned,
                 pinnedActiveTabID: file.pinnedActiveTabID,
-                windows: file.windows
+                windows: file.windows,
+                quickTerminal: file.quickTerminal
             )
         }
         return file

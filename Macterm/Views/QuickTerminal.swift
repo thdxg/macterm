@@ -25,7 +25,12 @@ private func orderPanelFront(_ panel: NSPanel) -> Bool {
 @MainActor
 final class QuickTerminalService: NSObject {
     static let shared = QuickTerminalService()
-    static let ephemeralProjectID = UUID()
+    /// The routing id of the quick terminal's panes — the counterpart of
+    /// `PinnedTabs.projectID` for a workspace that is not a project. Fresh
+    /// per launch on purpose: unlike the pinned sentinel it is never written
+    /// to disk (the tab is restored by the caller that knows it is the quick
+    /// terminal's), so nothing can key on a stale value.
+    static let projectID = UUID()
 
     private(set) var panel: QuickTerminalPanel?
     var panelRef: QuickTerminalPanel? { panel }
@@ -277,10 +282,25 @@ final class QuickTerminalService: NSObject {
 /// Thin wrapper around a single `TerminalTab` that the quick terminal uses as
 /// its split tree. Delegates split/resize/close to `TerminalTab` so the main
 /// window and quick terminal share the same mutation logic.
+///
+/// The tab is persisted with the workspaces (`WorkspacesFile.quickTerminal`)
+/// and restored at launch (`AppState.restoreQuickTerminal`), so its panes'
+/// zmx sessions survive a quit like any workspace pane's: the panel reopens
+/// onto the shells the user left, and quitting with a command running in it
+/// asks nothing. This state owns no `AppState`, so it reports every
+/// structural change through `onStructureChange` — the hook `AppState`
+/// points at `saveWorkspaces` when it adopts the state — rather than saving
+/// itself.
 @MainActor @Observable
 final class QuickTerminalSplitState {
     var tab: TerminalTab
     var pendingClosePaneID: UUID?
+    /// Fired after every mutation that changes what a snapshot would
+    /// serialize (a split, a close, a pane move — not a restore, which only
+    /// adopts what the file already holds). Wired by
+    /// `AppState.adoptQuickTerminal`; a no-op until then.
+    @ObservationIgnored
+    var onStructureChange: () -> Void = {}
 
     var splitRoot: SplitNode {
         get { tab.splitRoot }
@@ -293,11 +313,36 @@ final class QuickTerminalSplitState {
     }
 
     init() {
-        tab = TerminalTab(
+        tab = Self.freshTab()
+    }
+
+    private static func freshTab() -> TerminalTab {
+        TerminalTab(
             projectPath: NSHomeDirectory(),
-            projectID: QuickTerminalService.ephemeralProjectID,
+            projectID: QuickTerminalService.projectID,
             sessionSlug: ZmxSessionName.quickTerminalSlug
         )
+    }
+
+    /// Whether any pane has built its surface — i.e. the panel has been shown
+    /// this run, so the tab's sessions are live and must not be swapped out.
+    var hasLiveSurfaces: Bool {
+        tab.splitRoot.allPanes().contains { $0.nsView != nil }
+    }
+
+    /// Adopt the persisted tab from the last run so its panes reattach their
+    /// sessions when the panel is next shown (`zmx attach` is an upsert, so a
+    /// session that died meanwhile just comes back as a fresh shell in its
+    /// saved cwd — the same rule workspace panes follow). Refused once the
+    /// panel has been shown this run: replacing a tab whose surfaces are live
+    /// would orphan those sessions, and the fresh tab it made is by then the
+    /// one worth keeping. Returns whether the snapshot was adopted. Fires no
+    /// `onStructureChange`: what was adopted is what the file already holds.
+    @discardableResult
+    func restore(from snapshot: TabSnapshot) -> Bool {
+        guard !hasLiveSurfaces else { return false }
+        tab = WorkspaceSerializer.restoreTab(snapshot, projectID: QuickTerminalService.projectID)
+        return true
     }
 
     func focusPane(_ paneID: UUID) {
@@ -360,10 +405,17 @@ final class QuickTerminalSplitState {
 
     func split(paneID: UUID, direction: SplitDirection) {
         tab.split(paneID: paneID, direction: direction)
+        onStructureChange()
     }
 
     func autoSplit(paneID: UUID) {
         tab.autoSplit(paneID: paneID)
+        onStructureChange()
+    }
+
+    func movePane(_ paneID: UUID, to target: TabDropResolution.Target) {
+        guard tab.movePane(paneID, to: target) else { return }
+        onStructureChange()
     }
 
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
@@ -371,8 +423,9 @@ final class QuickTerminalSplitState {
     }
 
     func closePane(_ paneID: UUID) {
-        // Quick-terminal panes are ephemeral: closing one is permanent, so its
-        // zmx session dies with it (transient hide/show never reaches here).
+        // Closing a quick-terminal pane is permanent, so its zmx session dies
+        // with it (transient hide/show never reaches here, and neither does
+        // quit — the sessions persist across it like a workspace pane's).
         //
         // This is the one kill that does NOT go through
         // `AppState.releaseSessions`, and it is exempt by construction rather
@@ -387,15 +440,12 @@ final class QuickTerminalSplitState {
             // Replace the whole tab with a fresh one — the quick terminal should
             // always have at least one pane, but we fully reset so the prior
             // pane's surface is torn down (removePane already destroyed it).
-            tab = TerminalTab(
-                projectPath: NSHomeDirectory(),
-                projectID: QuickTerminalService.ephemeralProjectID,
-                sessionSlug: ZmxSessionName.quickTerminalSlug
-            )
+            tab = Self.freshTab()
         case .removed,
              .notFound:
             break
         }
+        onStructureChange()
         if let newID = focusedPaneID {
             QuickTerminalService.shared.refocusPane(newID)
         }
@@ -524,7 +574,7 @@ private struct QuickTerminalView: View {
             focusedPaneID: state.focusedPaneID,
             zoomedPaneID: state.tab.zoomedPaneID,
             isActiveProject: true,
-            projectID: QuickTerminalService.ephemeralProjectID,
+            projectID: QuickTerminalService.projectID,
             onFocusPane: { state.focusPane($0) },
             onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
             onClosePane: { state.closePane($0) },
@@ -544,14 +594,14 @@ private struct QuickTerminalView: View {
                 resolution: $dropResolution,
                 draggedPaneID: draggedPaneID,
                 onMovePane: { paneID, target in
-                    state.tab.movePane(paneID, to: target)
+                    state.movePane(paneID, to: target)
                 }
             )
         )
         .id(renderedNode.id)
         // Grab-handle drags share the workspace drop grammar (whole-edge,
         // divider, local). The context carries no tab handler: the quick
-        // terminal's ephemeral world doesn't adopt workspace tabs.
+        // terminal is one tab outside every workspace and adopts no others.
         .overlay {
             WorkspaceDropPreview(resolution: dropResolution)
         }

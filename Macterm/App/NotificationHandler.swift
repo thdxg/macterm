@@ -172,7 +172,7 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
         [
             "paneID": pane.id.uuidString,
             "projectID": pane.projectID.uuidString,
-            "isQuickTerminal": pane.projectID == QuickTerminalService.ephemeralProjectID,
+            "isQuickTerminal": pane.projectID == QuickTerminalService.projectID,
         ]
     }
 

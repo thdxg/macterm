@@ -1151,6 +1151,14 @@ final class AppState {
     @ObservationIgnored
     var zmx: ZmxClient = .live
 
+    /// The quick terminal's split state once this AppState has adopted it
+    /// (`adoptQuickTerminal`) — the one whose tab the snapshot carries and
+    /// whose sessions the reaper spares. Resolved lazily to the panel's
+    /// singleton, or handed in at init by tests so a restore never writes
+    /// into the shared one. See `AppState+QuickTerminal.swift`.
+    @ObservationIgnored
+    var adoptedQuickTerminal: QuickTerminalSplitState?
+
     /// Refresh policy for `ZmxForegroundResolver`'s name→leader-pid cache:
     /// refresh on session lifecycle events plus a 30s reconcile TTL — never
     /// per tick (`zmx ls` is a fork/exec).
@@ -1184,11 +1192,13 @@ final class AppState {
 
     init(
         workspaceStore: WorkspaceStore = WorkspaceStore(),
-        projectFiles: ProjectFileStore = ProjectFileStore()
+        projectFiles: ProjectFileStore = ProjectFileStore(),
+        quickTerminal: QuickTerminalSplitState? = nil
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
         pinnedLayoutStore = PinnedLayoutStore(directoryURL: projectFiles.directoryURL)
+        if let quickTerminal { adoptQuickTerminal(quickTerminal) }
         let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,
             object: nil,
@@ -1493,6 +1503,9 @@ final class AppState {
         savedWindowSnapshots = loaded.windows
         restorePinnedState(loaded.pinned, activeTabID: loaded.pinnedActiveTabID)
         reconcilePinnedLayoutAtLaunch(projects: projects)
+        // The quick terminal's tab reattaches like any workspace tab. Before
+        // the orphan sweep below, which spares only what a pane claims.
+        restoreQuickTerminal(loaded.quickTerminal)
         if let id = Preferences.shared.activeProjectID {
             if id == PinnedTabs.projectID {
                 if !pinnedRecords.isEmpty {
@@ -1514,9 +1527,9 @@ final class AppState {
         // no restored pane claims. Attach-aware and fail-closed (a failed
         // probe reaps nothing, and a failed snapshot LOAD sweeps nothing —
         // an empty claim set would mark every live session an orphan);
-        // foreign prefixes (supa-*, user sessions) are spared.
-        // Quick-terminal sessions are never persisted, so leftovers from a
-        // crash die here too.
+        // foreign prefixes (supa-*, user sessions) are spared. The quick
+        // terminal's restored sessions are claims like any other, so they
+        // wait for the panel to be shown rather than dying here.
         // Pinned live tabs materialize async, after zmx says which sessions
         // survived (#285) — ahead of the loadFailed gate, since pinned
         // records come from pinned.yaml, not the snapshot.
@@ -1567,7 +1580,8 @@ final class AppState {
                         activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
                         sidebarVisible: window.sidebarVisible
                     )
-                }
+                },
+            quickTerminal: quickTerminalSnapshot()
         )
         // A closed or unloaded tab takes its bell out of the count with it.
         syncDockBadge()
@@ -1756,10 +1770,13 @@ final class AppState {
     /// under-sparing kills a live session, hence the `loadFailed` gates.
     /// Pinned live snapshots that haven't materialized yet count as claims
     /// too (#285), or a sweep would kill the very sessions the materialize
-    /// step is about to reattach.
+    /// step is about to reattach. So do the quick terminal's panes: restored
+    /// at launch but attached only when the panel is first shown, they sit
+    /// at zero clients for exactly the window this sweep runs in.
     private func claimedSessionNames() -> Set<String> {
         Set(allLivePanes().map(\.sessionName))
             .union(pendingPinnedSessionNames())
+            .union(quickTerminalSessionNames())
     }
 
     /// Every pane attached to a session, across ALL workspaces (pinned
@@ -2683,7 +2700,7 @@ final class AppState {
 
     /// Find the workspace tab currently holding a pane. Scans every loaded
     /// workspace — a sidebar pane drop only carries the pane's id, and the
-    /// quick terminal's ephemeral tab (not in `workspaces`) correctly misses.
+    /// quick terminal's tab (not in `workspaces`) correctly misses.
     private func locatePane(_ paneID: UUID) -> (projectID: UUID, tab: TerminalTab)? {
         for (projectID, ws) in workspaces {
             if let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) {

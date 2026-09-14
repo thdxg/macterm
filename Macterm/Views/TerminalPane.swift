@@ -135,8 +135,8 @@ private struct TerminalSurface: NSViewRepresentable {
     let onZoomRequest: () -> Void
 
     /// Optional on purpose: the quick terminal's hosting view has no AppState
-    /// in its environment, and its ephemeral tab has no rename UI anyway —
-    /// the tab-title actions just no-op there.
+    /// in its environment, and its one tab has no rename UI anyway — the
+    /// tab-title actions just no-op there.
     @Environment(AppState.self) private var appState: AppState?
 
     final class Coordinator {

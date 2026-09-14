@@ -75,7 +75,7 @@ struct NotificationHandlerTests {
 
     @Test
     func a_quick_terminal_pane_is_flagged_so_taps_route_to_the_panel() {
-        let pane = Pane(projectPath: "/tmp", projectID: QuickTerminalService.ephemeralProjectID)
+        let pane = Pane(projectPath: "/tmp", projectID: QuickTerminalService.projectID)
 
         #expect(NotificationHandler.userInfo(for: pane)["isQuickTerminal"] as? Bool == true)
     }
