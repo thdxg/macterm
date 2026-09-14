@@ -1425,14 +1425,17 @@ struct AppStateTests {
     }
 
     @Test
-    func selecting_project_with_matching_project_file_auto_applies_on_first_open() throws {
+    func selecting_project_with_matching_project_file_does_not_apply_it() throws {
+        // A declared layout only ever lands through an explicit Apply Layout.
+        // Selecting the project builds the default single-pane workspace and
+        // leaves the file alone — no apply, no prompt, no error.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-autoapply-\(UUID().uuidString)")
+            .appendingPathComponent("macterm-noautoapply-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        // A central file declaring this path exists *before* first open.
+        // A central file declaring this path exists *before* the project opens.
         writeProjectFile("""
         path: \(dir.path)
         tabs:
@@ -1443,24 +1446,23 @@ struct AppStateTests {
               second: {}
         """, in: files)
 
-        let project = Project(name: "auto", path: dir.path, sortOrder: 0)
+        let project = Project(name: "declared", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        // Workspace built from the file (one tab, two panes), not the default
-        // single-pane workspace. Non-destructive on first open → no prompt.
         let ws = try #require(state.workspaces[project.id])
         #expect(ws.tabs.count == 1)
-        #expect(ws.tabs[0].customTitle == "Dev")
-        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(ws.tabs[0].customTitle == nil)
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
         #expect(state.pendingLayoutApply == nil)
         #expect(state.pendingLayoutError == nil)
+        // The file is still there for Apply Layout to pick up.
+        #expect(files.applyState(forProjectPath: dir.path) == .applicable)
     }
 
     @Test
     func first_open_without_a_project_file_uses_the_default_workspace() throws {
         // No central file declares this path, so first open is a plain
-        // single-pane workspace — nothing to seed it from now that the
-        // in-repo `.macterm/layout.yaml` path is gone.
+        // single-pane workspace.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
@@ -1478,7 +1480,9 @@ struct AppStateTests {
     }
 
     @Test
-    func first_open_with_invalid_project_file_surfaces_error_and_uses_default_workspace() throws {
+    func selecting_project_with_invalid_project_file_raises_no_error() throws {
+        // Selection never reads the file, so a broken one can't fail a plain
+        // open; the parse error surfaces when Apply Layout is invoked.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
@@ -1495,8 +1499,12 @@ struct AppStateTests {
         let project = Project(name: "broken", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        #expect(state.pendingLayoutError?.verb == "apply")
+        #expect(state.pendingLayoutError == nil)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+
+        state.applyLayoutPresentingError(project)
+
+        #expect(state.pendingLayoutError?.verb == "apply")
     }
 
     @Test
@@ -1578,7 +1586,7 @@ struct AppStateTests {
     }
 
     @Test
-    func apply_layout_toasts_only_when_user_invoked() throws {
+    func apply_layout_toasts_on_a_clean_apply() throws {
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
@@ -1589,10 +1597,10 @@ struct AppStateTests {
         let project = Project(name: "toast", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        // The first-open seed fires unbidden — it must stay silent.
+        // Selecting applies nothing, so there is nothing to toast yet.
         #expect(state.activeToast == nil)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
 
         #expect(state.pendingLayoutError == nil)
         #expect(state.activeToast?.title == "Layout applied")
@@ -1618,12 +1626,12 @@ struct AppStateTests {
         // would close it, which is what stages the confirmation.
         state.createTab(projectID: project.id, projectPath: dir.path)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
         #expect(state.pendingLayoutApply?.host == .mainWindow)
 
         state.cancelPendingLayoutApply()
 
-        state.applyLayoutPresentingError(project, confirming: true, host: .settings)
+        state.applyLayoutPresentingError(project, host: .settings)
         #expect(state.pendingLayoutApply?.host == .settings)
     }
 
@@ -1634,12 +1642,12 @@ struct AppStateTests {
         let state = makeAppState(projectFiles: makeProjectFileStore())
         let (project, _) = seedProjectWithDir(state)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
         #expect(state.pendingLayoutError?.host == .mainWindow)
 
         state.pendingLayoutError = nil
 
-        state.applyLayoutPresentingError(project, confirming: true, host: .settings)
+        state.applyLayoutPresentingError(project, host: .settings)
         #expect(state.pendingLayoutError?.host == .settings)
     }
 
@@ -1650,7 +1658,7 @@ struct AppStateTests {
         let state = makeAppState(projectFiles: makeProjectFileStore())
         let (project, _) = seedProjectWithDir(state)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
 
         #expect(state.pendingLayoutError != nil)
         #expect(state.activeToast == nil)
@@ -1813,8 +1821,7 @@ struct AppStateTests {
         // Reopen is always silent: a restored session snapshot wins (a
         // project's panes must reattach their live zmx sessions, and its live
         // layout is remembered), and the declared file is NOT applied and NOT
-        // prompted for — even when it differs. The file only seeds a genuine
-        // first open (no snapshot), covered by the next test.
+        // prompted for — even when it differs.
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-reopen-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -1854,9 +1861,9 @@ struct AppStateTests {
     }
 
     @Test
-    func project_file_auto_applies_on_genuine_first_open_without_snapshot() throws {
-        // No snapshot at all → the declared file still seeds the workspace on
-        // first open (pure-spawn, no prompt). The only auto-apply path left.
+    func restore_without_snapshot_ignores_project_file_and_uses_default_workspace() throws {
+        // No snapshot at all → the default single-pane workspace, not the
+        // declared file. A layout lands only through an explicit Apply Layout.
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-firstopen-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -1884,9 +1891,10 @@ struct AppStateTests {
 
         let ws = try #require(state.workspaces[project.id])
         #expect(ws.tabs.count == 1)
-        #expect(ws.tabs[0].customTitle == "Dev")
-        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(ws.tabs[0].customTitle == nil)
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
         #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingLayoutError == nil)
     }
 
     @Test

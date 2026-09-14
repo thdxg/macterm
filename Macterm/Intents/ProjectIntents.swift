@@ -8,10 +8,9 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectIntents")
 /// without the picker.
 ///
 /// Runs the same pair the sidebar, the Finder service and `macterm project
-/// create` run (`ProjectStore.create` then `AppState.selectProject`), so a
-/// matching central project file auto-applies its layout exactly as it would
-/// on a first open. Always creates: a directory is not an identity, and a
-/// second project on the same folder is a legitimate ask.
+/// create` run (`ProjectStore.create` then `AppState.selectProject`). Always
+/// creates: a directory is not an identity, and a second project on the same
+/// folder is a legitimate ask.
 struct NewMactermProjectIntent: AppIntent {
     static let title: LocalizedStringResource = "New Project"
     static let description = IntentDescription("Add a folder as a project and select it.")
@@ -89,9 +88,9 @@ struct FocusMactermProjectIntent: AppIntent {
         // exactly the shape of an intent arriving from outside.
         ctx.appState.appDelegate?.showWindow()
         if target.id == PinnedTabs.projectID {
-            // The sentinel must not go through the project path: its
-            // first-open auto-apply would match a layout file declaring the
-            // home directory.
+            // The sentinel must not go through the project path: it has its
+            // own selection (`selectPinnedProject`), and `selectProject`
+            // would treat it as a project rooted at the home directory.
             ctx.appState.selectPinnedProject()
         } else {
             ctx.appState.revealProject(target.id)

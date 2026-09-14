@@ -24,7 +24,7 @@ A few are offered up front as ready-made shortcuts, so you can run them without 
 
 | Action | What it does |
 | --- | --- |
-| **New Project** | Takes a folder and adds it as a project, then selects it and brings the window forward. Optionally takes a name; without one it uses the folder's own name. If a [project file](/docs/declarative-layouts) declares that path, its layout applies — exactly as on a first open. |
+| **New Project** | Takes a folder and adds it as a project, then selects it and brings the window forward. Optionally takes a name; without one it uses the folder's own name. |
 | **Focus Project** | Shows a project. If a window is already on it, that window comes forward rather than the frontmost one being repointed. |
 
 A project is created even when one already backs that folder — a directory is not an identity, and two projects on one folder stay fully separate.

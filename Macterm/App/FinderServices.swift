@@ -112,8 +112,7 @@ final class FinderServiceProvider: NSObject {
                 selected = projectStore.create(name: (path as NSString).lastPathComponent, path: path)
             }
             if let selected {
-                // The same first-open path as the sidebar — a matching central
-                // project file auto-applies its layout.
+                // The same selection path as the sidebar.
                 appState.selectProject(selected)
             }
             // The gesture happened in Finder, so Macterm is in the background

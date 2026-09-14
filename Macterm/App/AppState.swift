@@ -967,9 +967,8 @@ final class AppState {
     }
 
     /// A layout apply/save/import notice awaiting presentation (alert in
-    /// `MactermApp`). Fed by the explicit palette/menu commands and by the
-    /// silent first-open auto-apply — an invalid project file must always
-    /// surface a dialog, never fail silently.
+    /// `MactermApp`). Fed by the explicit palette/menu/Settings commands — an
+    /// invalid project file must always surface a dialog, never fail silently.
     struct LayoutError: Identifiable {
         let id = UUID()
         /// "apply" / "save" / "import" — slotted into the default alert title.
@@ -1478,11 +1477,10 @@ final class AppState {
         let valid = Set(projects.map(\.id))
         // Restore every project's snapshot — including layout-file projects.
         // The snapshot carries each pane's persisted zmx session identity, so
-        // panes REATTACH their still-running shells; force-applying the
-        // project file's declared layout here would silently destroy them
-        // on every launch. The layout now only seeds a genuine first open
-        // (no snapshot) — `autoApplyLayoutOnFirstOpen` guards on
-        // `workspaces[id] == nil`, so a restored snapshot disables it.
+        // panes REATTACH their still-running shells; applying the project
+        // file's declared layout here would silently destroy them on every
+        // launch. A declared layout is only ever applied by an explicit Apply
+        // Layout; a project with no snapshot gets the default workspace.
         for ws in WorkspaceSerializer.restore(from: loaded.workspaces, validIDs: valid) {
             workspaces[ws.projectID] = ws
         }
@@ -1502,7 +1500,6 @@ final class AppState {
             } else if let project = projects.first(where: { $0.id == id }) {
                 activeProjectID = id
                 recordProjectVisit(id)
-                autoApplyLayoutOnFirstOpen(project)
                 ensureWorkspace(projectID: id, path: project.path)
                 // Reattaching remote panes need the zmx path before warm/render.
                 stampRemoteZmxPath(project)
@@ -1587,7 +1584,6 @@ final class AppState {
             selectProject(project)
         } else {
             recordProjectVisit(project.id)
-            autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: project.id, path: project.path)
             stampRemoteZmxPath(project)
         }
@@ -1597,7 +1593,6 @@ final class AppState {
         logger.debug("selectProject: \(project.name, privacy: .public)")
         activeProjectID = project.id
         recordProjectVisit(project.id)
-        autoApplyLayoutOnFirstOpen(project)
         ensureWorkspace(projectID: project.id, path: project.path)
         // Stamp the remote zmx path onto every pane BEFORE any surface spawns
         // (warmFocusedProject / render → ensureNSView reads it). It's a host
@@ -2089,26 +2084,6 @@ final class AppState {
             for name in orphans {
                 await zmx.killRemoteSession(remote, name, zmxPath)
             }
-        }
-    }
-
-    /// On a project's first open this session (no live/restored workspace yet),
-    /// build its workspace from the central project file matching its path.
-    /// Because there are no live panes, the apply is pure-spawn — never
-    /// destructive, never prompts. A restored snapshot already populates
-    /// `workspaces`, so it takes precedence; with no applicable file this
-    /// no-ops and `ensureWorkspace` creates the default single-pane workspace.
-    private func autoApplyLayoutOnFirstOpen(_ project: Project) {
-        guard workspaces[project.id] == nil else { return }
-        switch projectFiles.applyState(forProjectPath: project.path, preferredSlug: ProjectSlug.slug(from: project.name)) {
-        case .applicable:
-            applyLayoutPresentingError(project)
-        case .invalid:
-            // Surface the parse error; the default workspace is created after.
-            applyLayoutPresentingError(project)
-        case .emptyTabs,
-             .none:
-            break
         }
     }
 
@@ -3287,13 +3262,9 @@ final class AppState {
 
     /// `applyLayout` + error presentation: failures land in
     /// `pendingLayoutError` (the alert in `MactermApp`). The shared entry
-    /// point for the palette/menu command and the first-open auto-apply.
-    ///
-    /// `confirming` marks the *user-invoked* command (palette, menu, keybind),
-    /// which gets a success toast. The first-open seed passes false: it fires
-    /// unbidden on every project's first open, where a confirmation would be
-    /// noise for something the user never asked for.
-    func applyLayoutPresentingError(_ project: Project, confirming: Bool = false, host: DialogHost = .mainWindow) {
+    /// point for the palette/menu command and the Settings row menu — every
+    /// caller is user-invoked, so a clean apply gets a success toast.
+    func applyLayoutPresentingError(_ project: Project, host: DialogHost = .mainWindow) {
         if let error = applyLayout(project: project, host: host) {
             pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription, host: host)
             return
@@ -3301,7 +3272,7 @@ final class AppState {
         // A destructive plan is staged, not applied — its confirmation dialog is
         // up, and the toast belongs to whatever the user chooses there
         // (`confirmPendingLayoutApply`), not to merely opening the prompt.
-        if confirming, pendingLayoutApply == nil {
+        if pendingLayoutApply == nil {
             presentToast("Layout applied")
         }
     }

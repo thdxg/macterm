@@ -398,9 +398,7 @@ final class ControlHandler {
             path: canonical
         )
         if args.select == true {
-            // selectProject runs the same first-open path the sidebar does —
-            // including auto-applying a matching central project file, so a
-            // declared layout spawns its tabs.
+            // The same selection path the sidebar runs.
             appState.selectProject(project)
         }
         return projectData(project)
@@ -412,9 +410,9 @@ final class ControlHandler {
         }
         let project = try resolveProject(args.project)
         if project.id == PinnedTabs.projectID {
-            // The synthetic project must not go through `selectProject` — its
-            // first-open auto-apply would match a layout file declaring the
-            // home directory.
+            // The synthetic project must not go through `selectProject`, which
+            // would treat it as a project rooted at the home directory; it has
+            // its own selection path.
             appState.selectPinnedProject()
         } else {
             // `--window` targets a specific one; without it the key window,
@@ -1056,8 +1054,8 @@ final class ControlHandler {
 
     /// The layout verbs must never treat the SYNTHETIC pinned project as a
     /// real one: `layout save` would write a project file declaring the home
-    /// directory (which first-open auto-apply would then pick up for any
-    /// home-rooted project), and `layout apply --force` would swap the pinned
+    /// directory (which Apply Layout on any home-rooted project would then
+    /// pick up), and `layout apply --force` would swap the pinned
     /// workspace's tabs out from under the records.
     private func rejectPinned(_ project: Project, verb: String) throws {
         guard project.id == PinnedTabs.projectID else { return }
