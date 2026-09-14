@@ -40,11 +40,8 @@ struct AppStateTests {
 
     @Test
     func createTab_uses_selected_directory_and_preserves_project_session_slug() throws {
-        let prior = Preferences.shared.newTabWorkingDirectory
-        defer { Preferences.shared.newTabWorkingDirectory = prior }
-        Preferences.shared.newTabWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newTabInheritsWorkingDirectory = { true }
         let localProject = seedProject(state, path: "/project")
         let localWorkspace = try #require(state.workspaces[localProject.id])
         let activePane = try #require(localWorkspace.activeTab?.focusedPane)
@@ -57,7 +54,7 @@ struct AppStateTests {
 
         let inheritedPane = try #require(localWorkspace.activeTab?.focusedPane)
         inheritedPane.ensureNSView().currentPwd = "/project/src/deep"
-        Preferences.shared.newTabWorkingDirectory = .projectDirectory
+        state.newTabInheritsWorkingDirectory = { false }
 
         state.createTab(projectID: localProject.id, projects: [localProject])
 
@@ -67,11 +64,8 @@ struct AppStateTests {
 
     @Test
     func createTab_remote_active_pane_falls_back_to_project_directory() throws {
-        let prior = Preferences.shared.newTabWorkingDirectory
-        defer { Preferences.shared.newTabWorkingDirectory = prior }
-        Preferences.shared.newTabWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newTabInheritsWorkingDirectory = { true }
         let remoteProject = seedProject(state, path: "devbox:~/repo")
         let remoteWorkspace = try #require(state.workspaces[remoteProject.id])
 
@@ -460,11 +454,8 @@ struct AppStateTests {
 
     @Test
     func splitPane_uses_selected_directory() throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newSplitInheritsWorkingDirectory = { true }
         let project = seedProject(state, path: "/project")
         let tab = try #require(state.workspaces[project.id]?.activeTab)
         let activePane = try #require(tab.focusedPane)
@@ -476,7 +467,7 @@ struct AppStateTests {
 
         let inheritedPane = try #require(tab.focusedPane)
         inheritedPane.ensureNSView().currentPwd = "/project/src/deep"
-        Preferences.shared.newSplitWorkingDirectory = .projectDirectory
+        state.newSplitInheritsWorkingDirectory = { false }
 
         state.splitPane(direction: .vertical, projectID: project.id, projects: [project])
 
@@ -490,11 +481,8 @@ struct AppStateTests {
     /// instead of a remote zmx sibling.
     @Test
     func splitPane_remote_source_inherits_its_own_path_not_the_project_root() throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newSplitInheritsWorkingDirectory = { true }
         let project = seedProject(state, path: "devbox:~/repo")
         state.createTab(projectID: project.id, projectPath: "devbox:~/repo/sub")
         let tab = try #require(state.workspaces[project.id]?.activeTab)
@@ -510,11 +498,8 @@ struct AppStateTests {
     /// `Cmd+D` split off the same pane can't disagree about it.
     @Test
     func makeGrid_uses_selected_directory() throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .projectDirectory
-
         let state = makeAppState()
+        state.newSplitInheritsWorkingDirectory = { false }
         let project = seedProject(state, path: "/project")
         let tab = try #require(state.workspaces[project.id]?.activeTab)
         let source = try #require(tab.focusedPane)
@@ -1425,14 +1410,17 @@ struct AppStateTests {
     }
 
     @Test
-    func selecting_project_with_matching_project_file_auto_applies_on_first_open() throws {
+    func selecting_project_with_matching_project_file_does_not_apply_it() throws {
+        // A declared layout only ever lands through an explicit Apply Layout.
+        // Selecting the project builds the default single-pane workspace and
+        // leaves the file alone — no apply, no prompt, no error.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-autoapply-\(UUID().uuidString)")
+            .appendingPathComponent("macterm-noautoapply-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        // A central file declaring this path exists *before* first open.
+        // A central file declaring this path exists *before* the project opens.
         writeProjectFile("""
         path: \(dir.path)
         tabs:
@@ -1443,24 +1431,23 @@ struct AppStateTests {
               second: {}
         """, in: files)
 
-        let project = Project(name: "auto", path: dir.path, sortOrder: 0)
+        let project = Project(name: "declared", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        // Workspace built from the file (one tab, two panes), not the default
-        // single-pane workspace. Non-destructive on first open → no prompt.
         let ws = try #require(state.workspaces[project.id])
         #expect(ws.tabs.count == 1)
-        #expect(ws.tabs[0].customTitle == "Dev")
-        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(ws.tabs[0].customTitle == nil)
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
         #expect(state.pendingLayoutApply == nil)
         #expect(state.pendingLayoutError == nil)
+        // The file is still there for Apply Layout to pick up.
+        #expect(files.applyState(forProjectPath: dir.path) == .applicable)
     }
 
     @Test
     func first_open_without_a_project_file_uses_the_default_workspace() throws {
         // No central file declares this path, so first open is a plain
-        // single-pane workspace — nothing to seed it from now that the
-        // in-repo `.macterm/layout.yaml` path is gone.
+        // single-pane workspace.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
@@ -1478,7 +1465,9 @@ struct AppStateTests {
     }
 
     @Test
-    func first_open_with_invalid_project_file_surfaces_error_and_uses_default_workspace() throws {
+    func selecting_project_with_invalid_project_file_raises_no_error() throws {
+        // Selection never reads the file, so a broken one can't fail a plain
+        // open; the parse error surfaces when Apply Layout is invoked.
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
@@ -1495,8 +1484,12 @@ struct AppStateTests {
         let project = Project(name: "broken", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        #expect(state.pendingLayoutError?.verb == "apply")
+        #expect(state.pendingLayoutError == nil)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
+
+        state.applyLayoutPresentingError(project)
+
+        #expect(state.pendingLayoutError?.verb == "apply")
     }
 
     @Test
@@ -1578,7 +1571,7 @@ struct AppStateTests {
     }
 
     @Test
-    func apply_layout_toasts_only_when_user_invoked() throws {
+    func apply_layout_toasts_on_a_clean_apply() throws {
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
         let dir = FileManager.default.temporaryDirectory
@@ -1589,10 +1582,10 @@ struct AppStateTests {
         let project = Project(name: "toast", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        // The first-open seed fires unbidden — it must stay silent.
+        // Selecting applies nothing, so there is nothing to toast yet.
         #expect(state.activeToast == nil)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
 
         #expect(state.pendingLayoutError == nil)
         #expect(state.activeToast?.title == "Layout applied")
@@ -1618,12 +1611,12 @@ struct AppStateTests {
         // would close it, which is what stages the confirmation.
         state.createTab(projectID: project.id, projectPath: dir.path)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
         #expect(state.pendingLayoutApply?.host == .mainWindow)
 
         state.cancelPendingLayoutApply()
 
-        state.applyLayoutPresentingError(project, confirming: true, host: .settings)
+        state.applyLayoutPresentingError(project, host: .settings)
         #expect(state.pendingLayoutApply?.host == .settings)
     }
 
@@ -1634,12 +1627,12 @@ struct AppStateTests {
         let state = makeAppState(projectFiles: makeProjectFileStore())
         let (project, _) = seedProjectWithDir(state)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
         #expect(state.pendingLayoutError?.host == .mainWindow)
 
         state.pendingLayoutError = nil
 
-        state.applyLayoutPresentingError(project, confirming: true, host: .settings)
+        state.applyLayoutPresentingError(project, host: .settings)
         #expect(state.pendingLayoutError?.host == .settings)
     }
 
@@ -1650,7 +1643,7 @@ struct AppStateTests {
         let state = makeAppState(projectFiles: makeProjectFileStore())
         let (project, _) = seedProjectWithDir(state)
 
-        state.applyLayoutPresentingError(project, confirming: true)
+        state.applyLayoutPresentingError(project)
 
         #expect(state.pendingLayoutError != nil)
         #expect(state.activeToast == nil)
@@ -1813,8 +1806,7 @@ struct AppStateTests {
         // Reopen is always silent: a restored session snapshot wins (a
         // project's panes must reattach their live zmx sessions, and its live
         // layout is remembered), and the declared file is NOT applied and NOT
-        // prompted for — even when it differs. The file only seeds a genuine
-        // first open (no snapshot), covered by the next test.
+        // prompted for — even when it differs.
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-reopen-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -1854,9 +1846,9 @@ struct AppStateTests {
     }
 
     @Test
-    func project_file_auto_applies_on_genuine_first_open_without_snapshot() throws {
-        // No snapshot at all → the declared file still seeds the workspace on
-        // first open (pure-spawn, no prompt). The only auto-apply path left.
+    func restore_without_snapshot_ignores_project_file_and_uses_default_workspace() throws {
+        // No snapshot at all → the default single-pane workspace, not the
+        // declared file. A layout lands only through an explicit Apply Layout.
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-firstopen-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -1884,9 +1876,10 @@ struct AppStateTests {
 
         let ws = try #require(state.workspaces[project.id])
         #expect(ws.tabs.count == 1)
-        #expect(ws.tabs[0].customTitle == "Dev")
-        #expect(ws.tabs[0].splitRoot.allPanes().count == 2)
+        #expect(ws.tabs[0].customTitle == nil)
+        #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
         #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingLayoutError == nil)
     }
 
     @Test
@@ -2609,6 +2602,167 @@ struct AppStateTests {
         #expect(!secondView.rendersForPreview)
 
         state.commitTabCycle(projectID: project.id)
+    }
+
+    // MARK: - Quick terminal persistence
+
+    /// A store on disk plus an AppState adopting its own quick terminal, so
+    /// nothing here writes into the panel's shared split state.
+    private func makeQuickTerminalFixture(
+        quick: QuickTerminalSplitState = QuickTerminalSplitState()
+    ) throws -> (state: AppState, quick: QuickTerminalSplitState, storeURL: URL, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let storeURL = dir.appendingPathComponent("workspaces.json")
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: quick
+        )
+        return (state, quick, storeURL, dir)
+    }
+
+    /// The quick terminal's own mutations persist the moment they happen — a
+    /// split in the panel is as durable as a split in a workspace, not
+    /// something that waits for quit (a crash would otherwise lose the tree
+    /// and orphan the new pane's session).
+    @Test
+    func a_quick_terminal_split_persists_its_tab_with_session_names_verbatim() throws {
+        let (state, quick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        state.restoreSelection(projects: [])
+
+        try quick.split(paneID: #require(quick.focusedPaneID), direction: .vertical)
+        let names = Set(quick.tab.splitRoot.allPanes().map(\.sessionName))
+        #expect(names.count == 2)
+
+        let saved = try #require(WorkspaceStore(fileURL: storeURL).load().quickTerminal)
+        #expect(saved.id == quick.tab.id)
+        let restored = WorkspaceSerializer.restoreTab(saved, projectID: QuickTerminalService.projectID)
+        #expect(Set(restored.splitRoot.allPanes().map(\.sessionName)) == names)
+    }
+
+    /// Launch hands the persisted tab back to the panel: same tab id, same
+    /// session names (the reattach identity), each pane respawning in the cwd
+    /// it was in rather than the home directory a fresh tab starts from.
+    @Test
+    func restoreSelection_hands_the_persisted_quick_terminal_back_to_the_panel() throws {
+        let (writer, writerQuick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writerQuick.split(paneID: #require(writerQuick.focusedPaneID), direction: .horizontal)
+        let expectedNames = Set(writerQuick.tab.splitRoot.allPanes().map(\.sessionName))
+        writer.saveWorkspaces()
+
+        let fresh = QuickTerminalSplitState()
+        let bornWith = fresh.tab.id
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: fresh
+        )
+        state.restoreSelection(projects: [])
+
+        #expect(fresh.tab.id == writerQuick.tab.id)
+        #expect(fresh.tab.id != bornWith)
+        #expect(Set(fresh.tab.splitRoot.allPanes().map(\.sessionName)) == expectedNames)
+        #expect(fresh.tab.splitRoot.allPanes().allSatisfy { $0.projectID == QuickTerminalService.projectID })
+        #expect(fresh.tab.focusedPaneID != nil)
+    }
+
+    /// A restore that arrives after the panel has already been shown this run
+    /// is refused: the live tab's sessions would be orphaned by the swap, and
+    /// the fresh tab is the one now worth persisting.
+    @Test
+    func restoreSelection_keeps_a_quick_terminal_that_is_already_on_screen() throws {
+        let (writer, writerQuick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        writer.saveWorkspaces()
+        let persistedID = writerQuick.tab.id
+
+        let shown = QuickTerminalSplitState()
+        let livePane = try #require(shown.tab.focusedPane)
+        _ = livePane.ensureNSView()
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: shown
+        )
+        state.restoreSelection(projects: [])
+
+        #expect(shown.tab.id != persistedID)
+        #expect(shown.tab.focusedPane === livePane)
+    }
+
+    /// Until the launch restore has run, `workspaces` is empty — a save then
+    /// would write that emptiness over the file about to be restored. The
+    /// panel's hotkey works from the first moment of launch, so a split made
+    /// in that window must wait for the next save rather than cause one.
+    @Test
+    func a_quick_terminal_split_before_the_launch_restore_saves_nothing() throws {
+        let (_, quick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sentinel = """
+        {"version": 6, "workspaces": [], "pinned": [], "windows": []}
+        """
+        try sentinel.write(to: storeURL, atomically: true, encoding: .utf8)
+
+        try quick.split(paneID: #require(quick.focusedPaneID), direction: .vertical)
+
+        #expect(try String(contentsOf: storeURL, encoding: .utf8) == sentinel)
+    }
+
+    /// A file from before the section existed leaves the fresh tab alone.
+    @Test
+    func restoreSelection_without_a_quick_terminal_section_leaves_the_fresh_tab() throws {
+        let (_, quick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try """
+        {"version": 6, "workspaces": [], "pinned": [], "windows": []}
+        """.write(to: storeURL, atomically: true, encoding: .utf8)
+        let bornWith = quick.tab.id
+
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: quick
+        )
+        state.restoreSelection(projects: [])
+        #expect(quick.tab.id == bornWith)
+    }
+
+    /// The launch sweep kills zero-client `macterm-*` sessions nobody claims.
+    /// The quick terminal's restored panes attach only when the panel is
+    /// first shown, so they ARE zero-client at exactly that moment — and must
+    /// count as claims, or the sweep would destroy the sessions the panel is
+    /// about to reattach. A genuinely unclaimed session still dies.
+    @Test
+    func the_launch_sweep_spares_the_restored_quick_terminals_sessions() async throws {
+        let (writer, writerQuick, storeURL, dir) = try makeQuickTerminalFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writerQuick.split(paneID: #require(writerQuick.focusedPaneID), direction: .horizontal)
+        let quickNames = Set(writerQuick.tab.splitRoot.allPanes().map(\.sessionName))
+        writer.saveWorkspaces()
+
+        let orphan = "macterm-quick-0123456789ab"
+        #expect(!quickNames.contains(orphan))
+        let killed = KilledSessions()
+        var zmx = recordingZmx(into: killed)
+        zmx.listSessionsWithClients = {
+            (quickNames.sorted() + [orphan]).map {
+                ZmxSessionListParser.Entry(name: $0, clients: 0, owner: nil)
+            }
+        }
+        let state = AppState(
+            workspaceStore: WorkspaceStore(fileURL: storeURL),
+            projectFiles: makeProjectFileStore(),
+            quickTerminal: QuickTerminalSplitState()
+        )
+        state.zmx = zmx
+        state.restoreSelection(projects: [])
+
+        await killed.settle(expecting: 1)
+        #expect(await killed.names == [orphan])
     }
 }
 

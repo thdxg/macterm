@@ -43,24 +43,14 @@ final class MactermConfig {
     /// (the shell-integration-features merge), so `GhosttyApp.loadConfig`
     /// calls this before every load to pick up user edits.
     func regenerate() {
-        let defaults = [
-            // First-launch tasteful UX. User's Ghostty config overrides any of
-            // these without needing to know they exist. Anything we'd set to
-            // ghostty's own default (e.g. scrollbar=system) isn't listed —
-            // libghostty already does the right thing.
-            "theme = \"Rose Pine\"",
-            "font-size = 16",
-            "macos-option-as-alt = true",
-            "window-padding-x = 16",
-            "window-padding-y = 16",
-        ].joined(separator: "\n") + "\n"
-        write(Data(defaults.utf8), to: defaultsURL)
+        write(Data(Self.defaultsBody.utf8), to: defaultsURL)
 
         let body = Self.overridesBody(
             windowOpacity: Preferences.shared.windowOpacity,
             userConfigText: userGhosttyConfigText(),
             shimDirectory: Self.sshShimDirectory(),
-            cursorEffects: .init(
+            experiments: .init(
+                smoothScrolling: Preferences.shared.smoothScrolling,
                 smoothCursor: Preferences.shared.smoothCursor,
                 trail: Preferences.shared.cursorTrail,
                 shaderDirectory: Self.shaderDirectory()
@@ -69,31 +59,41 @@ final class MactermConfig {
         write(Data(body.utf8), to: overridesURL)
     }
 
-    /// The cursor effects Settings offers as toggles. Each is a bundled
-    /// ghostty custom shader (`Resources/shaders/`) that the overrides file
-    /// appends to the user's own `custom-shader` list — the key is
-    /// repeatable, and the overrides load last, so the user's shaders stay
-    /// and run first. The trail is listed before the glide so it renders
-    /// beneath the drawn cursor.
+    /// The Settings → Experimental toggles, each a ghostty-side switch the
+    /// overrides file flips. All default off, so a user who never opens the
+    /// pane gets exactly the user-config behavior.
     ///
-    /// The smooth cursor also forces `cursor-opacity = 0`: the shader draws
-    /// the focused cursor itself, and ghostty's would otherwise jump ahead of
-    /// it. libghostty applies that key only while focused, so unfocused panes
-    /// keep the native hollow cursor. It is the one user-visible ghostty key
-    /// a Macterm setting overrides, which is why the toggle defaults to off.
-    struct CursorEffects: Equatable {
+    /// - Smooth scrolling is the fork's `smooth-scroll` key: libghostty
+    ///   already accumulates precise trackpad deltas in pixels, and with the
+    ///   key on it renders the sub-row remainder. Macterm forwards every
+    ///   wheel event untouched (#393), so the gate must live on that side.
+    /// - Smooth cursor and cursor trail are bundled custom shaders
+    ///   (`Resources/shaders/`) appended to the user's own `custom-shader`
+    ///   list — the key is repeatable, and the overrides load last, so the
+    ///   user's shaders stay and run first. The trail is listed before the
+    ///   glide so it renders beneath the drawn cursor. The smooth cursor also
+    ///   forces `cursor-opacity = 0`: the shader draws the focused cursor
+    ///   itself, and ghostty's would otherwise jump ahead of it. libghostty
+    ///   applies that key only while focused, so unfocused panes keep the
+    ///   native hollow cursor. It is the one user-visible ghostty key a
+    ///   Macterm setting overrides, which is why the toggle defaults to off.
+    struct Experiments: Equatable {
+        var smoothScrolling = false
         var smoothCursor = false
         var trail = false
         /// Where the bundled shaders live, or nil when the bundle lacks them
-        /// (a broken or partial build) — then nothing is emitted rather than
-        /// a `custom-shader` path libghostty would fail to load and log.
+        /// (a broken or partial build) — then no shader line is emitted
+        /// rather than a `custom-shader` path libghostty would fail to load.
         var shaderDirectory: String?
 
-        static let none = CursorEffects()
+        static let none = Experiments()
 
         var overrideLines: [String] {
-            guard let shaderDirectory else { return [] }
             var lines: [String] = []
+            if smoothScrolling {
+                lines.append("smooth-scroll = true")
+            }
+            guard let shaderDirectory else { return lines }
             if trail {
                 lines.append("custom-shader = \(shaderDirectory)/cursor_trail.glsl")
             }
@@ -105,6 +105,33 @@ final class MactermConfig {
         }
     }
 
+    /// The full text of `macterm-defaults.conf`, the first config layer. The
+    /// user's Ghostty config overrides any line here without needing to know
+    /// it exists. Two kinds of line live in it:
+    ///
+    /// - First-launch taste (theme, font size, padding).
+    /// - **Macterm's default for a ghostty key Macterm itself applies**, where
+    ///   that default departs from ghostty's. Macterm reads `macos-shortcuts`
+    ///   and `tab-inherit-working-directory` / `split-inherit-working-directory`
+    ///   for its own behavior and has no Settings UI for them; when its
+    ///   behavior should differ from ghostty's by default, the difference is a
+    ///   line here — never a fallback in `Preferences` — so the user changes
+    ///   it the same way as any other key.
+    ///
+    /// Anything we'd set to ghostty's own default (e.g. `scrollbar = system`,
+    /// `split-inherit-working-directory = true`) isn't listed — libghostty
+    /// already does the right thing. `MactermConfigTests` pins the departures.
+    static let defaultsBody: String = [
+        "theme = \"Rose Pine\"",
+        "font-size = 16",
+        "macos-option-as-alt = true",
+        "window-padding-x = 16",
+        "window-padding-y = 16",
+        // A new tab starts at the project root; ghostty would start it in the
+        // focused surface's cwd. Splits keep ghostty's `true`.
+        "tab-inherit-working-directory = false",
+    ].joined(separator: "\n") + "\n"
+
     /// The full text of `macterm-overrides.conf`. Pure — live inputs are
     /// passed in — so the wire contract with libghostty (most importantly the
     /// fork's `background-default-transparent` key) is unit-testable without
@@ -113,7 +140,7 @@ final class MactermConfig {
         windowOpacity: Double,
         userConfigText: String?,
         shimDirectory: String?,
-        cursorEffects: CursorEffects = .none
+        experiments: Experiments = .none
     ) -> String {
         var overrides = [
             // Macterm composites window translucency at the AppKit level —
@@ -169,14 +196,14 @@ final class MactermConfig {
             overrides.append("shell-integration-features = \(value)")
         }
 
-        overrides.append(contentsOf: cursorEffects.overrideLines)
+        overrides.append(contentsOf: experiments.overrideLines)
 
         return overrides.joined(separator: "\n") + "\n"
     }
 
     /// The bundle directory holding the cursor-effect shaders
     /// (`Macterm/Resources/shaders`, a folder reference in project.yml), or
-    /// nil when either file is missing so `CursorEffects` emits nothing.
+    /// nil when either file is missing so `Experiments` emits no shader line.
     static func shaderDirectory() -> String? {
         guard let dir = Bundle.main.resourceURL?
             .appendingPathComponent("shaders", isDirectory: true)

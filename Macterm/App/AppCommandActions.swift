@@ -224,7 +224,7 @@ extension AppCommand {
             switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
             case .applicable,
                  .invalid:
-                return { ctx.appState.applyLayoutPresentingError(current, confirming: true) }
+                return { ctx.appState.applyLayoutPresentingError(current) }
             case .emptyTabs,
                  .none:
                 return nil

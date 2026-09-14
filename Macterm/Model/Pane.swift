@@ -788,7 +788,6 @@ final class Pane: Identifiable {
         view.onAdaptiveBackgroundChange = nil
         view.onOutputActivity = nil
         view.onScrollbarUpdate = nil
-        view.onScrollWheel = nil
         view.onLinkHover = nil
         view.onMouseShapeChange = nil
         view.onPromptTitle = nil

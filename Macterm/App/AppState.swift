@@ -967,9 +967,8 @@ final class AppState {
     }
 
     /// A layout apply/save/import notice awaiting presentation (alert in
-    /// `MactermApp`). Fed by the explicit palette/menu commands and by the
-    /// silent first-open auto-apply — an invalid project file must always
-    /// surface a dialog, never fail silently.
+    /// `MactermApp`). Fed by the explicit palette/menu/Settings commands — an
+    /// invalid project file must always surface a dialog, never fail silently.
     struct LayoutError: Identifiable {
         let id = UUID()
         /// "apply" / "save" / "import" — slotted into the default alert title.
@@ -1130,6 +1129,16 @@ final class AppState {
     /// default writer is the ONE AppKit write, `BellBadge.apply`.
     @ObservationIgnored
     var bellFeatures: () -> GhosttyApp.BellFeatures = { GhosttyApp.shared.bellFeatures }
+
+    /// Whether a new tab / split starts in the focused pane's cwd rather than
+    /// the project directory — the user's `tab-inherit-working-directory` and
+    /// `split-inherit-working-directory`, read live so a config reload takes
+    /// effect on the next tab. Injectable so tests drive both answers without
+    /// a loaded ghostty config.
+    @ObservationIgnored
+    var newTabInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.tabInheritsWorkingDirectory }
+    @ObservationIgnored
+    var newSplitInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.splitInheritsWorkingDirectory }
     @ObservationIgnored
     var dockBadgeWriter: (String?) -> Void = { BellBadge.apply($0) }
     /// The label last handed to `dockBadgeWriter`, so a sync that changes
@@ -1150,6 +1159,14 @@ final class AppState {
     /// session kills without a real daemon.
     @ObservationIgnored
     var zmx: ZmxClient = .live
+
+    /// The quick terminal's split state once this AppState has adopted it
+    /// (`adoptQuickTerminal`) — the one whose tab the snapshot carries and
+    /// whose sessions the reaper spares. Resolved lazily to the panel's
+    /// singleton, or handed in at init by tests so a restore never writes
+    /// into the shared one. See `AppState+QuickTerminal.swift`.
+    @ObservationIgnored
+    var adoptedQuickTerminal: QuickTerminalSplitState?
 
     /// Refresh policy for `ZmxForegroundResolver`'s name→leader-pid cache:
     /// refresh on session lifecycle events plus a 30s reconcile TTL — never
@@ -1184,11 +1201,13 @@ final class AppState {
 
     init(
         workspaceStore: WorkspaceStore = WorkspaceStore(),
-        projectFiles: ProjectFileStore = ProjectFileStore()
+        projectFiles: ProjectFileStore = ProjectFileStore(),
+        quickTerminal: QuickTerminalSplitState? = nil
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
         pinnedLayoutStore = PinnedLayoutStore(directoryURL: projectFiles.directoryURL)
+        if let quickTerminal { adoptQuickTerminal(quickTerminal) }
         let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,
             object: nil,
@@ -1478,11 +1497,10 @@ final class AppState {
         let valid = Set(projects.map(\.id))
         // Restore every project's snapshot — including layout-file projects.
         // The snapshot carries each pane's persisted zmx session identity, so
-        // panes REATTACH their still-running shells; force-applying the
-        // project file's declared layout here would silently destroy them
-        // on every launch. The layout now only seeds a genuine first open
-        // (no snapshot) — `autoApplyLayoutOnFirstOpen` guards on
-        // `workspaces[id] == nil`, so a restored snapshot disables it.
+        // panes REATTACH their still-running shells; applying the project
+        // file's declared layout here would silently destroy them on every
+        // launch. A declared layout is only ever applied by an explicit Apply
+        // Layout; a project with no snapshot gets the default workspace.
         for ws in WorkspaceSerializer.restore(from: loaded.workspaces, validIDs: valid) {
             workspaces[ws.projectID] = ws
         }
@@ -1493,6 +1511,9 @@ final class AppState {
         savedWindowSnapshots = loaded.windows
         restorePinnedState(loaded.pinned, activeTabID: loaded.pinnedActiveTabID)
         reconcilePinnedLayoutAtLaunch(projects: projects)
+        // The quick terminal's tab reattaches like any workspace tab. Before
+        // the orphan sweep below, which spares only what a pane claims.
+        restoreQuickTerminal(loaded.quickTerminal)
         if let id = Preferences.shared.activeProjectID {
             if id == PinnedTabs.projectID {
                 if !pinnedRecords.isEmpty {
@@ -1502,7 +1523,6 @@ final class AppState {
             } else if let project = projects.first(where: { $0.id == id }) {
                 activeProjectID = id
                 recordProjectVisit(id)
-                autoApplyLayoutOnFirstOpen(project)
                 ensureWorkspace(projectID: id, path: project.path)
                 // Reattaching remote panes need the zmx path before warm/render.
                 stampRemoteZmxPath(project)
@@ -1514,9 +1534,9 @@ final class AppState {
         // no restored pane claims. Attach-aware and fail-closed (a failed
         // probe reaps nothing, and a failed snapshot LOAD sweeps nothing —
         // an empty claim set would mark every live session an orphan);
-        // foreign prefixes (supa-*, user sessions) are spared.
-        // Quick-terminal sessions are never persisted, so leftovers from a
-        // crash die here too.
+        // foreign prefixes (supa-*, user sessions) are spared. The quick
+        // terminal's restored sessions are claims like any other, so they
+        // wait for the panel to be shown rather than dying here.
         // Pinned live tabs materialize async, after zmx says which sessions
         // survived (#285) — ahead of the loadFailed gate, since pinned
         // records come from pinned.yaml, not the snapshot.
@@ -1567,7 +1587,8 @@ final class AppState {
                         activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
                         sidebarVisible: window.sidebarVisible
                     )
-                }
+                },
+            quickTerminal: quickTerminalSnapshot()
         )
         // A closed or unloaded tab takes its bell out of the count with it.
         syncDockBadge()
@@ -1587,7 +1608,6 @@ final class AppState {
             selectProject(project)
         } else {
             recordProjectVisit(project.id)
-            autoApplyLayoutOnFirstOpen(project)
             ensureWorkspace(projectID: project.id, path: project.path)
             stampRemoteZmxPath(project)
         }
@@ -1597,7 +1617,6 @@ final class AppState {
         logger.debug("selectProject: \(project.name, privacy: .public)")
         activeProjectID = project.id
         recordProjectVisit(project.id)
-        autoApplyLayoutOnFirstOpen(project)
         ensureWorkspace(projectID: project.id, path: project.path)
         // Stamp the remote zmx path onto every pane BEFORE any surface spawns
         // (warmFocusedProject / render → ensureNSView reads it). It's a host
@@ -1756,10 +1775,13 @@ final class AppState {
     /// under-sparing kills a live session, hence the `loadFailed` gates.
     /// Pinned live snapshots that haven't materialized yet count as claims
     /// too (#285), or a sweep would kill the very sessions the materialize
-    /// step is about to reattach.
+    /// step is about to reattach. So do the quick terminal's panes: restored
+    /// at launch but attached only when the panel is first shown, they sit
+    /// at zero clients for exactly the window this sweep runs in.
     private func claimedSessionNames() -> Set<String> {
         Set(allLivePanes().map(\.sessionName))
             .union(pendingPinnedSessionNames())
+            .union(quickTerminalSessionNames())
     }
 
     /// Every pane attached to a session, across ALL workspaces (pinned
@@ -2092,26 +2114,6 @@ final class AppState {
         }
     }
 
-    /// On a project's first open this session (no live/restored workspace yet),
-    /// build its workspace from the central project file matching its path.
-    /// Because there are no live panes, the apply is pure-spawn — never
-    /// destructive, never prompts. A restored snapshot already populates
-    /// `workspaces`, so it takes precedence; with no applicable file this
-    /// no-ops and `ensureWorkspace` creates the default single-pane workspace.
-    private func autoApplyLayoutOnFirstOpen(_ project: Project) {
-        guard workspaces[project.id] == nil else { return }
-        switch projectFiles.applyState(forProjectPath: project.path, preferredSlug: ProjectSlug.slug(from: project.name)) {
-        case .applicable:
-            applyLayoutPresentingError(project)
-        case .invalid:
-            // Surface the parse error; the default workspace is created after.
-            applyLayoutPresentingError(project)
-        case .emptyTabs,
-             .none:
-            break
-        }
-    }
-
     /// Shows an open panel, adds or finds the selected directory as a project,
     /// and selects it. Returns the selected project, nil if cancelled.
     @discardableResult
@@ -2384,7 +2386,7 @@ final class AppState {
         return tab.id
     }
 
-    /// Creates a tab in the directory selected in Settings.
+    /// Creates a tab in the directory `tab-inherit-working-directory` selects.
     /// Active pane falls back to the project path when no local cwd is available.
     /// The pinned workspace falls back to home.
     @discardableResult
@@ -2395,7 +2397,7 @@ final class AppState {
         let activePaneDirectory = focusedPane(for: projectID)?.liveLocalWorkingDirectory()
         // A brand-new tab has no source pane to inherit from, so an
         // unusable active-pane cwd (nil) lands in the project directory.
-        let newTabDirectory = Preferences.shared.newTabWorkingDirectory.resolveNewTerminalDirectory(
+        let newTabDirectory = NewTerminalWorkingDirectory(inherits: newTabInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: activePaneDirectory
         ) ?? projectDirectory
@@ -2683,7 +2685,7 @@ final class AppState {
 
     /// Find the workspace tab currently holding a pane. Scans every loaded
     /// workspace — a sidebar pane drop only carries the pane's id, and the
-    /// quick terminal's ephemeral tab (not in `workspaces`) correctly misses.
+    /// quick terminal's tab (not in `workspaces`) correctly misses.
     private func locatePane(_ paneID: UUID) -> (projectID: UUID, tab: TerminalTab)? {
         for (projectID, ws) in workspaces {
             if let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }) {
@@ -2985,7 +2987,7 @@ final class AppState {
         // nil = inherit (the source pane's live cwd, else its own
         // `projectPath`) — never coerced to the project root, which would
         // turn a remote pane's split into a local shell.
-        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+        let newPaneDirectory = NewTerminalWorkingDirectory(inherits: newSplitInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: pane.liveLocalWorkingDirectory()
         )
@@ -3069,7 +3071,7 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
               let pane = tab.splitRoot.findPane(id: paneID)
         else { return [] }
-        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+        let newPaneDirectory = NewTerminalWorkingDirectory(inherits: newSplitInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: pane.liveLocalWorkingDirectory()
         )
@@ -3092,7 +3094,7 @@ final class AppState {
               let pane = tab.focusedPane,
               let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects)
         else { return }
-        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+        let newPaneDirectory = NewTerminalWorkingDirectory(inherits: newSplitInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: pane.liveLocalWorkingDirectory()
         )
@@ -3287,13 +3289,9 @@ final class AppState {
 
     /// `applyLayout` + error presentation: failures land in
     /// `pendingLayoutError` (the alert in `MactermApp`). The shared entry
-    /// point for the palette/menu command and the first-open auto-apply.
-    ///
-    /// `confirming` marks the *user-invoked* command (palette, menu, keybind),
-    /// which gets a success toast. The first-open seed passes false: it fires
-    /// unbidden on every project's first open, where a confirmation would be
-    /// noise for something the user never asked for.
-    func applyLayoutPresentingError(_ project: Project, confirming: Bool = false, host: DialogHost = .mainWindow) {
+    /// point for the palette/menu command and the Settings row menu — every
+    /// caller is user-invoked, so a clean apply gets a success toast.
+    func applyLayoutPresentingError(_ project: Project, host: DialogHost = .mainWindow) {
         if let error = applyLayout(project: project, host: host) {
             pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription, host: host)
             return
@@ -3301,7 +3299,7 @@ final class AppState {
         // A destructive plan is staged, not applied — its confirmation dialog is
         // up, and the toast belongs to whatever the user chooses there
         // (`confirmPendingLayoutApply`), not to merely opening the prompt.
-        if confirming, pendingLayoutApply == nil {
+        if pendingLayoutApply == nil {
             presentToast("Layout applied")
         }
     }

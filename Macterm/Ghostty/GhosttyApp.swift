@@ -522,6 +522,29 @@ final class GhosttyApp {
         MacosHidden.resolve(configValue: configEnum(MacosHidden.key))
     }
 
+    /// `macos-shortcuts`: whether Shortcuts, Spotlight and the `shortcuts` CLI
+    /// may drive the app through its App Intents. Read live by
+    /// `IntentPermissionGate` on every authorize, so a config reload takes
+    /// effect on the next intent.
+    var shortcutsAccess: ShortcutsAccess {
+        ShortcutsAccess.resolve(configValue: configEnum(ShortcutsAccess.key))
+    }
+
+    /// `tab-inherit-working-directory`: a new tab starts in the focused pane's
+    /// cwd (true) or at the project directory (false — Macterm's reading of
+    /// ghostty's "default working directory"). Ghostty defaults it to true;
+    /// `macterm-defaults.conf` pins it to false, which is also the fallback
+    /// here for the moment before any config has loaded.
+    var tabInheritsWorkingDirectory: Bool {
+        configBool("tab-inherit-working-directory", default: false)
+    }
+
+    /// `split-inherit-working-directory`: the same choice for a new split.
+    /// Ghostty's default (true) is Macterm's too, so nothing pins it.
+    var splitInheritsWorkingDirectory: Bool {
+        configBool("split-inherit-working-directory", default: true)
+    }
+
     /// Read an enum-valued key as its ghostty tag name.
     ///
     /// Deliberately NOT `configString`: libghostty writes an enum's `@tagName`

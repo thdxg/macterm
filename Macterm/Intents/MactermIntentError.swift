@@ -10,7 +10,7 @@ import AppIntents
 /// `.busy` rather than staging a confirmation dialog: a shortcut can run with
 /// nobody watching, and a modal nobody answers hangs the whole automation.
 enum MactermIntentError: Error, CustomLocalizedStringResourceConvertible {
-    /// `Preferences.shortcutsAccess` is `deny`, or the user answered the ask.
+    /// `macos-shortcuts` is `deny`, or the user answered the ask.
     case accessDenied
     /// The app never became ready — no state objects within the deadline.
     case appUnavailable
@@ -28,7 +28,7 @@ enum MactermIntentError: Error, CustomLocalizedStringResourceConvertible {
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .accessDenied:
-            "\(appDisplayName) doesn't allow Shortcuts. Change this in \(appDisplayName) → Settings → General → Shortcuts."
+            "\(appDisplayName) doesn't allow Shortcuts. Set macos-shortcuts = allow in your Ghostty config."
         case .appUnavailable:
             "\(appDisplayName) isn't ready yet."
         case .notFound:

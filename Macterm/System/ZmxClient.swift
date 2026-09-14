@@ -257,41 +257,6 @@ extension ZmxClient {
         }
     }
 
-    /// Synchronously kill `sessionIDs`, blocking the caller until every kill
-    /// finishes or `timeout` elapses. For `applicationWillTerminate`, where the
-    /// run loop is tearing down and a detached `Task` would never be scheduled
-    /// before the process exits — so a fire-and-forget kill silently no-ops. The
-    /// kills run concurrently off the main thread; each is already bounded by the
-    /// 5s subprocess timeout, and `timeout` caps the whole batch so a wedged
-    /// daemon can't hang quit indefinitely.
-    nonisolated func killSessionsBlocking(
-        _ sessionIDs: [String],
-        timeout: Duration = .seconds(6)
-    ) {
-        let kill = killSession
-        runKillsBlocking(sessionIDs.map { id in { await kill(id) } }, timeout: timeout)
-    }
-
-    nonisolated private func runKillsBlocking(
-        _ kills: [@Sendable () async -> Void],
-        timeout: Duration
-    ) {
-        guard !kills.isEmpty else { return }
-        let group = DispatchGroup()
-        group.enter()
-        Task {
-            await withTaskGroup(of: Void.self) { taskGroup in
-                for kill in kills {
-                    taskGroup.addTask { await kill() }
-                }
-            }
-            group.leave()
-        }
-        let seconds = Double(timeout.components.seconds)
-            + Double(timeout.components.attoseconds) / 1e18
-        _ = group.wait(timeout: .now() + seconds)
-    }
-
     /// Runs a zmx subcommand — directly (the bundled binary) or through ssh
     /// (remote ops pass `/usr/bin/ssh` and a `RemoteSpawn.opArgv`). Returns
     /// captured stdout on success, or nil on any failure (unbundled, spawn

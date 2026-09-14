@@ -167,9 +167,10 @@ struct ProjectsSettings: View {
         return projectStore.projects.contains { ProjectPath.matches($0.path, declared) }
     }
 
-    /// Add a project for this file's declaration and select it. Selecting is
-    /// what makes the layout take effect: a project with no workspace yet
-    /// auto-applies its matching file on first open.
+    /// Add a project for this file's declaration and select it. The new
+    /// project opens with the default workspace; the file's layout takes
+    /// effect through Apply Layout (the row menu beside it), never on
+    /// selection.
     private func createProject(from layout: ProjectFileStore.Listing) {
         guard let path = layout.declaredPath else { return }
         // `name:` is optional in a project file; fall back to the filename,

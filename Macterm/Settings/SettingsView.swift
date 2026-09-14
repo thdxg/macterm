@@ -448,9 +448,6 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
-    @State private var shortcutsAccess: ShortcutsAccess = Preferences.shared.shortcutsAccess
-    @State private var newTabWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newTabWorkingDirectory
-    @State private var newSplitWorkingDirectory: NewTerminalWorkingDirectory = Preferences.shared.newSplitWorkingDirectory
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -462,8 +459,6 @@ private struct GeneralSettings: View {
         return "Session persistence is inactive: this system's zmx socket path is too long. Terminals run without persistence."
     }
 
-    @State
-    private var terminalScrollSpeed: Double = Preferences.shared.terminalScrollSpeed
     /// Ghostty's default locations form an optional base layer. Custom files
     /// always load afterward in their displayed order.
     @State
@@ -551,39 +546,6 @@ private struct GeneralSettings: View {
                 }
             }
 
-            Section("Terminal") {
-                Picker("New tab directory", selection: $newTabWorkingDirectory) {
-                    ForEach(NewTerminalWorkingDirectory.allCases) { directory in
-                        Text(directory.displayName).tag(directory)
-                    }
-                }
-                .onChange(of: newTabWorkingDirectory) { _, directory in
-                    Preferences.shared.newTabWorkingDirectory = directory
-                }
-
-                Picker("New split directory", selection: $newSplitWorkingDirectory) {
-                    ForEach(NewTerminalWorkingDirectory.allCases) { directory in
-                        Text(directory.displayName).tag(directory)
-                    }
-                }
-                .onChange(of: newSplitWorkingDirectory) { _, directory in
-                    Preferences.shared.newSplitWorkingDirectory = directory
-                }
-
-                SettingsSlider(
-                    label: "Scroll speed",
-                    value: $terminalScrollSpeed,
-                    range: 0.25 ... 3.0,
-                    step: nil,
-                    display: { String(format: "%.2f×", $0) }
-                )
-                .onChange(of: terminalScrollSpeed) { _, v in
-                    Preferences.shared.terminalScrollSpeed = v
-                }
-                Text("Scrollback speed for trackpads and mouse wheels.")
-                    .settingsCaption()
-            }
-
             Section("Layout") {
                 Toggle("Auto-tile panes", isOn: $autoTilingEnabled)
                     .onChange(of: autoTilingEnabled) { _, v in
@@ -610,22 +572,6 @@ private struct GeneralSettings: View {
                 Text(
                     "Reattaches a disconnected pane's session when you wake "
                         + "the Mac or return to the app."
-                )
-                .settingsCaption()
-            }
-
-            Section("Shortcuts") {
-                Picker("Allow Shortcuts to control \(appDisplayName)", selection: $shortcutsAccess) {
-                    ForEach(ShortcutsAccess.allCases) { access in
-                        Text(access.displayName).tag(access)
-                    }
-                }
-                .onChange(of: shortcutsAccess) { _, v in
-                    Preferences.shared.shortcutsAccess = v
-                }
-                Text(
-                    "Shortcuts and Spotlight actions can create projects and tabs, "
-                        + "and type into your terminals. Ask confirms once per launch."
                 )
                 .settingsCaption()
             }

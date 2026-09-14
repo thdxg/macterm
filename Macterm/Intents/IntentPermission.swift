@@ -4,20 +4,17 @@ import os
 private let logger = Logger(subsystem: appBundleID, category: "IntentPermission")
 
 /// Whether Shortcuts, Spotlight and the `shortcuts` CLI may drive this app
-/// through its App Intents.
+/// through its App Intents: the user's ghostty `macos-shortcuts` key, read
+/// live off the loaded config (`GhosttyApp.shortcutsAccess`) with no Settings
+/// UI of its own. Ghostty defines the key with the same three values and the
+/// same `ask` default, and Macterm's intents are the same kind of surface
+/// (create terminals, type into shells), so it is the same setting — the
+/// one place Macterm reads it differently is that `ask` remembers the answer
+/// for the run only (see `IntentPermissionGate`).
 ///
-/// Mirrors Ghostty's `macos-shortcuts` config key, but lives in `Preferences`
-/// rather than the ghostty config pipeline: the rule is that ghostty keys carry
-/// libghostty-shaped settings (theme, font, palette, shell integration) and
-/// everything about Macterm's own UI and automation surface is a `Preferences`
-/// value. An intent can create projects, close tabs and type into shells —
-/// none of which libghostty knows anything about — so a ghostty key would be
-/// asking the terminal core's config to gate a Macterm feature it has no other
-/// stake in, and would break the "the user is the source of truth for every
-/// ghostty setting" contract by adding a key ghostty itself doesn't define.
-///
-/// The raw values are persisted, so renaming a case is a stored-preference
-/// migration; an unrecognized stored value falls back to `.ask`.
+/// The raw values are ghostty's own `MacShortcuts` tag names — exactly what
+/// `ghostty_config_get` hands back for the key — so they are a wire contract
+/// with libghostty, not names of ours.
 enum ShortcutsAccess: String, CaseIterable, Identifiable {
     /// Confirm with an alert the first time an intent runs in a launch, then
     /// remember that answer for the rest of the run.
@@ -26,6 +23,18 @@ enum ShortcutsAccess: String, CaseIterable, Identifiable {
     case allow
     /// Refuse every intent with an error that says how to change it.
     case deny
+
+    static let key = "macos-shortcuts"
+
+    /// An unset, empty, unreadable, or unrecognized value means `ask` —
+    /// ghostty's default, and the conservative one: a key a newer ghostty grew
+    /// a fourth case for degrades to a prompt rather than to a silent grant.
+    static func resolve(configValue: String?) -> ShortcutsAccess {
+        guard let raw = configValue?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
+            return .ask
+        }
+        return ShortcutsAccess(rawValue: raw.lowercased()) ?? .ask
+    }
 
     var id: String { rawValue }
 
@@ -95,12 +104,11 @@ final class IntentPermissionGate {
     /// user allowed it.
     var presentAlert: @MainActor () -> Bool = IntentPermissionGate.runModalAlert
 
-    /// Where the preference comes from — injectable for the same reason. Read
-    /// on every authorize rather than captured, so flipping the setting takes
-    /// effect on the next intent with no restart. Tests override this instead
-    /// of writing `Preferences.shared`, which swift-testing's parallel suites
-    /// share.
-    var access: @MainActor () -> ShortcutsAccess = { Preferences.shared.shortcutsAccess }
+    /// Where the setting comes from — injectable for the same reason. Read on
+    /// every authorize rather than captured, so a config reload that flips
+    /// `macos-shortcuts` takes effect on the next intent with no restart.
+    /// Tests override this instead of loading a ghostty config.
+    var access: @MainActor () -> ShortcutsAccess = { GhosttyApp.shared.shortcutsAccess }
 
     private init() {}
 
@@ -130,7 +138,7 @@ final class IntentPermissionGate {
     func resetForTesting() {
         recorded = nil
         presentAlert = IntentPermissionGate.runModalAlert
-        access = { Preferences.shared.shortcutsAccess }
+        access = { GhosttyApp.shared.shortcutsAccess }
     }
 
     private static func runModalAlert() -> Bool {

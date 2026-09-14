@@ -133,7 +133,7 @@ struct ProjectCommand: ParsableCommand {
         @Option(help: "Display name. Defaults to the directory name.")
         var name: String?
 
-        @Flag(help: "Also select it (applies a matching project file's layout on first open).")
+        @Flag(help: "Also select it.")
         var select = false
 
         @OptionGroup var options: ConnectionOptions
