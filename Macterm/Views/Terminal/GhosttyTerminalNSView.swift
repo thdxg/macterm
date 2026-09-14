@@ -424,12 +424,6 @@ final class GhosttyTerminalNSView: NSView {
     /// current total row count. Occlusion-independent — see
     /// `surfaceDidOutputActivity`.
     var onOutputActivity: ((UInt64) -> Void)?
-    /// Gives the hosting `SurfaceScrollView` first chance to handle scrollback
-    /// wheel/trackpad events with its iTerm-style line accumulator. It declines
-    /// when there's no scrollback to move through (so alternate-screen apps
-    /// like less/vim fall through to libghostty for mouse reporting). Return
-    /// false to let libghostty handle the event directly.
-    var onScrollWheel: ((NSEvent) -> Bool)?
     /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
     /// when the pointer leaves it. Drives the pane's hover-URL banner.
     var onLinkHover: ((String?) -> Void)?
@@ -1348,20 +1342,17 @@ final class GhosttyTerminalNSView: NSView {
         onInteraction?()
         guard let surface else { return }
 
+        // Exactly Ghostty.app's `scrollWheel` (SurfaceView_AppKit.swift): the
+        // core does all the scrolling — scrollback, alt-screen cursor keys,
+        // mouse reporting — with the user's `mouse-scroll-multiplier`, so the
+        // feel is Ghostty's. The 2× on precise deltas is Ghostty's own
+        // frontend factor ("subjective, it feels better"), not a Macterm tune.
         var x = event.scrollingDeltaX
         var y = event.scrollingDeltaY
         if event.hasPreciseScrollingDeltas {
-            // Match Ghostty's macOS frontend: precise trackpad/Magic Mouse
-            // deltas are valid but feel slow at 1x because terminals scroll in
-            // rows instead of continuous document pixels.
             x *= 2
             y *= 2
         }
-
-        if !ghostty_surface_mouse_captured(surface), onScrollWheel?(event) == true {
-            return
-        }
-
         ghostty_surface_mouse_scroll(surface, x, y, scrollMods(for: event))
     }
 

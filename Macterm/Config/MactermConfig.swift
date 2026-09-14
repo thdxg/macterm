@@ -59,12 +59,12 @@ final class MactermConfig {
     ///
     /// - First-launch taste (theme, font size, padding).
     /// - **Macterm's default for a ghostty key Macterm itself applies**, where
-    ///   that default departs from ghostty's. Macterm reads `macos-shortcuts`,
-    ///   `tab-inherit-working-directory` / `split-inherit-working-directory`
-    ///   and `mouse-scroll-multiplier` for its own behavior and has no
-    ///   Settings UI for them; when its behavior should differ from ghostty's
-    ///   by default, the difference is a line here — never a fallback in
-    ///   `Preferences` — so the user changes it the same way as any other key.
+    ///   that default departs from ghostty's. Macterm reads `macos-shortcuts`
+    ///   and `tab-inherit-working-directory` / `split-inherit-working-directory`
+    ///   for its own behavior and has no Settings UI for them; when its
+    ///   behavior should differ from ghostty's by default, the difference is a
+    ///   line here — never a fallback in `Preferences` — so the user changes
+    ///   it the same way as any other key.
     ///
     /// Anything we'd set to ghostty's own default (e.g. `scrollbar = system`,
     /// `split-inherit-working-directory = true`) isn't listed — libghostty
@@ -78,11 +78,6 @@ final class MactermConfig {
         // A new tab starts at the project root; ghostty would start it in the
         // focused surface's cwd. Splits keep ghostty's `true`.
         "tab-inherit-working-directory = false",
-        // Macterm's scrollback has always moved one row per wheel notch;
-        // ghostty's discrete default is three. One key now drives both the
-        // scrollback path and libghostty's own (vim, less, mouse reporting),
-        // so the pin reaches those too. See `MouseScrollMultiplier`.
-        "mouse-scroll-multiplier = precision:1,discrete:1",
     ].joined(separator: "\n") + "\n"
 
     /// The full text of `macterm-overrides.conf`. Pure — live inputs are

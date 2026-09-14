@@ -23,16 +23,14 @@ private func oid(_ object: AnyObject) -> String {
 ///        └─ GhosttyTerminalNSView      (pinned to the visible rect)
 /// ```
 ///
-/// Wheel/trackpad events hit the frontmost surface view first. The scroll
-/// view handles them with an iTerm2-style line accumulator that converts
-/// AppKit's wheel/trackpad deltas (including inertia) into whole terminal-row
-/// movement — but only while there's scrollback to move through. Apps with no
-/// scrollback (alternate-screen programs like less/vim, or a fresh prompt)
-/// have nothing to scroll, so the view declines and libghostty handles the
-/// event (mouse reporting / cursor keys). Scrollback geometry flows **into**
-/// this view via the `GHOSTTY_ACTION_SCROLLBAR` action (`onScrollbarUpdate`),
-/// and user-visible scroll positions flow **out** via the `scroll_to_row:<n>`
-/// keybind action.
+/// Wheel/trackpad events hit the frontmost surface view and go straight to
+/// libghostty, exactly as Ghostty.app sends them (`GhosttyTerminalNSView
+/// .scrollWheel`); this view never handles them, so scrolling feels like
+/// Ghostty's and the user's `mouse-scroll-multiplier` governs it. (An
+/// iTerm2-style row accumulator lived here from #102 until it was removed in
+/// favor of ghostty's own path.) Scrollback geometry flows **into** this view
+/// via the `GHOSTTY_ACTION_SCROLLBAR` action (`onScrollbarUpdate`), and
+/// scroller drags flow **out** via the `scroll_to_row:<n>` keybind action.
 final class SurfaceScrollView: NSScrollView {
     /// The Metal terminal surface. Owned by `Pane`; we just re-parent it into
     /// our document view.
@@ -63,11 +61,6 @@ final class SurfaceScrollView: NSScrollView {
     private var searchMatchRows: [Int] = []
     private var searchSelectedFromEnd: Int?
     private var searchTickScanScheduled = false
-
-    /// iTerm-style vertical scroll-wheel accumulator. It turns AppKit's messy
-    /// wheel/trackpad deltas into whole terminal-row movement, including
-    /// momentum events, instead of trying to pixel-scroll terminal contents.
-    private let verticalScrollAccumulator = ITermScrollAccumulator()
 
     nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
@@ -172,9 +165,6 @@ final class SurfaceScrollView: NSScrollView {
         wireObservers()
         surfaceView.onScrollbarUpdate = { [weak self] total, offset, len in
             self?.applyScrollbar(total: total, offset: offset, len: len)
-        }
-        surfaceView.onScrollWheel = { [weak self] event in
-            self?.handleSurfaceScrollWheel(event) ?? false
         }
         // libghostty computes the pointer shape for the grid (I-beam over
         // text, pointing hand over links, resize arrows for TUI drags);
@@ -361,32 +351,10 @@ final class SurfaceScrollView: NSScrollView {
 
     // MARK: - UI → Core
 
-    private func handleSurfaceScrollWheel(_ event: NSEvent) -> Bool {
-        let cellHeight = surfaceView.cellHeightPoints
-        guard canHandleScrollbackWheel(event, cellHeight: cellHeight) else { return false }
-        // The user's `mouse-scroll-multiplier`, chosen per device class the way
-        // ghostty picks it. libghostty applies the same key on its own scroll
-        // path (alt screen, mouse reporting), so the two paths move together.
-        let sensitivity = GhosttyApp.shared.mouseScrollMultiplier.value(precise: event.hasPreciseScrollingDeltas)
-        let rowDelta = verticalScrollAccumulator.delta(for: event, sensitivity: sensitivity)
-        guard rowDelta != 0 else { return true }
-        let currentRow = Int(min(offset, UInt64(Int.max)))
-        sendScrollToRow(currentRow - rowDelta)
-        return true
-    }
-
-    /// The scrollback geometry as one value, so the alt-screen and clamping
-    /// predicates come from `ScrollbarSnapshot` rather than being restated here.
+    /// The scrollback geometry as one value, so the clamping predicates come
+    /// from `ScrollbarSnapshot` rather than being restated here.
     private var snapshot: GhosttyTerminalNSView.ScrollbarSnapshot {
         .init(total: total, offset: offset, len: len)
-    }
-
-    private func canHandleScrollbackWheel(_ event: NSEvent, cellHeight: CGFloat) -> Bool {
-        // Without scrollback (less/vim, a fresh prompt) there is nothing to
-        // scroll, so we decline and let libghostty handle the event (mouse
-        // reporting / cursor keys).
-        guard surfaceView.surface != nil, cellHeight > 0, snapshot.hasScrollback else { return false }
-        return abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX)
     }
 
     private func handleLiveScroll() {
@@ -448,73 +416,6 @@ final class SurfaceScrollView: NSScrollView {
         // scroller when the pointer is over its track so it stays discoverable.
         guard NSScroller.preferredScrollerStyle == .legacy else { return }
         flashScrollers()
-    }
-}
-
-// MARK: - iTerm2-style scroll accumulation
-
-/// Swift port of iTerm2's `iTermScrollAccumulator`: modern accumulator enabled,
-/// `fastTrackpad = YES`, a caller-supplied sensitivity (the user's
-/// `mouse-scroll-multiplier`, already clamped to ghostty's range by
-/// `MouseScrollMultiplier`), and scroll-wheel acceleration 1.0.
-private final class ITermScrollAccumulator {
-    private var accumulatedDelta: CGFloat = 0
-
-    func delta(for event: NSEvent, sensitivity: Double) -> Int {
-        Int(accumulatedDelta(for: event, sensitivity: CGFloat(sensitivity)))
-    }
-
-    private func accumulatedDelta(for event: NSEvent, sensitivity: CGFloat) -> CGFloat {
-        if event.phase.isEmpty, event.momentumPhase.isEmpty {
-            return accumulatedDeltaForMouseWheelEvent(event, sensitivity: sensitivity)
-        }
-        return accumulatedDeltaForTrackpadEvent(event, sensitivity: sensitivity)
-    }
-
-    private func accumulatedDeltaForMouseWheelEvent(_ event: NSEvent, sensitivity: CGFloat) -> CGFloat {
-        let delta = adjustedDelta(for: event) * sensitivity
-        accumulatedDelta += delta
-        return takeWholePortion(delta: delta)
-    }
-
-    private func accumulatedDeltaForTrackpadEvent(_ event: NSEvent, sensitivity: CGFloat) -> CGFloat {
-        if event.phase == .began {
-            accumulatedDelta = 0
-        }
-        let delta = adjustedDelta(for: event) * sensitivity
-        accumulatedDelta += delta
-        return takeWholePortion(delta: delta)
-    }
-
-    private func adjustedDelta(for event: NSEvent) -> CGFloat {
-        if event.hasPreciseScrollingDeltas {
-            // iTerm2's `fastTrackpad` path, based on Terminal.app: use the
-            // device line delta and round away from zero so small trackpad
-            // gestures don't feel sluggish.
-            return Self.roundAwayFromZero(event.deltaY)
-        }
-        return event.scrollingDeltaY
-    }
-
-    private func takeWholePortion(delta: CGFloat) -> CGFloat {
-        if abs(accumulatedDelta) >= 1 {
-            let roundDelta = Self.roundTowardZero(accumulatedDelta)
-            accumulatedDelta -= roundDelta
-            return roundDelta
-        }
-        if delta * accumulatedDelta < 0 {
-            accumulatedDelta = 0
-            return delta.rounded()
-        }
-        return 0
-    }
-
-    private static func roundTowardZero(_ value: CGFloat) -> CGFloat {
-        value > 0 ? floor(value) : ceil(value)
-    }
-
-    private static func roundAwayFromZero(_ value: CGFloat) -> CGFloat {
-        value > 0 ? ceil(value) : floor(value)
     }
 }
 

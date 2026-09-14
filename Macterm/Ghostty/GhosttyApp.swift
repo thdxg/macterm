@@ -28,12 +28,6 @@ final class GhosttyApp {
     /// never an `effectiveAppearance`, which our own `.preferredColorScheme`
     /// pins, latching the theme after one system switch (issue #144).
     private(set) var systemScheme: ThemeResolver.Scheme = .light
-    /// The user's `mouse-scroll-multiplier`, resolved from the raw config
-    /// text on every load and reload (the key has no C getter, see
-    /// `MouseScrollMultiplier`) and cached because `SurfaceScrollView` asks on
-    /// every wheel event. Applied to Macterm's scrollback path; libghostty
-    /// applies the same key on its own.
-    private(set) var mouseScrollMultiplier: MouseScrollMultiplier = .mactermDefault
     /// Chrome colors as libghostty resolved them for a live surface — the
     /// active `theme = light:X,dark:Y` side already applied. Populated from
     /// `GHOSTTY_ACTION_CONFIG_CHANGE` (see `adoptResolvedColors`) and preferred
@@ -139,7 +133,6 @@ final class GhosttyApp {
         app = createdApp
         config = cfg
         applyAppIcon()
-        refreshRawTextValues()
 
         // Ticking is event-driven: libghostty's `wakeup_cb` fires whenever the
         // core needs `ghostty_app_tick` (GhosttyCallbacks.wakeup schedules it
@@ -256,15 +249,8 @@ final class GhosttyApp {
         config = newConfig
         configVersion += 1
         applyAppIcon()
-        refreshRawTextValues()
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
         return result
-    }
-
-    /// Re-read the keys that come from the user's raw config text rather than
-    /// the loaded C config. Same two moments as `applyAppIcon`.
-    private func refreshRawTextValues() {
-        mouseScrollMultiplier = MouseScrollMultiplier.resolve(userConfigText: MactermConfig.userGhosttyConfigText())
     }
 
     // MARK: - App icon (`macos-icon`)

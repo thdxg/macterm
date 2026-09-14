@@ -888,11 +888,12 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.pane.dimOpacity")
             defaults.set(true, forKey: Keys.migrationRetiredPaneDimKey)
         }
-        // Scroll speed, the new tab / split directory choice and Shortcuts
-        // access are ghostty keys now (`mouse-scroll-multiplier`,
-        // `tab-inherit-working-directory` / `split-inherit-working-directory`,
-        // `macos-shortcuts`), read off the loaded config; Macterm's defaults
-        // for them live in `macterm-defaults.conf`. The old keys are dead.
+        // The new tab / split directory choice and Shortcuts access are
+        // ghostty keys now (`tab-inherit-working-directory` /
+        // `split-inherit-working-directory`, `macos-shortcuts`), read off the
+        // loaded config with Macterm's defaults in `macterm-defaults.conf`;
+        // scrolling is libghostty's own (`mouse-scroll-multiplier`) with no
+        // Macterm-side speed at all. The old keys are dead.
         if !defaults.bool(forKey: Keys.migrationRetiredGhosttyOwnedKeys) {
             defaults.removeObject(forKey: "macterm.terminal.scrollSpeed")
             defaults.removeObject(forKey: "macterm.tabs.newTabWorkingDirectory")

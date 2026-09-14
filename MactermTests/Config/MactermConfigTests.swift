@@ -20,19 +20,12 @@ struct MactermConfigTests {
         #expect(!MactermConfig.defaultsBody.contains("split-inherit-working-directory"))
     }
 
-    /// Macterm's scrollback has always moved one row per wheel notch where
-    /// ghostty's discrete default is three. The pin and the resolver's
-    /// fallback must agree, or an unset key and the shipped default would
-    /// scroll differently.
+    /// Scrolling is libghostty's on every path (the #102 accumulator is gone),
+    /// so `mouse-scroll-multiplier` keeps ghostty's own default — and
+    /// `macos-shortcuts` defaults to `ask` in both. A pin would be noise.
     @Test
-    func scroll_multiplier_pin_matches_the_resolver_fallback() {
-        #expect(MactermConfig.defaultsBody.contains("mouse-scroll-multiplier = precision:1,discrete:1\n"))
-        #expect(MouseScrollMultiplier.resolve(userConfigText: MactermConfig.defaultsBody) == .mactermDefault)
-    }
-
-    /// `macos-shortcuts` defaults to `ask` in both; a pin would be noise.
-    @Test
-    func shortcuts_access_is_not_pinned() {
+    func keys_that_share_ghosttys_default_are_not_pinned() {
+        #expect(!MactermConfig.defaultsBody.contains("mouse-scroll-multiplier"))
         #expect(!MactermConfig.defaultsBody.contains("macos-shortcuts"))
     }
 
