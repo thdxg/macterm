@@ -2,18 +2,19 @@ import AppKit
 import Foundation
 import Observation
 
-/// Determines whether a new terminal starts in the project directory or the focused pane's cwd.
-enum NewTerminalWorkingDirectory: String, CaseIterable, Identifiable {
-    case projectDirectory = "project"
-    case activePaneDirectory = "active_pane"
+/// Whether a new terminal starts in the project directory or the focused
+/// pane's cwd — the two answers to ghostty's `tab-inherit-working-directory`
+/// and `split-inherit-working-directory`, which `AppState` reads live off the
+/// loaded config (`GhosttyApp.tabInheritsWorkingDirectory` and friends). In a
+/// project-based terminal, ghostty's "default working directory" for the
+/// `false` case is the project root.
+enum NewTerminalWorkingDirectory: Equatable {
+    case projectDirectory
+    case activePaneDirectory
 
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .projectDirectory: "Project"
-        case .activePaneDirectory: "Active pane"
-        }
+    /// The ghostty boolean's reading: `true` inherits the focused pane's cwd.
+    init(inherits: Bool) {
+        self = inherits ? .activePaneDirectory : .projectDirectory
     }
 
     /// The directory a new terminal must start in, or nil for "keep the
@@ -240,21 +241,6 @@ final class Preferences {
         }
     }
 
-    /// Multiplier applied to terminal scroll wheel / trackpad row deltas.
-    var terminalScrollSpeed: Double {
-        didSet { defaults.set(terminalScrollSpeed, forKey: Keys.terminalScrollSpeed) }
-    }
-
-    /// Selection shown by "New tab directory" in Settings.
-    var newTabWorkingDirectory: NewTerminalWorkingDirectory {
-        didSet { defaults.set(newTabWorkingDirectory.rawValue, forKey: Keys.newTabWorkingDirectory) }
-    }
-
-    /// Selection shown by "New split directory" in Settings.
-    var newSplitWorkingDirectory: NewTerminalWorkingDirectory {
-        didSet { defaults.set(newSplitWorkingDirectory.rawValue, forKey: Keys.newSplitWorkingDirectory) }
-    }
-
     /// Presentation used by `peekSidebarWhenHidden`. The pinned sidebar is
     /// always the native split-view column.
     var sidebarPeekStyle: SidebarPeekStyle {
@@ -375,20 +361,6 @@ final class Preferences {
     /// every wake.
     var reconnectRemotePanes: Bool {
         didSet { defaults.set(reconnectRemotePanes, forKey: Keys.reconnectRemotePanes) }
-    }
-
-    /// Whether Shortcuts, Spotlight and the `shortcuts` CLI may drive the app
-    /// through its App Intents (`Macterm/Intents/`). Defaults to `.ask` —
-    /// Ghostty's own default for the equivalent `macos-shortcuts` key.
-    ///
-    /// This is a `Preferences` value rather than a ghostty config key even
-    /// though Ghostty spells it as one: the intents create projects, close
-    /// tabs and type into shells, none of which libghostty has any stake in,
-    /// and inventing a ghostty key Ghostty doesn't define would break the
-    /// "the user is the source of truth for every ghostty setting" contract.
-    /// See `ShortcutsAccess`.
-    var shortcutsAccess: ShortcutsAccess {
-        didSet { defaults.set(shortcutsAccess.rawValue, forKey: Keys.shortcutsAccess) }
     }
 
     /// Stable per-installation identity, lazily created on first use. Stamped
@@ -792,13 +764,6 @@ final class Preferences {
     private init(defaults: UserDefaults) {
         self.defaults = defaults
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
-        terminalScrollSpeed = Self.clampScrollSpeed(defaults.double(forKey: Keys.terminalScrollSpeed), fallback: 1.0)
-        // Defaults preserve the behavior from before these preferences existed:
-        // new tabs started at the project root; splits inherited the active pane cwd.
-        newTabWorkingDirectory = (defaults.string(forKey: Keys.newTabWorkingDirectory))
-            .flatMap(NewTerminalWorkingDirectory.init(rawValue:)) ?? .projectDirectory
-        newSplitWorkingDirectory = (defaults.string(forKey: Keys.newSplitWorkingDirectory))
-            .flatMap(NewTerminalWorkingDirectory.init(rawValue:)) ?? .activePaneDirectory
         sidebarPeekStyle = (defaults.string(forKey: Keys.sidebarPeekStyle))
             .flatMap(SidebarPeekStyle.init(rawValue:)) ?? .resizeTerminal
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
@@ -856,10 +821,6 @@ final class Preferences {
         showProjectNewTabButton = defaults.object(forKey: Keys.showProjectNewTabButton) as? Bool ?? true
         backgroundSSHConnections = defaults.object(forKey: Keys.backgroundSSHConnections) as? Bool ?? true
         reconnectRemotePanes = defaults.object(forKey: Keys.reconnectRemotePanes) as? Bool ?? true
-        // An unrecognized stored value (a newer build's case, a hand-edited
-        // domain) falls back to the conservative default rather than failing.
-        shortcutsAccess = (defaults.string(forKey: Keys.shortcutsAccess))
-            .flatMap(ShortcutsAccess.init(rawValue:)) ?? .ask
         peekSidebarWhenHidden = defaults.object(forKey: Keys.peekSidebarWhenHidden) as? Bool ?? true
         let storedSidebarWidth = Self.clampSidebarWidth(defaults.object(forKey: Keys.sidebarWidth) as? Double)
         sidebarWidth = storedSidebarWidth
@@ -898,11 +859,6 @@ final class Preferences {
         return min(max(v, recentTabCandidateRange.lowerBound), recentTabCandidateRange.upperBound)
     }
 
-    private static func clampScrollSpeed(_ v: Double, fallback: Double) -> Double {
-        guard v > 0 else { return fallback }
-        return max(0.25, min(3.0, v))
-    }
-
     /// Pre-v2 builds stored theme/font/option-as-alt in UserDefaults. Those
     /// settings now live entirely in the user's Ghostty config, so the keys
     /// are dead. Drop them so `defaults read com.thdxg.macterm` is clean
@@ -932,6 +888,18 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.pane.dimOpacity")
             defaults.set(true, forKey: Keys.migrationRetiredPaneDimKey)
         }
+        // Scroll speed, the new tab / split directory choice and Shortcuts
+        // access are ghostty keys now (`mouse-scroll-multiplier`,
+        // `tab-inherit-working-directory` / `split-inherit-working-directory`,
+        // `macos-shortcuts`), read off the loaded config; Macterm's defaults
+        // for them live in `macterm-defaults.conf`. The old keys are dead.
+        if !defaults.bool(forKey: Keys.migrationRetiredGhosttyOwnedKeys) {
+            defaults.removeObject(forKey: "macterm.terminal.scrollSpeed")
+            defaults.removeObject(forKey: "macterm.tabs.newTabWorkingDirectory")
+            defaults.removeObject(forKey: "macterm.panes.newSplitWorkingDirectory")
+            defaults.removeObject(forKey: "macterm.intents.shortcutsAccess")
+            defaults.set(true, forKey: Keys.migrationRetiredGhosttyOwnedKeys)
+        }
     }
 
     /// Reads the two-layer config preference. The single-path key came from the
@@ -959,9 +927,6 @@ final class Preferences {
 
     enum Keys {
         static let autoTiling = "macterm.autoTiling.enabled"
-        static let terminalScrollSpeed = "macterm.terminal.scrollSpeed"
-        static let newTabWorkingDirectory = "macterm.tabs.newTabWorkingDirectory"
-        static let newSplitWorkingDirectory = "macterm.panes.newSplitWorkingDirectory"
         static let sidebarPeekStyle = "macterm.sidebar.presentation"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"
@@ -999,7 +964,6 @@ final class Preferences {
         static let showProjectNewTabButton = "macterm.sidebar.showProjectNewTabButton"
         static let backgroundSSHConnections = "macterm.remote.backgroundSSHConnections"
         static let reconnectRemotePanes = "macterm.remote.reconnectDroppedPanes"
-        static let shortcutsAccess = "macterm.intents.shortcutsAccess"
         static let installationID = "macterm.installationID"
         static let hasSeededFirstRun = "macterm.firstRun.seeded"
         static let peekSidebarWhenHidden = "macterm.sidebar.peekWhenHidden"
@@ -1010,5 +974,6 @@ final class Preferences {
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
         static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"
         static let migrationRetiredPaneDimKey = "macterm.migration.retired_pane_dim_key"
+        static let migrationRetiredGhosttyOwnedKeys = "macterm.migration.retired_ghostty_owned_keys"
     }
 }

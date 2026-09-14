@@ -1130,6 +1130,16 @@ final class AppState {
     /// default writer is the ONE AppKit write, `BellBadge.apply`.
     @ObservationIgnored
     var bellFeatures: () -> GhosttyApp.BellFeatures = { GhosttyApp.shared.bellFeatures }
+
+    /// Whether a new tab / split starts in the focused pane's cwd rather than
+    /// the project directory — the user's `tab-inherit-working-directory` and
+    /// `split-inherit-working-directory`, read live so a config reload takes
+    /// effect on the next tab. Injectable so tests drive both answers without
+    /// a loaded ghostty config.
+    @ObservationIgnored
+    var newTabInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.tabInheritsWorkingDirectory }
+    @ObservationIgnored
+    var newSplitInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.splitInheritsWorkingDirectory }
     @ObservationIgnored
     var dockBadgeWriter: (String?) -> Void = { BellBadge.apply($0) }
     /// The label last handed to `dockBadgeWriter`, so a sync that changes
@@ -2384,7 +2394,7 @@ final class AppState {
         return tab.id
     }
 
-    /// Creates a tab in the directory selected in Settings.
+    /// Creates a tab in the directory `tab-inherit-working-directory` selects.
     /// Active pane falls back to the project path when no local cwd is available.
     /// The pinned workspace falls back to home.
     @discardableResult
@@ -2395,7 +2405,7 @@ final class AppState {
         let activePaneDirectory = focusedPane(for: projectID)?.liveLocalWorkingDirectory()
         // A brand-new tab has no source pane to inherit from, so an
         // unusable active-pane cwd (nil) lands in the project directory.
-        let newTabDirectory = Preferences.shared.newTabWorkingDirectory.resolveNewTerminalDirectory(
+        let newTabDirectory = NewTerminalWorkingDirectory(inherits: newTabInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: activePaneDirectory
         ) ?? projectDirectory
@@ -2985,7 +2995,7 @@ final class AppState {
         // nil = inherit (the source pane's live cwd, else its own
         // `projectPath`) — never coerced to the project root, which would
         // turn a remote pane's split into a local shell.
-        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+        let newPaneDirectory = NewTerminalWorkingDirectory(inherits: newSplitInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: pane.liveLocalWorkingDirectory()
         )
@@ -3069,7 +3079,7 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
               let pane = tab.splitRoot.findPane(id: paneID)
         else { return [] }
-        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+        let newPaneDirectory = NewTerminalWorkingDirectory(inherits: newSplitInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: pane.liveLocalWorkingDirectory()
         )
@@ -3092,7 +3102,7 @@ final class AppState {
               let pane = tab.focusedPane,
               let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects)
         else { return }
-        let newPaneDirectory = Preferences.shared.newSplitWorkingDirectory.resolveNewTerminalDirectory(
+        let newPaneDirectory = NewTerminalWorkingDirectory(inherits: newSplitInheritsWorkingDirectory()).resolveNewTerminalDirectory(
             projectDirectory: projectDirectory,
             activePaneDirectory: pane.liveLocalWorkingDirectory()
         )

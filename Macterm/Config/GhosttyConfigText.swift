@@ -14,7 +14,17 @@ enum GhosttyConfigText {
     /// lines are skipped, and one matched pair of surrounding double quotes is
     /// stripped. nil when the key is never set (or only reset).
     static func lastValue(of key: String, inConfigText text: String) -> String? {
-        var result: String?
+        guard let last = values(of: key, inConfigText: text).last else { return nil }
+        return last.isEmpty ? nil : last
+    }
+
+    /// Every value `key` is set to, in file order, with one matched pair of
+    /// surrounding double quotes stripped; an empty string is a reset. For
+    /// keys whose later lines build on earlier ones — `mouse-scroll-multiplier`'s
+    /// partial `precision:` / `discrete:` form keeps the field it leaves out —
+    /// the consumer needs the whole sequence, not just the last line.
+    static func values(of key: String, inConfigText text: String) -> [String] {
+        var result: [String] = []
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             if line.isEmpty || line.hasPrefix("#") { continue }
@@ -25,7 +35,7 @@ enum GhosttyConfigText {
             if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
                 value = String(value.dropFirst().dropLast())
             }
-            result = value.isEmpty ? nil : value
+            result.append(value)
         }
         return result
     }

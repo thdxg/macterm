@@ -43,18 +43,7 @@ final class MactermConfig {
     /// (the shell-integration-features merge), so `GhosttyApp.loadConfig`
     /// calls this before every load to pick up user edits.
     func regenerate() {
-        let defaults = [
-            // First-launch tasteful UX. User's Ghostty config overrides any of
-            // these without needing to know they exist. Anything we'd set to
-            // ghostty's own default (e.g. scrollbar=system) isn't listed —
-            // libghostty already does the right thing.
-            "theme = \"Rose Pine\"",
-            "font-size = 16",
-            "macos-option-as-alt = true",
-            "window-padding-x = 16",
-            "window-padding-y = 16",
-        ].joined(separator: "\n") + "\n"
-        write(Data(defaults.utf8), to: defaultsURL)
+        write(Data(Self.defaultsBody.utf8), to: defaultsURL)
 
         let body = Self.overridesBody(
             windowOpacity: Preferences.shared.windowOpacity,
@@ -63,6 +52,38 @@ final class MactermConfig {
         )
         write(Data(body.utf8), to: overridesURL)
     }
+
+    /// The full text of `macterm-defaults.conf`, the first config layer. The
+    /// user's Ghostty config overrides any line here without needing to know
+    /// it exists. Two kinds of line live in it:
+    ///
+    /// - First-launch taste (theme, font size, padding).
+    /// - **Macterm's default for a ghostty key Macterm itself applies**, where
+    ///   that default departs from ghostty's. Macterm reads `macos-shortcuts`,
+    ///   `tab-inherit-working-directory` / `split-inherit-working-directory`
+    ///   and `mouse-scroll-multiplier` for its own behavior and has no
+    ///   Settings UI for them; when its behavior should differ from ghostty's
+    ///   by default, the difference is a line here — never a fallback in
+    ///   `Preferences` — so the user changes it the same way as any other key.
+    ///
+    /// Anything we'd set to ghostty's own default (e.g. `scrollbar = system`,
+    /// `split-inherit-working-directory = true`) isn't listed — libghostty
+    /// already does the right thing. `MactermConfigTests` pins the departures.
+    static let defaultsBody: String = [
+        "theme = \"Rose Pine\"",
+        "font-size = 16",
+        "macos-option-as-alt = true",
+        "window-padding-x = 16",
+        "window-padding-y = 16",
+        // A new tab starts at the project root; ghostty would start it in the
+        // focused surface's cwd. Splits keep ghostty's `true`.
+        "tab-inherit-working-directory = false",
+        // Macterm's scrollback has always moved one row per wheel notch;
+        // ghostty's discrete default is three. One key now drives both the
+        // scrollback path and libghostty's own (vim, less, mouse reporting),
+        // so the pin reaches those too. See `MouseScrollMultiplier`.
+        "mouse-scroll-multiplier = precision:1,discrete:1",
+    ].joined(separator: "\n") + "\n"
 
     /// The full text of `macterm-overrides.conf`. Pure — live inputs are
     /// passed in — so the wire contract with libghostty (most importantly the

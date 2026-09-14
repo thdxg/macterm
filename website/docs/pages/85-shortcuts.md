@@ -79,13 +79,17 @@ If the thing a shortcut names has since gone — the tab was closed, the project
 
 ## Permission
 
-An intent can create projects and tabs, close tabs, and type into your shells, so **Settings → General → Shortcuts** gates the whole surface:
+An intent can create projects and tabs, close tabs, and type into your shells, so `macos-shortcuts` in your Ghostty config gates the whole surface — the same key, values and default as Ghostty:
 
 - **Ask** (the default) — the first action in each launch of Macterm puts up a confirmation. Your answer is remembered for the rest of that run, and asked again the next time Macterm starts.
 - **Allow** — never asks.
 - **Deny** — every action fails with an error saying where to change this.
 
-Macterm mirrors Ghostty's `macos-shortcuts` here, including its `ask` default, but keeps it as a Macterm setting rather than a key in your ghostty config — see [Ghostty settings](/docs/ghostty) for where that line falls.
+```
+macos-shortcuts = allow
+```
+
+The value is read live, so **Reload Ghostty Config** applies a change without a restart. One difference from Ghostty: an **Ask** answer is remembered for the current run only, where Ghostty remembers an Allow forever.
 
 ## Cold starts
 

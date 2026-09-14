@@ -28,6 +28,12 @@ final class GhosttyApp {
     /// never an `effectiveAppearance`, which our own `.preferredColorScheme`
     /// pins, latching the theme after one system switch (issue #144).
     private(set) var systemScheme: ThemeResolver.Scheme = .light
+    /// The user's `mouse-scroll-multiplier`, resolved from the raw config
+    /// text on every load and reload (the key has no C getter, see
+    /// `MouseScrollMultiplier`) and cached because `SurfaceScrollView` asks on
+    /// every wheel event. Applied to Macterm's scrollback path; libghostty
+    /// applies the same key on its own.
+    private(set) var mouseScrollMultiplier: MouseScrollMultiplier = .mactermDefault
     /// Chrome colors as libghostty resolved them for a live surface — the
     /// active `theme = light:X,dark:Y` side already applied. Populated from
     /// `GHOSTTY_ACTION_CONFIG_CHANGE` (see `adoptResolvedColors`) and preferred
@@ -133,6 +139,7 @@ final class GhosttyApp {
         app = createdApp
         config = cfg
         applyAppIcon()
+        refreshRawTextValues()
 
         // Ticking is event-driven: libghostty's `wakeup_cb` fires whenever the
         // core needs `ghostty_app_tick` (GhosttyCallbacks.wakeup schedules it
@@ -249,8 +256,15 @@ final class GhosttyApp {
         config = newConfig
         configVersion += 1
         applyAppIcon()
+        refreshRawTextValues()
         NotificationCenter.default.post(name: .mactermConfigDidChange, object: nil)
         return result
+    }
+
+    /// Re-read the keys that come from the user's raw config text rather than
+    /// the loaded C config. Same two moments as `applyAppIcon`.
+    private func refreshRawTextValues() {
+        mouseScrollMultiplier = MouseScrollMultiplier.resolve(userConfigText: MactermConfig.userGhosttyConfigText())
     }
 
     // MARK: - App icon (`macos-icon`)
@@ -520,6 +534,29 @@ final class GhosttyApp {
     /// menu bar, no ⌘-Tab entry). Applied by `AppDelegate.applyActivationPolicy`.
     var macosHidden: MacosHidden {
         MacosHidden.resolve(configValue: configEnum(MacosHidden.key))
+    }
+
+    /// `macos-shortcuts`: whether Shortcuts, Spotlight and the `shortcuts` CLI
+    /// may drive the app through its App Intents. Read live by
+    /// `IntentPermissionGate` on every authorize, so a config reload takes
+    /// effect on the next intent.
+    var shortcutsAccess: ShortcutsAccess {
+        ShortcutsAccess.resolve(configValue: configEnum(ShortcutsAccess.key))
+    }
+
+    /// `tab-inherit-working-directory`: a new tab starts in the focused pane's
+    /// cwd (true) or at the project directory (false — Macterm's reading of
+    /// ghostty's "default working directory"). Ghostty defaults it to true;
+    /// `macterm-defaults.conf` pins it to false, which is also the fallback
+    /// here for the moment before any config has loaded.
+    var tabInheritsWorkingDirectory: Bool {
+        configBool("tab-inherit-working-directory", default: false)
+    }
+
+    /// `split-inherit-working-directory`: the same choice for a new split.
+    /// Ghostty's default (true) is Macterm's too, so nothing pins it.
+    var splitInheritsWorkingDirectory: Bool {
+        configBool("split-inherit-working-directory", default: true)
     }
 
     /// Read an enum-valued key as its ghostty tag name.

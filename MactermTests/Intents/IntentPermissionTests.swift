@@ -123,3 +123,35 @@ struct IntentPermissionGateTests {
         try gate.authorize()
     }
 }
+
+/// `ShortcutsAccess.resolve` is the `macos-shortcuts` read, shaped like
+/// `MacosHidden.resolve`: the raw values are ghostty's tag names, and anything
+/// unrecognized is the conservative `ask`.
+@MainActor
+struct ShortcutsAccessResolveTests {
+    @Test
+    func theWireVocabularyIsGhosttysOwn() {
+        #expect(ShortcutsAccess.allCases.map(\.rawValue) == ["ask", "allow", "deny"])
+        #expect(ShortcutsAccess.key == "macos-shortcuts")
+    }
+
+    @Test
+    func anUnsetKeyIsGhosttysDefault() {
+        #expect(ShortcutsAccess.resolve(configValue: nil) == .ask)
+        #expect(ShortcutsAccess.resolve(configValue: "") == .ask)
+        #expect(ShortcutsAccess.resolve(configValue: "  ") == .ask)
+    }
+
+    @Test
+    func readsEveryValueAndToleratesCaseAndPadding() {
+        #expect(ShortcutsAccess.resolve(configValue: "allow") == .allow)
+        #expect(ShortcutsAccess.resolve(configValue: "deny") == .deny)
+        #expect(ShortcutsAccess.resolve(configValue: " Allow ") == .allow)
+    }
+
+    /// A value a newer ghostty might add must not read as a grant.
+    @Test
+    func anUnrecognizedValueAsks() {
+        #expect(ShortcutsAccess.resolve(configValue: "sometimes") == .ask)
+    }
+}

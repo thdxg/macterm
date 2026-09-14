@@ -40,11 +40,8 @@ struct AppStateTests {
 
     @Test
     func createTab_uses_selected_directory_and_preserves_project_session_slug() throws {
-        let prior = Preferences.shared.newTabWorkingDirectory
-        defer { Preferences.shared.newTabWorkingDirectory = prior }
-        Preferences.shared.newTabWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newTabInheritsWorkingDirectory = { true }
         let localProject = seedProject(state, path: "/project")
         let localWorkspace = try #require(state.workspaces[localProject.id])
         let activePane = try #require(localWorkspace.activeTab?.focusedPane)
@@ -57,7 +54,7 @@ struct AppStateTests {
 
         let inheritedPane = try #require(localWorkspace.activeTab?.focusedPane)
         inheritedPane.ensureNSView().currentPwd = "/project/src/deep"
-        Preferences.shared.newTabWorkingDirectory = .projectDirectory
+        state.newTabInheritsWorkingDirectory = { false }
 
         state.createTab(projectID: localProject.id, projects: [localProject])
 
@@ -67,11 +64,8 @@ struct AppStateTests {
 
     @Test
     func createTab_remote_active_pane_falls_back_to_project_directory() throws {
-        let prior = Preferences.shared.newTabWorkingDirectory
-        defer { Preferences.shared.newTabWorkingDirectory = prior }
-        Preferences.shared.newTabWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newTabInheritsWorkingDirectory = { true }
         let remoteProject = seedProject(state, path: "devbox:~/repo")
         let remoteWorkspace = try #require(state.workspaces[remoteProject.id])
 
@@ -460,11 +454,8 @@ struct AppStateTests {
 
     @Test
     func splitPane_uses_selected_directory() throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newSplitInheritsWorkingDirectory = { true }
         let project = seedProject(state, path: "/project")
         let tab = try #require(state.workspaces[project.id]?.activeTab)
         let activePane = try #require(tab.focusedPane)
@@ -476,7 +467,7 @@ struct AppStateTests {
 
         let inheritedPane = try #require(tab.focusedPane)
         inheritedPane.ensureNSView().currentPwd = "/project/src/deep"
-        Preferences.shared.newSplitWorkingDirectory = .projectDirectory
+        state.newSplitInheritsWorkingDirectory = { false }
 
         state.splitPane(direction: .vertical, projectID: project.id, projects: [project])
 
@@ -490,11 +481,8 @@ struct AppStateTests {
     /// instead of a remote zmx sibling.
     @Test
     func splitPane_remote_source_inherits_its_own_path_not_the_project_root() throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
-
         let state = makeAppState()
+        state.newSplitInheritsWorkingDirectory = { true }
         let project = seedProject(state, path: "devbox:~/repo")
         state.createTab(projectID: project.id, projectPath: "devbox:~/repo/sub")
         let tab = try #require(state.workspaces[project.id]?.activeTab)
@@ -510,11 +498,8 @@ struct AppStateTests {
     /// `Cmd+D` split off the same pane can't disagree about it.
     @Test
     func makeGrid_uses_selected_directory() throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .projectDirectory
-
         let state = makeAppState()
+        state.newSplitInheritsWorkingDirectory = { false }
         let project = seedProject(state, path: "/project")
         let tab = try #require(state.workspaces[project.id]?.activeTab)
         let source = try #require(tab.focusedPane)

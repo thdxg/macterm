@@ -364,7 +364,11 @@ final class SurfaceScrollView: NSScrollView {
     private func handleSurfaceScrollWheel(_ event: NSEvent) -> Bool {
         let cellHeight = surfaceView.cellHeightPoints
         guard canHandleScrollbackWheel(event, cellHeight: cellHeight) else { return false }
-        let rowDelta = verticalScrollAccumulator.delta(for: event, sensitivity: Preferences.shared.terminalScrollSpeed)
+        // The user's `mouse-scroll-multiplier`, chosen per device class the way
+        // ghostty picks it. libghostty applies the same key on its own scroll
+        // path (alt screen, mouse reporting), so the two paths move together.
+        let sensitivity = GhosttyApp.shared.mouseScrollMultiplier.value(precise: event.hasPreciseScrollingDeltas)
+        let rowDelta = verticalScrollAccumulator.delta(for: event, sensitivity: sensitivity)
         guard rowDelta != 0 else { return true }
         let currentRow = Int(min(offset, UInt64(Int.max)))
         sendScrollToRow(currentRow - rowDelta)
@@ -450,14 +454,14 @@ final class SurfaceScrollView: NSScrollView {
 // MARK: - iTerm2-style scroll accumulation
 
 /// Swift port of iTerm2's `iTermScrollAccumulator`: modern accumulator enabled,
-/// `fastTrackpad = YES`, configurable sensitivity, and scroll-wheel acceleration
-/// 1.0.
+/// `fastTrackpad = YES`, a caller-supplied sensitivity (the user's
+/// `mouse-scroll-multiplier`, already clamped to ghostty's range by
+/// `MouseScrollMultiplier`), and scroll-wheel acceleration 1.0.
 private final class ITermScrollAccumulator {
     private var accumulatedDelta: CGFloat = 0
 
     func delta(for event: NSEvent, sensitivity: Double) -> Int {
-        let sensitivity = CGFloat(max(0.25, min(3.0, sensitivity)))
-        return Int(accumulatedDelta(for: event, sensitivity: sensitivity))
+        Int(accumulatedDelta(for: event, sensitivity: CGFloat(sensitivity)))
     }
 
     private func accumulatedDelta(for event: NSEvent, sensitivity: CGFloat) -> CGFloat {

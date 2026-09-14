@@ -482,11 +482,8 @@ struct ControlHandlerTests {
 
     @Test
     func tab_new_creates_selects_and_reports() async throws {
-        let prior = Preferences.shared.newTabWorkingDirectory
-        defer { Preferences.shared.newTabWorkingDirectory = prior }
-        Preferences.shared.newTabWorkingDirectory = .activePaneDirectory
-
         let (handler, appState, projectStore) = makeHandler()
+        appState.newTabInheritsWorkingDirectory = { true }
         let project = seedProject(appState, projectStore, name: "target", path: "/target-project")
         let targetPane = try #require(appState.workspaces[project.id]?.activeTab?.focusedPane)
         targetPane.ensureNSView().currentPwd = "/target-project/src"
@@ -715,11 +712,8 @@ struct ControlHandlerTests {
 
     @Test
     func pane_split_targets_session_selector() async throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
-
         let (handler, appState, projectStore) = makeHandler()
+        appState.newSplitInheritsWorkingDirectory = { true }
         let project = seedProject(appState, projectStore, path: "/project")
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
         let source = try #require(tab.splitRoot.allPanes().first)
@@ -752,11 +746,8 @@ struct ControlHandlerTests {
 
     @Test
     func pane_split_remote_source_falls_back_to_project_directory() async throws {
-        let prior = Preferences.shared.newSplitWorkingDirectory
-        defer { Preferences.shared.newSplitWorkingDirectory = prior }
-        Preferences.shared.newSplitWorkingDirectory = .activePaneDirectory
-
         let (handler, appState, projectStore) = makeHandler()
+        appState.newSplitInheritsWorkingDirectory = { true }
         let project = seedProject(appState, projectStore, path: "devbox:~/repo")
         let tab = try #require(appState.workspaces[project.id]?.activeTab)
         let source = try #require(tab.focusedPane)
