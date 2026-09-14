@@ -63,4 +63,57 @@ struct MactermConfigTests {
         let body = MactermConfig.overridesBody(windowOpacity: 1.0, userConfigText: user, shimDirectory: "/tmp/shim")
         #expect(body.contains("shell-integration-features = no-cursor,no-path"))
     }
+
+    // MARK: - overridesBody: cursor effects
+
+    @Test
+    func cursor_effects_off_emit_nothing() {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            cursorEffects: .init(smoothCursor: false, trail: false, shaderDirectory: "/tmp/shaders")
+        )
+        #expect(!body.contains("custom-shader"))
+        #expect(!body.contains("cursor-opacity"))
+    }
+
+    @Test
+    func smooth_cursor_adds_the_glide_shader_and_hides_ghosttys_cursor() {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            cursorEffects: .init(smoothCursor: true, trail: false, shaderDirectory: "/tmp/shaders")
+        )
+        #expect(body.contains("custom-shader = /tmp/shaders/cursor_glide.glsl\ncursor-opacity = 0\n"))
+        #expect(!body.contains("cursor_trail"))
+    }
+
+    @Test
+    func trail_renders_beneath_the_glide() throws {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            cursorEffects: .init(smoothCursor: true, trail: true, shaderDirectory: "/tmp/shaders")
+        )
+        let trail = try #require(body.range(of: "cursor_trail.glsl"))
+        let glide = try #require(body.range(of: "cursor_glide.glsl"))
+        #expect(trail.lowerBound < glide.lowerBound)
+    }
+
+    @Test
+    func trail_alone_leaves_cursor_opacity_to_the_user() {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            cursorEffects: .init(smoothCursor: false, trail: true, shaderDirectory: "/tmp/shaders")
+        )
+        #expect(body.contains("custom-shader = /tmp/shaders/cursor_trail.glsl"))
+        #expect(!body.contains("cursor-opacity"))
+    }
+
+    @Test
+    func missing_bundled_shaders_emit_nothing() {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            cursorEffects: .init(smoothCursor: true, trail: true, shaderDirectory: nil)
+        )
+        #expect(!body.contains("custom-shader"))
+        #expect(!body.contains("cursor-opacity"))
+    }
 }

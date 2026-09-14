@@ -54,6 +54,7 @@ targets:
           - "Resources/ghostty"
           - "Resources/terminfo"
           - "Resources/zmx"
+          - "Resources/shaders"
           - "AppIcon.icon"
       # Ghostty resources (themes + shell-integration), downloaded by setup.sh.
       # Folder reference (not the default "group") because the contents are
@@ -70,6 +71,13 @@ targets:
       # MUST land at Contents/Resources/terminfo — a SIBLING of ghostty/ — so
       # libghostty's dirname(GHOSTTY_RESOURCES_DIR)/terminfo derivation hits it.
       - path: Macterm/Resources/terminfo
+        type: folder
+        buildPhase: resources
+      # Cursor-effect shaders behind Settings → Experimental → Smooth cursor /
+      # Cursor trail. Folder reference so they land as
+      # Contents/Resources/shaders/*.glsl, which MactermConfig.CursorEffects
+      # names by absolute path in the overrides file.
+      - path: Macterm/Resources/shaders
         type: folder
         buildPhase: resources
       # Icon Composer file. Xcode 26 prefers this over an Assets.xcassets

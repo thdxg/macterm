@@ -59,9 +59,50 @@ final class MactermConfig {
         let body = Self.overridesBody(
             windowOpacity: Preferences.shared.windowOpacity,
             userConfigText: userGhosttyConfigText(),
-            shimDirectory: Self.sshShimDirectory()
+            shimDirectory: Self.sshShimDirectory(),
+            cursorEffects: .init(
+                smoothCursor: Preferences.shared.smoothCursor,
+                trail: Preferences.shared.cursorTrail,
+                shaderDirectory: Self.shaderDirectory()
+            )
         )
         write(Data(body.utf8), to: overridesURL)
+    }
+
+    /// The cursor effects Settings offers as toggles. Each is a bundled
+    /// ghostty custom shader (`Resources/shaders/`) that the overrides file
+    /// appends to the user's own `custom-shader` list — the key is
+    /// repeatable, and the overrides load last, so the user's shaders stay
+    /// and run first. The trail is listed before the glide so it renders
+    /// beneath the drawn cursor.
+    ///
+    /// The smooth cursor also forces `cursor-opacity = 0`: the shader draws
+    /// the focused cursor itself, and ghostty's would otherwise jump ahead of
+    /// it. libghostty applies that key only while focused, so unfocused panes
+    /// keep the native hollow cursor. It is the one user-visible ghostty key
+    /// a Macterm setting overrides, which is why the toggle defaults to off.
+    struct CursorEffects: Equatable {
+        var smoothCursor = false
+        var trail = false
+        /// Where the bundled shaders live, or nil when the bundle lacks them
+        /// (a broken or partial build) — then nothing is emitted rather than
+        /// a `custom-shader` path libghostty would fail to load and log.
+        var shaderDirectory: String?
+
+        static let none = CursorEffects()
+
+        var overrideLines: [String] {
+            guard let shaderDirectory else { return [] }
+            var lines: [String] = []
+            if trail {
+                lines.append("custom-shader = \(shaderDirectory)/cursor_trail.glsl")
+            }
+            if smoothCursor {
+                lines.append("custom-shader = \(shaderDirectory)/cursor_glide.glsl")
+                lines.append("cursor-opacity = 0")
+            }
+            return lines
+        }
     }
 
     /// The full text of `macterm-overrides.conf`. Pure — live inputs are
@@ -71,7 +112,8 @@ final class MactermConfig {
     static func overridesBody(
         windowOpacity: Double,
         userConfigText: String?,
-        shimDirectory: String?
+        shimDirectory: String?,
+        cursorEffects: CursorEffects = .none
     ) -> String {
         var overrides = [
             // Macterm composites window translucency at the AppKit level —
@@ -127,7 +169,22 @@ final class MactermConfig {
             overrides.append("shell-integration-features = \(value)")
         }
 
+        overrides.append(contentsOf: cursorEffects.overrideLines)
+
         return overrides.joined(separator: "\n") + "\n"
+    }
+
+    /// The bundle directory holding the cursor-effect shaders
+    /// (`Macterm/Resources/shaders`, a folder reference in project.yml), or
+    /// nil when either file is missing so `CursorEffects` emits nothing.
+    static func shaderDirectory() -> String? {
+        guard let dir = Bundle.main.resourceURL?
+            .appendingPathComponent("shaders", isDirectory: true)
+        else { return nil }
+        let present = ["cursor_glide.glsl", "cursor_trail.glsl"].allSatisfy {
+            FileManager.default.isReadableFile(atPath: dir.appendingPathComponent($0).path)
+        }
+        return present ? dir.path : nil
     }
 
     /// Write a wrapper-config file, logging on failure. These writes are
