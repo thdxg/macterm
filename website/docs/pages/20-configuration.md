@@ -28,6 +28,14 @@ Two per-row checkboxes change *where* a chord applies.
 
 Give a project a **color** from its sidebar context menu (Color) or from **Settings → Projects**. The color tints the project's icon in the sidebar and the icon on each of its tabs, so a glance says which project a tab belongs to. It is only ever a tint on an icon, so with the sidebar icon preference set to None a project row has nothing to tint; a tab row still shows the color on an AI agent logo or a status indicator, the glyphs that setting doesn't suppress. The eight colors are fixed system colors, so a tag always looks like its name and no two tags collide. **Settings → Appearance → Auto-assign project colors** (off by default) gives each new project the least-used color automatically; it never changes projects you already have.
 
+## Experimental
+
+**Settings → Experimental** collects features that work but are still settling in. Every toggle is off by default and does nothing until you turn it on.
+
+- **Smooth scrolling** — trackpad scrolling moves scrollback by pixels instead of whole rows, including during momentum. Only scrollback scrolls this way: programs that draw their own screen (editors, pagers, `less`) still scroll by rows, because that is how they repaint. Mouse wheels keep row-by-row scrolling, and the **Scroll speed** slider in General applies to both.
+- **Smooth cursor** — the cursor glides between positions instead of jumping. It is a bundled Ghostty custom shader that draws the focused cursor itself, so Macterm sets `cursor-opacity = 0` while this is on; unfocused panes keep their normal hollow cursor. Your own `custom-shader` entries keep running ahead of it.
+- **Cursor trail** — a fading streak follows the cursor across larger moves, drawn beneath the smooth cursor when both are on. If you already use a community trail shader such as `cursor_sweep.glsl`, turn one of them off or you will see two trails.
+
 ## Running without a Dock icon
 
 `macos-hidden = always` in your Ghostty config runs Macterm as an accessory app: no Dock icon, no menu bar, and no entry in <kbd>⌘</kbd><kbd>⇥</kbd>. It is for working out of the [quick terminal](/docs/quick-terminal) — the hotkey still drops the panel over whatever you are in, and the panel takes your typing without bringing Macterm forward, exactly as before. `never` (the default) keeps the ordinary app. The value is read live, so **Reload Ghostty Config** moves it either way without a restart.

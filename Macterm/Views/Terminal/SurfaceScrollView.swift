@@ -29,7 +29,10 @@ private func oid(_ object: AnyObject) -> String {
 /// movement — but only while there's scrollback to move through. Apps with no
 /// scrollback (alternate-screen programs like less/vim, or a fresh prompt)
 /// have nothing to scroll, so the view declines and libghostty handles the
-/// event (mouse reporting / cursor keys). Scrollback geometry flows **into**
+/// event (mouse reporting / cursor keys). With `Preferences.smoothScrolling`
+/// on, precise trackpad deltas are declined too: libghostty accumulates them
+/// itself and the fork's renderer draws the sub-row remainder, which the
+/// accumulator would otherwise round away. Scrollback geometry flows **into**
 /// this view via the `GHOSTTY_ACTION_SCROLLBAR` action (`onScrollbarUpdate`),
 /// and user-visible scroll positions flow **out** via the `scroll_to_row:<n>`
 /// keybind action.
@@ -364,6 +367,12 @@ final class SurfaceScrollView: NSScrollView {
     private func handleSurfaceScrollWheel(_ event: NSEvent) -> Bool {
         let cellHeight = surfaceView.cellHeightPoints
         guard canHandleScrollbackWheel(event, cellHeight: cellHeight) else { return false }
+        // Smooth scrolling: a precise trackpad delta must reach libghostty's
+        // own scroll path, which keeps the sub-row remainder the fork's
+        // renderer draws. Quantizing it to rows here would discard exactly
+        // that. Discrete wheels always take the accumulator; there is no
+        // sub-row motion to preserve in a click.
+        if event.hasPreciseScrollingDeltas, Preferences.shared.smoothScrolling { return false }
         let rowDelta = verticalScrollAccumulator.delta(for: event, sensitivity: Preferences.shared.terminalScrollSpeed)
         guard rowDelta != 0 else { return true }
         let currentRow = Int(min(offset, UInt64(Int.max)))

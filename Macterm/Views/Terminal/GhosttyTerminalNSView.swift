@@ -1353,9 +1353,12 @@ final class GhosttyTerminalNSView: NSView {
         if event.hasPreciseScrollingDeltas {
             // Match Ghostty's macOS frontend: precise trackpad/Magic Mouse
             // deltas are valid but feel slow at 1x because terminals scroll in
-            // rows instead of continuous document pixels.
-            x *= 2
-            y *= 2
+            // rows instead of continuous document pixels. The user's scroll
+            // speed applies here as well, so the one Settings slider governs
+            // both this path (smooth scrolling) and the row accumulator.
+            let speed = Preferences.shared.terminalScrollSpeed
+            x *= 2 * speed
+            y *= 2 * speed
         }
 
         if !ghostty_surface_mouse_captured(surface), onScrollWheel?(event) == true {

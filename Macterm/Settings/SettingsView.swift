@@ -11,6 +11,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case appearance = "Appearance"
     case quickTerminal = "Quick Terminal"
     case keymaps = "Keymaps"
+    case experimental = "Experimental"
     case updates = "Updates"
 
     var id: String { rawValue }
@@ -23,6 +24,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: "paintpalette"
         case .quickTerminal: "rectangle.bottomthird.inset.filled"
         case .keymaps: "keyboard"
+        case .experimental: "flask"
         case .updates: "arrow.triangle.2.circlepath"
         }
     }
@@ -77,6 +79,7 @@ struct SettingsView: View {
         case .appearance: AppearanceSettings()
         case .quickTerminal: QuickTerminalSettings()
         case .keymaps: KeymapSettings()
+        case .experimental: ExperimentalSettings()
         case .updates: UpdatesSettings()
         }
     }
@@ -1802,6 +1805,53 @@ private struct HotkeyCaptureView: NSViewRepresentable {
 }
 
 // MARK: - Updates
+
+/// Features that work but haven't earned a permanent home yet: each is off
+/// by default, does nothing to a user who never opens this pane, and is
+/// expected to either graduate into a regular pane or be removed. Keep the
+/// pane honest — a toggle that has shipped for a while without complaint
+/// belongs elsewhere.
+private struct ExperimentalSettings: View {
+    @State
+    private var smoothScrolling: Bool = Preferences.shared.smoothScrolling
+    @State
+    private var smoothCursor: Bool = Preferences.shared.smoothCursor
+    @State
+    private var cursorTrail: Bool = Preferences.shared.cursorTrail
+
+    var body: some View {
+        Form {
+            Section("Scrolling") {
+                Toggle("Smooth scrolling", isOn: $smoothScrolling)
+                    .onChange(of: smoothScrolling) { _, v in
+                        Preferences.shared.smoothScrolling = v
+                    }
+                Text(
+                    "Trackpad scrolling moves scrollback by pixels instead of whole rows. "
+                        + "Programs that draw their own screen (editors, pagers) still scroll by rows."
+                )
+                .settingsCaption()
+            }
+
+            Section("Cursor") {
+                Toggle("Smooth cursor", isOn: $smoothCursor)
+                    .onChange(of: smoothCursor) { _, v in
+                        Preferences.shared.smoothCursor = v
+                    }
+                Text("The cursor glides between positions instead of jumping.")
+                    .settingsCaption()
+
+                Toggle("Cursor trail", isOn: $cursorTrail)
+                    .onChange(of: cursorTrail) { _, v in
+                        Preferences.shared.cursorTrail = v
+                    }
+                Text("A fading streak follows the cursor across larger moves.")
+                    .settingsCaption()
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
 
 private struct UpdatesSettings: View {
     /// `Updater` is `@Observable`; read the singleton directly (Observation

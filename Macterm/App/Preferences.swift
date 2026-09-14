@@ -245,6 +245,39 @@ final class Preferences {
         didSet { defaults.set(terminalScrollSpeed, forKey: Keys.terminalScrollSpeed) }
     }
 
+    // MARK: - Experimental (Settings → Experimental; all default off)
+
+    /// Pixel-precise trackpad scrolling through scrollback. On, a precise
+    /// scroll event goes to libghostty untouched, whose fork patch draws the
+    /// viewport between rows; off, `SurfaceScrollView` quantizes it to whole
+    /// rows like a mouse wheel. Purely a Macterm routing decision: the
+    /// renderer needs no config key, since a whole-row scroll simply has no
+    /// sub-row remainder to draw.
+    var smoothScrolling: Bool {
+        didSet { defaults.set(smoothScrolling, forKey: Keys.smoothScrolling) }
+    }
+
+    /// The cursor glides between cells instead of jumping. Implemented as a
+    /// bundled ghostty custom shader (`Resources/shaders/cursor_glide.glsl`)
+    /// that Macterm appends to the config through the overrides file, along
+    /// with `cursor-opacity = 0` so the shader can be the focused cursor.
+    /// See `MactermConfig.CursorEffects`.
+    var smoothCursor: Bool {
+        didSet {
+            defaults.set(smoothCursor, forKey: Keys.smoothCursor)
+            notifyConfigChanged()
+        }
+    }
+
+    /// A fading streak follows the cursor across larger moves. The bundled
+    /// `cursor_trail.glsl`, injected the same way as `smoothCursor`.
+    var cursorTrail: Bool {
+        didSet {
+            defaults.set(cursorTrail, forKey: Keys.cursorTrail)
+            notifyConfigChanged()
+        }
+    }
+
     /// Selection shown by "New tab directory" in Settings.
     var newTabWorkingDirectory: NewTerminalWorkingDirectory {
         didSet { defaults.set(newTabWorkingDirectory.rawValue, forKey: Keys.newTabWorkingDirectory) }
@@ -793,6 +826,9 @@ final class Preferences {
         self.defaults = defaults
         autoTilingEnabled = defaults.bool(forKey: Keys.autoTiling)
         terminalScrollSpeed = Self.clampScrollSpeed(defaults.double(forKey: Keys.terminalScrollSpeed), fallback: 1.0)
+        smoothScrolling = defaults.object(forKey: Keys.smoothScrolling) as? Bool ?? false
+        smoothCursor = defaults.object(forKey: Keys.smoothCursor) as? Bool ?? false
+        cursorTrail = defaults.object(forKey: Keys.cursorTrail) as? Bool ?? false
         // Defaults preserve the behavior from before these preferences existed:
         // new tabs started at the project root; splits inherited the active pane cwd.
         newTabWorkingDirectory = (defaults.string(forKey: Keys.newTabWorkingDirectory))
@@ -960,6 +996,9 @@ final class Preferences {
     enum Keys {
         static let autoTiling = "macterm.autoTiling.enabled"
         static let terminalScrollSpeed = "macterm.terminal.scrollSpeed"
+        static let smoothScrolling = "macterm.terminal.smoothScrolling"
+        static let smoothCursor = "macterm.terminal.smoothCursor"
+        static let cursorTrail = "macterm.terminal.cursorTrail"
         static let newTabWorkingDirectory = "macterm.tabs.newTabWorkingDirectory"
         static let newSplitWorkingDirectory = "macterm.panes.newSplitWorkingDirectory"
         static let sidebarPeekStyle = "macterm.sidebar.presentation"
