@@ -47,12 +47,29 @@ struct PanePreview {
     /// a reliable "nothing new was drawn" and lets the live sampling skip the
     /// copy for a pane that is sitting still. nil when there is no frame.
     let frameID: IOSurfaceID?
+    /// The display's backing scale when the frame was taken. `image.size` is
+    /// in pixels; divided by this it is the size the pane occupied on screen
+    /// in points — what a ghost must draw it at, since the pane may have been
+    /// mid-resize and smaller than the tile the model gives it.
+    let pixelsPerPoint: CGFloat
 
-    init(image: NSImage?, background: NSColor, aspectRatio: CGFloat?, frameID: IOSurfaceID? = nil) {
+    init(
+        image: NSImage?,
+        background: NSColor,
+        aspectRatio: CGFloat?,
+        frameID: IOSurfaceID? = nil,
+        pixelsPerPoint: CGFloat = 1
+    ) {
         self.image = image
         self.background = background
         self.aspectRatio = aspectRatio
         self.frameID = frameID
+        self.pixelsPerPoint = pixelsPerPoint
+    }
+
+    /// `image`'s on-screen size in points, or nil without an image.
+    var pointSize: CGSize? {
+        image.map { CGSize(width: $0.size.width / pixelsPerPoint, height: $0.size.height / pixelsPerPoint) }
     }
 }
 
@@ -109,7 +126,8 @@ enum PanePreviewCapture {
             image: image,
             background: background,
             aspectRatio: aspect,
-            frameID: image == nil ? nil : surface.map { IOSurfaceGetID($0) }
+            frameID: image == nil ? nil : surface.map { IOSurfaceGetID($0) },
+            pixelsPerPoint: view.window?.backingScaleFactor ?? 1
         )
     }
 

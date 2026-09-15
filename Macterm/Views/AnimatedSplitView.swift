@@ -305,22 +305,26 @@ struct AnimatedSplitView: View {
         .transition(.asymmetric(insertion: .opacity, removal: .identity))
     }
 
-    /// The ghost's image keeps the pane's size and slides toward the pane's
-    /// outer edge by its own length; the window it is seen through shrinks
-    /// from the tile to nothing against that same edge, exactly as fast as
-    /// the sibling advances into the strip. The branch's divider, removed
-    /// with the branch, is stood in for by a hairline on the window's seam
-    /// edge, so the divider travels with the retile.
+    /// The ghost's image is drawn at the size the pane actually had on
+    /// screen (`PanePreview.pointSize`), never stretched to the tile: close
+    /// a pane while its sibling is still growing from an earlier close and
+    /// the snapshot is of a smaller, mid-resize surface — filling the model's
+    /// tile with it scaled the text non-uniformly. It slides toward the
+    /// pane's outer edge by the tile's length; the window it is seen through
+    /// shrinks from the tile to nothing against that same edge, exactly as
+    /// fast as the sibling advances into the strip. The branch's divider,
+    /// removed with the branch, is stood in for by a hairline on the
+    /// window's seam edge, so the divider travels with the retile.
     @ViewBuilder
     private func ghostView(_ ghost: ClosingGhost) -> some View {
         let window = ghost.leaving ? SplitLayout.collapsed(ghost.rect, placement: ghost.placement) : ghost.rect
         let shift = ghost.leaving ? SplitLayout.slideOutShift(for: ghost.rect, placement: ghost.placement) : .zero
         ZStack(alignment: .topLeading) {
-            if let image = ghost.snapshot.image {
+            if let image = ghost.snapshot.image, let size = ghost.snapshot.pointSize {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.medium)
-                    .frame(width: ghost.rect.width, height: ghost.rect.height)
+                    .frame(width: size.width, height: size.height)
                     .offset(x: shift.width, y: shift.height)
             }
         }
