@@ -733,8 +733,22 @@ final class GhosttyTerminalNSView: NSView {
     /// overrides that verdict for as long as it is set.
     private func syncOcclusion() {
         guard let surface else { return }
-        let visible = rendersForPreview || (window?.occlusionState.contains(.visible) ?? false)
+        let visible = rendersForPreview ||
+            (!hiddenInLayout && (window?.occlusionState.contains(.visible) ?? false))
         ghostty_surface_set_occlusion(surface, visible)
+    }
+
+    /// Set while the animated split layout keeps this pane mounted but
+    /// invisible (a tile behind a zoomed pane). It stays in the window so
+    /// unzoom can animate it back without a remount, so the window's own
+    /// occlusion says "visible"; this override lets the renderer sleep the
+    /// way an orphaned pane does. `rendersForPreview` still wins — the tab
+    /// switcher samples zoomed-away panes too.
+    var hiddenInLayout = false {
+        didSet {
+            guard oldValue != hiddenInLayout else { return }
+            syncOcclusion()
+        }
     }
 
     /// Keep the renderer drawing while this surface is off screen, so its

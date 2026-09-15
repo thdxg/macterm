@@ -118,8 +118,9 @@ struct SplitTreeView: View {
 
 /// One leaf of the split tree: the terminal pane plus the grab handle that
 /// starts a pane drag and the leaf's own pane-drop capture, which reports
-/// into the shared workspace resolution (see `PaneDropContext`).
-private struct SplitLeafView: View {
+/// into the shared workspace resolution (see `PaneDropContext`). Shared with
+/// `AnimatedSplitView`, which lays the same leaves out flat.
+struct SplitLeafView: View {
     let pane: Pane
     let isFocused: Bool
     let isZoomed: Bool

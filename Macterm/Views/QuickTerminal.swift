@@ -569,8 +569,9 @@ private struct QuickTerminalView: View {
     }
 
     private func splitTree(_ renderedNode: SplitNode) -> some View {
-        SplitTreeView(
-            node: renderedNode,
+        SplitRootView(
+            tabID: state.tab.id,
+            root: state.splitRoot,
             focusedPaneID: state.focusedPaneID,
             zoomedPaneID: state.tab.zoomedPaneID,
             isActiveProject: true,
@@ -598,7 +599,6 @@ private struct QuickTerminalView: View {
                 }
             )
         )
-        .id(renderedNode.id)
         // Grab-handle drags share the workspace drop grammar (whole-edge,
         // divider, local). The context carries no tab handler: the quick
         // terminal is one tab outside every workspace and adopts no others.

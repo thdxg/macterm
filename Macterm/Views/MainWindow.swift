@@ -1022,8 +1022,9 @@ struct WorkspaceView: View {
         let focusedPaneID = real.focusedPaneID.flatMap { appState.viewPaneID(forReal: $0, in: view) }
         let zoomedPaneID = real.zoomedPaneID.flatMap { appState.viewPaneID(forReal: $0, in: view) }
         let renderedNode = renderedNode(of: tab, zoomedPaneID: zoomedPaneID)
-        SplitTreeView(
-            node: renderedNode,
+        SplitRootView(
+            tabID: tab.id,
+            root: tab.splitRoot,
             focusedPaneID: focusedPaneID,
             zoomedPaneID: zoomedPaneID,
             isActiveProject: true,
@@ -1050,7 +1051,6 @@ struct WorkspaceView: View {
             onToggleZoom: { paneID in toggleZoom(paneID, in: view) },
             paneDrop: dropContext(for: view, renderedNode: renderedNode)
         )
-        .id(renderedNode.id)
         // Pane grab-handle drags and sidebar tab drags are both captured
         // per leaf (see LeafDropDelegate for why there is no whole-area
         // target), sharing one resolution rendered here (#227). Uses

@@ -1764,6 +1764,8 @@ private struct ExperimentalSettings: View {
     private var smoothCursor: Bool = Preferences.shared.smoothCursor
     @State
     private var cursorTrail: Bool = Preferences.shared.cursorTrail
+    @State
+    private var animatedSplits: Bool = Preferences.shared.animatedSplits
 
     var body: some View {
         Form {
@@ -1793,6 +1795,18 @@ private struct ExperimentalSettings: View {
                     }
                 Text("A fading streak follows the cursor across larger moves.")
                     .settingsCaption()
+            }
+
+            Section("Splits") {
+                Toggle("Animate splits", isOn: $animatedSplits)
+                    .onChange(of: animatedSplits) { _, v in
+                        Preferences.shared.animatedSplits = v
+                    }
+                Text(
+                    "New panes slide in while their neighbors make room, closing panes slide out, "
+                        + "and zooming grows the pane over the layout. Honors Reduce Motion."
+                )
+                .settingsCaption()
             }
         }
         .formStyle(.grouped)

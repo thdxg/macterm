@@ -756,9 +756,24 @@ final class Pane: Identifiable {
 
     var scrollView: SurfaceScrollView? { _scrollView }
 
+    /// The pane's last frame, taken as its surface was torn down, for the
+    /// animated split layout to slide out in its place (`AnimatedSplitView`
+    /// ghosts). Only the model can take it: by the time SwiftUI sees the pane
+    /// leave the tree the view is gone (`destroySurface` nils it and detaches
+    /// it a tick later), and a removal transition on the live leaf would show
+    /// an empty host. Captured only while `Preferences.animatedSplits` is on,
+    /// so the default path pays nothing. nil until then; set with a nil image
+    /// when the surface never drew, which still marks the pane as closed
+    /// rather than merely moved to another tab.
+    @ObservationIgnored
+    private(set) var closingSnapshot: PanePreview?
+
     /// Tear down the ghostty surface and null out callbacks. Call when the
     /// pane is removed from the tree. Safe to call multiple times.
     func destroySurface() {
+        if Preferences.shared.animatedSplits, closingSnapshot == nil, _nsView != nil {
+            closingSnapshot = PanePreviewCapture.capture(self, longEdge: nil, fillsBackground: false)
+        }
         // A pane with no surface has nothing left to acknowledge — an unloaded
         // project's panes stay in the tree, and their bells must not keep the
         // Dock badged for shells that no longer exist (ghostty's window-close

@@ -277,6 +277,18 @@ final class Preferences {
         }
     }
 
+    /// Hyprland-style split animations (its `slide`): a new pane slides in
+    /// from the nearest edge while its neighbours retile, a closing pane
+    /// slides back out, and zoom grows the pane over the layout. Pure
+    /// Macterm chrome — the tab's
+    /// tree is rendered flat by `AnimatedSplitView` (one animatable frame per
+    /// pane) instead of the recursive `SplitTreeView`, and nothing reaches
+    /// libghostty beyond the per-frame surface resizes a divider drag already
+    /// causes. Off: the recursive view, exactly as before.
+    var animatedSplits: Bool {
+        didSet { defaults.set(animatedSplits, forKey: Keys.animatedSplits) }
+    }
+
     /// Presentation used by `peekSidebarWhenHidden`. The pinned sidebar is
     /// always the native split-view column.
     var sidebarPeekStyle: SidebarPeekStyle {
@@ -803,6 +815,7 @@ final class Preferences {
         smoothScrolling = defaults.object(forKey: Keys.smoothScrolling) as? Bool ?? false
         smoothCursor = defaults.object(forKey: Keys.smoothCursor) as? Bool ?? false
         cursorTrail = defaults.object(forKey: Keys.cursorTrail) as? Bool ?? false
+        animatedSplits = defaults.object(forKey: Keys.animatedSplits) as? Bool ?? false
         sidebarPeekStyle = (defaults.string(forKey: Keys.sidebarPeekStyle))
             .flatMap(SidebarPeekStyle.init(rawValue:)) ?? .resizeTerminal
         windowOpacity = (defaults.object(forKey: Keys.windowOpacity) as? Double) ?? 1.0
@@ -970,6 +983,7 @@ final class Preferences {
         static let smoothScrolling = "macterm.terminal.smoothScrolling"
         static let smoothCursor = "macterm.terminal.smoothCursor"
         static let cursorTrail = "macterm.terminal.cursorTrail"
+        static let animatedSplits = "macterm.terminal.animatedSplits"
         static let sidebarPeekStyle = "macterm.sidebar.presentation"
         static let windowOpacity = "macterm.window.opacity"
         static let windowBlurRadius = "macterm.window.blurRadius"

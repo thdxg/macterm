@@ -37,6 +37,7 @@ Give a project a **color** from its sidebar context menu (Color) or from **Setti
 - **Smooth scrolling** — trackpad scrolling moves scrollback by pixels instead of whole rows, including during momentum. Only scrollback scrolls this way: programs that draw their own screen (editors, pagers, `less`) still scroll by rows, because that is how they repaint. Mouse wheels keep row-by-row scrolling, and `mouse-scroll-multiplier` tunes the speed of both as in Ghostty.
 - **Smooth cursor** — the cursor glides between positions instead of jumping. It is a bundled Ghostty custom shader that draws the focused cursor itself, so Macterm sets `cursor-opacity = 0` while this is on; unfocused panes keep their normal hollow cursor. Your own `custom-shader` entries keep running ahead of it.
 - **Cursor trail** — a fading streak follows the cursor across larger moves, drawn beneath the smooth cursor when both are on. If you already use a community trail shader such as `cursor_sweep.glsl`, turn one of them off or you will see two trails.
+- **Animate splits** — Hyprland-style slide animations for the split layout. A new pane slides in from its own edge of the split while its neighbor makes room (a side-by-side split from the right, a stacked split from the bottom), a closing pane slides back out through that edge, zooming grows the pane over the layout, and a pane dragged to another spot travels there. Dragging a divider is never animated. The animation is off automatically when Reduce Motion is on in System Settings.
 
 ## Running without a Dock icon
 
