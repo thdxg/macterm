@@ -26,11 +26,14 @@ final class MactermConfig {
 
     let defaultsURL: URL
     let overridesURL: URL
+    /// Where `ExperimentShaders` installs the rendered cursor shaders.
+    let shadersURL: URL
 
     private init() {
         let dir = FileStorage.appSupportDirectory()
         defaultsURL = dir.appendingPathComponent("macterm-defaults.conf")
         overridesURL = dir.appendingPathComponent("macterm-overrides.conf")
+        shadersURL = dir.appendingPathComponent("shaders", isDirectory: true)
         regenerate()
     }
 
@@ -45,15 +48,19 @@ final class MactermConfig {
     func regenerate() {
         write(Data(Self.defaultsBody.utf8), to: defaultsURL)
 
+        let userConfigText = userGhosttyConfigText()
         let body = Self.overridesBody(
             windowOpacity: Preferences.shared.windowOpacity,
-            userConfigText: userGhosttyConfigText(),
+            userConfigText: userConfigText,
             shimDirectory: Self.sshShimDirectory(),
             experiments: .init(
                 smoothScrolling: Preferences.shared.smoothScrolling,
                 smoothCursor: Preferences.shared.smoothCursor,
                 trail: Preferences.shared.cursorTrail,
-                shaderDirectory: Self.shaderDirectory()
+                shaderDirectory: ExperimentShaders.install(
+                    into: shadersURL,
+                    encoding: .from(userConfigText: userConfigText)
+                )
             )
         )
         write(Data(body.utf8), to: overridesURL)
@@ -68,8 +75,9 @@ final class MactermConfig {
     ///   key on it renders the sub-row remainder. Macterm forwards every
     ///   wheel event untouched (#393), so the gate must live on that side.
     /// - Smooth cursor and cursor trail are bundled custom shaders
-    ///   (`Resources/shaders/`) appended to the user's own `custom-shader`
-    ///   list — the key is repeatable, and the overrides load last, so the
+    ///   (`Resources/shaders/`, installed by `ExperimentShaders` with the
+    ///   framebuffer-encoding header) appended to the user's own
+    ///   `custom-shader` list — the key is repeatable, and the overrides load last, so the
     ///   user's shaders stay and run first. The trail is listed before the
     ///   glide so it renders beneath the drawn cursor. The smooth cursor also
     ///   forces `cursor-opacity = 0`: the shader draws the focused cursor
@@ -81,9 +89,10 @@ final class MactermConfig {
         var smoothScrolling = false
         var smoothCursor = false
         var trail = false
-        /// Where the bundled shaders live, or nil when the bundle lacks them
-        /// (a broken or partial build) — then no shader line is emitted
-        /// rather than a `custom-shader` path libghostty would fail to load.
+        /// Where `ExperimentShaders.install` put the rendered shaders, or
+        /// nil when the bundle lacks the templates or the install failed —
+        /// then no shader line is emitted rather than a `custom-shader`
+        /// path libghostty would fail to load.
         var shaderDirectory: String?
 
         static let none = Experiments()
@@ -199,19 +208,6 @@ final class MactermConfig {
         overrides.append(contentsOf: experiments.overrideLines)
 
         return overrides.joined(separator: "\n") + "\n"
-    }
-
-    /// The bundle directory holding the cursor-effect shaders
-    /// (`Macterm/Resources/shaders`, a folder reference in project.yml), or
-    /// nil when either file is missing so `Experiments` emits no shader line.
-    static func shaderDirectory() -> String? {
-        guard let dir = Bundle.main.resourceURL?
-            .appendingPathComponent("shaders", isDirectory: true)
-        else { return nil }
-        let present = ["cursor_glide.glsl", "cursor_trail.glsl"].allSatisfy {
-            FileManager.default.isReadableFile(atPath: dir.appendingPathComponent($0).path)
-        }
-        return present ? dir.path : nil
     }
 
     /// Write a wrapper-config file, logging on failure. These writes are

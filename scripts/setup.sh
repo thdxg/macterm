@@ -16,14 +16,15 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 #
 # Set GHOSTTYKIT_TAG to another tag (or `latest`) to try one without committing:
 #   GHOSTTYKIT_TAG=latest mise run setup
-# build-2026-09-14 was re-published twice on its own UTC day for downstream
-# patch 0005 (smooth scrolling and its `smooth-scroll` key): any same-day push
-# to the fork's main deletes and recreates the daily tag with different bytes,
-# the asset-swap-under-a-pin hazard documented in AGENTS.md. The stamp below
-# can't tell the copies apart, so a checkout holding an earlier copy needs
-# `rm -rf GhosttyKit.xcframework Macterm/Resources/terminfo && mise run setup`
-# once; CI's download cache hashes this file, so this comment refreshes it.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-09-14}"
+# build-2026-09-15: upstream 2026-09-14 + downstream patches 0001–0006 (0006
+# hides the custom-shader cursor while it is scrolled out of view). Any
+# same-day push to the fork's main — the nightly sync included — deletes and
+# recreates a daily tag with different bytes, the asset-swap-under-a-pin hazard
+# documented in AGENTS.md; the stamp below can't tell copies apart, so a
+# checkout holding a stale copy needs `rm -rf GhosttyKit.xcframework
+# Macterm/Resources/terminfo && mise run setup` once. CI's download cache
+# hashes this file, so a bump here also refreshes it.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-09-15}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
