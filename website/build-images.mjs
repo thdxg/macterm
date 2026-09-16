@@ -14,6 +14,7 @@
 // assets/ is still a one-file change and the derivatives can never go stale.
 //
 // Outputs, per screenshot:
+//   img/hero-<width>.webp     the landing page's hero, and its 1400w PNG
 //   img/<name>-<width>.webp   the responsive srcset (WEBP_QUALITY)
 //   img/<name>-1400.png       the <picture> fallback for a WebP-less client
 // Plus, once:
@@ -46,19 +47,44 @@ const WEBP_QUALITY = 90;
 // to this 1.90:1 box would cut the sidebar or the shell out of frame, so the
 // image is letterboxed onto the site's own ground instead — the whole
 // screenshot stays visible and the bars read as intentional matting. The
-// colour tracks the landing page's --l-bg; a cream card behind a dark site
-// reads as a rendering bug in every link preview.
-const OG = { width: 1200, height: 630, background: "#19191a" };
+// colour tracks the landing page's --l-bg; a card on a different ground than
+// the site reads as a rendering bug in every link preview.
+const OG = { width: 1200, height: 630, background: "#0B0D0E" };
 
-// The landing page's gallery hard-codes five thumbnails, one per screenshot,
-// so a missing source is a 404 in production rather than a smaller gallery.
-// The build doesn't fail on it — a contributor touching only CSS shouldn't be
+// The landing page now shows recordings rather than a screenshot gallery, so
+// only screenshot-1 is still displayed (the "Built on libghostty" figure, and
+// og.png is rendered from it). The others are the README's and the release
+// notes', and are still rendered here so that stays one drop-in per file. The
+// count is checked because a missing source is a 404 wherever it IS used; the
+// build doesn't fail on it — a contributor touching only CSS shouldn't be
 // blocked by an asset they never touched — but it must not pass silently.
 const EXPECTED_SCREENSHOTS = 5;
 
 // 180 is the apple-touch-icon size iOS actually asks for; 32 and 16 are the
 // classic favicon rungs. The 730x730 original has no business being either.
 const ICON_SIZES = [180, 32, 16];
+
+// The landing page's hero. Same rungs as a screenshot; kept separate because
+// it is the one image the page actually loads, and the social card is rendered
+// from it rather than from a gallery shot that no longer appears anywhere.
+async function buildHero() {
+  const src = join(SRC_DIR, "hero.png");
+  if (!existsSync(src)) {
+    console.warn("build-images: assets/hero.png missing — the landing page's hero will 404");
+    return 0;
+  }
+  for (const width of WIDTHS) {
+    await sharp(src)
+      .resize({ width })
+      .webp({ quality: WEBP_QUALITY, smartSubsample: true })
+      .toFile(join(OUT_DIR, `hero-${width}.webp`));
+  }
+  await sharp(src)
+    .resize({ width: FALLBACK_WIDTH })
+    .png()
+    .toFile(join(OUT_DIR, `hero-${FALLBACK_WIDTH}.png`));
+  return 1;
+}
 
 async function buildScreenshots() {
   const sources = readdirSync(SRC_DIR)
@@ -105,8 +131,10 @@ async function buildScreenshots() {
   return sources.length;
 }
 
+// From the hero rather than a screenshot: the card should be the image the
+// page itself leads with.
 async function buildOgCard() {
-  const input = join(SRC_DIR, "screenshot-1.png");
+  const input = join(SRC_DIR, "hero.png");
   if (!existsSync(input)) {
     throw new Error(`build-images: ${input} is missing — no OG card to build`);
   }
@@ -140,11 +168,12 @@ async function buildIcons() {
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
+  const hero = await buildHero();
   const count = await buildScreenshots();
   await buildOgCard();
   await buildIcons();
   console.log(
-    `build-images: wrote ${count} screenshot set(s), og.png, and ${ICON_SIZES.length} icons to ${OUT_DIR}`
+    `build-images: wrote ${hero} hero set, ${count} screenshot set(s), og.png, and ${ICON_SIZES.length} icons to ${OUT_DIR}`
   );
 }
 

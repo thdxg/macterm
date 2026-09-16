@@ -32,7 +32,7 @@ Dockerfile         Multi-stage image — Bun builds it, Caddy serves it
 ### Design
 
 Both the landing page and the docs run one dark **"Classical"** system, ported
-from a Claude Design canvas: Rosé Pine ink on a warm-neutral `#19191a` ground,
+from a Claude Design canvas: white ink on a pure-black ground,
 Cormorant Garamond display over Lora body text, JetBrains Mono for code. Only
 the fonts live in `@theme`; every colour is scoped under `.landing`, which both
 `public/index.html` and `src/docs-template.html` set on `<body>`, so the docs
@@ -73,18 +73,41 @@ Replace a screenshot by dropping a new one into `assets/`; every derivative is
 regenerated on the next build, so they cannot go stale. `public/img/` is
 gitignored.
 
-The landing gallery is **five** screenshots, in this order — sidebar, command
-palette, settings, full-screen TUI, quick terminal — and its captions are
-written into `index.html` against those positions. The build prints a warning
-naming any that are missing, because the gallery hard-codes five thumbnails, so
-a missing source is a 404 in production rather than a shorter gallery.
+Only `screenshot-1` is still on the landing page — the figure in "Built on
+libghostty" — plus `og.png`, which is rendered from it. The rest stay in
+`assets/` for the repo README and the release notes. The `Caddyfile` gives
+`/img/*` the same TTL as `/assets/*` — keep the two paths listed together in
+both its `@media` and `@pages` matchers, or the images every page loads fall
+through to the no-cache `@pages` rule.
 
-The figure in the "Built on libghostty" section mirrors the gallery's
-selection. Both carry the same `data-shot-*` hooks and `site.js` rewrites every
-one it finds, but each keeps its own `sizes`, so the small figure still resolves
-to a small rung. The `Caddyfile` gives `/img/*` the same TTL as `/assets/*` — keep
-the two paths listed together in both its `@media` and `@pages` matchers, or
-the images every page loads fall through to the no-cache `@pages` rule.
+### The demo reel
+
+What used to be the screenshot gallery is now six screen recordings, stacked
+one per feature, in `assets/demo/`: `<name>.mp4` beside a `<name>.webp` poster
+frame. Their number prefixes are the order they were recorded in, not the order
+the page shows them — `index.html` decides that. They are referenced straight from `/assets/demo/…` — no build step —
+because `public/assets` is the repo-root `assets/` (a symlink locally, real
+files in the image) and Caddy already caches that path.
+
+Each clip is 1400×792 H.264 at CRF 26 with `+faststart`, re-encoded from a
+1680×950 master by `scripts/record-demos/record-demos.sh web` — the same script
+that records them (see AGENTS.md); the poster is its first frame. All five
+together are ~4MB, and none of it is fetched on load: the markup carries
+`preload="none"` and the poster, and `site.js`'s `demoReel` only flips a clip
+to `preload="auto"` and plays it when it scrolls into view — pausing it again
+when it leaves, because five looping videos decoding at once is a fan the page
+has no business spinning up.
+
+`muted` and `playsinline` are what make that autoplay permissible at all; a
+`play()` that is refused anyway turns the clip's controls on rather than
+failing silently, which is also what Reduce Motion gets. A click pauses a clip
+you want to read.
+
+Each clip sits beside its own `<h2>` and a line of copy, both written into
+`index.html` — they are the only place the reel says what it is showing. They
+name the ACTION, never the chord: every binding in the app is rebindable, so
+copy that spells one out is wrong for anyone who changed it. The pair is one
+grid row that collapses to a single column under 900px.
 
 > `index.html` is hand-authored and no build step rewrites it, so anything it
 > states twice can drift silently. `check-seo.mjs` guards the two that matter:

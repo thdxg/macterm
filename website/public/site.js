@@ -44,53 +44,115 @@
   });
 })();
 
-// --- Landing screenshot gallery: thumbnails swap the framed shot above. ---
+// --- Landing demo reel: each clip plays while it is on screen, and the
+//     hairline under it fills with its progress. ---
 //
-// The markup ships showing the first screenshot with its caption already
-// written, so the section is complete and indexable before this runs — the
-// thumbnails just stop being interactive without JS.
+// The markup ships with a poster frame and preload="none", so the section is
+// complete, indexable and free before this runs; without JS the clips are
+// still there and simply wait to be asked (the fallbacks below turn their
+// controls on).
 //
-// The swap has to rewrite the <source>'s srcset, not only the <img>'s src: the
-// browser picks from <source> whenever it supports WebP, so changing src alone
-// would leave every visitor on modern Safari or Chrome looking at the first
-// screenshot no matter which thumbnail they clicked.
+// `muted` and `playsinline` in the markup are what make autoplay permissible
+// at all — Safari and Chrome both refuse a play() that would make noise. A
+// refused play() is still not fatal: the catch shows the controls so a
+// visitor can start it by hand.
 //
-// The targets are collected document-wide rather than from inside the gallery,
-// because the "Built on libghostty" figure further down mirrors the same
-// selection. Each target keeps its own `sizes` — only srcset, src, alt, and
-// caption text are rewritten — so the small figure still picks a small rung.
-(function screenshotGallery() {
-  const root = document.querySelector("[data-gallery]");
-  if (!root) return;
-  const sources = document.querySelectorAll("[data-shot-source]");
-  const imgs = document.querySelectorAll("[data-shot-main]");
-  const captions = document.querySelectorAll("[data-shot-caption]");
-  const thumbs = Array.from(root.querySelectorAll("[data-shot]"));
-  if (!sources.length || !imgs.length || !thumbs.length) return;
+// Pausing off-screen matters as much as playing on-screen. Five looping
+// videos decoding at once on a laptop is a fan the page has no business
+// spinning up, and the whole reel is taller than any viewport.
+(function demoReel() {
+  const videos = Array.from(document.querySelectorAll("[data-demo]"));
+  if (!videos.length) return;
 
-  // The rungs build-images.mjs emits. Kept in step with WIDTHS there — a rung
-  // named here that the build didn't write is a 404 on click.
-  const WIDTHS = [640, 1000, 1400, 2200, 3132];
-  const srcsetFor = (base) =>
-    WIDTHS.map((w) => `/img/${base}-${w}.webp ${w}w`).join(", ");
-
-  const select = (btn) => {
-    const base = btn.dataset.shot;
-    const srcset = srcsetFor(base);
-    sources.forEach((s) => {
-      s.srcset = srcset;
-    });
-    imgs.forEach((i) => {
-      i.src = `/img/${base}-1400.png`;
-      i.alt = btn.dataset.alt || "";
-    });
-    captions.forEach((c) => {
-      c.textContent = btn.dataset.caption || "";
-    });
-    thumbs.forEach((t) => t.setAttribute("aria-pressed", String(t === btn)));
+  const fillFor = (v) => {
+    const wrap = v.closest("[data-demo-wrap]");
+    return wrap && wrap.querySelector("[data-demo-fill]");
   };
 
-  thumbs.forEach((btn) => btn.addEventListener("click", () => select(btn)));
+  const showControls = (v) => {
+    v.controls = true;
+    if (v.preload === "none") v.preload = "metadata";
+  };
+
+  // Reduce Motion means "do not move on your own" — the clips stay, but they
+  // wait for a click. Same fallback covers a browser without the observer.
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+  if (still.matches || !("IntersectionObserver" in window)) {
+    videos.forEach(showControls);
+    return;
+  }
+
+  const playing = new Set();
+  // A rejected play() is only meaningful when the page is actually on screen.
+  // A tab opened in the background rejects every one of them, and treating
+  // that as "autoplay is blocked here" would pin controls on all six clips
+  // for a visitor who has not even looked at the page yet.
+  const start = (v) => {
+    const started = v.play();
+    if (started && started.catch) {
+      started.catch(() => {
+        if (document.visibilityState === "visible") showControls(v);
+      });
+    }
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    videos.forEach((v) => {
+      if (v.paused && !v.controls && onScreen.has(v)) start(v);
+    });
+  });
+
+  // One rAF loop for every clip on screen rather than a timeupdate listener
+  // per video: timeupdate fires about 4x a second, which reads as a progress
+  // bar that stutters. The loop stops itself when nothing is playing.
+  let frame = null;
+  const paint = () => {
+    playing.forEach((v) => {
+      const bar = fillFor(v);
+      if (!bar) return;
+      const pct = v.duration ? (v.currentTime / v.duration) * 100 : 0;
+      bar.style.width = pct.toFixed(2) + "%";
+    });
+    frame = playing.size ? requestAnimationFrame(paint) : null;
+  };
+  const wake = () => {
+    if (frame === null && playing.size) frame = requestAnimationFrame(paint);
+  };
+
+  const onScreen = new Set();
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const v = entry.target;
+        if (entry.isIntersecting) {
+          onScreen.add(v);
+          if (v.preload !== "auto") v.preload = "auto";
+          start(v);
+        } else {
+          onScreen.delete(v);
+          if (!v.paused) v.pause();
+        }
+      });
+    },
+    { threshold: 0.35, rootMargin: "120px 0px" },
+  );
+
+  videos.forEach((v) => {
+    io.observe(v);
+    v.addEventListener("playing", () => {
+      playing.add(v);
+      wake();
+    });
+    ["pause", "ended", "emptied"].forEach((e) =>
+      v.addEventListener(e, () => playing.delete(v)),
+    );
+    // The one control an autoplaying clip keeps: click to hold a frame you
+    // want to read, click again to carry on.
+    v.addEventListener("click", () => {
+      if (v.paused) start(v);
+      else v.pause();
+    });
+  });
 })();
 
 // --- Live GitHub stats: fill star + download counts, reveal their containers,
