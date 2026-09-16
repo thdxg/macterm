@@ -16,7 +16,6 @@
 
 // --- Tuning ---
 const float DURATION = 0.14;        // seconds for one glide
-const float AA = 1.0;               // edge antialiasing in pixels
 const float TEXT_TOLERANCE = 0.05;  // framebuffer-RGB distance still read as cursor-text
 
 // --- Output encoding (set by Macterm from the user's ghostty config) ---
@@ -78,15 +77,26 @@ float ease(float x) {
     return 1.0 - pow(1.0 - x, 3.0);
 }
 
-float sdfRect(vec2 p, vec2 center, vec2 halfSize) {
-    vec2 d = abs(p - center) - halfSize;
-    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-}
-
 // iCurrentCursor / iPreviousCursor are (left, top edge, width, height) in
 // pixels, y up: the rect spans [y - h, y].
-vec2 rectCenter(vec4 r) {
-    return vec2(r.x + r.z * 0.5, r.y - r.w * 0.5);
+vec2 rectMin(vec4 r) {
+    return vec2(r.x, r.y - r.w);
+}
+
+vec2 rectMax(vec4 r) {
+    return vec2(r.x + r.z, r.y);
+}
+
+// How much of the 1x1 pixel centered on `p` lies inside [lo, hi]: exact box
+// filtering, not a distance-field ramp. Ghostty lays cells out on whole
+// framebuffer pixels, so at rest every edge lands between two pixels and the
+// block is as hard-edged as the native cursor; mid-glide the fractional
+// edge pixels blend, which is all the antialiasing a moving block needs. A
+// smoothstep over a 1px distance gave every edge a half-bright ring one
+// pixel outside the rect, which read as a blurry cursor.
+float boxCoverage(vec2 p, vec2 lo, vec2 hi) {
+    vec2 c = clamp(min(hi, p + 0.5) - max(lo, p - 0.5), 0.0, 1.0);
+    return c.x * c.y;
 }
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
@@ -111,18 +121,27 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float t = clamp((iTime - iTimeCursorChange) / DURATION, 0.0, 1.0);
     float e = ease(t);
 
-    vec2 center = mix(rectCenter(prev), rectCenter(cur), e);
-    vec2 halfSize = mix(prev.zw, cur.zw, e) * 0.5;
+    vec2 lo = mix(rectMin(prev), rectMin(cur), e);
+    vec2 hi = mix(rectMax(prev), rectMax(cur), e);
+    // Once the glide has landed, snap to whole pixels the way ghostty's own
+    // quad rasterizes (a pixel is in or out by its center), so a rect that
+    // arrives at a fractional edge — window padding scaled by a fractional
+    // display scale — still draws crisp.
+    if (t >= 1.0) {
+        lo = floor(lo + 0.5);
+        hi = floor(hi + 0.5);
+    }
     vec4 cursor = vec4(mactermEncode(mix(prevColor, iCurrentCursorColor.rgb, e)), 1.0);
 
-    float coverage = 1.0 - smoothstep(0.0, AA, sdfRect(fragCoord, center, halfSize));
+    float coverage = boxCoverage(fragCoord, lo, hi);
     if (coverage <= 0.0) return;
 
     // The destination cell's glyph, painted by ghostty in cursor-text (see
     // header): keep it on top of the block.
     vec3 textColor = dot(iCursorText, iCursorText) > 0.0 ? iCursorText : iBackgroundColor;
     vec3 textEncoded = mactermEncode(textColor);
-    float inTarget = 1.0 - step(0.0, sdfRect(fragCoord, rectCenter(cur), cur.zw * 0.5));
+    vec2 inCur = step(rectMin(cur), fragCoord) * step(fragCoord, rectMax(cur));
+    float inTarget = inCur.x * inCur.y;
     vec3 texel = tex.rgb / max(tex.a, 1e-4);
     float isText = 1.0 - smoothstep(TEXT_TOLERANCE, TEXT_TOLERANCE * 2.0, distance(texel, textEncoded));
     float text = tex.a * isText * inTarget;
