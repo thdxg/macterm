@@ -17,7 +17,7 @@ struct SplitRootView: View {
     let projectID: UUID
     var nonLeaderPaneIDs: Set<UUID> = []
     let onFocusPane: (UUID) -> Void
-    let onSplit: (UUID, SplitDirection) -> Void
+    let onSplit: (UUID, SplitDirection, SplitPosition) -> Void
     let onClosePane: (UUID) -> Void
     var onCommandFinished: (UUID) -> Void = { _ in }
     var onAdaptiveBackgroundChange: (UUID, CGColor?) -> Void = { _, _ in }
@@ -136,7 +136,7 @@ struct AnimatedSplitView: View {
     let isActiveProject: Bool
     let nonLeaderPaneIDs: Set<UUID>
     let onFocusPane: (UUID) -> Void
-    let onSplit: (UUID, SplitDirection) -> Void
+    let onSplit: (UUID, SplitDirection, SplitPosition) -> Void
     let onClosePane: (UUID) -> Void
     let onCommandFinished: (UUID) -> Void
     let onAdaptiveBackgroundChange: (UUID, CGColor?) -> Void
@@ -256,7 +256,7 @@ struct AnimatedSplitView: View {
             onProcessExit: { onClosePane(pane.id) },
             onCommandFinished: { onCommandFinished(pane.id) },
             onAdaptiveBackgroundChange: { onAdaptiveBackgroundChange(pane.id, $0) },
-            onSplitRequest: { dir in onSplit(pane.id, dir) },
+            onSplitRequest: { dir, position in onSplit(pane.id, dir, position) },
             onZoomRequest: { onToggleZoom(pane.id) },
             paneDrop: paneDrop
         )

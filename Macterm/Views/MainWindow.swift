@@ -1031,7 +1031,7 @@ struct WorkspaceView: View {
             projectID: project.id,
             nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab),
             onFocusPane: { paneID in focus(paneID, in: view) },
-            onSplit: { paneID, dir in split(paneID, direction: dir, in: view) },
+            onSplit: { paneID, dir, position in split(paneID, direction: dir, position: position, in: view) },
             // This closure is the PROCESS-EXIT path only (SplitTreeView
             // wires it to the surface's onProcessExit; the user's Cmd+W
             // goes through Responders → requestClosePane directly).
@@ -1092,9 +1092,15 @@ struct WorkspaceView: View {
         }
     }
 
-    private func split(_ paneID: UUID, direction: SplitDirection, in view: AppState.WindowTabView) {
+    private func split(_ paneID: UUID, direction: SplitDirection, position: SplitPosition, in view: AppState.WindowTabView) {
         guard let realID = appState.realPaneID(for: paneID, in: view) else { return }
-        appState.splitPane(realID, direction: direction, projectID: project.id, projectDirectory: project.path)
+        appState.splitPane(
+            realID,
+            direction: direction,
+            position: position,
+            projectID: project.id,
+            projectDirectory: project.path
+        )
     }
 
     private func acknowledge(_ paneID: UUID, in view: AppState.WindowTabView) {

@@ -66,6 +66,14 @@ struct TerminalTabTests {
     }
 
     @Test
+    func split_position_first_places_new_pane_before_the_target() throws {
+        let (tab, ids) = makeTab(pane("a"), focused: "a")
+        let target = try #require(ids["a"])
+        let newID = try #require(tab.split(paneID: target, direction: .horizontal, position: .first))
+        #expect(tab.splitRoot.allPanes().map(\.id) == [newID, target])
+    }
+
+    @Test
     func split_pushes_old_focus_to_history() throws {
         let (tab, ids) = makeTab(pane("a"), focused: "a")
         _ = try tab.split(paneID: #require(ids["a"]), direction: .horizontal)

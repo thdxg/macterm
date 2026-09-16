@@ -146,7 +146,7 @@ final class TerminalTab: Identifiable {
     }
 
     /// Split the focused pane (or a specific pane) in `direction`, placing the
-    /// new pane in the `.second` position. Returns the new pane ID if created.
+    /// new pane at `position`. Returns the new pane ID if created.
     /// A `command` spawns in the new pane via libghostty's `initial_input`
     /// (the layout `run:` path — typed into the fresh shell verbatim).
     /// `newPaneWorkingDirectory` overrides cwd inheritance without changing
@@ -155,6 +155,7 @@ final class TerminalTab: Identifiable {
     func split(
         paneID: UUID,
         direction: SplitDirection,
+        position: SplitPosition = .second,
         command: String? = nil,
         newPaneWorkingDirectory: String? = nil
     ) -> UUID? {
@@ -180,7 +181,7 @@ final class TerminalTab: Identifiable {
         let (newRoot, newID) = splitRoot.splitting(
             paneID: paneID,
             direction: direction,
-            position: .second,
+            position: position,
             projectPath: sourcePath,
             projectID: sourceProjectID,
             command: command

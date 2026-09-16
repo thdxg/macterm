@@ -403,8 +403,8 @@ final class QuickTerminalSplitState {
         }
     }
 
-    func split(paneID: UUID, direction: SplitDirection) {
-        tab.split(paneID: paneID, direction: direction)
+    func split(paneID: UUID, direction: SplitDirection, position: SplitPosition = .second) {
+        tab.split(paneID: paneID, direction: direction, position: position)
         onStructureChange()
     }
 
@@ -577,7 +577,7 @@ private struct QuickTerminalView: View {
             isActiveProject: true,
             projectID: QuickTerminalService.projectID,
             onFocusPane: { state.focusPane($0) },
-            onSplit: { paneID, dir in state.split(paneID: paneID, direction: dir) },
+            onSplit: { paneID, dir, position in state.split(paneID: paneID, direction: dir, position: position) },
             onClosePane: { state.closePane($0) },
             onCommandFinished: { paneID in
                 guard QuickTerminalService.shared.panelRef?.isKeyWindow == true,

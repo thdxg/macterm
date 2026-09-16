@@ -2976,6 +2976,7 @@ final class AppState {
     func splitPane(
         _ paneID: UUID,
         direction: SplitDirection,
+        position: SplitPosition = .second,
         projectID: UUID,
         projectDirectory: String,
         command: String? = nil
@@ -2995,6 +2996,7 @@ final class AppState {
         return splitPane(
             paneID,
             direction: direction,
+            position: position,
             projectID: projectID,
             command: command,
             newPaneWorkingDirectory: newPaneDirectory
@@ -3009,6 +3011,7 @@ final class AppState {
     func splitPane(
         _ paneID: UUID,
         direction: SplitDirection,
+        position: SplitPosition = .second,
         projectID: UUID,
         command: String? = nil,
         newPaneWorkingDirectory: String? = nil
@@ -3019,6 +3022,7 @@ final class AppState {
         let newID = tab.split(
             paneID: paneID,
             direction: direction,
+            position: position,
             command: command,
             newPaneWorkingDirectory: newPaneWorkingDirectory
         )

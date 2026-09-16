@@ -14,7 +14,7 @@ struct SplitTreeView: View {
     /// geometry, so they are dimmed to say "not the live size".
     let nonLeaderPaneIDs: Set<UUID>
     let onFocusPane: (UUID) -> Void
-    let onSplit: (UUID, SplitDirection) -> Void
+    let onSplit: (UUID, SplitDirection, SplitPosition) -> Void
     let onClosePane: (UUID) -> Void
     let onCommandFinished: (UUID) -> Void
     let onAdaptiveBackgroundChange: (UUID, CGColor?) -> Void
@@ -33,7 +33,7 @@ struct SplitTreeView: View {
         isSplit: Bool = false,
         nonLeaderPaneIDs: Set<UUID> = [],
         onFocusPane: @escaping (UUID) -> Void,
-        onSplit: @escaping (UUID, SplitDirection) -> Void,
+        onSplit: @escaping (UUID, SplitDirection, SplitPosition) -> Void,
         onClosePane: @escaping (UUID) -> Void,
         onCommandFinished: @escaping (UUID) -> Void = { _ in },
         onAdaptiveBackgroundChange: @escaping (UUID, CGColor?) -> Void = { _, _ in },
@@ -69,7 +69,7 @@ struct SplitTreeView: View {
                 onProcessExit: { onClosePane(pane.id) },
                 onCommandFinished: { onCommandFinished(pane.id) },
                 onAdaptiveBackgroundChange: { onAdaptiveBackgroundChange(pane.id, $0) },
-                onSplitRequest: { dir in onSplit(pane.id, dir) },
+                onSplitRequest: { dir, position in onSplit(pane.id, dir, position) },
                 onZoomRequest: { onToggleZoom(pane.id) },
                 paneDrop: paneDrop
             )
@@ -130,7 +130,7 @@ struct SplitLeafView: View {
     let onProcessExit: () -> Void
     let onCommandFinished: () -> Void
     let onAdaptiveBackgroundChange: (CGColor?) -> Void
-    let onSplitRequest: (SplitDirection) -> Void
+    let onSplitRequest: (SplitDirection, SplitPosition) -> Void
     let onZoomRequest: () -> Void
     let paneDrop: PaneDropContext?
 
@@ -144,7 +144,7 @@ struct SplitLeafView: View {
             onProcessExit: onProcessExit,
             onCommandFinished: onCommandFinished,
             onAdaptiveBackgroundChange: onAdaptiveBackgroundChange,
-            onSplitRequest: { dir, _ in onSplitRequest(dir) },
+            onSplitRequest: onSplitRequest,
             onZoomRequest: onZoomRequest
         )
         .overlay {

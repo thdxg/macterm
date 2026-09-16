@@ -2,6 +2,10 @@ import CoreGraphics
 import Foundation
 
 enum SplitDirection: String, Codable { case horizontal, vertical }
+
+/// Which side of a split a node occupies along the branch's axis: `.first` is
+/// the leading edge (left of a horizontal split, top of a vertical one),
+/// `.second` the trailing edge.
 enum SplitPosition { case first, second }
 
 /// Which edge of a pane a dragged pane is dropped onto. Determines how the
