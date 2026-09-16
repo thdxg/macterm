@@ -16,15 +16,17 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 #
 # Set GHOSTTYKIT_TAG to another tag (or `latest`) to try one without committing:
 #   GHOSTTYKIT_TAG=latest mise run setup
-# build-2026-09-15: upstream 2026-09-14 + downstream patches 0001–0006 (0006
-# hides the custom-shader cursor while it is scrolled out of view). Any
+# build-2026-09-16: upstream 2026-09-16 + downstream patches 0001–0006 (0006
+# reports the custom-shader cursor hidden on frames that draw no cursor glyph,
+# and restores the flag on frames that do — the one-sided clear it shipped with
+# left the smooth cursor invisible at an idle prompt). Any
 # same-day push to the fork's main — the nightly sync included — deletes and
 # recreates a daily tag with different bytes, the asset-swap-under-a-pin hazard
 # documented in AGENTS.md; the stamp below can't tell copies apart, so a
 # checkout holding a stale copy needs `rm -rf GhosttyKit.xcframework
 # Macterm/Resources/terminfo && mise run setup` once. CI's download cache
 # hashes this file, so a bump here also refreshes it.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-09-15}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-09-16}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
