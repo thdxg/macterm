@@ -99,16 +99,21 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
     vec4 cur = iCurrentCursor;
     vec4 prev = iPreviousCursor;
-    // An all-zero previous cursor is the first frame after launch; don't
-    // glide in from the window corner.
-    if (dot(prev.zw, prev.zw) == 0.0) prev = cur;
+    vec3 prevColor = iPreviousCursorColor.rgb;
+    // An all-zero previous cursor is the first frame after launch: the
+    // previous rect and color were never written, so don't glide in from
+    // the window corner or fade up out of black.
+    if (dot(prev.zw, prev.zw) == 0.0) {
+        prev = cur;
+        prevColor = iCurrentCursorColor.rgb;
+    }
 
     float t = clamp((iTime - iTimeCursorChange) / DURATION, 0.0, 1.0);
     float e = ease(t);
 
     vec2 center = mix(rectCenter(prev), rectCenter(cur), e);
     vec2 halfSize = mix(prev.zw, cur.zw, e) * 0.5;
-    vec4 cursor = vec4(mactermEncode(mix(iPreviousCursorColor.rgb, iCurrentCursorColor.rgb, e)), 1.0);
+    vec4 cursor = vec4(mactermEncode(mix(prevColor, iCurrentCursorColor.rgb, e)), 1.0);
 
     float coverage = 1.0 - smoothstep(0.0, AA, sdfRect(fragCoord, center, halfSize));
     if (coverage <= 0.0) return;
