@@ -25,3 +25,8 @@ Macterm.xcodeproj/
 
 .env*
 !.env.example
+
+# The demo recorder generates an ssh keypair for its throwaway container; the
+# recordings themselves live outside the repo (see scripts/record-demos).
+scripts/record-demos/remote/id_ed25519*
+scripts/record-demos/remote/authorized_keys

@@ -208,7 +208,7 @@ A pane for features that work but haven't earned a permanent home: every toggle 
 - `Macterm/Intents/` — the App Intents surface: `MactermIntentHost`+`IntentTargets` (`IntentHost.swift`), `IntentPermission`, `MactermIntentError`, `Entities`, `ProjectIntents`/`TabIntents`/`PaneIntents`/`CommandIntents`, `MactermShortcuts` (`AppShortcutsProvider`).
 - `Macterm/Palette/` — `PaletteEngine` + `CommandSource`/`ProjectSource`/`DirectorySource`.
 - `CLI/` — the `macterm` binary: `MactermCommand` (ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`.
-- `scripts/` — `setup.sh`, `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh`, `benchmark.py` + `_harness.py` (`MactermHarness`, shared with e2e), `e2e.sh`, `ghosttykit-api-diff.sh`, `ghostty-shim.sh`.
+- `scripts/` — `setup.sh`, `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh`, `benchmark.py` + `_harness.py` (`MactermHarness`, shared with e2e), `e2e.sh`, `ghosttykit-api-diff.sh`, `ghostty-shim.sh`, `record-demos/` (the website's demo clips).
 - `e2e/` — pytest suite. `website/` — docs site (`docs/pages/*.md`) and the Caddyfile that serves the update feed.
 
 ## Tests
@@ -224,6 +224,19 @@ Launches the real Debug app hermetically via `MactermHarness` (throwaway `$HOME`
 ### Benchmarks
 
 `mise run bench` / `.github/workflows/benchmark.yml` measure CPU-time delta, RSS and wakeups across `focused`, `workload-focused`, `workload-unfocused`, driven by Darwin notifications (`BenchmarkControl`, `MACTERM_BENCHMARK=1`, which also skips the notification prompt, Sparkle and the first-run seed). PR runs compare against a pooled median of the last 10 main runs; a cell is flagged only past ±25% and a noise floor, and the `benchmark:regression`/`improvement` label needs ≥2 corroborating cells with one under a workload state (`should_label`). The label/comment writes live in `benchmark-report.yml` (a fork PR's token is read-only).
+
+### Demo recordings
+
+`scripts/record-demos/record-demos.sh` records the six clips the landing page plays, driving the **installed** app with synthetic keystrokes — so it needs Accessibility and Screen Recording for whatever runs it, plus ffmpeg, plus Docker for demo 5. Masters land in `$MACTERM_DEMOS_OUT` (default `~/Desktop/macterm-demos`); only `record-demos.sh web` writes into the repo, re-encoding the finished clips to 1400×792 CRF 26 with a first-frame poster in `assets/demo/`, which `website/public/assets` serves as `/assets/demo/…`.
+
+The rules it encodes, each earned against the real app:
+
+- **You place the window; it refuses to record until the rect matches** (1600×870 at 160,186, captured with a 40pt margin). Every clip then lines up, and the quick terminal's panel is placed to the same frame by `quick-prefs` — the panel's frame is recomputed from prefs on each show, so an AX move never sticks.
+- **Wait for a prompt, never a delay.** Every typed command polls `pane dump` until the pane is showing one. A remote pane starts up blank — the shell printed its prompt before zmx had a client — so the wait nudges it with Ctrl-L until one appears.
+- **The tab switcher needs a HELD modifier**: the overlay lives exactly as long as the recent-tab chord's modifier is down (`commitTabCycle` fires on the flags-changed event when it drops), and System Events cannot hold one across statements. `hold.js` posts the key events at CGEvent level from osascript. The chord is read from `macterm.hotkey.recent_tab` at run time rather than assumed.
+- **The quick terminal is recorded with the window parked off-screen, not closed.** The panel is non-activating: with no window at all Macterm cannot be the frontmost app, and every keystroke meant for the panel lands in whatever app is. `qt_ready` refuses to type unless the panel is up *and* Macterm is frontmost — Finder renames files with stray keystrokes.
+- **`guard_repo` restores only the files a demo opens** (`AGENTS.md`). Helix auto-saves on focus loss, so a keystroke that lands in an editor pane is written to disk; a blanket list reverts unrelated work in passing.
+- **Demo 5 builds its own host**: a container with sshd, vim and zmx (compiled from source — the fork ships macOS binaries only), published on 127.0.0.1:2222 with a marked `Host demo-box` block prepended to `~/.ssh/config`. It refuses to record unless the alias answers with the image's own marker, so a name collision can never point a recording at a real machine, and teardown removes project, container and config block.
 
 ## Releasing
 
