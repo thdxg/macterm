@@ -641,31 +641,39 @@ final class ControlHandler {
 
     // MARK: - Pane mutations
 
-    /// Resolve a `--direction` argument against the pane it will act on.
-    /// Shared by `pane.split` and `pane.mirror` so the two can't drift on what
-    /// `auto` means.
-    private func splitDirection(_ args: ControlArgs, relativeTo pane: Pane) throws -> SplitDirection {
+    /// Resolve a `--direction` argument into the axis and side the new pane
+    /// lands on, measured against the pane it will act on. Shared by
+    /// `pane.split` and `pane.mirror` so the two can't drift on what a
+    /// direction means.
+    private func splitPlacement(
+        _ args: ControlArgs,
+        relativeTo pane: Pane
+    ) throws -> (direction: SplitDirection, position: SplitPosition) {
         switch args.direction ?? "auto" {
-        case "right": return .horizontal
-        case "down": return .vertical
+        case "right": return (.horizontal, .second)
+        case "left": return (.horizontal, .first)
+        case "down": return (.vertical, .second)
+        case "up": return (.vertical, .first)
         case "auto":
             // The UI's auto-split picks the longer on-screen axis from the
             // pane's live NSView bounds; a never-shown pane measures zero and
-            // falls back to horizontal — same as TerminalTab.autoSplit.
+            // falls back to horizontal — same as TerminalTab.autoSplit. `auto`
+            // has no side to infer, so the new pane trails the target.
             let bounds = pane.nsView?.bounds.size ?? .zero
-            return bounds.height > bounds.width ? .vertical : .horizontal
+            return (bounds.height > bounds.width ? .vertical : .horizontal, .second)
         default:
-            throw ControlError(code: .badRequest, message: "direction must be right, down, or auto")
+            throw ControlError(code: .badRequest, message: "direction must be right, left, down, up, or auto")
         }
     }
 
     private func paneSplit(_ args: ControlArgs) throws -> ControlData {
         let (project, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
-        let direction = try splitDirection(args, relativeTo: target.pane)
+        let placement = try splitPlacement(args, relativeTo: target.pane)
         guard let newID = appState.splitPane(
             target.pane.id,
-            direction: direction,
+            direction: placement.direction,
+            position: placement.position,
             projectID: project.id,
             projectDirectory: project.path,
             command: args.run
@@ -679,10 +687,11 @@ final class ControlHandler {
     private func paneMirror(_ args: ControlArgs) throws -> ControlData {
         let (project, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
-        let direction = try splitDirection(args, relativeTo: target.pane)
+        let placement = try splitPlacement(args, relativeTo: target.pane)
         guard let newID = appState.mirrorPane(
             target.pane.id,
-            direction: direction,
+            direction: placement.direction,
+            position: placement.position,
             projectID: project.id
         ), let newPane = target.tab.splitRoot.findPane(id: newID)
         else {

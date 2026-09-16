@@ -710,6 +710,21 @@ struct ControlHandlerTests {
         #expect(tab.splitRoot.allPanes().count == 3)
     }
 
+    @Test(arguments: ["left", "up"])
+    func pane_split_leading_direction_places_the_new_pane_before_the_target(direction: String) async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let target = try #require(tab.splitRoot.allPanes().first)
+
+        let response = await handler.handle(request("pane.split", args: ControlArgs(direction: direction)))
+        #expect(response.ok)
+        let newInfo = try #require(response.data?.panes?.first)
+        let newID = try #require(UUID(uuidString: newInfo.id))
+        // `left`/`up` insert before the target; `right`/`down`/`auto` append after it.
+        #expect(tab.splitRoot.allPanes().map(\.id) == [newID, target.id])
+    }
+
     @Test
     func pane_split_targets_session_selector() async throws {
         let (handler, appState, projectStore) = makeHandler()

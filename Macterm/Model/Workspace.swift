@@ -203,14 +203,14 @@ final class TerminalTab: Identifiable {
     /// would move it away from the pane they are actually using — and, once
     /// leadership follows focus, would hand the pty size to the new view for
     /// no reason.
-    func mirror(paneID: UUID, direction: SplitDirection) -> UUID? {
+    func mirror(paneID: UUID, direction: SplitDirection, position: SplitPosition) -> UUID? {
         guard let source = splitRoot.findPane(id: paneID) else { return nil }
         let mirrored = Pane(mirroring: source)
         let (newRoot, inserted) = splitRoot.inserting(
             pane: mirrored,
             at: paneID,
             direction: direction,
-            position: .second
+            position: position
         )
         guard inserted else { return nil }
         splitRoot = newRoot

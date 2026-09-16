@@ -525,7 +525,7 @@ struct PaneCommand: ParsableCommand {
             abstract: "Split a pane. Defaults to the focused pane (or the pane you're in)."
         )
 
-        @Option(help: "right, down, or auto (longer on-screen axis).")
+        @Option(help: "right, left, down, up, or auto (longer on-screen axis).")
         var direction: String = "auto"
 
         @Option(name: .customLong("run"), help: "Command to run in the new pane's shell.")
@@ -547,7 +547,7 @@ struct PaneCommand: ParsableCommand {
             abstract: "Mirror a pane — show the same session in a second pane."
         )
 
-        @Option(help: "right, down, or auto (longer on-screen axis).")
+        @Option(help: "right, left, down, up, or auto (longer on-screen axis).")
         var direction: String = "auto"
 
         @OptionGroup var target: PaneTarget

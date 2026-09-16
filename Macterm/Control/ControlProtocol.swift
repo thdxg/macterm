@@ -78,9 +78,10 @@ struct ControlArgs: Codable, Equatable {
     /// (`tab.new`, `pane.split`, `grid`), typed into the live shell for
     /// `pane.run`.
     var run: String?
-    /// Direction, with a per-command vocabulary: `right`/`down`/`auto` for
-    /// `pane.split`, `left`/`down`/`up`/`right` for `pane.focus` (where it
-    /// makes the resolved pane the origin and focuses its neighbour).
+    /// Direction, with a per-command vocabulary: `right`/`left`/`down`/`up`/`auto`
+    /// for `pane.split` and `pane.mirror` (`auto` picks the longer on-screen
+    /// axis), `left`/`down`/`up`/`right` for `pane.focus` (where it makes the
+    /// resolved pane the origin and focuses its neighbour).
     var direction: String?
     /// Skip the busy-confirmation and destructive-plan guards
     /// (`project.remove`, `tab.close`, `pane.close`, `layout.apply`).

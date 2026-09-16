@@ -57,8 +57,8 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `l
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |
 | `pane inspect [target]` | Read-only snapshot of a pane's terminal core: grid, cell/surface pixels, scrollback totals, content scale, foreground pid + argv. Needs a live surface. |
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text — the viewport, or the full scrollback with `--scrollback`. Pipeline-friendly (text only). |
-| `pane split [--direction right\|down\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the source's cwd. `auto` picks the longer on-screen axis. |
-| `pane mirror [--direction right\|down\|auto] [target]` | Show the same session in a second pane beside the target. Both render the live shell; the one driving the pty size is zmx's *leader* (focusing a mirror claims it), the other is dimmed. |
+| `pane split [--direction right\|left\|down\|up\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the source's cwd. `right`/`down` place it after the target, `left`/`up` before it. `auto` picks the longer on-screen axis. |
+| `pane mirror [--direction right\|left\|down\|up\|auto] [target]` | Show the same session in a second pane beside the target. `right`/`down` place it after the target, `left`/`up` before it. Both render the live shell; the one driving the pty size is zmx's *leader* (focusing a mirror claims it), the other is dimmed. |
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way *from* the target — the same geometry the focus keybinds use. At the outermost edge it's a no-op, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |
