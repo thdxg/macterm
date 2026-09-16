@@ -23,15 +23,14 @@
 </p>
 
 <p align="center">
-  <a href="https://macterm.thdxg.dev/docs/"><b>Documentation</b></a> ·
   <a href="https://macterm.thdxg.dev"><b>Website</b></a> ·
   <a href="https://github.com/thdxg/macterm/releases"><b>Releases</b></a>
 </p>
 
-![Macterm's vertical project sidebar beside an editor and shell split](./assets/screenshot-1.png)
+![Macterm's vertical project sidebar beside an editor pane and a shell pane](./assets/hero.png)
 
 <p align="center">
-  <a href="https://macterm.thdxg.dev/#gallery"><b>More screenshots →</b></a>
+  <a href="https://macterm.thdxg.dev/#features"><b>Watch it work →</b></a>
 </p>
 
 ## Features
@@ -79,18 +78,9 @@ xattr -cr /Applications/Macterm.app
 
 Sparkle handles updates from there, verifying an EdDSA signature on each one — so you won't need `xattr` again.
 
-## Documentation
+## Cookbook
 
-Full guides live at **[macterm.thdxg.dev/docs](https://macterm.thdxg.dev/docs/)**:
-
-- [Installation](https://macterm.thdxg.dev/docs/install) and [Configuration](https://macterm.thdxg.dev/docs/configuration)
-- [Command palette](https://macterm.thdxg.dev/docs/command-palette) and [Quick terminal](https://macterm.thdxg.dev/docs/quick-terminal)
-- [Declarative layouts](https://macterm.thdxg.dev/docs/declarative-layouts), [Pinned tabs](https://macterm.thdxg.dev/docs/pinned-tabs), [Session persistence](https://macterm.thdxg.dev/docs/session-persistence), and [Remote projects](https://macterm.thdxg.dev/docs/remote-projects)
-- [The `macterm` CLI](https://macterm.thdxg.dev/docs/cli)
-
-### Cookbook
-
-The [**Cookbook**](https://macterm.thdxg.dev/docs/cookbook) collects workflows and recipes from the community — the layouts, keybinds, and scripts people actually run to get more out of Macterm. Three to start with: [one <kbd>⌃hjkl</kbd> chord that moves between nvim's splits *and* Macterm's panes](https://github.com/thdxg/macterm/discussions/217), [driving an interactive program from a script](https://github.com/thdxg/macterm/discussions/218), and [giving a coding agent control of Macterm](https://github.com/thdxg/macterm/discussions/219).
+Workflows and recipes from the community — the layouts, keybinds, and scripts people actually run to get more out of Macterm. Three to start with: [one <kbd>⌃hjkl</kbd> chord that moves between nvim's splits *and* Macterm's panes](https://github.com/thdxg/macterm/discussions/217), [driving an interactive program from a script](https://github.com/thdxg/macterm/discussions/218), and [giving a coding agent control of Macterm](https://github.com/thdxg/macterm/discussions/219).
 
 Got a recipe of your own? [Start a Cookbook topic](https://github.com/thdxg/macterm/discussions/new?category=cookbook) — anyone can post, and anyone can borrow.
 
