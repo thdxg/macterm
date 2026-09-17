@@ -124,9 +124,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 lo = mix(rectMin(prev), rectMin(cur), e);
     vec2 hi = mix(rectMax(prev), rectMax(cur), e);
     // Once the glide has landed, snap to whole pixels the way ghostty's own
-    // quad rasterizes (a pixel is in or out by its center), so a rect that
-    // arrives at a fractional edge — window padding scaled by a fractional
-    // display scale — still draws crisp.
+    // quad rasterizes (a pixel is in or out by its center). Ghostty builds
+    // the rect out of whole pixels, so this bites only under Experimental →
+    // Smooth scrolling, whose sub-row remainder shifts the cursor with the
+    // rows it rides and stays on screen until the next row commit: without
+    // the snap, a paused scroll leaves the block blended across two rows
+    // for as long as it sits there.
     if (t >= 1.0) {
         lo = floor(lo + 0.5);
         hi = floor(hi + 0.5);
