@@ -5,12 +5,14 @@ pub const Shell = enum {
     zsh,
     fish,
     nu,
+    yash,
 
     pub fn fromString(s: []const u8) ?Shell {
         if (std.mem.eql(u8, s, "bash")) return .bash;
         if (std.mem.eql(u8, s, "zsh")) return .zsh;
         if (std.mem.eql(u8, s, "fish")) return .fish;
         if (std.mem.eql(u8, s, "nu")) return .nu;
+        if (std.mem.eql(u8, s, "yash")) return .yash;
 
         return null;
     }
@@ -21,6 +23,7 @@ pub const Shell = enum {
             .zsh => zsh_completions,
             .fish => fish_completions,
             .nu => nu_completions,
+            .yash => yash_completions,
         };
     }
 };
@@ -45,7 +48,7 @@ const bash_completions =
     \\      COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
     \\      ;;
     \\    completions)
-    \\      COMPREPLY=($(compgen -W "bash zsh fish nu" -- "$cur"))
+    \\      COMPREPLY=($(compgen -W "bash zsh fish nu yash" -- "$cur"))
     \\      ;;
     \\    list)
     \\      COMPREPLY=($(compgen -W "--short" -- "$cur"))
@@ -101,7 +104,7 @@ const zsh_completions =
     \\          _zmx_sessions
     \\          ;;
     \\        completions|c)
-    \\          _values 'shell' 'bash' 'zsh' 'fish' 'nu'
+    \\          _values 'shell' 'bash' 'zsh' 'fish' 'nu' 'yash'
     \\          ;;
     \\        list|l)
     \\          _values 'options' '--short'
@@ -147,7 +150,7 @@ const fish_completions =
     \\complete -c zmx -n "__fish_is_nth_token 1" -a history -d 'Output session scrollback'
     \\complete -c zmx -n "__fish_is_nth_token 1" -a wait -d 'Wait for session tasks to complete'
     \\complete -c zmx -n "__fish_is_nth_token 1" -a tail -d 'Follow session output'
-    \\complete -c zmx -n "__fish_is_nth_token 1" -a completions -d 'Shell completions (bash, zsh, fish, nu)'
+    \\complete -c zmx -n "__fish_is_nth_token 1" -a completions -d 'Shell completions (bash, zsh, fish, nu, yash)'
     \\complete -c zmx -n "__fish_is_nth_token 1" -a version -d 'Show version'
     \\complete -c zmx -n "__fish_is_nth_token 1" -a get -d 'Get session labels'
     \\complete -c zmx -n "__fish_is_nth_token 1" -a set -d 'Set session labels'
@@ -159,7 +162,7 @@ const fish_completions =
     \\complete -c zmx -n "__fish_is_nth_token 2; and __fish_seen_subcommand_from a attach r run s send p print wr write hi history g get se set cl clear print-env" -a '(zmx list --short 2>/dev/null)' -d 'Session name'
     \\complete -c zmx -n "not __fish_is_nth_token 1; and __fish_seen_subcommand_from k kill w wait t tail" -a '(zmx list --short 2>/dev/null)' -d 'Session name'
     \\
-    \\complete -c zmx -n "__fish_is_nth_token 2; and __fish_seen_subcommand_from c completions" -a 'bash zsh fish nu' -d Shell
+    \\complete -c zmx -n "__fish_is_nth_token 2; and __fish_seen_subcommand_from c completions" -a 'bash zsh fish nu yash' -d Shell
     \\
     \\# Subcommand flags
     \\complete -c zmx -n "__fish_seen_subcommand_from a attach" -l labels -d 'Apply "key=value ..." labels as the session is created' -r
@@ -178,7 +181,7 @@ const nu_completions =
     \\}
     \\
     \\def "nu-complete zmx complete" [] {
-    \\    [bash fish nu zsh]
+    \\    [bash fish nu yash zsh]
     \\}
     \\
     \\export extern "zmx attach" [
@@ -241,4 +244,280 @@ const nu_completions =
     \\]
     \\
     \\export extern "zmx help" []
+;
+
+const yash_completions =
+    \\function completion/zmx {
+    \\    typeset OPTIONS ARGOPT PREFIX
+    \\    OPTIONS=( #>#
+    \\        "v --version; show version"
+    \\        "h; show help"
+    \\    ) #<#
+    \\
+    \\    command -f completion//parseoptions -e
+    \\    case $ARGOPT in
+    \\    (-)
+    \\        command -f completion//completeoptions
+    \\        ;;
+    \\    ("")
+    \\        if [ ${WORDS[#]} -le 1 ]; then
+    \\            command -f completion/zmx::completecmd
+    \\        else
+    \\            typeset zmxcmd="${WORDS[2]}"
+    \\            case $zmxcmd in
+    \\            (a|attach)
+    \\                command -f completion/zmx::attach:arg
+    \\                ;;
+    \\            (r|run)
+    \\                command -f completion/zmx::run:arg
+    \\                ;;
+    \\            (s|send)
+    \\                command -f completion/zmx::send:arg
+    \\                ;;
+    \\            (p|print)
+    \\                command -f completion/zmx::print:arg
+    \\                ;;
+    \\            (wr|write)
+    \\                command -f completion/zmx::write:arg
+    \\                ;;
+    \\            (d|detach)
+    \\                ;;
+    \\            (l|ls|list)
+    \\                command -f completion/zmx::list:arg
+    \\                ;;
+    \\            (g|get)
+    \\                command -f completion/zmx::get:arg
+    \\                ;;
+    \\            (set)
+    \\                command -f completion/zmx::set:arg
+    \\                ;;
+    \\            (cl|clear)
+    \\                command -f completion/zmx::clear:arg
+    \\                ;;
+    \\            (print-env)
+    \\                command -f completion/zmx::print-env:arg
+    \\                ;;
+    \\            (k|kill)
+    \\                command -f completion/zmx::kill:arg
+    \\                ;;
+    \\            (hi|history)
+    \\                command -f completion/zmx::history:arg
+    \\                ;;
+    \\            (w|wait)
+    \\                command -f completion/zmx::wait:arg
+    \\                ;;
+    \\            (t|tail)
+    \\                command -f completion/zmx::tail:arg
+    \\                ;;
+    \\            (c|completions)
+    \\                command -f completion/zmx::completions:arg
+    \\                ;;
+    \\            esac
+    \\        fi
+    \\        ;;
+    \\    esac
+    \\}
+    \\
+    \\function completion/zmx::completecmd {
+    \\    complete -P "$PREFIX" -D "Attach to session, creating if needed" attach a
+    \\    complete -P "$PREFIX" -D "Send command without attaching" run r
+    \\    complete -P "$PREFIX" -D "Send raw input to session PTY" send s
+    \\    complete -P "$PREFIX" -D "Inject text into session display" print p
+    \\    complete -P "$PREFIX" -D "Write stdin to file_path through the session" write wr
+    \\    complete -P "$PREFIX" -D "Detach all clients from current session" detach d
+    \\    complete -P "$PREFIX" -D "List active sessions" list ls l
+    \\    complete -P "$PREFIX" -D "Get session labels" get g
+    \\    complete -P "$PREFIX" -D "Set session labels" set
+    \\    complete -P "$PREFIX" -D "Clear all session labels" clear cl
+    \\    complete -P "$PREFIX" -D "Print tracked environment variables" print-env
+    \\    complete -P "$PREFIX" -D "Kill session and all attached clients" kill k
+    \\    complete -P "$PREFIX" -D "Output session scrollback" history hi
+    \\    complete -P "$PREFIX" -D "Wait for session tasks to complete" wait w
+    \\    complete -P "$PREFIX" -D "Follow session output" tail t
+    \\    complete -P "$PREFIX" -D "Shell completion scripts" completions c
+    \\    complete -P "$PREFIX" -D "Show version" version v
+    \\    complete -P "$PREFIX" -D "Show help message" help h
+    \\}
+    \\
+    \\function completion/zmx::sessions {
+    \\    typeset sessions
+    \\    typeset IFS='
+    \\'
+    \\    sessions=($(zmx list --short 2>/dev/null))
+    \\    if [ ${sessions[#]} -gt 0 ]; then
+    \\        complete -P "$PREFIX" -- "$sessions"
+    \\    fi
+    \\}
+    \\
+    \\function completion/zmx::attach:arg {
+    \\    OPTIONS=( #>#
+    \\        "--labels:; apply labels as session is created"
+    \\    ) #<#
+    \\    command -f completion//parseoptions -en
+    \\    case $ARGOPT in
+    \\    (-)
+    \\        command -f completion//completeoptions
+    \\        ;;
+    \\    (--labels)
+    \\        ;;
+    \\    (*)
+    \\        command -f completion//getoperands
+    \\        if [ ${WORDS[#]} -eq 1 ]; then
+    \\            command -f completion/zmx::sessions
+    \\        else
+    \\            complete -P "$PREFIX" -c
+    \\        fi
+    \\        ;;
+    \\    esac
+    \\}
+    \\
+    \\function completion/zmx::run:arg {
+    \\    OPTIONS=( #>#
+    \\        "d; detach from calling terminal"
+    \\        "--fish; session runs fish shell"
+    \\    ) #<#
+    \\    command -f completion//parseoptions -en
+    \\    case $ARGOPT in
+    \\    (-)
+    \\        command -f completion//completeoptions
+    \\        ;;
+    \\    (*)
+    \\        command -f completion//getoperands
+    \\        if [ ${WORDS[#]} -eq 1 ]; then
+    \\            command -f completion/zmx::sessions
+    \\        else
+    \\            complete -P "$PREFIX" -c
+    \\        fi
+    \\        ;;
+    \\    esac
+    \\}
+    \\
+    \\function completion/zmx::send:arg {
+    \\    command -f completion//getoperands
+    \\    if [ ${WORDS[#]} -eq 1 ]; then
+    \\        command -f completion/zmx::sessions
+    \\    fi
+    \\}
+    \\
+    \\function completion/zmx::print:arg {
+    \\    command -f completion//getoperands
+    \\    if [ ${WORDS[#]} -eq 1 ]; then
+    \\        command -f completion/zmx::sessions
+    \\    fi
+    \\}
+    \\
+    \\function completion/zmx::write:arg {
+    \\    command -f completion//getoperands
+    \\    if [ ${WORDS[#]} -eq 1 ]; then
+    \\        command -f completion/zmx::sessions
+    \\    elif [ ${WORDS[#]} -eq 2 ]; then
+    \\        complete -P "$PREFIX" -f
+    \\    fi
+    \\}
+    \\
+    \\function completion/zmx::list:arg {
+    \\    OPTIONS=( #>#
+    \\        "--short; short output"
+    \\    ) #<#
+    \\    command -f completion//parseoptions -en
+    \\    case $ARGOPT in
+    \\    (-)
+    \\        command -f completion//completeoptions
+    \\        ;;
+    \\    esac
+    \\}
+    \\
+    \\function completion/zmx::get:arg {
+    \\    command -f completion//getoperands
+    \\    if [ ${WORDS[#]} -eq 1 ]; then
+    \\        complete -P "$PREFIX" -D "Current session" .
+    \\        command -f completion/zmx::sessions
+    \\    fi
+    \\}
+    \\
+    \\function completion/zmx::set:arg {
+    \\    command -f completion//getoperands
+    \\    if [ ${WORDS[#]} -eq 1 ]; then
+    \\        complete -P "$PREFIX" -D "Current session" .
+    \\        command -f completion/zmx::sessions
+    \\    fi
+    \\}
+    \\
+    \\function completion/zmx::clear:arg {
+    \\    command -f completion//getoperands
+    \\    if [ ${WORDS[#]} -eq 1 ]; then
+    \\        complete -P "$PREFIX" -D "Current session" .
+    \\        command -f completion/zmx::sessions
+    \\    fi
+    \\}
+    \\
+    \\function completion/zmx::print-env:arg {
+    \\    OPTIONS=( #>#
+    \\        "s --shell; output POSIX export/unset commands for eval"
+    \\    ) #<#
+    \\    command -f completion//parseoptions -en
+    \\    case $ARGOPT in
+    \\    (-)
+    \\        command -f completion//completeoptions
+    \\        ;;
+    \\    (*)
+    \\        command -f completion//getoperands
+    \\        if [ ${WORDS[#]} -eq 1 ]; then
+    \\            complete -P "$PREFIX" -D "Current session" .
+    \\            command -f completion/zmx::sessions
+    \\        fi
+    \\        ;;
+    \\    esac
+    \\}
+    \\
+    \\function completion/zmx::kill:arg {
+    \\    OPTIONS=( #>#
+    \\        "--force; force kill"
+    \\    ) #<#
+    \\    command -f completion//parseoptions -en
+    \\    case $ARGOPT in
+    \\    (-)
+    \\        command -f completion//completeoptions
+    \\        ;;
+    \\    (*)
+    \\        command -f completion/zmx::sessions
+    \\        ;;
+    \\    esac
+    \\}
+    \\
+    \\function completion/zmx::history:arg {
+    \\    OPTIONS=( #>#
+    \\        "--vt; history format with escape sequences"
+    \\        "--html; history format in HTML"
+    \\    ) #<#
+    \\    command -f completion//parseoptions -en
+    \\    case $ARGOPT in
+    \\    (-)
+    \\        command -f completion//completeoptions
+    \\        ;;
+    \\    (*)
+    \\        command -f completion//getoperands
+    \\        if [ ${WORDS[#]} -eq 1 ]; then
+    \\            command -f completion/zmx::sessions
+    \\        fi
+    \\        ;;
+    \\    esac
+    \\}
+    \\
+    \\function completion/zmx::wait:arg {
+    \\    command -f completion//getoperands
+    \\    command -f completion/zmx::sessions
+    \\}
+    \\
+    \\function completion/zmx::tail:arg {
+    \\    command -f completion//getoperands
+    \\    command -f completion/zmx::sessions
+    \\}
+    \\
+    \\function completion/zmx::completions:arg {
+    \\    command -f completion//getoperands
+    \\    if [ ${WORDS[#]} -eq 1 ]; then
+    \\        complete -P "$PREFIX" -- bash zsh fish nu yash
+    \\    fi
+    \\}
 ;

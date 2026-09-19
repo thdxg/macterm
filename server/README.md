@@ -116,7 +116,7 @@ Commands:
   [hi]story <name> [--vt|--html]           Output session scrollback
   [w]ait <name>...                         Wait for session tasks to complete
   [t]ail <name>...                         Follow session output
-  [c]ompletions <shell>                    Shell completions (bash, zsh, fish, nu)
+  [c]ompletions <shell>                    Shell completions (bash, zsh, fish, nu, yash)
   [v]ersion                                Show version and metadata (socket dir, log dir)
   [h]elp                                   Show this help
 ```
@@ -333,6 +333,32 @@ Add this to `~/.config/fish/completions/zmx.fish`:
 if type -q zmx
   zmx completions fish | source
 end
+```
+
+### yash
+
+Add this to your `~/.config/yash/rc`:
+
+```sh
+if command -v zmx > /dev/null 2>&1; then
+  eval "$(zmx completions yash)"
+fi
+```
+
+Or save as an autoloaded script in your completion directory:
+
+```sh
+zmx completions yash > ~/.config/yash/completion/zmx
+```
+
+### nu
+
+Add this to your Nushell config (`config.nu`):
+
+```nu
+use ("~/.cache/zmx/completions.nu" | path expand)
+# Or generate dynamically:
+zmx completions nu | save -f ~/.cache/zmx/completions.nu
 ```
 
 ## session picker

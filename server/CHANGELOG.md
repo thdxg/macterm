@@ -4,6 +4,10 @@ Use spec: https://common-changelog.org/
 
 ## Staged
 
+### Added
+
+- Completions for [`yash`](https://magicant.github.io/yash/)
+
 ## v0.8.1 - 2026-09-05
 
 ### Fixed

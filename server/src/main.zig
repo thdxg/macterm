@@ -114,13 +114,13 @@ pub fn main(init: std.process.Init) !void {
         return labelClear(gpa, io, &cfg, sesh);
     } else if (std.mem.eql(u8, cmd, "completions") or std.mem.eql(u8, cmd, "c")) {
         const arg = args.next() orelse {
-            return printError(io, "completions requires a shell argument (bash, zsh, fish, nu)", .{});
+            return printError(io, "completions requires a shell argument (bash, zsh, fish, nu, yash)", .{});
         };
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             return help(io);
         }
         const shell = completions.Shell.fromString(arg) orelse {
-            return printError(io, "unknown shell \"{s}\" (valid: bash, zsh, fish, nu)", .{arg});
+            return printError(io, "unknown shell \"{s}\" (valid: bash, zsh, fish, nu, yash)", .{arg});
         };
         return printCompletions(io, shell);
     } else if (std.mem.eql(u8, cmd, "detach") or std.mem.eql(u8, cmd, "d")) {
@@ -524,7 +524,7 @@ fn help(io: std.Io) !void {
         \\  [hi]story <name> [--vt|--html]              Output session scrollback
         \\  [w]ait <name>...                            Wait for session tasks to complete
         \\  [t]ail <name>...                            Follow session output
-        \\  [c]ompletions <shell>                       Shell completions (bash, zsh, fish, nu)
+        \\  [c]ompletions <shell>                       Shell completions (bash, zsh, fish, nu, yash)
         \\  [v]ersion                                   Show version and metadata (socket dir, log dir)
         \\  [h]elp                                      Show this help
         \\

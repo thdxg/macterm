@@ -140,6 +140,10 @@ load test_helper
   run "$ZMX" completions bash
   [ "$status" -eq 0 ]
   [[ "$output" == *"_zmx_completions"* ]]
+
+  run "$ZMX" completions yash
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"completion/zmx"* ]]
 }
 
 @test "completions --help exits zero" {
