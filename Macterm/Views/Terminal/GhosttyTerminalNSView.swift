@@ -844,10 +844,7 @@ final class GhosttyTerminalNSView: NSView {
             // Reconnect existing surface to the new window
             let scale = Double(window.backingScaleFactor)
             ghostty_surface_set_content_scale(surface, scale, scale)
-            let size = convertToBacking(bounds).size
-            if size.width > 0, size.height > 0 {
-                ghostty_surface_set_size(surface, UInt32(size.width), UInt32(size.height))
-            }
+            applySurfaceSize(convertToBacking(bounds).size)
             ghostty_surface_set_focus(surface, isFocused)
         }
         updateMetalLayerSize()
@@ -922,7 +919,32 @@ final class GhosttyTerminalNSView: NSView {
             CATransaction.commit()
         }
         ghostty_surface_set_content_scale(surface, scale, scale)
-        ghostty_surface_set_size(surface, UInt32(scaledSize.width), UInt32(scaledSize.height))
+        applySurfaceSize(scaledSize)
+    }
+
+    /// The one path to `ghostty_surface_set_size`. A size that would leave
+    /// the grid degenerate is refused (see `SurfaceSizeGate`): libghostty
+    /// reflows scrollback into whatever grid it is given, and a two-column
+    /// grid — a split animation's first frame, a window shrunk to the
+    /// sidebar's width, a container collapsing mid tab switch — shreds every
+    /// line and leaves the content above the viewport when the pane grows
+    /// back. Keeping the last grid renders the pane clipped for as long as
+    /// it is that small, with its content intact.
+    private func applySurfaceSize(_ backingSize: CGSize) {
+        guard let surface else { return }
+        let widthPx = UInt32(backingSize.width)
+        let heightPx = UInt32(backingSize.height)
+        let cells = ghostty_surface_size(surface)
+        guard SurfaceSizeGate.admits(
+            widthPx: widthPx, heightPx: heightPx,
+            cellWidthPx: cells.cell_width_px, cellHeightPx: cells.cell_height_px
+        )
+        else {
+            let size = "\(widthPx)x\(heightPx)"
+            logger.debug("refusing degenerate surface size \(size, privacy: .public)px for \(self.sessionName, privacy: .public)")
+            return
+        }
+        ghostty_surface_set_size(surface, widthPx, heightPx)
         if !hasReportedSurfaceSize {
             hasReportedSurfaceSize = true
             onSurfaceSized?()

@@ -282,6 +282,7 @@ Auto-updates via Sparkle (`SUFeedURL` = `https://macterm.thdxg.dev/appcast.xml`,
 - The `closeSurface` callback is asynchronous — guard double-close.
 - First-responder handoff goes through `FocusRestoration` — a bare `makeFirstResponder` races window attachment.
 - Any encoded key counts as typing to libghostty (clears selection, scrolls to bottom) — don't send control sequences on focus.
+- **Every surface resize goes through `GhosttyTerminalNSView.applySurfaceSize`, gated by `SurfaceSizeGate`.** A grid under 8×2 cells is refused and the surface keeps its last size: libghostty reflows scrollback into whatever grid it is given, and a two-column grid (a split animation's first frame, a window shrunk to the sidebar's width, a container collapsing mid tab switch) shreds every line and leaves the content above the viewport when the pane grows back. Ghostty.app never meets this because its window can't get that small.
 
 ### Persistence
 
