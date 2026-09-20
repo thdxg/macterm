@@ -199,265 +199,70 @@ struct MactermApp: App {
             SettingsView()
                 // The Projects pane drives real project/layout mutations, so
                 // the settings window needs the same state the main window has
-                // — and its own copies of the confirmation/error alerts, since
-                // the ones above are attached to `MainWindow` and would fire
-                // behind (or without) the settings window.
-                //
-                // Each copy is presented only for a dialog this pane staged
-                // (`DialogHost.settings`). Without that gate the shared state
-                // fires both copies, and SwiftUI opens and fronts this window
-                // just to show a duplicate of a dialog the user is already
-                // answering in the main window.
+                // — and its own copy of the dialog alert, since the main
+                // window's is attached to `MainWindow` and would fire behind
+                // (or without) the settings window. The copy presents only a
+                // dialog this pane staged (`DialogHost.settings`); see
+                // `PendingDialogAlert`.
                 .environment(appState)
                 .environment(projectStore)
                 .modifier(AppColorScheme())
-                .alert(
-                    "Unload project with running processes?",
-                    isPresented: Binding(
-                        get: { appState.pendingUnloadProject?.host == .settings },
-                        set: { if !$0 { appState.cancelPendingUnloadProject() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingUnloadProject()
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    Button("Unload", role: .destructive) {
-                        appState.confirmPendingUnloadProject()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                } message: {
-                    Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
-                }
-                .alert(
-                    "Remove project with running processes?",
-                    isPresented: Binding(
-                        get: { appState.pendingRemoveProject?.host == .settings },
-                        set: { if !$0 { appState.cancelPendingRemoveProject() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingRemoveProject()
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    Button("Remove", role: .destructive) {
-                        appState.confirmPendingRemoveProject()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                } message: {
-                    Text("A process is still running in this project. Removing it ends every process in its tabs.")
-                }
-                .alert(
-                    "Apply layout?",
-                    isPresented: Binding(
-                        get: { appState.pendingLayoutApply?.host == .settings },
-                        set: { if !$0 { appState.cancelPendingLayoutApply() } }
-                    )
-                ) {
-                    Button("Cancel", role: .cancel) {
-                        appState.cancelPendingLayoutApply()
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    Button("Apply", role: .destructive) {
-                        appState.confirmPendingLayoutApply()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                } message: {
-                    if let pending = appState.pendingLayoutApply {
-                        Text(pending.confirmationMessage)
-                    }
-                }
-                .alert(
-                    appState.pendingLayoutError?.title ?? "Couldn't apply layout",
-                    isPresented: Binding(
-                        get: { appState.pendingLayoutError?.host == .settings },
-                        set: { if !$0 { appState.pendingLayoutError = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) {
-                        appState.pendingLayoutError = nil
-                    }
-                } message: {
-                    if let pending = appState.pendingLayoutError {
-                        Text(pending.message)
-                    }
-                }
+                .modifier(PendingDialogAlert(appState: appState, host: .settings))
         }
     }
 }
 
-/// The main window's confirmation alerts, split across three modifiers because
-/// all seven chained into `MactermApp.body` defeat the type checker on Xcode
-/// 26.3. Add new alerts to one of these — never back into `body`.
+/// The one alert behind `AppState.pendingDialog`, attached once per scene.
 ///
-/// Every alert across these three that Settings also carries is gated on the
-/// staging call's `DialogHost` — see the enum's doc comment: an ungated binding
-/// presents in BOTH scenes, which opens the settings window just to stack a
-/// duplicate dialog.
-struct CloseConfirmationAlerts: ViewModifier {
+/// A copy presents only a dialog staged for its own `host` — Settings →
+/// Projects stages with `.settings`, everything else with `.mainWindow` —
+/// and a main-window copy only when its window is the one that asked
+/// (`dialogWindowID`). Both gates are written here, once: an ungated copy
+/// presents in every scene at the same time, which opens and fronts the
+/// settings window just to stack a duplicate of the dialog the user is
+/// already answering.
+struct PendingDialogAlert: ViewModifier {
     let appState: AppState
-    /// The window this copy belongs to. Every window's scene carries
-    /// these alerts, so each must present only its own.
-    let windowID: WindowState.ID?
+    let host: AppState.DialogHost
+    /// The window this copy belongs to; main-window copies only.
+    var windowID: WindowState.ID?
 
-    /// Whether this is the window a dialog should appear in.
-    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
-
-    func body(content: Content) -> some View {
-        content
-            .alert(
-                "Close running process?",
-                isPresented: Binding(
-                    get: { isDialogWindow && appState.pendingClosePane != nil },
-                    set: { if !$0 { appState.cancelPendingClosePane() } }
-                )
-            ) {
-                Button("Cancel", role: .cancel) {
-                    appState.cancelPendingClosePane()
-                }
-                .keyboardShortcut(.cancelAction)
-                Button("Close", role: .destructive) {
-                    appState.confirmPendingClosePane()
-                }
-                .keyboardShortcut(.defaultAction)
-            } message: {
-                Text("A process is still running in this pane. Close it anyway?")
-            }
-            .alert(
-                "Close running processes?",
-                isPresented: Binding(
-                    get: { isDialogWindow && appState.pendingCloseTab != nil },
-                    set: { if !$0 { appState.cancelPendingCloseTab() } }
-                )
-            ) {
-                Button("Cancel", role: .cancel) {
-                    appState.cancelPendingCloseTab()
-                }
-                .keyboardShortcut(.cancelAction)
-                Button("Close", role: .destructive) {
-                    appState.confirmPendingCloseTab()
-                }
-                .keyboardShortcut(.defaultAction)
-            } message: {
-                Text("A process is still running in this tab. Closing the tab ends it.")
-            }
+    private var dialog: AppState.PendingDialog? {
+        guard let dialog = appState.pendingDialog, dialog.host == host else { return nil }
+        if host == .mainWindow, appState.dialogWindowID != windowID { return nil }
+        return dialog
     }
-}
-
-struct ProjectConfirmationAlerts: ViewModifier {
-    let appState: AppState
-    /// The window this copy belongs to. Every window's scene carries
-    /// these alerts, so each must present only its own.
-    let windowID: WindowState.ID?
-
-    /// Whether this is the window a dialog should appear in.
-    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
 
     func body(content: Content) -> some View {
-        content
-            .alert(
-                "Unload project with running processes?",
-                isPresented: Binding(
-                    get: { isDialogWindow && appState.pendingUnloadProject?.host == .mainWindow },
-                    set: { if !$0 { appState.cancelPendingUnloadProject() } }
-                )
-            ) {
+        // Dismissal is keyed to the dialog that was showing: SwiftUI flips
+        // `isPresented` off after a button ran, and confirming may already
+        // have put a different dialog up.
+        let dialogID = dialog?.id
+        content.alert(
+            dialog?.title ?? "",
+            isPresented: Binding(
+                get: { dialog != nil },
+                set: { if !$0 { appState.dismissPendingDialog(dialogID) } }
+            ),
+            presenting: dialog
+        ) { dialog in
+            if let confirmTitle = dialog.confirmTitle {
                 Button("Cancel", role: .cancel) {
-                    appState.cancelPendingUnloadProject()
+                    appState.dismissPendingDialog(dialog.id)
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Unload", role: .destructive) {
-                    appState.confirmPendingUnloadProject()
+                Button(confirmTitle, role: .destructive) {
+                    appState.confirmPendingDialog()
                 }
                 .keyboardShortcut(.defaultAction)
-            } message: {
-                Text("A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.")
-            }
-            .alert(
-                "Remove project with running processes?",
-                isPresented: Binding(
-                    get: { isDialogWindow && appState.pendingRemoveProject?.host == .mainWindow },
-                    set: { if !$0 { appState.cancelPendingRemoveProject() } }
-                )
-            ) {
-                Button("Cancel", role: .cancel) {
-                    appState.cancelPendingRemoveProject()
-                }
-                .keyboardShortcut(.cancelAction)
-                Button("Remove", role: .destructive) {
-                    appState.confirmPendingRemoveProject()
-                }
-                .keyboardShortcut(.defaultAction)
-            } message: {
-                Text("A process is still running in this project. Removing it ends every process in its tabs.")
-            }
-            .alert(
-                "Remove items with running processes?",
-                isPresented: Binding(
-                    get: { isDialogWindow && appState.pendingBulkRemove != nil },
-                    set: { if !$0 { appState.cancelPendingBulkRemove() } }
-                )
-            ) {
-                Button("Cancel", role: .cancel) {
-                    appState.cancelPendingBulkRemove()
-                }
-                .keyboardShortcut(.cancelAction)
-                Button("Remove", role: .destructive) {
-                    appState.confirmPendingBulkRemove()
-                }
-                .keyboardShortcut(.defaultAction)
-            } message: {
-                Text("A process is still running in one of the selected items. Removing them ends every process in their tabs.")
-            }
-    }
-}
-
-struct LayoutAlerts: ViewModifier {
-    let appState: AppState
-    /// The window this copy belongs to. Every window's scene carries
-    /// these alerts, so each must present only its own.
-    let windowID: WindowState.ID?
-
-    /// Whether this is the window a dialog should appear in.
-    private var isDialogWindow: Bool { appState.dialogWindowID == windowID }
-
-    func body(content: Content) -> some View {
-        content
-            .alert(
-                "Apply layout?",
-                isPresented: Binding(
-                    get: { isDialogWindow && appState.pendingLayoutApply?.host == .mainWindow },
-                    set: { if !$0 { appState.cancelPendingLayoutApply() } }
-                )
-            ) {
-                Button("Cancel", role: .cancel) {
-                    appState.cancelPendingLayoutApply()
-                }
-                .keyboardShortcut(.cancelAction)
-                Button("Apply", role: .destructive) {
-                    appState.confirmPendingLayoutApply()
-                }
-                .keyboardShortcut(.defaultAction)
-            } message: {
-                if let pending = appState.pendingLayoutApply {
-                    Text(pending.confirmationMessage)
-                }
-            }
-            .alert(
-                appState.pendingLayoutError?.title ?? "Couldn't apply layout",
-                isPresented: Binding(
-                    get: { isDialogWindow && appState.pendingLayoutError?.host == .mainWindow },
-                    set: { if !$0 { appState.pendingLayoutError = nil } }
-                )
-            ) {
+            } else {
                 Button("OK", role: .cancel) {
-                    appState.pendingLayoutError = nil
-                }
-            } message: {
-                if let pending = appState.pendingLayoutError {
-                    Text(pending.message)
+                    appState.dismissPendingDialog(dialog.id)
                 }
             }
+        } message: { dialog in
+            Text(dialog.message)
+        }
     }
 }
 

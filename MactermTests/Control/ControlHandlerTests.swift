@@ -1115,7 +1115,7 @@ struct ControlHandlerTests {
         // non-destructive: applies cleanly without --force.
         let applied = await handler.handle(request("layout.apply"))
         #expect(applied.ok)
-        #expect(appState.pendingLayoutApply == nil)
+        #expect(appState.pendingDialog == nil)
     }
 }
 

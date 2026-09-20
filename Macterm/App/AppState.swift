@@ -889,11 +889,11 @@ final class AppState {
     /// surfaces (and thus never spawn shells) inside the test host.
     @ObservationIgnored
     var warmPane: (Pane) -> Void = { SurfaceIncubator.shared.warm($0) }
-    var pendingClosePane: PendingClosePane?
-    /// A computed layout-apply plan awaiting user confirmation because applying
-    /// it would terminate one or more live panes/tabs. nil when no apply is
-    /// pending (or the pending apply is non-destructive and already ran).
-    var pendingLayoutApply: PendingLayoutApply?
+    /// The one dialog awaiting the user — a staged confirmation or a notice.
+    /// Set through `present`, cleared through `confirmPendingDialog` /
+    /// `dismissPendingDialog` (see `AppState+Dialogs`); presented by the one
+    /// `PendingDialogAlert` per scene.
+    var pendingDialog: PendingDialog?
     /// The command palette's search text, kept on `AppState` so it survives the
     /// panel's view lifecycle — closing and reopening the palette preserves what
     /// was typed.
@@ -907,81 +907,6 @@ final class AppState {
     @ObservationIgnored
     private var projectRecency = RecencyStack<UUID>(limit: 50)
     private let recencyKey = "macterm.projectRecency"
-
-    /// Which window presents a dialog `AppState` stages.
-    ///
-    /// Both scenes in `MactermApp` — the main `WindowGroup` and `Settings` —
-    /// attach alerts to the *same* pending state, because Settings → Projects
-    /// drives the same destructive project/layout mutations and the settings
-    /// window needs its own copy of each confirmation. With no gate, one
-    /// request presents twice: SwiftUI materializes and fronts the settings
-    /// window purely to show its duplicate, stacking an identical dialog on
-    /// top of the one the user is looking at. So every staged dialog records
-    /// the scene that asked for it, and each scene's `isPresented` binding
-    /// reads only its own. The default is the main window; only the settings
-    /// pane's call sites pass `.settings`.
-    enum DialogHost: Equatable {
-        case mainWindow
-        case settings
-    }
-
-    struct PendingClosePane: Equatable {
-        let paneID: UUID
-        let projectID: UUID
-    }
-
-    /// A tab close staged for confirmation because one of its panes has a
-    /// running foreground program (closing kills the pane's zmx session — the
-    /// destructive act now that quit detaches).
-    struct PendingCloseTab: Equatable {
-        let tabID: UUID
-        let projectID: UUID
-    }
-
-    var pendingCloseTab: PendingCloseTab?
-
-    /// A project removal staged for confirmation, same busy rule as tabs.
-    /// Carries the full removal (AppState workspace + ProjectStore entry) as
-    /// a closure, since the store lives with the caller.
-    struct PendingRemoveProject {
-        let projectID: UUID
-        let completeRemoval: () -> Void
-        var host: DialogHost = .mainWindow
-    }
-
-    var pendingRemoveProject: PendingRemoveProject?
-
-    /// A reconcile plan staged for confirmation because applying it would
-    /// close panes / end their processes. (There's no name-mismatch prompt
-    /// anymore: central project files are matched by *path*, so a differing
-    /// `name:` only means the project was renamed since the last save —
-    /// expected drift, not a wrong-file hazard.)
-    struct PendingLayoutApply {
-        let projectID: UUID
-        let plan: LayoutReconciler.Plan
-        var host: DialogHost = .mainWindow
-
-        var confirmationMessage: String {
-            "Applying this layout will close some panes and end the processes running in them."
-        }
-    }
-
-    /// A layout apply/save/import notice awaiting presentation (alert in
-    /// `MactermApp`). Fed by the explicit palette/menu/Settings commands — an
-    /// invalid project file must always surface a dialog, never fail silently.
-    struct LayoutError: Identifiable {
-        let id = UUID()
-        /// "apply" / "save" / "import" — slotted into the default alert title.
-        let verb: String
-        let message: String
-        /// Title override for notices that aren't failures (e.g. a save that
-        /// landed but is shadowed by a duplicate file).
-        var customTitle: String?
-        var host: DialogHost = .mainWindow
-        var title: String { customTitle ?? "Couldn't \(verb) layout" }
-    }
-
-    var pendingLayoutError: LayoutError?
 
     /// Bumped whenever the app itself writes a project file, so an open
     /// Projects settings pane can re-read the directory. There's no file
@@ -2300,66 +2225,44 @@ final class AppState {
         saveWorkspaces()
     }
 
-    /// An unload staged for confirmation because one of the project's panes
-    /// has a running foreground program — unload now stops every shell in
-    /// the project (keeping the layout), so it's destructive.
-    struct PendingUnloadProject: Equatable {
-        let projectID: UUID
-        var host: DialogHost = .mainWindow
-    }
-
-    var pendingUnloadProject: PendingUnloadProject?
-
-    /// Unload a project, confirming first when any pane is busy.
+    /// Unload a project, confirming first when any pane is busy — unload
+    /// stops every shell in the project (keeping the layout), so it's
+    /// destructive.
     func requestUnloadProject(_ projectID: UUID, host: DialogHost = .mainWindow) {
-        if closeNeedsConfirmation(projectID: projectID) {
-            pendingUnloadProject = PendingUnloadProject(projectID: projectID, host: host)
+        guard closeNeedsConfirmation(projectID: projectID) else {
+            unloadProject(projectID)
             return
         }
-        unloadProject(projectID)
-    }
-
-    func confirmPendingUnloadProject() {
-        guard let pending = pendingUnloadProject else { return }
-        pendingUnloadProject = nil
-        unloadProject(pending.projectID)
-    }
-
-    func cancelPendingUnloadProject() {
-        pendingUnloadProject = nil
+        present(PendingDialog(
+            kind: .unloadProject(projectID),
+            title: "Unload project with running processes?",
+            message: "A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.",
+            confirmTitle: "Unload",
+            host: host
+        ) { [weak self] in self?.unloadProject(projectID) })
     }
 
     /// Run `removal` (the caller's full remove: workspace + project store)
     /// immediately when no pane in the project is busy; otherwise stage it
     /// for the confirmation alert — removal kills every pane's zmx session.
-    func requestRemoveProject(_ projectID: UUID, host: DialogHost = .mainWindow, removal: @escaping () -> Void) {
-        if closeNeedsConfirmation(projectID: projectID) {
-            pendingRemoveProject = PendingRemoveProject(projectID: projectID, completeRemoval: removal, host: host)
+    func requestRemoveProject(_ projectID: UUID, host: DialogHost = .mainWindow, removal: @escaping @MainActor () -> Void) {
+        guard closeNeedsConfirmation(projectID: projectID) else {
+            removal()
             return
         }
-        removal()
+        present(PendingDialog(
+            kind: .removeProject(projectID),
+            title: "Remove project with running processes?",
+            message: "A process is still running in this project. Removing it ends every process in its tabs.",
+            confirmTitle: "Remove",
+            host: host,
+            onConfirm: removal
+        ))
     }
 
-    func confirmPendingRemoveProject() {
-        guard let pending = pendingRemoveProject else { return }
-        pendingRemoveProject = nil
-        pending.completeRemoval()
-    }
-
-    func cancelPendingRemoveProject() {
-        pendingRemoveProject = nil
-    }
-
-    /// A bulk sidebar delete (multi-selection) staged for confirmation because
-    /// one or more affected panes has a running foreground program. Holds the
-    /// caller's full removal so it can run on confirm — a single dialog for the
-    /// whole selection instead of one per item.
-    struct PendingBulkRemove {
-        let completeRemoval: () -> Void
-    }
-
-    var pendingBulkRemove: PendingBulkRemove?
-
+    /// A bulk sidebar delete (multi-selection): run `removal` now, or stage
+    /// it when one or more affected panes has a running foreground program —
+    /// a single dialog for the whole selection instead of one per item.
     /// Run `removal` (the caller's full bulk close/remove) immediately when no
     /// affected pane is busy; otherwise stage it behind one confirmation alert.
     /// Mirrors `requestRemoveProject`/`requestCloseTab`, but for a whole
@@ -2367,23 +2270,20 @@ final class AppState {
     func requestRemoveSelection(
         projectIDs: [UUID],
         tabs: [(tabID: UUID, projectID: UUID)],
-        removal: @escaping () -> Void
+        removal: @escaping @MainActor () -> Void
     ) {
-        if closeNeedsConfirmation(projectIDs: projectIDs, tabs: tabs) {
-            pendingBulkRemove = PendingBulkRemove(completeRemoval: removal)
+        guard closeNeedsConfirmation(projectIDs: projectIDs, tabs: tabs) else {
+            removal()
             return
         }
-        removal()
-    }
-
-    func confirmPendingBulkRemove() {
-        guard let pending = pendingBulkRemove else { return }
-        pendingBulkRemove = nil
-        pending.completeRemoval()
-    }
-
-    func cancelPendingBulkRemove() {
-        pendingBulkRemove = nil
+        present(PendingDialog(
+            kind: .removeSelection,
+            title: "Remove items with running processes?",
+            message: "A process is still running in one of the selected items. Removing them ends every process in their tabs.",
+            confirmTitle: "Remove",
+            host: .mainWindow,
+            onConfirm: removal
+        ))
     }
 
     // MARK: - Tabs
@@ -2481,21 +2381,17 @@ final class AppState {
     /// destructive-confirmation lives here (quit will detach, not kill).
     func requestCloseTab(_ tabID: UUID, projectID: UUID) {
         let tab = workspaces[projectID]?.tabs.first { $0.id == tabID }
-        if let tab, closeNeedsConfirmation(tab: tab) {
-            pendingCloseTab = PendingCloseTab(tabID: tabID, projectID: projectID)
+        guard let tab, closeNeedsConfirmation(tab: tab) else {
+            closeTab(tabID, projectID: projectID)
             return
         }
-        closeTab(tabID, projectID: projectID)
-    }
-
-    func confirmPendingCloseTab() {
-        guard let pending = pendingCloseTab else { return }
-        pendingCloseTab = nil
-        closeTab(pending.tabID, projectID: pending.projectID)
-    }
-
-    func cancelPendingCloseTab() {
-        pendingCloseTab = nil
+        present(PendingDialog(
+            kind: .closeTab(tabID: tabID, projectID: projectID),
+            title: "Close running processes?",
+            message: "A process is still running in this tab. Closing the tab ends it.",
+            confirmTitle: "Close",
+            host: .mainWindow
+        ) { [weak self] in self?.closeTab(tabID, projectID: projectID) })
     }
 
     func selectTab(_ tabID: UUID, projectID: UUID) {
@@ -3246,21 +3142,17 @@ final class AppState {
         let pane = workspaces[projectID]?.tabs
             .compactMap { $0.splitRoot.findPane(id: paneID) }
             .first
-        if let pane, closeNeedsConfirmation([pane]) {
-            pendingClosePane = PendingClosePane(paneID: paneID, projectID: projectID)
+        guard let pane, closeNeedsConfirmation([pane]) else {
+            closePane(paneID, projectID: projectID)
             return
         }
-        closePane(paneID, projectID: projectID)
-    }
-
-    func confirmPendingClosePane() {
-        guard let pending = pendingClosePane else { return }
-        pendingClosePane = nil
-        closePane(pending.paneID, projectID: pending.projectID)
-    }
-
-    func cancelPendingClosePane() {
-        pendingClosePane = nil
+        present(PendingDialog(
+            kind: .closePane(paneID: paneID, projectID: projectID),
+            title: "Close running process?",
+            message: "A process is still running in this pane. Close it anyway?",
+            confirmTitle: "Close",
+            host: .mainWindow
+        ) { [weak self] in self?.closePane(paneID, projectID: projectID) })
     }
 
     // MARK: - Layout files
@@ -3269,7 +3161,7 @@ final class AppState {
     /// workspace, reconciling with minimal destruction (see
     /// `LayoutReconciler`). A non-destructive reconcile (only spawns +
     /// resizes) runs immediately; one that would terminate panes/tabs is
-    /// staged in `pendingLayoutApply` for confirmation. Returns an error to
+    /// staged as a `pendingDialog` for confirmation. Returns an error to
     /// surface when no file matches, the file is unparseable, or it declares
     /// no tabs (an empty declaration must never plan "close every tab").
     @discardableResult
@@ -3302,7 +3194,20 @@ final class AppState {
         logger.info("applyLayout plan: \(planDesc, privacy: .public)")
         if plan.isDestructive {
             logger.info("applyLayout: staged for confirmation")
-            pendingLayoutApply = PendingLayoutApply(projectID: project.id, plan: plan, host: host)
+            let projectID = project.id
+            present(PendingDialog(
+                kind: .applyLayout(projectID: projectID),
+                title: "Apply layout?",
+                message: "Applying this layout will close some panes and end the processes running in them.",
+                confirmTitle: "Apply",
+                host: host
+            ) { [weak self] in
+                guard let self else { return }
+                executeLayoutPlan(plan, projectID: projectID)
+                // Always user-invoked: reaching here means they clicked through
+                // the destructive-apply confirmation.
+                presentToast("Layout applied")
+            })
         } else {
             executeLayoutPlan(plan, projectID: project.id)
         }
@@ -3310,33 +3215,20 @@ final class AppState {
     }
 
     /// `applyLayout` + error presentation: failures land in
-    /// `pendingLayoutError` (the alert in `MactermApp`). The shared entry
+    /// `pendingDialog` as a layout notice. The shared entry
     /// point for the palette/menu command and the Settings row menu — every
     /// caller is user-invoked, so a clean apply gets a success toast.
     func applyLayoutPresentingError(_ project: Project, host: DialogHost = .mainWindow) {
         if let error = applyLayout(project: project, host: host) {
-            pendingLayoutError = LayoutError(verb: "apply", message: error.localizedDescription, host: host)
+            presentLayoutError(verb: "apply", message: error.localizedDescription, host: host)
             return
         }
         // A destructive plan is staged, not applied — its confirmation dialog is
         // up, and the toast belongs to whatever the user chooses there
-        // (`confirmPendingLayoutApply`), not to merely opening the prompt.
-        if pendingLayoutApply == nil {
+        // (`confirmPendingDialog`), not to merely opening the prompt.
+        if !isLayoutApplyPending {
             presentToast("Layout applied")
         }
-    }
-
-    func confirmPendingLayoutApply() {
-        guard let pending = pendingLayoutApply else { return }
-        pendingLayoutApply = nil
-        executeLayoutPlan(pending.plan, projectID: pending.projectID)
-        // Always user-invoked: reaching here means they clicked through the
-        // destructive-apply confirmation.
-        presentToast("Layout applied")
-    }
-
-    func cancelPendingLayoutApply() {
-        pendingLayoutApply = nil
     }
 
     /// Save the project's live workspace as its central project file — one of
@@ -3371,8 +3263,8 @@ final class AppState {
             // pre-save state.
             noteLayoutFilesChanged()
             // A stray-*file* conflict (an unrelated file declares this path)
-            // takes priority over the shared-*project* notice — both write
-            // `pendingLayoutError`, so only surface the latter when the former
+            // takes priority over the shared-*project* notice — both raise
+            // a layout notice, so only surface the latter when the former
             // stayed quiet.
             if !presentSaveConflictIfNeeded(
                 project: project,
@@ -3395,7 +3287,7 @@ final class AppState {
             // directory isn't somewhere the user necessarily has in mind, so a
             // bare filename doesn't tell them where to go look. `~` keeps it
             // readable (and keeps the username out of a screenshot).
-            if pendingLayoutError == nil {
+            if pendingDialog == nil {
                 presentToast("Layout saved", subtitle: ProjectPath.homeContracted(target.path))
             }
             return nil
@@ -3439,12 +3331,12 @@ final class AppState {
         }
         guard !strays.isEmpty else { return false }
         let names = strays.map { "“\($0.url.lastPathComponent)”" }.joined(separator: ", ")
-        pendingLayoutError = LayoutError(
+        presentLayoutError(
             verb: "save",
             message: "The layout was saved to “\(target.lastPathComponent)”, but these other files also "
                 + "declare this project’s path and are ignored: \(names). "
                 + "Remove or merge them in the projects directory.",
-            customTitle: "Layout saved with a conflict",
+            title: "Layout saved with a conflict",
             host: host
         )
         return true
@@ -3471,13 +3363,13 @@ final class AppState {
         }
         guard !colliding.isEmpty else { return }
         let names = colliding.map { "“\($0.name)”" }.joined(separator: ", ")
-        pendingLayoutError = LayoutError(
+        presentLayoutError(
             verb: "save",
             message: "\(names) share this directory and layout file "
                 + "“\(target.lastPathComponent)” with this project. Saving here overwrote their "
                 + "layout, and each save wins over the last. Give the projects distinct names to "
                 + "keep separate layout files.",
-            customTitle: "Layout file shared with another project",
+            title: "Layout file shared with another project",
             host: host
         )
     }
@@ -3489,7 +3381,7 @@ final class AppState {
         host: DialogHost = .mainWindow
     ) {
         if let error = saveLayout(project: project, siblingProjects: siblingProjects, host: host) {
-            pendingLayoutError = LayoutError(verb: "save", message: error.localizedDescription, host: host)
+            presentLayoutError(verb: "save", message: error.localizedDescription, host: host)
         }
     }
 

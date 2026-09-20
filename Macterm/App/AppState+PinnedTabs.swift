@@ -688,11 +688,11 @@ extension AppState {
         guard !pinnedLayoutSuspended else { return }
         pinnedLayoutSuspended = true
         logger.error("pinned.yaml auto-save suspended: \(reason, privacy: .public)")
-        pendingLayoutError = LayoutError(
+        presentLayoutError(
             verb: "save",
             message: "\(reason)\n\nPinned-tab auto-save is paused so your edits aren’t overwritten. "
                 + "Fix the file (or delete it) to resume.",
-            customTitle: "Pinned layout file problem"
+            title: "Pinned layout file problem"
         )
     }
 

@@ -481,10 +481,10 @@ struct AppStateTests {
 
         // And the UI request paths read that verdict rather than their own.
         state.requestCloseTab(mirrorTab.id, projectID: p.id)
-        #expect(state.pendingCloseTab == nil)
+        #expect(state.pendingDialog == nil)
         #expect(state.workspaces[p.id]?.tabs.count == 1)
         state.requestCloseTab(sourceTab.id, projectID: p.id)
-        #expect(state.pendingCloseTab?.tabID == sourceTab.id)
+        #expect(state.pendingDialog?.kind == .closeTab(tabID: sourceTab.id, projectID: p.id))
     }
 
     @Test
@@ -494,18 +494,18 @@ struct AppStateTests {
         let p = seedProject(state)
 
         state.requestUnloadProject(p.id)
-        #expect(state.pendingUnloadProject?.projectID == p.id)
-        state.cancelPendingUnloadProject()
+        #expect(state.pendingDialog?.kind == .unloadProject(p.id))
+        state.dismissPendingDialog()
 
         var removed = false
         state.requestRemoveProject(p.id) { removed = true }
         #expect(!removed)
-        #expect(state.pendingRemoveProject?.projectID == p.id)
-        state.cancelPendingRemoveProject()
+        #expect(state.pendingDialog?.kind == .removeProject(p.id))
+        state.dismissPendingDialog()
 
         state.requestRemoveSelection(projectIDs: [p.id], tabs: []) { removed = true }
         #expect(!removed)
-        #expect(state.pendingBulkRemove != nil)
+        #expect(state.pendingDialog?.kind == .removeSelection)
 
         // An unknown project has no panes and so nothing to confirm.
         #expect(!state.closeNeedsConfirmation(projectID: UUID()))
@@ -1158,23 +1158,26 @@ struct AppStateTests {
         state.requestRemoveSelection(projectIDs: [p1.id, p2.id], tabs: []) { ran = true }
 
         #expect(ran)
-        #expect(state.pendingBulkRemove == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
     func pendingBulkRemove_confirm_and_cancel() {
         let state = makeAppState()
+        // Every pane reads busy, so the selection stages instead of running.
+        state.paneNeedsConfirmClose = { _ in true }
+        let p = seedProject(state)
 
-        // Stage manually (busy detection needs a live surface).
         var ran = false
-        state.pendingBulkRemove = AppState.PendingBulkRemove { ran = true }
-        state.cancelPendingBulkRemove()
-        #expect(state.pendingBulkRemove == nil)
+        state.requestRemoveSelection(projectIDs: [p.id], tabs: []) { ran = true }
+        #expect(state.pendingDialog?.kind == .removeSelection)
+        state.dismissPendingDialog()
+        #expect(state.pendingDialog == nil)
         #expect(!ran)
 
-        state.pendingBulkRemove = AppState.PendingBulkRemove { ran = true }
-        state.confirmPendingBulkRemove()
-        #expect(state.pendingBulkRemove == nil)
+        state.requestRemoveSelection(projectIDs: [p.id], tabs: []) { ran = true }
+        state.confirmPendingDialog()
+        #expect(state.pendingDialog == nil)
         #expect(ran)
     }
 
@@ -1446,7 +1449,7 @@ struct AppStateTests {
         let target = try #require(tab.focusedPaneID)
         // No GhosttyTerminalNSView is ever created in tests, so needsConfirmQuit is false.
         state.requestClosePane(target, projectID: p.id)
-        #expect(state.pendingClosePane == nil)
+        #expect(state.pendingDialog == nil)
         #expect(tab.splitRoot.allPanes().count == 1)
     }
 
@@ -1497,8 +1500,7 @@ struct AppStateTests {
         #expect(ws.tabs.count == 1)
         #expect(ws.tabs[0].customTitle == nil)
         #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
-        #expect(state.pendingLayoutApply == nil)
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
         // The file is still there for Apply Layout to pick up.
         #expect(files.applyState(forProjectPath: dir.path) == .applicable)
     }
@@ -1517,7 +1519,7 @@ struct AppStateTests {
         let project = Project(name: "No File", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
         // Nothing is written on open — files appear only on explicit Save Layout.
         #expect(files.find(forProjectPath: dir.path) == nil)
@@ -1543,12 +1545,12 @@ struct AppStateTests {
         let project = Project(name: "broken", path: dir.path, sortOrder: 0)
         state.selectProject(project)
 
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingLayoutError?.verb == "apply")
+        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
     }
 
     @Test
@@ -1568,7 +1570,7 @@ struct AppStateTests {
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingLayoutError?.verb == "apply")
+        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
         #expect(files.find(forProjectPath: dir.path) == nil)
         // The live workspace is untouched by a failed apply.
         #expect(state.workspaces[project.id]?.tabs[0].splitRoot.allPanes().count == 1)
@@ -1584,7 +1586,7 @@ struct AppStateTests {
 
         state.saveLayoutPresentingError(project)
 
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
         #expect(state.activeToast?.title == "Layout saved")
         // The full path, not just the filename: the projects directory isn't
         // somewhere the user necessarily has in mind, so the subtitle has to
@@ -1625,7 +1627,7 @@ struct AppStateTests {
 
         state.saveLayoutPresentingError(project)
 
-        #expect(state.pendingLayoutError != nil)
+        #expect(state.pendingDialog?.kind == .layoutError(verb: "save"))
         #expect(state.activeToast == nil)
     }
 
@@ -1646,7 +1648,7 @@ struct AppStateTests {
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
         #expect(state.activeToast?.title == "Layout applied")
     }
 
@@ -1671,12 +1673,14 @@ struct AppStateTests {
         state.createTab(projectID: project.id, projectPath: dir.path)
 
         state.applyLayoutPresentingError(project)
-        #expect(state.pendingLayoutApply?.host == .mainWindow)
+        #expect(state.pendingDialog?.kind == .applyLayout(projectID: project.id))
+        #expect(state.pendingDialog?.host == .mainWindow)
 
-        state.cancelPendingLayoutApply()
+        state.dismissPendingDialog()
 
         state.applyLayoutPresentingError(project, host: .settings)
-        #expect(state.pendingLayoutApply?.host == .settings)
+        #expect(state.pendingDialog?.kind == .applyLayout(projectID: project.id))
+        #expect(state.pendingDialog?.host == .settings)
     }
 
     /// Same gate for the notice alerts: a Settings-invoked failure must not
@@ -1687,12 +1691,13 @@ struct AppStateTests {
         let (project, _) = seedProjectWithDir(state)
 
         state.applyLayoutPresentingError(project)
-        #expect(state.pendingLayoutError?.host == .mainWindow)
+        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
+        #expect(state.pendingDialog?.host == .mainWindow)
 
-        state.pendingLayoutError = nil
+        state.dismissPendingDialog()
 
         state.applyLayoutPresentingError(project, host: .settings)
-        #expect(state.pendingLayoutError?.host == .settings)
+        #expect(state.pendingDialog?.host == .settings)
     }
 
     @Test
@@ -1704,7 +1709,7 @@ struct AppStateTests {
 
         state.applyLayoutPresentingError(project)
 
-        #expect(state.pendingLayoutError != nil)
+        #expect(state.pendingDialog?.kind == .layoutError(verb: "apply"))
         #expect(state.activeToast == nil)
     }
 
@@ -1754,7 +1759,7 @@ struct AppStateTests {
 
         state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
 
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
         #expect(files.find(forProjectPath: root, preferredSlug: "other")?.url.lastPathComponent == "other.yaml")
         #expect(files.find(forProjectPath: root, preferredSlug: "proj")?.url.lastPathComponent == "proj.yaml")
     }
@@ -1770,7 +1775,7 @@ struct AppStateTests {
 
         state.saveLayoutPresentingError(project)
 
-        let notice = try #require(state.pendingLayoutError)
+        let notice = try #require(state.pendingDialog)
         #expect(notice.title == "Layout saved with a conflict")
         #expect(notice.message.contains("zzz.yaml"))
         #expect(notice.message.contains("ignored"))
@@ -1781,7 +1786,7 @@ struct AppStateTests {
         let state = makeAppState()
         let (project, _) = seedProjectWithDir(state)
         state.saveLayoutPresentingError(project)
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -1795,7 +1800,7 @@ struct AppStateTests {
 
         state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
 
-        let notice = try #require(state.pendingLayoutError)
+        let notice = try #require(state.pendingDialog)
         #expect(notice.title == "Layout file shared with another project")
         #expect(notice.message.contains("proj"))
     }
@@ -1810,7 +1815,7 @@ struct AppStateTests {
 
         state.saveLayoutPresentingError(project, siblingProjects: [project, sibling])
 
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -1835,7 +1840,7 @@ struct AppStateTests {
         state.saveLayoutPresentingError(alpha, siblingProjects: siblings)
         state.saveLayoutPresentingError(bravo, siblingProjects: siblings)
 
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
         // Both files coexist — saving bravo didn't realign-delete alpha's.
         #expect(files.find(forProjectPath: dir.path, preferredSlug: "alpha")?.url.lastPathComponent == "alpha.yaml")
         #expect(files.find(forProjectPath: dir.path, preferredSlug: "bravo")?.url.lastPathComponent == "bravo.yaml")
@@ -1901,7 +1906,7 @@ struct AppStateTests {
         let ws = try #require(state.workspaces[project.id])
         #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
         #expect(ws.tabs[0].customTitle != "Dev")
-        #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -1937,8 +1942,7 @@ struct AppStateTests {
         #expect(ws.tabs.count == 1)
         #expect(ws.tabs[0].customTitle == nil)
         #expect(ws.tabs[0].splitRoot.allPanes().count == 1)
-        #expect(state.pendingLayoutApply == nil)
-        #expect(state.pendingLayoutError == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -1955,7 +1959,7 @@ struct AppStateTests {
         #expect(error != nil)
         // Workspace is untouched — same tabs, nothing spawned or closed.
         #expect(state.workspaces[p.id]?.tabs.map(\.id) == beforeTabIDs)
-        #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -1968,7 +1972,7 @@ struct AppStateTests {
 
         #expect(error != nil)
         #expect(state.workspaces[p.id]?.tabs.map(\.id) == beforeTabIDs)
-        #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -1985,7 +1989,7 @@ struct AppStateTests {
 
         #expect(error != nil)
         #expect(state.workspaces[p.id]?.tabs.map(\.id) == beforeTabIDs)
-        #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -2000,7 +2004,7 @@ struct AppStateTests {
         let error = state.applyLayout(project: p)
 
         #expect(error == nil)
-        #expect(state.pendingLayoutApply == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
@@ -2529,7 +2533,7 @@ struct AppStateTests {
         // No live surfaces in a unit test → needsConfirmQuit is unreachable →
         // not busy → closes without staging.
         state.requestCloseTab(tab.id, projectID: p.id)
-        #expect(state.pendingCloseTab == nil)
+        #expect(state.pendingDialog == nil)
         #expect(ws.tabs.count == 1)
     }
 
@@ -2540,26 +2544,29 @@ struct AppStateTests {
         var removed = false
         state.requestRemoveProject(p.id) { removed = true }
         #expect(removed)
-        #expect(state.pendingRemoveProject == nil)
+        #expect(state.pendingDialog == nil)
     }
 
     @Test
     func pendingCloseTab_confirm_and_cancel() throws {
         let state = makeAppState()
+        // Every pane reads busy, so the close stages instead of running.
+        state.paneNeedsConfirmClose = { _ in true }
         let p = seedProject(state)
         let ws = try #require(state.workspaces[p.id])
         let tab = try #require(ws.activeTab)
         _ = ws.createTab(projectPath: "/tmp")
 
-        // Stage manually (busy detection needs a live surface).
-        state.pendingCloseTab = AppState.PendingCloseTab(tabID: tab.id, projectID: p.id)
-        state.cancelPendingCloseTab()
-        #expect(state.pendingCloseTab == nil)
+        state.requestCloseTab(tab.id, projectID: p.id)
+        #expect(state.pendingDialog?.kind == .closeTab(tabID: tab.id, projectID: p.id))
+        #expect(state.pendingDialog?.confirmTitle == "Close")
+        state.dismissPendingDialog()
+        #expect(state.pendingDialog == nil)
         #expect(ws.tabs.count == 2)
 
-        state.pendingCloseTab = AppState.PendingCloseTab(tabID: tab.id, projectID: p.id)
-        state.confirmPendingCloseTab()
-        #expect(state.pendingCloseTab == nil)
+        state.requestCloseTab(tab.id, projectID: p.id)
+        state.confirmPendingDialog()
+        #expect(state.pendingDialog == nil)
         #expect(ws.tabs.count == 1)
     }
 

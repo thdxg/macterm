@@ -295,9 +295,7 @@ struct MainWindow: View {
         // Applied here rather than in the scene so each copy knows WHICH
         // window it is: they stay grouped in these three modifiers, which is
         // the rule — the alerts must not scatter back into `body`.
-        .modifier(CloseConfirmationAlerts(appState: appState, windowID: windowState.id))
-        .modifier(ProjectConfirmationAlerts(appState: appState, windowID: windowState.id))
-        .modifier(LayoutAlerts(appState: appState, windowID: windowState.id))
+        .modifier(PendingDialogAlert(appState: appState, host: .mainWindow, windowID: windowState.id))
         .onAppear {
             AdaptiveTerminalChrome.shared.mainWindowDidAppear()
         }

@@ -1025,12 +1025,12 @@ final class ControlHandler {
         // A destructive reconcile is staged for UI confirmation; headless
         // callers either force it through or get a typed `busy` — the staged
         // dialog must never dangle waiting for a click that won't come.
-        if appState.pendingLayoutApply != nil {
+        if appState.isLayoutApplyPending {
             if args.force == true {
                 // Raises its own toast.
-                appState.confirmPendingLayoutApply()
+                appState.confirmPendingDialog()
             } else {
-                appState.cancelPendingLayoutApply()
+                appState.dismissPendingDialog()
                 throw ControlError(
                     code: .busy,
                     message: "applying would close panes and end their processes",
