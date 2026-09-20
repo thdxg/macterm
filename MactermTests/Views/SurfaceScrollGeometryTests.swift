@@ -12,16 +12,36 @@ struct SurfaceScrollGeometryTests {
     // MARK: - documentHeight
 
     @Test
-    func document_height_is_total_rows_times_cell() {
-        // 100 rows of scrollback at 20pt cells.
-        #expect(SurfaceScrollView.documentHeight(total: 100, cellHeight: cell, viewportHeight: 480) == 2000)
+    func document_height_is_the_scrollable_rows_plus_the_viewport() {
+        // 100 rows, 24 on screen: 76 rows to travel through, and the clip
+        // view's travel is documentHeight - viewportHeight.
+        let height = SurfaceScrollView.documentHeight(total: 100, len: 24, cellHeight: cell, viewportHeight: 480)
+        #expect(height == 76 * cell + 480)
+        #expect(height - 480 == 76 * cell)
+    }
+
+    /// The viewport is not a whole number of rows — libghostty floors the
+    /// grid and keeps the remainder as padding — and the travel has to stay
+    /// exactly the scrollable rows anyway, or a drag to the bottom stops
+    /// short of the last line by the padding.
+    @Test
+    func a_viewport_with_leftover_padding_still_travels_whole_rows() {
+        let viewport: CGFloat = 489 // 24 rows plus 9pt of padding
+        let height = SurfaceScrollView.documentHeight(
+            total: 100, len: 24, cellHeight: cell, viewportHeight: viewport
+        )
+        #expect(height - viewport == 76 * cell)
+        let row = SurfaceScrollView.rowFromOffset(
+            visibleOriginY: 0, visibleHeight: viewport, documentHeight: height, cellHeight: cell
+        )
+        #expect(row == 76)
     }
 
     @Test
     func document_height_never_below_viewport() {
         // No scrollback (total == visible rows): document can't be shorter than
         // what's on screen, or there'd be a phantom scroll region.
-        #expect(SurfaceScrollView.documentHeight(total: 24, cellHeight: cell, viewportHeight: 600) == 600)
+        #expect(SurfaceScrollView.documentHeight(total: 24, len: 24, cellHeight: cell, viewportHeight: 600) == 600)
     }
 
     // MARK: - documentOffsetY (core → clip view)
@@ -76,7 +96,9 @@ struct SurfaceScrollGeometryTests {
     func row_round_trips_with_offset() {
         // For a given core offset, documentOffsetY → rowFromOffset recovers it.
         let total: UInt64 = 100, len: UInt64 = 24, offset: UInt64 = 40
-        let docHeight = SurfaceScrollView.documentHeight(total: total, cellHeight: cell, viewportHeight: CGFloat(len) * cell)
+        let docHeight = SurfaceScrollView.documentHeight(
+            total: total, len: len, cellHeight: cell, viewportHeight: CGFloat(len) * cell
+        )
         let y = SurfaceScrollView.documentOffsetY(total: total, offset: offset, len: len, cellHeight: cell)
         let row = SurfaceScrollView.rowFromOffset(
             visibleOriginY: y, visibleHeight: CGFloat(len) * cell, documentHeight: docHeight, cellHeight: cell

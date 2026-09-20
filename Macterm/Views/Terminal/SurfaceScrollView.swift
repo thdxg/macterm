@@ -259,7 +259,9 @@ final class SurfaceScrollView: NSScrollView {
         }
 
         verticalLineScroll = cellHeight
-        let docHeight = Self.documentHeight(total: total, cellHeight: cellHeight, viewportHeight: viewportHeight)
+        let docHeight = Self.documentHeight(
+            total: total, len: len, cellHeight: cellHeight, viewportHeight: viewportHeight
+        )
         if spacer.frame.height != docHeight || spacer.frame.width != contentView.bounds.width {
             spacer.frame = NSRect(x: 0, y: 0, width: contentView.bounds.width, height: docHeight)
         }
@@ -438,8 +440,23 @@ final class SurfaceScrollView: NSScrollView {
 extension SurfaceScrollView {
     /// Height of the blank document view (points). At least the viewport height
     /// so there's nothing to scroll when scrollback is empty.
-    nonisolated static func documentHeight(total: UInt64, cellHeight: CGFloat, viewportHeight: CGFloat) -> CGFloat {
-        max(CGFloat(total) * cellHeight, viewportHeight)
+    ///
+    /// Sized so the clip view's own travel (`documentHeight - viewportHeight`)
+    /// is exactly the scrollable rows, `total - len`. The viewport is **not**
+    /// a whole number of rows — libghostty floors the grid and keeps the
+    /// leftover as padding — so a document of `total * cellHeight` gives a
+    /// travel of `total * cellHeight - viewportHeight`, and a drag to the
+    /// very bottom then asks for a row short of the last one by however much
+    /// padding there is (a visible strip of unreachable scrollback). Carrying
+    /// the padding in the document instead keeps both ends exact.
+    nonisolated static func documentHeight(
+        total: UInt64,
+        len: UInt64,
+        cellHeight: CGFloat,
+        viewportHeight: CGFloat
+    ) -> CGFloat {
+        let scrollableRows = CGFloat(max(0, Int64(total) - Int64(len)))
+        return max(scrollableRows * cellHeight + viewportHeight, viewportHeight)
     }
 
     /// AppKit clip-view origin (points, Y-up from the document bottom) that
