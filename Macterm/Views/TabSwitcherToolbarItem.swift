@@ -20,7 +20,7 @@ struct TabSwitcherToolbarItem: View {
     private var appState
 
     @AppStorage(Preferences.Keys.tabSwitcherVisibility)
-    private var visibilityRaw: String = TabSwitcherVisibility.whenMultiple.rawValue
+    private var visibility: TabSwitcherVisibility
 
     /// Width of the detail column, measured by `MainWindow`. The toolbar has
     /// no "hide when clipped" mode — a control that doesn't fit folds into
@@ -32,7 +32,6 @@ struct TabSwitcherToolbarItem: View {
     private static let minimumDetailWidth: CGFloat = 420
 
     var body: some View {
-        let visibility = TabSwitcherVisibility(rawValue: visibilityRaw) ?? .whenMultiple
         if visibility != .hidden,
            availableWidth >= Self.minimumDetailWidth,
            let workspace = activeWorkspace,

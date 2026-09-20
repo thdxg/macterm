@@ -19,10 +19,10 @@ struct PreferencesTests {
 
         #expect(Preferences.shared.recentTabCandidates == Preferences.unlimitedRecentTabCandidates)
         Preferences.shared.recentTabCandidates = 8
-        #expect(Preferences.defaults.object(forKey: Preferences.Keys.recentTabCandidates) as? Int == 8)
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.recentTabCandidates.name) as? Int == 8)
         Preferences.shared.recentTabCandidates = Preferences.unlimitedRecentTabCandidates
         #expect(
-            Preferences.defaults.object(forKey: Preferences.Keys.recentTabCandidates) as? Int
+            Preferences.defaults.object(forKey: Preferences.Keys.recentTabCandidates.name) as? Int
                 == Preferences.unlimitedRecentTabCandidates
         )
     }
@@ -33,10 +33,10 @@ struct PreferencesTests {
         defer { Preferences.shared.sidebarPeekStyle = prior }
 
         Preferences.shared.sidebarPeekStyle = .overlayTerminal
-        #expect(Preferences.defaults.string(forKey: Preferences.Keys.sidebarPeekStyle) == "overlay_on_hover")
+        #expect(Preferences.defaults.string(forKey: Preferences.Keys.sidebarPeekStyle.name) == "overlay_on_hover")
 
         Preferences.shared.sidebarPeekStyle = .resizeTerminal
-        #expect(Preferences.defaults.string(forKey: Preferences.Keys.sidebarPeekStyle) == "resize_content")
+        #expect(Preferences.defaults.string(forKey: Preferences.Keys.sidebarPeekStyle.name) == "resize_content")
     }
 
     @Test
@@ -48,7 +48,7 @@ struct PreferencesTests {
         #expect(Preferences.shared.reconnectRemotePanes)
 
         Preferences.shared.reconnectRemotePanes = false
-        #expect(Preferences.defaults.object(forKey: Preferences.Keys.reconnectRemotePanes) as? Bool == false)
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.reconnectRemotePanes.name) as? Bool == false)
     }
 
     @Test
@@ -60,7 +60,7 @@ struct PreferencesTests {
         #expect(Preferences.shared.showProjectNewTabButton)
 
         Preferences.shared.showProjectNewTabButton = false
-        #expect(Preferences.defaults.object(forKey: Preferences.Keys.showProjectNewTabButton) as? Bool == false)
+        #expect(Preferences.defaults.object(forKey: Preferences.Keys.showProjectNewTabButton.name) as? Bool == false)
     }
 
     @Test
@@ -82,7 +82,7 @@ struct PreferencesTests {
 
         Preferences.shared.activeProjectID = sentinel
 
-        let standardValue = UserDefaults.standard.string(forKey: Preferences.Keys.activeProjectID)
+        let standardValue = UserDefaults.standard.string(forKey: Preferences.Keys.activeProjectID.name)
         #expect(standardValue != sentinel.uuidString)
     }
 
@@ -110,7 +110,7 @@ struct PreferencesTests {
         state.selectProject(project)
 
         #expect(Preferences.shared.activeProjectID == project.id)
-        let standardValue = UserDefaults.standard.string(forKey: Preferences.Keys.activeProjectID)
+        let standardValue = UserDefaults.standard.string(forKey: Preferences.Keys.activeProjectID.name)
         #expect(standardValue != project.id.uuidString)
         let standardRecency = UserDefaults.standard.stringArray(forKey: "macterm.projectRecency") ?? []
         #expect(!standardRecency.contains(project.id.uuidString))

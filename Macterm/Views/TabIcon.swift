@@ -36,13 +36,13 @@ struct TabGlyph: View {
     var tint: Color?
 
     @AppStorage(Preferences.Keys.tabIconSymbol)
-    private var tabIconSymbol = "terminal"
+    private var tabIconSymbol: String
     @AppStorage(Preferences.Keys.showAgentIcons)
-    private var showAgentIcons = true
+    private var showAgentIcons: Bool
     @AppStorage(Preferences.Keys.showTabStatusIndicator)
-    private var showTabStatusIndicator = false
+    private var showTabStatusIndicator: Bool
     @AppStorage(Preferences.Keys.showSpinnerOverAgentIcons)
-    private var showSpinnerOverAgentIcons = true
+    private var showSpinnerOverAgentIcons: Bool
 
     private var symbol: String { symbolOverride ?? tabIconSymbol }
     private var agent: AgentIcon? { showAgentIcons ? tab.agentIcon : nil }
@@ -94,10 +94,10 @@ struct TabStatusGlyph: View {
     var tint: Color?
     var spinnerOverAgent = true
     @AppStorage(Preferences.Keys.sidebarIconSize)
-    private var iconSizeRaw = SidebarIconSize.medium.rawValue
+    private var iconSize: SidebarIconSize
 
     private var size: SidebarIconSize {
-        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
+        iconSize
     }
 
     /// The spinner is a control, so it steps between AppKit's control sizes
@@ -189,14 +189,14 @@ struct TabRowIcon: View {
     /// (untagged) keeps the brand color.
     var agentTint: Color?
     @AppStorage(Preferences.Keys.sidebarIconSize)
-    private var iconSizeRaw = SidebarIconSize.medium.rawValue
+    private var iconSize: SidebarIconSize
     /// Scales with the user's text size like the sibling SF Symbols do; a
     /// fixed 15pt would stay small next to enlarged row text.
     @ScaledMetric(relativeTo: .body)
     private var agentIconSize: CGFloat = 15
 
     private var size: SidebarIconSize {
-        SidebarIconSize(rawValue: iconSizeRaw) ?? .medium
+        iconSize
     }
 
     var body: some View {

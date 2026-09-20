@@ -160,9 +160,9 @@ struct UpdaterChannelTests {
     @Test
     func update_channel_defaults_to_the_builds_own_channel() throws {
         let defaults = try #require(UserDefaults(suiteName: "macterm.updater-channel-tests.\(UUID().uuidString)"))
-        #expect(defaults.string(forKey: Preferences.Keys.updateChannel) == nil)
+        #expect(defaults.string(forKey: Preferences.Keys.updateChannel.name) == nil)
         // Mirrors Preferences.init's read for an unset key.
-        let value = defaults.string(forKey: Preferences.Keys.updateChannel)
+        let value = defaults.string(forKey: Preferences.Keys.updateChannel.name)
             .flatMap(UpdateChannel.init(rawValue:)) ?? UpdateChannel.bundleDefault
         #expect(value == UpdateChannel.bundleDefault)
         // The test bundle is not a tip build, so that resolves to stable — which
