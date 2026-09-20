@@ -269,9 +269,11 @@ final class AdaptiveTerminalChrome {
         WindowAppearance.updateTerminalPaintRegions(
             in: window,
             rects: zip(views, candidates).compactMap { view, color in
-                guard let color, Self.paneFill(color) == nil, let rect = view.sampledPaintedRect
-                else { return nil }
-                return view.convert(rect, to: nil)
+                Self.tintHole(
+                    color: color,
+                    paintedRect: view.sampledPaintedRect,
+                    hiddenInLayout: view.hiddenInLayout
+                ).map { view.convert($0, to: nil) }
             }
         )
         // A lone pane can lend its color to the whole window. In a split, each
@@ -290,6 +292,50 @@ final class AdaptiveTerminalChrome {
     /// left exactly as the renderer drew it.
     static func paneFill(_ color: NSColor) -> NSColor? {
         color.alphaComponent >= 0.999 ? color : nil
+    }
+
+    /// The hole a pane cuts in the window tint (in the pane's coordinates), or
+    /// nil when it cuts none: no detected color, an opaque one (the pane fill
+    /// stands in for the tint there), no sampled paint yet — or a pane the
+    /// layout is holding invisible behind a zoomed sibling.
+    ///
+    /// That last case is why this is a rule and not two guards inline. A
+    /// zoomed-away pane stays mounted at opacity 0 with its frame, its
+    /// remembered color and its sampled paint intact, so unzoom can slide it
+    /// back without re-detecting. Every one of those is right to keep; the
+    /// hole is not. A hole is only correct while the terminal's own paint is
+    /// on top of it, and with the pane invisible the cut showed the bare
+    /// material — the desktop through the window — inside whatever pane was
+    /// zoomed over it.
+    static func tintHole(color: NSColor?, paintedRect: CGRect?, hiddenInLayout: Bool) -> CGRect? {
+        guard !hiddenInLayout, let color, paneFill(color) == nil else { return nil }
+        return paintedRect
+    }
+
+    /// The animated split layout hid this pane behind a zoomed sibling, or
+    /// brought it back.
+    ///
+    /// Hiding republishes at once: the pane fades out over the split
+    /// animation, and its hole has to close before the fade lets the material
+    /// show through — a fading pane over a restored tint merely reads a shade
+    /// more solid on its way out. Revealing waits the animation out instead,
+    /// for the mirror-image reason: the pane fades *in*, so a hole cut at the
+    /// start of the fade is the same bare-material flash. The wait is
+    /// `SplitAnimation.duration` whether or not Reduce Motion skipped the
+    /// animation; under Reduce Motion that costs a fully visible pane a
+    /// double-tinted third of a second, which is not visible at these
+    /// opacities.
+    func layoutVisibilityDidChange(_ view: GhosttyTerminalNSView) {
+        guard Preferences.shared.adaptiveTerminalChromeEnabled else { return }
+        if view.hiddenInLayout {
+            // Still in the monitored set — the layout hides it, not the
+            // window — so the republish reads the flag off it and drops the
+            // hole.
+            guard shouldHandleEvent(from: view) else { return }
+            refreshPresentation(for: monitoredViews())
+        } else {
+            requestSamplingBurst(delay: SplitAnimation.duration, retries: 2)
+        }
     }
 
     private func currentCandidate(for view: GhosttyTerminalNSView) -> NSColor? {

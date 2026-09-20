@@ -749,11 +749,14 @@ final class GhosttyTerminalNSView: NSView {
     /// unzoom can animate it back without a remount, so the window's own
     /// occlusion says "visible"; this override lets the renderer sleep the
     /// way an orphaned pane does. `rendersForPreview` still wins — the tab
-    /// switcher samples zoomed-away panes too.
+    /// switcher samples zoomed-away panes too. The adaptive chrome is told as
+    /// well, since a hidden pane must stop cutting the window tint
+    /// (`AdaptiveTerminalChrome.layoutVisibilityDidChange`).
     var hiddenInLayout = false {
         didSet {
             guard oldValue != hiddenInLayout else { return }
             syncOcclusion()
+            AdaptiveTerminalChrome.shared.layoutVisibilityDidChange(self)
         }
     }
 
