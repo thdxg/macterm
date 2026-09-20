@@ -26,7 +26,7 @@ final class MactermConfig {
 
     let defaultsURL: URL
     let overridesURL: URL
-    /// Where `ExperimentShaders` installs the rendered cursor shaders.
+    /// Where `AnimationShaders` installs the rendered cursor shaders.
     let shadersURL: URL
 
     private init() {
@@ -53,11 +53,11 @@ final class MactermConfig {
             windowOpacity: Preferences.shared.windowOpacity,
             userConfigText: userConfigText,
             shimDirectory: Self.sshShimDirectory(),
-            experiments: .init(
+            animations: .init(
                 smoothScrolling: Preferences.shared.smoothScrolling,
                 smoothCursor: Preferences.shared.smoothCursor,
                 trail: Preferences.shared.cursorTrail,
-                shaderDirectory: ExperimentShaders.install(
+                shaderDirectory: AnimationShaders.install(
                     into: shadersURL,
                     encoding: .from(userConfigText: userConfigText)
                 )
@@ -66,16 +66,17 @@ final class MactermConfig {
         write(Data(body.utf8), to: overridesURL)
     }
 
-    /// The Settings → Experimental toggles, each a ghostty-side switch the
-    /// overrides file flips. All default off, so a user who never opens the
-    /// pane gets exactly the user-config behavior.
+    /// The Settings → Animations toggles that are ghostty-side switches the
+    /// overrides file flips. Smooth scrolling ships on; the two cursor
+    /// shaders are opt-in, so a user who never opens the pane gets the
+    /// user-config cursor behavior.
     ///
     /// - Smooth scrolling is the fork's `smooth-scroll` key: libghostty
     ///   already accumulates precise trackpad deltas in pixels, and with the
     ///   key on it renders the sub-row remainder. Macterm forwards every
     ///   wheel event untouched (#393), so the gate must live on that side.
     /// - Smooth cursor and cursor trail are bundled custom shaders
-    ///   (`Resources/shaders/`, installed by `ExperimentShaders` with the
+    ///   (`Resources/shaders/`, installed by `AnimationShaders` with the
     ///   framebuffer-encoding header) appended to the user's own
     ///   `custom-shader` list — the key is repeatable, and the overrides load last, so the
     ///   user's shaders stay and run first. The trail is listed before the
@@ -84,18 +85,19 @@ final class MactermConfig {
     ///   itself, and ghostty's would otherwise jump ahead of it. libghostty
     ///   applies that key only while focused, so unfocused panes keep the
     ///   native hollow cursor. It is the one user-visible ghostty key a
-    ///   Macterm setting overrides, which is why the toggle defaults to off.
-    struct Experiments: Equatable {
+    ///   Macterm setting overrides, which is why that toggle defaults to off
+    ///   while smooth scrolling does not.
+    struct Animations: Equatable {
         var smoothScrolling = false
         var smoothCursor = false
         var trail = false
-        /// Where `ExperimentShaders.install` put the rendered shaders, or
+        /// Where `AnimationShaders.install` put the rendered shaders, or
         /// nil when the bundle lacks the templates or the install failed —
         /// then no shader line is emitted rather than a `custom-shader`
         /// path libghostty would fail to load.
         var shaderDirectory: String?
 
-        static let none = Experiments()
+        static let none = Animations()
 
         var overrideLines: [String] {
             var lines: [String] = []
@@ -149,7 +151,7 @@ final class MactermConfig {
         windowOpacity: Double,
         userConfigText: String?,
         shimDirectory: String?,
-        experiments: Experiments = .none
+        animations: Animations = .none
     ) -> String {
         var overrides = [
             // Macterm composites window translucency at the AppKit level —
@@ -205,7 +207,7 @@ final class MactermConfig {
             overrides.append("shell-integration-features = \(value)")
         }
 
-        overrides.append(contentsOf: experiments.overrideLines)
+        overrides.append(contentsOf: animations.overrideLines)
 
         return overrides.joined(separator: "\n") + "\n"
     }

@@ -241,14 +241,14 @@ final class Preferences {
         }
     }
 
-    // MARK: - Experimental (Settings → Experimental; all default off)
+    // MARK: - Animations (Settings → Animations)
 
-    /// Pixel-precise trackpad scrolling through scrollback. Written to the
-    /// overrides as the fork's `smooth-scroll` key (`MactermConfig
-    /// .Experiments`): libghostty already accumulates precise deltas in
-    /// pixels, and with the key on it renders the sub-row remainder instead
-    /// of dropping it. Every wheel event reaches libghostty untouched (#393),
-    /// so the gate has to live on that side.
+    /// Pixel-precise trackpad scrolling through scrollback, on by default.
+    /// Written to the overrides as the fork's `smooth-scroll` key
+    /// (`MactermConfig.Animations`): libghostty already accumulates precise
+    /// deltas in pixels, and with the key on it renders the sub-row remainder
+    /// instead of dropping it. Every wheel event reaches libghostty untouched
+    /// (#393), so the gate has to live on that side.
     var smoothScrolling: Bool {
         didSet {
             Keys.smoothScrolling.write(smoothScrolling, to: defaults)
@@ -260,7 +260,7 @@ final class Preferences {
     /// bundled ghostty custom shader (`Resources/shaders/cursor_glide.glsl`)
     /// that Macterm appends to the config through the overrides file, along
     /// with `cursor-opacity = 0` so the shader can be the focused cursor.
-    /// See `MactermConfig.Experiments`.
+    /// See `MactermConfig.Animations`.
     var smoothCursor: Bool {
         didSet {
             Keys.smoothCursor.write(smoothCursor, to: defaults)
@@ -277,14 +277,14 @@ final class Preferences {
         }
     }
 
-    /// Hyprland-style split animations (its `slide`): a new pane slides in
-    /// from the nearest edge while its neighbours retile, a closing pane
-    /// slides back out, and zoom grows the pane over the layout. Pure
-    /// Macterm chrome — the tab's
-    /// tree is rendered flat by `AnimatedSplitView` (one animatable frame per
-    /// pane) instead of the recursive `SplitTreeView`, and nothing reaches
-    /// libghostty beyond the per-frame surface resizes a divider drag already
-    /// causes. Off: the recursive view, exactly as before.
+    /// Hyprland-style split animations (its `slide`), on by default: a new
+    /// pane slides in from the nearest edge while its neighbours retile, a
+    /// closing pane slides back out, and zoom grows the pane over the layout.
+    /// Pure Macterm chrome — the tab's tree is rendered flat by
+    /// `AnimatedSplitView` (one animatable frame per pane) instead of the
+    /// recursive `SplitTreeView`, and nothing reaches libghostty beyond the
+    /// per-frame surface resizes a divider drag already causes. Off: the
+    /// recursive view.
     var animatedSplits: Bool {
         didSet { Keys.animatedSplits.write(animatedSplits, to: defaults) }
     }
@@ -978,10 +978,10 @@ final class Preferences {
     /// state and one-time migration flags — and stay raw.
     enum Keys {
         static let autoTiling = PreferenceStorageKey("macterm.autoTiling.enabled", default: false)
-        static let smoothScrolling = PreferenceStorageKey("macterm.terminal.smoothScrolling", default: false)
+        static let smoothScrolling = PreferenceStorageKey("macterm.terminal.smoothScrolling", default: true)
         static let smoothCursor = PreferenceStorageKey("macterm.terminal.smoothCursor", default: false)
         static let cursorTrail = PreferenceStorageKey("macterm.terminal.cursorTrail", default: false)
-        static let animatedSplits = PreferenceStorageKey("macterm.terminal.animatedSplits", default: false)
+        static let animatedSplits = PreferenceStorageKey("macterm.terminal.animatedSplits", default: true)
         static let sidebarPeekStyle = PreferenceStorageKey("macterm.sidebar.presentation", default: SidebarPeekStyle.resizeTerminal)
         static let windowOpacity = PreferenceStorageKey("macterm.window.opacity", default: 1.0)
         static let windowBlurRadius = PreferenceStorageKey("macterm.window.blurRadius", default: 0)

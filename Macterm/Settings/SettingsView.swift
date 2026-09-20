@@ -9,9 +9,9 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case general = "General"
     case projects = "Projects"
     case appearance = "Appearance"
+    case animations = "Animations"
     case quickTerminal = "Quick Terminal"
     case keymaps = "Keymaps"
-    case experimental = "Experimental"
     case updates = "Updates"
 
     var id: String { rawValue }
@@ -22,9 +22,9 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .projects: "folder"
         case .appearance: "paintpalette"
+        case .animations: "wand.and.sparkles"
         case .quickTerminal: "rectangle.bottomthird.inset.filled"
         case .keymaps: "keyboard"
-        case .experimental: "flask"
         case .updates: "arrow.triangle.2.circlepath"
         }
     }
@@ -77,9 +77,9 @@ struct SettingsView: View {
         case .general: GeneralSettings()
         case .projects: ProjectsSettings()
         case .appearance: AppearanceSettings()
+        case .animations: AnimationsSettings()
         case .quickTerminal: QuickTerminalSettings()
         case .keymaps: KeymapSettings()
-        case .experimental: ExperimentalSettings()
         case .updates: UpdatesSettings()
         }
     }
@@ -1311,6 +1311,64 @@ private struct AppearanceSettings: View {
     }
 }
 
+// MARK: - Animations
+
+/// Motion: what moves, and how. Smooth scrolling and split animations are on
+/// by default; the two cursor effects are bundled ghostty shaders and stay
+/// opt-in, because the glide takes over drawing the focused cursor.
+private struct AnimationsSettings: View {
+    @State
+    private var smoothScrolling: Bool = Preferences.shared.smoothScrolling
+    @State
+    private var smoothCursor: Bool = Preferences.shared.smoothCursor
+    @State
+    private var cursorTrail: Bool = Preferences.shared.cursorTrail
+    @State
+    private var animatedSplits: Bool = Preferences.shared.animatedSplits
+
+    var body: some View {
+        Form {
+            Section("Scrolling") {
+                Toggle("Smooth scrolling", isOn: $smoothScrolling)
+                    .onChange(of: smoothScrolling) { _, v in
+                        Preferences.shared.smoothScrolling = v
+                    }
+                Text(
+                    "Trackpad scrolling moves scrollback by pixels instead of whole rows. "
+                        + "Programs that draw their own screen (editors, pagers) still scroll by rows."
+                )
+                .settingsCaption()
+            }
+
+            Section("Cursor") {
+                Toggle("Smooth cursor", isOn: $smoothCursor)
+                    .onChange(of: smoothCursor) { _, v in
+                        Preferences.shared.smoothCursor = v
+                    }
+                Text("The cursor glides between positions instead of jumping.")
+                    .settingsCaption()
+
+                Toggle("Cursor trail", isOn: $cursorTrail)
+                    .onChange(of: cursorTrail) { _, v in
+                        Preferences.shared.cursorTrail = v
+                    }
+                Text("A fading streak follows the cursor across larger moves.")
+                    .settingsCaption()
+            }
+
+            Section("Splits") {
+                Toggle("Animate splits", isOn: $animatedSplits)
+                    .onChange(of: animatedSplits) { _, v in
+                        Preferences.shared.animatedSplits = v
+                    }
+                Text("Panes slide in and out as the layout changes. Turns itself off when Reduce Motion is on.")
+                    .settingsCaption()
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
 // MARK: - Quick Terminal
 
 private struct QuickTerminalSettings: View {
@@ -1751,62 +1809,6 @@ private struct HotkeyCaptureView: NSViewRepresentable {
 }
 
 // MARK: - Updates
-
-/// Features that work but haven't earned a permanent home yet: each is off
-/// by default, does nothing to a user who never opens this pane, and is
-/// expected to either graduate into a regular pane or be removed. Keep the
-/// pane honest — a toggle that has shipped for a while without complaint
-/// belongs elsewhere.
-private struct ExperimentalSettings: View {
-    @State
-    private var smoothScrolling: Bool = Preferences.shared.smoothScrolling
-    @State
-    private var smoothCursor: Bool = Preferences.shared.smoothCursor
-    @State
-    private var cursorTrail: Bool = Preferences.shared.cursorTrail
-    @State
-    private var animatedSplits: Bool = Preferences.shared.animatedSplits
-
-    var body: some View {
-        Form {
-            Section("Scrolling") {
-                Toggle("Smooth scrolling", isOn: $smoothScrolling)
-                    .onChange(of: smoothScrolling) { _, v in
-                        Preferences.shared.smoothScrolling = v
-                    }
-                Text(
-                    "Trackpad scrolling moves scrollback by pixels instead of whole rows. "
-                        + "Programs that draw their own screen (editors, pagers) still scroll by rows."
-                )
-                .settingsCaption()
-            }
-
-            Section("Cursor") {
-                Toggle("Smooth cursor", isOn: $smoothCursor)
-                    .onChange(of: smoothCursor) { _, v in
-                        Preferences.shared.smoothCursor = v
-                    }
-                Text("The cursor glides between positions instead of jumping.")
-                    .settingsCaption()
-
-                Toggle("Cursor trail", isOn: $cursorTrail)
-                    .onChange(of: cursorTrail) { _, v in
-                        Preferences.shared.cursorTrail = v
-                    }
-                Text("A fading streak follows the cursor across larger moves.")
-                    .settingsCaption()
-            }
-
-            Section("Splits") {
-                Toggle("Animate splits", isOn: $animatedSplits)
-                    .onChange(of: animatedSplits) { _, v in
-                        Preferences.shared.animatedSplits = v
-                    }
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
 
 private struct UpdatesSettings: View {
     /// `Updater` is `@Observable`; read the singleton directly (Observation

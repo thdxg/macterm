@@ -1,9 +1,9 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: appBundleID, category: "ExperimentShaders")
+private let logger = Logger(subsystem: appBundleID, category: "AnimationShaders")
 
-/// The Settings → Experimental cursor shaders as libghostty loads them: the
+/// The Settings → Animations cursor shaders as libghostty loads them: the
 /// bundled templates (`Resources/shaders/`) written to Application Support
 /// with a header saying how ghostty's framebuffer is encoded.
 ///
@@ -16,7 +16,7 @@ private let logger = Logger(subsystem: appBundleID, category: "ExperimentShaders
 /// draw a visibly darker cursor under the default. The header carries the
 /// two answers as `#define`s, read from the user's *stated* config on every
 /// regenerate, so a reload after editing either key re-renders the files.
-enum ExperimentShaders {
+enum AnimationShaders {
     /// Installed in this order in the overrides: trail beneath glide.
     static let fileNames = ["cursor_trail.glsl", "cursor_glide.glsl"]
 
@@ -62,7 +62,7 @@ enum ExperimentShaders {
     /// The bundle directory holding the templates (`Macterm/Resources/shaders`,
     /// a folder reference in project.yml), or nil when a file is missing — a
     /// broken or partial build, in which case nothing is installed and
-    /// `MactermConfig.Experiments` emits no shader line.
+    /// `MactermConfig.Animations` emits no shader line.
     static func bundledDirectory() -> URL? {
         guard let dir = Bundle.main.resourceURL?
             .appendingPathComponent("shaders", isDirectory: true)
