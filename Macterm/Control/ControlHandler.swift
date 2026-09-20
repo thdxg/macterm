@@ -497,14 +497,10 @@ final class ControlHandler {
             throw ControlError(code: .badRequest, message: "the pinned section cannot be removed")
         }
 
-        // The same expression `AppState.requestRemoveProject` evaluates before
+        // The same predicate `AppState.requestRemoveProject` evaluates before
         // it decides to stage its dialog, so the CLI refuses exactly when the
         // app would have asked.
-        let busy = appState.workspaces[project.id]?.tabs
-            .flatMap { $0.splitRoot.allPanes() }
-            .contains(where: \.needsConfirmClose) ?? false
-
-        if busy, args.force != true {
+        if appState.closeNeedsConfirmation(projectID: project.id), args.force != true {
             throw ControlError(
                 code: .busy,
                 message: "a pane in that project has a running program (removing kills its sessions)",
@@ -626,9 +622,8 @@ final class ControlHandler {
         // stay, and the next launch starts it again — unpin in the app is the
         // removal path.) The UI stages a confirmation dialog for busy tabs; a
         // headless caller gets a typed `busy` error instead — never a dialog
-        // the CLI can't answer.
-        let busy = tab.splitRoot.allPanes().contains(where: \.needsConfirmClose)
-        if busy, args.force != true {
+        // the CLI can't answer. Mirror-aware, like the app's own guard.
+        if appState.closeNeedsConfirmation(tab: tab), args.force != true {
             throw ControlError(
                 code: .busy,
                 message: "a pane in that tab has a running program (closing kills its session)",

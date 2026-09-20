@@ -2045,10 +2045,54 @@ final class AppState {
     ///
     /// Uses the same retention rule as `releaseSessions`, because what the
     /// user stands to lose is exactly what that function decides to kill.
+    ///
+    /// This is the ONE busy-close predicate. Every path that ends sessions —
+    /// pane close, tab close, project unload/remove, the sidebar's bulk
+    /// remove, the CLI's `busy` refusal and the Close Tab intent — asks one
+    /// of the overloads below rather than spelling
+    /// `allPanes().contains(where: \.needsConfirmClose)` itself: that raw
+    /// form ignores retention, so a tab holding only a `pane mirror` view
+    /// would warn about killing a session it does not kill.
     func closeNeedsConfirmation(_ closing: [Pane]) -> Bool {
         let retained = retainedSessionNames(excluding: closing)
-        return closing.contains { $0.needsConfirmClose && !retained.contains($0.sessionName) }
+        return closing.contains { paneNeedsConfirmClose($0) && !retained.contains($0.sessionName) }
     }
+
+    /// Whether closing (or, for a pinned tab, unloading) `tab` needs
+    /// confirmation. Closing a tab ends every session its panes hold alone.
+    func closeNeedsConfirmation(tab: TerminalTab) -> Bool {
+        closeNeedsConfirmation(tab.splitRoot.allPanes())
+    }
+
+    /// Whether unloading or removing the whole of project `projectID` needs
+    /// confirmation. Unknown or empty projects need none.
+    func closeNeedsConfirmation(projectID: UUID) -> Bool {
+        closeNeedsConfirmation(panes(inProject: projectID))
+    }
+
+    /// Every pane of the given projects (removed whole) and tabs, judged
+    /// TOGETHER: a mirror in one selected tab whose source sits in another
+    /// selected tab is killed by the removal, and only the joint set knows.
+    func closeNeedsConfirmation(projectIDs: [UUID], tabs: [(tabID: UUID, projectID: UUID)]) -> Bool {
+        var closing = projectIDs.flatMap(panes(inProject:))
+        for tab in tabs {
+            guard let tab = workspaces[tab.projectID]?.tabs.first(where: { $0.id == tab.tabID }) else { continue }
+            closing += tab.splitRoot.allPanes()
+        }
+        return closeNeedsConfirmation(closing)
+    }
+
+    private func panes(inProject projectID: UUID) -> [Pane] {
+        workspaces[projectID]?.tabs.flatMap { $0.splitRoot.allPanes() } ?? []
+    }
+
+    /// The per-pane half of the verdict — `Pane.needsConfirmClose` in
+    /// production. A seam because that property short-circuits on
+    /// `hasSurface`, and no pane in a windowless test ever builds one, so
+    /// without it the tab- and project-level guards could only be tested
+    /// against an always-idle pane.
+    @ObservationIgnored
+    var paneNeedsConfirmClose: (Pane) -> Bool = { $0.needsConfirmClose }
 
     private func shouldSweep(_ destination: String, now: Date) -> Bool {
         if let last = sweptDestinations[destination],
@@ -2268,10 +2312,7 @@ final class AppState {
 
     /// Unload a project, confirming first when any pane is busy.
     func requestUnloadProject(_ projectID: UUID, host: DialogHost = .mainWindow) {
-        let busy = workspaces[projectID]?.tabs
-            .flatMap { $0.splitRoot.allPanes() }
-            .contains(where: \.needsConfirmClose) ?? false
-        if busy {
+        if closeNeedsConfirmation(projectID: projectID) {
             pendingUnloadProject = PendingUnloadProject(projectID: projectID, host: host)
             return
         }
@@ -2292,10 +2333,7 @@ final class AppState {
     /// immediately when no pane in the project is busy; otherwise stage it
     /// for the confirmation alert — removal kills every pane's zmx session.
     func requestRemoveProject(_ projectID: UUID, host: DialogHost = .mainWindow, removal: @escaping () -> Void) {
-        let busy = workspaces[projectID]?.tabs
-            .flatMap { $0.splitRoot.allPanes() }
-            .contains(where: \.needsConfirmClose) ?? false
-        if busy {
+        if closeNeedsConfirmation(projectID: projectID) {
             pendingRemoveProject = PendingRemoveProject(projectID: projectID, completeRemoval: removal, host: host)
             return
         }
@@ -2331,7 +2369,7 @@ final class AppState {
         tabs: [(tabID: UUID, projectID: UUID)],
         removal: @escaping () -> Void
     ) {
-        if selectionHasBusyPane(projectIDs: projectIDs, tabs: tabs) {
+        if closeNeedsConfirmation(projectIDs: projectIDs, tabs: tabs) {
             pendingBulkRemove = PendingBulkRemove(completeRemoval: removal)
             return
         }
@@ -2346,25 +2384,6 @@ final class AppState {
 
     func cancelPendingBulkRemove() {
         pendingBulkRemove = nil
-    }
-
-    /// True when any pane in the given projects (removed whole) or tabs has a
-    /// running foreground program needing quit-confirmation.
-    private func selectionHasBusyPane(projectIDs: [UUID], tabs: [(tabID: UUID, projectID: UUID)]) -> Bool {
-        for id in projectIDs {
-            let busy = workspaces[id]?.tabs
-                .flatMap { $0.splitRoot.allPanes() }
-                .contains(where: \.needsConfirmClose) ?? false
-            if busy { return true }
-        }
-        for tab in tabs {
-            let busy = workspaces[tab.projectID]?.tabs
-                .first { $0.id == tab.tabID }?
-                .splitRoot.allPanes()
-                .contains(where: \.needsConfirmClose) ?? false
-            if busy { return true }
-        }
-        return false
     }
 
     // MARK: - Tabs
@@ -2462,9 +2481,7 @@ final class AppState {
     /// destructive-confirmation lives here (quit will detach, not kill).
     func requestCloseTab(_ tabID: UUID, projectID: UUID) {
         let tab = workspaces[projectID]?.tabs.first { $0.id == tabID }
-        let busy = tab?.splitRoot.allPanes()
-            .contains(where: \.needsConfirmClose) ?? false
-        if busy {
+        if let tab, closeNeedsConfirmation(tab: tab) {
             pendingCloseTab = PendingCloseTab(tabID: tabID, projectID: projectID)
             return
         }

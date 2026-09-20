@@ -453,6 +453,65 @@ struct AppStateTests {
     }
 
     @Test
+    func closing_a_tab_that_only_mirrors_another_tabs_session_needs_no_confirmation() throws {
+        // A tab whose every pane is a mirror of a session another tab still
+        // holds kills nothing when it closes, however busy those programs
+        // are. The tab-level guard must say so — the raw
+        // `allPanes().contains(where: \.needsConfirmClose)` would not.
+        let state = makeAppState()
+        state.paneNeedsConfirmClose = { _ in true }
+        let p = seedProject(state)
+        let sourceTab = try #require(state.workspaces[p.id]?.activeTab)
+        let source = try #require(sourceTab.splitRoot.allPanes().first)
+        let mirrorID = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: p.id))
+        state.separatePane(mirrorID, toProject: p.id, destPath: p.path)
+        let mirrorTab = try #require(state.workspaces[p.id]?.tabs.first { $0.splitRoot.contains(paneID: mirrorID) })
+        #expect(mirrorTab.id != sourceTab.id)
+
+        #expect(!state.closeNeedsConfirmation(tab: mirrorTab))
+        #expect(!state.closeNeedsConfirmation(tab: sourceTab))
+        // The whole project goes — nothing retains the session.
+        #expect(state.closeNeedsConfirmation(projectID: p.id))
+        // Both tabs selected for a bulk remove is the same joint verdict.
+        #expect(state.closeNeedsConfirmation(
+            projectIDs: [],
+            tabs: [(mirrorTab.id, p.id), (sourceTab.id, p.id)]
+        ))
+        #expect(!state.closeNeedsConfirmation(projectIDs: [], tabs: [(mirrorTab.id, p.id)]))
+
+        // And the UI request paths read that verdict rather than their own.
+        state.requestCloseTab(mirrorTab.id, projectID: p.id)
+        #expect(state.pendingCloseTab == nil)
+        #expect(state.workspaces[p.id]?.tabs.count == 1)
+        state.requestCloseTab(sourceTab.id, projectID: p.id)
+        #expect(state.pendingCloseTab?.tabID == sourceTab.id)
+    }
+
+    @Test
+    func busy_project_paths_stage_confirmation_through_the_shared_guard() {
+        let state = makeAppState()
+        state.paneNeedsConfirmClose = { _ in true }
+        let p = seedProject(state)
+
+        state.requestUnloadProject(p.id)
+        #expect(state.pendingUnloadProject?.projectID == p.id)
+        state.cancelPendingUnloadProject()
+
+        var removed = false
+        state.requestRemoveProject(p.id) { removed = true }
+        #expect(!removed)
+        #expect(state.pendingRemoveProject?.projectID == p.id)
+        state.cancelPendingRemoveProject()
+
+        state.requestRemoveSelection(projectIDs: [p.id], tabs: []) { removed = true }
+        #expect(!removed)
+        #expect(state.pendingBulkRemove != nil)
+
+        // An unknown project has no panes and so nothing to confirm.
+        #expect(!state.closeNeedsConfirmation(projectID: UUID()))
+    }
+
+    @Test
     func splitPane_uses_selected_directory() throws {
         let state = makeAppState()
         state.newSplitInheritsWorkingDirectory = { true }
