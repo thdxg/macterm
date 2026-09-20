@@ -1,9 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Entry point for a tab's split tree. Renders the recursive `SplitTreeView`
-/// by default, or the flat `AnimatedSplitView` under Settings → Experimental
-/// → Animate splits. Both take the tab's whole tree; zoom is resolved here
+/// Entry point for a tab's split tree. Renders the flat `AnimatedSplitView`
+/// while Settings → Animations → Animate splits is on (the default), or the
+/// recursive `SplitTreeView` when it is off. Both take the tab's whole tree; zoom is resolved here
 /// (the recursive view renders the zoomed pane alone, the flat view keeps
 /// every tile mounted so zoom can animate).
 struct SplitRootView: View {
@@ -115,8 +115,18 @@ enum SplitAnimation {
 ///   fill, so over the window tint it looks exactly as the pane did — an
 ///   opaque ghost flashed to full opacity in a translucent window. A pane
 ///   that merely moved to another tab has no snapshot and simply disappears.
-///   The ghost carries the seam's hairline too (`SplitLayout.seamHairline`),
-///   since the branch's real divider is gone with the branch.
+///   The strip collapses onto the seam the surviving neighbours settle on
+///   (`SplitLayout.closingSeam`), read off the new layout: the branch's own
+///   edge when one sibling reclaims the space, the merge point when a
+///   rebalance moves both.
+/// - **A divider outliving its branch travels to that same seam**
+///   (`MergingDivider`). Closing a pane removes one branch and with it one
+///   divider, while the divider on the other side of the tile moves onto the
+///   new boundary — so both travel the same distance from opposite sides and
+///   merge, instead of one blinking out mid-pane. Splitting is the same
+///   motion reversed: the new divider is born on the seam the arriving pane
+///   grows from, which is the existing divider (or container edge) it peels
+///   off.
 /// - **Zoom keeps the other tiles mounted**, at opacity 0 beneath the zoomed
 ///   pane, so unzoom can slide them back without the orphan-and-reattach
 ///   round trip a remount costs. They sleep through
@@ -149,6 +159,11 @@ struct AnimatedSplitView: View {
     @State
     private var ghosts: [ClosingGhost] = []
 
+    /// Dividers whose branch is gone, kept for the length of the animation
+    /// so they can travel to the seam that replaced them (see `MergingDivider`).
+    @State
+    private var merging: [MergingDivider] = []
+
     /// Pane and branch IDs this view has laid out in place. nil until the
     /// first body, so everything present at appearance is never "new".
     @State
@@ -171,11 +186,50 @@ struct AnimatedSplitView: View {
     }
 
     /// A closed pane's last frame, sliding out of the strip it left.
+    /// `collapsed` is where that strip ends up — resolved against the layout
+    /// the close produced (`SplitLayout.closingSeam`), not from the branch
+    /// the pane was in, which no longer describes the retile once both
+    /// neighbours move.
     private struct ClosingGhost: Identifiable {
         let id: UUID
         let rect: CGRect
+        let collapsed: CGRect
         let placement: SplitLayout.Placement?
         let snapshot: PanePreview
+        var leaving = false
+    }
+
+    /// A divider as geometry alone — what a diff between two layouts needs,
+    /// without the `SplitBranch` a `SplitLayout.Divider` carries.
+    private struct PlacedDivider: Identifiable, Equatable {
+        let id: UUID
+        let rect: CGRect
+        let axis: SplitDirection
+    }
+
+    /// The layout as this view last rendered it. Diffed in one place so a
+    /// tree change resolves leaves and dividers against the same before and
+    /// after, which is what lets a dead divider and a live one agree on
+    /// where they meet.
+    private struct Snapshot: Equatable {
+        var leaves: [PlacedLeaf]
+        var dividers: [PlacedDivider]
+
+        var leafRects: [UUID: CGRect] {
+            Dictionary(leaves.map { ($0.id, $0.rect) }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+
+    /// A divider whose branch collapsed, travelling to the seam that took
+    /// its place. A close removes one branch, so the divider that described
+    /// it is gone from the new layout — but the boundary it drew is still
+    /// there in the survivors, either as another divider that moved onto it
+    /// or as the container's own edge. Animating it there is what makes two
+    /// dividers merge into one instead of one of them blinking out.
+    private struct MergingDivider: Identifiable {
+        let id: UUID
+        let rect: CGRect
+        let merged: CGRect
         var leaving = false
     }
 
@@ -201,6 +255,14 @@ struct AnimatedSplitView: View {
             let arrivingIDs = settledIDs.map { settled in
                 Set(placed.map(\.id).filter { !settled.contains($0) })
             } ?? []
+            // Dividers go in whether or not they are drawn: a zoom hides
+            // them without collapsing a branch, and a snapshot that dropped
+            // them would read as every divider dying at once and leave a
+            // hairline travelling over the zoomed pane.
+            let snapshot = Snapshot(
+                leaves: placed,
+                dividers: layout.dividers.map { PlacedDivider(id: $0.id, rect: $0.rect, axis: $0.axis) }
+            )
 
             ZStack(alignment: .topLeading) {
                 ForEach(placed) { leaf in
@@ -228,6 +290,10 @@ struct AnimatedSplitView: View {
                     ForEach(layout.dividers) { divider in
                         dividerView(divider, arrivingIDs: arrivingIDs)
                     }
+
+                    ForEach(merging) { divider in
+                        mergingDividerView(divider)
+                    }
                 }
 
                 ForEach(ghosts) { ghost in
@@ -239,8 +305,8 @@ struct AnimatedSplitView: View {
             .onAppear {
                 settledIDs = Set(placed.map(\.id)).union(layout.dividers.map(\.id))
             }
-            .onChange(of: placed) { old, new in
-                ghostClosedLeaves(from: old, to: new)
+            .onChange(of: snapshot) { old, new in
+                reconcile(from: old, to: new)
             }
         }
     }
@@ -311,13 +377,13 @@ struct AnimatedSplitView: View {
     /// the snapshot is of a smaller, mid-resize surface — filling the model's
     /// tile with it scaled the text non-uniformly. It slides toward the
     /// pane's outer edge by the tile's length; the window it is seen through
-    /// shrinks from the tile to nothing against that same edge, exactly as
-    /// fast as the sibling advances into the strip. The branch's divider,
-    /// removed with the branch, is stood in for by a hairline on the
-    /// window's seam edge, so the divider travels with the retile.
+    /// shrinks from the tile to nothing on the seam the survivors settle on,
+    /// exactly as fast as they advance into the strip. The branch's divider
+    /// travels to that same seam on its own (`MergingDivider`), so the two
+    /// edges of the strip close together.
     @ViewBuilder
     private func ghostView(_ ghost: ClosingGhost) -> some View {
-        let window = ghost.leaving ? SplitLayout.collapsed(ghost.rect, placement: ghost.placement) : ghost.rect
+        let window = ghost.leaving ? ghost.collapsed : ghost.rect
         let shift = ghost.leaving ? SplitLayout.slideOutShift(for: ghost.rect, placement: ghost.placement) : .zero
         ZStack(alignment: .topLeading) {
             if let image = ghost.snapshot.image, let size = ghost.snapshot.pointSize {
@@ -337,37 +403,91 @@ struct AnimatedSplitView: View {
         // same frame, and is removed only once it has slid out of view.
         .transition(.identity)
         .onAppear { slideOut(ghost.id) }
-
-        if let placement = ghost.placement {
-            let seam = SplitLayout.seamHairline(of: window, placement: placement)
-            Rectangle()
-                .fill(MactermTheme.border)
-                .frame(width: seam.width, height: seam.height)
-                .position(x: seam.midX, y: seam.midY)
-                .zIndex(2)
-                .allowsHitTesting(false)
-                .transition(.identity)
-        }
     }
 
-    /// Leaves that left the layout with a closing snapshot become ghosts,
-    /// placed where they were; each starts its slide from its own
-    /// `onAppear` (`slideOut`). A hidden tile (closed behind a zoom, e.g.
-    /// over the CLI) was never visible and gets no ghost.
-    private func ghostClosedLeaves(from old: [PlacedLeaf], to new: [PlacedLeaf]) {
-        let remaining = Set(new.map(\.id))
-        let closing = old.filter { !remaining.contains($0.id) && !$0.hidden }
+    /// A divider outliving its branch, on its way to the seam that replaced
+    /// it. No grab band: it is on its way out and owns no ratio.
+    @ViewBuilder
+    private func mergingDividerView(_ divider: MergingDivider) -> some View {
+        let rect = divider.leaving ? divider.merged : divider.rect
+        Rectangle()
+            .fill(MactermTheme.border)
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+            .zIndex(2)
+            .allowsHitTesting(false)
+            .transition(.identity)
+            .onAppear { mergeOut(divider.id) }
+    }
+
+    /// Everything the layout lost becomes an animation of its own, resolved
+    /// against the same before and after so the pieces agree on where they
+    /// are going:
+    ///
+    /// - a leaf that left with a closing snapshot becomes a ghost, placed
+    ///   where it was (a hidden tile — closed behind a zoom, e.g. over the
+    ///   CLI — was never visible and gets none);
+    /// - a divider whose branch collapsed becomes a `MergingDivider`.
+    ///
+    /// Both collapse onto `SplitLayout.closingSeam`: the boundary the
+    /// surviving neighbours settle on, read off the new layout rather than
+    /// guessed from the tree that is gone. Each starts its own animation
+    /// from its `onAppear`.
+    private func reconcile(from old: Snapshot, to new: Snapshot) {
+        let before = old.leafRects
+        let after = new.leafRects
+
+        let remaining = Set(new.leaves.map(\.id))
+        let closing = old.leaves.filter { !remaining.contains($0.id) && !$0.hidden }
             .compactMap { leaf in
-                leaf.pane.closingSnapshot.map {
-                    ClosingGhost(id: leaf.id, rect: leaf.rect, placement: leaf.placement, snapshot: $0)
+                leaf.pane.closingSnapshot.map { snapshot in
+                    ClosingGhost(
+                        id: leaf.id,
+                        rect: leaf.rect,
+                        collapsed: collapsedRect(for: leaf, before: before, after: after),
+                        placement: leaf.placement,
+                        snapshot: snapshot
+                    )
                 }
             }
-        guard !closing.isEmpty else { return }
+
+        let liveDividers = Set(new.dividers.map(\.id))
+        let merged = old.dividers.filter { !liveDividers.contains($0.id) }
+            .compactMap { divider -> MergingDivider? in
+                guard let seam = SplitLayout.closingSeam(
+                    of: divider.rect, axis: divider.axis, before: before, after: after
+                )
+                else { return nil }
+                return MergingDivider(
+                    id: divider.id,
+                    rect: divider.rect,
+                    merged: SplitLayout.moved(divider.rect, axis: divider.axis, onto: seam)
+                )
+            }
+
+        guard !closing.isEmpty || !merged.isEmpty else { return }
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             ghosts.append(contentsOf: closing)
+            merging.append(contentsOf: merged)
         }
+    }
+
+    /// Where a closing tile's strip ends up: the seam its surviving
+    /// neighbours settle on, or — with no neighbour left to read it off, and
+    /// for a tab's only pane — its own outer edge of the split.
+    private func collapsedRect(
+        for leaf: PlacedLeaf,
+        before: [UUID: CGRect],
+        after: [UUID: CGRect]
+    ) -> CGRect {
+        guard let placement = leaf.placement,
+              let seam = SplitLayout.closingSeam(
+                  of: leaf.rect, axis: placement.axis, before: before, after: after
+              )
+        else { return SplitLayout.collapsed(leaf.rect, placement: leaf.placement) }
+        return SplitLayout.collapsed(leaf.rect, axis: placement.axis, onto: seam)
     }
 
     /// Start a ghost's slide and drop it once the slide is over.
@@ -390,6 +510,23 @@ struct AnimatedSplitView: View {
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 ghosts.removeAll { $0.id == id }
+            }
+        }
+    }
+
+    /// Start a merging divider's travel and drop it once it has arrived.
+    private func mergeOut(_ id: UUID) {
+        withAnimation(animation) {
+            for index in merging.indices where merging[index].id == id {
+                merging[index].leaving = true
+            }
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(animation == nil ? 0 : SplitAnimation.duration))
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                merging.removeAll { $0.id == id }
             }
         }
     }

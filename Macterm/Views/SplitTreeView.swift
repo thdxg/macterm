@@ -134,6 +134,13 @@ struct SplitLeafView: View {
     let onZoomRequest: () -> Void
     let paneDrop: PaneDropContext?
 
+    /// Whether the unfocused-split dim applies. A zoomed or single pane is
+    /// not "a split", and a pane painting its own adaptive background is
+    /// left color-accurate.
+    private var isSplitDimmed: Bool {
+        !isFocused && isSplit && pane.adaptiveBackgroundColor == nil
+    }
+
     var body: some View {
         TerminalPane(
             pane: pane,
@@ -162,12 +169,21 @@ struct SplitLeafView: View {
                 NonLeaderBlur()
                     .overlay(MactermTheme.dimOverlay)
                     .allowsHitTesting(false)
-            } else if !isFocused, isSplit, pane.adaptiveBackgroundColor == nil {
+            } else {
                 // Driven by the user's ghostty `unfocused-split-opacity` /
                 // `unfocused-split-fill`, same as Ghostty.app's split dim. A
                 // pane whose TUI supplies its own adaptive background stays
                 // color-accurate even while unfocused.
+                //
+                // Always mounted, at opacity 0 when it doesn't apply, so the
+                // dim is a VALUE: a split or a close changes it in the same
+                // transaction as the layout, and a view that comes and goes
+                // can't cross-fade with the slide — it popped a shade darker
+                // the instant a pane was added, then slid. (The mirror's blur
+                // above stays structural: it is an expensive effect view, and
+                // nothing animates into or out of it.)
                 MactermTheme.dimOverlay
+                    .opacity(isSplitDimmed ? 1 : 0)
                     .allowsHitTesting(false)
             }
         }

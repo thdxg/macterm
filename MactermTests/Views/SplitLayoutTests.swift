@@ -2,11 +2,11 @@ import CoreGraphics
 @testable import Macterm
 import Testing
 
-/// The flat geometry `AnimatedSplitView` renders (Settings → Experimental →
+/// The flat geometry `AnimatedSplitView` renders (Settings → Animations →
 /// Animate splits). UI behaviour isn't unit-tested per the project's
 /// conventions, but the rectangles are plain arithmetic worth pinning: they
 /// must match the nested frames `SplitDividerView` lays out, so toggling the
-/// experiment moves no pane, and the animation key must ignore ratios so a
+/// setting moves no pane, and the animation key must ignore ratios so a
 /// divider drag never animates.
 @MainActor
 struct SplitLayoutTests {
@@ -183,26 +183,32 @@ struct SplitLayoutTests {
         ))
     }
 
+    /// A divider outliving its branch keeps its thickness and travels to the
+    /// seam, so it arrives on top of the divider coming the other way rather
+    /// than blinking out where the boundary no longer is.
     @Test
-    func the_seam_hairline_sits_on_the_sibling_side_of_the_ghost_window() throws {
-        let (tree, ids) = build(H(pane("l"), pane("r")))
-        let layout = SplitLayout.resolve(tree, in: bounds)
-        let r = try #require(layout.leaves.first { $0.id == ids["r"] })
-        let rPlacement = try #require(r.placement)
-        // At rest the hairline is exactly where the real divider was.
-        #expect(SplitLayout.seamHairline(of: r.rect, placement: rPlacement) == layout.dividers[0].rect)
-        // Collapsed, it has followed the seam to the strip's edge.
-        let gone = SplitLayout.collapsed(r.rect, placement: rPlacement)
-        #expect(SplitLayout.seamHairline(of: gone, placement: rPlacement).maxX == bounds.maxX)
-
-        let l = try #require(layout.leaves.first { $0.id == ids["l"] })
-        let lPlacement = try #require(l.placement)
-        #expect(SplitLayout.seamHairline(of: l.rect, placement: lPlacement) == layout.dividers[0].rect)
-
-        let (stacked, sids) = build(V(pane("t"), pane("b")))
-        let vlayout = SplitLayout.resolve(stacked, in: bounds)
-        let b = try #require(vlayout.leaves.first { $0.id == sids["b"] })
-        #expect(try SplitLayout.seamHairline(of: b.rect, placement: #require(b.placement)) == vlayout.dividers[0].rect)
+    func a_divider_whose_branch_collapsed_travels_to_the_merged_seam() throws {
+        let a = UUID(), b = UUID(), c = UUID()
+        let before: [UUID: CGRect] = [
+            a: CGRect(x: 0, y: 0, width: 1000, height: 200),
+            b: CGRect(x: 0, y: 201, width: 1000, height: 199),
+            c: CGRect(x: 0, y: 401, width: 1000, height: 199),
+        ]
+        let after: [UUID: CGRect] = [
+            a: CGRect(x: 0, y: 0, width: 1000, height: 299.5),
+            c: CGRect(x: 0, y: 300.5, width: 1000, height: 299.5),
+        ]
+        // The divider under the closed tile: its own neighbour above is the
+        // tile that left, so the survivor below is what tells it where to go.
+        let dying = CGRect(x: 0, y: 400, width: 1000, height: hairline)
+        let seam = try #require(SplitLayout.closingSeam(
+            of: dying, axis: .vertical, before: before, after: after
+        ))
+        let moved = SplitLayout.moved(dying, axis: .vertical, onto: seam)
+        #expect(moved.height == hairline)
+        #expect(moved.width == dying.width)
+        // Within half a point of where the surviving divider settles.
+        #expect(abs(moved.midY - 300) <= hairline / 2)
     }
 
     @Test
@@ -242,5 +248,86 @@ struct SplitLayoutTests {
             SplitLayout.animationKey(of: vertical, zoomedPaneID: nil).first
                 != SplitLayout.animationKey(of: horizontal, zoomedPaneID: nil).first
         )
+    }
+
+    // MARK: - Closing seam
+
+    /// Three stacked panes, auto-tiling on: closing the middle one rebalances
+    /// the survivors to half each, so the divider above the closed tile and
+    /// the divider below it both travel to the same line between them. The
+    /// ghost's strip has to collapse there, not onto the branch edge it
+    /// grew from — that dragged its hairline back across the pane above.
+    @Test
+    func closing_seam_merges_both_neighbours_when_a_rebalance_moves_them() throws {
+        let a = UUID(), b = UUID(), c = UUID()
+        let before: [UUID: CGRect] = [
+            a: CGRect(x: 0, y: 0, width: 1000, height: 200),
+            b: CGRect(x: 0, y: 201, width: 1000, height: 199),
+            c: CGRect(x: 0, y: 401, width: 1000, height: 199),
+        ]
+        let after: [UUID: CGRect] = [
+            a: CGRect(x: 0, y: 0, width: 1000, height: 299.5),
+            c: CGRect(x: 0, y: 300.5, width: 1000, height: 299.5),
+        ]
+        let closing = try #require(before[b])
+        let seam = try #require(SplitLayout.closingSeam(
+            of: closing, axis: .vertical, before: before, after: after
+        ))
+        #expect(seam == 300)
+        // Both hairlines travel the same distance to reach it.
+        #expect(abs(seam - 200) == abs(seam - 400))
+    }
+
+    /// Two panes: the survivor takes the whole container, so the seam is the
+    /// container edge — the same answer `collapsed` gives from the branch.
+    @Test
+    func closing_seam_is_the_container_edge_when_one_sibling_reclaims() throws {
+        let top = UUID(), bottom = UUID()
+        let before: [UUID: CGRect] = [
+            top: CGRect(x: 0, y: 0, width: 1000, height: 299.5),
+            bottom: CGRect(x: 0, y: 300.5, width: 1000, height: 299.5),
+        ]
+        let after: [UUID: CGRect] = [top: bounds]
+        let closing = try #require(before[bottom])
+        let seam = try #require(SplitLayout.closingSeam(
+            of: closing, axis: .vertical, before: before, after: after
+        ))
+        #expect(seam == bounds.maxY)
+        #expect(
+            SplitLayout.collapsed(closing, axis: .vertical, onto: seam)
+                == CGRect(x: 0, y: bounds.maxY, width: 1000, height: 0)
+        )
+    }
+
+    /// A tile that shares no edge with a survivor (the last pane of a tab,
+    /// or a tree rebuilt wholesale) has nothing to converge on.
+    @Test
+    func closing_seam_is_nil_without_a_surviving_neighbour() {
+        let only = UUID()
+        let before: [UUID: CGRect] = [only: bounds]
+        #expect(SplitLayout.closingSeam(of: bounds, axis: .vertical, before: before, after: [:]) == nil)
+    }
+
+    /// Side-by-side panes read their edges along x, and a neighbour that
+    /// doesn't overlap the closing tile's rows isn't one.
+    @Test
+    func closing_seam_reads_the_axis_and_ignores_non_overlapping_tiles() throws {
+        let left = UUID(), right = UUID(), elsewhere = UUID()
+        let closing = CGRect(x: 300, y: 0, width: 200, height: 600)
+        let before: [UUID: CGRect] = [
+            left: CGRect(x: 0, y: 0, width: 299, height: 600),
+            right: CGRect(x: 501, y: 0, width: 499, height: 600),
+            // Sits against the closing tile's left edge but in other rows.
+            elsewhere: CGRect(x: 0, y: 700, width: 299, height: 100),
+        ]
+        let after: [UUID: CGRect] = [
+            left: CGRect(x: 0, y: 0, width: 499.5, height: 600),
+            right: CGRect(x: 500.5, y: 0, width: 499.5, height: 600),
+            elsewhere: CGRect(x: 0, y: 700, width: 299, height: 100),
+        ]
+        let seam = try #require(SplitLayout.closingSeam(
+            of: closing, axis: .horizontal, before: before, after: after
+        ))
+        #expect(seam == 500)
     }
 }

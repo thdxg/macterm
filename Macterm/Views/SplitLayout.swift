@@ -149,6 +149,87 @@ struct SplitLayout: Equatable {
         }
     }
 
+    /// The line a closing pane's strip collapses onto: where the seam between
+    /// its neighbours ends up once the tree has retiled, in `axis`
+    /// coordinates. `before` and `after` are the leaf rects on either side of
+    /// the close.
+    ///
+    /// `collapsed`'s own-outer-edge answer is only right when a single
+    /// sibling reclaims the strip. Auto-tiling's rebalance moves BOTH
+    /// neighbours of a middle pane — the divider above it and the divider
+    /// below it merge somewhere between the two — and a ghost collapsing to
+    /// its branch edge then dragged its hairline the other way, across the
+    /// pane above it (a stray divider mid-pane for the length of the
+    /// animation). Reading the answer off the new layout covers both: with
+    /// one neighbour it IS that branch edge, with two it is the merge point,
+    /// and each hairline travels the same distance to reach it.
+    ///
+    /// Neighbours are the leaves whose edge met the closing tile's, matched
+    /// by geometry rather than by tree walking, since the tree they shared
+    /// no longer exists. nil when none of them survived — nothing to
+    /// converge on, so the caller keeps `collapsed`'s answer.
+    static func closingSeam(
+        of rect: CGRect,
+        axis: SplitDirection,
+        before: [UUID: CGRect],
+        after: [UUID: CGRect]
+    ) -> CGFloat? {
+        // A divider sits between the tiles and each side gives up half of it,
+        // so touching edges are `dividerThickness` apart, not zero.
+        let touching = dividerThickness + 0.5
+
+        func edges(_ low: Bool) -> [CGFloat] {
+            before.compactMap { id, tile -> CGFloat? in
+                guard let moved = after[id] else { return nil }
+                switch axis {
+                case .vertical:
+                    guard tile.maxX > rect.minX, tile.minX < rect.maxX else { return nil }
+                    return low
+                        ? (abs(tile.maxY - rect.minY) <= touching ? moved.maxY : nil)
+                        : (abs(tile.minY - rect.maxY) <= touching ? moved.minY : nil)
+                case .horizontal:
+                    guard tile.maxY > rect.minY, tile.minY < rect.maxY else { return nil }
+                    return low
+                        ? (abs(tile.maxX - rect.minX) <= touching ? moved.maxX : nil)
+                        : (abs(tile.minX - rect.maxX) <= touching ? moved.minX : nil)
+                }
+            }
+        }
+
+        let low = edges(true).max()
+        let high = edges(false).min()
+        switch (low, high) {
+        case let (.some(low), .some(high)): return (low + high) / 2
+        case let (.some(low), nil): return low
+        case let (nil, .some(high)): return high
+        case (nil, nil): return nil
+        }
+    }
+
+    /// `rect` collapsed to nothing on `line`, the axis coordinate
+    /// `closingSeam` resolved. The cross-axis extent is the tile's own: the
+    /// strip narrows along the split, it doesn't move sideways.
+    static func collapsed(_ rect: CGRect, axis: SplitDirection, onto line: CGFloat) -> CGRect {
+        switch axis {
+        case .horizontal: CGRect(x: line, y: rect.minY, width: 0, height: rect.height)
+        case .vertical: CGRect(x: rect.minX, y: line, width: rect.width, height: 0)
+        }
+    }
+
+    /// `rect` centred on `line` along `axis`, keeping its thickness — a
+    /// divider travelling to the seam that replaced it, rather than a strip
+    /// closing on it.
+    static func moved(_ rect: CGRect, axis: SplitDirection, onto line: CGFloat) -> CGRect {
+        switch axis {
+        case .horizontal: CGRect(
+                x: line - rect.width / 2, y: rect.minY, width: rect.width, height: rect.height
+            )
+        case .vertical: CGRect(
+                x: rect.minX, y: line - rect.height / 2, width: rect.width, height: rect.height
+            )
+        }
+    }
+
     /// How far a closing pane's content travels while it slides out: its own
     /// length along the axis, toward its own outer edge of the split — a
     /// left or top pane leaves to the left or top, a right or bottom pane to
@@ -162,21 +243,6 @@ struct SplitLayout: Equatable {
         return switch placement.axis {
         case .horizontal: CGSize(width: -rect.width, height: 0)
         case .vertical: CGSize(width: 0, height: -rect.height)
-        }
-    }
-
-    /// The hairline at a closing pane's seam: the edge of its ghost's window
-    /// that faces the sibling, one `dividerThickness` wide, on the sibling's
-    /// side of the window exactly where the branch's divider sat against the
-    /// tile. As the window collapses the hairline rides the seam, so the
-    /// divider is seen to travel with the retile instead of vanishing.
-    static func seamHairline(of window: CGRect, placement: Placement) -> CGRect {
-        let t = dividerThickness
-        return switch (placement.axis, placement.position) {
-        case (.horizontal, .second): CGRect(x: window.minX - t, y: window.minY, width: t, height: window.height)
-        case (.horizontal, .first): CGRect(x: window.maxX, y: window.minY, width: t, height: window.height)
-        case (.vertical, .second): CGRect(x: window.minX, y: window.minY - t, width: window.width, height: t)
-        case (.vertical, .first): CGRect(x: window.minX, y: window.maxY, width: window.width, height: t)
         }
     }
 
