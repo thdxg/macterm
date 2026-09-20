@@ -22,7 +22,10 @@ enum MacosHidden: String, CaseIterable {
     /// Accessory: no Dock tile, no menu bar, no ⌘-Tab entry.
     case always
 
-    static let key = "macos-hidden"
+    /// An enum key, so it arrives as a bare tag pointer (`.tag`), never a
+    /// `ghostty_string_s` — the read that came back empty before the key
+    /// carried its own shape.
+    static let key = GhosttyConfigKey.tag("macos-hidden")
 
     /// An unset, empty, unreadable, or unrecognized value means `never` —
     /// ghostty's default *and* its own fallback for a value it can't parse, so

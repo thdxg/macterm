@@ -620,10 +620,16 @@ final class GhosttyTerminalNSView: NSView {
             // untouched instead of being coerced relative to the app's cwd.
             config.working_directory = cString(ProjectPath.normalizedForStorage(workingDirectory))
 
-            // Shell binary → the surface's program. nil falls back to libghostty's
-            // own resolution (which honors the user's ghostty config / login shell).
-            if let resolvedShell = shell ?? GhosttyApp.shared.configuredShell {
-                config.command = cString(resolvedShell)
+            // Shell binary → the surface's program. nil leaves it to libghostty,
+            // which applies the user's ghostty `command =` and otherwise the
+            // login shell from the password database. Deliberately never
+            // `$SHELL`: that is the shell of whatever launched the app (often
+            // `/bin/zsh` via launchd), not the user's, and using it once forced
+            // every pane onto zsh. (Macterm cannot read `command` off the C
+            // config itself — its Zig type is a union the getter refuses — nor
+            // does it need to: this is where libghostty honors it.)
+            if let shell {
+                config.command = cString(shell)
             }
         }
 

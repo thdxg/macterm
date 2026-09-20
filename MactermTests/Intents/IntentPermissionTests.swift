@@ -132,7 +132,7 @@ struct ShortcutsAccessResolveTests {
     @Test
     func theWireVocabularyIsGhosttysOwn() {
         #expect(ShortcutsAccess.allCases.map(\.rawValue) == ["ask", "allow", "deny"])
-        #expect(ShortcutsAccess.key == "macos-shortcuts")
+        #expect(ShortcutsAccess.key.name == "macos-shortcuts")
     }
 
     @Test

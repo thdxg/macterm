@@ -24,7 +24,8 @@ enum ShortcutsAccess: String, CaseIterable, Identifiable {
     /// Refuse every intent with an error that says how to change it.
     case deny
 
-    static let key = "macos-shortcuts"
+    /// An enum key: read as its tag name (`.tag`), like `macos-hidden`.
+    static let key = GhosttyConfigKey.tag("macos-shortcuts")
 
     /// An unset, empty, unreadable, or unrecognized value means `ask` —
     /// ghostty's default, and the conservative one: a key a newer ghostty grew

@@ -21,8 +21,11 @@ enum GhosttyAppIcon: Equatable {
     /// file URL; the file is not yet known to exist.
     case custom(URL)
 
-    static let styleKey = "macos-icon"
-    static let customPathKey = "macos-custom-icon"
+    /// `macos-icon` is an enum and `macos-custom-icon` an optional
+    /// `?[:0]const u8`; both arrive as a bare C pointer (`.tag`), and for the
+    /// optional a null pointer with a *true* return is what "unset" looks like.
+    static let styleKey = GhosttyConfigKey.tag("macos-icon")
+    static let customPathKey = GhosttyConfigKey.tag("macos-custom-icon")
     /// `macos-icon` values, spelled as ghostty's `MacAppIcon` tags. Named for
     /// the key rather than shortened, because ghostty *also* has a value
     /// literally called `custom-style` (the colorized ghost) and a constant

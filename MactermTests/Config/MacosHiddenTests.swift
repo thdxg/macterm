@@ -10,7 +10,7 @@ struct MacosHiddenTests {
     @Test
     func theWireVocabularyIsGhosttysOwn() {
         #expect(MacosHidden.allCases.map(\.rawValue) == ["never", "always"])
-        #expect(MacosHidden.key == "macos-hidden")
+        #expect(MacosHidden.key.name == "macos-hidden")
     }
 
     @Test
