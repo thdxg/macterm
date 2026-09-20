@@ -1373,7 +1373,63 @@ final class GhosttyTerminalNSView: NSView {
             x *= 2
             y *= 2
         }
+        noteScroll(y: y, precise: event.hasPreciseScrollingDeltas)
         ghostty_surface_mouse_scroll(surface, x, y, scrollMods(for: event))
+    }
+
+    // MARK: - Sub-row scroll offset (smooth scrolling)
+
+    /// Mirror of the core's scroll accumulator — see `ScrollAccumulator`.
+    private var scrollAccumulator = ScrollAccumulator()
+
+    /// Cell height in backing pixels: the units the core accumulates in.
+    private var cellHeightPixels: CGFloat {
+        guard let surface else { return 0 }
+        return CGFloat(ghostty_surface_size(surface).cell_height_px)
+    }
+
+    /// Record a delta we are about to hand the core, converted to the pixels
+    /// it will add to its accumulator (`Surface.scrollCallback`'s
+    /// `yoff_adjusted`). Discrete ticks are normalized to cells first, and on
+    /// macOS to at least one, exactly as the core does.
+    private func noteScroll(y: CGFloat, precise: Bool) {
+        let cell = cellHeightPixels
+        guard cell > 0 else { return }
+        let multiplier = GhosttyApp.shared.mouseScrollMultiplier
+        let pixels: CGFloat = if precise {
+            y * CGFloat(multiplier.precision)
+        } else {
+            (y > 0 ? max(y, 1) : min(y, -1)) * cell * CGFloat(multiplier.discrete)
+        }
+        scrollAccumulator.advance(pixels: pixels, cellHeight: cell)
+    }
+
+    /// Put the viewport `points` below its row-aligned position, which is
+    /// what draws a scroller drag between rows.
+    ///
+    /// libghostty publishes a sub-row viewport offset only from a precision
+    /// scroll, and any row-level move (the `scroll_to_row` a drag sends)
+    /// clears it — so a drag is row-quantized however smooth the wheel is.
+    /// This hands the core a precision delta sized to land its accumulator
+    /// on exactly the offset we want (`ScrollAccumulator.nudge`), which
+    /// publishes the offset and, being under a cell, commits no row of its
+    /// own. Only meaningful with the user's `smooth-scroll` on; without it
+    /// the core keeps the remainder as an accumulator detail and draws
+    /// nothing differently.
+    func applySubRowScrollOffset(pointsBelowRow points: CGFloat) {
+        guard let surface else { return }
+        let cell = cellHeightPixels
+        guard cell > 0 else { return }
+        let scale = window?.backingScaleFactor ?? 2.0
+        // The core's sign: positive is content moved down (scrolled back), so
+        // a viewport sitting below its row is a negative remainder.
+        let remainder = max(-cell + 1, min(0, -points * scale))
+        let multiplier = GhosttyApp.shared.mouseScrollMultiplier.precision
+        let delta = scrollAccumulator.nudge(toward: remainder, multiplier: multiplier)
+        guard delta != 0 else { return }
+        scrollAccumulator.advance(pixels: delta * CGFloat(multiplier), cellHeight: cell)
+        // Precision, no momentum: mods bit 0 is `precision` (`scrollMods`).
+        ghostty_surface_mouse_scroll(surface, 0, delta, 1)
     }
 
     private func scrollMods(for event: NSEvent) -> ghostty_input_scroll_mods_t {

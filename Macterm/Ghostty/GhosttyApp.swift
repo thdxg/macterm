@@ -359,6 +359,16 @@ final class GhosttyApp {
         GhosttyColorSpace.resolve(userConfigText: MactermConfig.userGhosttyConfigText())
     }
 
+    /// The user's `mouse-scroll-multiplier`. Only the scroller-drag path
+    /// reads it, to speak the core's own scroll units back to it — a wheel
+    /// event is forwarded untouched and multiplied inside ghostty (#393).
+    /// See `MouseScrollMultiplier`.
+    ///
+    /// Cached rather than resolved on demand like `surfaceColorSpace`:
+    /// resolving reads the user's config off disk, and this one is read on
+    /// the scroll path, once per event.
+    private(set) var mouseScrollMultiplier: MouseScrollMultiplier = .default
+
     var effectiveBackgroundColor: NSColor {
         adaptiveBackgroundColor ?? backgroundColor
     }
@@ -553,6 +563,12 @@ final class GhosttyApp {
                 result.diagnostics.append(s)
             }
         }
+
+        // Raw-text values the C API can't answer, re-read with the config
+        // they belong to.
+        mouseScrollMultiplier = MouseScrollMultiplier.resolve(
+            userConfigText: MactermConfig.userGhosttyConfigText()
+        )
 
         return (cfg, result)
     }
