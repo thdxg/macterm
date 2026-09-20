@@ -118,20 +118,6 @@ final class MainAppResponder: KeyResponder {
     weak var mainWindow: NSWindow?
     private var tabIndexChord = TabIndexChord()
 
-    private static let focusActions: [(HotkeyAction, PaneFocusDirection)] = [
-        (.focusPaneLeft, .left),
-        (.focusPaneDown, .down),
-        (.focusPaneUp, .up),
-        (.focusPaneRight, .right),
-    ]
-
-    private static let resizeActions: [(HotkeyAction, PaneFocusDirection)] = [
-        (.resizePaneLeft, .left),
-        (.resizePaneDown, .down),
-        (.resizePaneUp, .up),
-        (.resizePaneRight, .right),
-    ]
-
     init(appState: AppState, projectStore: ProjectStore) {
         self.appState = appState
         self.projectStore = projectStore
@@ -210,174 +196,31 @@ final class MainAppResponder: KeyResponder {
             return .passThrough
         }
 
-        // Quick-terminal toggle. The same shortcut is also a Carbon global
-        // hot key (see QuickTerminalService) for when Macterm isn't active;
-        // this branch covers the in-app case.
-        if HotkeyRegistry.matches(event, action: .toggleQuickTerminal) {
-            NotificationCenter.default.post(name: .toggleQuickTerminal, object: nil)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .recentTab) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.cycleRecentTab(projectID: projectID)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .newTab) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.createTab(projectID: projectID, projects: projectStore.projects)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .closePane) {
-            guard let projectID = appState.activeProjectID,
-                  let pane = appState.focusedPane(for: projectID)
-            else { return .passThrough }
-            appState.requestClosePane(pane.id, projectID: projectID)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .splitRight) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.splitPane(
-                direction: .horizontal,
-                projectID: projectID,
-                projects: projectStore.projects
-            )
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .splitDown) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.splitPane(
-                direction: .vertical,
-                projectID: projectID,
-                projects: projectStore.projects
-            )
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .splitAuto) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.autoSplitPane(projectID: projectID, projects: projectStore.projects)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .zoomPane) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.toggleZoom(projectID: projectID)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .toggleSidebar) {
-            appState.sidebarVisible.toggle()
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .nextProject) {
-            appState.selectNextProject(projects: projectStore.projects)
-            return .handled
-        }
-        if HotkeyRegistry.matches(event, action: .previousProject) {
-            appState.selectPreviousProject(projects: projectStore.projects)
-            return .handled
-        }
-        if HotkeyRegistry.matches(event, action: .nextGlobalTab) {
-            appState.selectGlobalTab(.next, projects: projectStore.projects)
-            return .handled
-        }
-        if HotkeyRegistry.matches(event, action: .previousGlobalTab) {
-            appState.selectGlobalTab(.previous, projects: projectStore.projects)
-            return .handled
-        }
-        // Project-scoped counterparts, and what ctrl+]/ctrl+[ bind to by
-        // default: cycle within the active project's tabs only, wrapping at
-        // either end instead of crossing into the next project the way the
-        // global pair above does. Order matters only if a user binds both
-        // pairs to one chord — the global branch above would win.
-        if HotkeyRegistry.matches(event, action: .nextTabInProject) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.selectNextTab(projectID: projectID)
-            return .handled
-        }
-        if HotkeyRegistry.matches(event, action: .previousTabInProject) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.selectPreviousTab(projectID: projectID)
-            return .handled
-        }
-
-        if let (_, dir) = Self.focusActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.focusPaneInDirection(dir, projectID: projectID)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .nextPane) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.cyclePane(forward: true, projectID: projectID)
-            return .handled
-        }
-        if HotkeyRegistry.matches(event, action: .previousPane) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.cyclePane(forward: false, projectID: projectID)
-            return .handled
-        }
-
-        if let (_, dir) = Self.resizeActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
-            guard let projectID = appState.activeProjectID else { return .passThrough }
-            appState.resizePane(dir, projectID: projectID)
-            return .handled
-        }
-
-        if HotkeyRegistry.matches(event, action: .openProject) {
-            _ = appState.openProject(store: projectStore)
-            return .handled
-        }
-
-        // These route through AppCommand.action(in:) — the single source of
-        // truth shared with the palette and menu bar — so the paths can't drift.
-        // Rename defers begin-editing a tick (see AppCommandActions) so the
-        // sidebar row's TextField exists before it takes first responder;
-        // copySessionID writes the focused pane's zmx name to the pasteboard;
-        // the layout pair inherits the same enablement guards (no applicable
-        // project file → nil action → the keystroke falls through) and the same
-        // error-presenting wrappers the palette and menu bar get.
+        // Every configurable binding runs the `AppCommand` that owns it,
+        // through `AppCommand.action(in:)` — the single source of truth shared
+        // with the palette, the menu bar, the Dock menu and App Intents — so a
+        // guard tightened there cannot be missed here. A nil action (no active
+        // project, nothing to separate, no applicable layout file, …) falls
+        // through as `.passThrough`, exactly as the palette hides the row.
         //
-        // reloadGhosttyConfig joins them rather than calling GhosttyApp
-        // directly: the command action also raises the success toast, and a
-        // second call site would silently skip it.
-        for action in [
-            HotkeyAction.renameTab,
-            .renameProject,
-            .copySessionID,
-            .applyLayout,
-            .saveLayout,
-            .reloadGhosttyConfig,
-            .separateAllPanes,
-            .separateCurrentPane,
-            .pinTab,
-            .unpinTab,
-            .closeTab,
-            // New Window is dispatched here like the others. A hardcoded
-            // "Cmd+N re-fronts the single window" fallback used to sit below
-            // this loop, from before multi-window; it answered `.handled` and
-            // so swallowed the chord before the File menu's New Window item —
-            // the only thing that opened a window — ever saw it.
-            .newWindow,
-            // Close Window likewise: the responder used to answer it with
-            // `mainWindow?.orderOut(nil)`, which HID the first window whatever
-            // window the user was in — and a hidden window stays registered
-            // and persisted, which is how quitting with one window on screen
-            // brought two back. `AppCommand.closeWindow` closes the focused
-            // window under the one close policy.
-            .closeWindow,
-        ] {
-            guard HotkeyRegistry.matches(event, action: action),
-                  let command = AppCommand.allCases.first(where: { $0.hotkeyAction == action })
-            else { continue }
+        // `HotkeyAction.allCases` order breaks ties when a user binds two
+        // actions to one chord: the global tab pair precedes the in-project
+        // pair, so the global one wins, as it always has. The quick-terminal
+        // toggle is here too (the same chord is a Carbon global hot key for
+        // when Macterm isn't active; this covers the in-app case).
+        //
+        // Two bindings were once answered here by hand and deliberately are
+        // not any more. New Window: a "re-front the single window" fallback
+        // from before multi-window answered `.handled` and so swallowed the
+        // chord before the File menu's item — the only thing that opened a
+        // window — ever saw it. Close Window: `mainWindow?.orderOut(nil)` HID
+        // the first window whatever window the user was in, and a hidden
+        // window stays registered and persisted, which is how quitting with
+        // one window on screen brought two back. Both now run under the one
+        // open/close policy in `AppCommandActions`.
+        if let action = HotkeyAction.allCases.first(where: { HotkeyRegistry.matches(event, action: $0) }) {
             let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
-            guard let run = command.action(in: ctx) else { return .passThrough }
+            guard let run = action.appCommand.action(in: ctx) else { return .passThrough }
             run()
             return .handled
         }
