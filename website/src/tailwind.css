@@ -163,8 +163,8 @@
     text-wrap: pretty;
   }
 
-  /* The two things to do from the hero, as a pair of pills: copy the install
-     command, or go to the repo. Both are 46px tall so they sit on one line. */
+  /* The two things to do from the hero, as a pair of pills: start reading the
+     docs, or go to the repo. Both are 46px tall so they sit on one line. */
   .l-actions {
     display: flex;
     flex-wrap: wrap;
@@ -172,53 +172,38 @@
     gap: 10px;
     margin-top: clamp(24px, 3.4vw, 40px);
   }
-  .l-install {
+  /* The one solid element on the page — white on the black ground, so the
+     primary action reads before anything else in the hero. */
+  .l-cta {
     display: flex;
     align-items: center;
+    gap: 9px;
     height: 46px;
-    max-width: 100%;
-    border: 1px solid var(--l-chip-edge);
+    padding: 0 20px;
+    border: 1px solid var(--l-bright);
     border-radius: 9px;
-    background: var(--l-chip-fill);
-    overflow: hidden;
-  }
-  .l-install code {
+    background: var(--l-bright);
     font-family: var(--font-mono);
     font-size: clamp(13px, 1.4vw, 16px);
-    color: var(--l-text);
-    padding: 0 16px;
+    color: var(--l-bg);
+    text-decoration: none;
     white-space: nowrap;
-    /* The command is longer than a phone: let it scroll inside its own pill
-       rather than widen the page. */
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .l-install code::-webkit-scrollbar {
-    display: none;
-  }
-  .l-copy {
-    all: unset;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 44px;
-    align-self: stretch;
-    border-left: 1px solid var(--l-chip-edge);
-    color: var(--l-dim);
     transition:
-      color 0.18s,
-      background 0.18s;
+      background 0.18s,
+      border-color 0.18s;
   }
-  .l-copy:hover {
-    color: var(--l-text);
-    background: var(--l-chip-hover);
+  .l-cta:hover {
+    background: var(--l-text);
+    border-color: var(--l-text);
   }
-  .l-copy svg {
+  .l-cta svg {
     width: 15px;
     height: 15px;
     display: block;
+    transition: transform 0.18s;
+  }
+  .l-cta:hover svg {
+    transform: translateX(2px);
   }
   .l-gh {
     display: flex;
@@ -415,14 +400,10 @@
     .l-nav {
       gap: 16px;
     }
-    /* The docs header has no room to spare on a phone: brand + three links
-       fill the row to the gutter, and the two counts add ~90px on top. */
+    /* The docs header has no room to spare on a phone, and the count adds
+       ~45px to the row. */
     .l-nav .l-count {
       display: none;
-    }
-    .cmd--inline {
-      --cmd-font: 12.5px;
-      padding-left: 14px;
     }
   }
 
@@ -465,26 +446,13 @@
   .l-nav a:hover {
     color: var(--l-bright);
   }
-  .l-nav .l-cta {
-    color: var(--l-text);
-    border: 1px solid var(--l-chip-edge);
-    border-radius: 9px;
-    padding: 8px 15px;
-    transition:
-      border-color 0.18s,
-      background 0.18s;
-  }
-  .l-nav .l-cta:hover {
-    border-color: var(--l-chip-edge-lit);
-    background: var(--l-chip-hover);
-  }
-  /* A live figure riding beside a nav label — the star count on GitHub, the
-     all-releases download total on Download — filled by site.js's loadStats
-     and revealed only once a number has landed (`hidden` until then, so a
-     failed or rate-limited fetch leaves the label exactly as it was). Set in
-     the mono a step down and a step fainter than the label, behind a hairline,
-     so it reads as data attached to the word rather than a second word. It is
-     inline — no `display` of its own — so the [hidden] reset stays in charge. */
+  /* A live figure riding beside a nav label — the star count on GitHub —
+     filled by site.js's loadStats and revealed only once a number has landed
+     (`hidden` until then, so a failed or rate-limited fetch leaves the label
+     exactly as it was). Set in the mono a step down and a step fainter than
+     the label, behind a hairline, so it reads as data attached to the word
+     rather than a second word. It is inline — no `display` of its own — so the
+     [hidden] reset stays in charge. */
   .l-nav .l-count {
     margin-left: 9px;
     padding-left: 9px;
@@ -629,10 +597,19 @@
     text-align: justify;
     hyphens: auto;
   }
+  /* Tailwind's preflight resets every list to `list-style: none`, so the
+     markers have to be reasserted here or the docs' steps and option lists
+     render as undifferentiated indented text. */
   .prose-docs ul,
   .prose-docs ol {
     margin: 0 0 20px;
-    padding-left: 20px;
+    padding-left: 22px;
+  }
+  .prose-docs ul {
+    list-style: disc;
+  }
+  .prose-docs ol {
+    list-style: decimal;
   }
   .prose-docs li {
     margin-bottom: 8px;
@@ -700,9 +677,7 @@
          <div class="cmd-caption">…</div>      site.js scopes its copy to
          <pre><code>…</code></pre>           (a bare <code> for one-liners)
          <button class="cmd-copy" data-copy>
-       </div>
-     `.cmd--inline` is the hero's auto-width pill, where the button sits in a
-     flex row beside the text rather than floating over it. */
+       </div> */
   .cmd {
     /* Tokens, because the button's offset is derived from them below: change
        the padding or the type size and the button follows on its own. */
@@ -803,23 +778,6 @@
       var(--cmd-pad-y) + (var(--cmd-font) * var(--cmd-lh) / 2) - (var(--cmd-btn) / 2)
     );
     right: 8px;
-  }
-
-  /* The hero's pill: auto width, button inline after the text. */
-  .cmd--inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0;
-    padding: 10px 10px 10px 18px;
-    background: var(--l-fill);
-  }
-  .cmd--inline > code {
-    padding: 0;
-    min-width: 0;
-  }
-  .cmd--inline > .cmd-copy {
-    position: static;
   }
 
   /* — tables — */

@@ -44,11 +44,15 @@ artboard has to do. Those are reassembled into named `.l-*` classes in
 artboard, and the canvas is a fixed 1180px, so every responsive step below that
 is the implementation's own.
 
-**Every command surface is one component, `.cmd`** — the hero's install pill
-(`.cmd--inline`), the landing Install section, and every fenced block
-`build-docs.mjs` emits. They began as three near-identical rule sets and drifted
-into two font sizes, two copy-button sizes, two border colours, and two
-different vertical alignments for the same button. The component owns its type
+The hero's one action is `.l-cta` — a solid white **Get started** button to
+`/docs/`. The install command is not on the landing page at all; it lives on
+the Installation docs page.
+
+**Every command surface is one component, `.cmd`** — every fenced block
+`build-docs.mjs` emits. The landing page has none of its own any more. They began as three
+near-identical rule sets and drifted into two font sizes, two copy-button
+sizes, two border colours, and two different vertical alignments for the same
+button. The component owns its type
 metrics so the `<pre>` and the `<code>` share one strut, and the floating copy
 button's offset is derived from those tokens in `calc()` — it aligns to the
 centre of the *first line*, which reads as centred on a one-line command and
@@ -135,6 +139,12 @@ URL `/docs/install`, and `public/docs/index.html` at `/docs/` — the
 extensionless resolution the site used to get from Cloudflare's
 `auto-trailing-slash` html handling, and the reason a bare file server won't do.
 
+The docs header carries the brand and the GitHub link, nothing else — no Docs
+link (you are in the docs) and no Download button. Retired pages keep their
+URLs alive as `redir` lines in the `Caddyfile`: `/docs/ghostty` and
+`/docs/tmux` were published pages and now 301 to the docs index. Add a line
+there whenever a page is dropped or renamed.
+
 > Bun's native HTML serving (`bun ./public/**/*.html`) does derive exactly the
 > right routes, but it is a bundler, not a file server: it tries to resolve
 > every root-absolute `src`/`href` as a build input (500s on `/site.js`,
@@ -189,9 +199,10 @@ because a notes page is now served as real HTML into a WebView.
 
 ### GitHub stats
 
-The star count, total download count, and the Download button's link to the
-latest `.dmg` come from `api.github.com`, called **client-side and
-unauthenticated** by `public/site.js`. There is no API token and no server-side
+The star count beside the docs header's GitHub link comes from
+`api.github.com`, called **client-side and unauthenticated** by
+`public/site.js`. (The download-total and latest-`.dmg` fetches are still
+wired but render nowhere, so they never run.) There is no API token and no server-side
 proxy — the unauthenticated budget is 60 requests/hour per visitor IP, and the
 site spends at most three of them, each cached in `localStorage` for an hour and
 fetched only on a page that displays it. Everything degrades to a hidden stat

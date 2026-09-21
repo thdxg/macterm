@@ -163,14 +163,14 @@
 // unauthenticated budget is 60 requests/hour per *visitor* IP, and the site
 // spends at most three of them (one per figure below), so the ceiling that
 // matters is a single reader browsing the docs. Two things keep that in
-// bounds: every figure is fetched only when the page actually displays it
-// (both headers now show all three — stars beside GitHub, the download total
-// beside Download — so a cold page spends a handful: one for stars, one for
-// the latest release, and one per hundred releases for the total), and each
-// is cached in localStorage for an hour, so a docs reader clicking between
-// pages pays once. Anything that fails — offline, rate
-// limited, storage blocked — leaves the stat hidden and the button on its
-// static /releases/latest href, which is how this already degrades. ---
+// bounds: every figure is fetched only when the page actually displays it —
+// each block below is guarded on its own markup being present, and today only
+// the star count is rendered, so a cold page spends one request — and each is
+// cached in localStorage for an hour, so a reader clicking between pages pays
+// once. Anything that fails — offline, rate limited, storage blocked — leaves
+// the stat hidden and the button on its static /releases/latest href, which is
+// how this already degrades. The download-total and latest-.dmg blocks are
+// kept wired for whenever a Download button comes back. ---
 (function loadStats() {
   const starWraps = document.querySelectorAll("[data-stat-stars]");
   const dlWraps = document.querySelectorAll("[data-stat-downloads]");
