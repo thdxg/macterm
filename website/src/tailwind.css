@@ -530,8 +530,6 @@
     font-size: 19px;
     line-height: 1.55;
     color: rgba(255, 255, 255, 0.8);
-    text-align: left;
-    hyphens: none;
     margin: 0 0 34px;
     padding-bottom: 34px;
     border-bottom: 1px solid var(--l-edge);
@@ -559,8 +557,6 @@
   }
   .prose-docs p {
     margin: 0 0 20px;
-    text-align: justify;
-    hyphens: auto;
   }
   /* Tailwind's preflight resets every list to `list-style: none`, so the
      markers have to be reasserted here or the docs' steps and option lists
@@ -621,8 +617,6 @@
     font-size: 15px;
     line-height: 1.6;
     color: var(--l-body);
-    text-align: left;
-    hyphens: none;
   }
   .prose-docs blockquote p + p {
     margin-top: 12px;
@@ -853,10 +847,6 @@
     }
     .docs-main {
       max-width: none;
-    }
-    .prose-docs p {
-      text-align: left;
-      hyphens: none;
     }
   }
 }

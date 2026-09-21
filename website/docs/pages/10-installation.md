@@ -18,7 +18,7 @@ brew install --cask thdxg/tap/macterm
 
 ## From Releases
 
-Download the latest `.dmg`, drag Macterm to Applications, then clear the quarantine flag once:
+Download the latest `.dmg` from the [Releases page](https://github.com/thdxg/macterm/releases/latest), drag Macterm to Applications, then clear the quarantine flag once:
 
 ```sh
 xattr -cr /Applications/Macterm.app
