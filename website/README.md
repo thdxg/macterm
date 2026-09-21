@@ -45,8 +45,8 @@ artboard, and the canvas is a fixed 1180px, so every responsive step below that
 is the implementation's own.
 
 The hero's one action is `.l-cta` — a solid white **Get started** button to
-`/docs/`. The install command is not on the landing page at all; it lives on
-the Installation docs page.
+`/docs/install`. The install command is not on the landing page at all; the
+button is the route to it.
 
 **Every command surface is one component, `.cmd`** — every fenced block
 `build-docs.mjs` emits. The landing page has none of its own any more. They began as three
