@@ -80,6 +80,18 @@ xattr -cr /Applications/Macterm.app
 
 Sparkle handles updates from there, verifying an EdDSA signature on each one — so you won't need `xattr` again.
 
+## Configuration
+
+Macterm reads your Ghostty config from the same locations Ghostty does (`~/.config/ghostty/config` or `~/Library/Application Support/com.mitchellh.ghostty/config`), so an existing setup carries over unchanged. Every key is documented in the [Ghostty option reference](https://ghostty.org/docs/config/reference). A minimal config looks like this:
+
+```ini
+theme = catppuccin-mocha
+font-family = JetBrains Mono
+font-size = 14
+```
+
+Macterm's own settings — window opacity, sidebar behavior, quick-terminal size, keymaps — live in **Macterm → Settings**. See the [configuration docs](https://macterm.thdxg.dev/docs/configuration) for the full precedence order and the few chrome keys Macterm overrides.
+
 ## Cookbook
 
 Workflows and recipes from the community — the layouts, keybinds, and scripts people actually run to get more out of Macterm. Three to start with: [one <kbd>⌃hjkl</kbd> chord that moves between nvim's splits *and* Macterm's panes](https://github.com/thdxg/macterm/discussions/217), [driving an interactive program from a script](https://github.com/thdxg/macterm/discussions/218), and [giving a coding agent control of Macterm](https://github.com/thdxg/macterm/discussions/219).
