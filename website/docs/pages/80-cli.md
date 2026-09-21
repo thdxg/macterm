@@ -8,9 +8,9 @@ description: Drive the running app — projects, tabs, panes, sessions — from 
 
 # The `macterm` CLI
 
-Macterm bundles a control CLI that drives the **running app** — projects, tabs, panes, and their zmx sessions — over a local Unix socket. It's how scripts, AI agents, and other apps orchestrate the terminal: spawn a grid of panes, run a command in each, focus one, tear it down.
+Drives the **running app** — projects, tabs, panes, and their zmx sessions — over a local Unix socket.
 
-Shells that Macterm spawns already have `macterm` on their `PATH`, so inside any pane it just works:
+Shells Macterm spawns already have `macterm` on their `PATH`:
 
 ```console
 $ macterm status
@@ -20,80 +20,72 @@ $ macterm tab new --run "npm run dev"
 tab:3  *  npm  1 pane
 
 $ macterm grid 2x2 --run "tail -f log/dev.log"
-$ macterm session list
-macterm-api-8f327ce4a3f8  clients:1  pid:4310  attached-pane
 ```
 
-From a shell Macterm *didn't* spawn, invoke it by bundle path (or symlink it onto your `PATH`):
+From any other shell, use the bundle path or symlink it onto your `PATH`:
 
 ```sh
 /Applications/Macterm.app/Contents/Resources/bin/macterm status
 ```
 
-Every command takes `--json` for a stable, scriptable payload instead of the human table, and `--socket <path>` to target a specific app instance. `--help` works at every level of the command tree.
+Every command takes `--json` for a scriptable payload and `--socket <path>` to target a specific instance. `--help` works at every level.
 
 ## Commands
 
-The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to its `list` verb, so `macterm project` is `macterm project list`.
+The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`.
 
 | Command | Description |
 |---|---|
-| `status` | Liveness probe: version, pid, active project. Exits non-zero if no app is reachable. |
+| `status` | Version, pid, active project. Exits non-zero if no app is reachable. |
 | `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
-| `project create <path> [--name N] [--select]` | Add a project for a local directory or an scp-style `[user@]host:dir` [remote spec](/docs/remote-projects) (stored verbatim — a wrong host or dir surfaces in the pane). **Not idempotent** — each run adds a distinct project, even for a directory that already has one; check `project list` first if you want create-or-select. `--select` activates it. |
-| `project select <name\|uuid\|index> [--window W]` | Make a project active — in the focused window, or in `--window` (index or id). `pinned` (or the sentinel UUID) selects the pinned-tabs workspace; every `--project` selector accepts it too. |
-| `project rename <project> <name>` | Rename a project — the same edit as the sidebar row's inline rename, so it touches `projects.json` only and never a [layout file](/docs/declarative-layouts). `Pinned` is reserved for the pinned-tabs workspace. |
-| `project remove <project> [--force]` | Remove a project, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. (Does not delete files on disk.) |
-| `tab list [--project P]` | Tabs of a project (default: active project). |
+| `project create <path> [--name N] [--select]` | Add a project for a local directory or a [remote spec](/docs/remote-projects). **Not idempotent** — each run adds a distinct project. |
+| `project select <name\|uuid\|index> [--window W]` | Make a project active. `pinned` selects the pinned-tabs workspace. |
+| `project rename <project> <name>` | Rename a project. `Pinned` is reserved. |
+| `project remove <project> [--force]` | Remove a project, killing its sessions. Returns `busy` when a pane runs a program, unless forced. Deletes no files. |
+| `tab list [--project P]` | Tabs of a project (default: active). |
 | `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
-| `tab select <tab> [--window W]` | Activate a tab (`tab:3`, index, UUID, or exact title). `--window` selects it in that window. Two windows on one project keep independent selections; a window that selects a tab another window already shows renders a mirror view of it (same sessions, attached twice). |
-| `tab move <tab> <slot>` | Reorder a tab within its project. `slot` is the tab's **final** 1-based position in `tab list` order (so `tab move tab:4 2` makes it second). Out-of-range slots are an error, never a silent clamp. |
-| `tab rename <tab> [title] [--reset] [--project P]` | Rename a tab, or reset to the automatic default title with `--reset`. |
-| `tab close <tab> [--force]` | Close a tab, killing its panes' sessions. Refuses with `busy` when a pane runs a program, unless forced. Closing a pinned tab unloads it — sessions end, but its row and saved layout stay, and the next launch starts it again. |
-| `window list` | Open windows in creation order (`window:1`), each with its project, the tab it shows (`tabID`, plus `mirrored` when another window owns that tab's panes), sidebar width, and a focus marker. |
-| `window new` | Open another window on the project you were looking at. |
-| `window focus <window>` | Bring a window to the front and make it key. Leadership of a mirrored tab follows it, as it does a click. |
-| `window close [--window W]` | Close a window — the named one, else the focused one. The last visible window hides instead of closing. |
-| `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, focus marker, and execution state (`idle`/`running`/`done`; live tracking requires the tab status indicator setting). |
-| `pane inspect [target]` | Read-only snapshot of a pane's terminal core: grid, cell/surface pixels, scrollback totals, content scale, foreground pid + argv. Needs a live surface. |
-| `pane dump [--scrollback] [target]` | Print a pane's terminal text — the viewport, or the full scrollback with `--scrollback`. Pipeline-friendly (text only). |
-| `pane split [--direction right\|left\|down\|up\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the source's cwd. `right`/`down` place it after the target, `left`/`up` before it. `auto` picks the longer on-screen axis. |
-| `pane mirror [--direction right\|left\|down\|up\|auto] [target]` | Show the same session in a second pane beside the target. `right`/`down` place it after the target, `left`/`up` before it. Both render the live shell; the one driving the pty size is zmx's *leader* (focusing a mirror claims it), the other is dimmed. |
+| `tab select <tab> [--window W]` | Activate a tab (`tab:3`, index, UUID, or exact title). |
+| `tab move <tab> <slot>` | Reorder a tab. `slot` is its **final** 1-based position. |
+| `tab rename <tab> [title] [--reset]` | Rename a tab, or restore the automatic title. |
+| `tab close <tab> [--force]` | Close a tab, killing its sessions. Returns `busy` when a pane runs a program. Closing a pinned tab unloads it. |
+| `window list` | Open windows in creation order (`window:1`). |
+| `window new` | Open another window on the current project. |
+| `window focus <window>` | Bring a window to the front. |
+| `window close [--window W]` | Close a window. The last visible one hides instead. |
+| `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, and execution state. |
+| `pane inspect [target]` | Snapshot of a pane's terminal core. Needs a live surface. |
+| `pane dump [--scrollback] [target]` | Print a pane's terminal text. Text only, pipeline-friendly. |
+| `pane split [--direction right\|left\|down\|up\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the cwd. `auto` picks the longer axis. |
+| `pane mirror [--direction …] [target]` | Show the same session in a second pane. Focusing a mirror makes it the leader; the other dims. |
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
-| `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way *from* the target — the same geometry the focus keybinds use. At the outermost edge it's a no-op, not an error. |
-| `pane close (--pane P \| --session S) [--force]` | Close a pane, killing its session. Always explicit — never defaults to "the pane you're in". |
-| `pane run <command…> [--no-submit] [target]` | Type a command (plus newline) into an **existing** live pane's shell. `--no-submit` withholds the newline, leaving the text on the prompt for a human to inspect or for a TUI to submit on its own terms; follow it with `pane key return`, which registers as a real command submission. |
-| `pane key <chord> [target]` | Send one key press (`a`, `space`, `shift+1`, `ctrl+c`, `escape`, `up`, `ctrl+\`) to a live pane through the terminal's key-encoding path — single keystrokes, where `pane run` types a whole command line. |
-| `pane zoom [target]` | Toggle zoom on a pane (the tab renders only that pane while zoomed) — the same action as the zoom keybind. |
-| `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split of that axis around a pane. Absolute geometry, unlike the keybind's relative nudge. |
-| `grid <RxC> [--run CMD] [target]` | Split a pane into an equal R×C grid (≤16 cells). `--run` spawns CMD in every **new** pane. |
-| `session list` / `session info <name>` | zmx sessions as the daemon reports them, with attached-pane mapping. |
-| `session kill <name>` | Kill a zmx session. If a live pane is attached, that pane's shell exits. |
-| `layout apply [--project P] [--force]` | Reconcile the workspace to the project's [layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes, unless forced. |
+| `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way. A no-op at the outermost edge, not an error. |
+| `pane close (--pane P \| --session S) [--force]` | Close a pane. Always requires an explicit target. |
+| `pane run <command…> [--no-submit] [target]` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. |
+| `pane key <chord> [target]` | Send one key press (`a`, `ctrl+c`, `escape`, `up`). |
+| `pane zoom [target]` | Toggle zoom on a pane. |
+| `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split on that axis. |
+| `grid <RxC> [--run CMD] [target]` | Split a pane into an equal R×C grid (≤16 cells). `--run` spawns CMD in every new pane. |
+| `session list` / `session info <name>` | zmx sessions with attached-pane mapping. |
+| `session kill <name>` | Kill a session. An attached pane's shell exits. |
+| `layout apply [--project P] [--force]` | Reconcile to the project's [layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes. |
 | `layout save [--project P]` | Write the live workspace to `~/.config/macterm/projects/<slug>.yaml`. |
-| `tutor [project\|pinned]` | Print a short tutorial as terminal output — what projects, tabs, splits and pinned rows are, with the CLI commands worth knowing. The keyboard columns show **your** bindings (the app renders the text, so overrides and unbound actions are reflected), which is why this verb needs a running app. It's what a [fresh install](/docs/install)'s two seeded panes run, and re-running it by hand is the point. |
-| `ssh <ssh args…>` | Run ssh with Macterm's terminal integration: installs the bundled `xterm-ghostty` terminfo on the destination on first connect (cached afterwards), sets `TERM` to what the host can actually resolve, requests `SendEnv` forwarding for `COLORTERM`/`TERM_PROGRAM`/`TERM_PROGRAM_VERSION`, then replaces itself with the real ssh. The **one offline verb** — needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false` skips the install, `--forward-env=false` skips the env flags, `--cache=false` bypasses the install cache, `--verbose` narrates. This is the engine behind the `ssh-env`/`ssh-terminfo` [shell-integration features](/docs/configuration). |
-
-> `pane run` types into a live shell — different from `--run`, which only applies to a pane at spawn time. Use `pane key` for a single keystroke: `pane run` pastes a command line and submits it, while `pane key` sends one encoded key press — a printable key (`j`, `space`, `shift+1`), a control byte (`ctrl+c`), or a named key (`escape`, `up`) — so libghostty applies the terminal's current mode (application cursor keys, Kitty protocol, …). That's what drives a TUI that reads keystrokes rather than lines. Quote chords the shell would otherwise mangle: `macterm pane key 'ctrl+\'`. Option chords are the one gap: their character depends on a keyboard-layout translation this path can't resolve, so they're delivered unencoded — use `pane run` for the literal text.
+| `tutor [project\|pinned]` | Print a short tutorial, with your own keybinds. Needs a running app. |
+| `ssh <ssh args…>` | Run ssh with Macterm's terminal integration. The one verb that needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false`, `--verbose`. |
 
 ## Targeting a pane
 
-Projects and tabs accept a **name/title**, a **UUID**, or the **1-based index** shown in list output (bare `3` or ref-style `tab:3`). A duplicate name is an `ambiguous` error, never a silent first-match.
+Projects and tabs accept a **name**, a **UUID**, or the **1-based index** from list output (`3` or `tab:3`). A duplicate name is an `ambiguous` error, never a silent first match.
 
-Pane verbs (`split`, `focus`, `close`, `run`, `grid`) resolve their target in this order:
+Pane verbs resolve their target in this order:
 
-1. `--session <name>` — the zmx session name (`macterm-<slug>-<hex12>`). This is the **restart-stable** address: pane UUIDs regenerate every launch, session names persist verbatim.
-2. `--pane <uuid|index>` — a pane UUID (searched project-wide), or its index within the tab scope.
-3. `MACTERM_SESSION` — inside a pane, Macterm sets this to that pane's own session, so a bare `macterm pane split` splits *the pane you're in*. An explicit `--tab` disables this fallback.
+1. `--session <name>` — the zmx session name. **Restart-stable**: pane UUIDs regenerate every launch, session names don't.
+2. `--pane <uuid|index>`.
+3. `MACTERM_SESSION` — inside a pane, so a bare `macterm pane split` splits the pane you're in. An explicit `--tab` disables this.
 4. Otherwise, the focused pane of the active tab.
 
-`pane close` never uses the `MACTERM_SESSION` fallback — destroying "whatever pane I'm in" because no target was given is a footgun, so it always demands an explicit `--pane` or `--session`.
+`pane close` never uses the `MACTERM_SESSION` fallback. `pane focus --direction` treats the resolved target as the **origin**, and reports the pane that ended up focused.
 
-`pane focus --direction` treats the resolved target as the **origin**, not the destination — so a bare `macterm pane focus --direction left` run inside a pane moves left from *that* pane. It reports the pane that ended up focused, and at the outermost edge it reports the origin unchanged rather than failing, so a caller can tell whether it moved by comparing the reported session to its own `$MACTERM_SESSION`.
-
-## Introspecting a pane
-
-`pane inspect` and `pane dump` read libghostty's own live state — the fast path for debugging scrollback/reflow behavior without hand-instrumenting a build.
+## Reading a pane
 
 ```console
 $ macterm pane inspect
@@ -109,48 +101,39 @@ process exited      false
 needs confirm quit  false
 ```
 
-- **scrollback** is `total`/`offset`/`len` rows straight from libghostty's scrollbar signal. This is the field that made a resize/reflow scrollback bug diagnosable — a `total` that jumps to ~65k on a resize is the whole signal.
-- **alt-screen** is a heuristic (`total ≤ len`), the same one the scrollbar uses; libghostty exposes no direct alt-screen query. It (and the scrollback fields) read `-` until the surface has emitted its first scrollbar update.
-- **Cursor position is not reported** — the libghostty C ABI doesn't expose it. `inspect` surfaces exactly what the ABI provides.
+`pane dump` prints the viewport's text; `--scrollback` prepends the full scrollback. It reads the terminal's own cells, so it sees what a full-screen program is drawing.
 
-`pane dump` prints the viewport's text; `--scrollback` prepends the full scrollback. It's the exact text libghostty would hand a "select all", so it round-trips cell contents faithfully:
+Both need a **live surface** — a never-shown pane returns `no_surface`. Select its tab once.
 
-```console
-$ macterm pane dump --scrollback | wc -l
-360
-```
-
-Both need a **live surface** (a never-shown pane returns `no_surface` — select its tab once to spawn it).
-
-## Debug-only verbs
-
-`pane resize --cols C --rows R [target]` drives a single, in-place `ghostty_surface_set_size` on a pane, bypassing the normal SwiftUI layout path — for reproducing a specific resize/reflow transition in isolation. It exists **only in debug builds**: it is absent from a release CLI's `--help`, and a release app rejects `pane.resize` as an unknown command. The live layout system reasserts the pane's real geometry on the next tick, so the verb drives the *transition* (and any reflow side effect, visible via `pane inspect`'s scrollback) rather than persisting a size.
+> Cursor position and a direct alt-screen query aren't available over libghostty's C ABI. `alt-screen` here is a heuristic, and reads `-` until the surface emits its first scrollbar update.
 
 ## Environment
 
-The app exports into every spawned shell:
+Macterm exports into every spawned shell:
 
-- `MACTERM_SOCKET` — the control socket path. A discovery *hint*: if it doesn't answer (the app restarted since this shell spawned), the CLI falls back to the well-known locations. Only `--socket` pins hard.
-- `MACTERM_SESSION` — the pane's own session name, for self-targeting.
-- `PATH` — prepended with the bundle's `Resources/bin`, so `macterm` resolves.
+| Variable | Meaning |
+| --- | --- |
+| `MACTERM_SOCKET` | Control socket path. A discovery *hint* — the CLI falls back to well-known locations. Only `--socket` pins hard. |
+| `MACTERM_SESSION` | The pane's own session name, for self-targeting. |
+| `PATH` | Prepended with the bundle's `Resources/bin`. |
 
 ## Exit codes
 
-The CLI is pipeline-safe: **stdout carries output only on success**, everything else goes to stderr.
+stdout carries output only on success; everything else goes to stderr.
 
-- `0` — success.
-- `1` — the app returned an error (message plus a recovery hint on stderr, when it can suggest one).
-- `2` — no running Macterm could be reached (stderr lists every socket path tried).
+| Code | Meaning |
+| --- | --- |
+| `0` | Success. |
+| `1` | The app returned an error. |
+| `2` | No running Macterm could be reached (stderr lists every socket path tried). |
 
-Scripts can gate on liveness:
+Gate a script on liveness:
 
 ```sh
 until macterm status >/dev/null 2>&1; do sleep 0.2; done
 ```
 
 ## Scripting example
-
-Spin up a project workspace from scratch, one pane per service:
 
 ```sh title="dev-up.sh"
 #!/bin/sh
@@ -168,7 +151,7 @@ until "$mac" status >/dev/null 2>&1; do sleep 0.2; done
 
 ## Wire protocol
 
-The `macterm` binary is a thin client over a documented protocol — any same-user process can speak it directly. One request per connection to the socket at `~/Library/Application Support/Macterm/control.sock`: write one newline-terminated JSON line, half-close your write end, and read one line back.
+Any same-user process can speak it directly. One request per connection to `~/Library/Application Support/Macterm/control.sock`: write one newline-terminated JSON line, half-close your write end, read one line back.
 
 ```json title="request"
 {"v":1,"id":"<any-string>","command":"pane.split","args":{"direction":"down","run":"btop"}}
@@ -178,10 +161,10 @@ The `macterm` binary is a thin client over a documented protocol — any same-us
 {"v":1,"id":"<echoed>","ok":true,"data":{"panes":[{"id":"…","session":"macterm-api-1a2b3c4d5e6f","index":2}]}}
 ```
 
-Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}` with snake_case codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `internal`. Commands are `noun.verb`; unknown fields are ignored on both sides, so the protocol can grow without breaking clients. Debuggable by hand:
+Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}`. Codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `internal`. Unknown fields are ignored on both sides.
 
 ```sh
 echo '{"v":1,"id":"x","command":"status"}' | nc -U ~/Library/Application\ Support/Macterm/control.sock
 ```
 
-> The boundary is filesystem permissions, same-user only: the socket is mode `0600` in a `0700` directory, and the CLI refuses sockets owned by another user. There's no token auth by design — it's the same trust boundary the zmx session daemon already uses.
+> The socket is mode `0600` in a `0700` directory and the CLI refuses sockets owned by another user. Same-user only, no token auth.

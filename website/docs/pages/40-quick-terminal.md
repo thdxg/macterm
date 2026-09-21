@@ -8,8 +8,19 @@ description: A global drop-down terminal on a hotkey, whose shells survive a qui
 
 # Quick terminal
 
-A global terminal accessible from anywhere with a hotkey — <kbd>⌃`</kbd> by default. It drops down over your current space, then gets out of your way when you're done. Its shells persist the way every other pane's do: quit Macterm with a build running in the quick terminal and it keeps running, the panel reopens onto it after a relaunch, and quitting asks no questions about it. Closing a pane in the panel is what ends its session. Its size and hotkey are configurable in **Macterm → Settings**. Besides the hotkey, **Quick Terminal** sits in the View menu and **Toggle Quick Terminal** in the menu you get by right-clicking Macterm's Dock icon — that one leaves whatever app you're in focused, just as the hotkey does.
+A drop-down terminal available from any app. Press <kbd>⌃`</kbd>, or pick **View → Quick Terminal**, or **Toggle Quick Terminal** from the Dock icon's right-click menu.
 
-Position and size each have a **Fixed | Dynamic** mode in **Settings → Quick Terminal**. Fixed — the default, centered — anchors the panel with sliders: X (left–right) and Y (top–bottom) for position, width and height for size. Dynamic hands the geometry to you instead: for position, a grab handle appears along the panel's top edge and dragging it moves the panel like a title bar would — it reopens where you left it, even tucked partly off a screen edge (if the screen changed underneath it, the panel nudges back only as far as it takes to stay grabbable). For size, the panel becomes resizable from its edges and reopens at the size you left it.
+Its shells persist like every other pane's: quit with a build running and it keeps running. Closing a pane in the panel is what ends its session.
 
-If the quick terminal is the only Macterm you want, set `macos-hidden = always` in your Ghostty config: Macterm then runs with no Dock icon, no menu bar and no <kbd>⌘</kbd><kbd>⇥</kbd> entry, and the panel keeps working exactly as it does now. Read the trade-offs first — an accessory app has no menu bar, so Settings and Quit lose their keyboard route. [Configuration](/docs/configuration) has the details.
+## Position and size
+
+**Settings → Quick Terminal**. Each has a **Fixed | Dynamic** mode.
+
+| Mode | Position | Size |
+| --- | --- | --- |
+| **Fixed** (default) | Sliders for X and Y | Sliders for width and height |
+| **Dynamic** | Drag the handle on the panel's top edge; it reopens where you left it | Drag the panel's edges; it reopens at that size |
+
+## Quick terminal only
+
+Set `macos-hidden = always` in your Ghostty config to run with no Dock icon and no menu bar. Read the trade-offs in [Configuration](/docs/configuration) first — you lose the keyboard route to Settings and Quit.

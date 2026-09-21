@@ -43,6 +43,11 @@
 	}
 	redir @html_ext {re.html_ext.1} 301
 
+	# Retired docs pages. Both were published and are linked from the wild, so
+	# they redirect to the docs index rather than 404ing.
+	redir /docs/ghostty /docs/ 301
+	redir /docs/tmux /docs/ 301
+
 	# Liveness for the container runtime, matched before any file lookup.
 	respond /healthz 200 {
 		body "ok"

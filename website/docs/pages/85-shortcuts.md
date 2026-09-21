@@ -8,89 +8,73 @@ description: Drive Macterm from the Shortcuts app, Spotlight and Siri — projec
 
 # Shortcuts and Spotlight
 
-Macterm publishes its actions as **App Intents**, so the Shortcuts app, Spotlight and Siri can drive it the way [the `macterm` CLI](/docs/cli) drives it from a script. The two surfaces do the same things through the same code — pick whichever fits: the CLI when you're already in a shell or writing an agent, Shortcuts when you want a keyboard-launchable action, a menu-bar button, or a step in a larger automation that also touches your calendar, your notes and your browser.
+Macterm publishes its actions as App Intents, so Shortcuts, Spotlight and Siri can drive it. Same capabilities as [the CLI](/docs/cli) — use the CLI from a shell or a script, Shortcuts for a keyboard-launchable action or a step in a larger automation.
 
-Everything here is off by default until you allow it once. See [Permission](#permission).
+**Allow it first.** See [Permission](#permission).
 
 ## Finding the actions
 
-Open **Shortcuts**, create a shortcut, and search the action list for `Macterm`. The actions also appear in Spotlight — start typing an action's name and it shows up as a runnable result.
+Open **Shortcuts**, create a shortcut, and search the action list for `Macterm`. They appear in Spotlight too. Three are offered ready-made: **Toggle Quick Terminal**, **Open Command Palette**, and **New Tab**.
 
-A few are offered up front as ready-made shortcuts, so you can run them without building anything: **Toggle Quick Terminal**, **Open Command Palette** and **New Tab**.
-
-## The actions
-
-### Projects
+## Projects
 
 | Action | What it does |
 | --- | --- |
-| **New Project** | Takes a folder and adds it as a project, then selects it and brings the window forward. Optionally takes a name; without one it uses the folder's own name. |
-| **Focus Project** | Shows a project. If a window is already on it, that window comes forward rather than the frontmost one being repointed. |
+| **New Project** | Adds a folder as a project, selects it, and brings the window forward. Optional name; defaults to the folder's. Always creates a new project, even if one already backs that folder. |
+| **Focus Project** | Shows a project. A window already on it comes forward. |
 
-A project is created even when one already backs that folder — a directory is not an identity, and two projects on one folder stay fully separate.
-
-### Tabs
+## Tabs
 
 | Action | What it does |
 | --- | --- |
-| **New Tab** | Opens a tab in a project you pick, and returns it so a later step can act on it. The optional **Command** runs in the new tab's shell as it starts. |
+| **New Tab** | Opens a tab in a project you pick and returns it for a later step. The optional **Command** runs in the new shell. |
 | **Focus Tab** | Selects a tab and brings its window forward. |
-| **Close Tab** | Closes a tab and ends its sessions. |
+| **Close Tab** | Closes a tab and ends its sessions. Fails with an error if a pane has a running program — never puts up a dialog. |
 
-**New Tab**'s command is typed into the shell as it launches — the same thing a layout's `run:` and `macterm tab new --run` do — so it goes through your login shell with your full environment. Write it so your own shell can parse it.
+**New Tab**'s command goes through your login shell, like a layout's `run:`. Write it so your shell can parse it.
 
-**Close Tab** refuses, with an error, if a pane in that tab has a running program. It never puts a confirmation dialog up, because a shortcut can run with nobody watching and a dialog nobody answers would stall the whole automation. Close it in the app if you meant to interrupt something. (Closing a [pinned tab](/docs/pinned-tabs) unloads it, as it does everywhere else: the row stays and the next launch starts it again.)
-
-### Panes
+## Panes
 
 | Action | What it does |
 | --- | --- |
-| **Run Command in Pane** | Types a command into a pane's shell. |
-| **Send Key** | Sends one key chord — `ctrl+c`, `escape`, `up`, or a bare printable like `j`. |
-| **Get Pane Contents** | Returns the text the pane is showing, optionally including scrollback. |
+| **Run Command in Pane** | Types a command into a pane's shell. **Submit** is on by default; turn it off to leave the text on the prompt. |
+| **Send Key** | Sends one chord — `ctrl+c`, `escape`, `up`, or a bare printable. Same spelling as your [keybinds](/docs/configuration). |
+| **Get Pane Contents** | Returns the text the pane is showing, optionally with scrollback. Reads the terminal's cells, so it sees full-screen programs. |
 | **Get Pane Details** | Returns one of: ID, session name, working directory, foreground process, size. |
 | **Focus Pane** | Shows a pane and puts the keyboard in it. |
 
-**Run Command in Pane** has a **Submit** option, on by default. Turn it off and the text is left sitting on the prompt without running — useful to pre-fill a command line for yourself to look over, or to feed a full-screen program that decides for itself when input is complete.
+All five need a live terminal. A pane in a tab you have never selected has none — select its tab once.
 
-**Send Key** is a separate action rather than an option on Run Command because it goes through a different path: it sends an encoded keypress, which is the only way to deliver something like `ctrl+c` that has no text form at all. It takes the same chord spelling as your [keybinds](/docs/configuration).
-
-**Get Pane Contents** reads the terminal's own cells, so it sees what a full-screen program is drawing — not just output you could have piped.
-
-All five need the pane's terminal to be live. A pane in a tab you have never selected has no terminal yet; select its tab once and the action works.
-
-### The app
+## The app
 
 | Action | What it does |
 | --- | --- |
-| **Invoke Keybind** | Runs any of Macterm's own keybind actions, picked from a list. |
+| **Invoke Keybind** | Runs any of Macterm's keybind actions, picked from a list. Returns true or false, so a shortcut can branch on it. |
 | **Toggle Quick Terminal** | Shows or hides the [quick terminal](/docs/quick-terminal). |
-| **Open Command Palette** | Opens the [command palette](/docs/command-palette) in the frontmost window. |
-
-**Invoke Keybind** is the catch-all: anything in the command palette that has a binding is in its list, under the same name — Split Right, Zoom Pane, Next Project, Save Layout, and so on. It returns true or false depending on whether the action applied, so a shortcut can branch on it rather than failing. (New Tab with no project open, for instance, simply doesn't apply.)
+| **Open Command Palette** | Opens the [palette](/docs/command-palette) in the frontmost window. |
 
 ## Picking a project, tab or pane
 
-Actions that act on something give you a picker. Type to filter it; a pane matches on the name you see in the sidebar *and* on its session name, so if you already have a session name in hand — from `macterm pane list`, or from `$MACTERM_SESSION` inside a pane — you can paste it straight in.
+Type to filter the picker. A pane matches on the name in the sidebar *and* on its session name, so you can paste one from `macterm pane list` or `$MACTERM_SESSION`.
 
-Panes are remembered by **session name**, which survives quitting and relaunching Macterm. So a shortcut you write today still names the same pane tomorrow, after the app has restarted and its sessions have reattached. Tabs and projects are remembered the same way.
-
-If the thing a shortcut names has since gone — the tab was closed, the project removed — the action fails with a message saying so, rather than acting on something else.
+Panes, tabs and projects are remembered by identifiers that survive quitting and relaunching, so a shortcut written today names the same pane tomorrow. If the target is gone, the action fails with a message rather than acting on something else.
 
 ## Permission
 
-An intent can create projects and tabs, close tabs, and type into your shells, so `macos-shortcuts` in your Ghostty config gates the whole surface — the same key, values and default as Ghostty:
+`macos-shortcuts` in your Ghostty config gates the whole surface.
 
-- **Ask** (the default) — the first action in each launch of Macterm puts up a confirmation. Your answer is remembered for the rest of that run, and asked again the next time Macterm starts.
-- **Allow** — never asks.
-- **Deny** — every action fails with an error saying where to change this.
-
-```
+```ini
 macos-shortcuts = allow
 ```
 
-The value is read live, so **Reload Ghostty Config** applies a change without a restart. One difference from Ghostty: an **Ask** answer is remembered for the current run only, where Ghostty remembers an Allow forever.
+| Value | Effect |
+| --- | --- |
+| `ask` | Default. The first action in each launch asks; your answer holds for that run. |
+| `allow` | Never asks. |
+| `deny` | Every action fails with an error. |
+
+Read live, so **Reload Ghostty Config** applies a change without a restart.
 
 ## Cold starts
 
-Running a shortcut launches Macterm if it isn't running. The action waits for the app to finish starting — restoring your projects, tabs and sessions — and then does its work, so a shortcut fired at a machine that just booted behaves the same as one fired at an app that has been open for hours. If the app can't finish starting, the action fails with a message instead of hanging.
+Running a shortcut launches Macterm if it isn't running, and the action waits for the restore to finish before doing its work. If the app can't finish starting, the action fails rather than hanging.

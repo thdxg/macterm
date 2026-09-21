@@ -8,7 +8,7 @@ description: Describe a project's tabs, splits, and per-pane commands in YAML.
 
 # Declarative layouts
 
-Describe a project's tabs, split layout, and the process each pane runs in a YAML file, and Macterm builds the workspace from it when you apply it. Project files live in `~/.config/macterm/projects/`, one per project — they're matched to a project by their `path`, not their filename, so the filename is just cosmetic.
+Describe a project's tabs, splits, and per-pane commands in YAML. Files live in `~/.config/macterm/projects/`, one per project, matched by `path` — the filename is cosmetic.
 
 ```yaml title="~/.config/macterm/projects/myapp.yaml"
 name: "MyApp"
@@ -23,12 +23,24 @@ tabs:
       second: {} # plain shell pane
 ```
 
-Each tab is a layout node: a leaf pane (`cwd` / `run` / `shell`) or a `split` with a `direction`, a `ratio`, and `first` / `second` children. A bare `{}` is a plain shell.
+Each tab is either a leaf pane (`cwd` / `run` / `shell`) or a `split` with a `direction`, a `ratio`, and `first` / `second` children. A bare `{}` is a plain shell.
 
-Run **Save layout** from the palette to write your current workspace out, or **Apply layout** to reconcile the live workspace toward the file — matching panes are kept, only ones that drifted are restarted.
+## Applying and saving
 
-A file is never applied on its own: selecting a project or relaunching Macterm brings back the session as you left it, and the file's shape takes effect only when you run **Apply layout**.
+| Command palette | Effect |
+| --- | --- |
+| **Save layout** | Writes your current workspace to the file. |
+| **Apply layout** | Reconciles the live workspace toward the file — matching panes are kept, drifted ones restart. |
 
-A `path` can also be a remote spec (`devbox:~/dev/api`), declaring a [remote project](/docs/remote-projects) whose tabs spawn on that host — with an optional top-level `zmxPath` when zmx needs an explicit location there.
+Selecting a project or relaunching Macterm restores your last session, not the file. The file takes effect only when you run **Apply layout**.
 
-> The older in-project `.macterm/layout.yaml` was removed in v1.22.0, after being deprecated since v1.20.0. If you still have one, recreate the layout with **Save layout** — it writes the central file for you.
+## Remote projects
+
+Set `path` to a remote spec and the tabs spawn on that host. Add `zmxPath` only if auto-detection fails.
+
+```yaml
+path: "devbox:~/dev/api"
+zmxPath: "~/bin/zmx"
+```
+
+See [remote projects](/docs/remote-projects).

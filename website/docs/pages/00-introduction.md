@@ -9,8 +9,10 @@ description: Macterm — a native macOS terminal with a vertical project sidebar
 
 # Macterm
 
-A native macOS terminal with a vertical project sidebar and persistent multiplexing, built on [libghostty](https://ghostty.org). Quit anytime — your projects, tabs, and split panes come back exactly as you left them. Projects can live on [remote machines](/docs/remote-projects) too, with panes that persist on the host across disconnects and reboots.
+A native macOS terminal with a vertical project sidebar and persistent multiplexing, built on [libghostty](https://ghostty.org). Quit anytime — your projects, tabs, and split panes come back exactly as you left them.
 
-Macterm requires macOS 14 or later and is MIT licensed.
+Requires macOS 14 or later. MIT licensed.
 
-New here? Start with [Installation](/docs/install), then point Macterm at your [Ghostty config](/docs/configuration). Automating something? There's a [CLI](/docs/cli). For workflows other people run, browse the [Cookbook](/docs/cookbook).
+1. [Install](/docs/install) it.
+2. Point it at your [Ghostty config](/docs/configuration).
+3. Automate it with the [CLI](/docs/cli) or [Shortcuts](/docs/shortcuts).
