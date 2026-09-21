@@ -205,26 +205,24 @@
   .l-cta:hover svg {
     transform: translateX(2px);
   }
+  /* No border: the solid CTA beside it is the page's one framed element, and
+     a second outline made the pair read as two equal choices. */
   .l-gh {
     display: flex;
     align-items: center;
     gap: 10px;
     height: 46px;
-    padding: 0 16px;
-    border: 1px solid var(--l-chip-edge);
+    padding: 0 14px;
     border-radius: 9px;
     font-family: var(--font-mono);
     font-size: clamp(13px, 1.4vw, 16px);
     color: var(--l-muted);
     text-decoration: none;
     font-variant-numeric: tabular-nums;
-    transition:
-      color 0.18s,
-      border-color 0.18s;
+    transition: color 0.18s;
   }
   .l-gh:hover {
     color: var(--l-text);
-    border-color: var(--l-chip-edge-lit);
   }
   .l-gh svg {
     width: 16px;
@@ -400,11 +398,6 @@
     .l-nav {
       gap: 16px;
     }
-    /* The docs header has no room to spare on a phone, and the count adds
-       ~45px to the row. */
-    .l-nav .l-count {
-      display: none;
-    }
   }
 
   /* ---- Docs header ------------------------------------------------------ */
@@ -446,34 +439,6 @@
   .l-nav a:hover {
     color: var(--l-bright);
   }
-  /* A live figure riding beside a nav label — the star count on GitHub —
-     filled by site.js's loadStats and revealed only once a number has landed
-     (`hidden` until then, so a failed or rate-limited fetch leaves the label
-     exactly as it was). Set in the mono a step down and a step fainter than
-     the label, behind a hairline, so it reads as data attached to the word
-     rather than a second word. It is inline — no `display` of its own — so the
-     [hidden] reset stays in charge. */
-  .l-nav .l-count {
-    margin-left: 9px;
-    padding-left: 9px;
-    border-left: 1px solid var(--l-chip-edge);
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    letter-spacing: 0.02em;
-    color: var(--l-muted);
-    transition: color 0.18s;
-  }
-  .l-nav a:hover .l-count {
-    color: inherit;
-  }
-  /* The glyph sits on the text baseline rather than the box's middle, so it
-     lines up with the digits' x-height instead of floating above them. */
-  .l-count-icon {
-    display: inline-block;
-    vertical-align: -1px;
-    margin-right: 5px;
-  }
-
   /* ---- Docs shell + sidebar (dark) -------------------------------------- */
   /* The docs page from the same Claude Design canvas: the landing's header and
      ground, with a 212px sticky sidebar beside a 660px reading column. <body>
