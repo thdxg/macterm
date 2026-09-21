@@ -19,3 +19,9 @@ zmx ls
 ```
 
 > Local sessions don't survive a reboot; panes respawn in their last working directory. Sessions in [remote projects](/docs/remote-projects) live on the host, so they do.
+
+## Privacy prompts
+
+Programs running in a pane belong to their session, not to the Macterm process: on macOS the session daemon is their *responsible process*. So a Local Network prompt (or a Files and Folders or Full Disk Access one) triggered by something you run in a pane names **Macterm Sessions**, and its grant lives under that name in System Settings → Privacy & Security. That is what keeps the grant working after you quit and relaunch, or update. Macterm's own entry covers only the app itself.
+
+> A session started by an older version keeps its old attribution until you close and reopen its tab.

@@ -106,6 +106,19 @@ if [[ -n "$CODESIGN_IDENTITY" ]] \
   echo "ERROR: $APP_BUNDLE is ad-hoc signed despite MACTERM_CODESIGN_IDENTITY being set" >&2
   exit 1
 fi
+# The bundled zmx is signed separately (scripts/embed-zmx.sh) because it, not
+# the app, is what macOS holds responsible for the programs in every pane; the
+# same regression — an ad-hoc identity resetting users' grants — applies to it.
+ZMX_BINARY="$APP_BUNDLE/Contents/Resources/zmx/zmx"
+if [[ -n "$CODESIGN_IDENTITY" ]] \
+  && codesign --display --verbose "$ZMX_BINARY" 2>&1 | grep -q "Signature=adhoc"; then
+  echo "ERROR: $ZMX_BINARY is ad-hoc signed despite MACTERM_CODESIGN_IDENTITY being set" >&2
+  exit 1
+fi
+if ! codesign --display --verbose "$ZMX_BINARY" 2>&1 | grep -q "Identifier=com.thdxg.macterm.zmx"; then
+  echo "ERROR: $ZMX_BINARY does not carry the com.thdxg.macterm.zmx identity (embedded Info.plist missing?)" >&2
+  exit 1
+fi
 
 # Package into a compressed DMG with an Applications symlink for drag-install.
 DMG_STAGING="$BUILD_DIR/dmg-staging"

@@ -28,4 +28,18 @@ mkdir -p "${destination_dir}"
 # -c clones (copy-on-write) when possible; -p preserves the executable bit.
 cp -cp "${zmx_source}" "${destination_dir}/zmx" 2>/dev/null || cp -p "${zmx_source}" "${destination_dir}/zmx"
 chmod +x "${destination_dir}/zmx"
-echo "✓ embedded zmx → ${destination_dir}/zmx"
+
+# Sign the copy with the same identity Xcode signs the app with (ad-hoc in a
+# local build, the stable release certificate in CI). The release download is
+# only linker-signed, and Xcode never re-signs a Mach-O it merely copies into
+# Resources/. That signature is load-bearing: each zmx session daemon disclaims
+# the app at spawn and becomes the *responsible process* for every program in
+# its session (see the fork's daemonize.zig and AGENTS.md), so macOS records
+# Local Network and TCC grants for pane programs against zmx's own identity —
+# the CFBundleIdentifier in its embedded Info.plist plus this signature. An
+# ad-hoc signature is a fresh identity per build, which would turn every
+# update into a new prompt and a lost grant. codesign takes the signing
+# identifier from the embedded Info.plist, so none is passed here.
+signing_identity="${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}"
+codesign --force --sign "${signing_identity}" --timestamp=none "${destination_dir}/zmx"
+echo "✓ embedded zmx → ${destination_dir}/zmx (signed: ${signing_identity})"

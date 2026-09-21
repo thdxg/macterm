@@ -80,4 +80,49 @@ struct BundledResourcesTests {
         // themes are upstream's iTerm2-Color-Schemes names, spaces and all).
         #expect(exists("ghostty/themes/Rose Pine"), "expected bundled ghostty theme missing")
     }
+
+    /// The bundled zmx must carry an embedded Info.plist naming
+    /// `com.thdxg.macterm.zmx`. Each session daemon disclaims the app at spawn
+    /// and is the *responsible process* for every program in its session, so
+    /// this identity — not Macterm's — is what the Local Network prompt names
+    /// and what the grant is recorded against (#419). A fork sync that dropped
+    /// the downstream patch would ship a binary with no identity at all:
+    /// prompts naming a bare path, and a grant lost on every update. Read the
+    /// way codesign reads it, from the `__TEXT,__info_plist` section, in every
+    /// slice: the release binary is universal, and `launchctl plist` reads a
+    /// thin Mach-O only.
+    @Test
+    func bundled_zmx_carries_its_privacy_identity() throws {
+        try #require(resourcesPresent, "run `mise run setup` to populate Macterm/Resources")
+        let zmx = try #require(Self.resourcesDir?.appendingPathComponent("zmx/zmx"))
+        try #require(FileManager.default.isExecutableFile(atPath: zmx.path), "zmx/zmx missing")
+
+        let archs = try Self.run("/usr/bin/lipo", ["-archs", zmx.path]).output
+            .split(whereSeparator: \.isWhitespace).map(String.init)
+        try #require(!archs.isEmpty, "lipo could not read zmx/zmx")
+        for arch in archs {
+            let thin = FileManager.default.temporaryDirectory
+                .appendingPathComponent("zmx-\(arch)-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: thin) }
+            _ = try Self.run("/usr/bin/lipo", ["-thin", arch, "-output", thin.path, zmx.path])
+
+            let plist = try Self.run("/bin/launchctl", ["plist", "__TEXT,__info_plist", thin.path])
+            #expect(plist.status == 0, "zmx (\(arch)) has no embedded Info.plist section")
+            #expect(plist.output.contains("com.thdxg.macterm.zmx"), "zmx (\(arch)) is not com.thdxg.macterm.zmx:\n\(plist.output)")
+            #expect(plist.output.contains("NSLocalNetworkUsageDescription"), "zmx (\(arch)) lacks the Local Network usage description")
+        }
+    }
+
+    private static func run(_ tool: String, _ arguments: [String]) throws -> (status: Int32, output: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = arguments
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        try process.run()
+        let output = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        return (process.terminationStatus, output)
+    }
 }
