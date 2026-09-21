@@ -43,6 +43,11 @@ final class QuickTerminalService: NSObject {
     private var previousFrontmostApp: NSRunningApplication?
     let splitState = QuickTerminalSplitState()
     var suppressAutoHide = false
+    /// Set while the panel is handing key status away; see `panelDidResignKey`.
+    private var awaitingKeyHandoff = false
+    /// The real delegate, handed over at launch (the reason it is not read off
+    /// `NSApp.delegate` is on `AppState.appDelegate`).
+    weak var appDelegate: AppDelegate?
 
     override private init() {
         super.init()
@@ -60,6 +65,12 @@ final class QuickTerminalService: NSObject {
             self,
             selector: #selector(reapplyAppearance),
             name: .mactermConfigDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidBecomeKey),
+            name: NSWindow.didBecomeKeyNotification,
             object: nil
         )
     }
@@ -89,6 +100,46 @@ final class QuickTerminalService: NSObject {
         } else {
             show()
         }
+    }
+
+    // MARK: - Key handoff
+
+    /// The panel just stopped being key. A `.nonactivatingPanel` takes
+    /// keyboard input while Macterm is NOT the active app, so a chord typed
+    /// into it that opens one of our regular windows — ⌘, for Settings, ⌘N
+    /// for a new window — makes that window key inside an app macOS still
+    /// considers inactive. The window comes up with dimmed chrome and takes no
+    /// typing, and the user is left to click it or the Dock to finish what one
+    /// keystroke asked for. Nothing else makes a regular window of ours key
+    /// while the app is inactive: `AppState.focusWindow` documents that a
+    /// `makeKeyAndOrderFront` from a CLI caller posts no key notification at
+    /// all, and activation re-keys a window only after the app is active.
+    ///
+    /// So the handoff is watched for exactly one run-loop turn — the new
+    /// window becomes key synchronously, inside the same `makeKeyAndOrderFront`
+    /// that resigned the panel — and `windowDidBecomeKey` has the delegate
+    /// activate the app for it (`AppDelegate.activateForKeyHandoff`, which also
+    /// keeps that activation from re-fronting a hidden terminal window over
+    /// it). The watch closes on the next turn so a later key change (the user
+    /// clicking a window of ours, which activates by itself) never trips it.
+    ///
+    /// Ordering matters for `hide()`: the panel resigns key, and so hides,
+    /// BEFORE the new window becomes key, so its focus bounce-back sees the
+    /// other app still in front and leaves it alone.
+    func panelDidResignKey() {
+        awaitingKeyHandoff = true
+        DispatchQueue.main.async { [weak self] in self?.awaitingKeyHandoff = false }
+    }
+
+    @objc
+    private func windowDidBecomeKey(_ note: Notification) {
+        guard awaitingKeyHandoff,
+              let window = note.object as? NSWindow,
+              AppDelegate.isTerminalWindowCandidate(window),
+              !NSApp.isActive
+        else { return }
+        awaitingKeyHandoff = false
+        appDelegate?.activateForKeyHandoff(to: window)
     }
 
     // MARK: - Show / Hide
@@ -521,6 +572,7 @@ final class QuickTerminalPanel: NSPanel {
 
     override func resignKey() {
         super.resignKey()
+        QuickTerminalService.shared.panelDidResignKey()
         // Don't auto-hide while a confirmation alert is pending or is being torn down.
         if QuickTerminalService.shared.suppressAutoHide { return }
         if QuickTerminalService.shared.splitState.pendingClosePaneID != nil { return }

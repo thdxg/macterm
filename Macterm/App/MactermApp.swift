@@ -298,6 +298,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowObserver: Any?
     private var activateObserver: Any?
+    /// Set by `activateForKeyHandoff`, consumed by the activation it causes.
+    private var skipReopenForKeyHandoff = false
     private var configObserver: Any?
     private var appFocusObservers: [Any] = []
     private var reconnectObservers: [Any] = []
@@ -416,7 +418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.applyActivationPolicy(activating: false) }
         }
-        _ = QuickTerminalService.shared
+        QuickTerminalService.shared.appDelegate = self
         KeyRouter.shared.install()
         // After the key router, so the local monitor is in place before any
         // chord can be yielded to Carbon. This also registers the quick
@@ -437,6 +439,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let bundleID = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
             MainActor.assumeIsolated {
                 guard let self, bundleID == Bundle.main.bundleIdentifier else { return }
+                if self.skipReopenForKeyHandoff {
+                    self.skipReopenForKeyHandoff = false
+                    return
+                }
                 self.reopenIfNeeded()
             }
         }
@@ -710,6 +716,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard activating || (previous == .accessory && policy == .regular) else { return }
         NSApp.activate()
+    }
+
+    /// Activate the app for a regular window that just became key while the
+    /// app was inactive — the quick terminal handing keyboard focus to the
+    /// Settings window or a new terminal window it opened
+    /// (`QuickTerminalService.panelDidResignKey`). Without this the window
+    /// sits dimmed and takes no typing.
+    ///
+    /// `ignoringOtherApps: true`, not plain `activate()`: another app holds
+    /// the front, and cooperative activation refuses a plain request from an
+    /// app without an activation right — measured and recorded on
+    /// `MacosHidden.activateForWindowRequest`. The keystroke that opened the
+    /// window is the user asking for the front.
+    ///
+    /// The activation this causes must not run `reopenIfNeeded`: with the
+    /// terminal window hidden (the last window closed), the Dock-click
+    /// re-front would resurrect it and make it key ON TOP of the window the
+    /// user just asked for — observed live, Settings landing behind the
+    /// terminal window. The NSWorkspace notification arrives asynchronously,
+    /// so the skip is a one-shot flag it consumes, with a timeout for a
+    /// refused activation that posts nothing.
+    func activateForKeyHandoff(to window: NSWindow) {
+        logger.info("\(String(describing: type(of: window)), privacy: .public) made key while inactive; activating for it")
+        skipReopenForKeyHandoff = true
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.skipReopenForKeyHandoff = false
+        }
     }
 
     /// Front the terminal window for an explicit user request ("Show Window"),
