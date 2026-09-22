@@ -26,6 +26,16 @@ notes.md          working notes and ideas
 - The `--density` and `--speed` flags in `main.swift` are the only configuration. Both are clamped so a typo can't produce an empty or solid screen.
 - `notes.md` lists two open ideas: a warp burst on keypress, and colour by temperature instead of depth.
 
+## Running it
+
+```
+swift run starfield                    # defaults: one star per 40 cells, speed 0.35
+swift run starfield --density 20       # twice as many stars
+swift run starfield --speed 1.2        # a faster approach; try it in a wide window
+```
+
+Quit with `Ctrl-C`; the signal handler shows the cursor again and resets the colours before exiting, so the shell comes back clean. There is no other input: the program renders until it is stopped.
+
 ## Where to start
 
 `Sources/Starfield/Field.swift` is the heart of it and fits on one screen. Read `advance(by:)` first, then `Renderer.render(_:)`, and the rest follows.

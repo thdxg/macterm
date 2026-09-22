@@ -4,9 +4,12 @@
 // device engages it — libghostty scrolls by whole rows for anything else, and
 // a page-up keybind jumps rows too. So the driver posts CGEvent scroll-wheel
 // events in pixel units, with the began/changed/ended phases a real gesture
-// carries, at a point inside the pane. The cursor itself stays parked; the
-// event carries its own location. Posted from osascript for the same reason
-// hold.js is: that process holds the Accessibility grant.
+// carries, at a point inside the pane. The pointer is moved there first: a
+// program with mouse reporting on (Claude Code in its full-screen mode) gets
+// each wheel tick with the pointer's cell attached and drops ticks aimed at
+// a cell it does not own, which a parked pointer outside the window is. The
+// caller parks it again afterwards. Posted from osascript for the same
+// reason hold.js is: that process holds the Accessibility grant.
 //
 //   osascript -l JavaScript scroll.js <x> <y> <pixels> <steps> <seconds>
 //
@@ -24,6 +27,8 @@ const kCGScrollPhaseBegan = 1;
 const kCGScrollPhaseChanged = 2;
 const kCGScrollPhaseEnded = 4;
 const kCGHIDEventTap = 0;
+const kCGEventMouseMoved = 5;
+const kCGMouseButtonLeft = 0;
 
 function sleep(seconds) {
   $.NSThread.sleepForTimeInterval(seconds);
@@ -56,6 +61,11 @@ function run(argv) {
     weights.push(w);
     sum += w;
   }
+
+  // Put the pointer where the gesture happens, as a real move would.
+  const move = $.CGEventCreateMouseEvent(src, kCGEventMouseMoved, where, kCGMouseButtonLeft);
+  $.CGEventPost(kCGHIDEventTap, move);
+  sleep(0.08);
 
   post(0, kCGScrollPhaseBegan);
   let sent = 0;

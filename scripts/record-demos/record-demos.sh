@@ -22,7 +22,10 @@
 # API, so no account and no network are involved.
 #
 # You place the Macterm window; the script refuses to record until it sits at
-# the canonical rect below, so every clip lines up. Recordings go to
+# the canonical rect below, so every clip lines up. The capture region includes
+# a margin of wallpaper around the window, so nothing else may be on screen
+# behind it: under a tiling window manager (AeroSpace) give Macterm a workspace
+# of its own for the session and float it there. Recordings go to
 # $MACTERM_DEMOS_OUT (default ~/Desktop/macterm-demos); `web` is the only step
 # that writes into the repo.
 #
@@ -696,6 +699,25 @@ app_has_anim_kit() {  # does the installed app link a GhosttyKit with the region
 
 anim_pref() { defaults read com.thdxg.macterm "macterm.terminal.$1" 2>/dev/null || echo default; }
 
+# The control socket does not say whether the sidebar is showing, but the
+# toolbar button does: its description reads "Show Sidebar" while hidden and
+# "Hide Sidebar" while visible. Demo 7 wants the whole width for its two panes.
+sidebar_visible() {
+  [ "$(osa 'tell application "System Events" to tell process "Macterm" to get description of (first button of toolbar 1 of window 1 whose description contains "Sidebar")' 2>/dev/null)" = "Hide Sidebar" ]
+}
+SIDEBAR_WAS_VISIBLE=0
+hide_sidebar_for_demo() {
+  if sidebar_visible; then
+    SIDEBAR_WAS_VISIBLE=1
+    focus_app; sleep 0.3; kc $K_BSLASH "$CMD"; sleep 1.0
+  fi
+}
+restore_sidebar() {
+  if [ "$SIDEBAR_WAS_VISIBLE" = 1 ] && ! sidebar_visible; then
+    focus_app; sleep 0.3; kc $K_BSLASH "$CMD"; sleep 0.6
+  fi
+}
+
 claude_up() {
   command -v claude >/dev/null || die "claude (Claude Code) not on PATH — demo 7 needs it"
   app_has_anim_kit \
@@ -731,7 +753,10 @@ json.dump({
 PY
   # The pane runs this instead of a shell, so no command line shows above the
   # banner in scrollback. CLAUDE_CODE_* is scrubbed in case the recording
-  # shell is itself inside a Claude Code session.
+  # shell is itself inside a Claude Code session. Claude Code stays in its
+  # full-screen mode: it owns the mouse there and scrolls its own transcript
+  # by rows with the terminal's scroll margins, which is the motion this
+  # clip is about (see tscroll for why the pointer has to be in the pane).
   cat > "$CDEMO/claude-demo.sh" <<WRAP
 #!/bin/bash
 cd "$CPROJ"
@@ -760,20 +785,37 @@ claude_down() {
   say "offline Claude Code stopped"
 }
 
+# A key held down: one AppleScript repeating the key code at key-repeat pace,
+# because a separate osascript per press is too slow to read as a hold. The
+# cursor glide and trail show best under exactly this — Helix moving line by
+# line or word by word as fast as the keyboard repeats.
+khold() {  # khold <keycode> <times> [gap seconds]
+  osa "tell application \"System Events\"
+        repeat $2 times
+          key code $1
+          delay ${3:-0.045}
+        end repeat
+      end tell" >/dev/null
+}
+
 # One trackpad-style scroll into the middle of the first pane. Positive pixels
-# go toward older content. scroll.js posts the gesture at CGEvent level.
+# go toward older content. scroll.js posts the gesture at CGEvent level and
+# moves the pointer into the pane for it (mouse-reporting programs attach the
+# pointer's cell to every tick); the pointer goes back to its parking spot
+# after, out of every capture region. The camera never records the pointer.
 tscroll() {  # tscroll <pixels> <seconds>
   local px="$1" secs="$2" steps
   steps=$(python3 -c "print(max(8, int($secs * 40)))")
   osascript -l JavaScript "$HERE/scroll.js" \
     $((WIN_X + WIN_W / 4)) $((WIN_Y + WIN_H / 2)) "$px" "$steps" "$secs" >/dev/null
+  park_cursor
 }
 
 drive7() {
   sleep 1.0                                        # the finished session; poster frame
-  tscroll 700 0.9;   sleep 0.8                     # up through the reply
-  tscroll 700 0.9;   sleep 1.0                     # and to its top
-  tscroll -1500 1.2; sleep 1.0                     # back down to the prompt
+  tscroll 180 0.7;   sleep 0.7                     # up through the reply
+  tscroll 180 0.7;   sleep 0.9                     # and to its top
+  tscroll -900 1.1;  sleep 1.0                     # back down to the prompt
   kc $K_D "$CMD"; sleep 1.6                        # split (split-auto) grows in
   wait_prompt --pane 2;       kline "hx notes.md" 0.055
   sleep 1.5
@@ -781,9 +823,9 @@ drive7() {
   ktype "Try a dimmer glyph for the farthest band; the dots read as noise." 0.06
   sleep 0.5; kc $K_ESC; sleep 0.8
   kc $K_G; kc $K_G; sleep 0.9                      # gg: top of the file
-  local i; for i in 1 2 3; do kc $K_W; sleep 0.45; done   # word by word
-  kc $K_B; sleep 0.6
-  kc $K_J; sleep 0.5; kc $K_J; sleep 0.5; kc $K_K; sleep 0.7
+  khold $K_J 16; sleep 0.8                         # hold j: down the file
+  khold $K_W 14; sleep 0.8                         # hold w: along a line, word by word
+  khold $K_K 9;  sleep 0.8                         # hold k: back up
   kc $K_G; kc $K_E; sleep 1.0                      # ge: end of the file
   kc $K_G; kc $K_G; sleep 1.2                      # and back to the top
 }
@@ -792,6 +834,7 @@ demo7() {  # animations: scrollback in Claude Code, a split, the cursor in Helix
   say "demo 7 — animations"
   claude_up
   reset_project
+  hide_sidebar_for_demo
   # Claude Code in its own tab, launched directly so no shell prompt or command
   # precedes the banner in scrollback; then drop the shell tab reset_project made.
   "$MACTERM" tab new --project macterm --run "$CDEMO/claude-demo.sh" >/dev/null; sleep 1
@@ -806,6 +849,7 @@ demo7() {  # animations: scrollback in Claude Code, a split, the cursor in Helix
   encode animations 07-animations.mp4
   claude_down
   reset_project
+  restore_sidebar
 }
 
 anim_prefs() {
