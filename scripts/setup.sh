@@ -39,7 +39,7 @@ GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-09-21}"
 # APC to the user's shell as literal garbage instead of switching leader. That
 # is exactly what a stale CI cache did once — `Macterm/Resources/zmx` rides the
 # GhosttyKit cache, whose key hashes THIS file, so a zmx bump must change it.
-ZMX_TAG="${ZMX_TAG:-build-2026-09-06}"
+ZMX_TAG="${ZMX_TAG:-build-2026-09-22}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
