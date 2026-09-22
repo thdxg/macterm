@@ -801,28 +801,31 @@ khold() {  # khold <keycode> <times> [gap seconds]
 # One trackpad-style scroll into the middle of the first pane. Positive pixels
 # go toward older content. scroll.js posts the gesture at CGEvent level and
 # moves the pointer into the pane for it (mouse-reporting programs attach the
-# pointer's cell to every tick); the pointer goes back to its parking spot
-# after, out of every capture region. The camera never records the pointer.
+# pointer's cell to every tick). The pointer is left there: the camera never
+# records it, and every osascript round trip between two beats is a visible
+# pause, so the driver parks it once, after the beat that follows the scrolls.
 tscroll() {  # tscroll <pixels> <seconds>
   local px="$1" secs="$2" steps
   steps=$(python3 -c "print(max(8, int($secs * 40)))")
   osascript -l JavaScript "$HERE/scroll.js" \
     $((WIN_X + WIN_W / 4)) $((WIN_Y + WIN_H / 2)) "$px" "$steps" "$secs" >/dev/null
-  park_cursor
 }
 
 drive7() {
   sleep 1.0                                        # the finished session; poster frame
-  tscroll 180 0.7;   sleep 0.7                     # up through the reply
-  tscroll 180 0.7;   sleep 0.9                     # and to its top
-  tscroll -900 1.1;  sleep 1.0                     # back down to the prompt
-  kc $K_D "$CMD"; sleep 1.6                        # split (split-auto) grows in
+  tscroll 180 0.7;   sleep 0.6                     # up through the reply
+  tscroll 180 0.7;   sleep 0.8                     # and to its top
+  tscroll -900 1.0                                 # back down, and straight into
+  kc $K_D "$CMD"                                   # the split (split-auto) growing in
+  park_cursor; sleep 1.3
   wait_prompt --pane 2;       kline "hx notes.md" 0.055
   sleep 1.5
   kc $K_O; sleep 0.5                               # open a line below, insert mode
   ktype "Try a dimmer glyph for the farthest band; the dots read as noise." 0.06
   sleep 0.5; kc $K_ESC; sleep 0.8
-  kc $K_G; kc $K_G; sleep 0.9                      # gg: top of the file
+  # Escape leaves the cursor at the end of the long line just typed. Held from
+  # there, j keeps that column as its target and the cursor swings across the
+  # width as the lines below vary in length — the glide at its most visible.
   khold $K_J 16; sleep 0.8                         # hold j: down the file
   khold $K_W 14; sleep 0.8                         # hold w: along a line, word by word
   khold $K_K 9;  sleep 0.8                         # hold k: back up
