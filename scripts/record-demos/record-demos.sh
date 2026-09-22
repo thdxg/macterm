@@ -9,10 +9,17 @@
 #   ./scripts/record-demos/record-demos.sh remote-down    and tear it down
 #   ./scripts/record-demos/record-demos.sh quick-prefs    set the quick-terminal geometry (needs an app restart)
 #   ./scripts/record-demos/record-demos.sh quick-restore  put that geometry back
+#   ./scripts/record-demos/record-demos.sh anim-prefs     turn every animation on (needs an app restart)
+#   ./scripts/record-demos/record-demos.sh anim-restore   put the animation settings back
+#   ./scripts/record-demos/record-demos.sh claude-up      start demo 7's offline Claude Code alone
+#   ./scripts/record-demos/record-demos.sh claude-down    and stop it
+#   ./scripts/record-demos/record-demos.sh scroll-test    one trackpad scroll into the window, to check direction
 #
 # It drives the INSTALLED app (/Applications/Macterm.app) through synthetic
 # keystrokes, so it needs Accessibility and Screen Recording granted to
-# whatever runs it, ffmpeg on PATH, and — for demo 5 — Docker.
+# whatever runs it, ffmpeg on PATH, Docker for demo 5, and `claude` (Claude
+# Code) on PATH for demo 7 — which runs it against a local stand-in for the
+# API, so no account and no network are involved.
 #
 # You place the Macterm window; the script refuses to record until it sits at
 # the canonical rect below, so every clip lines up. Recordings go to
@@ -20,7 +27,8 @@
 # that writes into the repo.
 #
 # Demos: 1 splits · 2 sidebar and tabs · 3 command palette and layouts ·
-#        4 quick terminal · 5 remote project (Docker) · 6 tab switcher
+#        4 quick terminal · 5 remote project (Docker) · 6 tab switcher ·
+#        7 animations (Claude Code scrollback, a split, the cursor in Helix)
 set -euo pipefail
 
 # ---------------------------------------------------------------- constants --
@@ -47,6 +55,14 @@ CNAME=macterm-demo          # the docker container's own name
 RIMAGE=macterm-demo-remote
 RDIR=/workspace
 RMARKER=macterm-demo-container   # /etc/macterm-demo, baked into the image
+
+# Demo 7's Claude Code talks to a mock of the API on this port (claude-mock/
+# server.py), started by claude_up. The scrolling it shows arrived with the
+# GhosttyKit in 1.29.3 (and the tip builds just before it); an older app
+# records the same keystrokes with nothing moving, so claude_up checks the
+# installed binary for that kit rather than trusting a version string.
+CLAUDE_PORT=8765
+ANIM_KIT_SYMBOL=ghost_rows       # a shader uniform only the new kit has
 
 MACTERM=/Applications/Macterm.app/Contents/Resources/bin/macterm
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -232,7 +248,11 @@ record() {
   local dev; dev="$(screen_device)"; [ -n "$dev" ] || die "no screen-capture device"
   rm -f "$out"
   park_cursor
-  if [ "$mode" != noactivate ]; then
+  if [ "$mode" = quiet ]; then
+    # focus, but type nothing: the pane is showing a program (Claude Code)
+    # for which the Escape/Return settle below would be input
+    focus_app; sleep 0.8
+  elif [ "$mode" != noactivate ]; then
     focus_app
     # settle before the camera rolls: Escape clears a stray palette or alert,
     # and the empty Return hands a vi-mode line editor back to insert mode
@@ -577,7 +597,8 @@ web_assets() {
     "03-palette:03-command-palette-and-layouts" \
     "04-quick-terminal:04-quick-terminal" \
     "05-remote:05-remote-project" \
-    "06-tab-switcher:06-tab-switcher"
+    "06-tab-switcher:06-tab-switcher" \
+    "07-animations:07-animations"
   do
     name="${pair%%:*}"; src="$OUT/${pair#*:}.mp4"
     [ -f "$src" ] || { printf '\033[33m..\033[0m no %s, skipping\n' "$src"; continue; }
@@ -654,6 +675,164 @@ demo6() {  # the tab switcher, over tabs that are actually doing something
   reset_project
 }
 
+# ── animations ──────────────────────────────────────────────────────────────
+# Smooth scrolling through a Claude Code transcript, a split growing in, and
+# the cursor gliding (with its trail) around a file in Helix. Everything the
+# clip shows is generated: claude-mock/server.py stands in for the API and
+# streams a canned tour of a small Swift package that seed-project.sh writes
+# fresh each run, so the transcript is the same on every take and nothing
+# leaves the machine. The tour is answered BEFORE the camera rolls; the clip
+# opens on the finished session and scrolls back through it.
+CDEMO="$WORK/demo7"                 # mock pid, Claude Code's config dir, the project
+CPROJ="$CDEMO/starfield"
+K_G=5 K_E=14 K_B=11 K_O=31
+
+app_version() { defaults read /Applications/Macterm.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo 0; }
+
+app_has_anim_kit() {  # does the installed app link a GhosttyKit with the region animation?
+  # grep -c, not -q: under pipefail an early exit would fail `strings` with SIGPIPE
+  [ "$(strings /Applications/Macterm.app/Contents/MacOS/Macterm 2>/dev/null | grep -c "$ANIM_KIT_SYMBOL")" -gt 0 ]
+}
+
+anim_pref() { defaults read com.thdxg.macterm "macterm.terminal.$1" 2>/dev/null || echo default; }
+
+claude_up() {
+  command -v claude >/dev/null || die "claude (Claude Code) not on PATH — demo 7 needs it"
+  app_has_anim_kit \
+    || die "installed Macterm ($(app_version)) predates the scrolling animation; demo 7 needs 1.29.3 or newer"
+  local k; for k in smoothScrolling smoothCursor cursorTrail animatedSplits; do
+    [ "$(anim_pref $k)" = 1 ] || die "macterm.terminal.$k is off — run: $0 anim-prefs, then relaunch Macterm"
+  done
+  mkdir -p "$CDEMO/claude-home"
+  "$HERE/claude-mock/seed-project.sh" "$CPROJ" >/dev/null
+
+  claude_down_mock
+  python3 -u "$HERE/claude-mock/server.py" "$CLAUDE_PORT" -v >"$CDEMO/mock.log" 2>&1 &
+  echo $! > "$CDEMO/mock.pid"
+  local i=0
+  until curl -fs "http://127.0.0.1:$CLAUDE_PORT/health" >/dev/null 2>&1; do
+    sleep 0.2; i=$((i + 1)); [ $i -gt 25 ] && { cat "$CDEMO/mock.log" >&2; die "mock API never answered"; }
+  done
+
+  # Claude Code's own state, kept out of ~/.claude: onboarding done, the
+  # project trusted, and the dummy key pre-approved (it remembers keys by
+  # their last 20 characters), so nothing asks a question on screen.
+  local key="sk-ant-api03-macterm-demo-0000000000000000000000000000"
+  python3 - "$CDEMO/claude-home/.claude.json" "$CPROJ" "$key" <<'PY'
+import json, sys
+path, proj, key = sys.argv[1:4]
+json.dump({
+    "hasCompletedOnboarding": True, "theme": "dark", "numStartups": 12,
+    "hasAcknowledgedCostThreshold": True, "autoUpdates": False,
+    "customApiKeyResponses": {"approved": [key[-20:]], "rejected": []},
+    "projects": {proj: {"hasTrustDialogAccepted": True, "hasCompletedProjectOnboarding": True,
+                        "allowedTools": [], "projectOnboardingSeenCount": 3}},
+}, open(path, "w"), indent=2)
+PY
+  # The pane runs this instead of a shell, so no command line shows above the
+  # banner in scrollback. CLAUDE_CODE_* is scrubbed in case the recording
+  # shell is itself inside a Claude Code session.
+  cat > "$CDEMO/claude-demo.sh" <<WRAP
+#!/bin/bash
+cd "$CPROJ"
+exec env -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_ENTRYPOINT -u CLAUDECODE \\
+  ANTHROPIC_BASE_URL="http://127.0.0.1:$CLAUDE_PORT" \\
+  ANTHROPIC_API_KEY="$key" \\
+  CLAUDE_CONFIG_DIR="$CDEMO/claude-home" \\
+  DISABLE_AUTOUPDATER=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \\
+  DISABLE_BUG_COMMAND=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \\
+  claude "Give me a tour of this project"
+WRAP
+  chmod +x "$CDEMO/claude-demo.sh"
+  say "offline Claude Code ready (mock API on :$CLAUDE_PORT, project $CPROJ)"
+}
+
+claude_down_mock() {
+  if [ -f "$CDEMO/mock.pid" ]; then
+    kill "$(cat "$CDEMO/mock.pid")" 2>/dev/null || true
+    rm -f "$CDEMO/mock.pid"
+  fi
+  pkill -f "claude-mock/server.py $CLAUDE_PORT" 2>/dev/null || true
+}
+
+claude_down() {
+  claude_down_mock
+  say "offline Claude Code stopped"
+}
+
+# One trackpad-style scroll into the middle of the first pane. Positive pixels
+# go toward older content. scroll.js posts the gesture at CGEvent level.
+tscroll() {  # tscroll <pixels> <seconds>
+  local px="$1" secs="$2" steps
+  steps=$(python3 -c "print(max(8, int($secs * 40)))")
+  osascript -l JavaScript "$HERE/scroll.js" \
+    $((WIN_X + WIN_W / 4)) $((WIN_Y + WIN_H / 2)) "$px" "$steps" "$secs" >/dev/null
+}
+
+drive7() {
+  sleep 1.0                                        # the finished session; poster frame
+  tscroll 700 0.9;   sleep 0.8                     # up through the reply
+  tscroll 700 0.9;   sleep 1.0                     # and to its top
+  tscroll -1500 1.2; sleep 1.0                     # back down to the prompt
+  kc $K_D "$CMD"; sleep 1.6                        # split (split-auto) grows in
+  wait_prompt --pane 2;       kline "hx notes.md" 0.055
+  sleep 1.5
+  kc $K_O; sleep 0.5                               # open a line below, insert mode
+  ktype "Try a dimmer glyph for the farthest band; the dots read as noise." 0.06
+  sleep 0.5; kc $K_ESC; sleep 0.8
+  kc $K_G; kc $K_G; sleep 0.9                      # gg: top of the file
+  local i; for i in 1 2 3; do kc $K_W; sleep 0.45; done   # word by word
+  kc $K_B; sleep 0.6
+  kc $K_J; sleep 0.5; kc $K_J; sleep 0.5; kc $K_K; sleep 0.7
+  kc $K_G; kc $K_E; sleep 1.0                      # ge: end of the file
+  kc $K_G; kc $K_G; sleep 1.2                      # and back to the top
+}
+
+demo7() {  # animations: scrollback in Claude Code, a split, the cursor in Helix
+  say "demo 7 — animations"
+  claude_up
+  reset_project
+  # Claude Code in its own tab, launched directly so no shell prompt or command
+  # precedes the banner in scrollback; then drop the shell tab reset_project made.
+  "$MACTERM" tab new --project macterm --run "$CDEMO/claude-demo.sh" >/dev/null; sleep 1
+  "$MACTERM" tab close 1 --project macterm --force >/dev/null 2>&1 || true
+  # wait for the whole tour to have arrived, then for the input box to settle
+  local i=0
+  until "$MACTERM" pane dump --project macterm --tab 1 2>/dev/null | grep -Eq "Want me to walk through|line by line\?"; do
+    sleep 0.5; i=$((i + 1)); [ $i -gt 120 ] && { claude_down; die "Claude Code never finished the tour (see $CDEMO/mock.log)"; }
+  done
+  sleep 2.5
+  record animations drive7 "" quiet
+  encode animations 07-animations.mp4
+  claude_down
+  reset_project
+}
+
+anim_prefs() {
+  local k; for k in smoothScrolling smoothCursor cursorTrail animatedSplits; do
+    anim_pref $k > "$WORK/anim.$k.was"
+    defaults write com.thdxg.macterm "macterm.terminal.$k" -bool true
+    echo "  macterm.terminal.$k = 1  (was $(cat "$WORK/anim.$k.was"))"
+  done
+  cat <<EOF
+   written. Quit and relaunch Macterm so the cursor shaders load (sessions
+   persist), then put the window back and record. anim-restore undoes this.
+EOF
+}
+
+anim_restore() {
+  local k was; for k in smoothScrolling smoothCursor cursorTrail animatedSplits; do
+    was="$(cat "$WORK/anim.$k.was" 2>/dev/null || echo default)"
+    if [ "$was" = default ]; then
+      defaults delete com.thdxg.macterm "macterm.terminal.$k" 2>/dev/null || true
+    else
+      defaults write com.thdxg.macterm "macterm.terminal.$k" -bool "$([ "$was" = 1 ] && echo true || echo false)"
+    fi
+    echo "  macterm.terminal.$k -> $was"
+  done
+  say "restored — relaunch Macterm to pick it up"
+}
+
 quick_prefs() {  # panel geometry as fractions of the screen, for the rect above
   read -r sw sh <<< "$(screen_size)"; read -r vw vh <<< "$(visible_size)"
   python3 - "$sw" "$sh" "$vw" "$vh" $QT_X $QT_Y $QT_W $QT_H <<'PY'
@@ -683,13 +862,18 @@ case "${1:-all}" in
   remote-down) remote_down; exit 0 ;;
   web) web_assets; exit 0 ;;
   quick-prefs) quick_prefs; exit 0 ;;
+  anim-prefs) anim_prefs; exit 0 ;;
+  anim-restore) anim_restore; exit 0 ;;
+  claude-up) claude_up; exit 0 ;;
+  claude-down) claude_down; exit 0 ;;
+  scroll-test) focus_app; sleep 0.5; tscroll 600 0.8; say "scrolled 600px toward older content"; exit 0 ;;
   quick-restore)  # half the screen, centred — what it was before recording
     defaults write com.thdxg.macterm macterm.quickTerminal.width -float 0.5
     defaults write com.thdxg.macterm macterm.quickTerminal.height -float 0.5
     defaults write com.thdxg.macterm macterm.quickTerminal.fixedX -float 0.5
     defaults delete com.thdxg.macterm macterm.quickTerminal.fixedY 2>/dev/null || true
     say "restored — relaunch Macterm to pick it up"; exit 0 ;;
-  all) preflight; demo1; demo2; demo3; demo4; demo5; demo6 ;;
+  all) preflight; demo1; demo2; demo3; demo4; demo5; demo6; demo7 ;;
   *) preflight; for n in "$@"; do "demo$n"; done ;;
 esac
 say "done — $OUT"

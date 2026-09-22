@@ -86,7 +86,7 @@ through to the no-cache `@pages` rule.
 
 ### The demo reel
 
-What used to be the screenshot gallery is now six screen recordings, stacked
+What used to be the screenshot gallery is now seven screen recordings, stacked
 one per feature, in `assets/demo/`: `<name>.mp4` beside a `<name>.webp` poster
 frame. Their number prefixes are the order they were recorded in, not the order
 the page shows them — `index.html` decides that. They are referenced straight from `/assets/demo/…` — no build step —
