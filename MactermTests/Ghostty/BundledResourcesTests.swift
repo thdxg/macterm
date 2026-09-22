@@ -81,47 +81,40 @@ struct BundledResourcesTests {
         #expect(exists("ghostty/themes/Rose Pine"), "expected bundled ghostty theme missing")
     }
 
-    /// The bundled zmx must carry an embedded Info.plist naming
-    /// `com.thdxg.macterm.zmx`. Each session daemon disclaims the app at spawn
-    /// and is the *responsible process* for every program in its session, so
-    /// this identity — not Macterm's — is what the Local Network prompt names
-    /// and what the grant is recorded against (#419). A fork sync that dropped
-    /// the downstream patch would ship a binary with no identity at all:
-    /// prompts naming a bare path, and a grant lost on every update. Read the
-    /// way codesign reads it, from the `__TEXT,__info_plist` section, in every
-    /// slice: the release binary is universal, and `launchctl plist` reads a
-    /// thin Mach-O only.
+    /// The zmx inside the built bundle must be signed as the app itself. Each
+    /// session daemon disclaims the app at spawn and is the *responsible
+    /// process* for every program in its session, and macOS identifies a
+    /// responsible process by its code signature's identifier: with the app's,
+    /// the daemon resolves to Macterm's name, usage descriptions and existing
+    /// Local Network / TCC grants (#419). The release download is only
+    /// linker-signed as `zmx`, and Xcode never re-signs a Mach-O it copies into
+    /// Resources/, so `scripts/embed-zmx.sh` does it — this pins that a build
+    /// phase edit can't silently turn every pane prompt into one for "zmx".
+    /// Read from the test host's own bundle, which is the built app.
     @Test
-    func bundled_zmx_carries_its_privacy_identity() throws {
-        try #require(resourcesPresent, "run `mise run setup` to populate Macterm/Resources")
-        let zmx = try #require(Self.resourcesDir?.appendingPathComponent("zmx/zmx"))
-        try #require(FileManager.default.isExecutableFile(atPath: zmx.path), "zmx/zmx missing")
-
-        let archs = try Self.run("/usr/bin/lipo", ["-archs", zmx.path]).output
-            .split(whereSeparator: \.isWhitespace).map(String.init)
-        try #require(!archs.isEmpty, "lipo could not read zmx/zmx")
-        for arch in archs {
-            let thin = FileManager.default.temporaryDirectory
-                .appendingPathComponent("zmx-\(arch)-\(UUID().uuidString)")
-            defer { try? FileManager.default.removeItem(at: thin) }
-            _ = try Self.run("/usr/bin/lipo", ["-thin", arch, "-output", thin.path, zmx.path])
-
-            let plist = try Self.run("/bin/launchctl", ["plist", "__TEXT,__info_plist", thin.path])
-            #expect(plist.status == 0, "zmx (\(arch)) has no embedded Info.plist section")
-            #expect(plist.output.contains("com.thdxg.macterm.zmx"), "zmx (\(arch)) is not com.thdxg.macterm.zmx:\n\(plist.output)")
-            #expect(plist.output.contains("NSLocalNetworkUsageDescription"), "zmx (\(arch)) lacks the Local Network usage description")
-        }
+    func bundled_zmx_is_signed_as_the_app() throws {
+        let zmx = try #require(
+            Bundle.main.url(forResource: "zmx", withExtension: nil, subdirectory: "zmx"),
+            "zmx/zmx missing from the built bundle — run `mise run setup`"
+        )
+        let appID = try #require(Bundle.main.bundleIdentifier)
+        let signature = try Self.run("/usr/bin/codesign", ["--display", "--verbose", zmx.path])
+        #expect(signature.status == 0, "codesign could not read zmx: \(signature.output)")
+        #expect(
+            signature.output.contains("Identifier=\(appID)\n"),
+            "zmx is not signed as \(appID):\n\(signature.output)"
+        )
     }
 
     private static func run(_ tool: String, _ arguments: [String]) throws -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tool)
         process.arguments = arguments
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = Pipe()
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
         try process.run()
-        let output = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
         return (process.terminationStatus, output)
     }
