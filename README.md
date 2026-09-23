@@ -91,6 +91,8 @@ font-family = JetBrains Mono
 font-size = 14
 ```
 
+Macterm's defaults differ from Ghostty's for a few keys (theme, font size, padding, `macos-option-as-alt`, and `tab-inherit-working-directory = false` so new tabs open at the project root). They are loaded before your config, so any key you set wins. The full list is `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
+
 Macterm's own settings — window opacity, sidebar behavior, quick-terminal size, keymaps — live in **Macterm → Settings**. See the [configuration docs](https://macterm.thdxg.dev/docs/configuration) for the full precedence order and the few chrome keys Macterm overrides.
 
 ## Cookbook
