@@ -18,6 +18,20 @@ font-size = 14
 
 With no existing config, Macterm uses `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`. If yours lives elsewhere, set the path in **Settings → General → Ghostty Config**. Run **Reload Ghostty Config** from the command palette to apply an edit without restarting.
 
+## Defaults that differ from Ghostty
+
+Macterm ships its own defaults for a few keys. They load before your config, so setting any of them yourself wins.
+
+| Key | Macterm default |
+| --- | --- |
+| `theme` | `"Rose Pine"` |
+| `font-size` | `16` |
+| `macos-option-as-alt` | `true` |
+| `window-padding-x`, `window-padding-y` | `16` |
+| `tab-inherit-working-directory` | `false` — new tabs start at the project root |
+
+The source of truth is `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
+
 ## Keys Macterm overrides
 
 Window chrome Macterm draws itself, so these are ignored or forced:
