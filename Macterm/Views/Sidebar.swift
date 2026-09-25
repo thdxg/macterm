@@ -768,6 +768,7 @@ struct SidebarContent: View {
     @ViewBuilder
     private func projectMenu(_ project: Project) -> some View {
         Button("New Tab") { createTab(in: project) }
+        worktreesMenu(for: project)
         Button("Copy Path") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(project.path, forType: .string)
@@ -797,10 +798,43 @@ struct SidebarContent: View {
         }
     }
 
+    /// The project's other git worktrees, each opening a tab of this project
+    /// in its directory. The listing is read from git's files as the menu is
+    /// built — the list's context-menu closure runs when the menu opens, not
+    /// when a row redraws — so it is never older than the right-click. It is
+    /// empty, and the item disabled, for a directory that isn't a repository's
+    /// top or has no other worktree, and for a remote project: that one's
+    /// files are reachable only over ssh, which a menu never starts.
+    @ViewBuilder
+    private func worktreesMenu(for project: Project) -> some View {
+        let worktrees = GitWorktrees.list(projectPath: project.path)
+        if worktrees.isEmpty {
+            // A disabled item, not a disabled `Menu`: a context menu drops
+            // `.disabled` on a submenu item — measured on macOS 27, it renders
+            // enabled, over an empty submenu that never opens.
+            Button("Worktrees") {}
+                .disabled(true)
+        } else {
+            Menu("Worktrees") {
+                ForEach(worktrees) { worktree in
+                    Button(worktree.title) { createTab(in: project, worktree: worktree) }
+                }
+            }
+        }
+    }
+
     /// Shared by the context menu and its optional hover shortcut.
     private func createTab(in project: Project) {
         appState.selectProject(project, in: windowState)
         appState.createTab(projectID: project.id, projects: projectStore.projects)
+        presentation.expandedProjects.insert(project.id)
+    }
+
+    /// `createTab(in:)` with the worktree's directory as the working directory
+    /// in place of the one `tab-inherit-working-directory` would pick.
+    private func createTab(in project: Project, worktree: GitWorktree) {
+        appState.selectProject(project, in: windowState)
+        appState.createTab(projectID: project.id, projects: projectStore.projects, workingDirectory: worktree.path)
         presentation.expandedProjects.insert(project.id)
     }
 
