@@ -95,26 +95,26 @@ struct AgentSkillsTests {
 
     @Test
     func the_bundled_cli_prints_exactly_this_text() throws {
-        let all = try Self.cli(["skills"])
+        let all = try BundledCLI.run(["skills"])
         #expect(all.status == 0)
         #expect(all.stdout == AgentSkills.catalogText)
 
         for skill in AgentSkills.all {
-            let one = try Self.cli(["skills", skill.name])
+            let one = try BundledCLI.run(["skills", skill.name])
             #expect(one.status == 0)
             #expect(one.stdout == skill.fileText, "`macterm skills \(skill.name)` is not the SKILL.md verbatim")
         }
 
-        let list = try Self.cli(["skills", "--list"])
+        let list = try BundledCLI.run(["skills", "--list"])
         #expect(list.status == 0)
         #expect(list.stdout == AgentSkills.listText)
 
         // stdout only on success; the error and its hint go to stderr.
-        let unknown = try Self.cli(["skills", "no-such-skill"])
+        let unknown = try BundledCLI.run(["skills", "no-such-skill"])
         #expect(unknown.status == 1)
         #expect(unknown.stdout.isEmpty)
         #expect(unknown.stderr.contains("--list"))
-        let both = try Self.cli(["skills", "--list", AgentSkills.all[0].name])
+        let both = try BundledCLI.run(["skills", "--list", AgentSkills.all[0].name])
         #expect(both.status == 1)
         #expect(both.stdout.isEmpty)
     }
@@ -131,13 +131,13 @@ struct AgentSkillsTests {
 
             let skills: [Skill]
         }
-        let full = try JSONDecoder().decode(Payload.self, from: Data(Self.cli(["skills", "--json"]).stdout.utf8))
+        let full = try JSONDecoder().decode(Payload.self, from: Data(BundledCLI.run(["skills", "--json"]).stdout.utf8))
         #expect(full.skills.map(\.name) == AgentSkills.all.map(\.name))
         #expect(full.skills.map(\.path) == AgentSkills.all.map(\.path))
         #expect(full.skills.map(\.text) == AgentSkills.all.map(\.fileText))
 
         let list = try JSONDecoder().decode(
-            Payload.self, from: Data(Self.cli(["skills", "--list", "--json"]).stdout.utf8)
+            Payload.self, from: Data(BundledCLI.run(["skills", "--list", "--json"]).stdout.utf8)
         )
         #expect(list.skills.map(\.description) == AgentSkills.all.map(\.description))
         #expect(list.skills.allSatisfy { $0.text == nil })
@@ -147,7 +147,7 @@ struct AgentSkillsTests {
     /// door; losing it in a help-text edit would go unnoticed otherwise.
     @Test
     func the_help_carries_a_prompt_to_give_an_agent() throws {
-        let help = try Self.cli(["skills", "--help"])
+        let help = try BundledCLI.run(["skills", "--help"])
         #expect(help.status == 0)
         let flattened = help.stdout.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         #expect(flattened.contains("Run `macterm skills`"))
@@ -163,7 +163,7 @@ struct AgentSkillsTests {
     /// real, since a release CLI lacks them.
     @Test
     func every_command_in_the_skills_is_one_the_cli_accepts() throws {
-        let dump = try Self.cli(["--experimental-dump-help"])
+        let dump = try BundledCLI.run(["--experimental-dump-help"])
         #expect(dump.status == 0)
         let json = try #require(try JSONSerialization.jsonObject(with: Data(dump.stdout.utf8)) as? [String: Any])
         let root = try CommandNode(json: #require(json["command"] as? [String: Any]))
@@ -182,26 +182,6 @@ struct AgentSkillsTests {
     }
 
     // MARK: - Helpers
-
-    private static func cli(_ arguments: [String]) throws -> (status: Int32, stdout: String, stderr: String) {
-        let binary = try #require(
-            Bundle.main.url(forResource: "macterm", withExtension: nil, subdirectory: "bin"),
-            "bin/macterm missing from the built bundle"
-        )
-        let process = Process()
-        process.executableURL = binary
-        process.arguments = arguments
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        try process.run()
-        // Drain both pipes before waiting, or a full pipe deadlocks the child.
-        let out = stdout.fileHandleForReading.readDataToEndOfFile()
-        let err = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(decoding: out, as: UTF8.self), String(decoding: err, as: UTF8.self))
-    }
 
     /// Lines of a skill outside its fenced code blocks.
     private static func forEachProseLine(of skill: AgentSkill, _ body: (String) -> Void) {
