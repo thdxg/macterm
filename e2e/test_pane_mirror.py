@@ -17,7 +17,7 @@ used across this suite.
 
 import uuid
 
-from _harness import wait_for
+from _harness import HarnessError, wait_for
 
 
 def test_mirror_shares_the_sources_session(app, fresh_tab, live_pane):
@@ -189,13 +189,6 @@ def test_focusing_a_mirror_resizes_the_shared_pty_to_it(app, fresh_tab, live_pan
 
     app.cli("pane", "resize-split", "--axis", "horizontal", "--ratio", "0.72",
             "--pane", live_pane["id"])
-    widths = wait_for(
-        lambda: (lambda a, b: (a, b) if a - b > 8 else None)(
-            _cols(app, live_pane["id"]), _cols(app, mirror["id"])
-        ),
-        message="the split to skew so the two mirrors differ in width",
-    )
-    wide, narrow = widths
 
     # Print the pty size once a second, forever. No `$` and no single quotes,
     # so every login shell tokenizes it identically.
@@ -209,17 +202,32 @@ def test_focusing_a_mirror_resizes_the_shared_pty_to_it(app, fresh_tab, live_pan
                 return int(parts[1])
         return None
 
-    def settles_on(expected, why):
-        wait_for(
-            lambda: latest_pty_cols() == expected,
-            timeout=30,
-            message=f"the pty to report {expected} columns ({why})",
-        )
+    def settles_on(leader, why):
+        """Wait for the pty to report `leader`'s width while the other mirror's
+        differs from it by more than 8 columns, since the skew is what makes a
+        match mean anything.
 
-    settles_on(wide, "the loop was started in the wide pane, so it leads")
+        Both are read at each check, never captured up front: the mirror's
+        surface comes up while its split is still sliding open, and the resize
+        redirects that slide instead of ending it, so the widths just after it
+        are ones the panes pass through, not the ones they settle at. A window
+        re-laid out mid-test (a tiling window manager) moves them the same way."""
+        other = mirror["id"] if leader == live_pane["id"] else live_pane["id"]
+        seen = {}
+
+        def leads():
+            seen.update(pty=latest_pty_cols(), leader=_cols(app, leader), other=_cols(app, other))
+            return abs(seen["leader"] - seen["other"]) > 8 and seen["pty"] == seen["leader"]
+
+        try:
+            wait_for(leads, timeout=30, message=f"the pty to report the leader's width ({why})")
+        except HarnessError as error:
+            raise HarnessError(f"{error}; last saw columns {seen}") from None
+
+    settles_on(live_pane["id"], "the loop was started in the wide pane, so it leads")
 
     app.cli("pane", "focus", "--pane", mirror["id"])
-    settles_on(narrow, "focusing the narrow mirror claims leadership")
+    settles_on(mirror["id"], "focusing the narrow mirror claims leadership")
 
     app.cli("pane", "focus", "--pane", live_pane["id"])
-    settles_on(wide, "and focusing back claims it again")
+    settles_on(live_pane["id"], "and focusing back claims it again")
