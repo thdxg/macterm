@@ -759,6 +759,39 @@ struct ControlHandlerTests {
         #expect(unknown.error?.code == .notFound)
     }
 
+    /// A session names one pane wherever it lives, so with no `--project` it
+    /// resolves in the project holding it rather than only while that project
+    /// is active — the case of an agent in a background pane (targeting itself
+    /// through `MACTERM_SESSION`, which arrives as this same selector) after the
+    /// user has moved to another project.
+    @Test
+    func session_selector_resolves_outside_the_active_project() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let home = seedProject(appState, projectStore, name: "home")
+        let homeTab = try #require(appState.workspaces[home.id]?.activeTab)
+        let pane = try #require(homeTab.splitRoot.allPanes().first)
+        _ = seedProject(appState, projectStore, name: "elsewhere")
+        #expect(appState.activeProjectID != home.id)
+
+        let split = await handler.handle(request(
+            "pane.split", args: ControlArgs(session: pane.sessionName, direction: "down")
+        ))
+        #expect(split.ok)
+        #expect(split.data?.panes?.first?.tabID == homeTab.id.uuidString)
+        #expect(homeTab.splitRoot.allPanes().count == 2)
+
+        // An explicit project still scopes the lookup to that project.
+        let scoped = await handler.handle(request(
+            "pane.zoom", args: ControlArgs(project: "elsewhere", session: pane.sessionName)
+        ))
+        #expect(scoped.error?.code == .notFound)
+
+        let unknown = await handler.handle(request(
+            "pane.zoom", args: ControlArgs(session: "macterm-nope-000000000000")
+        ))
+        #expect(unknown.error?.code == .notFound)
+    }
+
     @Test
     func pane_split_remote_source_falls_back_to_project_directory() async throws {
         let (handler, appState, projectStore) = makeHandler()

@@ -1073,8 +1073,17 @@ final class ControlHandler {
     // MARK: - Selector resolution
 
     /// Resolve the project selector (name, UUID, or 1-based list index) to a
-    /// project with a live workspace; defaults to the active project.
+    /// project with a live workspace; defaults to the active project — except
+    /// for a session selector with no project. A session names one pane
+    /// wherever it lives, so it resolves in the project holding it: otherwise
+    /// `--session`, and the `MACTERM_SESSION` self-target the CLI sends the
+    /// same way, answered `not_found` for as long as the user was looking at
+    /// another project, which is exactly when a script or agent in a
+    /// background pane is still working.
     private func resolveWorkspace(_ args: ControlArgs) throws -> (Project, Workspace) {
+        if args.project == nil, let session = args.session, !session.isEmpty {
+            return try workspace(holding: session)
+        }
         let project = try resolveProject(args.project)
         guard let workspace = appState.workspaces[project.id] else {
             throw ControlError(
@@ -1084,6 +1093,32 @@ final class ControlHandler {
             )
         }
         return (project, workspace)
+    }
+
+    /// The project whose workspace has a pane on `session`. The active project
+    /// is asked first, so a session it holds resolves exactly as it did before
+    /// sessions were looked up everywhere; then the rest in sidebar order, and
+    /// the pinned workspace last.
+    private func workspace(holding session: String) throws -> (Project, Workspace) {
+        let candidates = [appState.activeProjectID].compactMap(\.self)
+            + projectStore.projects.map(\.id)
+            + [PinnedTabs.projectID]
+        for projectID in candidates {
+            guard let workspace = appState.workspaces[projectID],
+                  workspace.tabs.contains(where: { tab in
+                      tab.splitRoot.allPanes().contains { $0.sessionName == session }
+                  })
+            else { continue }
+            let project = projectID == PinnedTabs.projectID
+                ? PinnedTabs.project
+                : projectStore.projects.first { $0.id == projectID }
+            if let project { return (project, workspace) }
+        }
+        throw ControlError(
+            code: .notFound,
+            message: "no pane runs session \"\(session)\"",
+            action: "run `macterm session list` for live sessions"
+        )
     }
 
     private func resolveProject(_ selector: String?) throws -> Project {

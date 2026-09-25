@@ -78,7 +78,7 @@ Projects and tabs accept a **name**, a **UUID**, or the **1-based index** from l
 
 Pane verbs resolve their target in this order:
 
-1. `--session <name>` — the zmx session name. **Restart-stable**: pane UUIDs regenerate every launch, session names don't.
+1. `--session <name>` — the zmx session name. **Restart-stable**: pane UUIDs regenerate every launch, session names don't. Found in whichever project holds it, unless `--project` names one.
 2. `--pane <uuid|index>`.
 3. `MACTERM_SESSION` — inside a pane, so a bare `macterm pane split` splits the pane you're in. An explicit `--tab` disables this.
 4. Otherwise, the focused pane of the active tab.
