@@ -33,6 +33,14 @@ struct NewRemoteProjectSheet: View {
         return t.isEmpty ? nil : t
     }
 
+    /// A typed name the pinned workspace reserves: refused here like every
+    /// typed name (`PinnedTabs.reservesName`). An empty field falls back to
+    /// the host, which nobody typed as a name, so `ProjectStore.create`
+    /// suffixes that one instead.
+    private var nameIsReserved: Bool {
+        PinnedTabs.reservesName(name)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New Remote Project")
@@ -44,6 +52,12 @@ struct NewRemoteProjectSheet: View {
                 TextField("zmx path (optional)", text: $zmxPath, prompt: Text("auto-detect via PATH"))
             }
             .textFieldStyle(.roundedBorder)
+            if nameIsReserved {
+                Text(PinnedTabs.reservedNameMessage)
+                    .font(.caption)
+                    .foregroundStyle(MactermTheme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(
                 "Panes run persistent zmx sessions on the host over ssh — zmx must be installed there. "
                     + "If it isn't found automatically, set an absolute path (e.g. ~/bin/zmx or /usr/local/bin/zmx). "
@@ -58,7 +72,7 @@ struct NewRemoteProjectSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Add") { add() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(composedPath == nil)
+                    .disabled(composedPath == nil || nameIsReserved)
             }
         }
         .padding(20)
@@ -66,7 +80,7 @@ struct NewRemoteProjectSheet: View {
     }
 
     private func add() {
-        guard let path = composedPath else { return }
+        guard let path = composedPath, !nameIsReserved else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         // Always create: a directory can back several projects, so a repeat
         // host:dir here adds a distinct project rather than reusing the last.

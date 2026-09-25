@@ -136,6 +136,36 @@ struct MactermIntentsTests {
     }
 
     @Test
+    func new_project_refuses_a_typed_reserved_name_but_suffixes_the_folders() async throws {
+        let (appState, projectStore) = makeHost()
+        defer { teardown() }
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("intent-pinned-\(UUID().uuidString)", isDirectory: true)
+        let dir = parent.appendingPathComponent("Pinned", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        // Typed into the action: refused, like the CLI's `--name`.
+        let named = NewMactermProjectIntent()
+        named.folder = IntentFile(fileURL: dir)
+        named.name = " pinned "
+        let refusal = await #expect(throws: MactermIntentError.self) { try await named.perform() }
+        if case let .badInput(detail)? = refusal {
+            #expect(detail == PinnedTabs.reservedNameMessage)
+        } else {
+            Issue.record("expected badInput, got \(String(describing: refusal))")
+        }
+        #expect(projectStore.projects.isEmpty)
+
+        // The folder's own name, which nobody typed: suffixed, not refused.
+        let unnamed = NewMactermProjectIntent()
+        unnamed.folder = IntentFile(fileURL: dir)
+        _ = try await unnamed.perform()
+        #expect(projectStore.projects.map(\.name) == ["Pinned 2"])
+        #expect(appState.activeProjectID == projectStore.projects.first?.id)
+    }
+
+    @Test
     func new_project_on_a_missing_folder_is_bad_input() async throws {
         let (appState, projectStore) = makeHost()
         defer { teardown() }

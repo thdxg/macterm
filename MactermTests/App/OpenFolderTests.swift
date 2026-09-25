@@ -117,6 +117,22 @@ struct OpenFolderTests {
         #expect(state.activeProjectID == store.projects.last?.id)
     }
 
+    @Test
+    func a_folder_named_pinned_opens_as_pinned_2() {
+        // The folder's own name would collide with the pinned workspace's (see
+        // `PinnedTabs.reservesName`); opening the folder must still work.
+        let state = makeAppState()
+        let store = makeProjectStore()
+        state.restoreWindows(adopting: WindowState())
+        let delegate = AppDelegate()
+        delegate.finderServices.attach(appState: state, projectStore: store)
+
+        delegate.application(NSApplication.shared, open: [URL(fileURLWithPath: "/Users/me/Pinned", isDirectory: true)])
+
+        #expect(store.projects.map(\.name) == ["Pinned 2"])
+        #expect(store.projects.map(\.path) == ["/Users/me/Pinned"])
+    }
+
     // MARK: - Info.plist contract
 
     @Test

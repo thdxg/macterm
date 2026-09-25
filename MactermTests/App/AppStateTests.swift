@@ -512,6 +512,28 @@ struct AppStateTests {
     }
 
     @Test
+    func sidebar_rename_refuses_the_pinned_workspaces_name_with_a_notice() throws {
+        // The sidebar's half of `project rename`'s refusal: its field has
+        // already closed, so the notice is what says why the name didn't take.
+        let state = makeAppState()
+        let store = ProjectStore(fileURL: FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-rename-\(UUID().uuidString).json"))
+        let project = store.create(name: "alpha", path: "/tmp")
+
+        state.renameProject(project.id, to: "pinned", store: store)
+        #expect(store.projects.first?.name == "alpha")
+        let notice = try #require(state.pendingDialog)
+        #expect(notice.kind == .reservedProjectName)
+        #expect(notice.confirmTitle == nil)
+        #expect(notice.message == PinnedTabs.reservedNameMessage)
+        state.dismissPendingDialog()
+
+        state.renameProject(project.id, to: "beta", store: store)
+        #expect(store.projects.first?.name == "beta")
+        #expect(state.pendingDialog == nil)
+    }
+
+    @Test
     func splitPane_uses_selected_directory() throws {
         let state = makeAppState()
         state.newSplitInheritsWorkingDirectory = { true }
