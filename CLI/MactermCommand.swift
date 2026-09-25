@@ -124,7 +124,7 @@ struct ProjectCommand: ParsableCommand {
 
     struct Create: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Add a project for a local directory (idempotent by path)."
+            abstract: "Add a project for a local directory or remote spec (a new one on every run)."
         )
 
         @Argument(help: "Project directory (absolute or ~-prefixed).")
