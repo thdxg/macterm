@@ -79,7 +79,7 @@ Set a color from a project's sidebar context menu (**Color**) or **Settings → 
 
 | Toggle | Effect |
 | --- | --- |
-| **Smooth scrolling** | Trackpad scrolling and divider drags move by pixels instead of whole rows. Programs that draw their own screen still scroll by rows. |
+| **Smooth scrolling** | Trackpad scrolling and divider drags move by pixels instead of whole rows. Full-screen programs that scroll a region of the screen (`less`, for one) slide too; ones that redraw every row still move by rows. |
 | **Animate splits** | Panes slide in and out of the split layout. Off automatically under Reduce Motion. |
 | **Smooth cursor** | The cursor glides between positions. Sets `cursor-opacity = 0` while on. |
 | **Cursor trail** | A fading streak follows the cursor. Turn off any community trail shader, or you'll see two. |
