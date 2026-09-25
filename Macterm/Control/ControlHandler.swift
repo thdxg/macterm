@@ -362,9 +362,10 @@ final class ControlHandler {
     // MARK: - Project mutations
 
     /// Create a project for a local directory or a remote spec — always a new
-    /// one (see the `create` call). A `--name` the pinned workspace reserves
-    /// is refused exactly as `project.rename` refuses it; the directory's own
-    /// name, which nobody typed, is `ProjectStore.create`'s to disambiguate.
+    /// one (see the `create` call). A `--name` is held to `project.rename`'s
+    /// rules: trimmed, then refused when empty or reserved by the pinned
+    /// workspace. Leaving the flag out takes the directory's own name, which
+    /// nobody typed, so that one is `ProjectStore.create`'s to disambiguate.
     private func projectCreate(_ args: ControlArgs) throws -> ControlData {
         guard let rawPath = args.path, !rawPath.isEmpty else {
             throw ControlError(code: .badRequest, message: "project.create requires a path")
@@ -389,8 +390,13 @@ final class ControlHandler {
         case .remote:
             canonical = rawPath
         }
-        if let name = args.name, PinnedTabs.reservesName(name) {
-            throw Self.reservedNameError
+        // An empty `--name` is refused rather than read as "no name": leaving
+        // the flag out already says that, so an empty value is a mistake (an
+        // unset shell variable, typically) that should fail, not fall back.
+        let name = args.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let name {
+            guard !name.isEmpty else { throw Self.emptyNameError }
+            guard !PinnedTabs.reservesName(name) else { throw Self.reservedNameError }
         }
 
         // Always create — `project create` is not idempotent: re-running adds a
@@ -398,7 +404,7 @@ final class ControlHandler {
         // the just-created project; scripts that want create-or-select must
         // check `project list` first.
         let project = projectStore.create(
-            name: args.name ?? (canonical as NSString).lastPathComponent,
+            name: name ?? (canonical as NSString).lastPathComponent,
             path: canonical
         )
         if args.select == true {
@@ -450,9 +456,7 @@ final class ControlHandler {
             )
         }
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw ControlError(code: .badRequest, message: "project name cannot be empty")
-        }
+        guard !trimmed.isEmpty else { throw Self.emptyNameError }
         let project = try resolveProject(selector)
         // Unreachable through the app (the sentinel is not a `ProjectStore`
         // row, so no sidebar row edits it) — but `resolveProject` accepts
@@ -471,6 +475,10 @@ final class ControlHandler {
         }
         return projectData(updated)
     }
+
+    /// What `project.create` and `project.rename` say to a name that is empty
+    /// once trimmed.
+    private static let emptyNameError = ControlError(code: .badRequest, message: "project name cannot be empty")
 
     /// What `project.create` and `project.rename` say to a name
     /// `PinnedTabs.reservesName` matches — worded like the app's own refusal

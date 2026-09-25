@@ -375,7 +375,7 @@ struct ControlHandlerTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        for name in ["Pinned", "pinned", " PINNED "] {
+        for name in ["Pinned", "pinned", " PINNED ", "\tpinned\n"] {
             let response = await handler.handle(request(
                 "project.create", args: ControlArgs(path: dir.path, name: name)
             ))
@@ -383,6 +383,49 @@ struct ControlHandlerTests {
             #expect(response.error?.message == "\"Pinned\" is reserved for the pinned-tabs workspace")
         }
         #expect(projectStore.projects.isEmpty)
+    }
+
+    @Test
+    func project_create_trims_a_padded_name() async throws {
+        // The trim `project.rename` applies: padding doesn't show in the
+        // sidebar or `project list`, so it must not be part of the name.
+        let (handler, _, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let response = await handler.handle(request(
+            "project.create", args: ControlArgs(path: dir.path, name: "  api \t\n")
+        ))
+        #expect(response.ok)
+        #expect(response.data?.projects?.first?.name == "api")
+        #expect(projectStore.projects.map(\.name) == ["api"])
+    }
+
+    @Test
+    func project_create_refuses_an_empty_name() async throws {
+        // Refused as `project.rename` refuses it, not read as "no name":
+        // leaving `--name` out already means that, so an empty value is a
+        // mistake — typically `--name "$NAME"` with the variable unset.
+        let (handler, _, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        for name in ["", "   ", "\n\t"] {
+            let response = await handler.handle(request(
+                "project.create", args: ControlArgs(path: dir.path, name: name)
+            ))
+            #expect(response.error?.code == .badRequest)
+            #expect(response.error?.message == "project name cannot be empty")
+        }
+        #expect(projectStore.projects.isEmpty)
+
+        // Leaving the flag out still names the project after its directory.
+        let unnamed = await handler.handle(request("project.create", args: ControlArgs(path: dir.path)))
+        #expect(unnamed.data?.projects?.first?.name == dir.lastPathComponent)
     }
 
     @Test
@@ -463,6 +506,7 @@ struct ControlHandlerTests {
         // Empty name
         let empty = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "   ")))
         #expect(empty.error?.code == .badRequest)
+        #expect(empty.error?.message == "project name cannot be empty")
 
         // Reject pinned sentinel
         let pinned = await handler.handle(request("project.rename", args: ControlArgs(project: "pinned", name: "custom")))
