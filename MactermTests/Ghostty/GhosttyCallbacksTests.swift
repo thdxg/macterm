@@ -155,4 +155,29 @@ struct GhosttyCallbacksTests {
         let unknown = ghostty_action_progress_report_state_e(rawValue: 99)
         #expect(GhosttyCallbacks.progressReport(for: unknown) == .ended)
     }
+
+    // MARK: - GHOSTTY_ACTION_TOGGLE_FULLSCREEN
+
+    /// The chords the handler answers, read off ghostty's real defaults: ⌃⌘F
+    /// is the trigger ghostty reports for `toggle_fullscreen` on macOS (the
+    /// last one it defines), and ⌘↩ is bound as well. A GhosttyKit bump that
+    /// moves either fails here instead of leaving a documented shortcut dead.
+    @Test
+    func toggleFullscreen_defaultChordsAreControlCommandFAndCommandReturn() throws {
+        let config = try #require(ghostty_config_new())
+        defer { ghostty_config_free(config) }
+        ghostty_config_finalize(config)
+
+        let action = "toggle_fullscreen"
+        let trigger = ghostty_config_trigger(config, action, UInt(action.utf8.count))
+        #expect(trigger.tag == GHOSTTY_TRIGGER_UNICODE)
+        #expect(trigger.key.unicode == ("f" as Unicode.Scalar).value)
+        #expect(trigger.mods.rawValue == GHOSTTY_MODS_SUPER.rawValue | GHOSTTY_MODS_CTRL.rawValue)
+
+        var commandReturn = ghostty_input_key_s()
+        commandReturn.action = GHOSTTY_ACTION_PRESS
+        commandReturn.keycode = 36 // kVK_Return
+        commandReturn.mods = GHOSTTY_MODS_SUPER
+        #expect(ghostty_config_key_is_binding(config, commandReturn))
+    }
 }
