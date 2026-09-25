@@ -267,6 +267,13 @@ struct ControlStatusInfo: Codable, Equatable {
 }
 
 struct ControlProjectInfo: Codable, Equatable {
+    /// 1-based position in `project list` order, rendered as `project:N` —
+    /// the number `--project` resolves an index against. Carried on every
+    /// reply, so a single-project one (create, select, rename) names the same
+    /// position the list does. nil for the pinned workspace, which is not a
+    /// `project list` row (it is addressed as `pinned`), and from a server
+    /// predating this field (optional per the additive-field convention).
+    var index: Int?
     var id: String
     var name: String
     var path: String

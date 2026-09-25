@@ -99,6 +99,30 @@ struct ControlProtocolTests {
         #expect(decoded.data?.panes?.first?.state == nil)
     }
 
+    @Test
+    func project_response_without_index_remains_decodable() throws {
+        let json = #"""
+        {
+          "v": 1,
+          "id": "old",
+          "ok": true,
+          "data": {
+            "projects": [{
+              "id": "p",
+              "name": "api",
+              "path": "/tmp",
+              "active": true,
+              "loaded": true,
+              "tabCount": 1
+            }]
+          }
+        }
+        """#
+        let decoded = try ControlProtocol.decodeResponse(Data((json + "\n").utf8))
+        #expect(decoded.data?.projects?.first?.name == "api")
+        #expect(decoded.data?.projects?.first?.index == nil)
+    }
+
     // MARK: - New verbs (#165/#166/#167)
 
     @Test
