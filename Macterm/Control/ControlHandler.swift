@@ -361,9 +361,9 @@ final class ControlHandler {
 
     // MARK: - Project mutations
 
-    /// Create (or find) a project for a local path. Idempotent by canonical
-    /// path — re-creating an existing project returns it instead of erroring,
-    /// so scripted setups (the benchmark) can run unconditionally.
+    /// Create a project for a local path or a remote spec. Never a lookup:
+    /// a directory is not an identity (#184), so re-running adds another
+    /// project for the same path — see the comment on the create call below.
     private func projectCreate(_ args: ControlArgs) throws -> ControlData {
         guard let rawPath = args.path, !rawPath.isEmpty else {
             throw ControlError(code: .badRequest, message: "project.create requires a path")
