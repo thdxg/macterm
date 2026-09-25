@@ -18,9 +18,12 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 #   GHOSTTYKIT_TAG=latest mise run setup
 # build-2026-09-25: upstream 2026-09-25 + downstream patches 0001–0006. 0005
 # now decides the smooth-scroll shift in one place for drawing and for the hit
-# test, mouse reports and IME point (thdxg/ghostty#13, #433), and carries the
+# test, mouse reports and IME point (thdxg/ghostty#13, #433), carries the
 # alt-screen region-scroll animation again, which the 09-23 sync had dropped
-# (thdxg/ghostty#14). Any
+# (thdxg/ghostty#14), and undoes that animation's per-region offsets in the
+# same three places, so a click during the ease lands on the row drawn under
+# the pointer (thdxg/ghostty#15). The tag was re-cut from the #15 merge
+# (d716b14): a copy downloaded before that is the build without it. Any
 # same-day push to the fork's main — the nightly sync included — deletes and
 # recreates a daily tag with different bytes, the asset-swap-under-a-pin hazard
 # documented in AGENTS.md; the stamp below can't tell copies apart, so a
