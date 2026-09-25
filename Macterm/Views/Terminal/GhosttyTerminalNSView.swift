@@ -202,11 +202,11 @@ final class GhosttyTerminalNSView: NSView {
         }
     }
 
-    func surfaceDidReportProgress(running: Bool) {
-        if running {
-            onProgressStarted?()
-        } else {
-            onProgressFinished?()
+    func surfaceDidReportProgress(_ report: TerminalProgressReport) {
+        switch report {
+        case .running: onProgressStarted?()
+        case .ended: onProgressFinished?(false)
+        case .failed: onProgressFinished?(true)
         }
     }
 
@@ -411,7 +411,9 @@ final class GhosttyTerminalNSView: NSView {
     var onBell: (() -> Void)?
     var onCommandFinished: ((Int16, UInt64) -> Void)?
     var onProgressStarted: (() -> Void)?
-    var onProgressFinished: (() -> Void)?
+    /// A progress report ended the run (`TerminalProgressReport`). The Bool is
+    /// whether it failed: true for ERROR, false for REMOVE and PAUSE.
+    var onProgressFinished: ((Bool) -> Void)?
     var onTerminalRender: (() -> Void)?
     var onBackgroundColorChange: ((NSColor) -> Void)?
     var onAdaptiveBackgroundChange: ((NSColor?) -> Void)?

@@ -180,6 +180,10 @@ final class Pane: Identifiable {
     var executionState: TerminalExecutionState = .idle {
         didSet {
             guard executionState != oldValue else { return }
+            // A failure describes the `.done` it was recorded on, so it goes
+            // the moment the pane leaves `.done` — acknowledged, or a new run
+            // started — exactly when the green dot would.
+            if oldValue == .done, completionFailed { completionFailed = false }
             // A remote pane's OSC title expires when its command ends — the
             // execution edge is the pid-change analogue local panes get from
             // the poll (see `receiveRemoteReportedTitle`).
@@ -197,6 +201,17 @@ final class Pane: Identifiable {
             NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
         }
     }
+
+    /// Whether the run that left this pane `.done` reported a failure — an
+    /// OSC 9;4 ERROR (`markProgressFinished(failed:)`) — so its status dot is
+    /// red instead of green. It means something only while `executionState`
+    /// is `.done`: it is set only as the pane lands on `.done`, and cleared
+    /// whenever the state leaves `.done` (`executionState`'s `didSet`), which
+    /// is what makes every acknowledgement path clear red exactly as it
+    /// clears green. A flag rather than a fourth `TerminalExecutionState`,
+    /// because the tracker's guards compare against `.done` and a new case
+    /// would slip past them all.
+    private(set) var completionFailed = false
 
     /// The pending-probe request for this remote pane (see
     /// `RemoteProbeRequest`). Set when the pane crossed an execution boundary
@@ -388,8 +403,22 @@ final class Pane: Identifiable {
         executionTracker.notePromptReturned()
     }
 
-    func markProgressFinished() {
-        executionState = executionTracker.markProgressFinished(currentState: executionState)
+    /// A progress report ended the pane's run: REMOVE or PAUSE, or ERROR when
+    /// `failed`. The failure lands on whatever `.done` results rather than only
+    /// on a transition made here, because the caller (`TerminalSurface`)
+    /// reports only for a pane that was `.running` when the report arrived and
+    /// refreshes the foreground first — which has already settled the run when
+    /// the program exited straight after its ERROR. A report that finds the
+    /// pane already `.done` never clears a failure: that is the REMOVE a
+    /// program sends after its ERROR, so SET → ERROR → REMOVE stays red.
+    ///
+    /// The flag is set before the state is published, because publishing
+    /// wakes the poll synchronously and the poll can save the workspace (or
+    /// acknowledge the pane) on the spot — it has to see how the run ended.
+    func markProgressFinished(failed: Bool = false) {
+        let next = executionTracker.markProgressFinished(currentState: executionState)
+        if failed, next == .done { completionFailed = true }
+        executionState = next
         cancelActivityQuietPollIfNeeded()
     }
 
@@ -462,12 +491,15 @@ final class Pane: Identifiable {
         return true
     }
 
-    /// Restore the persisted "done / needs attention" state after a relaunch.
-    /// Only the user-visible checkmark is restored; the live tracker starts
+    /// Restore the persisted "done / needs attention" state after a relaunch,
+    /// and whether that run failed (`completionFailed`), so a red dot comes
+    /// back red. Only the user-visible dot is restored; the live tracker starts
     /// idle, so the first real foreground/output signal behaves normally and
     /// a user interaction (or focusing the tab) clears it via
     /// `acknowledgeCommandCompletion`.
-    func restoreNeedsAttention() {
+    func restoreNeedsAttention(failed: Bool = false) {
+        // Flag first, for the reason `markProgressFinished` gives.
+        completionFailed = failed
         executionState = .done
     }
 

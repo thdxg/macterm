@@ -360,13 +360,15 @@ private struct TerminalSurface: NSViewRepresentable {
             pane?.refreshForegroundProcess()
             pane?.markCommandRunning()
         }
-        view.onProgressFinished = { [weak pane] in
+        view.onProgressFinished = { [weak pane] failed in
+            // Only a live run can end. The REMOVE a program sends after its
+            // ERROR finds the pane already `.done` and leaves the red dot up.
             guard let pane,
                   Preferences.shared.showTabStatusIndicator,
                   pane.executionState == .running
             else { return }
             pane.refreshForegroundProcess()
-            pane.markProgressFinished()
+            pane.markProgressFinished(failed: failed)
             onCommandFinished()
         }
         view.onLinkHover = { [weak pane] url in

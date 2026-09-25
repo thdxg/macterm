@@ -50,6 +50,28 @@ struct GhosttyTerminalNSViewTests {
         #expect(GhosttyTerminalNSView.cursor(for: GHOSTTY_MOUSE_SHAPE_PROGRESS) == nil)
     }
 
+    // MARK: - Progress report routing
+
+    /// ERROR reaches the finish callback flagged as a failure; REMOVE and
+    /// PAUSE (both `.ended`) reach it as a success.
+    @Test
+    func progressReport_routesToStartAndFinishWithTheOutcome() {
+        let view = GhosttyTerminalNSView(
+            paneID: UUID(),
+            workingDirectory: "/tmp",
+            sessionName: "progress-test"
+        )
+        var events: [String] = []
+        view.onProgressStarted = { events.append("started") }
+        view.onProgressFinished = { failed in events.append(failed ? "failed" : "finished") }
+
+        view.surfaceDidReportProgress(.running)
+        view.surfaceDidReportProgress(.failed)
+        view.surfaceDidReportProgress(.ended)
+
+        #expect(events == ["started", "failed", "finished"])
+    }
+
     // MARK: - Context-menu scroll navigation
 
     private typealias Snapshot = GhosttyTerminalNSView.ScrollbarSnapshot
