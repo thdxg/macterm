@@ -60,7 +60,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way. A no-op at the outermost edge, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane. Always requires an explicit target. |
-| `pane run <command…> [--no-submit] [target]` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. |
+| `pane run [--no-submit] [target] <command…>` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. Flags go first: from the command's first word on, everything is typed. |
 | `pane key <chord> [target]` | Send one key press (`a`, `ctrl+c`, `escape`, `up`). |
 | `pane zoom [target]` | Toggle zoom on a pane. |
 | `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split on that axis. |

@@ -98,8 +98,9 @@ enum AgentSkills {
       is the second pane of the active tab (add `--tab` for another tab) and shifts as splits change. An
       explicit target always beats the fallback, which is your own pane inside Macterm and the user's
       focused pane outside it.
-    - **Flags before text.** In `pane run` and `pane key`, every flag goes before the text: everything after
-      the text is typed into the pane, `--help` included. `macterm help pane run` shows help without typing.
+    - **Flags before text.** In `pane run`, every flag goes before the text: from its first word on, everything
+      is typed into the pane, flags included, so `macterm pane run ls --help` types `ls --help`. Only a leading
+      `--help` or `-h` prints help instead, as `macterm help pane run` does.
     - **One argument.** `pane run` joins its arguments with spaces after your shell has removed their quotes,
       so pass the command line as one quoted string; quotes inside it then survive.
     - **The user's shell.** Typed text runs in the user's login shell, which may be nushell or fish. Wrap
