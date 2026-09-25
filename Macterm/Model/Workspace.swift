@@ -78,6 +78,15 @@ final class TerminalTab: Identifiable {
         return .idle
     }
 
+    /// Whether the tab's `.done` is a failure — some pane's run reported one
+    /// (`Pane.completionFailed`) — which turns its status dot red. A running
+    /// pane outranks it exactly as it outranks done, and it outranks a sibling
+    /// pane's success: a split where one pane failed and another passed shows
+    /// the failure.
+    var completionFailed: Bool {
+        executionState == .done && splitRoot.allPanes().contains(where: \.completionFailed)
+    }
+
     var focusedPane: Pane? {
         guard let focusedPaneID else { return nil }
         return splitRoot.findPane(id: focusedPaneID)

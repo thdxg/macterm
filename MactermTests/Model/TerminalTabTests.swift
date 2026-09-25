@@ -185,6 +185,54 @@ struct TerminalTabTests {
         #expect(tab.executionState == .idle)
     }
 
+    /// A pane whose progress run ended on an OSC 9;4 ERROR.
+    private func fail(_ pane: Pane) {
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        pane.markProgressFinished(failed: true)
+    }
+
+    private func paneNamed(_ name: String, in tab: TerminalTab, _ ids: [String: UUID]) throws -> Pane {
+        let id = try #require(ids[name])
+        return try #require(tab.splitRoot.findPane(id: id))
+    }
+
+    @Test
+    func completionFailed_ranks_below_running_and_above_done() throws {
+        let (tab, ids) = makeTab(H(pane("a"), H(pane("b"), pane("c"))), focused: "a")
+        let a = try paneNamed("a", in: tab, ids)
+        let b = try paneNamed("b", in: tab, ids)
+        let c = try paneNamed("c", in: tab, ids)
+        b.executionState = .done
+        fail(c)
+        // One pane passed and one failed: the failure shows.
+        #expect(tab.executionState == .done)
+        #expect(tab.completionFailed)
+        // Work still under way outranks both.
+        a.executionState = .running
+        #expect(tab.executionState == .running)
+        #expect(!tab.completionFailed)
+        a.executionState = .idle
+        #expect(tab.completionFailed)
+        // Acknowledging the failed pane leaves the passing one's green dot.
+        c.acknowledgeCommandCompletion()
+        #expect(tab.executionState == .done)
+        #expect(!tab.completionFailed)
+    }
+
+    @Test
+    func acknowledgeCommandCompletion_clears_a_failure_like_a_success() throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let a = try paneNamed("a", in: tab, ids)
+        let b = try paneNamed("b", in: tab, ids)
+        fail(a)
+        b.executionState = .done
+        #expect(tab.acknowledgeCommandCompletion())
+        #expect(tab.executionState == .idle)
+        #expect(!tab.completionFailed)
+        #expect(!a.completionFailed)
+    }
+
     // MARK: - toggleZoom
 
     @Test

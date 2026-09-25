@@ -136,6 +136,26 @@ struct GhosttyCallbacksTests {
         #expect(url.path == NSHomeDirectory() + "/notes.txt")
     }
 
+    // MARK: - GHOSTTY_ACTION_PROGRESS_REPORT (OSC 9;4)
+
+    @Test
+    func progressReport_mapsEveryStateToWhatItMeansForTheRun() {
+        #expect(GhosttyCallbacks.progressReport(for: GHOSTTY_PROGRESS_STATE_SET) == .running)
+        #expect(GhosttyCallbacks.progressReport(for: GHOSTTY_PROGRESS_STATE_INDETERMINATE) == .running)
+        #expect(GhosttyCallbacks.progressReport(for: GHOSTTY_PROGRESS_STATE_ERROR) == .failed)
+        #expect(GhosttyCallbacks.progressReport(for: GHOSTTY_PROGRESS_STATE_REMOVE) == .ended)
+        // PAUSE has always ended a run, and still ends it as a success.
+        #expect(GhosttyCallbacks.progressReport(for: GHOSTTY_PROGRESS_STATE_PAUSE) == .ended)
+    }
+
+    /// A state a newer libghostty adds ends the run rather than starting one,
+    /// so an unrecognised report can never leave a spinner up.
+    @Test
+    func progressReport_endsTheRunOnAnUnknownState() {
+        let unknown = ghostty_action_progress_report_state_e(rawValue: 99)
+        #expect(GhosttyCallbacks.progressReport(for: unknown) == .ended)
+    }
+
     // MARK: - GHOSTTY_ACTION_TOGGLE_FULLSCREEN
 
     /// The chords the handler answers, read off ghostty's real defaults: ⌃⌘F

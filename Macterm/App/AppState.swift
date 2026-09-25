@@ -2103,6 +2103,24 @@ final class AppState {
         return project
     }
 
+    /// Rename a project from its sidebar row (the inline edit, which Rename
+    /// Current Project opens too). A name the pinned workspace reserves is
+    /// refused with a notice and the old name stays — as `project rename`
+    /// refuses it with a `bad_request`. The field has closed by the time the
+    /// name arrives, so the notice is the one place left to say why.
+    func renameProject(_ projectID: UUID, to name: String, store: ProjectStore) {
+        guard !PinnedTabs.reservesName(name) else {
+            present(.notice(
+                .reservedProjectName,
+                title: "Couldn't rename project",
+                message: PinnedTabs.reservedNameMessage,
+                host: .mainWindow
+            ))
+            return
+        }
+        store.rename(id: projectID, to: name)
+    }
+
     /// Update the active project's path to wherever the focused pane currently
     /// sits (via OSC 7 — `pane.nsView.currentPwd`). Useful when a project
     /// started in one directory but the user has settled into a subdirectory

@@ -135,21 +135,7 @@ final class ControlHandler {
     }
 
     private func projectList() -> ControlData {
-        let infos = projectStore.projects.map { project in
-            ControlProjectInfo(
-                id: project.id.uuidString,
-                name: project.name,
-                path: project.path,
-                active: project.id == appState.activeProjectID,
-                // "Loaded" = a workspace exists (tabs/panes addressable over
-                // this protocol) — NOT `AppState.isProjectLoaded`, which asks
-                // whether live terminal *surfaces* exist and is false for a
-                // restored-but-never-shown project.
-                loaded: appState.workspaces[project.id] != nil,
-                tabCount: appState.workspaces[project.id]?.tabs.count
-            )
-        }
-        return ControlData(projects: infos)
+        ControlData(projects: projectStore.projects.map { projectInfo($0) })
     }
 
     private func tabList(_ args: ControlArgs) throws -> ControlData {
@@ -361,9 +347,11 @@ final class ControlHandler {
 
     // MARK: - Project mutations
 
-    /// Create (or find) a project for a local path. Idempotent by canonical
-    /// path — re-creating an existing project returns it instead of erroring,
-    /// so scripted setups (the benchmark) can run unconditionally.
+    /// Create a project for a local directory or a remote spec — always a new
+    /// one (see the `create` call). A `--name` is held to `project.rename`'s
+    /// rules: trimmed, then refused when empty or reserved by the pinned
+    /// workspace. Leaving the flag out takes the directory's own name, which
+    /// nobody typed, so that one is `ProjectStore.create`'s to disambiguate.
     private func projectCreate(_ args: ControlArgs) throws -> ControlData {
         guard let rawPath = args.path, !rawPath.isEmpty else {
             throw ControlError(code: .badRequest, message: "project.create requires a path")
@@ -388,13 +376,21 @@ final class ControlHandler {
         case .remote:
             canonical = rawPath
         }
+        // An empty `--name` is refused rather than read as "no name": leaving
+        // the flag out already says that, so an empty value is a mistake (an
+        // unset shell variable, typically) that should fail, not fall back.
+        let name = args.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let name {
+            guard !name.isEmpty else { throw Self.emptyNameError }
+            guard !PinnedTabs.reservesName(name) else { throw Self.reservedNameError }
+        }
 
         // Always create — `project create` is not idempotent: re-running adds a
         // distinct project for the same directory. `--select` only activates
         // the just-created project; scripts that want create-or-select must
         // check `project list` first.
         let project = projectStore.create(
-            name: args.name ?? (canonical as NSString).lastPathComponent,
+            name: name ?? (canonical as NSString).lastPathComponent,
             path: canonical
         )
         if args.select == true {
@@ -446,9 +442,7 @@ final class ControlHandler {
             )
         }
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw ControlError(code: .badRequest, message: "project name cannot be empty")
-        }
+        guard !trimmed.isEmpty else { throw Self.emptyNameError }
         let project = try resolveProject(selector)
         // Unreachable through the app (the sentinel is not a `ProjectStore`
         // row, so no sidebar row edits it) — but `resolveProject` accepts
@@ -460,19 +454,26 @@ final class ControlHandler {
         // project's, so a project renamed to it becomes unreachable by name
         // (UUID and index still work, but `--project Pinned` would silently
         // target the pinned workspace instead). Refuse rather than strand it.
-        guard trimmed.lowercased() != PinnedTabs.displayName.lowercased() else {
-            throw ControlError(
-                code: .badRequest,
-                message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
-                action: "pick another name"
-            )
-        }
+        guard !PinnedTabs.reservesName(trimmed) else { throw Self.reservedNameError }
         projectStore.rename(id: project.id, to: trimmed)
         guard let updated = projectStore.projects.first(where: { $0.id == project.id }) else {
             throw ControlError(code: .internalError, message: "project rename failed")
         }
         return projectData(updated)
     }
+
+    /// What `project.create` and `project.rename` say to a name that is empty
+    /// once trimmed.
+    private static let emptyNameError = ControlError(code: .badRequest, message: "project name cannot be empty")
+
+    /// What `project.create` and `project.rename` say to a name
+    /// `PinnedTabs.reservesName` matches — worded like the app's own refusal
+    /// (`PinnedTabs.reservedNameMessage`), in the CLI's quoting.
+    private static let reservedNameError = ControlError(
+        code: .badRequest,
+        message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
+        action: "pick another name"
+    )
 
     /// Drop a project's workspace and its `ProjectStore` entry — the same pair
     /// every in-app removal runs (sidebar row menu, bulk delete, palette,
@@ -1105,6 +1106,9 @@ final class ControlHandler {
         // `--project pinned` (or the sentinel UUID) targets the pinned
         // workspace. Checked before the name lookup so a user project that
         // happens to be named "pinned" is still reachable by UUID/index.
+        // Every naming path refuses or suffixes that name
+        // (`PinnedTabs.reservesName`, a superset of this test), so only a
+        // project named before that rule can be in this position.
         if selector.lowercased() == PinnedTabs.displayName.lowercased()
             || selector == PinnedTabs.projectID.uuidString
         {
@@ -1247,15 +1251,28 @@ final class ControlHandler {
     // MARK: - Shared projections
 
     private func projectData(_ project: Project) -> ControlData {
-        let info = ControlProjectInfo(
+        ControlData(projects: [projectInfo(project)])
+    }
+
+    /// The one projection behind `project list` and every single-project
+    /// reply. `index` is looked up here, in the same `projectStore.projects`
+    /// order `resolveProject` resolves `project:N` against, so a reply's ref
+    /// always selects the project it describes. nil for the pinned sentinel,
+    /// which is not a store row.
+    private func projectInfo(_ project: Project) -> ControlProjectInfo {
+        ControlProjectInfo(
+            index: projectStore.projects.firstIndex { $0.id == project.id }.map { $0 + 1 },
             id: project.id.uuidString,
             name: project.name,
             path: project.path,
             active: project.id == appState.activeProjectID,
+            // "Loaded" = a workspace exists (tabs/panes addressable over
+            // this protocol) — NOT `AppState.isProjectLoaded`, which asks
+            // whether live terminal *surfaces* exist and is false for a
+            // restored-but-never-shown project.
             loaded: appState.workspaces[project.id] != nil,
             tabCount: appState.workspaces[project.id]?.tabs.count
         )
-        return ControlData(projects: [info])
     }
 
     private func tabInfo(_ tab: TerminalTab, index: Int, in workspace: Workspace) -> ControlTabInfo {

@@ -55,6 +55,7 @@ struct TabGlyph: View {
         if showTabStatusIndicator, !(symbol == Preferences.noIcon && tab.executionState == .idle && agent == nil) {
             TabStatusGlyph(
                 state: tab.executionState,
+                failed: tab.completionFailed,
                 symbol: symbol,
                 index: index,
                 agent: agent,
@@ -83,9 +84,15 @@ struct TabGlyph: View {
 ///   and it avoids the heavy, off-platform look of a checkmark glyph badge.
 ///   It overlays the agent logo the same way, regardless of the spinner
 ///   preference — "unread agent messages" is the signal #225 asked to keep.
+///   The dot is red instead of green when the run reported a failure (an
+///   OSC 9;4 ERROR); nothing else about it changes, and no progress
+///   percentage is ever drawn.
 /// - `idle`: the icon as-is.
 struct TabStatusGlyph: View {
     let state: TerminalExecutionState
+    /// Whether a `.done` state is a failure (`TerminalTab.completionFailed`).
+    /// Ignored in every other state.
+    var failed = false
     let symbol: String
     let index: Int
     var agent: AgentIcon?
@@ -144,12 +151,12 @@ struct TabStatusGlyph: View {
                         .frame(width: 7 * size.glyphScale, height: 7 * size.glyphScale)
                         .overlay(
                             Circle()
-                                .fill(MactermTheme.success)
+                                .fill(failed ? MactermTheme.failure : MactermTheme.success)
                                 .frame(width: 5 * size.glyphScale, height: 5 * size.glyphScale)
                         )
                         .offset(x: 2.5 * size.glyphScale, y: 2.5 * size.glyphScale)
                 }
-                .help("Done")
+                .help(failed ? "Failed" : "Done")
         case .idle:
             TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
                 .foregroundStyle(iconStyle)

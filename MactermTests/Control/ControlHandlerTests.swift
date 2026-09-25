@@ -107,6 +107,7 @@ struct ControlHandlerTests {
         let response = await handler.handle(request("project.list"))
         let projects = response.data?.projects
         #expect(projects?.count == 2)
+        #expect(projects?.map(\.index) == [1, 2])
         let one = projects?.first { $0.name == "one" }
         let two = projects?.first { $0.name == "two" }
         #expect(one?.active == true)
@@ -364,6 +365,97 @@ struct ControlHandlerTests {
     }
 
     @Test
+    func project_create_refuses_a_reserved_name() async throws {
+        // `resolveProject` matches the pinned workspace's name before any
+        // project's, so a project created under it could never be targeted by
+        // name — the state `project.rename` refuses. A typed `--name` gets the
+        // same refusal, in every spelling the resolver would match.
+        let (handler, _, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        for name in ["Pinned", "pinned", " PINNED ", "\tpinned\n"] {
+            let response = await handler.handle(request(
+                "project.create", args: ControlArgs(path: dir.path, name: name)
+            ))
+            #expect(response.error?.code == .badRequest)
+            #expect(response.error?.message == "\"Pinned\" is reserved for the pinned-tabs workspace")
+        }
+        #expect(projectStore.projects.isEmpty)
+    }
+
+    @Test
+    func project_create_trims_a_padded_name() async throws {
+        // The trim `project.rename` applies: padding doesn't show in the
+        // sidebar or `project list`, so it must not be part of the name.
+        let (handler, _, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let response = await handler.handle(request(
+            "project.create", args: ControlArgs(path: dir.path, name: "  api \t\n")
+        ))
+        #expect(response.ok)
+        #expect(response.data?.projects?.first?.name == "api")
+        #expect(projectStore.projects.map(\.name) == ["api"])
+    }
+
+    @Test
+    func project_create_refuses_an_empty_name() async throws {
+        // Refused as `project.rename` refuses it, not read as "no name":
+        // leaving `--name` out already means that, so an empty value is a
+        // mistake — typically `--name "$NAME"` with the variable unset.
+        let (handler, _, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        for name in ["", "   ", "\n\t"] {
+            let response = await handler.handle(request(
+                "project.create", args: ControlArgs(path: dir.path, name: name)
+            ))
+            #expect(response.error?.code == .badRequest)
+            #expect(response.error?.message == "project name cannot be empty")
+        }
+        #expect(projectStore.projects.isEmpty)
+
+        // Leaving the flag out still names the project after its directory.
+        let unnamed = await handler.handle(request("project.create", args: ControlArgs(path: dir.path)))
+        #expect(unnamed.data?.projects?.first?.name == dir.lastPathComponent)
+    }
+
+    @Test
+    func project_create_disambiguates_a_reserved_directory_name() async throws {
+        // Nobody typed this name — it is the folder's — so refusing it would
+        // make a folder called Pinned impossible to add. It takes the numeric
+        // suffix the layout file already gets (`pinned_2.yaml`) instead.
+        let (handler, appState, projectStore) = makeHandler()
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        let dir = parent.appendingPathComponent("Pinned", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        let created = await handler.handle(request("project.create", args: ControlArgs(path: dir.path)))
+        #expect(created.ok)
+        #expect(created.data?.projects?.first?.name == "Pinned 2")
+        let project = try #require(projectStore.projects.first)
+
+        // Reachable by the name it was given…
+        let byName = await handler.handle(request("project.select", args: ControlArgs(project: project.name)))
+        #expect(byName.data?.projects?.first?.id == project.id.uuidString)
+        #expect(appState.activeProjectID == project.id)
+        // …while `pinned` still means the pinned workspace, first.
+        let pinned = await handler.handle(request("project.select", args: ControlArgs(project: "Pinned")))
+        #expect(pinned.data?.projects?.first?.id == PinnedTabs.projectID.uuidString)
+    }
+
+    @Test
     func project_select_switches_active() async {
         let (handler, appState, projectStore) = makeHandler()
         _ = seedProject(appState, projectStore, name: "one")
@@ -374,6 +466,64 @@ struct ControlHandlerTests {
 
         let empty = await handler.handle(request("project.select"))
         #expect(empty.error?.code == .badRequest)
+    }
+
+    // MARK: - project:N refs
+
+    // A single-project reply carries its project's `project list` position,
+    // which the CLI prints as the `project:N` ref. Each project under test
+    // sits past position 1 (the pinned workspace has none), where a reply
+    // numbered from its own rows would still read `project:1`.
+
+    @Test
+    func project_create_reports_its_list_index() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+        _ = seedProject(appState, projectStore, name: "tools", select: false)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let response = await handler.handle(request("project.create", args: ControlArgs(path: dir.path, name: "fresh")))
+        #expect(response.data?.projects?.map(\.index) == [3])
+    }
+
+    @Test
+    func project_select_reports_its_list_index() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+        let tools = seedProject(appState, projectStore, name: "tools", select: false)
+
+        let response = await handler.handle(request("project.select", args: ControlArgs(project: "tools")))
+        let index = try #require(response.data?.projects?.first?.index)
+        #expect(index == 2)
+
+        // The ref selects the project it was reported for.
+        let again = await handler.handle(request("project.select", args: ControlArgs(project: "project:\(index)")))
+        #expect(again.data?.projects?.first?.id == tools.id.uuidString)
+    }
+
+    @Test
+    func project_rename_reports_its_list_index() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+        _ = seedProject(appState, projectStore, name: "tools", select: false)
+
+        let response = await handler.handle(request("project.rename", args: ControlArgs(project: "tools", name: "tooling")))
+        #expect(response.data?.projects?.map(\.index) == [2])
+    }
+
+    @Test
+    func project_select_pinned_reports_no_index() async {
+        // The pinned workspace is not a `project list` row, so any index
+        // reported for it would name the project at that position instead.
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+
+        let response = await handler.handle(request("project.select", args: ControlArgs(project: "pinned")))
+        #expect(response.ok)
+        #expect(response.data?.projects?.first?.id == PinnedTabs.projectID.uuidString)
+        #expect(response.data?.projects?.first?.index == nil)
     }
 
     // MARK: - project.rename / project.remove
@@ -415,6 +565,7 @@ struct ControlHandlerTests {
         // Empty name
         let empty = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "   ")))
         #expect(empty.error?.code == .badRequest)
+        #expect(empty.error?.message == "project name cannot be empty")
 
         // Reject pinned sentinel
         let pinned = await handler.handle(request("project.rename", args: ControlArgs(project: "pinned", name: "custom")))
@@ -425,6 +576,7 @@ struct ControlHandlerTests {
         // name selector on the pinned workspace.
         let reserved = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "Pinned")))
         #expect(reserved.error?.code == .badRequest)
+        #expect(reserved.error?.message == "\"Pinned\" is reserved for the pinned-tabs workspace")
         let reservedCase = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: " pInNeD ")))
         #expect(reservedCase.error?.code == .badRequest)
         #expect(projectStore.projects.first?.name == "alpha")

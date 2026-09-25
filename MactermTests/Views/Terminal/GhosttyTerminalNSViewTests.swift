@@ -50,6 +50,28 @@ struct GhosttyTerminalNSViewTests {
         #expect(GhosttyTerminalNSView.cursor(for: GHOSTTY_MOUSE_SHAPE_PROGRESS) == nil)
     }
 
+    // MARK: - Progress report routing
+
+    /// ERROR reaches the finish callback flagged as a failure; REMOVE and
+    /// PAUSE (both `.ended`) reach it as a success.
+    @Test
+    func progressReport_routesToStartAndFinishWithTheOutcome() {
+        let view = GhosttyTerminalNSView(
+            paneID: UUID(),
+            workingDirectory: "/tmp",
+            sessionName: "progress-test"
+        )
+        var events: [String] = []
+        view.onProgressStarted = { events.append("started") }
+        view.onProgressFinished = { failed in events.append(failed ? "failed" : "finished") }
+
+        view.surfaceDidReportProgress(.running)
+        view.surfaceDidReportProgress(.failed)
+        view.surfaceDidReportProgress(.ended)
+
+        #expect(events == ["started", "failed", "finished"])
+    }
+
     // MARK: - Context-menu scroll navigation
 
     private typealias Snapshot = GhosttyTerminalNSView.ScrollbarSnapshot
@@ -160,5 +182,52 @@ struct GhosttyTerminalNSViewTests {
         view.destroySurface()
 
         #expect(!view.hasMarkedText())
+    }
+
+    // MARK: - Command chords under a non-Latin layout
+
+    /// Whether ghostty's default keybinds claim ⌘ on `keyCode`, sent the way
+    /// `performKeyEquivalent` sends it: super, the layout's own key as the
+    /// unshifted codepoint, and `text` as the key's text. Run against ghostty's
+    /// real defaults, so a GhosttyKit bump that changes how a binding is found
+    /// fails here rather than in a Ukrainian user's hands.
+    private func defaultKeybindsClaimCommand(keyCode: UInt32, unshifted: Unicode.Scalar, text: String?) throws -> Bool {
+        let config = try #require(ghostty_config_new())
+        defer { ghostty_config_free(config) }
+        ghostty_config_finalize(config)
+        var ke = ghostty_input_key_s()
+        ke.action = GHOSTTY_ACTION_PRESS
+        ke.keycode = keyCode
+        ke.mods = GHOSTTY_MODS_SUPER
+        ke.consumed_mods = GHOSTTY_MODS_NONE
+        ke.unshifted_codepoint = unshifted.value
+        guard let text else { return ghostty_config_key_is_binding(config, ke) }
+        return text.withCString { ptr in
+            ke.text = ptr
+            return ghostty_config_key_is_binding(config, ke)
+        }
+    }
+
+    /// Under a Ukrainian layout the C and V keys type `с` and `м`, which is all
+    /// libghostty had to go on — and `super+c`/`super+v` are unicode `c`/`v`,
+    /// so copy and paste never fired. The Command map's letter as the key's
+    /// text is what reaches them (`HotkeyRegistry.commandKeyCharacter`).
+    @Test
+    func commandChord_onACyrillicKey_reachesCopyAndPasteOnlyThroughItsText() throws {
+        #expect(try !defaultKeybindsClaimCommand(keyCode: 8, unshifted: "\u{0441}", text: nil))
+        #expect(try !defaultKeybindsClaimCommand(keyCode: 9, unshifted: "\u{043C}", text: nil))
+        #expect(try defaultKeybindsClaimCommand(keyCode: 8, unshifted: "\u{0441}", text: "c"))
+        #expect(try defaultKeybindsClaimCommand(keyCode: 9, unshifted: "\u{043C}", text: "v"))
+        // The same chord under a US layout needs no text at all.
+        #expect(try defaultKeybindsClaimCommand(keyCode: 8, unshifted: "c", text: nil))
+    }
+
+    /// The flip side, and why `isAppShortcut` names its system keys by
+    /// `eventToken`: with `q` as the text, ghostty's own `super+q=quit` claims
+    /// ⌘Q under a Cyrillic layout — an action Macterm leaves unhandled, so the
+    /// menu bar's Quit must get the chord first.
+    @Test
+    func commandQ_onACyrillicKey_isGhosttysQuitOnceItCarriesItsText() throws {
+        #expect(try defaultKeybindsClaimCommand(keyCode: 12, unshifted: "\u{0439}", text: "q"))
     }
 }

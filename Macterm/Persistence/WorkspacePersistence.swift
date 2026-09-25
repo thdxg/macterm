@@ -127,6 +127,17 @@ struct PaneSnapshot: Codable {
     /// outlive the shell process, and `.idle` is the default. Optional so older
     /// snapshots (without the field) decode as nil / idle.
     var needsAttention: Bool?
+    /// Whether that attention-needing completion was a failure (an OSC 9;4
+    /// ERROR, `Pane.completionFailed`), so a red dot survives a restart as
+    /// red. Its own optional key rather than a new meaning for
+    /// `needsAttention`, so builds either side of it read each other's files:
+    /// an older build ignores the key and shows the dot green, and a file
+    /// without it decodes as nil — not failed. Written only when true, and
+    /// only beside `needsAttention`, so a file with no failure in it is the
+    /// same file an older build writes. Not a schema bump: a downgrade that
+    /// re-saves the file loses only the dot's color, not worth refusing saves
+    /// over (see `currentSchemaVersion`).
+    var completionFailed: Bool?
     /// Stable zmx session id (`Pane.sessionID`). On restore the rebuilt pane
     /// reuses it, so its shell reattaches to the still-running daemon instead
     /// of spawning fresh. Optional: older snapshots decode nil → fresh id.
@@ -150,6 +161,7 @@ struct PaneSnapshot: Codable {
         id: UUID,
         projectPath: String,
         needsAttention: Bool? = nil,
+        completionFailed: Bool? = nil,
         sessionID: UUID? = nil,
         sessionName: String? = nil,
         workingDirectory: String? = nil
@@ -157,6 +169,7 @@ struct PaneSnapshot: Codable {
         self.id = id
         self.projectPath = projectPath
         self.needsAttention = needsAttention
+        self.completionFailed = completionFailed
         self.sessionID = sessionID
         self.sessionName = sessionName
         self.workingDirectory = workingDirectory
@@ -340,6 +353,7 @@ final class WorkspaceStore {
         switch node {
         case var .pane(p):
             p.needsAttention = nil
+            p.completionFailed = nil
             return .pane(p)
         case let .split(b):
             return .split(SplitBranchSnapshot(
@@ -433,10 +447,12 @@ enum WorkspaceSerializer {
                 ? nil
                 : (p.nsView?.currentPwd ?? ProcessInspector.foregroundWorkingDirectory(forPane: p))
             let needsAttention = p.executionState == .done
+            let completionFailed = needsAttention && p.completionFailed
             return .pane(PaneSnapshot(
                 id: p.id,
                 projectPath: p.projectPath,
                 needsAttention: needsAttention,
+                completionFailed: completionFailed ? true : nil,
                 sessionID: p.sessionID,
                 sessionName: p.sessionName,
                 workingDirectory: liveCwd
@@ -472,7 +488,7 @@ enum WorkspaceSerializer {
                 sessionName: p.sessionName
             )
             if p.needsAttention == true {
-                pane.restoreNeedsAttention()
+                pane.restoreNeedsAttention(failed: p.completionFailed == true)
             }
             return .pane(pane)
         case let .split(b):
