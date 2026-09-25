@@ -44,9 +44,16 @@ final class ProjectStore {
     /// keep wholly independent workspaces (keyed on `Project.id`) and zmx
     /// sessions (named with per-pane entropy). This is the entry point for
     /// user-initiated creation (folder picker, remote sheet, `project create`).
+    ///
+    /// A name the pinned workspace reserves is stored suffixed (see
+    /// `unreservedName`). Most callers pass the folder's own name — the
+    /// picker, Finder, Open With, the palette, a bare `project create` — which
+    /// nobody chose, so refusing it would make a folder called Pinned
+    /// impossible to add. A caller holding a name someone typed refuses it
+    /// before calling this, where it can say why.
     @discardableResult
     func create(name: String, path: String, zmxPath: String? = nil) -> Project {
-        var project = Project(name: name, path: path, sortOrder: projects.count, zmxPath: zmxPath)
+        var project = Project(name: Self.unreservedName(name), path: path, sortOrder: projects.count, zmxPath: zmxPath)
         if autoAssignsColors() {
             project.colorName = ProjectColor.leastUsed(among: projects.map(\.color)).rawValue
         }
@@ -66,10 +73,31 @@ final class ProjectStore {
         save()
     }
 
+    /// Rename a project, unless `PinnedTabs.reservesName` matches the new
+    /// name: then the project keeps its old one. Every caller holds a name
+    /// someone typed and says why first (the CLI's `bad_request`, the
+    /// sidebar's notice); this only stops one that forgot to.
     func rename(id: UUID, to newName: String) {
+        guard !PinnedTabs.reservesName(newName) else {
+            logger.error("Refusing to rename project \(id, privacy: .public) to reserved name \(newName, privacy: .public)")
+            return
+        }
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         projects[index].name = newName
         save()
+    }
+
+    /// `name`, or — when the pinned workspace reserves it — the name a second
+    /// one would get: `Pinned 2`, the suffix its layout file already takes
+    /// (`pinned_2.yaml`, see `ProjectFileStore.write`). The case is kept; it
+    /// is still the folder's name. Only the bare name is reserved, so the
+    /// suffixed one is always reachable, and a second project from the same
+    /// folder is a second `Pinned 2`, as a second `api` is a second `api`.
+    private static func unreservedName(_ name: String) -> String {
+        guard PinnedTabs.reservesName(name) else { return name }
+        let suffixed = "\(name.trimmingCharacters(in: .whitespacesAndNewlines)) 2"
+        logger.info("Project name \(name, privacy: .public) is reserved; creating \(suffixed, privacy: .public)")
+        return suffixed
     }
 
     /// Set (or clear, with nil) the project's color tag.

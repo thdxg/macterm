@@ -20,7 +20,7 @@ Open **Shortcuts**, create a shortcut, and search the action list for `Macterm`.
 
 | Action | What it does |
 | --- | --- |
-| **New Project** | Adds a folder as a project, selects it, and brings the window forward. Optional name; defaults to the folder's. Always creates a new project, even if one already backs that folder. |
+| **New Project** | Adds a folder as a project, selects it, and brings the window forward. Optional name; defaults to the folder's. `Pinned` is reserved: that name is refused, and a folder named Pinned is added as `Pinned 2`. Always creates a new project, even if one already backs that folder. |
 | **Focus Project** | Shows a project. A window already on it comes forward. |
 
 ## Tabs

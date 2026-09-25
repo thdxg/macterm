@@ -593,7 +593,7 @@ struct SidebarContent: View {
             index: projectIndex + 1,
             presentation: presentation,
             isInteractive: isInteractive,
-            onRename: { projectStore.rename(id: project.id, to: $0) },
+            onRename: { appState.renameProject(project.id, to: $0, store: projectStore) },
             onNewTab: { createTab(in: project) }
         )
         .tag(SidebarItem.project(project.id))
