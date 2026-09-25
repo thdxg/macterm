@@ -42,6 +42,7 @@ Window chrome Macterm draws itself, so these are ignored or forced:
 | `background-blur` | Settings → Appearance → Blur |
 | titlebar, window-decoration, split-divider, quick-terminal keys | Settings |
 | `bell-features = title`, `border` | not implemented |
+| `macos-non-native-fullscreen` | not implemented — full screen is always native |
 
 `background-opacity-cells` works as in Ghostty. Everything else — `bell-features = system`, `audio`, `attention` (which badges the Dock with the number of tabs waiting on you), `mouse-scroll-multiplier`, `custom-shader` — behaves as documented upstream.
 
