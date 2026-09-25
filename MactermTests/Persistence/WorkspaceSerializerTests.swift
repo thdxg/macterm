@@ -132,9 +132,121 @@ struct WorkspaceSerializerTests {
         let roundTripped = roundTrip([ws.projectID: ws])
         if case let .pane(p) = roundTripped[0].tabs[0].splitRoot {
             #expect(p.executionState == .done)
+            #expect(!p.completionFailed)
         } else {
             Issue.record("expected leaf")
         }
+    }
+
+    // MARK: - Failed completion (OSC 9;4 ERROR)
+
+    /// A workspace whose one pane ended its progress run on an ERROR.
+    private func failedWorkspace() -> Workspace {
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
+        if case let .pane(p) = ws.tabs[0].splitRoot {
+            p.recordUserInteraction()
+            p.markCommandRunning()
+            p.markProgressFinished(failed: true)
+        }
+        return ws
+    }
+
+    @Test
+    func round_trip_preserves_a_failed_completion() throws {
+        let ws = failedWorkspace()
+        let roundTripped = roundTrip([ws.projectID: ws])
+        let tab = try #require(roundTripped.first?.tabs.first)
+        let p = try #require(tab.splitRoot.allPanes().first)
+        #expect(p.executionState == .done)
+        #expect(p.completionFailed)
+        #expect(tab.completionFailed)
+    }
+
+    /// The failure is written beside `needsAttention`, never instead of it, so
+    /// an older build that ignores the new key still shows the dot — green.
+    /// A passing completion writes no failure key at all.
+    @Test
+    func snapshot_writes_the_failure_beside_needsAttention() throws {
+        func leaf(_ ws: Workspace) -> PaneSnapshot? {
+            let root = WorkspaceSerializer.snapshot([ws.projectID: ws]).first?.tabs.first?.splitRoot
+            guard case let .pane(p) = root else { return nil }
+            return p
+        }
+        let passed = Workspace(projectID: UUID(), projectPath: "/tmp")
+        if case let .pane(p) = passed.tabs[0].splitRoot {
+            p.recordUserInteraction()
+            p.markCommandRunning()
+            p.markProgressFinished()
+        }
+
+        let failure = try #require(leaf(failedWorkspace()))
+        #expect(failure.needsAttention == true)
+        #expect(failure.completionFailed == true)
+
+        let success = try #require(leaf(passed))
+        #expect(success.needsAttention == true)
+        #expect(success.completionFailed == nil)
+    }
+
+    @Test
+    func a_failed_completion_round_trips_via_WorkspaceStore_on_disk() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = WorkspaceStore(fileURL: tmp)
+        let ws = failedWorkspace()
+
+        store.save(WorkspaceSerializer.snapshot([ws.projectID: ws]))
+        let restored = WorkspaceSerializer.restore(from: store.load().workspaces, validIDs: [ws.projectID])
+
+        let pane = try #require(restored.first?.tabs.first?.splitRoot.allPanes().first)
+        #expect(pane.executionState == .done)
+        #expect(pane.completionFailed)
+    }
+
+    /// A file from before the failure had a key of its own restores its
+    /// completion green, as it always did.
+    @Test
+    func a_file_without_completionFailed_restores_a_green_dot() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let projectID = UUID()
+        let old = """
+        {"version": 6, "workspaces": [{"projectID": "\(projectID.uuidString)", "tabs": [{
+            "id": "\(UUID().uuidString)",
+            "splitRoot": {"type": "pane", "pane": {
+                "id": "\(UUID().uuidString)", "projectPath": "/tmp", "needsAttention": true
+            }}
+        }]}]}
+        """
+        try old.write(to: tmp, atomically: true, encoding: .utf8)
+        let store = WorkspaceStore(fileURL: tmp)
+
+        let restored = WorkspaceSerializer.restore(from: store.load().workspaces, validIDs: [projectID])
+
+        #expect(!store.loadFailed)
+        let pane = try #require(restored.first?.tabs.first?.splitRoot.allPanes().first)
+        #expect(pane.executionState == .done)
+        #expect(!pane.completionFailed)
+    }
+
+    @Test
+    func restored_failure_is_cleared_by_acknowledge() throws {
+        let ws = failedWorkspace()
+        let tab = try #require(roundTrip([ws.projectID: ws]).first?.tabs.first)
+        #expect(tab.completionFailed)
+
+        tab.acknowledgeCommandCompletion()
+
+        #expect(tab.executionState == .idle)
+        #expect(!tab.completionFailed)
+        guard case let .pane(p) = WorkspaceSerializer.snapshotTab(tab).splitRoot else {
+            Issue.record("expected leaf")
+            return
+        }
+        #expect(p.needsAttention == false)
+        #expect(p.completionFailed == nil)
     }
 
     @Test
@@ -263,7 +375,8 @@ struct WorkspaceSerializerTests {
                     splitRoot: .pane(PaneSnapshot(
                         id: paneID,
                         projectPath: "/tmp",
-                        needsAttention: true
+                        needsAttention: true,
+                        completionFailed: true
                     ))
                 )]
             )]
@@ -274,6 +387,7 @@ struct WorkspaceSerializerTests {
         let restored = WorkspaceSerializer.restore(from: store.load().workspaces, validIDs: [projectID])
 
         #expect(restored.first?.tabs.first?.executionState == .idle)
+        #expect(restored.first?.tabs.first?.completionFailed == false)
     }
 
     @Test

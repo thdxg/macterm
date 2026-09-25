@@ -6,6 +6,20 @@ enum TerminalExecutionState: Equatable {
     case done
 }
 
+/// An OSC 9;4 progress report (`GHOSTTY_ACTION_PROGRESS_REPORT`), reduced to
+/// what it says about the pane's run. The percentage does not survive the
+/// reduction: the sidebar shows that work is running and how it ended, never
+/// how far along it is.
+enum TerminalProgressReport: Equatable {
+    /// SET or INDETERMINATE: the program is working.
+    case running
+    /// REMOVE, or PAUSE, which has always ended a run here: the program has
+    /// stopped reporting work and reported nothing wrong.
+    case ended
+    /// ERROR: the run ended in failure (`Pane.completionFailed`).
+    case failed
+}
+
 private struct ForegroundProcessKey: Equatable {
     let name: String
     let pid: pid_t?
