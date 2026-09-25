@@ -53,7 +53,7 @@
 - **Declarative layouts** \
   Describe a project's tabs, splits, and per-pane commands in YAML; Macterm builds the workspace from it on open.
 - **Control CLI** \
-  A bundled `macterm` command drives the running app, so scripts and AI agents can spawn panes, run commands, and script layouts.
+  A bundled `macterm` command drives the running app, so scripts and AI agents can spawn panes, run commands, and script layouts. `macterm skills` prints skills that teach a coding agent to use it.
 - **Quick terminal** \
   A global drop-down terminal on a hotkey (<kbd>⌃`</kbd>), for scratch work from anywhere.
 - **Adaptive background** \

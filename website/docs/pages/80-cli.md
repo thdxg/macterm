@@ -28,7 +28,7 @@ From any other shell, use the bundle path or symlink it onto your `PATH`:
 /Applications/Macterm.app/Contents/Resources/bin/macterm status
 ```
 
-Every command takes `--json` for a scriptable payload and `--socket <path>` to target a specific instance. `--help` works at every level.
+Every command that talks to the app takes `--json` for a scriptable payload and `--socket <path>` to target a specific instance. `--help` works at every level.
 
 ## Commands
 
@@ -70,7 +70,8 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `layout apply [--project P] [--force]` | Reconcile to the project's [layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes. |
 | `layout save [--project P]` | Write the live workspace to `~/.config/macterm/projects/<slug>.yaml`. |
 | `tutor [project\|pinned]` | Print a short tutorial, with your own keybinds. Needs a running app. |
-| `ssh <ssh args…>` | Run ssh with Macterm's terminal integration. The one verb that needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false`, `--verbose`. |
+| `ssh <ssh args…>` | Run ssh with Macterm's terminal integration. Needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false`, `--verbose`. |
+| `skills [name] [--list]` | Print [skills for coding agents](#skills-for-coding-agents): all of them after install instructions, or one `SKILL.md` verbatim. Needs no running app. |
 
 ## Targeting a pane
 
@@ -106,6 +107,16 @@ needs confirm quit  false
 Both need a **live surface** — a never-shown pane returns `no_surface`. Select its tab once.
 
 > Cursor position and a direct alt-screen query aren't available over libghostty's C ABI. `alt-screen` here is a heuristic, and reads `-` until the surface emits its first scrollbar update.
+
+## Skills for coding agents
+
+`macterm skills` prints [Agent Skills](https://agentskills.io) — `SKILL.md` files that Claude Code, Codex, OpenCode, Gemini CLI, Cursor and other agents load from a skills directory — teaching an agent this CLI: running commands in panes and reading their output (`macterm-panes`), building a workspace that persists (`macterm-workspace`), and running sub-agents in panes of their own (`macterm-subagents`). There's no installer; the agent installs them. Give it this prompt:
+
+```text
+Run `macterm skills` and install each skill it prints into your skills directory as <name>/SKILL.md, exactly as printed. Then tell me what you installed and where.
+```
+
+`macterm skills <name>` prints one skill verbatim, so `macterm skills macterm-panes > <skills dir>/macterm-panes/SKILL.md` installs it; `--list` names them. The text ships inside the CLI, so it always matches your version: install again after updating Macterm.
 
 ## Environment
 

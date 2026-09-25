@@ -22,6 +22,7 @@ struct MactermCommand: ParsableCommand {
             LayoutCommand.self,
             TutorCommand.self,
             SSHCommand.self,
+            SkillsCommand.self,
         ]
     )
 }

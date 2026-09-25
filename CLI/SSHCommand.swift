@@ -2,8 +2,8 @@ import ArgumentParser
 import Foundation
 
 /// `macterm ssh` — ghostty's `+ssh` action reimplemented natively (see
-/// `SSHWrapper` for the full story). The one offline verb: it never touches
-/// the control socket and works with no Macterm running.
+/// `SSHWrapper` for the full story). Offline, like `macterm skills`: it never
+/// touches the control socket and works with no Macterm running.
 ///
 /// Invoked two ways: by the bundled `ghostty` shim when the shell-integration
 /// `ssh` wrapper fires (the `ssh-env`/`ssh-terminfo` features), and directly
