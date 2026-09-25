@@ -41,6 +41,20 @@ struct PinnedTabsTests {
 
     private var pinnedID: UUID { PinnedTabs.projectID }
 
+    // MARK: - Reserved name
+
+    @Test
+    func reserves_its_own_name_in_any_case_and_padding_only() {
+        // Every spelling `ControlHandler.resolveProject` reads as the pinned
+        // workspace, plus the padded ones that would look like it in a row.
+        for name in ["Pinned", "pinned", "PINNED", "pInNeD", " Pinned ", "\tpinned\n"] {
+            #expect(PinnedTabs.reservesName(name), "\(name)")
+        }
+        for name in ["", "Pinned 2", "Pinned Tabs", "unpinned", "pinned.yaml", "Pin ned", PinnedTabs.projectID.uuidString] {
+            #expect(!PinnedTabs.reservesName(name), "\(name)")
+        }
+    }
+
     // MARK: - Pin
 
     @Test

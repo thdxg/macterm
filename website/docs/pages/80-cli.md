@@ -38,7 +38,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 |---|---|
 | `status` | Version, pid, active project. Exits non-zero if no app is reachable. |
 | `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
-| `project create <path> [--name N] [--select]` | Add a project for a local directory or a [remote spec](/docs/remote-projects). **Not idempotent** — each run adds a distinct project. |
+| `project create <path> [--name N] [--select]` | Add a project for a local directory or a [remote spec](/docs/remote-projects). **Not idempotent** — each run adds a distinct project. `Pinned` is reserved: `--name Pinned` is refused, and a directory named Pinned is added as `Pinned 2`. |
 | `project select <name\|uuid\|index> [--window W]` | Make a project active. `pinned` selects the pinned-tabs workspace. |
 | `project rename <project> <name>` | Rename a project. `Pinned` is reserved. |
 | `project remove <project> [--force]` | Remove a project, killing its sessions. Returns `busy` when a pane runs a program, unless forced. Deletes no files. |

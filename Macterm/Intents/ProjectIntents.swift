@@ -46,6 +46,11 @@ struct NewMactermProjectIntent: AppIntent {
             throw MactermIntentError.badInput("There is no folder at \(path).")
         }
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A typed name is refused like the CLI's `--name`; the folder's own
+        // name is `ProjectStore.create`'s to disambiguate.
+        if let trimmed, PinnedTabs.reservesName(trimmed) {
+            throw MactermIntentError.badInput(PinnedTabs.reservedNameMessage)
+        }
         logger.info("intent: new project at \(path, privacy: .public)")
         let project = ctx.projectStore.create(
             name: (trimmed?.isEmpty == false ? trimmed : nil) ?? (path as NSString).lastPathComponent,

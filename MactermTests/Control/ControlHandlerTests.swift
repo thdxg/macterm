@@ -364,6 +364,54 @@ struct ControlHandlerTests {
     }
 
     @Test
+    func project_create_refuses_a_reserved_name() async throws {
+        // `resolveProject` matches the pinned workspace's name before any
+        // project's, so a project created under it could never be targeted by
+        // name — the state `project.rename` refuses. A typed `--name` gets the
+        // same refusal, in every spelling the resolver would match.
+        let (handler, _, projectStore) = makeHandler()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        for name in ["Pinned", "pinned", " PINNED "] {
+            let response = await handler.handle(request(
+                "project.create", args: ControlArgs(path: dir.path, name: name)
+            ))
+            #expect(response.error?.code == .badRequest)
+            #expect(response.error?.message == "\"Pinned\" is reserved for the pinned-tabs workspace")
+        }
+        #expect(projectStore.projects.isEmpty)
+    }
+
+    @Test
+    func project_create_disambiguates_a_reserved_directory_name() async throws {
+        // Nobody typed this name — it is the folder's — so refusing it would
+        // make a folder called Pinned impossible to add. It takes the numeric
+        // suffix the layout file already gets (`pinned_2.yaml`) instead.
+        let (handler, appState, projectStore) = makeHandler()
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        let dir = parent.appendingPathComponent("Pinned", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        let created = await handler.handle(request("project.create", args: ControlArgs(path: dir.path)))
+        #expect(created.ok)
+        #expect(created.data?.projects?.first?.name == "Pinned 2")
+        let project = try #require(projectStore.projects.first)
+
+        // Reachable by the name it was given…
+        let byName = await handler.handle(request("project.select", args: ControlArgs(project: project.name)))
+        #expect(byName.data?.projects?.first?.id == project.id.uuidString)
+        #expect(appState.activeProjectID == project.id)
+        // …while `pinned` still means the pinned workspace, first.
+        let pinned = await handler.handle(request("project.select", args: ControlArgs(project: "Pinned")))
+        #expect(pinned.data?.projects?.first?.id == PinnedTabs.projectID.uuidString)
+    }
+
+    @Test
     func project_select_switches_active() async {
         let (handler, appState, projectStore) = makeHandler()
         _ = seedProject(appState, projectStore, name: "one")
@@ -425,6 +473,7 @@ struct ControlHandlerTests {
         // name selector on the pinned workspace.
         let reserved = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "Pinned")))
         #expect(reserved.error?.code == .badRequest)
+        #expect(reserved.error?.message == "\"Pinned\" is reserved for the pinned-tabs workspace")
         let reservedCase = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: " pInNeD ")))
         #expect(reservedCase.error?.code == .badRequest)
         #expect(projectStore.projects.first?.name == "alpha")

@@ -19,6 +19,27 @@ enum PinnedTabs {
 
     static let displayName = "Pinned"
 
+    /// Whether `name` is this workspace's, which no project may carry:
+    /// `ControlHandler.resolveProject` reads `pinned` as the pinned workspace
+    /// before it looks at any project, so a project given the name could be
+    /// reached by UUID or `project:N` but never by name. Case-insensitive like
+    /// that lookup, and blind to surrounding whitespace: a padded name reads
+    /// as the bare one in the sidebar and `project list`, and the bare one is
+    /// what anyone would type to reach it.
+    ///
+    /// The one test every naming path applies. A name somebody typed is
+    /// refused where they typed it (`project create --name`,
+    /// `project rename`, the sidebar's rename, the New Project intent, the
+    /// remote sheet); a name nobody chose — the folder's own, which most
+    /// creation paths default to — is suffixed instead (`ProjectStore.create`).
+    static func reservesName(_ name: String) -> Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == displayName.lowercased()
+    }
+
+    /// Why a typed name was refused, as the app says it. The CLI words its
+    /// `bad_request` the same (`ControlHandler.reservedNameError`).
+    static let reservedNameMessage = "“\(displayName)” is reserved for the pinned-tabs workspace. Pick another name."
+
     /// The reserved `path:` literal that marks `pinned.yaml` as the pinned
     /// set rather than a project declaration. The angle brackets make the
     /// sentinel VISIBLY impossible as a real path: they are illegal in

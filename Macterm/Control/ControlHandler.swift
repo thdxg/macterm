@@ -361,9 +361,10 @@ final class ControlHandler {
 
     // MARK: - Project mutations
 
-    /// Create (or find) a project for a local path. Idempotent by canonical
-    /// path — re-creating an existing project returns it instead of erroring,
-    /// so scripted setups (the benchmark) can run unconditionally.
+    /// Create a project for a local directory or a remote spec — always a new
+    /// one (see the `create` call). A `--name` the pinned workspace reserves
+    /// is refused exactly as `project.rename` refuses it; the directory's own
+    /// name, which nobody typed, is `ProjectStore.create`'s to disambiguate.
     private func projectCreate(_ args: ControlArgs) throws -> ControlData {
         guard let rawPath = args.path, !rawPath.isEmpty else {
             throw ControlError(code: .badRequest, message: "project.create requires a path")
@@ -387,6 +388,9 @@ final class ControlHandler {
             }
         case .remote:
             canonical = rawPath
+        }
+        if let name = args.name, PinnedTabs.reservesName(name) {
+            throw Self.reservedNameError
         }
 
         // Always create — `project create` is not idempotent: re-running adds a
@@ -460,19 +464,22 @@ final class ControlHandler {
         // project's, so a project renamed to it becomes unreachable by name
         // (UUID and index still work, but `--project Pinned` would silently
         // target the pinned workspace instead). Refuse rather than strand it.
-        guard trimmed.lowercased() != PinnedTabs.displayName.lowercased() else {
-            throw ControlError(
-                code: .badRequest,
-                message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
-                action: "pick another name"
-            )
-        }
+        guard !PinnedTabs.reservesName(trimmed) else { throw Self.reservedNameError }
         projectStore.rename(id: project.id, to: trimmed)
         guard let updated = projectStore.projects.first(where: { $0.id == project.id }) else {
             throw ControlError(code: .internalError, message: "project rename failed")
         }
         return projectData(updated)
     }
+
+    /// What `project.create` and `project.rename` say to a name
+    /// `PinnedTabs.reservesName` matches — worded like the app's own refusal
+    /// (`PinnedTabs.reservedNameMessage`), in the CLI's quoting.
+    private static let reservedNameError = ControlError(
+        code: .badRequest,
+        message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
+        action: "pick another name"
+    )
 
     /// Drop a project's workspace and its `ProjectStore` entry — the same pair
     /// every in-app removal runs (sidebar row menu, bulk delete, palette,
@@ -1105,6 +1112,9 @@ final class ControlHandler {
         // `--project pinned` (or the sentinel UUID) targets the pinned
         // workspace. Checked before the name lookup so a user project that
         // happens to be named "pinned" is still reachable by UUID/index.
+        // Every naming path refuses or suffixes that name
+        // (`PinnedTabs.reservesName`, a superset of this test), so only a
+        // project named before that rule can be in this position.
         if selector.lowercased() == PinnedTabs.displayName.lowercased()
             || selector == PinnedTabs.projectID.uuidString
         {

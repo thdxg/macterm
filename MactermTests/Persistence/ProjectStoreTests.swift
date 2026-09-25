@@ -80,6 +80,33 @@ struct ProjectStoreTests {
     }
 
     @Test
+    func create_disambiguates_the_pinned_workspaces_name() {
+        // Every creation path funnels here, and most name a project after its
+        // folder — a name nobody chose, so it is suffixed rather than refused.
+        let store = makeStore()
+        #expect(store.create(name: "Pinned", path: "/tmp/a").name == "Pinned 2")
+        #expect(store.create(name: "pinned", path: "/tmp/b").name == "pinned 2")
+        #expect(store.findOrCreate(name: "PINNED", path: "/tmp/c").name == "PINNED 2")
+        // Only the name itself is reserved.
+        #expect(store.create(name: "Pinned Tabs", path: "/tmp/d").name == "Pinned Tabs")
+        #expect(store.create(name: "Pinned 2", path: "/tmp/e").name == "Pinned 2")
+        #expect(store.projects.map(\.name) == ["Pinned 2", "pinned 2", "PINNED 2", "Pinned Tabs", "Pinned 2"])
+    }
+
+    @Test
+    func rename_refuses_the_pinned_workspaces_name() {
+        let store = makeStore()
+        let project = store.create(name: "alpha", path: "/tmp")
+
+        store.rename(id: project.id, to: "Pinned")
+        store.rename(id: project.id, to: " pinned ")
+        #expect(store.projects.first?.name == "alpha")
+
+        store.rename(id: project.id, to: "Pinned Tabs")
+        #expect(store.projects.first?.name == "Pinned Tabs")
+    }
+
+    @Test
     func find_or_create_reuses_matching_remote_path() {
         let store = makeStore()
         let existing = Project(name: "api", path: "devbox:~/dev/api", sortOrder: 0)
