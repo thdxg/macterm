@@ -107,6 +107,7 @@ struct ControlHandlerTests {
         let response = await handler.handle(request("project.list"))
         let projects = response.data?.projects
         #expect(projects?.count == 2)
+        #expect(projects?.map(\.index) == [1, 2])
         let one = projects?.first { $0.name == "one" }
         let two = projects?.first { $0.name == "two" }
         #expect(one?.active == true)
@@ -374,6 +375,64 @@ struct ControlHandlerTests {
 
         let empty = await handler.handle(request("project.select"))
         #expect(empty.error?.code == .badRequest)
+    }
+
+    // MARK: - project:N refs
+
+    // A single-project reply carries its project's `project list` position,
+    // which the CLI prints as the `project:N` ref. Each project under test
+    // sits past position 1 (the pinned workspace has none), where a reply
+    // numbered from its own rows would still read `project:1`.
+
+    @Test
+    func project_create_reports_its_list_index() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+        _ = seedProject(appState, projectStore, name: "tools", select: false)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-create-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let response = await handler.handle(request("project.create", args: ControlArgs(path: dir.path, name: "fresh")))
+        #expect(response.data?.projects?.map(\.index) == [3])
+    }
+
+    @Test
+    func project_select_reports_its_list_index() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+        let tools = seedProject(appState, projectStore, name: "tools", select: false)
+
+        let response = await handler.handle(request("project.select", args: ControlArgs(project: "tools")))
+        let index = try #require(response.data?.projects?.first?.index)
+        #expect(index == 2)
+
+        // The ref selects the project it was reported for.
+        let again = await handler.handle(request("project.select", args: ControlArgs(project: "project:\(index)")))
+        #expect(again.data?.projects?.first?.id == tools.id.uuidString)
+    }
+
+    @Test
+    func project_rename_reports_its_list_index() async {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+        _ = seedProject(appState, projectStore, name: "tools", select: false)
+
+        let response = await handler.handle(request("project.rename", args: ControlArgs(project: "tools", name: "tooling")))
+        #expect(response.data?.projects?.map(\.index) == [2])
+    }
+
+    @Test
+    func project_select_pinned_reports_no_index() async {
+        // The pinned workspace is not a `project list` row, so any index
+        // reported for it would name the project at that position instead.
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "api")
+
+        let response = await handler.handle(request("project.select", args: ControlArgs(project: "pinned")))
+        #expect(response.ok)
+        #expect(response.data?.projects?.first?.id == PinnedTabs.projectID.uuidString)
+        #expect(response.data?.projects?.first?.index == nil)
     }
 
     // MARK: - project.rename / project.remove

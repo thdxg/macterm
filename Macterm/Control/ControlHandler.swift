@@ -135,21 +135,7 @@ final class ControlHandler {
     }
 
     private func projectList() -> ControlData {
-        let infos = projectStore.projects.map { project in
-            ControlProjectInfo(
-                id: project.id.uuidString,
-                name: project.name,
-                path: project.path,
-                active: project.id == appState.activeProjectID,
-                // "Loaded" = a workspace exists (tabs/panes addressable over
-                // this protocol) — NOT `AppState.isProjectLoaded`, which asks
-                // whether live terminal *surfaces* exist and is false for a
-                // restored-but-never-shown project.
-                loaded: appState.workspaces[project.id] != nil,
-                tabCount: appState.workspaces[project.id]?.tabs.count
-            )
-        }
-        return ControlData(projects: infos)
+        ControlData(projects: projectStore.projects.map { projectInfo($0) })
     }
 
     private func tabList(_ args: ControlArgs) throws -> ControlData {
@@ -1247,15 +1233,28 @@ final class ControlHandler {
     // MARK: - Shared projections
 
     private func projectData(_ project: Project) -> ControlData {
-        let info = ControlProjectInfo(
+        ControlData(projects: [projectInfo(project)])
+    }
+
+    /// The one projection behind `project list` and every single-project
+    /// reply. `index` is looked up here, in the same `projectStore.projects`
+    /// order `resolveProject` resolves `project:N` against, so a reply's ref
+    /// always selects the project it describes. nil for the pinned sentinel,
+    /// which is not a store row.
+    private func projectInfo(_ project: Project) -> ControlProjectInfo {
+        ControlProjectInfo(
+            index: projectStore.projects.firstIndex { $0.id == project.id }.map { $0 + 1 },
             id: project.id.uuidString,
             name: project.name,
             path: project.path,
             active: project.id == appState.activeProjectID,
+            // "Loaded" = a workspace exists (tabs/panes addressable over
+            // this protocol) — NOT `AppState.isProjectLoaded`, which asks
+            // whether live terminal *surfaces* exist and is false for a
+            // restored-but-never-shown project.
             loaded: appState.workspaces[project.id] != nil,
             tabCount: appState.workspaces[project.id]?.tabs.count
         )
-        return ControlData(projects: [info])
     }
 
     private func tabInfo(_ tab: TerminalTab, index: Int, in workspace: Workspace) -> ControlTabInfo {
