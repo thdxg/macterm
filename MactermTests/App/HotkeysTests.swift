@@ -683,6 +683,62 @@ struct HotkeysTests {
         #expect(str == "cmd+q") // Should be "q", not "a"
     }
 
+    // MARK: - Non-Latin layouts (⌘ chords named by the Command key map)
+
+    // The characters are what macOS's own layouts produce for these keys (read
+    // with UCKeyTranslate from the installed layout data), so each case is a
+    // real layout rather than a guess at one.
+
+    /// Ukrainian: the key labelled С types `с` alone and `c` under ⌘, so ⌘С is
+    /// ⌘C — what a Ukrainian user presses for Copy. Same for V, Q, `,` and `[`.
+    @Test
+    func command_chord_on_a_cyrillic_key_is_named_by_the_command_map() {
+        let keys: [(chars: String, keyCode: UInt16, command: String)] = [
+            ("с", 8, "c"), ("м", 9, "v"), ("й", 12, "q"), ("б", 43, ","), ("х", 33, "["),
+        ]
+        for key in keys {
+            let token = HotkeyRegistry.eventToken(
+                charactersIgnoringModifiers: key.chars, keyCode: key.keyCode, commandCharacter: key.command
+            )
+            #expect(token == key.command, "⌘\(key.chars)")
+        }
+    }
+
+    /// The Command map outranks the key's US-ANSI position: Tifinagh (AZERTY)
+    /// types `a` under ⌘ on the key where US has Q, so that chord is ⌘A, and
+    /// the key where US has A is ⌘Q.
+    @Test
+    func command_map_outranks_the_keys_us_position() {
+        #expect(HotkeyRegistry.eventToken(charactersIgnoringModifiers: "ⴰ", keyCode: 12, commandCharacter: "a") == "a")
+        #expect(HotkeyRegistry.eventToken(charactersIgnoringModifiers: "ⵇ", keyCode: 0, commandCharacter: "q") == "q")
+    }
+
+    /// With no ⌘ there is no Command map to ask, so a Cyrillic key keeps its
+    /// US-ANSI position — `ctrl+]` under Ukrainian is the `ї` key.
+    @Test
+    func non_command_chord_on_a_cyrillic_key_falls_back_to_position() {
+        #expect(HotkeyRegistry.eventToken(charactersIgnoringModifiers: "ї", keyCode: 30, commandCharacter: nil) == "]")
+    }
+
+    /// A key that types ASCII is named by that character whatever the Command
+    /// map says: the map only replaces the position guess for keys that don't.
+    @Test
+    func ascii_key_is_named_by_its_character_not_the_command_map() {
+        #expect(HotkeyRegistry.eventToken(charactersIgnoringModifiers: "d", keyCode: 35, commandCharacter: "p") == "d")
+    }
+
+    /// The live layout is asked only for a ⌘ chord on a key that types no
+    /// ASCII. Each of these answers nil on any host layout.
+    @Test
+    func command_key_character_is_nil_unless_command_is_held_on_a_non_ascii_key() throws {
+        // No ⌘, no Command map: ctrl+С.
+        #expect(try HotkeyRegistry.commandKeyCharacter(for: keyEvent("с", [.control], keyCode: 8)) == nil)
+        // A key that types ASCII keeps its character (Colemak's `d` on US P).
+        #expect(try HotkeyRegistry.commandKeyCharacter(for: keyEvent("d", [.command], keyCode: 35)) == nil)
+        // An arrow's private-use character maps to itself under ⌘ — no letter.
+        #expect(try HotkeyRegistry.commandKeyCharacter(for: keyEvent("\u{F702}", [.command], keyCode: 123)) == nil)
+    }
+
     // MARK: - Conflict detection
 
     @Test

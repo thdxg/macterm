@@ -961,14 +961,20 @@ final class GhosttyTerminalNSView: NSView {
 
     private func isAppShortcut(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-        // Always let system Cmd shortcuts through
-        if flags == .command, Self.systemKeys.contains(key) { return true }
+        // Always let system Cmd shortcuts through. Named by `eventToken`, not
+        // the typed character: under a Cyrillic layout ⌘Q types `й`, and
+        // `performKeyEquivalent` hands libghostty that key's Command-map `q`,
+        // so without this ghostty's own `super+q=quit` — an action Macterm
+        // leaves unhandled — would swallow Quit.
+        if flags == .command, let token = HotkeyRegistry.eventToken(event), Self.systemKeys.contains(token) {
+            return true
+        }
         // Cmd+1-9 for tab selection. A backstop only: KeyRouter's monitor
         // sees these first and swallows them. Cmd+0 is deliberately absent —
         // it addresses a tab only as the second digit of a multi-digit run
         // (TabIndexChord), which the monitor has already handled; on its own
         // it belongs to ghostty as reset-font-size.
+        let key = (event.charactersIgnoringModifiers ?? "").lowercased()
         if flags == .command, let n = Int(key), (1 ... 9).contains(n) { return true }
         // A binding the user flagged for passthrough is NOT an app shortcut
         // while a program owns this pane's keyboard — otherwise the key would
@@ -1272,12 +1278,23 @@ final class GhosttyTerminalNSView: NSView {
             clearCommandSubmissionEvidence()
         }
         var ke = buildKeyEvent(from: event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
-        ke.text = nil
-        if ghostty_surface_key_is_binding(surface, ke, nil) {
+        func performIfBinding(_ ke: ghostty_input_key_s) -> Bool {
+            guard ghostty_surface_key_is_binding(surface, ke, nil) else { return false }
             _ = ghostty_surface_key(surface, ke)
             return true
         }
-        return false
+        // libghostty resolves a unicode binding (`super+c`) from the key's text
+        // before its unshifted codepoint, and under a Cyrillic layout the C
+        // key's unshifted codepoint is `с` — so with no text, ⌘C and ⌘V matched
+        // nothing. The layout's Command-map letter goes in as the text — the
+        // letter Ghostty.app gets by sending `event.characters` — and the check
+        // and the dispatch must both carry it. It types nothing: ghostty never
+        // encodes text for super on macOS.
+        guard let text = HotkeyRegistry.commandKeyCharacter(for: event) else { return performIfBinding(ke) }
+        return text.withCString { ptr in
+            ke.text = ptr
+            return performIfBinding(ke)
+        }
     }
 
     // MARK: - Mouse

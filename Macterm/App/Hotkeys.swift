@@ -297,32 +297,75 @@ enum HotkeyRegistry {
     ///    (handles letters, digits, unshifted symbols — correct for Colemak/AZERTY)
     /// 3. Printable but NOT a known key token (e.g. `<`, `?`, `!` from shifted
     ///    symbols) → fall back to `keyCodeToBaseToken` to recover the base key
-    /// 4. Empty chars → arrow/non-character keys by keyCode
+    /// 4. Not ASCII under ⌘ (a Cyrillic, Greek, Hebrew… letter) → the layout's
+    ///    Command key map (`commandKeyCharacter`), so ⌘ + the key labelled С is ⌘C
+    /// 5. Anything else (empty, arrows, not ASCII without ⌘) → by keyCode
     static func eventToken(_ event: NSEvent) -> String? {
-        guard let chars = event.charactersIgnoringModifiers else {
-            return Self.keyCodeToBaseToken[event.keyCode]
-        }
+        eventToken(
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+            keyCode: event.keyCode,
+            commandCharacter: commandKeyCharacter(for: event)
+        )
+    }
+
+    /// `eventToken(_:)` over the event's parts. `commandCharacter` is what
+    /// `commandKeyCharacter(for:)` read off the live layout; taking it as a
+    /// value lets a test state any layout's answer rather than the host's.
+    static func eventToken(charactersIgnoringModifiers chars: String?, keyCode: UInt16, commandCharacter: String?) -> String? {
+        guard let chars else { return Self.keyCodeToBaseToken[keyCode] }
 
         // Special named keys
         if let token = specialCharsToToken[chars] { return token }
 
         // Single printable ASCII
-        if chars.count == 1, let scalar = chars.unicodeScalars.first,
-           scalar.value >= 0x20, scalar.value < 0x7F
-        {
-            let lower = chars.lowercased()
+        if let ascii = printableASCII(chars) {
+            let lower = ascii.lowercased()
             // If the char itself is a known key token, use it directly.
             // This is the correct path for letters (layout-independent),
             // digits, and unshifted symbols.
             if keyCodes[lower] != nil { return lower }
             // Printable but not a known token (e.g. "<" from shift+, "?")
             // → fall back to the keyCode → base-token mapping.
-            if let token = Self.keyCodeToBaseToken[event.keyCode] { return token }
-            return nil
+            return Self.keyCodeToBaseToken[keyCode]
         }
 
-        // Empty or multi-char → try named non-character keys by position
-        return Self.keyCodeToBaseToken[event.keyCode]
+        // Not ASCII: under ⌘, the layout's Command map names the key.
+        if let command = commandCharacter?.lowercased(), keyCodes[command] != nil { return command }
+
+        // Empty or multi-char, or no Command map to ask → try the key by position
+        return Self.keyCodeToBaseToken[keyCode]
+    }
+
+    /// What a ⌘ chord's key types under the layout's Command key map, for a
+    /// key that types no ASCII on its own — nil for every other event.
+    ///
+    /// A macOS keyboard layout carries a separate key map for chords with ⌘,
+    /// and every Cyrillic, Greek, Hebrew and Arabic layout fills it with Latin
+    /// QWERTY letters: the key labelled С types `с` alone and `c` with ⌘. The
+    /// menu bar reads shortcuts through that map, so it names the key for
+    /// Macterm's bindings (`eventToken`) and libghostty's alike —
+    /// `GhosttyTerminalNSView.performKeyEquivalent` hands it over as the key's
+    /// text, which is what libghostty resolves `super+c` from. The two must
+    /// agree: a chord libghostty read as `w` while Macterm read it as something
+    /// else would close the pane through ghostty's `close_surface` rather than
+    /// Macterm's Close Pane. A key that types ASCII is left to its own
+    /// character: the map is only asked where `eventToken`'s answer was
+    /// otherwise a guess from the key's US-ANSI position.
+    static func commandKeyCharacter(for event: NSEvent) -> String? {
+        // `characters(byApplyingModifiers:)` raises for any other event type.
+        guard event.type == .keyDown || event.type == .keyUp,
+              event.modifierFlags.contains(.command),
+              printableASCII(event.charactersIgnoringModifiers) == nil
+        else { return nil }
+        return printableASCII(event.characters(byApplyingModifiers: .command))
+    }
+
+    /// `chars` if it is a single printable ASCII character, else nil.
+    private static func printableASCII(_ chars: String?) -> String? {
+        guard let chars, chars.count == 1, let scalar = chars.unicodeScalars.first,
+              scalar.value >= 0x20, scalar.value < 0x7F
+        else { return nil }
+        return chars
     }
 
     /// Fold input aliases to the single canonical token the event-matching
