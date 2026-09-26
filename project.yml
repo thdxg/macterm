@@ -212,9 +212,10 @@ targets:
           chmod +x "$SHIM_DIR/ghostty"
 
   # The bundled control CLI (`macterm`). Shares ControlProtocol.swift with the
-  # app target so the wire codec can never drift between the two, and
+  # app target so the wire codec can never drift between the two,
   # SSHWrapper.swift so `macterm ssh` and the app promise the same terminfo
-  # entry (both files are unit-tested through the app module).
+  # entry, and AgentSkills/ so the skills `macterm skills` prints are checked
+  # against the CLI itself (all unit-tested through the app module).
   MactermCLI:
     type: tool
     platform: macOS
@@ -222,6 +223,7 @@ targets:
       - path: CLI
       - path: Macterm/Control/ControlProtocol.swift
       - path: Macterm/System/SSHWrapper.swift
+      - path: Macterm/Control/AgentSkills
     dependencies:
       - package: ArgumentParser
         product: ArgumentParser

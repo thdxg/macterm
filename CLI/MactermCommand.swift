@@ -22,6 +22,7 @@ struct MactermCommand: ParsableCommand {
             LayoutCommand.self,
             TutorCommand.self,
             SSHCommand.self,
+            SkillsCommand.self,
         ]
     )
 }
@@ -60,6 +61,16 @@ func runControlCommand(command: String, args: ControlArgs? = nil, options: Conne
 func sessionFromEnvironment() -> String? {
     let value = ProcessInfo.processInfo.environment[ControlProtocol.sessionEnvVar]
     return (value?.isEmpty ?? true) ? nil : value
+}
+
+/// Whether a `.captureForPassthrough` argument opens with one of
+/// ArgumentParser's help flags (its default `-h`/`--help`). The capture takes
+/// every word from the first one it doesn't recognize, help flags included,
+/// before ArgumentParser looks for them — so a verb built on it must answer
+/// help itself, and only for the first word: after real text, `--help`
+/// belongs to that text (`pane run ls --help` types `ls --help`).
+func startsWithHelpFlag(_ words: [String]) -> Bool {
+    words.first == "--help" || words.first == "-h"
 }
 
 /// Shared pane-target options: `--session`/`--pane` are explicit; inside a
@@ -127,7 +138,7 @@ struct ProjectCommand: ParsableCommand {
             abstract: "Add a project for a local directory or remote spec (a new one on every run)."
         )
 
-        @Argument(help: "Project directory (absolute or ~-prefixed).")
+        @Argument(help: "Project directory (absolute or ~-prefixed), or a remote [user@]host:dir.")
         var path: String
 
         @Option(help: "Display name. Defaults to the directory name.")
@@ -618,6 +629,11 @@ struct PaneCommand: ParsableCommand {
             discussion: """
             Pastes a command line into an existing pane's shell and submits it.
 
+            Flags go before the command line: from its first word on, \
+            everything is typed, flags included, so `macterm pane run ls \
+            --help` types `ls --help`. Only a leading `--help` or `-h` shows \
+            this help.
+
             `--no-submit` withholds the trailing newline, so the text lands on \
             the prompt unsubmitted — pre-filling a command for a human to \
             inspect, or feeding a TUI that submits on its own terms. Follow it \
@@ -634,9 +650,6 @@ struct PaneCommand: ParsableCommand {
             """
         )
 
-        @Argument(parsing: .captureForPassthrough, help: "The command line to run.")
-        var command: [String]
-
         @Flag(
             name: .customLong("no-submit"),
             help: "Leave the text on the prompt instead of running it (omits the trailing newline)."
@@ -646,7 +659,14 @@ struct PaneCommand: ParsableCommand {
         @OptionGroup var target: PaneTarget
         @OptionGroup var options: ConnectionOptions
 
+        /// Declared after every flag so the usage line lists them first, the
+        /// only order in which they are parsed rather than typed.
+        @Argument(parsing: .captureForPassthrough, help: "The command line to run.")
+        var command: [String]
+
         func run() throws {
+            // Checked before anything is sent: the capture took the flag as text.
+            if startsWithHelpFlag(command) { throw CleanExit.helpRequest(self) }
             let line = command.joined(separator: " ")
             guard !line.isEmpty else {
                 Output.printError("nothing to run")

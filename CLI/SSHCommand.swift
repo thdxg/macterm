@@ -2,8 +2,8 @@ import ArgumentParser
 import Foundation
 
 /// `macterm ssh` — ghostty's `+ssh` action reimplemented natively (see
-/// `SSHWrapper` for the full story). The one offline verb: it never touches
-/// the control socket and works with no Macterm running.
+/// `SSHWrapper` for the full story). Offline, like `macterm skills`: it never
+/// touches the control socket and works with no Macterm running.
 ///
 /// Invoked two ways: by the bundled `ghostty` shim when the shell-integration
 /// `ssh` wrapper fires (the `ssh-env`/`ssh-terminfo` features), and directly
@@ -65,6 +65,10 @@ struct SSHCommand: ParsableCommand {
     var sshArgs: [String] = []
 
     func run() throws {
+        // Never fires for the relay: every shell integration calls `ghostty
+        // +ssh <flags> -- "$@"` (and the alias is `macterm ssh --`), so the
+        // capture starts with `--` and a user's own `ssh --help` reaches ssh.
+        if startsWithHelpFlag(sshArgs) { throw CleanExit.helpRequest(self) }
         guard !sshArgs.isEmpty else {
             Output.printError("no ssh arguments provided")
             throw ExitCode(2)

@@ -28,7 +28,7 @@ From any other shell, use the bundle path or symlink it onto your `PATH`:
 /Applications/Macterm.app/Contents/Resources/bin/macterm status
 ```
 
-Every command takes `--json` for a scriptable payload and `--socket <path>` to target a specific instance. `--help` works at every level.
+Every command that talks to the app takes `--json` for a scriptable payload and `--socket <path>` to target a specific instance. `--help` works at every level.
 
 ## Commands
 
@@ -60,7 +60,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way. A no-op at the outermost edge, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane. Always requires an explicit target. |
-| `pane run <command…> [--no-submit] [target]` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. |
+| `pane run [--no-submit] [target] <command…>` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. Flags go first: from the command's first word on, everything is typed. |
 | `pane key <chord> [target]` | Send one key press (`a`, `ctrl+c`, `escape`, `up`). |
 | `pane zoom [target]` | Toggle zoom on a pane. |
 | `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split on that axis. |
@@ -70,7 +70,8 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `layout apply [--project P] [--force]` | Reconcile to the project's [layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes. |
 | `layout save [--project P]` | Write the live workspace to `~/.config/macterm/projects/<slug>.yaml`. |
 | `tutor [project\|pinned]` | Print a short tutorial, with your own keybinds. Needs a running app. |
-| `ssh <ssh args…>` | Run ssh with Macterm's terminal integration. The one verb that needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false`, `--verbose`. |
+| `ssh <ssh args…>` | Run ssh with Macterm's terminal integration. Needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false`, `--verbose`. |
+| `skills [name] [--list]` | Print [skills for coding agents](#skills-for-coding-agents): all of them after install instructions, or one `SKILL.md` verbatim. Needs no running app. |
 
 ## Targeting a pane
 
@@ -78,7 +79,7 @@ Projects and tabs accept a **name**, a **UUID**, or the **1-based index** from l
 
 Pane verbs resolve their target in this order:
 
-1. `--session <name>` — the zmx session name. **Restart-stable**: pane UUIDs regenerate every launch, session names don't.
+1. `--session <name>` — the zmx session name. **Restart-stable**: pane UUIDs regenerate every launch, session names don't. Found in whichever project holds it, unless `--project` names one.
 2. `--pane <uuid|index>`.
 3. `MACTERM_SESSION` — inside a pane, so a bare `macterm pane split` splits the pane you're in. An explicit `--tab` disables this.
 4. Otherwise, the focused pane of the active tab.
@@ -106,6 +107,16 @@ needs confirm quit  false
 Both need a **live surface** — a never-shown pane returns `no_surface`. Select its tab once.
 
 > Cursor position and a direct alt-screen query aren't available over libghostty's C ABI. `alt-screen` here is a heuristic, and reads `-` until the surface emits its first scrollbar update.
+
+## Skills for coding agents
+
+`macterm skills` prints [Agent Skills](https://agentskills.io) — `SKILL.md` files that Claude Code, Codex, OpenCode, Gemini CLI, Cursor and other agents load from a skills directory — teaching an agent this CLI: running commands in panes and reading their output (`macterm-panes`), building a workspace that persists (`macterm-workspace`), and running sub-agents in panes of their own (`macterm-subagents`). There's no installer; the agent installs them. Give it this prompt:
+
+```text
+Run `macterm skills` and install each skill it prints into your skills directory as <name>/SKILL.md, exactly as printed. Then tell me what you installed and where.
+```
+
+`macterm skills <name>` prints one skill verbatim, so `macterm skills macterm-panes > <skills dir>/macterm-panes/SKILL.md` installs it; `--list` names them. The text ships inside the CLI, so it always matches your version: install again after updating Macterm.
 
 ## Environment
 
