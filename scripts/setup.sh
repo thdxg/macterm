@@ -23,7 +23,10 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # hit tests were A/B'd pixel-identical against build-2026-09-25. Upstream also
 # added GHOSTTY_ACTION_RESIZE_WINDOW (CSI 8 t, behind its off-by-default
 # `vt-window-resize-allowed`), which Macterm doesn't handle, so the key does
-# nothing here yet; the tag renumbers OUTPUT_ACTIVITY. Any
+# nothing here yet; the tag renumbers OUTPUT_ACTIVITY. Re-cut onto
+# thdxg/ghostty#17: the partly revealed scrollback row at the top of a shifted
+# grid (the old prompt line after a clear) is selectable instead of clamping a
+# press to the row below it. Any
 # same-day push to the fork's main — the nightly sync included — deletes and
 # recreates a daily tag with different bytes, the asset-swap-under-a-pin hazard
 # documented in AGENTS.md; the stamp below can't tell copies apart, so a
