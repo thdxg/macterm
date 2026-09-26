@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.30.0 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li>A project's right-click menu now lists its git worktrees, and picking one opens a new tab of that project in the worktree. (#431)</li>
+<li><code class="notranslate">macterm skills</code> prints ready-to-install agent skills so Claude Code, Codex and other coding agents can learn to drive Macterm themselves. (#432)</li>
+<li>A program that reports a progress error now leaves a red "Failed" dot on its tab instead of the green done dot. (#430)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li>⌘C, ⌘V and ghostty's other letter shortcuts now work with Ukrainian, Russian, Greek, Hebrew, Arabic and other non-Latin keyboard layouts. (#435)</li>
+<li>⌃⌘F and ⌘↩ now toggle full screen, as they do in Ghostty.app. (#438)</li>
+<li>With smooth scrolling on, clicking or dragging now selects the row under the pointer, including the partly visible row at the top of a pane and rows in the middle of a scroll animation. (#439, #443)</li>
+<li>A second window showing the same tab no longer takes over the terminal's size when a program checks the keyboard mode. (#442)</li>
+<li>A project can no longer be named Pinned, which made it unreachable by name from the CLI; a folder called Pinned becomes "Pinned 2", and <code class="notranslate">project create --name</code> trims padding and rejects an empty name. (#436)</li>
+<li><code class="notranslate">macterm project create</code>, <code class="notranslate">select</code> and <code class="notranslate">rename</code> now print the project's real <code class="notranslate">project:N</code> instead of always <code class="notranslate">project:1</code>, and <code class="notranslate">project create --help</code> no longer claims it is idempotent. (#434, #437)</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> for this release.</p>
+</body>
+</html>
