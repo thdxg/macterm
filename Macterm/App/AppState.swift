@@ -2338,11 +2338,21 @@ final class AppState {
             projectDirectory: projectDirectory,
             activePaneDirectory: activePaneDirectory
         ) ?? projectDirectory
+        return createTab(projectID: projectID, projects: projects, workingDirectory: newTabDirectory, command: command)
+    }
+
+    /// Creates a tab in an explicit `workingDirectory` — one of the project's
+    /// git worktrees, from the sidebar's Worktrees menu.
+    @discardableResult
+    func createTab(projectID: UUID, projects: [Project], workingDirectory: String, command: String? = nil) -> UUID? {
+        guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
+            return nil
+        }
         // The cwd is user-selectable, but zmx session grouping remains project-scoped.
         let projectSessionSlug = (projectDirectory as NSString).lastPathComponent
         return createTab(
             projectID: projectID,
-            projectPath: newTabDirectory,
+            projectPath: workingDirectory,
             sessionSlug: projectSessionSlug,
             command: command
         )

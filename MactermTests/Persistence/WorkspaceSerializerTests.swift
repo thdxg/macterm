@@ -25,6 +25,24 @@ struct WorkspaceSerializerTests {
     }
 
     @Test
+    func a_tab_rooted_outside_the_project_restores_there_under_its_session() throws {
+        // A Worktrees-menu tab starts in a worktree, not the project
+        // directory. Snapshotted before its shell reports a cwd — the save
+        // `createTab` makes — it must still come back in the worktree, under
+        // the session name it was created with.
+        let ws = Workspace(projectID: UUID(), projectPath: "/tmp/app")
+        let tab = ws.createTab(projectPath: "/tmp/app-feature", sessionSlug: "app")
+        let pane = try #require(tab.focusedPane)
+
+        let restored = try #require(roundTrip([ws.projectID: ws]).first)
+
+        let restoredPane = try #require(restored.tabs.first { $0.id == tab.id }?.splitRoot.allPanes().first)
+        #expect(restoredPane.projectPath == "/tmp/app-feature")
+        #expect(restoredPane.sessionName == pane.sessionName)
+        #expect(restoredPane.sessionSlug == "app")
+    }
+
+    @Test
     func round_trip_preserves_tab_and_workspace_ids() {
         let ws = Workspace(projectID: UUID(), projectPath: "/tmp")
         let tabID = ws.tabs[0].id

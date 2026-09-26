@@ -63,6 +63,28 @@ struct AppStateTests {
     }
 
     @Test
+    func createTab_in_an_explicit_directory_keeps_the_project_session_slug() throws {
+        // The sidebar's Worktrees menu roots a tab in a worktree beside the
+        // project: the pane starts there, but its zmx session still groups
+        // under the project, like every other tab the project owns.
+        let state = makeAppState()
+        let project = seedProject(state, path: "/project")
+        let workspace = try #require(state.workspaces[project.id])
+
+        let tabID = try #require(state.createTab(
+            projectID: project.id,
+            projects: [project],
+            workingDirectory: "/project-feature"
+        ))
+
+        #expect(workspace.activeTabID == tabID)
+        let pane = try #require(workspace.activeTab?.focusedPane)
+        #expect(pane.projectPath == "/project-feature")
+        #expect(pane.sessionSlug == "project")
+        #expect(pane.sessionName.hasPrefix("macterm-project-"))
+    }
+
+    @Test
     func createTab_remote_active_pane_falls_back_to_project_directory() throws {
         let state = makeAppState()
         state.newTabInheritsWorkingDirectory = { true }
