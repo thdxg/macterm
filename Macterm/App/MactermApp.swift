@@ -62,8 +62,8 @@ struct MactermApp: App {
                     // an explicit id so `openWindow(id:)` could address it was
                     // tried first and made SwiftUI open a SECOND window at
                     // launch, every launch.
-                    appState.openNewWindow = { [weak appDelegate] in
-                        appDelegate?.openInitialWindow()
+                    appState.openNewWindow = { [weak delegate = appDelegate] in
+                        delegate?.openInitialWindow()
                     }
                     appDelegate.projectStore = projectStore
                     NotificationHandler.shared.appState = appState

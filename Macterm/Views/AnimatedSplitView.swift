@@ -538,7 +538,7 @@ struct AnimatedSplitView: View {
     private func settle(_ id: UUID) {
         guard let settled = settledIDs, !settled.contains(id) else { return }
         withAnimation(animation) {
-            settledIDs?.insert(id)
+            _ = settledIDs?.insert(id)
         }
     }
 }

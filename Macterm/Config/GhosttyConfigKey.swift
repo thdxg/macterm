@@ -35,7 +35,7 @@ struct GhosttyConfigKey<Value> {
     }
 
     /// One `ghostty_config_get` call with `value` as the out parameter.
-    fileprivate static func get(_ config: ghostty_config_t, _ name: String, into value: inout some Any) -> Bool {
+    fileprivate static func get(_ config: ghostty_config_t, _ name: String, into value: inout some BitwiseCopyable) -> Bool {
         ghostty_config_get(config, &value, name, UInt(name.utf8.count))
     }
 }

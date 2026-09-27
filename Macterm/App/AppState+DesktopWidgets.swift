@@ -220,7 +220,7 @@ extension AppState {
     /// reattach, never toward respawning over sessions that may be alive.
     func materializeRestoredDesktopWidgets(_ ids: Set<UUID>) async {
         guard !ids.isEmpty else { return }
-        var alive: Set<String>? = if zmx.isBundled() {
+        let alive: Set<String>? = if zmx.isBundled() {
             await zmx.listSessionsWithClients().map { Set($0.map(\.name)) }
         } else {
             []
