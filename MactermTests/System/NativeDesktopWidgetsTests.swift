@@ -57,8 +57,11 @@ struct NativeDesktopWidgetsTests {
     }
 
     @Test
-    func another_app_or_level_is_not_a_widget() {
+    func another_app_or_a_window_outside_the_desktop_band_is_not_a_widget() {
         #expect(frames([window(pid: 1, 18, 55, 360, 180)]).isEmpty)
         #expect(frames([window(layer: 0, 18, 55, 360, 180)]).isEmpty)
+        #expect(frames([window(layer: NativeDesktopWidgets.desktopLevels.lowerBound - 1, 18, 55, 360, 180)]).isEmpty)
+        // Anywhere in the band counts, not only the level measured today.
+        #expect(frames([window(layer: NativeDesktopWidgets.desktopLevels.lowerBound, 18, 55, 360, 180)]).count == 1)
     }
 }

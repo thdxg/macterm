@@ -46,6 +46,14 @@ enum NativeDesktopWidgets {
     /// windows one level lower — see `widgetFrames`.
     static let widgetLevel = Int(CGWindowLevelForKey(.desktopIconWindow)) + 2
 
+    /// The desktop band a widget window can be in: above the desktop icons,
+    /// below ordinary windows. Wider than `widgetLevel` so a level change in
+    /// a macOS release doesn't silently blind this; the other checks carry
+    /// the filtering.
+    static var desktopLevels: Range<Int> {
+        (Int(CGWindowLevelForKey(.desktopIconWindow)) + 1) ..< Int(CGWindowLevelForKey(.normalWindow))
+    }
+
     /// The widgets among `windows` (window-list entries), converted from the
     /// window list's top-left space to AppKit's. Pure, for tests.
     ///
@@ -54,16 +62,16 @@ enum NativeDesktopWidgets {
     /// (measured: 464×824, alpha 0, left behind after widgets were dragged
     /// and resized), and taking that one for a widget both blocked the empty
     /// cells it covered and pulled Macterm's widgets onto its lattice. So a
-    /// widget is a window of the host at `widgetLevel`, with visible alpha,
-    /// whose every side is a whole number of cells — a widget window is
-    /// 180pt per cell each way, its 8pt shadow insets included.
+    /// widget is a window of the host in the desktop band, with visible
+    /// alpha, whose every side is a whole number of cells — a widget window
+    /// is 180pt per cell each way, its 8pt shadow insets included.
     static func widgetFrames(
         in windows: [[String: Any]],
         primaryScreenHeight: CGFloat,
         isHost: (pid_t) -> Bool
     ) -> [CGRect] {
         windows.compactMap { info in
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer == widgetLevel,
+            guard let layer = info[kCGWindowLayer as String] as? Int, desktopLevels.contains(layer),
                   let alpha = info[kCGWindowAlpha as String] as? Double, alpha > 0,
                   let pid = info[kCGWindowOwnerPID as String] as? pid_t,
                   let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
