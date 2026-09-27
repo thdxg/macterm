@@ -19,7 +19,12 @@ private let logger = Logger(subsystem: appBundleID, category: "WorkspacePersiste
 /// v7 adds `desktopWidgets`, for v5's reason again: an older build would
 /// restore without the widgets and then save without them — and its orphan
 /// reaper would kill their sessions, since nothing it restored claims them.
+/// Unlike v5 and v6, it is written only while there ARE widgets to protect:
+/// a file with none is written as v6, so switching to an older build (the
+/// stable channel after a spell on tip) keeps saving for everyone who never
+/// made a widget, whom the gate would otherwise freeze for nothing.
 private let currentSchemaVersion = 7
+private let widgetFreeSchemaVersion = 6
 
 /// Top-level on-disk representation. Wraps the workspace array so we can
 /// evolve the file format (add fields, do migrations) without renaming the
@@ -327,13 +332,13 @@ final class WorkspaceStore {
         }
         do {
             let file = WorkspacesFile(
-                version: currentSchemaVersion,
+                version: desktopWidgets.isEmpty ? widgetFreeSchemaVersion : currentSchemaVersion,
                 workspaces: snapshots,
                 pinned: pinned,
                 pinnedActiveTabID: pinnedActiveTabID,
                 windows: windows,
                 quickTerminal: quickTerminal,
-                desktopWidgets: desktopWidgets
+                desktopWidgets: desktopWidgets.isEmpty ? nil : desktopWidgets
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

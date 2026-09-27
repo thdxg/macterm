@@ -1134,6 +1134,18 @@ final class AppState {
     @ObservationIgnored
     var widgetLayoutSuspended = false
 
+    /// The widgets our last `widgets.yaml` write listed — the only ones an
+    /// entry can have been removed FROM. A widget created since that write
+    /// is unknown to the file on disk, not removed by the user.
+    @ObservationIgnored
+    var widgetLayoutLastWrittenIDs: Set<UUID> = []
+
+    /// Widgets whose `widgets.yaml` entry the user removed while Macterm ran:
+    /// still alive — a half-saved file must never kill a shell — but left out
+    /// of every write, so the next launch removes them as the file says.
+    @ObservationIgnored
+    var unlistedDesktopWidgetIDs: Set<UUID> = []
+
     /// Restored widgets not drawn yet: they wait for zmx to say whether their
     /// sessions survived, so a dead one respawns from its recipe instead of
     /// a surface reattaching to an empty shell first.

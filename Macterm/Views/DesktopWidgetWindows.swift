@@ -40,7 +40,10 @@ final class DesktopWidgetWindows: DesktopWidgetPresenting {
     func sync(_ widgets: [DesktopWidget], editing: UUID?) {
         let live = Set(widgets.map(\.id))
         for (id, panel) in panels where !live.contains(id) {
-            panel.orderOut(nil)
+            // `close`, not `orderOut`: an ordered-out window stays in
+            // `NSApp.windows`, which kept the panel, its hosting view and the
+            // widget's tab and pane alive for the rest of the run.
+            panel.close()
             panels[id] = nil
         }
         for widget in widgets {
@@ -120,9 +123,7 @@ final class DesktopWidgetPanel: NSPanel {
 
     func apply(_ widget: DesktopWidget, isEditing editing: Bool) {
         if frame != widget.frame, !widgetContent.isResizing {
-            // Animated, like a system widget settling into its grid cell.
-            setFrame(widget.frame, display: true, animate: isVisible)
-            invalidateShadow()
+            settle(to: widget.frame)
         }
         guard isEditing != editing else { return }
         isEditing = editing
@@ -155,6 +156,33 @@ final class DesktopWidgetPanel: NSPanel {
     /// Hand the frame the user left the widget at to the grid.
     private func settle() {
         appState?.settleDesktopWidget(id: widgetID, frame: frame)
+    }
+
+    /// Move to the cell the model settled on — animated like a system widget
+    /// slotting in, but through an animation group rather than
+    /// `setFrame(_:display:animate:)`, which spins the run loop inside the
+    /// caller until it's done; and not at all under Reduce Motion, as the
+    /// split animations.
+    private func settle(to target: CGRect) {
+        guard isVisible, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            setFrame(target, display: true)
+            invalidateShadow()
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            animator().setFrame(target, display: true)
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated { self?.invalidateShadow() }
+        }
+    }
+
+    /// ⌘W while editing: `MainAppResponder` sends the key window
+    /// `performClose` when it isn't a terminal window, and a borderless panel
+    /// only beeps at that. Closing the widget you're editing means being done
+    /// with it.
+    override func performClose(_: Any?) {
+        appState?.endEditingDesktopWidget()
     }
 
     // MARK: Menu

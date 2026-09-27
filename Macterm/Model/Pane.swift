@@ -399,6 +399,12 @@ final class Pane: Identifiable {
     /// The shell returned to a prompt (OSC 133;D) — recorded even when the
     /// status indicator is off, because the naming path uses it to reject
     /// prompt-hook processes.
+    /// Whether the shell sits at its prompt (OSC 133;D since the last real
+    /// submission). A foreground seen then is a prompt hook, not a command —
+    /// the rule the tracker's own start gate and the naming path apply; the
+    /// widget recipe capture reads it for the same reason.
+    var isShellAtPrompt: Bool { executionTracker.isShellAtPrompt }
+
     func notePromptReturned() {
         executionTracker.notePromptReturned()
     }

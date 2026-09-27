@@ -76,6 +76,7 @@ extension AppState {
         guard let index = desktopWidgets.firstIndex(where: { $0.id == id }) else { return }
         let widget = desktopWidgets.remove(at: index)
         if editingDesktopWidgetID == id { editingDesktopWidgetID = nil }
+        unlistedDesktopWidgetIDs.remove(id)
         endSessions(of: widget)
         logger.info("removed desktop widget \(id.uuidString, privacy: .public)")
         desktopWidgetsDidChange()
@@ -150,12 +151,14 @@ extension AppState {
         desktopWidgetsDidChange()
     }
 
-    /// Snap every widget onto its screen's grid in order, each clear of the
-    /// ones before it — after a declaration moved several at once.
-    private func tidyDesktopWidgets() {
+    /// Snap the widgets in `ids` onto their screens' grids, each clear of
+    /// every other widget — after a declaration placed them. Only those: a
+    /// widget the file left alone stays exactly where it settled.
+    private func tidyDesktopWidgets(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
         let frames = desktopVisibleFrames()
-        var placed = nativeDesktopWidgetFrames()
-        for widget in desktopWidgets {
+        var placed = nativeDesktopWidgetFrames() + desktopWidgets.filter { !ids.contains($0.id) }.map(\.frame)
+        for widget in desktopWidgets where ids.contains(widget.id) {
             if let screen = DesktopWidgetGrid.screen(for: widget.frame, among: frames) {
                 let snapped = DesktopWidgetGrid.snap(widget.frame, in: screen, avoiding: placed)
                 widget.topLeft = snapped.topLeft
@@ -261,12 +264,23 @@ extension AppState {
     // MARK: - widgets.yaml
 
     /// Re-capture each live widget's recipe from what its pane is running —
-    /// the pinned tabs' capture (`LayoutSerializer.pinnedDeclaration`), and
-    /// their rule that an idle capture never ERASES an established `run:`:
-    /// a pane at its prompt says nothing about what it should respawn with.
-    func refreshDesktopWidgetRecipes() {
+    /// the pinned tabs' capture (`LayoutSerializer.pinnedDeclaration`) under
+    /// two of the execution tracker's rules. An idle capture never ERASES an
+    /// established `run:`: a pane at its prompt says nothing about what it
+    /// should respawn with. And a foreground seen while the shell is AT its
+    /// prompt is a prompt hook (`starship prompt`, `mise hook-env`), not a
+    /// command — this runs on every change, so it caught them, and a hook
+    /// recorded as `run:` is typed into the next fresh shell. `liveCommand`
+    /// is the raw sample, injected by tests.
+    func refreshDesktopWidgetRecipes(
+        liveCommand: (Pane) -> String? = { ProcessInspector.runningCommand(forPane: $0) }
+    ) {
         for widget in desktopWidgets where widget.pane?.nsView != nil {
-            guard case let .pane(leaf) = LayoutSerializer.pinnedDeclaration(for: widget.tab).layout else { continue }
+            let declaration = LayoutSerializer.pinnedDeclaration(
+                for: widget.tab,
+                liveCommand: { pane in pane.isShellAtPrompt ? nil : liveCommand(pane) }
+            )
+            guard case let .pane(leaf) = declaration.layout else { continue }
             if let cwd = leaf.cwd { widget.cwd = cwd }
             if let run = leaf.run { widget.command = run }
         }
@@ -299,19 +313,32 @@ extension AppState {
         )
     }
 
-    /// Make `widget` what `entry` declares. The recipe applies to the next
-    /// fresh session; size and place apply now.
-    private func adopt(_ entry: WidgetDeclaration, into widget: DesktopWidget) {
+    /// Make `widget` what `entry` declares. Name and recipe apply to the next
+    /// fresh session; size and place apply now — but only where the entry
+    /// says something DIFFERENT from what the widget already declares
+    /// (`desktopWidgetDeclaration`). The file's cell is on the screen's
+    /// default lattice and cannot express a widget that joined a neighbour's,
+    /// so re-deriving an untouched entry moved such a widget off its
+    /// neighbour on every launch. Returns whether size or place changed.
+    @discardableResult
+    private func adopt(_ entry: WidgetDeclaration, into widget: DesktopWidget) -> Bool {
+        let current = desktopWidgetDeclaration(widget)
         widget.name = entry.name
         widget.command = entry.run
         widget.cwd = entry.cwd
-        widget.span = entry.size.flatMap(DesktopWidgetSize.parseSpan) ?? Preferences.shared.desktopWidgetDefaultSize.span
-        let screens = desktopScreens()
+        var moved = false
+        if let size = entry.size, size != current.size, let span = DesktopWidgetSize.parseSpan(size) {
+            widget.span = span
+            moved = true
+        }
         if let column = entry.column, let row = entry.row,
-           let screen = screens.first(where: { $0.name == entry.display }) ?? screens.first
+           column != current.column || row != current.row || entry.display != current.display,
+           let screen = desktopScreens().first(where: { $0.name == entry.display }) ?? desktopScreens().first
         {
             widget.topLeft = DesktopWidgetGrid.topLeft(column: max(0, column), row: max(0, row), in: screen.visibleFrame)
+            moved = true
         }
+        return moved
     }
 
     /// A widget for an entry the user added by hand: a fresh session running
@@ -333,7 +360,15 @@ extension AppState {
     /// removed. An absent file is "no input" (a first launch, an editor's
     /// truncate-then-write) and is written from the snapshot; an unparseable
     /// one suspends auto-writes and changes nothing.
+    ///
+    /// Deliberately no snapshot save: this runs inside `restoreSelection`,
+    /// before any window has registered, and a save then writes the window
+    /// list as absent — one window on the next launch. The next ordinary
+    /// save records what changed; a widget removed here that a force-quit's
+    /// stale snapshot brings back comes back on an empty session and is
+    /// removed again.
     func reconcileWidgetLayoutAtLaunch() {
+        unlistedDesktopWidgetIDs = []
         switch widgetLayoutStore.read() {
         case .absent:
             if !desktopWidgets.isEmpty { writeWidgetLayout() }
@@ -343,15 +378,17 @@ extension AppState {
             let matching = WidgetLayoutMatcher.match(entries: entries, current: desktopWidgets.map(desktopWidgetDeclaration))
             let current = desktopWidgets
             var result: [DesktopWidget] = []
+            var moved: Set<UUID> = []
             for (entry, index) in matching.pairs {
                 if let index {
-                    adopt(entry, into: current[index])
+                    if adopt(entry, into: current[index]) { moved.insert(current[index].id) }
                     result.append(current[index])
                 } else {
                     let widget = makeDeclaredWidget(entry)
                     logger.info("widgets.yaml added a widget; created \(widget.id.uuidString, privacy: .public)")
                     desktopWidgets.append(widget)
                     result.append(widget)
+                    moved.insert(widget.id)
                 }
             }
             for index in matching.removed {
@@ -360,21 +397,22 @@ extension AppState {
                 pendingDesktopWidgetMaterialize.remove(current[index].id)
             }
             desktopWidgets = result
-            tidyDesktopWidgets()
+            tidyDesktopWidgets(moved)
             widgetLayoutLastWrittenText = text
+            widgetLayoutLastWrittenIDs = Set(result.map(\.id))
             widgetLayoutSuspended = false
-            saveWorkspaces()
             syncDesktopWidgetPresenter()
         }
     }
 
     /// Rewrite `widgets.yaml` from the widgets — after absorbing any edit made
     /// since our last write (tracked by exact text). Additions become widgets
-    /// and edits apply now; removing a widget that is running is honored at
-    /// launch only, so an editor's half-saved file can never kill a shell. A
-    /// file that doesn't parse suspends auto-writes rather than clobbering
-    /// the user's work. Nothing is ever created for someone who has never had
-    /// a widget.
+    /// and edits apply now. Removing a widget that is running is honored at
+    /// launch — an editor's half-saved file can never kill a shell — but its
+    /// entry stays out of the file from then on (`unlistedDesktopWidgetIDs`),
+    /// so a write can't put back what the user took out. A file that doesn't
+    /// parse suspends auto-writes rather than clobbering the user's work.
+    /// Nothing is ever created for someone who has never had a widget.
     func writeWidgetLayout() {
         let onDisk = widgetLayoutStore.read()
         if widgetLayoutSuspended {
@@ -391,26 +429,51 @@ extension AppState {
             if text != widgetLayoutLastWrittenText { absorbExternalWidgetEdits(entries) }
         }
         do {
-            widgetLayoutLastWrittenText = try widgetLayoutStore.write(widgets: desktopWidgets.map(desktopWidgetDeclaration))
+            let listed = desktopWidgets.filter { !unlistedDesktopWidgetIDs.contains($0.id) }
+            widgetLayoutLastWrittenText = try widgetLayoutStore.write(widgets: listed.map(desktopWidgetDeclaration))
+            widgetLayoutLastWrittenIDs = Set(listed.map(\.id))
         } catch {
             logger.error("Failed to write widgets.yaml: \(error, privacy: .public)")
         }
     }
 
+    /// Write-time absorption: the listed widgets adopt the file's order and
+    /// entries, additions become widgets, and an entry the user removed takes
+    /// its widget out of the file — the widget stays alive, unlisted, until
+    /// the next launch removes it. Only a widget our last write listed can
+    /// have had its entry removed: one created since is simply unknown to
+    /// the file on disk and is carried over. Unlisted widgets take no part
+    /// in matching, or a later entry could resurrect one by position.
     private func absorbExternalWidgetEdits(_ entries: [WidgetDeclaration]) {
         logger.info("widgets.yaml changed externally; absorbing before write")
-        let matching = WidgetLayoutMatcher.match(entries: entries, current: desktopWidgets.map(desktopWidgetDeclaration))
-        let current = desktopWidgets
-        var result: [DesktopWidget] = matching.pairs.map { entry, index in
+        let unlisted = desktopWidgets.filter { unlistedDesktopWidgetIDs.contains($0.id) }
+        let listed = desktopWidgets.filter { widgetLayoutLastWrittenIDs.contains($0.id) && !unlistedDesktopWidgetIDs.contains($0.id) }
+        let fresh = desktopWidgets.filter { !widgetLayoutLastWrittenIDs.contains($0.id) && !unlistedDesktopWidgetIDs.contains($0.id) }
+        let matching = WidgetLayoutMatcher.match(entries: entries, current: listed.map(desktopWidgetDeclaration))
+        var result: [DesktopWidget] = []
+        var moved: Set<UUID> = []
+        for (entry, index) in matching.pairs {
             if let index {
-                adopt(entry, into: current[index])
-                return current[index]
+                if adopt(entry, into: listed[index]) { moved.insert(listed[index].id) }
+                result.append(listed[index])
+            } else {
+                let widget = makeDeclaredWidget(entry)
+                result.append(widget)
+                moved.insert(widget.id)
             }
-            return makeDeclaredWidget(entry)
         }
-        result += matching.removed.map { current[$0] }
+        for index in matching.removed {
+            logger
+                .info(
+                    "widgets.yaml no longer lists widget \(listed[index].id.uuidString, privacy: .public); removed at next launch"
+                )
+            unlistedDesktopWidgetIDs.insert(listed[index].id)
+            result.append(listed[index])
+        }
+        result += fresh
+        result += unlisted
         desktopWidgets = result
-        tidyDesktopWidgets()
+        tidyDesktopWidgets(moved)
         saveWorkspaces()
         syncDesktopWidgetPresenter()
     }

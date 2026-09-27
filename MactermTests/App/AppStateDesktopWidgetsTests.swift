@@ -484,7 +484,10 @@ extension AppStateDesktopWidgetsTests {
 
     /// A file edited while Macterm runs is absorbed before Macterm's next
     /// write: an edit applies, and removing a live widget's entry does not
-    /// kill it mid-session (that waits for the next launch).
+    /// kill it mid-session (that waits for the next launch) — but the entry
+    /// stays out of the file, rather than the write putting it back. A widget
+    /// created since the file was written is not mistaken for one the user
+    /// removed.
     @Test
     func an_external_edit_is_absorbed_before_the_next_write() throws {
         let (state, _, dir) = try makeFixture()
@@ -504,7 +507,7 @@ extension AppStateDesktopWidgetsTests {
 
         #expect(resized.span == DesktopWidgetSize.extraLarge.span)
         #expect(state.desktopWidget(id: unlisted.id) != nil)
-        #expect(try declared(dir).map(\.name) == ["resized", "unlisted", "third"])
+        #expect(try declared(dir).map(\.name) == ["resized", "third"])
     }
 
     /// A file that doesn't parse is the user mid-edit: nothing is written
@@ -600,5 +603,117 @@ private actor WidgetKills {
         for _ in 0 ..< 200 where names.count < count {
             try? await Task.sleep(for: .milliseconds(5))
         }
+    }
+}
+
+extension AppStateDesktopWidgetsTests {
+    // MARK: - Review follow-ups (#445)
+
+    /// A foreground seen while the shell sits at its prompt is a prompt hook
+    /// (`starship prompt`), and must never become the recipe — it would be
+    /// typed into the next fresh shell.
+    @Test
+    func a_prompt_hook_is_never_captured_as_the_recipe() throws {
+        let (state, _, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        state.restoreSelection(projects: [])
+        let widget = state.createDesktopWidget(command: "htop")
+        let pane = try #require(widget.pane)
+        _ = pane.ensureNSView()
+
+        pane.notePromptReturned()
+        state.refreshDesktopWidgetRecipes(liveCommand: { _ in "/opt/homebrew/bin/starship prompt --status=0" })
+        #expect(widget.command == "htop")
+
+        // A real submission hands the shell work; what runs then is it.
+        pane.recordCommandSubmission(hasContent: true)
+        state.refreshDesktopWidgetRecipes(liveCommand: { _ in "tail -f dev.log" })
+        #expect(widget.command == "tail -f dev.log")
+    }
+
+    /// An entry removed by hand while Macterm runs stays out of the file from
+    /// then on, and its widget — alive until then — goes at the next launch.
+    @Test
+    func a_removed_entry_stays_out_of_the_file_and_its_widget_goes_at_launch() throws {
+        let (state, storeURL, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        state.restoreSelection(projects: [])
+        let keep = state.createDesktopWidget(span: Self.medium, name: "keep")
+        let doomed = state.createDesktopWidget(span: Self.medium, name: "doomed")
+        try writeLayout("""
+        widgets:
+          - name: keep
+            size: medium
+        """, in: dir)
+
+        // Any change writes the file, absorbing the edit first.
+        state.beginEditingDesktopWidget(id: keep.id)
+        state.endEditingDesktopWidget()
+        #expect(state.desktopWidget(id: doomed.id) != nil)
+        #expect(try declared(dir).map(\.name) == ["keep"])
+        state.persistForTermination()
+        #expect(try declared(dir).map(\.name) == ["keep"])
+
+        let relaunched = makeState(storeURL: storeURL, dir: dir)
+        relaunched.restoreSelection(projects: [])
+        #expect(relaunched.desktopWidgets.map(\.id) == [keep.id])
+    }
+
+    /// A relaunch keeps a widget exactly where it settled — beside a system
+    /// widget, off the default lattice — when its entry is untouched: the
+    /// file's cell is on the default lattice and can't express that, and the
+    /// system widget may not be in the window list yet at launch.
+    @Test
+    func an_untouched_entry_leaves_a_widget_where_it_settled() throws {
+        let (writer, storeURL, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let native = CGRect(x: 600, y: 636, width: 344, height: 164)
+        writer.nativeDesktopWidgetFrames = { [native] }
+        writer.restoreSelection(projects: [])
+        let widget = writer.createDesktopWidget(span: Self.medium)
+        writer.settleDesktopWidget(id: widget.id, frame: CGRect(x: 950, y: 640, width: 344, height: 164))
+        #expect(widget.topLeft == CGPoint(x: 960, y: 800))
+
+        let state = makeState(storeURL: storeURL, dir: dir)
+        state.restoreSelection(projects: [])
+        #expect(state.desktopWidget(id: widget.id)?.topLeft == CGPoint(x: 960, y: 800))
+    }
+
+    /// The launch reconcile writes only its own file: a snapshot save then
+    /// would run before any window has registered and record the window list
+    /// as absent.
+    @Test
+    func the_launch_reconcile_does_not_save_the_snapshot() throws {
+        let (writer, storeURL, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        writer.restoreSelection(projects: [])
+        writer.createDesktopWidget(name: "a")
+        let before = try String(contentsOf: storeURL, encoding: .utf8)
+        try writeLayout("widgets:\n  - name: a\n    size: large\n", in: dir)
+
+        let state = makeState(storeURL: storeURL, dir: dir)
+        state.restoreSelection(projects: [])
+        #expect(state.desktopWidgets.first?.span == DesktopWidgetSize.large.span)
+        #expect(try String(contentsOf: storeURL, encoding: .utf8) == before)
+    }
+
+    /// A file with no widgets is written as v6, so an older build — the
+    /// stable channel after a spell on tip — keeps saving for everyone who
+    /// never made a widget; only a file with widgets to protect is v7.
+    @Test
+    func the_schema_version_rises_only_with_widgets_to_protect() throws {
+        let (state, storeURL, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        func version() throws -> Int {
+            let object = try JSONSerialization.jsonObject(with: Data(contentsOf: storeURL)) as? [String: Any]
+            return object?["version"] as? Int ?? -1
+        }
+        state.restoreSelection(projects: [])
+        state.saveWorkspaces()
+        #expect(try version() == 6)
+        let widget = state.createDesktopWidget()
+        #expect(try version() == 7)
+        state.removeDesktopWidget(id: widget.id)
+        #expect(try version() == 6)
     }
 }

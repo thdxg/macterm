@@ -840,9 +840,9 @@ final class Preferences {
         quickTerminalHeightFraction = Keys.quickTerminalHeight.read(defaults)
         quickTerminalPositionMode = Keys.quickTerminalPositionMode.read(defaults)
         quickTerminalFixedX = Keys.quickTerminalFixedX.read(defaults)
-        desktopWidgetDefaultSize = Keys.desktopWidgetDefaultSize.read(defaults)
         quickTerminalFixedY = Keys.quickTerminalFixedY.read(defaults)
         quickTerminalSizeMode = Keys.quickTerminalSizeMode.read(defaults)
+        desktopWidgetDefaultSize = Keys.desktopWidgetDefaultSize.read(defaults)
         if let w = Keys.quickTerminalDynamicWidth.readStored(defaults),
            let h = Keys.quickTerminalDynamicHeight.readStored(defaults)
         {
