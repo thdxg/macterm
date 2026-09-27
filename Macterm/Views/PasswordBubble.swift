@@ -14,11 +14,13 @@ import SwiftUI
 /// terminal's own key path (`PasswordPromptMonitor`), never as popover
 /// shortcuts, which is why the buttons carry no key hints.
 @MainActor
-final class PasswordBubble: NSObject, NSPopoverDelegate {
+class PasswordBubble: NSObject, NSPopoverDelegate {
     enum Content: Equatable {
         case autofill(PasswordEntryID, busy: Bool)
         case rejected(PasswordEntryID)
-        case save(PasswordEntryID, isUpdate: Bool)
+        /// `problem` is a keychain write that failed; the offer stays up
+        /// with it until the user retries or cancels.
+        case save(PasswordEntryID, isUpdate: Bool, problem: String?)
     }
 
     struct Actions {
@@ -37,25 +39,58 @@ final class PasswordBubble: NSObject, NSPopoverDelegate {
     private let model = PasswordBubbleModel()
     private var popover: NSPopover?
     private weak var anchorView: NSView?
+    /// What the bubble last said, kept across an off-screen spell (anchor
+    /// nil: the cursor scrolled away, the tab hidden) so coming back is not
+    /// mistaken for a new bubble.
+    private var lastContent: Content?
 
-    var isShown: Bool { popover?.isShown ?? false }
+    /// True while a popover is on screen. Tracked here rather than read off
+    /// the popover so a test double can stand in (`present`/`dismiss` are
+    /// the AppKit seams).
+    private(set) var isShown = false
 
     /// Show `content` at `anchor` (in `view`'s coordinates), move the arrow
     /// if the popover is already up, or close it when either is nil. Returns
-    /// true when this call put up a bubble, or changed what one says.
+    /// true when the bubble now says something it didn't before — a new
+    /// bubble, or new content in one — and false for a re-anchor of the same
+    /// content, which is what lets the monitor tell "typed under this
+    /// bubble" apart from "scrolled away and back".
     @discardableResult
     func show(_ content: Content?, anchor: NSRect?, in view: NSView) -> Bool {
-        guard let content, let anchor else {
+        guard let content else {
             close()
             return false
         }
-        let changed = model.content != content
-        if changed { model.content = content }
-        if let popover, popover.isShown, anchorView === view {
-            if popover.positioningRect != anchor { popover.positioningRect = anchor }
+        let changed = content != lastContent
+        lastContent = content
+        if model.content != content { model.content = content }
+        guard let anchor else {
+            dismiss()
             return changed
         }
-        close()
+        present(at: anchor, in: view)
+        isShown = true
+        return changed
+    }
+
+    func close() {
+        dismiss()
+        lastContent = nil
+    }
+
+    private func dismiss() {
+        isShown = false
+        tearDown()
+    }
+
+    /// Put the popover up at `anchor`, or move it there. Overridden by the
+    /// test double.
+    func present(at anchor: NSRect, in view: NSView) {
+        if let popover, popover.isShown, anchorView === view {
+            if popover.positioningRect != anchor { popover.positioningRect = anchor }
+            return
+        }
+        tearDown()
         let popover = NSPopover()
         popover.behavior = .applicationDefined
         popover.animates = true
@@ -67,10 +102,10 @@ final class PasswordBubble: NSObject, NSPopoverDelegate {
         self.popover = popover
         anchorView = view
         returnKey(to: view)
-        return true
     }
 
-    func close() {
+    /// Take the popover down. Overridden by the test double.
+    func tearDown() {
         popover?.close()
         popover = nil
         anchorView = nil
@@ -80,6 +115,7 @@ final class PasswordBubble: NSObject, NSPopoverDelegate {
         guard (notification.object as? NSPopover) === popover else { return }
         popover = nil
         anchorView = nil
+        isShown = false
     }
 
     /// Hand key back to the window `view` lives in when the popover took it
@@ -157,13 +193,20 @@ private struct PasswordBubbleView: View {
                     Button("OK") { model.actions.primary() }
                         .buttonStyle(.borderedProminent)
                 }
-            case let .save(id, isUpdate):
+            case let .save(id, isUpdate, problem):
                 header(
                     symbol: "key.fill",
                     title: isUpdate ? "Update Saved Password?" : "Save Password?",
                     detail: "Macterm can fill it in the next time this prompt appears."
                 )
                 entry(id, showsSecret: true)
+                if let problem {
+                    Text(problem)
+                        .font(.callout)
+                        .foregroundStyle(MactermTheme.failure)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 34)
+                }
                 HStack {
                     Spacer()
                     Button("Cancel") { model.actions.dismiss() }

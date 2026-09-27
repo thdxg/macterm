@@ -184,11 +184,19 @@ struct PasswordLineCapture: Equatable {
     }
 }
 
-/// Decides, after a password was submitted, whether it worked. Failure is
-/// visible (the same prompt comes back, a nonzero exit, a "denied" line);
-/// success is mostly its absence, so the rules below only call success on
-/// positive evidence — output that isn't a failure, or a zero exit — and give
-/// up rather than guess once `timeout` passes.
+/// Decides, after a password was submitted, whether it worked. A rejection
+/// is visible: every program prints one ("Permission denied, please try
+/// again.", "Sorry, try again.") right after the prompt. Success is mostly
+/// its absence, so the rules below call success only on positive evidence —
+/// the read ended and something else happened — and give up rather than
+/// guess once `timeout` passes.
+///
+/// Two things deliberately are NOT evidence of a rejection. The command's
+/// exit code: it judges the command, not the password (`sudo grep -q`,
+/// `sudo test -f`, `ssh host cmd` exit nonzero with the password accepted).
+/// And the identical prompt appearing again without a failure line: git over
+/// HTTPS asks the same `Password for 'https://…':` once per connection, and
+/// a push opens two, so the repeat is the next read, not a retry.
 struct PasswordSubmissionJudge {
     enum Verdict: Equatable {
         case pending
@@ -244,19 +252,33 @@ struct PasswordSubmissionJudge {
 
     func evaluate(_ o: Observation) -> Verdict {
         let elapsed = o.now.timeIntervalSince(submittedAt)
-        if let code = o.exitCode, code >= 0 {
-            return code == 0 ? .succeeded : .failed
-        }
         if Self.containsFailure(o.outputAfterPrompt) { return .failed }
-        if o.atPasswordPrompt, elapsed >= Self.settleDelay {
-            // Asked again: the same question means the answer was wrong; a
-            // different one (the next hop's password) means it was right.
-            return o.currentPrompt == submittedPrompt ? .failed : .succeeded
-        }
+        // A prompt up again past the settle window is the next read — the
+        // next hop's password, or the same question asked afresh — and the
+        // previous one was accepted, since no rejection was printed.
+        if o.atPasswordPrompt, elapsed >= Self.settleDelay { return .succeeded }
+        // The command ended without printing a rejection: the read was
+        // accepted, whatever the command then made of its work.
+        if let code = o.exitCode, code >= 0 { return .succeeded }
         if !o.atPasswordPrompt, elapsed >= Self.settleDelay, !o.outputAfterPrompt.isEmpty {
             return .succeeded
         }
         return elapsed >= Self.timeout ? .undetermined : .pending
+    }
+
+    /// The verdict as of now, without waiting out the settle window — for
+    /// when the user has started typing at a prompt, which says the read this
+    /// submission fed is over.
+    func settle(_ o: Observation) -> Verdict {
+        let forced = Observation(
+            now: max(o.now, submittedAt.addingTimeInterval(Self.settleDelay)),
+            atPasswordPrompt: o.atPasswordPrompt,
+            currentPrompt: o.currentPrompt,
+            outputAfterPrompt: o.outputAfterPrompt,
+            exitCode: o.exitCode
+        )
+        let verdict = evaluate(forced)
+        return verdict == .pending ? .succeeded : verdict
     }
 
     static func containsFailure(_ lines: [String]) -> Bool {
@@ -266,16 +288,26 @@ struct PasswordSubmissionJudge {
         }
     }
 
-    /// The non-empty lines below the last occurrence of `prompt` in the
-    /// viewport. When the prompt has scrolled out of view the program has
-    /// printed at least a screenful since — the last few lines stand in.
-    static func output(after prompt: String, inViewport text: String) -> [String] {
+    /// Where a transcript (the screen with its scrollback) ends right now:
+    /// one past its last non-empty line. Taken at Return, it marks the
+    /// submission; what the program prints lands after it. Non-empty rather
+    /// than the raw count, because the viewport pads with blank rows that
+    /// output fills in without the count changing.
+    static func transcriptEnd(_ text: String) -> Int {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let last = lines.lastIndex(where: { !$0.allSatisfy(\.isWhitespace) }) else { return 0 }
+        return last + 1
+    }
+
+    /// The non-empty lines the transcript gained since `end`
+    /// (`transcriptEnd` at submission). Searching for the prompt line instead
+    /// would be wrong exactly when it matters: a rejection re-prompts with the
+    /// same line, and "after its last occurrence" is then nothing at all.
+    static func output(since end: Int, in text: String) -> [String] {
         let lines = text
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { PasswordPromptIdentity.normalize(String($0)) }
-        guard let index = lines.lastIndex(of: prompt) else {
-            return Array(lines.filter { !$0.isEmpty }.suffix(5))
-        }
-        return lines[(index + 1)...].filter { !$0.isEmpty }
+        guard end < lines.count else { return [] }
+        return lines[end...].filter { !$0.isEmpty }
     }
 }

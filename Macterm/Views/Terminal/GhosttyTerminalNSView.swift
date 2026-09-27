@@ -1139,9 +1139,10 @@ final class GhosttyTerminalNSView: NSView {
         guard let surface else { super.keyDown(with: event)
             return
         }
-        // Before the key reaches libghostty, so the password monitor reads the
-        // tty while the prompt that will receive this key is still up. A
-        // Return or Escape the password bubble answers is consumed there.
+        // A Return or Escape the password bubble answers is consumed here and
+        // never reaches libghostty. Everything else is reported to the
+        // password monitor at the point it is actually sent, below, as the
+        // text the tty will receive — not `event.characters`.
         if PasswordPromptMonitor.shared.viewWillSendKey(self, event: event) { return }
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -1170,6 +1171,11 @@ final class GhosttyTerminalNSView: NSView {
             // keystroke — leave it alone. SIGQUIT stays reachable via `kill
             // -QUIT` for the rare intentional case.
             if event.keyCode == 42, !flags.contains(.shift) { return }
+            // Past the swallow and the shortcut check: this chord reaches
+            // the tty, so the password capture sees it.
+            if let input = PasswordKeyInput.from(event) {
+                PasswordPromptMonitor.shared.viewDidType(self, input: input)
+            }
             var ke = buildKeyEvent(from: event, action: action)
             let text = event.charactersIgnoringModifiers ?? event.characters ?? ""
             if text.isEmpty {
@@ -1248,6 +1254,27 @@ final class GhosttyTerminalNSView: NSView {
                 _ = ghostty_surface_key(surface, ke)
             }
             forwarded = true
+        }
+
+        // What the password capture sees is what went to the tty: the IME's
+        // committed text rather than the keystroke's raw characters, nothing
+        // while a composition is open (the romaji never reach the program),
+        // and nothing legible for an Option chord libghostty encodes as
+        // ESC+key (option-as-alt strips Option from the translation flags).
+        if let input = PasswordKeyInput.from(event) {
+            let typed: PasswordKeyInput = switch input {
+            case .text where hadMarkedText || hasMarkedText():
+                .unknown
+            case .text where !keyTextAccumulator.isEmpty:
+                .text(keyTextAccumulator.joined())
+            case .text where flags.contains(.option) && !translationEvent.modifierFlags.contains(.option):
+                .unknown
+            case .text:
+                filterSpecial(event.characters ?? "").isEmpty ? .unknown : .text(filterSpecial(event.characters ?? ""))
+            default:
+                input
+            }
+            PasswordPromptMonitor.shared.viewDidType(self, input: typed)
         }
 
         let userModifiers: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
@@ -1827,10 +1854,11 @@ extension GhosttyTerminalNSView {
     }
 
     /// Type a saved password into the program reading it, then Return. The
-    /// same text path as `sendText` — not paste, so no bracketed-paste markers
-    /// reach the password read — minus everything that treats typed text as
-    /// a command: no submission evidence, no execution-tracking callbacks, no
-    /// liveness ping. A password is never a command.
+    /// password goes through the same text path as `sendText` — not paste, so
+    /// no bracketed-paste markers reach the password read — but records no
+    /// command-submission evidence: a password is never a command. The Return
+    /// rides `sendKey`, so it does ping `onInteraction` and reports a bare
+    /// `onCommandSubmitted(false)`, exactly as a Return the user presses.
     @discardableResult
     func sendSecret(_ secret: String) -> Bool {
         guard let surface, !secret.isEmpty else { return false }

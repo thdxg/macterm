@@ -71,11 +71,37 @@ enum ProcessInspector {
         guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), !args.isEmpty else { return nil }
         // Idle at a prompt: the foreground process is the shell itself. Nothing
-        // worth recording as a `run` command. A shell running a script or a
-        // `-c` command is a command like any other (`isIdleShellInvocation`),
-        // which is what a password prompt inside `./deploy.sh` is filed under.
-        if isIdleShellInvocation(args) { return nil }
+        // worth recording as a `run` command.
+        if isShell(args[0]) { return nil }
         return displayCommand(args)
+    }
+
+    /// The foreground command with its program named by the executable's
+    /// real path — what a saved password is filed under. `runningCommand`
+    /// above reads argv, which the process sets for itself: `exec -a ssh
+    /// ./fake prod` reports `ssh prod` and would collect the password saved
+    /// for the real ssh. `proc_pidpath` comes from the kernel's vnode, so
+    /// only the binary at that path matches. Arguments stay argv (the program
+    /// parses those itself, so it can't be lied to about them). A shell
+    /// running a script or a `-c` command counts as a command here
+    /// (`isIdleShellInvocation`), so a prompt inside `./deploy.sh` is filed
+    /// under the script; an idle shell is nil.
+    @MainActor
+    static func trustedCommand(forPane pane: Pane) -> String? {
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
+        guard let args = argv(pid: pid), !args.isEmpty, !isIdleShellInvocation(args) else { return nil }
+        guard let path = executablePath(pid: pid) else { return nil }
+        return displayCommand([path] + args.dropFirst())
+    }
+
+    /// The executable's resolved absolute path from the kernel
+    /// (`proc_pidpath`), or nil when the process is gone or unreadable.
+    static func executablePath(pid: pid_t) -> String? {
+        // PROC_PIDPATHINFO_MAXSIZE (4 × MAXPATHLEN) isn't imported into Swift.
+        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(cString: buffer)
     }
 
     /// The display *name* of the pane's foreground process — the kernel's short

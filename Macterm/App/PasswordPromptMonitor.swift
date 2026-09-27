@@ -11,12 +11,12 @@ private let logger = Logger(subsystem: appBundleID, category: "PasswordPrompt")
 /// Detection is `ProcessInspector.terminalIsReadingPassword` — canonical mode
 /// with echo off on the pane's real tty. It is read on three cues: an output
 /// heartbeat from the pane (`viewDidOutput`, which is when a prompt gets
-/// printed), every key typed into the pane (`viewWillSendKey`, before the key
-/// reaches libghostty, so the prompt that receives it is still up), and a
-/// timer — slow (`idleInterval`) for the focused pane while nothing is
-/// happening, fast (`busyInterval`) only while some pane has a prompt,
-/// submission or offer in flight, so the idle app wakes no more often than
-/// its existing polls.
+/// printed), every key typed into the pane (`viewDidType`, reported by
+/// `keyDown` at the point the key is sent, as the text the tty receives), and
+/// a timer — slow (`idleInterval`) for the focused pane while nothing is
+/// happening, fast (`busyInterval`) only while some pane is in a phase with a
+/// deadline (a sighting to confirm, a submission to judge). A pane parked at a
+/// prompt, or an unanswered offer, costs the slow cadence only.
 ///
 /// Per pane it is a small state machine (`Phase`): a first sighting must hold
 /// for `confirmDelay` before it counts (a script that drops echo for an
@@ -24,16 +24,20 @@ private let logger = Logger(subsystem: appBundleID, category: "PasswordPrompt")
 /// the user types at it; a confirmed prompt captures what is typed through
 /// `PasswordLineCapture`; a submission is judged by `PasswordSubmissionJudge`,
 /// and only a success becomes a save offer. Offers queue (`ssh -J` yields two
-/// in a row) and show one at a time, once no prompt is up.
+/// in a row), show one at a time once no prompt is up, survive an ssh session
+/// (only a command run by the pane's own shell drops them) and expire after
+/// `offerLifetime`.
 ///
 /// While a bubble is up and nothing has been typed since it appeared, Return
 /// is its primary button and Escape dismisses it; the first typed character
 /// hands both keys back to the terminal, so a password or command typed under
-/// the bubble submits as usual, and a typed-then-submitted command drops an
-/// unanswered save offer.
+/// the bubble submits as usual.
 ///
-/// The captured password lives in memory only until the offer is answered or
-/// dropped, is never logged, and never reaches the CLI or App Intents.
+/// The captured password lives in memory only until the offer is answered,
+/// dropped or expired, is never logged, and never reaches the CLI or App
+/// Intents. Everything that touches the system — the tty, the screen, the
+/// process table, the bubble, authentication — comes through `Probes`, so
+/// the machine is unit-tested without a surface.
 @MainActor
 final class PasswordPromptMonitor {
     static let shared = PasswordPromptMonitor()
@@ -41,6 +45,35 @@ final class PasswordPromptMonitor {
     static let idleInterval: TimeInterval = 1.0
     static let busyInterval: TimeInterval = 0.15
     static let confirmDelay: TimeInterval = 0.2
+    /// An unanswered save offer is dropped after this long: a bound on how
+    /// long a secret sits in memory, generous enough to outlast an ssh
+    /// session's first stretch of work.
+    static let offerLifetime: TimeInterval = 15 * 60
+
+    /// The monitor's reads of and writes to the world, injectable for tests.
+    struct Probes {
+        var isReadingPassword: @MainActor (Pane) -> Bool = ProcessInspector.terminalIsReadingPassword(forPane:)
+        var screenText: @MainActor (GhosttyTerminalNSView) -> String? = { $0.readText(scrollback: false) }
+        /// The screen with its scrollback, so a submission's output is
+        /// measured from where the transcript ended at Return.
+        var transcript: @MainActor (GhosttyTerminalNSView) -> String? = { $0.readText(scrollback: true) }
+        var command: @MainActor (Pane) -> String? = PasswordPromptMonitor.command(for:)
+        var foregroundIsLocalShell: @MainActor (Pane) -> Bool = ProcessInspector.foregroundProcessIsShell(forPane:)
+        var anchor: @MainActor (GhosttyTerminalNSView) -> NSRect? = { view in
+            PasswordPromptMonitor.isShowing(view) ? view.cursorCellRect() : nil
+        }
+
+        var makeBubble: @MainActor () -> PasswordBubble = { PasswordBubble() }
+        var autoSecureInput: @MainActor () -> Bool = { GhosttyApp.shared.autoSecureInput }
+        var offerToSave: @MainActor () -> Bool = { Preferences.shared.offerToSavePasswords }
+        var authorize: @MainActor (String) async -> Bool = { await PasswordAuthenticator.shared.authorize(reason: $0) }
+        var focusedView: @MainActor () -> GhosttyTerminalNSView? = {
+            guard NSApp.isActive else { return nil }
+            return NSApp.keyWindow?.firstResponder as? GhosttyTerminalNSView
+        }
+
+        var isAppActive: @MainActor () -> Bool = { NSApp.isActive }
+    }
 
     struct Prompt {
         let id: PasswordEntryID
@@ -56,6 +89,8 @@ final class PasswordPromptMonitor {
         let id: PasswordEntryID
         let secret: String
         let judge: PasswordSubmissionJudge
+        /// `PasswordSubmissionJudge.transcriptEnd` at Return.
+        let transcriptEnd: Int
         let fromAutofill: Bool
         let wasSaved: Bool
         let savedWasRejected: Bool
@@ -66,6 +101,9 @@ final class PasswordPromptMonitor {
         let id: PasswordEntryID
         let secret: String
         let isUpdate: Bool
+        let createdAt: Date
+        /// The last keychain write's failure, shown in the bubble.
+        var problem: String?
     }
 
     enum Phase {
@@ -76,6 +114,16 @@ final class PasswordPromptMonitor {
 
         var isIdle: Bool {
             if case .idle = self { true } else { false }
+        }
+
+        /// Phases with a deadline the fast timer serves.
+        var isTimed: Bool {
+            switch self {
+            case .sighted,
+                 .verifying: true
+            case .idle,
+                 .prompting: false
+            }
         }
 
         var name: String {
@@ -107,14 +155,16 @@ final class PasswordPromptMonitor {
         /// Something was typed into the pane since the current bubble
         /// appeared, which hands Return and Escape back to the terminal.
         var typedSinceBubble = false
-        let bubble = PasswordBubble()
+        let bubble: PasswordBubble
 
-        init(view: GhosttyTerminalNSView) {
+        init(view: GhosttyTerminalNSView, bubble: PasswordBubble) {
             self.view = view
+            self.bubble = bubble
         }
 
         var offer: Offer? { offers.first }
-        var isBusy: Bool { !phase.isIdle || !offers.isEmpty }
+        /// Worth keeping when the pane isn't focused.
+        var isTracked: Bool { !phase.isIdle || !offers.isEmpty }
     }
 
     private var trackers: [ObjectIdentifier: Tracker] = [:]
@@ -126,10 +176,12 @@ final class PasswordPromptMonitor {
     private var isInjecting = false
     private let vault: PasswordVault
     private let now: () -> Date
+    private let probes: Probes
 
-    init(vault: PasswordVault = .shared, now: @escaping () -> Date = Date.init) {
+    init(vault: PasswordVault = .shared, now: @escaping () -> Date = Date.init, probes: Probes = Probes()) {
         self.vault = vault
         self.now = now
+        self.probes = probes
     }
 
     /// Begin polling. Called once the app has finished launching.
@@ -147,18 +199,39 @@ final class PasswordPromptMonitor {
     // MARK: - Inputs from the terminal view
 
     /// A key is about to reach libghostty. Returns true when the bubble took
-    /// it (Return as its primary button, Escape as Dismiss) and the terminal
-    /// must not see it; otherwise the key is fed to the capture.
+    /// it — Return as its primary button, Escape as Dismiss — and the terminal
+    /// must not see it. Nothing else is decided here: the capture learns of a
+    /// key from `viewDidType`, once `keyDown` knows what the tty will get.
     func viewWillSendKey(_ view: GhosttyTerminalNSView, event: NSEvent) -> Bool {
-        guard !isInjecting, let input = PasswordKeyInput.from(event) else { return false }
-        return receive(input, in: view)
+        guard !isInjecting,
+              let input = PasswordKeyInput.from(event),
+              let tracker = trackers[ObjectIdentifier(view)],
+              tracker.bubble.isShown, !tracker.typedSinceBubble
+        else { return false }
+        switch input {
+        case .submit:
+            guard let reply = primaryReply(for: tracker) else { return false }
+            answer(reply, in: view)
+            return true
+        case .escape:
+            answer(.dismiss, in: view)
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// A key reached the tty, as `keyDown` sent it.
+    func viewDidType(_ view: GhosttyTerminalNSView, input: PasswordKeyInput) {
+        guard !isInjecting else { return }
+        receive(input, in: view)
     }
 
     /// Text reached the surface outside a key event: a paste, or the control
     /// CLI's `pane run`. At a prompt it is (part of) the password.
     func viewDidSendText(_ view: GhosttyTerminalNSView, text: String) {
         guard !isInjecting, !text.isEmpty else { return }
-        _ = receive(.text(text), in: view)
+        receive(.text(text), in: view)
     }
 
     /// A paste reached the surface. At a prompt it is part of the password.
@@ -181,27 +254,32 @@ final class PasswordPromptMonitor {
             charactersIgnoringModifiers: HotkeyRegistry.baseToken(forKeyCode: keyCode)
         )
         guard let input else { return }
-        _ = receive(input, in: view)
+        receive(input, in: view)
     }
 
     /// The pane printed something. A prompt is output, so read the tty now.
     func viewDidOutput(_ view: GhosttyTerminalNSView) {
-        guard let tracker = trackers[ObjectIdentifier(view)] ?? (view === focusedView() ? tracker(for: view) : nil)
-        else { return }
-        _ = step(tracker)
+        guard trackers[ObjectIdentifier(view)] != nil || view === probes.focusedView() else { return }
+        observe(view)
+    }
+
+    /// Bring one pane's state up to date against its tty and screen now.
+    func observe(_ view: GhosttyTerminalNSView) {
+        let tracker = tracker(for: view)
+        step(tracker)
         refreshBubble(tracker)
         scheduleIfNeeded()
     }
 
     /// OSC 133;D: shell integration's exit code for the command that just
-    /// finished — the clearest verdict a submission can get.
+    /// finished.
     func viewDidFinishCommand(_ view: GhosttyTerminalNSView, exitCode: Int32) {
         guard let tracker = trackers[ObjectIdentifier(view)],
               case var .verifying(submission) = tracker.phase
         else { return }
         submission.exitCode = exitCode
         tracker.phase = .verifying(submission)
-        _ = step(tracker)
+        step(tracker)
         refreshBubble(tracker)
     }
 
@@ -212,48 +290,36 @@ final class PasswordPromptMonitor {
         tracker.bubble.close()
     }
 
-    /// Feed one input to the pane's state machine. Returns true when a
-    /// visible bubble consumed it.
-    private func receive(_ input: PasswordKeyInput, in view: GhosttyTerminalNSView) -> Bool {
+    /// Feed one input to the pane's state machine.
+    private func receive(_ input: PasswordKeyInput, in view: GhosttyTerminalNSView) {
         let tracker = tracker(for: view)
         let atPrompt = step(tracker)
         defer {
             refreshBubble(tracker)
             scheduleIfNeeded()
         }
-        // A bubble with nothing typed under it yet owns Return and Escape.
-        if tracker.bubble.isShown, !tracker.typedSinceBubble {
-            switch input {
-            case .submit:
-                if let reply = primaryReply(for: tracker) {
-                    _ = answer(reply, in: view)
-                    return true
-                }
-            case .escape:
-                _ = answer(.dismiss, in: view)
-                return true
-            default:
-                break
-            }
-        }
         if input != .submit, input != .escape { tracker.typedSinceBubble = true }
 
         switch tracker.phase {
         case .idle:
-            // A command typed and run at an ordinary prompt means the user
-            // has moved on: an unanswered save offer is dropped rather than
-            // left to pile up. A bare Return (a new prompt line) keeps it.
-            if input == .submit, tracker.typedSinceBubble, !tracker.offers.isEmpty {
+            // A command the pane's own shell runs means the user has moved
+            // on: an unanswered save offer is dropped rather than left to
+            // pile up. A bare Return keeps it, and so does anything typed
+            // into a program the shell is running — after an ssh login the
+            // offer must survive the session's first commands.
+            if input == .submit, tracker.typedSinceBubble, !tracker.offers.isEmpty,
+               let pane = view.owningPane, probes.foregroundIsLocalShell(pane)
+            {
                 tracker.offers.removeAll()
             }
-            return false
+            return
         case let .verifying(submission):
             // Typing at a prompt that is up before the judge has settled is
-            // the user answering the next read: resolve now, so the first
+            // the user answering the next read: settle now, so the first
             // characters of the retyped password aren't lost.
-            guard atPrompt, case .text = input else { return false }
+            guard atPrompt, case .text = input else { return }
             settle(submission, in: tracker, view: view, atPrompt: true, time: now())
-            guard case .sighted = tracker.phase else { return false }
+            guard case .sighted = tracker.phase else { return }
             confirm(tracker)
         case .sighted:
             // Typing at it is evidence enough that it is a real prompt.
@@ -261,7 +327,7 @@ final class PasswordPromptMonitor {
         case .prompting:
             break
         }
-        guard case var .prompting(prompt) = tracker.phase else { return false }
+        guard case var .prompting(prompt) = tracker.phase else { return }
         switch prompt.capture.apply(input) {
         case .editing,
              .cancelled:
@@ -271,27 +337,27 @@ final class PasswordPromptMonitor {
                 id: prompt.id,
                 secret: secret,
                 judge: PasswordSubmissionJudge(submittedPrompt: prompt.id.prompt, submittedAt: now()),
+                transcriptEnd: PasswordSubmissionJudge.transcriptEnd(probes.transcript(view) ?? ""),
                 fromAutofill: false,
                 wasSaved: prompt.isSaved,
                 savedWasRejected: prompt.savedWasRejected
             ))
             logger.info("password submitted; judging")
         }
-        return false
     }
 
     // MARK: - Answering the bubble
 
     /// The focused terminal view, if its prompt has a saved password.
     var canAutofillFocused: Bool {
-        guard let view = focusedView(), let tracker = trackers[ObjectIdentifier(view)] else { return false }
+        guard let view = probes.focusedView(), let tracker = trackers[ObjectIdentifier(view)] else { return false }
         if case let .prompting(prompt) = tracker.phase { return prompt.isSaved && !prompt.autofilling }
         return false
     }
 
     func autofillFocused() {
-        guard let view = focusedView() else { return }
-        _ = answer(.autofill, in: view)
+        guard let view = probes.focusedView() else { return }
+        answer(.autofill, in: view)
     }
 
     /// Press one of the bubble's buttons for `view`'s pane. False when that
@@ -313,9 +379,15 @@ final class PasswordPromptMonitor {
             tracker.phase = .prompting(prompt)
             return true
         case (.accept, .idle):
-            guard !tracker.offers.isEmpty else { return false }
-            let offer = tracker.offers.removeFirst()
-            vault.save(offer.secret, for: offer.id)
+            guard var offer = tracker.offers.first else { return false }
+            // A failed write keeps the offer — and the secret — on the table
+            // with the reason, rather than dropping both.
+            if vault.save(offer.secret, for: offer.id) {
+                tracker.offers.removeFirst()
+            } else {
+                offer.problem = vault.lastError ?? "Couldn’t save to the keychain."
+                tracker.offers[0] = offer
+            }
             return true
         case (.dismiss, .idle):
             guard !tracker.offers.isEmpty else { return false }
@@ -351,7 +423,7 @@ final class PasswordPromptMonitor {
         state.bubble = switch bubbleContent(for: tracker) {
         case .autofill: "autofill"
         case .rejected: "rejected"
-        case .save(_, isUpdate: true): "update"
+        case .save(_, isUpdate: true, _): "update"
         case .save: "save"
         case nil: nil
         }
@@ -372,9 +444,7 @@ final class PasswordPromptMonitor {
         refreshBubble(tracker)
         let id = prompt.id
         Task { @MainActor [weak view] in
-            let authorized = await PasswordAuthenticator.shared.authorize(
-                reason: "autofill the password for “\(id.title)”"
-            )
+            let authorized = await probes.authorize("autofill the password for “\(id.title)”")
             guard let view else { return }
             self.finishAutofill(in: view, id: id, authorized: authorized)
         }
@@ -395,7 +465,7 @@ final class PasswordPromptMonitor {
         }
         guard authorized else { return }
         // Authentication took a moment; the program may have given up.
-        guard let pane = view.owningPane, ProcessInspector.terminalIsReadingPassword(forPane: pane) else { return }
+        guard let pane = view.owningPane, probes.isReadingPassword(pane) else { return }
         guard let secret = vault.password(for: id) else {
             NSSound.beep()
             return
@@ -407,11 +477,13 @@ final class PasswordPromptMonitor {
         if !prompt.capture.buffer.isEmpty || prompt.capture.isTainted {
             view.sendKey(keyCode: 32, mods: .control)
         }
+        let transcriptEnd = PasswordSubmissionJudge.transcriptEnd(probes.transcript(view) ?? "")
         view.sendSecret(secret)
         tracker.phase = .verifying(Submission(
             id: id,
             secret: "",
             judge: PasswordSubmissionJudge(submittedPrompt: id.prompt, submittedAt: now()),
+            transcriptEnd: transcriptEnd,
             fromAutofill: true,
             wasSaved: true,
             savedWasRejected: false
@@ -425,20 +497,15 @@ final class PasswordPromptMonitor {
     private func tracker(for view: GhosttyTerminalNSView) -> Tracker {
         let key = ObjectIdentifier(view)
         if let existing = trackers[key] { return existing }
-        let tracker = Tracker(view: view)
+        let tracker = Tracker(view: view, bubble: probes.makeBubble())
         tracker.bubble.actions = actions(for: tracker)
         trackers[key] = tracker
         return tracker
     }
 
-    private func focusedView() -> GhosttyTerminalNSView? {
-        guard NSApp.isActive else { return nil }
-        return NSApp.keyWindow?.firstResponder as? GhosttyTerminalNSView
-    }
-
     private func scheduleIfNeeded() {
-        let busy = trackers.values.contains(where: \.isBusy)
-        let wanted: TimeInterval? = busy ? Self.busyInterval : (NSApp.isActive ? Self.idleInterval : nil)
+        let timed = trackers.values.contains { $0.phase.isTimed }
+        let wanted: TimeInterval? = timed ? Self.busyInterval : (probes.isAppActive() ? Self.idleInterval : nil)
         guard wanted != (timer == nil ? nil : timerInterval) else { return }
         timer?.invalidate()
         timer = nil
@@ -447,27 +514,29 @@ final class PasswordPromptMonitor {
             MainActor.assumeIsolated { PasswordPromptMonitor.shared.tick() }
         }
         // The idle poll is a courtesy check; let the system batch it.
-        timer.tolerance = busy ? 0 : wanted / 4
+        timer.tolerance = timed ? 0 : wanted / 4
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         timerInterval = wanted
     }
 
     private func tick() {
-        let focused = focusedView()
+        let focused = probes.focusedView()
         if let focused { _ = tracker(for: focused) }
+        let time = now()
         for (key, tracker) in trackers {
             guard let view = tracker.view, view.owningPane != nil else {
                 tracker.bubble.close()
                 trackers[key] = nil
                 continue
             }
+            tracker.offers.removeAll { time.timeIntervalSince($0.createdAt) > Self.offerLifetime }
             let isFocused = view === focused
             if isFocused || !tracker.phase.isIdle {
-                _ = step(tracker)
+                step(tracker)
             }
             refreshBubble(tracker)
-            if !isFocused, !tracker.isBusy {
+            if !isFocused, !tracker.isTracked {
                 view.detectedPasswordInput = false
                 tracker.bubble.close()
                 trackers[key] = nil
@@ -481,8 +550,8 @@ final class PasswordPromptMonitor {
     @discardableResult
     private func step(_ tracker: Tracker) -> Bool {
         guard let view = tracker.view, let pane = view.owningPane else { return false }
-        let atPrompt = ProcessInspector.terminalIsReadingPassword(forPane: pane)
-        view.detectedPasswordInput = atPrompt && GhosttyApp.shared.autoSecureInput
+        let atPrompt = probes.isReadingPassword(pane)
+        view.detectedPasswordInput = atPrompt && probes.autoSecureInput()
         let time = now()
         switch tracker.phase {
         case .idle:
@@ -508,13 +577,13 @@ final class PasswordPromptMonitor {
         guard let view = tracker.view, let pane = view.owningPane,
               case let .sighted(_, capture) = tracker.phase
         else { return }
-        guard let screen = view.readText(scrollback: false),
+        guard let screen = probes.screenText(view),
               let prompt = PasswordPromptIdentity.promptLine(fromViewport: screen)
         else {
             tracker.phase = .idle
             return
         }
-        let id = PasswordPromptIdentity.entryID(prompt: prompt, command: Self.command(for: pane))
+        let id = PasswordPromptIdentity.entryID(prompt: prompt, command: probes.command(pane))
         let rejected = tracker.rejectedAutofill == id
         tracker.rejectedAutofill = nil
         tracker.phase = .prompting(Prompt(
@@ -526,15 +595,34 @@ final class PasswordPromptMonitor {
         logger.info("password prompt confirmed saved=\(self.vault.contains(id), privacy: .public)")
     }
 
-    /// The command that asked. A remote project's pane is Macterm's own ssh
-    /// wrapper, filed under the connection it makes; everything else is the
-    /// foreground process's argv.
+    /// The command that asked, named by its executable's real path so a
+    /// process can't pose as another (`trustedCommand`). A remote project's
+    /// pane is Macterm's own ssh wrapper, filed under the connection it makes.
     static func command(for pane: Pane) -> String? {
         if pane.isRemote {
             guard case let .remote(user, host, _)? = ProjectPath.parse(pane.projectPath) else { return nil }
             return PasswordPromptIdentity.remoteCommand(user: user, host: host)
         }
-        return ProcessInspector.runningCommand(forPane: pane)
+        return ProcessInspector.trustedCommand(forPane: pane)
+    }
+
+    private func observation(
+        for submission: Submission,
+        view: GhosttyTerminalNSView,
+        atPrompt: Bool,
+        time: Date
+    ) -> PasswordSubmissionJudge.Observation {
+        let screen = probes.screenText(view) ?? ""
+        return .init(
+            now: time,
+            atPasswordPrompt: atPrompt,
+            currentPrompt: atPrompt ? PasswordPromptIdentity.promptLine(fromViewport: screen) : nil,
+            outputAfterPrompt: PasswordSubmissionJudge.output(
+                since: submission.transcriptEnd,
+                in: probes.transcript(view) ?? ""
+            ),
+            exitCode: submission.exitCode
+        )
     }
 
     private func judge(
@@ -544,21 +632,13 @@ final class PasswordPromptMonitor {
         atPrompt: Bool,
         time: Date
     ) {
-        let screen = view.readText(scrollback: false) ?? ""
-        let verdict = submission.judge.evaluate(.init(
-            now: time,
-            atPasswordPrompt: atPrompt,
-            currentPrompt: atPrompt ? PasswordPromptIdentity.promptLine(fromViewport: screen) : nil,
-            outputAfterPrompt: PasswordSubmissionJudge.output(after: submission.id.prompt, inViewport: screen),
-            exitCode: submission.exitCode
-        ))
+        let verdict = submission.judge.evaluate(observation(for: submission, view: view, atPrompt: atPrompt, time: time))
         guard verdict != .pending else { return }
         conclude(submission, verdict: verdict, in: tracker, atPrompt: atPrompt, time: time)
     }
 
-    /// Decide a submission from the prompt alone, without waiting for the
-    /// settle delay: the user has started typing at a prompt, so the read
-    /// the submission fed is over.
+    /// Decide a submission now, without waiting out the settle window: the
+    /// user has started typing at a prompt, so the read it fed is over.
     private func settle(
         _ submission: Submission,
         in tracker: Tracker,
@@ -566,17 +646,7 @@ final class PasswordPromptMonitor {
         atPrompt: Bool,
         time: Date
     ) {
-        let screen = view.readText(scrollback: false) ?? ""
-        let current = PasswordPromptIdentity.promptLine(fromViewport: screen)
-        let verdict: PasswordSubmissionJudge.Verdict = if let code = submission.exitCode, code >= 0 {
-            code == 0 ? .succeeded : .failed
-        } else if PasswordSubmissionJudge.containsFailure(
-            PasswordSubmissionJudge.output(after: submission.id.prompt, inViewport: screen)
-        ) {
-            .failed
-        } else {
-            current == submission.id.prompt ? .failed : .succeeded
-        }
+        let verdict = submission.judge.settle(observation(for: submission, view: view, atPrompt: atPrompt, time: time))
         conclude(submission, verdict: verdict, in: tracker, atPrompt: atPrompt, time: time)
     }
 
@@ -593,11 +663,16 @@ final class PasswordPromptMonitor {
         case .succeeded:
             let wantsOffer = !submission.fromAutofill
                 && !submission.secret.isEmpty
-                && Preferences.shared.offerToSavePasswords
+                && probes.offerToSave()
                 && !PasswordPromptIdentity.isOneTimeCode(submission.id.prompt)
                 && (!submission.wasSaved || submission.savedWasRejected)
             if wantsOffer {
-                tracker.offers.append(Offer(id: submission.id, secret: submission.secret, isUpdate: submission.wasSaved))
+                tracker.offers.append(Offer(
+                    id: submission.id,
+                    secret: submission.secret,
+                    isUpdate: submission.wasSaved,
+                    createdAt: time
+                ))
             }
         case .failed:
             if submission.fromAutofill { tracker.rejectedAutofill = submission.id }
@@ -615,7 +690,7 @@ final class PasswordPromptMonitor {
     private func actions(for tracker: Tracker) -> PasswordBubble.Actions {
         let reply: @MainActor (Reply) -> Void = { [weak self, weak tracker] reply in
             guard let self, let view = tracker?.view else { return }
-            _ = answer(reply, in: view)
+            answer(reply, in: view)
         }
         return PasswordBubble.Actions(
             primary: { reply(.accept) },
@@ -637,8 +712,7 @@ final class PasswordPromptMonitor {
             return
         }
         let content = bubbleContent(for: tracker)
-        let anchor = Self.isShowing(view) ? view.cursorCellRect() : nil
-        if tracker.bubble.show(content, anchor: anchor, in: view) {
+        if tracker.bubble.show(content, anchor: probes.anchor(view), in: view) {
             tracker.typedSinceBubble = false
         }
     }
@@ -651,7 +725,7 @@ final class PasswordPromptMonitor {
             return nil
         case .idle:
             // Held while a prompt is up so it never crowds one.
-            return tracker.offer.map { .save($0.id, isUpdate: $0.isUpdate) }
+            return tracker.offer.map { .save($0.id, isUpdate: $0.isUpdate, problem: $0.problem) }
         default:
             return nil
         }
@@ -659,7 +733,7 @@ final class PasswordPromptMonitor {
 
     /// The pane is on screen: in a visible window, not zoomed away, not in a
     /// hidden tab.
-    private static func isShowing(_ view: GhosttyTerminalNSView) -> Bool {
+    static func isShowing(_ view: GhosttyTerminalNSView) -> Bool {
         guard let window = view.window, window.isVisible,
               window.occlusionState.contains(.visible),
               !view.isHiddenOrHasHiddenAncestor,
@@ -672,7 +746,9 @@ final class PasswordPromptMonitor {
 extension PasswordKeyInput {
     /// What a key event does to the line a password read is collecting, or
     /// nil for a key that isn't input to it at all (⌘ chords — a paste
-    /// arrives through `viewDidPaste` — and bare modifiers).
+    /// arrives through `viewDidPaste` — and bare modifiers). For a printable
+    /// key this is only `.text(event.characters)`; `keyDown` replaces that
+    /// with the text it actually sends (`viewDidType`).
     static func from(_ event: NSEvent) -> PasswordKeyInput? {
         from(
             keyCode: event.keyCode,

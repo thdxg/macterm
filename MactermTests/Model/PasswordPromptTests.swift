@@ -151,8 +151,18 @@ struct PasswordSubmissionJudgeTests {
     }
 
     @Test
-    func the_same_prompt_again_is_a_failure() {
-        #expect(observe(after: 2, atPrompt: true, prompt: "ethan@prod's password:") == .failed)
+    func the_same_prompt_again_with_a_rejection_line_is_a_failure() {
+        let rejected = ["Permission denied, please try again."]
+        #expect(observe(after: 2, atPrompt: true, prompt: "ethan@prod's password:", output: rejected) == .failed)
+        // Printed before the settle window closes, it is still a rejection.
+        #expect(observe(after: 0.05, atPrompt: true, prompt: "ethan@prod's password:", output: rejected) == .failed)
+    }
+
+    @Test
+    func the_same_prompt_again_without_a_rejection_is_the_next_read() {
+        // git over HTTPS asks the identical prompt once per connection; a push
+        // opens two. The first password was accepted.
+        #expect(observe(after: 2, atPrompt: true, prompt: "ethan@prod's password:") == .succeeded)
     }
 
     @Test
@@ -188,11 +198,35 @@ struct PasswordSubmissionJudgeTests {
     }
 
     @Test
-    func exit_codes_decide() {
+    func an_exit_code_judges_the_command_not_the_password() {
         #expect(observe(after: 0.1, exit: 0) == .succeeded)
-        #expect(observe(after: 0.1, output: ["Welcome"], exit: 1) == .failed)
+        // `sudo grep -q`, `sudo test -f`, `ssh host cmd`: the password was
+        // accepted and the command then exited nonzero on its own account.
+        #expect(observe(after: 0.1, exit: 1) == .succeeded)
+        #expect(observe(after: 0.1, output: ["granted"], exit: 1) == .succeeded)
+        // A rejection line still fails, whatever the exit code.
+        #expect(observe(after: 0.1, output: ["Sorry, try again.", "sudo: 3 incorrect password attempts"], exit: 1) == .failed)
         // -1: shell integration couldn't read the status; not a verdict.
         #expect(observe(after: 0.1, exit: -1) == .pending)
+    }
+
+    @Test
+    func settle_decides_now_and_never_stays_pending() {
+        // Typing at the prompt right after Return: the read is over.
+        #expect(judge.settle(.init(
+            now: start.addingTimeInterval(0.05),
+            atPasswordPrompt: true,
+            currentPrompt: "ethan@prod's password:",
+            outputAfterPrompt: [],
+            exitCode: nil
+        )) == .succeeded)
+        #expect(judge.settle(.init(
+            now: start.addingTimeInterval(0.05),
+            atPasswordPrompt: true,
+            currentPrompt: "ethan@prod's password:",
+            outputAfterPrompt: ["Permission denied, please try again."],
+            exitCode: nil
+        )) == .failed)
     }
 
     @Test
@@ -202,16 +236,20 @@ struct PasswordSubmissionJudgeTests {
     }
 
     @Test
-    func output_is_read_below_the_last_copy_of_the_prompt() {
-        let screen = """
-        ~ $ ssh prod
-        ethan@prod's password:
-        Permission denied, please try again.
-        ethan@prod's password:
-        Last login: Sat
-
-        """
-        #expect(PasswordSubmissionJudge.output(after: "ethan@prod's password:", inViewport: screen) == ["Last login: Sat"])
+    func output_is_what_the_transcript_gained_since_the_submission() {
+        // The viewport pads with blank rows; the end is the last real line.
+        let atReturn = "~ $ ssh prod\nethan@prod's password:\n\n\n"
+        let end = PasswordSubmissionJudge.transcriptEnd(atReturn)
+        #expect(end == 2)
+        // A rejection re-prompts with the identical line: searching for the
+        // prompt would find the second copy and see nothing after it.
+        let rejected = "~ $ ssh prod\nethan@prod's password:\nPermission denied, please try again.\nethan@prod's password:\n\n"
+        #expect(PasswordSubmissionJudge.output(since: end, in: rejected) == [
+            "Permission denied, please try again.",
+            "ethan@prod's password:",
+        ])
+        #expect(PasswordSubmissionJudge.output(since: end, in: atReturn).isEmpty)
+        #expect(PasswordSubmissionJudge.transcriptEnd("\n \n") == 0)
     }
 }
 
