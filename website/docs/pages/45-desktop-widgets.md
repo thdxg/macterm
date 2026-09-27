@@ -31,11 +31,13 @@ Typing into a widget leaves the app you were in at the front.
 
 ## The grid
 
-Widgets snap to a grid when you let go of a move or a resize. The grid is the system widgets' own: 164-point cells with 16-point gaps, laid out from the top-left of each screen. A widget can span any number of cells. The right-click menu offers the system's four sizes: **Small** (1×1), **Medium** (2×1), **Large** (2×2) and **Extra Large** (4×2). Widgets never overlap: one dropped onto another moves to the nearest free cell.
+Widgets snap to a grid when you let go of a move or a resize. The grid is the system widgets' own: 164-point cells with 16-point gaps. A widget can span any number of cells. The right-click menu offers the system's four sizes: **Small** (1×1), **Medium** (2×1), **Large** (2×2) and **Extra Large** (4×2).
+
+Like macOS, Macterm lines widgets up in groups. A widget you let go of next to another widget, including one of the system's, snaps into line with it. One let go in open space snaps to the screen's grid, which starts where macOS puts widgets against the top-left corner. Widgets never overlap, and never cover the system's widgets: one dropped onto another moves to the nearest free cell.
 
 ## Settings → Widgets
 
-**Default size** sets the size of new widgets. The **Widgets** list shows every widget, including ones hidden behind windows or on another display, with **Edit**/**Done**, a size menu and **Remove** for each. **+** adds a widget.
+**Default size** sets the size of new widgets. The **Widgets** list shows every widget, including ones hidden behind windows or on another display, with a size menu and **Remove** for each; the one you're editing has an accent-colored icon. **+** adds a widget.
 
 Removing a widget ends its shell. If a program is still running in it, Macterm asks first.
 
@@ -43,7 +45,7 @@ If a widget's shell exits (`exit`, or its session is killed), the widget starts 
 
 ## widgets.yaml
 
-The widgets live in `~/.config/macterm/widgets/widgets.yaml`. Macterm maintains the file automatically, and it's still yours to edit.
+The widgets live in `~/.config/macterm/widgets.yaml`, next to `pinned.yaml`. Macterm maintains the file automatically, and it's still yours to edit.
 
 ```yaml
 widgets:

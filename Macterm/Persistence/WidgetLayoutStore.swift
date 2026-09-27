@@ -5,7 +5,7 @@ import Yams
 private let logger = Logger(subsystem: appBundleID, category: "WidgetLayoutStore")
 
 // The auto-maintained declaration of the desktop widgets:
-// `~/.config/macterm/widgets/widgets.yaml`. The widgets' counterpart of
+// `~/.config/macterm/widgets.yaml`, beside `pinned.yaml`. The widgets' counterpart of
 // `pinned.yaml` (`PinnedLayoutStore`), with the same two writers — the app,
 // on every change and at quit, and the user's editor — and the same rule
 // that makes that safe: the store tracks the exact text of its own last
@@ -118,15 +118,11 @@ enum WidgetLayoutMatcher {
 struct WidgetLayoutStore {
     static let filename = "widgets.yaml"
 
-    /// `~/.config/macterm/widgets` — user config, shared across debug and
-    /// release like the projects directory beside it (only the sessions are
-    /// per flavor). Derived from the injected projects directory, so tests
-    /// isolate it automatically.
+    /// `~/.config/macterm` — user config, shared across debug and release
+    /// like `projects/` beside it (only the sessions are per flavor).
+    /// `ProjectFileStore.configDirectoryURL`, so tests isolate it
+    /// automatically.
     let directoryURL: URL
-
-    init(projectsDirectoryURL: URL) {
-        directoryURL = projectsDirectoryURL.deletingLastPathComponent().appendingPathComponent("widgets", isDirectory: true)
-    }
 
     var fileURL: URL { directoryURL.appendingPathComponent(Self.filename) }
 

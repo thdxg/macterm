@@ -201,14 +201,28 @@ struct DesktopScreen: Equatable {
     let visibleFrame: CGRect
 }
 
-/// The virtual grid widgets snap to, one per screen: 164pt cells with 16pt
-/// gaps (the system widgets' own module), laid out from the screen's
-/// visible top-left corner with a gap's inset. Pure, so every snapping and
+/// The lattices widgets snap to. A lattice is the system widgets' module —
+/// 164pt cells, 16pt gaps, so a 180pt pitch — repeating from an origin, and
+/// there is one per GROUP of widgets, not one per screen: that is how macOS
+/// lays out its own (`NativeDesktopWidgets`). A widget let go near another
+/// widget, native or ours, joins that widget's lattice; one let go in open
+/// space uses the screen's default lattice, whose inset is where macOS puts
+/// a group against the top-left corner. Pure, so every snapping and
 /// placement rule is unit-testable.
 enum DesktopWidgetGrid {
     static let cell: CGFloat = 164
     static let gap: CGFloat = 16
     static var pitch: CGFloat { cell + gap }
+
+    /// The default lattice's inset from the screen's visible top-left.
+    /// Measured: Notification Center put a group against that corner at
+    /// window origin (18, 25) from the visible top-left, and a widget's
+    /// window is the widget plus `NativeDesktopWidgets.windowInset` (8pt).
+    static let edgeInset = CGSize(width: 26, height: 33)
+
+    /// How near a neighbour has to be for a widget to join its lattice — a
+    /// cell's pitch, gap to gap.
+    static var joinDistance: CGFloat { pitch }
 
     static func dimensions(of span: DesktopWidgetSpan) -> CGSize {
         CGSize(
@@ -222,79 +236,137 @@ enum DesktopWidgetGrid {
         return CGRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
     }
 
-    /// The grid's first cell's top-left corner on a screen.
+    /// The top-left of the default lattice's first cell on a screen — what
+    /// `widgets.yaml`'s `column`/`row` count from.
     static func origin(in visibleFrame: CGRect) -> CGPoint {
-        CGPoint(x: visibleFrame.minX + gap, y: visibleFrame.maxY - gap)
+        CGPoint(x: visibleFrame.minX + edgeInset.width, y: visibleFrame.maxY - edgeInset.height)
     }
 
-    /// Whole cells that fit across and down a screen (at least one each).
-    static func capacity(of visibleFrame: CGRect) -> DesktopWidgetSpan {
-        func fit(_ length: CGFloat) -> Int {
-            max(1, Int(((length - 2 * gap - cell) / pitch).rounded(.down)) + 1)
-        }
-        return DesktopWidgetSpan(columns: fit(visibleFrame.width), rows: fit(visibleFrame.height))
-    }
-
-    /// A cell position (column, row from the top) → its top-left point.
+    /// A default-lattice cell (column, row from the top) → its top-left.
     static func topLeft(column: Int, row: Int, in visibleFrame: CGRect) -> CGPoint {
-        let origin = origin(in: visibleFrame)
-        return CGPoint(x: origin.x + CGFloat(column) * pitch, y: origin.y - CGFloat(row) * pitch)
+        topLeft(column: column, row: row, lattice: origin(in: visibleFrame))
+    }
+
+    static func topLeft(column: Int, row: Int, lattice: CGPoint) -> CGPoint {
+        CGPoint(x: lattice.x + CGFloat(column) * pitch, y: lattice.y - CGFloat(row) * pitch)
+    }
+
+    /// The lattice a widget at `frame` belongs to: that of the nearest of
+    /// `neighbours` within `joinDistance` (a neighbour's own top-left is on
+    /// its lattice), else the screen's default one.
+    static func lattice(for frame: CGRect, in visibleFrame: CGRect, neighbours: [CGRect]) -> CGPoint {
+        let nearest = neighbours
+            .filter { visibleFrame.contains(CGPoint(x: $0.midX, y: $0.midY)) }
+            .map { (frame: $0, distance: distance(frame, $0)) }
+            .filter { $0.distance <= joinDistance }
+            .min { $0.distance < $1.distance }
+        return nearest.map { CGPoint(x: $0.frame.minX, y: $0.frame.maxY) } ?? origin(in: visibleFrame)
     }
 
     /// Where a widget the user just dragged or resized to `frame` settles:
-    /// the nearest span and cell, kept on the screen, and moved to the
-    /// nearest free cell when that one would overlap a widget in `occupied`
-    /// — the system's widgets never stack either.
+    /// the nearest span and cell of the lattice it belongs to, kept on the
+    /// screen, and moved to the nearest free cell when that one would
+    /// overlap a widget in `occupied` — the system's widgets never stack.
+    /// `occupied` doubles as the neighbours whose lattice it may join.
     static func snap(
         _ frame: CGRect,
         in visibleFrame: CGRect,
         avoiding occupied: [CGRect]
     ) -> (topLeft: CGPoint, span: DesktopWidgetSpan) {
-        let capacity = capacity(of: visibleFrame)
-        let span = DesktopWidgetSpan(
-            columns: min(capacity.columns, Int(((frame.width + gap) / pitch).rounded())),
-            rows: min(capacity.rows, Int(((frame.height + gap) / pitch).rounded()))
+        let lattice = lattice(for: frame, in: visibleFrame, neighbours: occupied)
+        let span = fitted(
+            DesktopWidgetSpan(
+                columns: Int(((frame.width + gap) / pitch).rounded()),
+                rows: Int(((frame.height + gap) / pitch).rounded())
+            ),
+            lattice: lattice,
+            in: visibleFrame
         )
-        let origin = origin(in: visibleFrame)
-        let column = Int(((frame.minX - origin.x) / pitch).rounded())
-        let row = Int(((origin.y - frame.maxY) / pitch).rounded())
-        return (nearestFree(column: column, row: row, span: span, in: visibleFrame, avoiding: occupied), span)
+        let column = Int(((frame.minX - lattice.x) / pitch).rounded())
+        let row = Int(((lattice.y - frame.maxY) / pitch).rounded())
+        let topLeft = nearestFree((column, row), span: span, lattice: lattice, in: visibleFrame, avoiding: occupied)
+        return (topLeft, span)
     }
 
-    /// Where a new widget of `span` goes: the free cell nearest the middle
-    /// of the screen.
+    /// Where a new widget of `span` goes: the free default-lattice cell
+    /// nearest the middle of the screen.
     static func centered(_ span: DesktopWidgetSpan, in visibleFrame: CGRect, avoiding occupied: [CGRect]) -> CGPoint {
-        let capacity = capacity(of: visibleFrame)
-        let fitted = DesktopWidgetSpan(columns: min(span.columns, capacity.columns), rows: min(span.rows, capacity.rows))
-        let column = Int((CGFloat(capacity.columns - fitted.columns) / 2).rounded(.down))
-        let row = Int((CGFloat(capacity.rows - fitted.rows) / 2).rounded(.down))
-        return nearestFree(column: column, row: row, span: fitted, in: visibleFrame, avoiding: occupied)
+        let lattice = origin(in: visibleFrame)
+        let span = fitted(span, lattice: lattice, in: visibleFrame)
+        let size = dimensions(of: span)
+        let columns = positions(from: lattice.x, length: size.width, lower: visibleFrame.minX, upper: visibleFrame.maxX)
+        let rows = rowPositions(from: lattice.y, length: size.height, in: visibleFrame)
+        let column = columns.map { ($0.lowerBound + $0.upperBound) / 2 } ?? 0
+        let row = rows.map { ($0.lowerBound + $0.upperBound) / 2 } ?? 0
+        return nearestFree((column, row), span: span, lattice: lattice, in: visibleFrame, avoiding: occupied)
+    }
+
+    /// The largest span no bigger than `span` that fits on the screen.
+    private static func fitted(_ span: DesktopWidgetSpan, lattice: CGPoint, in visibleFrame: CGRect) -> DesktopWidgetSpan {
+        var columns = max(1, span.columns)
+        var rows = max(1, span.rows)
+        while columns > 1, positions(
+            from: lattice.x,
+            length: dimensions(of: DesktopWidgetSpan(columns: columns, rows: 1)).width,
+            lower: visibleFrame.minX,
+            upper: visibleFrame.maxX
+        ) == nil {
+            columns -= 1
+        }
+        while rows > 1, rowPositions(
+            from: lattice.y,
+            length: dimensions(of: DesktopWidgetSpan(columns: 1, rows: rows)).height,
+            in: visibleFrame
+        ) == nil {
+            rows -= 1
+        }
+        return DesktopWidgetSpan(columns: columns, rows: rows)
+    }
+
+    /// Lattice columns whose cell of `length` fits between `lower` and
+    /// `upper`; nil when none does.
+    private static func positions(from origin: CGFloat, length: CGFloat, lower: CGFloat, upper: CGFloat) -> ClosedRange<Int>? {
+        let first = Int(((lower - origin) / pitch).rounded(.up))
+        let last = Int(((upper - length - origin) / pitch).rounded(.down))
+        return first <= last ? first ... last : nil
+    }
+
+    /// Lattice rows (counted downward) whose cell of `length` fits on the
+    /// screen.
+    private static func rowPositions(from origin: CGFloat, length: CGFloat, in visibleFrame: CGRect) -> ClosedRange<Int>? {
+        let first = Int(((origin - visibleFrame.maxY) / pitch).rounded(.up))
+        let last = Int(((origin - length - visibleFrame.minY) / pitch).rounded(.down))
+        return first <= last ? first ... last : nil
     }
 
     /// The free cell closest to (`column`, `row`) that holds `span` on the
     /// screen, searched in rings of growing distance; the clamped cell itself
     /// when nothing is free.
     private static func nearestFree(
-        column: Int,
-        row: Int,
+        _ cell: (column: Int, row: Int),
         span: DesktopWidgetSpan,
+        lattice: CGPoint,
         in visibleFrame: CGRect,
         avoiding occupied: [CGRect]
     ) -> CGPoint {
-        let capacity = capacity(of: visibleFrame)
-        let maxColumn = max(0, capacity.columns - span.columns)
-        let maxRow = max(0, capacity.rows - span.rows)
-        let start = (min(max(column, 0), maxColumn), min(max(row, 0), maxRow))
+        let size = dimensions(of: span)
+        let columns = positions(from: lattice.x, length: size.width, lower: visibleFrame.minX, upper: visibleFrame.maxX)
+            ?? cell.column ... cell.column
+        let rows = rowPositions(from: lattice.y, length: size.height, in: visibleFrame) ?? cell.row ... cell.row
+        let start = (
+            min(max(cell.column, columns.lowerBound), columns.upperBound),
+            min(max(cell.row, rows.lowerBound), rows.upperBound)
+        )
         func isFree(_ c: Int, _ r: Int) -> Bool {
-            let candidate = frame(topLeft: topLeft(column: c, row: r, in: visibleFrame), span: span)
+            let candidate = frame(topLeft: topLeft(column: c, row: r, lattice: lattice), span: span)
             // Touching edges is fine: the gap is inside the cell pitch.
             return !occupied.contains { $0.insetBy(dx: 1, dy: 1).intersects(candidate) }
         }
-        let reach = max(maxColumn, maxRow)
+        let reach = max(columns.count, rows.count)
         for distance in 0 ... reach {
             var best: (cell: (Int, Int), score: Int)?
-            for c in max(0, start.0 - distance) ... min(maxColumn, start.0 + distance) {
-                for r in max(0, start.1 - distance) ... min(maxRow, start.1 + distance)
+            for c in max(columns.lowerBound, start.0 - distance) ... min(columns.upperBound, start.0 + distance) {
+                for r in max(rows.lowerBound, start.1 - distance) ... min(rows.upperBound, start.1 + distance)
                     where max(abs(c - start.0), abs(r - start.1)) == distance && isFree(c, r)
                 {
                     // Within a ring, prefer the cell closest as the crow flies.
@@ -302,9 +374,16 @@ enum DesktopWidgetGrid {
                     if best.map({ score < $0.score }) ?? true { best = ((c, r), score) }
                 }
             }
-            if let best { return topLeft(column: best.cell.0, row: best.cell.1, in: visibleFrame) }
+            if let best { return topLeft(column: best.cell.0, row: best.cell.1, lattice: lattice) }
         }
-        return topLeft(column: start.0, row: start.1, in: visibleFrame)
+        return topLeft(column: start.0, row: start.1, lattice: lattice)
+    }
+
+    /// The gap between two rectangles (0 when they touch or overlap).
+    private static func distance(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        let dx = max(0, max(lhs.minX - rhs.maxX, rhs.minX - lhs.maxX))
+        let dy = max(0, max(lhs.minY - rhs.maxY, rhs.minY - lhs.maxY))
+        return hypot(dx, dy)
     }
 
     /// The least of a restored widget that must land on some screen for its
@@ -327,8 +406,10 @@ enum DesktopWidgetGrid {
         let center = CGPoint(x: frame.midX, y: frame.midY)
         if let holding = visibleFrames.first(where: { $0.contains(center) }) { return holding }
         return visibleFrames.max { lhs, rhs in
-            let a = lhs.intersection(frame), b = rhs.intersection(frame)
-            return (a.isNull ? 0 : a.width * a.height) < (b.isNull ? 0 : b.width * b.height)
+            let lhsOverlap = lhs.intersection(frame)
+            let rhsOverlap = rhs.intersection(frame)
+            return (lhsOverlap.isNull ? 0 : lhsOverlap.width * lhsOverlap.height)
+                < (rhsOverlap.isNull ? 0 : rhsOverlap.width * rhsOverlap.height)
         }
     }
 }

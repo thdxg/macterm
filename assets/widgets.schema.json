@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/widgets.schema.json",
   "title": "Macterm desktop widgets",
-  "description": "The desktop widgets, in ~/.config/macterm/widgets/widgets.yaml. Macterm maintains this file automatically — rewriting it whenever a widget is added, moved, resized or removed, and on quit — and reads your edits at launch and before each of its own writes. An added entry becomes a widget; removing an entry removes its widget at the next launch.",
+  "description": "The desktop widgets, in ~/.config/macterm/widgets.yaml. Macterm maintains this file automatically — rewriting it whenever a widget is added, moved, resized or removed, and on quit — and reads your edits at launch and before each of its own writes. An added entry becomes a widget; removing an entry removes its widget at the next launch.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -29,7 +29,7 @@
         "column": {
           "type": "integer",
           "minimum": 0,
-          "description": "The grid column of the widget's top-left corner, counted from the screen's left edge (0 is the first). With `row`; omit both to place the widget in the middle of the screen."
+          "description": "The grid column of the widget's top-left corner on the screen's grid, counted from its left edge (0 is the first). With `row`; omit both to place the widget in the middle of the screen. A widget next to another — including one of the system's — snaps into line with it, as macOS lines up its own widgets in groups."
         },
         "row": {
           "type": "integer",

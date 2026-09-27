@@ -132,7 +132,7 @@ extension AgentSkills {
         - **Pinned tabs** belong to no project, sit above the projects in the sidebar and re-run their commands
           whenever their sessions did not survive, a reboot included. Pinning happens in the app; over the CLI
           `--project pinned` addresses them once one exists. They are declared in
-          `~/.config/macterm/projects/pinned.yaml`, which Macterm maintains, and an edit there applies at the
+          `~/.config/macterm/pinned.yaml`, which Macterm maintains, and an edit there applies at the
           next launch. `layout save` and `layout apply` leave them alone.
 
         ## Windows

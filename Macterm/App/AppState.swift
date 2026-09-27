@@ -1115,7 +1115,13 @@ final class AppState {
         NSScreen.screens.map { DesktopScreen(name: $0.localizedName, visibleFrame: $0.visibleFrame) }
     }
 
-    /// `~/.config/macterm/widgets/widgets.yaml` (`AppState+DesktopWidgets`).
+    /// Where the system's own desktop widgets are, so ours line up with and
+    /// never cover them (`NativeDesktopWidgets`). Injectable: tests must not
+    /// see the machine's real widgets.
+    @ObservationIgnored
+    var nativeDesktopWidgetFrames: () -> [CGRect] = { NativeDesktopWidgets.frames() }
+
+    /// `~/.config/macterm/widgets.yaml` (`AppState+DesktopWidgets`).
     @ObservationIgnored
     let widgetLayoutStore: WidgetLayoutStore
 
@@ -1172,8 +1178,11 @@ final class AppState {
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
-        pinnedLayoutStore = PinnedLayoutStore(directoryURL: projectFiles.directoryURL)
-        widgetLayoutStore = WidgetLayoutStore(projectsDirectoryURL: projectFiles.directoryURL)
+        pinnedLayoutStore = PinnedLayoutStore(
+            directoryURL: projectFiles.configDirectoryURL,
+            legacyDirectoryURL: projectFiles.directoryURL
+        )
+        widgetLayoutStore = WidgetLayoutStore(directoryURL: projectFiles.configDirectoryURL)
         if let quickTerminal { adoptQuickTerminal(quickTerminal) }
         let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,

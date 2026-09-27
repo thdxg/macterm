@@ -1207,7 +1207,7 @@ final class ControlHandler {
         throw ControlError(
             code: .badRequest,
             message: "\(verb) doesn't apply to the pinned workspace — its layout is managed automatically",
-            action: "edit ~/.config/macterm/projects/pinned.yaml instead"
+            action: "edit ~/.config/macterm/pinned.yaml instead"
         )
     }
 

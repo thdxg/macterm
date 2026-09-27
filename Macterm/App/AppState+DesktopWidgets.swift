@@ -62,8 +62,9 @@ extension AppState {
 
     private func makeDesktopWidget(span: DesktopWidgetSpan?, name: String?, command: String?, cwd: String?) -> DesktopWidget {
         let span = span ?? Preferences.shared.desktopWidgetDefaultSize.span
+        let occupied = desktopWidgets.map(\.frame) + nativeDesktopWidgetFrames()
         let topLeft = desktopVisibleFrames().first.map {
-            DesktopWidgetGrid.centered(span, in: $0, avoiding: desktopWidgets.map(\.frame))
+            DesktopWidgetGrid.centered(span, in: $0, avoiding: occupied)
         } ?? .zero
         return DesktopWidget(name: name, span: span, topLeft: topLeft, command: command, cwd: cwd)
     }
@@ -133,12 +134,13 @@ extension AppState {
     }
 
     /// The user let go of a widget they dragged or resized to `frame`: snap
-    /// it to the nearest free grid cell and span of the screen it is on, and
-    /// persist that.
+    /// it to the nearest free cell and span of the lattice it belongs to —
+    /// that of a widget near it, the system's own included, else the
+    /// screen's default one — and persist that.
     func settleDesktopWidget(id: UUID, frame: CGRect) {
         guard let widget = desktopWidget(id: id) else { return }
         if let screen = DesktopWidgetGrid.screen(for: frame, among: desktopVisibleFrames()) {
-            let others = desktopWidgets.filter { $0.id != id }.map(\.frame)
+            let others = desktopWidgets.filter { $0.id != id }.map(\.frame) + nativeDesktopWidgetFrames()
             let snapped = DesktopWidgetGrid.snap(frame, in: screen, avoiding: others)
             widget.topLeft = snapped.topLeft
             widget.span = snapped.span
@@ -152,7 +154,7 @@ extension AppState {
     /// ones before it — after a declaration moved several at once.
     private func tidyDesktopWidgets() {
         let frames = desktopVisibleFrames()
-        var placed: [CGRect] = []
+        var placed = nativeDesktopWidgetFrames()
         for widget in desktopWidgets {
             if let screen = DesktopWidgetGrid.screen(for: widget.frame, among: frames) {
                 let snapped = DesktopWidgetGrid.snap(widget.frame, in: screen, avoiding: placed)
@@ -197,7 +199,8 @@ extension AppState {
                 cwd: snapshot.cwd
             )
             if let screen = frames.first, !DesktopWidgetGrid.isReachable(widget.frame, on: frames) {
-                widget.topLeft = DesktopWidgetGrid.centered(widget.span, in: screen, avoiding: desktopWidgets.map(\.frame))
+                let occupied = desktopWidgets.map(\.frame) + nativeDesktopWidgetFrames()
+                widget.topLeft = DesktopWidgetGrid.centered(widget.span, in: screen, avoiding: occupied)
             }
             desktopWidgets.append(widget)
             restored.insert(widget.id)

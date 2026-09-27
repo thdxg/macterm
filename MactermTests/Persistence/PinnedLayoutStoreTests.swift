@@ -305,3 +305,87 @@ struct PinnedLayoutStoreTests {
         #expect(loaded.pinned.isEmpty)
     }
 }
+
+@MainActor
+struct PinnedLayoutMigrationTests {
+    private func makeDirs() throws -> (config: URL, projects: URL) {
+        let config = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-config-\(UUID().uuidString)", isDirectory: true)
+        let projects = config.appendingPathComponent("projects", isDirectory: true)
+        try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+        return (config, projects)
+    }
+
+    /// `pinned.yaml` moved up from `projects/` to `~/.config/macterm`; an
+    /// existing one comes along, content intact.
+    @Test
+    func a_pinned_file_in_the_projects_directory_moves_up() throws {
+        let (config, projects) = try makeDirs()
+        defer { try? FileManager.default.removeItem(at: config) }
+        let legacy = projects.appendingPathComponent(PinnedLayoutStore.filename)
+        try "path: <pinned>\ntabs: []\n".write(to: legacy, atomically: true, encoding: .utf8)
+
+        let store = PinnedLayoutStore(directoryURL: config, legacyDirectoryURL: projects)
+        store.migrateLegacyFile()
+
+        #expect(!FileManager.default.fileExists(atPath: legacy.path))
+        #expect(try String(contentsOf: store.fileURL, encoding: .utf8) == "path: <pinned>\ntabs: []\n")
+    }
+
+    /// A file already at the new place is the live one; the old one is left
+    /// alone rather than overwriting it.
+    @Test
+    func a_pinned_file_already_moved_is_never_overwritten() throws {
+        let (config, projects) = try makeDirs()
+        defer { try? FileManager.default.removeItem(at: config) }
+        try "path: <pinned>\ntabs: [old]\n".write(
+            to: projects.appendingPathComponent(PinnedLayoutStore.filename),
+            atomically: true,
+            encoding: .utf8
+        )
+        let store = PinnedLayoutStore(directoryURL: config, legacyDirectoryURL: projects)
+        try "path: <pinned>\ntabs: []\n".write(to: store.fileURL, atomically: true, encoding: .utf8)
+
+        store.migrateLegacyFile()
+
+        #expect(try String(contentsOf: store.fileURL, encoding: .utf8) == "path: <pinned>\ntabs: []\n")
+    }
+
+    /// The default store keeps its layout files one level above `projects/`;
+    /// a store anywhere else keeps them inside its own directory.
+    @Test
+    func the_config_directory_is_the_parent_only_for_the_default_store() {
+        let custom = URL(fileURLWithPath: "/tmp/somewhere/projects", isDirectory: true)
+        #expect(ProjectFileStore(directoryURL: custom).configDirectoryURL == custom)
+        let standard = ProjectFileStore()
+        #expect(standard.configDirectoryURL.standardizedFileURL
+            == ProjectFileStore.defaultDirectory().deletingLastPathComponent().standardizedFileURL)
+    }
+}
+
+extension PinnedLayoutMigrationTests {
+    /// Until the old location is retired, a `projects/pinned.yaml` that
+    /// wasn't moved (the move failed, or nothing has migrated it yet) is read
+    /// and written where it is.
+    @Test
+    func an_unmoved_legacy_file_keeps_working_in_place() throws {
+        let config = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-tests-config-\(UUID().uuidString)", isDirectory: true)
+        let projects = config.appendingPathComponent("projects", isDirectory: true)
+        try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: config) }
+        let legacy = projects.appendingPathComponent(PinnedLayoutStore.filename)
+        try "path: <pinned>\ntabs:\n  - run: htop\n".write(to: legacy, atomically: true, encoding: .utf8)
+
+        let store = PinnedLayoutStore(directoryURL: config, legacyDirectoryURL: projects)
+        #expect(store.fileURL == legacy)
+        guard case let .file(tabs, _) = store.read() else {
+            Issue.record("expected the legacy file to be read")
+            return
+        }
+        #expect(tabs.count == 1)
+        try store.write(tabs: [])
+        #expect(!FileManager.default.fileExists(atPath: store.preferredFileURL.path))
+        #expect(try String(contentsOf: legacy, encoding: .utf8).contains("tabs: []"))
+    }
+}

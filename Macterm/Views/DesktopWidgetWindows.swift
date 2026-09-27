@@ -308,16 +308,7 @@ final class DesktopWidgetContentView: NSView {
         shield.owner = self
         addSubview(shield)
 
-        doneButton.bezelStyle = .push
-        doneButton.controlSize = .small
-        doneButton.target = self
-        doneButton.action = #selector(done)
-        doneButton.sizeToFit()
-        doneButton.autoresizingMask = [.minXMargin, .maxYMargin]
-        doneButton.frame.origin = CGPoint(
-            x: bounds.maxX - doneButton.frame.width - margin,
-            y: margin
-        )
+        configureDoneButton()
         addSubview(doneButton)
         applyEditing()
     }
@@ -335,6 +326,46 @@ final class DesktopWidgetContentView: NSView {
         doneButton.isHidden = !isEditing
         layer?.borderWidth = isEditing ? 3 : 0
         layer?.borderColor = MactermTheme.nsAccent.cgColor
+    }
+
+    /// A capsule in the widget's bottom-right corner, concentric with it:
+    /// inset by the widget's corner radius less the capsule's, so the two
+    /// curves run parallel. A rounded-rectangle push button's corner fought
+    /// the widget's there. Liquid glass on Tahoe; the capsule `.inline`
+    /// bezel before it.
+    private func configureDoneButton() {
+        if WindowAppearance.glassSupported, #available(macOS 26.0, *) {
+            doneButton.bezelStyle = .glass
+            doneButton.borderShape = .capsule
+        } else {
+            doneButton.bezelStyle = .inline
+        }
+        doneButton.controlSize = .regular
+        // An explicit label color: editing a widget never activates Macterm,
+        // and a control in an inactive app's window draws its title dimmed —
+        // the Done button read as disabled.
+        doneButton.attributedTitle = NSAttributedString(
+            string: doneButton.title,
+            attributes: [
+                .foregroundColor: NSColor.labelColor,
+                .font: NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .regular)),
+            ]
+        )
+        doneButton.target = self
+        doneButton.action = #selector(done)
+        doneButton.sizeToFit()
+        doneButton.autoresizingMask = [.minXMargin, .maxYMargin]
+        // Place the button's visible shape, not its frame (which carries the
+        // bezel's alignment padding).
+        let shape = doneButton.alignmentRect(forFrame: doneButton.frame)
+        let inset = max(DesktopWidgetMetrics.cornerRadius - shape.height / 2, 0)
+        let placed = CGRect(
+            x: bounds.maxX - inset - shape.width,
+            y: inset,
+            width: shape.width,
+            height: shape.height
+        )
+        doneButton.frame = doneButton.frame(forAlignmentRect: placed)
     }
 
     @objc

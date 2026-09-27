@@ -5,7 +5,7 @@ import Testing
 
 @MainActor
 struct AppStateDesktopWidgetsTests {
-    /// 7 columns × 4 rows; a centered medium widget lands at (376, 679).
+    /// A centered medium widget lands at (386, 662) on this screen.
     private static let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     private static let medium = DesktopWidgetSize.medium.span
 
@@ -27,6 +27,7 @@ struct AppStateDesktopWidgetsTests {
         let named = zip(screens, names ?? screens.indices.map { "Screen \($0 + 1)" })
             .map { DesktopScreen(name: $1, visibleFrame: $0) }
         state.desktopScreens = { named }
+        state.nativeDesktopWidgetFrames = { [] }
         // A listing that fails reattaches every restored widget — the
         // default here, so no test respawns a session it didn't ask to.
         var zmx = recordingZmx(into: WidgetKills())
@@ -67,7 +68,7 @@ struct AppStateDesktopWidgetsTests {
         let widget = state.createDesktopWidget(span: Self.medium, command: "htop")
 
         #expect(state.editingDesktopWidgetID == nil)
-        #expect(widget.topLeft == CGPoint(x: 376, y: 679))
+        #expect(widget.topLeft == CGPoint(x: 386, y: 662))
         let saved = try #require(savedWidgets(storeURL).first)
         #expect(saved.id == widget.id)
         #expect((saved.columns, saved.rows) == (2, 1))
@@ -155,10 +156,10 @@ struct AppStateDesktopWidgetsTests {
         state.settleDesktopWidget(id: widget.id, frame: CGRect(x: 30, y: 500, width: 530, height: 345))
 
         #expect(widget.span == DesktopWidgetSpan(columns: 3, rows: 2))
-        #expect(widget.topLeft == CGPoint(x: 16, y: 859))
+        #expect(widget.topLeft == CGPoint(x: 26, y: 842))
         let saved = try #require(savedWidgets(storeURL).first)
         #expect((saved.columns, saved.rows) == (3, 2))
-        #expect(CGPoint(x: saved.topLeftX, y: saved.topLeftY) == CGPoint(x: 16, y: 859))
+        #expect(CGPoint(x: saved.topLeftX, y: saved.topLeftY) == CGPoint(x: 26, y: 842))
     }
 
     /// A widget settles around its neighbours, never onto them — but its own
@@ -171,10 +172,27 @@ struct AppStateDesktopWidgetsTests {
         let moving = state.createDesktopWidget(span: Self.medium)
 
         state.settleDesktopWidget(id: moving.id, frame: moving.frame)
-        #expect(moving.topLeft == CGPoint(x: 376, y: 859))
+        #expect(moving.topLeft == CGPoint(x: 386, y: 842))
 
         state.settleDesktopWidget(id: moving.id, frame: still.frame)
         #expect(!moving.frame.insetBy(dx: 1, dy: 1).intersects(still.frame))
+    }
+
+    /// The system's widgets line our widgets up and are never covered by
+    /// them.
+    @Test
+    func widgets_line_up_with_and_never_cover_the_systems_own() throws {
+        let (state, _, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let native = CGRect(x: 507, y: 401, width: 344, height: 164)
+        state.nativeDesktopWidgetFrames = { [native] }
+        let widget = state.createDesktopWidget(span: Self.medium)
+
+        state.settleDesktopWidget(id: widget.id, frame: CGRect(x: 520, y: 380, width: 344, height: 164))
+
+        #expect(!widget.frame.insetBy(dx: 1, dy: 1).intersects(native))
+        #expect((widget.topLeft.x - native.minX).truncatingRemainder(dividingBy: DesktopWidgetGrid.pitch) == 0)
+        #expect((native.maxY - widget.topLeft.y).truncatingRemainder(dividingBy: DesktopWidgetGrid.pitch) == 0)
     }
 
     @Test
@@ -331,13 +349,15 @@ struct AppStateDesktopWidgetsTests {
 }
 
 extension AppStateDesktopWidgetsTests {
+    /// The fixture's projects directory is a custom one, so the layout files
+    /// sit inside it (`ProjectFileStore.configDirectoryURL`).
     private func layoutFile(_ dir: URL) -> URL {
-        dir.appendingPathComponent("widgets/widgets.yaml")
+        dir.appendingPathComponent("projects/widgets.yaml")
     }
 
     private func writeLayout(_ yaml: String, in dir: URL) throws {
         try FileManager.default.createDirectory(
-            at: dir.appendingPathComponent("widgets", isDirectory: true),
+            at: layoutFile(dir).deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         try yaml.write(to: layoutFile(dir), atomically: true, encoding: .utf8)

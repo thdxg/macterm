@@ -455,6 +455,7 @@ extension AppState {
     /// "remove everything" (editor truncate-then-write saves, mid-edit
     /// typos); unparseable additionally suspends auto-writes.
     func reconcilePinnedLayoutAtLaunch(projects: [Project]) {
+        pinnedLayoutStore.migrateLegacyFile()
         switch pinnedLayoutStore.read() {
         case .absent:
             pinnedMembershipStamp = pinnedRecords.map(\.id)

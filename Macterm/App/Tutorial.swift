@@ -128,7 +128,7 @@ enum Tutorial {
             s.dim("  · Closing a pinned tab keeps the row. It reloads — re-running"),
             s.dim("    whatever command it was running — the next time you select it."),
             s.dim("  · The set is a file you can edit:"),
-            "    " + s.accent("~/.config/macterm/projects/pinned.yaml"),
+            "    " + s.accent("~/.config/macterm/pinned.yaml"),
             s.dim("  · Done with this one? Right-click the row → ") + s.bold("Unpin Tab")
                 + s.dim("."),
             "",

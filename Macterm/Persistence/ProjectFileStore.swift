@@ -20,8 +20,21 @@ private let logger = Logger(subsystem: appBundleID, category: "ProjectFileStore"
 struct ProjectFileStore {
     let directoryURL: URL
 
-    init(directoryURL: URL = ProjectFileStore.defaultDirectory()) {
+    /// Where the auto-maintained single files live — `pinned.yaml`
+    /// (`PinnedLayoutStore`) and `widgets.yaml` (`WidgetLayoutStore`):
+    /// `~/.config/macterm` itself, beside `projects/`, for the default store.
+    /// A store rooted anywhere else (a test's tempdir) keeps them inside its
+    /// own directory instead, so no two stores can ever share one — deriving
+    /// "the parent" there would put every test's files in the shared temp
+    /// directory.
+    let configDirectoryURL: URL
+
+    init(directoryURL: URL = ProjectFileStore.defaultDirectory(), configDirectoryURL: URL? = nil) {
         self.directoryURL = directoryURL
+        self.configDirectoryURL = configDirectoryURL
+            ?? (directoryURL.standardizedFileURL == Self.defaultDirectory().standardizedFileURL
+                ? directoryURL.deletingLastPathComponent()
+                : directoryURL)
     }
 
     /// `~/.config/macterm/projects`. Deliberately shared across debug/release
@@ -178,6 +191,8 @@ struct ProjectFileStore {
         // `pinned.yaml` is the auto-managed pinned-tabs declaration, not a
         // project layout — surfacing it here would offer "Create Project" on
         // a file with no `path:` (and "Remove" on state the app rewrites).
+        // It now lives one level up, but a legacy one still works here until
+        // that location is retired (`PinnedLayoutStore.fileURL`).
         scan().filter { $0.url.lastPathComponent.lowercased() != PinnedLayoutStore.filename }.map { file in
             let full = try? ProjectFile.parse(yaml: (try? String(contentsOf: file.url, encoding: .utf8)) ?? "")
             return Listing(

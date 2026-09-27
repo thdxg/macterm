@@ -2,9 +2,10 @@ import AppKit
 import SwiftUI
 
 /// Settings → Widgets: what a new desktop widget starts as, and every widget
-/// on the desktop — each one editable, resizable and removable from here as
-/// from its own right-click menu, since a widget can be hidden behind
-/// windows or on a display that isn't in front of the user.
+/// on the desktop — each resizable and removable from here, since a widget
+/// can be hidden behind windows or on a display that isn't in front of the
+/// user. Editing is not offered here: it starts from the widget itself
+/// (right-click → Edit Widget), where the user types into it.
 struct WidgetsSettings: View {
     @Environment(AppState.self)
     private var appState
@@ -36,11 +37,6 @@ struct WidgetsSettings: View {
                         WidgetRow(index: index + 1, widget: widget)
                     }
                 }
-                Text(
-                    "Widgets are locked: drag one anywhere to move it, but nothing you click or type reaches its terminal. "
-                        + "Edit one to type into it or resize it from its edges. One widget can be edited at a time."
-                )
-                .settingsCaption()
                 LabeledContent("Layout file") {
                     Button(WidgetsSettings.layoutFilePath(appState)) {
                         NSWorkspace.shared.activateFileViewerSelecting([appState.widgetLayoutStore.fileURL])
@@ -68,7 +64,7 @@ struct WidgetsSettings: View {
         .formStyle(.grouped)
     }
 
-    /// `~/.config/macterm/widgets/widgets.yaml`, home-contracted.
+    /// `~/.config/macterm/widgets.yaml`, home-contracted.
     static func layoutFilePath(_ appState: AppState) -> String {
         let path = appState.widgetLayoutStore.fileURL.path(percentEncoded: false)
         let home = ProjectPath.currentHome
@@ -101,14 +97,9 @@ private struct WidgetRow: View {
 
             Spacer(minLength: 8)
 
-            if isEditing {
-                Button("Done") { appState.endEditingDesktopWidget() }
-            } else {
-                Button("Edit") { appState.beginEditingDesktopWidget(id: widget.id) }
-                    .disabled(!appState.canEditDesktopWidget(id: widget.id))
-                    .help(appState.canEditDesktopWidget(id: widget.id) ? "" : "Finish editing the other widget first")
-            }
-
+            // Editing starts from the widget itself (right-click → Edit
+            // Widget), where the user is looking; the accent icon marks the
+            // one being edited.
             Menu {
                 Picker("Size", selection: Binding(
                     get: { DesktopWidgetSize(span: widget.span) },

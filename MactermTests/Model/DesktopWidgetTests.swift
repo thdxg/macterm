@@ -4,7 +4,8 @@ import Testing
 
 @MainActor
 struct DesktopWidgetTests {
-    /// 7 columns × 4 rows of 164pt cells at a 180pt pitch, from (16, 859).
+    /// 164pt cells at a 180pt pitch from the default lattice's origin, (26,
+    /// 842): 6 medium columns (0…5) and 4 rows (0…3) fit.
     private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
 
     private func frame(column: Int, row: Int, _ size: DesktopWidgetSize) -> CGRect {
@@ -75,25 +76,24 @@ struct DesktopWidgetTests {
 
     // MARK: - Grid
 
+    /// The default lattice starts where macOS puts a group of its own widgets
+    /// against the top-left corner (measured: 26pt in, 33pt down).
     @Test
-    func the_grid_fits_whole_cells_inside_the_screen_margins() {
-        #expect(DesktopWidgetGrid.capacity(of: screen) == DesktopWidgetSpan(columns: 7, rows: 4))
-        #expect(DesktopWidgetGrid.origin(in: screen) == CGPoint(x: 16, y: 859))
-        // A screen smaller than a cell still has one.
-        #expect(DesktopWidgetGrid.capacity(of: CGRect(x: 0, y: 0, width: 100, height: 100)) == DesktopWidgetSpan(columns: 1, rows: 1))
+    func the_default_lattice_starts_at_the_system_widgets_corner_inset() {
+        #expect(DesktopWidgetGrid.origin(in: screen) == CGPoint(x: 26, y: 842))
     }
 
     @Test
     func a_new_widget_goes_in_the_middle_of_the_screen() {
         let topLeft = DesktopWidgetGrid.centered(DesktopWidgetSize.medium.span, in: screen, avoiding: [])
-        #expect(topLeft == CGPoint(x: 376, y: 679))
+        #expect(topLeft == CGPoint(x: 386, y: 662))
     }
 
     @Test
     func a_new_widget_takes_the_nearest_free_cell_when_the_middle_is_taken() {
         let occupied = [frame(column: 2, row: 1, .medium)]
         let topLeft = DesktopWidgetGrid.centered(DesktopWidgetSize.medium.span, in: screen, avoiding: occupied)
-        #expect(topLeft == CGPoint(x: 376, y: 859))
+        #expect(topLeft == CGPoint(x: 386, y: 842))
     }
 
     /// A drag lands anywhere; the widget settles into the nearest cell.
@@ -101,7 +101,7 @@ struct DesktopWidgetTests {
     func a_dragged_widget_snaps_to_the_nearest_cell() {
         let dropped = CGRect(x: 400, y: 530, width: 344, height: 164)
         let snapped = DesktopWidgetGrid.snap(dropped, in: screen, avoiding: [])
-        #expect(snapped.topLeft == CGPoint(x: 376, y: 679))
+        #expect(snapped.topLeft == CGPoint(x: 386, y: 662))
         #expect(snapped.span == DesktopWidgetSize.medium.span)
     }
 
@@ -111,7 +111,7 @@ struct DesktopWidgetTests {
         let resized = CGRect(x: 16, y: 509, width: 520, height: 350)
         let snapped = DesktopWidgetGrid.snap(resized, in: screen, avoiding: [])
         #expect(snapped.span == DesktopWidgetSpan(columns: 3, rows: 2))
-        #expect(snapped.topLeft == CGPoint(x: 16, y: 859))
+        #expect(snapped.topLeft == CGPoint(x: 26, y: 842))
     }
 
     @Test
@@ -119,7 +119,7 @@ struct DesktopWidgetTests {
         let dropped = CGRect(x: 2000, y: -100, width: 344, height: 164)
         let snapped = DesktopWidgetGrid.snap(dropped, in: screen, avoiding: [])
         // The last columns and row that hold a medium widget.
-        #expect(snapped.topLeft == CGPoint(x: 916, y: 319))
+        #expect(snapped.topLeft == CGPoint(x: 926, y: 302))
     }
 
     @Test
@@ -134,7 +134,41 @@ struct DesktopWidgetTests {
     func a_widget_dropped_on_another_moves_to_the_nearest_free_cell() {
         let occupied = [frame(column: 2, row: 1, .medium)]
         let snapped = DesktopWidgetGrid.snap(frame(column: 2, row: 1, .medium), in: screen, avoiding: occupied)
-        #expect(snapped.topLeft == CGPoint(x: 376, y: 859))
+        #expect(snapped.topLeft == CGPoint(x: 386, y: 842))
+    }
+
+    // MARK: - Groups
+
+    /// macOS lays its widgets out in groups, each on its own lattice from
+    /// wherever the group was dropped. A widget let go near one joins that
+    /// lattice, so it lines up with the system's widgets beside it.
+    @Test
+    func a_widget_let_go_near_another_joins_its_lattice() {
+        // A native medium widget at an origin off the default lattice.
+        let native = CGRect(x: 507, y: 401, width: 344, height: 164)
+        let dropped = CGRect(x: 880, y: 390, width: 344, height: 164)
+        let snapped = DesktopWidgetGrid.snap(dropped, in: screen, avoiding: [native])
+        #expect(snapped.topLeft == CGPoint(x: native.minX + 360, y: native.maxY))
+    }
+
+    @Test
+    func a_widget_let_go_in_open_space_uses_the_default_lattice() {
+        let native = CGRect(x: 1007, y: 11, width: 164, height: 164)
+        let dropped = CGRect(x: 30, y: 670, width: 344, height: 164)
+        let snapped = DesktopWidgetGrid.snap(dropped, in: screen, avoiding: [native])
+        #expect(snapped.topLeft == DesktopWidgetGrid.origin(in: screen))
+    }
+
+    /// Joining is for neighbours: a widget more than a cell's pitch away
+    /// doesn't pull a widget onto its lattice.
+    @Test
+    func only_a_neighbour_within_a_pitch_shares_its_lattice() {
+        let native = CGRect(x: 507, y: 401, width: 344, height: 164)
+        let near = CGRect(x: 507 + 344 + 100, y: 401, width: 10, height: 10)
+        let far = CGRect(x: 507 + 344 + 200, y: 401, width: 10, height: 10)
+        let origin = DesktopWidgetGrid.origin(in: screen)
+        #expect(DesktopWidgetGrid.lattice(for: near, in: screen, neighbours: [native]) == CGPoint(x: 507, y: 565))
+        #expect(DesktopWidgetGrid.lattice(for: far, in: screen, neighbours: [native]) == origin)
     }
 
     /// Cells are laid out with the gap inside the pitch, so neighbours touch
