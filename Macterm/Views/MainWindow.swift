@@ -101,10 +101,10 @@ struct MainWindow: View {
     private var sidebarWidth: CGFloat { sidebarWidthHandoff.width }
     private var peekStripWidth: CGFloat { SidebarOverlayMetrics.hoverActivationWidth }
     /// How far in from the leading edge the CONFIGURED style can acquire a
-    /// peek. The overlay's intent-aware corridor is far wider than the strip,
-    /// so `suppressPeekUntilExit` has to be armed and cleared against this —
-    /// against the strip, an explicit hide with the pointer at x=40 armed
-    /// nothing and the smallest leftward move popped the overlay back out.
+    /// peek. The overlay's intent-aware corridor is wider than the strip, so
+    /// `suppressPeekUntilExit` has to be armed and cleared against this —
+    /// against the strip, an explicit hide with the pointer in the corridor
+    /// armed nothing and the smallest leftward move popped the overlay back out.
     /// For the resize style the two are the same value.
     private var peekAcquisitionWidth: CGFloat {
         preferences.sidebarPeekStyle == .overlayTerminal

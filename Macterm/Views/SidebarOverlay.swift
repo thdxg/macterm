@@ -131,16 +131,23 @@ enum SidebarPeekInteraction {
 @MainActor
 enum SidebarOverlayMetrics {
     static let panelInset: CGFloat = 4
-    static let hoverActivationWidth: CGFloat = 12
-    static let hoverApproachWidth: CGFloat = 64
+    /// The strip at the leading edge that opens a peek by itself. Both trigger
+    /// widths stay inside the terminal's 16-point `window-padding-x`
+    /// (`MactermConfig.defaultsBody`), so no pointer over text can open a peek:
+    /// #447 was the overlay opening while the pointer travelled leftward to
+    /// select the first characters of a line, because the approach corridor
+    /// reached 64 points in — four columns past the padding.
+    static let hoverActivationWidth: CGFloat = 6
+    static let hoverApproachWidth: CGFloat = 12
     static let fastExitRecoveryWidth: CGFloat = 128
     static let hoverExitPadding: CGFloat = 8
     static let outsideAcquisitionDepth: CGFloat = 128
     static let outsideVerticalTolerance: CGFloat = 16
 
     /// A stationary pointer still has to reach the exact edge zone. A pointer
-    /// moving toward the edge gets a wider capture corridor so event sampling
-    /// cannot skip the 12-point trigger at ordinary fast mouse speeds.
+    /// moving toward the edge gets a slightly wider capture corridor so a
+    /// pointer decelerating into the strip cannot land just past it. The
+    /// corridor ends inside the terminal's leading padding, never over text.
     static func shouldBeginHover(pointX: CGFloat, previousX: CGFloat?) -> Bool {
         if pointX <= hoverActivationWidth { return true }
         guard let previousX else { return false }

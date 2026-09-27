@@ -25,17 +25,17 @@ struct SidebarPeekInteractionTests {
     func overlay_gets_intent_aware_acquisition_without_changing_resize_mode() {
         #expect(SidebarPeekInteraction.shouldBeginHover(
             style: .overlayTerminal,
-            pointX: 48,
-            previousX: 90
+            pointX: 10,
+            previousX: 20
         ))
         #expect(!SidebarPeekInteraction.shouldBeginHover(
             style: .resizeTerminal,
-            pointX: 48,
-            previousX: 90
+            pointX: 10,
+            previousX: 20
         ))
         #expect(SidebarPeekInteraction.shouldBeginHover(
             style: .resizeTerminal,
-            pointX: 8,
+            pointX: 4,
             previousX: nil
         ))
     }
