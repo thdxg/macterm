@@ -217,6 +217,24 @@ final class PasswordVault {
         }
     }
 
+    /// Re-file an entry under `newID` with `password`, removing the old entry
+    /// when the identity changed. The save goes first, so a failure leaves
+    /// the old entry in place rather than losing the password.
+    @discardableResult
+    func update(_ id: PasswordEntryID, to newID: PasswordEntryID, password: String) -> Bool {
+        defer { reload() }
+        do {
+            try store.save(password, for: newID)
+            if newID != id { try store.delete(id) }
+            logger.info("updated password entry moved=\(newID != id, privacy: .public)")
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            logger.error("update failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
     func remove(_ id: PasswordEntryID) {
         defer { reload() }
         do {

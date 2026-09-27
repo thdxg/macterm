@@ -234,6 +234,20 @@ struct PasswordVaultTests {
     }
 
     @Test
+    func update_refiles_an_entry_and_can_change_its_password() {
+        let vault = PasswordVault(store: InMemoryPasswordStore())
+        let old = PasswordEntryID(command: "ssh prod", prompt: "ethan@prod's password:")
+        let new = PasswordEntryID(command: "ssh prod.example.com", prompt: "ethan@prod's password:")
+        vault.save("hunter2", for: old)
+        #expect(vault.update(old, to: new, password: "hunter2"))
+        #expect(!vault.contains(old))
+        #expect(vault.password(for: new) == "hunter2")
+        #expect(vault.update(new, to: new, password: "hunter3"))
+        #expect(vault.entries.count == 1)
+        #expect(vault.password(for: new) == "hunter3")
+    }
+
+    @Test
     func search_matches_every_word_in_command_or_prompt() {
         let vault = PasswordVault(store: InMemoryPasswordStore())
         vault.save("a", for: PasswordEntryID(command: "ssh prod", prompt: "ethan@prod's password:"))

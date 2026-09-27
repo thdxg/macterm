@@ -70,19 +70,20 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 /// below the stable release of the same `X.Y.Z` and a tip sorts above it (see
 /// `sparkle_comparison_version` in scripts/_lib.sh).
 /// When Autofill asks the user to authenticate (Settings → Passwords). The raw
-/// values are persisted.
+/// values are persisted; the case order is the picker's.
 enum PasswordAutofillAuthentication: String, CaseIterable, Identifiable {
+    /// The default: the first Autofill asks, and the answer stands until the
+    /// Mac locks or sleeps, or Macterm quits.
+    case untilLocked
     /// Every Autofill, like Safari.
     case everyTime
-    /// Once, then not again until the Mac locks or sleeps, or Macterm quits.
-    case untilLocked
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .untilLocked: "Once, until the Mac locks"
         case .everyTime: "Every time"
-        case .untilLocked: "Once until the Mac locks"
         }
     }
 }
@@ -1062,7 +1063,7 @@ final class Preferences {
         static let reconnectRemotePanes = PreferenceStorageKey("macterm.remote.reconnectDroppedPanes", default: true)
         static let offerToSavePasswords = PreferenceStorageKey("macterm.passwords.offerToSave", default: true)
         static let passwordAutofillAuthentication = PreferenceStorageKey(
-            "macterm.passwords.autofillAuthentication", default: PasswordAutofillAuthentication.everyTime
+            "macterm.passwords.autofillAuthentication", default: PasswordAutofillAuthentication.untilLocked
         )
         static let peekSidebarWhenHidden = PreferenceStorageKey("macterm.sidebar.peekWhenHidden", default: true)
         static let sidebarWidth = PreferenceStorageKey("macterm.sidebar.width", default: defaultSidebarWidth) {
