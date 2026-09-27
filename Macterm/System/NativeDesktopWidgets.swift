@@ -10,8 +10,8 @@ import CoreGraphics
 /// row: 0, size: medium>, …]}]`, and items inside a group sit on a 180pt
 /// lattice (a 164pt cell plus a 16pt gap). That store lives in Notification
 /// Center's own container, which another app can't read without a privacy
-/// prompt, but every widget is an ordinary on-screen window whose bounds the
-/// window list reports without any permission — enough to find each group's
+/// prompt, but every widget is an ordinary window whose bounds the window
+/// list reports without any permission — enough to find each group's
 /// lattice. `DesktopWidgetGrid` snaps onto the lattice of whatever widget is
 /// nearby.
 enum NativeDesktopWidgets {
@@ -24,29 +24,61 @@ enum NativeDesktopWidgets {
     /// The system widgets' frames in AppKit's global (bottom-left) space.
     @MainActor
     static func frames() -> [CGRect] {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]],
+        // Every window, not only the on-screen ones: Notification Center
+        // reports its widgets as off screen whenever windows cover the
+        // desktop (measured), which is exactly when a widget is created from
+        // Settings or restored at launch — reading on-screen windows only saw
+        // no system widgets then, and placed ours over them.
+        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]],
               let primaryHeight = NSScreen.screens.first?.frame.height
         else { return [] }
-        let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
         var hostPIDs: [pid_t: Bool] = [:]
-        return list.compactMap { info in
-            // Desktop-level windows only: Notification Center's own panel
-            // sits above the normal level and isn't a widget.
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer < normalLevel,
+        return widgetFrames(in: list, primaryScreenHeight: primaryHeight) { pid in
+            if let known = hostPIDs[pid] { return known }
+            let host = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == hostBundleID
+            hostPIDs[pid] = host
+            return host
+        }
+    }
+
+    /// The level a system desktop widget's window sits at: two above the
+    /// Finder's desktop icons (measured). Notification Center keeps other
+    /// windows one level lower — see `widgetFrames`.
+    static let widgetLevel = Int(CGWindowLevelForKey(.desktopIconWindow)) + 2
+
+    /// The widgets among `windows` (window-list entries), converted from the
+    /// window list's top-left space to AppKit's. Pure, for tests.
+    ///
+    /// Notification Center's windows at the desktop are not all widgets. It
+    /// also keeps an untitled, fully transparent window a level below them
+    /// (measured: 464×824, alpha 0, left behind after widgets were dragged
+    /// and resized), and taking that one for a widget both blocked the empty
+    /// cells it covered and pulled Macterm's widgets onto its lattice. So a
+    /// widget is a window of the host at `widgetLevel`, with visible alpha,
+    /// whose every side is a whole number of cells — a widget window is
+    /// 180pt per cell each way, its 8pt shadow insets included.
+    static func widgetFrames(
+        in windows: [[String: Any]],
+        primaryScreenHeight: CGFloat,
+        isHost: (pid_t) -> Bool
+    ) -> [CGRect] {
+        windows.compactMap { info in
+            guard let layer = info[kCGWindowLayer as String] as? Int, layer == widgetLevel,
+                  let alpha = info[kCGWindowAlpha as String] as? Double, alpha > 0,
                   let pid = info[kCGWindowOwnerPID as String] as? pid_t,
                   let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
-                  let x = bounds["X"], let y = bounds["Y"], let width = bounds["Width"], let height = bounds["Height"]
+                  let x = bounds["X"], let y = bounds["Y"], let width = bounds["Width"], let height = bounds["Height"],
+                  isWholeCells(width), isWholeCells(height),
+                  isHost(pid)
             else { return nil }
-            let isHost = hostPIDs[pid] ?? {
-                let host = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == hostBundleID
-                hostPIDs[pid] = host
-                return host
-            }()
-            guard isHost else { return nil }
-            // The window list is top-left based on the primary display.
-            let window = CGRect(x: x, y: primaryHeight - y - height, width: width, height: height)
-            let widget = window.insetBy(dx: windowInset, dy: windowInset)
-            return widget.width > 0 && widget.height > 0 ? widget : nil
+            let window = CGRect(x: x, y: primaryScreenHeight - y - height, width: width, height: height)
+            return window.insetBy(dx: windowInset, dy: windowInset)
         }
+    }
+
+    /// Whether a widget window's side spans a whole number of cells.
+    private static func isWholeCells(_ length: CGFloat) -> Bool {
+        let cells = (length / DesktopWidgetGrid.pitch).rounded()
+        return cells >= 1 && abs(length - cells * DesktopWidgetGrid.pitch) <= 1
     }
 }
