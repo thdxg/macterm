@@ -357,6 +357,7 @@ final class GhosttyTerminalNSView: NSView {
     /// Unlike key-code inference, this distinguishes real content from an
     /// empty/whitespace clipboard or a remapped Command-V binding.
     func surfaceDidPasteText(_ text: String) {
+        PasswordPromptMonitor.shared.viewDidPaste(self, text: text)
         recordCommandInput(text)
         if TerminalCommandSubmission.textContainsNewline(text),
            TerminalCommandSubmission.textContainsContent(text)
@@ -453,18 +454,37 @@ final class GhosttyTerminalNSView: NSView {
     var currentPwd: String?
 
     /// True while libghostty reports the surface is at a password prompt
-    /// (surface-target `GHOSTTY_ACTION_SECURE_INPUT`). Registers this view
-    /// with the `SecureInput` manager so keystrokes are shielded from event
-    /// taps exactly while the prompt is focused.
+    /// (surface-target `GHOSTTY_ACTION_SECURE_INPUT`). libghostty reads its
+    /// own pty, which under zmx is the attach client's and never at a prompt,
+    /// so for a wrapped pane this stays false and `detectedPasswordInput`
+    /// carries the prompt instead.
     var passwordInput: Bool = false {
-        didSet {
-            guard passwordInput != oldValue else { return }
-            let id = ObjectIdentifier(self)
-            if passwordInput {
-                SecureInput.shared.setScoped(id, focused: hasKeyboardFocus)
-            } else {
-                SecureInput.shared.removeScoped(id)
-            }
+        didSet { syncSecureInputScope() }
+    }
+
+    /// True while Macterm's own read of the pane's real tty finds a password
+    /// prompt (`PasswordPromptMonitor`, honoring `macos-auto-secure-input`).
+    var detectedPasswordInput: Bool = false {
+        didSet { syncSecureInputScope() }
+    }
+
+    /// The pane this view belongs to, for the password monitor (which starts
+    /// from the focused view and needs the pane's session and command).
+    weak var owningPane: Pane?
+
+    /// Whether this view is registered with the `SecureInput` manager, which
+    /// shields keystrokes from event taps while a focused prompt is showing.
+    private var secureInputScoped = false
+
+    private func syncSecureInputScope() {
+        let wanted = passwordInput || detectedPasswordInput
+        guard wanted != secureInputScoped else { return }
+        secureInputScoped = wanted
+        let id = ObjectIdentifier(self)
+        if wanted {
+            SecureInput.shared.setScoped(id, focused: hasKeyboardFocus)
+        } else {
+            SecureInput.shared.removeScoped(id)
         }
     }
 
@@ -1046,7 +1066,7 @@ final class GhosttyTerminalNSView: NSView {
     /// keyboard focus — a prompt sitting in a background pane must not shield
     /// (and so break) typing that's going elsewhere.
     private func syncSecureInputFocus(_ focused: Bool) {
-        guard passwordInput else { return }
+        guard secureInputScoped else { return }
         SecureInput.shared.setScoped(ObjectIdentifier(self), focused: focused)
     }
 
@@ -1119,6 +1139,11 @@ final class GhosttyTerminalNSView: NSView {
         guard let surface else { super.keyDown(with: event)
             return
         }
+        // A Return or Escape the password bubble answers is consumed here and
+        // never reaches libghostty. Everything else is reported to the
+        // password monitor at the point it is actually sent, below, as the
+        // text the tty will receive — not `event.characters`.
+        if PasswordPromptMonitor.shared.viewWillSendKey(self, event: event) { return }
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // What zmx will count as user input: a key that reaches the pty. Cmd
@@ -1146,6 +1171,11 @@ final class GhosttyTerminalNSView: NSView {
             // keystroke — leave it alone. SIGQUIT stays reachable via `kill
             // -QUIT` for the rare intentional case.
             if event.keyCode == 42, !flags.contains(.shift) { return }
+            // Past the swallow and the shortcut check: this chord reaches
+            // the tty, so the password capture sees it.
+            if let input = PasswordKeyInput.from(event) {
+                PasswordPromptMonitor.shared.viewDidType(self, input: input)
+            }
             var ke = buildKeyEvent(from: event, action: action)
             let text = event.charactersIgnoringModifiers ?? event.characters ?? ""
             if text.isEmpty {
@@ -1224,6 +1254,27 @@ final class GhosttyTerminalNSView: NSView {
                 _ = ghostty_surface_key(surface, ke)
             }
             forwarded = true
+        }
+
+        // What the password capture sees is what went to the tty: the IME's
+        // committed text rather than the keystroke's raw characters, nothing
+        // while a composition is open (the romaji never reach the program),
+        // and nothing legible for an Option chord libghostty encodes as
+        // ESC+key (option-as-alt strips Option from the translation flags).
+        if let input = PasswordKeyInput.from(event) {
+            let typed: PasswordKeyInput = switch input {
+            case .text where hadMarkedText || hasMarkedText():
+                .unknown
+            case .text where !keyTextAccumulator.isEmpty:
+                .text(keyTextAccumulator.joined())
+            case .text where flags.contains(.option) && !translationEvent.modifierFlags.contains(.option):
+                .unknown
+            case .text:
+                filterSpecial(event.characters ?? "").isEmpty ? .unknown : .text(filterSpecial(event.characters ?? ""))
+            default:
+                input
+            }
+            PasswordPromptMonitor.shared.viewDidType(self, input: typed)
         }
 
         let userModifiers: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
@@ -1787,6 +1838,9 @@ extension GhosttyTerminalNSView {
         // Same liveness signal a keystroke sends (execution tracking + poll
         // resume), so an injected command updates the tab title promptly.
         onInteraction?()
+        // Text a program reads at a password prompt is the password, whoever
+        // typed it — the e2e suite answers prompts this way.
+        PasswordPromptMonitor.shared.viewDidSendText(self, text: text)
         recordCommandInput(text)
         text.withCString { ptr in
             _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
@@ -1797,6 +1851,35 @@ extension GhosttyTerminalNSView {
             if hasContent { preserveProgrammaticCommandInput(text) }
         }
         return true
+    }
+
+    /// Type a saved password into the program reading it, then Return. The
+    /// password goes through the same text path as `sendText` — not paste, so
+    /// no bracketed-paste markers reach the password read — but records no
+    /// command-submission evidence: a password is never a command. The Return
+    /// rides `sendKey`, so it does ping `onInteraction` and reports a bare
+    /// `onCommandSubmitted(false)`, exactly as a Return the user presses.
+    @discardableResult
+    func sendSecret(_ secret: String) -> Bool {
+        guard let surface, !secret.isEmpty else { return false }
+        secret.withCString { ptr in
+            _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
+        }
+        return sendKey(keyCode: 36, mods: [])
+    }
+
+    /// The cursor cell, in this view's coordinates — where a popover about
+    /// the line being typed on points. libghostty reports it for the IME
+    /// candidate window (`firstRect(forCharacterRange:)` below), shift from
+    /// smooth scrolling included. Nil when there's no surface or the cursor is
+    /// outside the visible bounds (scrolled away).
+    func cursorCellRect() -> NSRect? {
+        guard let surface else { return nil }
+        var x: Double = 0, y: Double = 0, w: Double = 0, h: Double = 0
+        ghostty_surface_ime_point(surface, &x, &y, &w, &h)
+        guard h > 0 else { return nil }
+        let rect = NSRect(x: x, y: bounds.height - y - h, width: max(w, 1), height: h)
+        return bounds.intersects(rect) ? rect.intersection(bounds) : nil
     }
 
     /// Send a single key chord through libghostty's key-*encoding* path — the
@@ -1823,6 +1906,7 @@ extension GhosttyTerminalNSView {
     func sendKey(keyCode: UInt16, mods flags: NSEvent.ModifierFlags) -> Bool {
         guard let surface else { return false }
         onInteraction?()
+        PasswordPromptMonitor.shared.viewDidSendKey(self, keyCode: keyCode, mods: flags)
         if TerminalCommandSubmission.clearsInputEvidence(
             keyCode: keyCode,
             hasControl: flags.contains(.control),

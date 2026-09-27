@@ -508,6 +508,7 @@ struct PaneCommand: ParsableCommand {
         #if DEBUG
         subs.append(Resize.self)
         subs.append(Move.self)
+        subs.append(Password.self)
         #endif
         return subs
     }
@@ -814,6 +815,27 @@ struct PaneCommand: ParsableCommand {
             args.cols = cols
             args.rows = rows
             try runControlCommand(command: "pane.resize", args: args, options: options)
+        }
+    }
+
+    /// DEBUG-only: the password monitor's state for a pane, and a way to
+    /// answer its bubble headlessly — what the e2e suite drives. Never the
+    /// password itself.
+    struct Password: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "[debug] Read a pane's password-prompt state, or answer its bubble."
+        )
+
+        @Option(help: "Answer the bubble: accept (Save/Update), dismiss, or autofill.")
+        var answer: String?
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.answer = answer
+            try runControlCommand(command: "pane.password", args: args, options: options)
         }
     }
 

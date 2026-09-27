@@ -18,12 +18,24 @@ struct SidebarOverlayMetricsTests {
 
     @Test
     func hover_trigger_captures_edge_entries_and_leftward_approach() {
-        #expect(SidebarOverlayMetrics.shouldBeginHover(pointX: 8, previousX: 20))
-        #expect(SidebarOverlayMetrics.shouldBeginHover(pointX: 48, previousX: 90))
+        #expect(SidebarOverlayMetrics.shouldBeginHover(pointX: 4, previousX: nil))
+        #expect(SidebarOverlayMetrics.shouldBeginHover(pointX: 4, previousX: 3))
+        #expect(SidebarOverlayMetrics.shouldBeginHover(pointX: 10, previousX: 20))
 
-        #expect(!SidebarOverlayMetrics.shouldBeginHover(pointX: 48, previousX: nil))
-        #expect(!SidebarOverlayMetrics.shouldBeginHover(pointX: 48, previousX: 20))
-        #expect(!SidebarOverlayMetrics.shouldBeginHover(pointX: 90, previousX: 120))
+        #expect(!SidebarOverlayMetrics.shouldBeginHover(pointX: 10, previousX: nil))
+        #expect(!SidebarOverlayMetrics.shouldBeginHover(pointX: 10, previousX: 8))
+        #expect(!SidebarOverlayMetrics.shouldBeginHover(pointX: 48, previousX: 90))
+    }
+
+    /// #447: the overlay opened while the pointer travelled leftward to select
+    /// the first characters of a line. Both trigger widths must stay inside the
+    /// terminal's leading padding so no pointer over text can open a peek.
+    @Test
+    func hover_trigger_stays_inside_the_terminal_padding() {
+        let padding: CGFloat = 16
+        #expect(SidebarOverlayMetrics.hoverActivationWidth < padding)
+        #expect(SidebarOverlayMetrics.hoverApproachWidth < padding)
+        #expect(!SidebarOverlayMetrics.shouldBeginHover(pointX: padding, previousX: 200))
     }
 
     @Test

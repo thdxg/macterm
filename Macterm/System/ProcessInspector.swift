@@ -76,6 +76,34 @@ enum ProcessInspector {
         return displayCommand(args)
     }
 
+    /// The foreground command with its program named by the executable's
+    /// real path — what a saved password is filed under. `runningCommand`
+    /// above reads argv, which the process sets for itself: `exec -a ssh
+    /// ./fake prod` reports `ssh prod` and would collect the password saved
+    /// for the real ssh. `proc_pidpath` comes from the kernel's vnode, so
+    /// only the binary at that path matches. Arguments stay argv (the program
+    /// parses those itself, so it can't be lied to about them). A shell
+    /// running a script or a `-c` command counts as a command here
+    /// (`isIdleShellInvocation`), so a prompt inside `./deploy.sh` is filed
+    /// under the script; an idle shell is nil.
+    @MainActor
+    static func trustedCommand(forPane pane: Pane) -> String? {
+        guard let pid = foregroundPID(forPane: pane) else { return nil }
+        guard let args = argv(pid: pid), !args.isEmpty, !isIdleShellInvocation(args) else { return nil }
+        guard let path = executablePath(pid: pid) else { return nil }
+        return displayCommand([path] + args.dropFirst())
+    }
+
+    /// The executable's resolved absolute path from the kernel
+    /// (`proc_pidpath`), or nil when the process is gone or unreadable.
+    static func executablePath(pid: pid_t) -> String? {
+        // PROC_PIDPATHINFO_MAXSIZE (4 × MAXPATHLEN) isn't imported into Swift.
+        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
     /// The display *name* of the pane's foreground process — the kernel's short
     /// accounting name (`hx`, `btop`, `nvim`), with no path and no arguments.
     /// Returns nil when the pane is idle at a shell prompt (the foreground
@@ -279,6 +307,38 @@ enum ProcessInspector {
         let canonical = attrs.c_lflag & tcflag_t(ICANON) != 0
         let echo = attrs.c_lflag & tcflag_t(ECHO) != 0
         return !canonical || !echo
+    }
+
+    /// Whether the program in the pane's foreground is reading a password:
+    /// the tty is in canonical mode with echo off. That is the mode
+    /// `readpassphrase(3)`, `getpass(3)`, ssh, sudo, su, Python's `getpass`,
+    /// Go's `term.ReadPassword` and Rust's `rpassword` all put it in, and
+    /// almost nothing else holds it — shells and TUIs run raw, ordinary
+    /// commands echo. It is ghostty's own rule (`termio/Exec.zig`), and
+    /// iTerm2's.
+    ///
+    /// Read from the same tty `terminalInputIsRaw` reads, for the same reason:
+    /// libghostty's own check sees the `zmx attach` client's pty, which is
+    /// permanently raw, so under zmx it never fires. A remote project's pane
+    /// has no local zmx, so its surface pty is where its ssh asks.
+    @MainActor
+    static func terminalIsReadingPassword(forPane pane: Pane) -> Bool {
+        let daemonTTY = ZmxForegroundResolver.daemonTTYPath(sessionName: pane.sessionName)
+        if daemonTTY == nil, pane.nsView?.isZmxWrapped == true { return false }
+        return terminalIsReadingPassword(ttyPath: daemonTTY ?? pane.nsView?.ttyName)
+    }
+
+    static func terminalIsReadingPassword(ttyPath: String?) -> Bool {
+        guard let ttyPath else { return false }
+        let fd = open(ttyPath, O_RDONLY | O_NOCTTY | O_NONBLOCK)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        var attrs = termios()
+        guard tcgetattr(fd, &attrs) == 0 else { return false }
+        let canonical = attrs.c_lflag & tcflag_t(ICANON) != 0
+        let echo = attrs.c_lflag & tcflag_t(ECHO) != 0
+        return canonical && !echo
     }
 
     /// The current working directory of the pane's foreground process, read

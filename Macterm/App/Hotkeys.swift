@@ -50,6 +50,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case separateCurrentPane = "separate_current_pane"
     case pinTab = "pin_tab"
     case unpinTab = "unpin_tab"
+    case autofillPassword = "autofill_password"
 
     var id: String { rawValue }
 
@@ -133,6 +134,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // which is disorienting from a stray chord.
         case .pinTab: "none"
         case .unpinTab: "none"
+        // iTerm2's Password Manager chord. It only acts while the focused
+        // pane is at a prompt with a saved password; anywhere else it passes
+        // through to the terminal.
+        case .autofillPassword: "cmd+opt+f"
         }
     }
 }

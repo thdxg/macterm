@@ -24,7 +24,15 @@ enum Output {
         if let inspect = data.inspect { renderInspect(inspect) }
         if let dump = data.dump { renderDump(dump) }
         if let tutorial = data.tutorial { print(tutorial.text) }
+        if let password = data.password { renderPassword(password) }
         if let widgets = data.widgets { renderWidgets(widgets) }
+    }
+
+    private static func renderPassword(_ state: ControlPasswordState) {
+        var line = "phase=\(state.phase) saved=\(state.saved) bubble=\(state.bubble ?? "none")"
+        if let prompt = state.prompt { line += " prompt=\(prompt)" }
+        if let command = state.command { line += " command=\(command)" }
+        print(line)
     }
 
     private static func renderWidgets(_ widgets: [ControlWidgetInfo]) {

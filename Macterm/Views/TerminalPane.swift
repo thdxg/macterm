@@ -390,6 +390,9 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onOutputActivity = { [weak pane, weak view] total in
             if let view {
                 AdaptiveTerminalChrome.shared.terminalDidOutput(view)
+                // A prompt is output: re-read the tty now rather than at the
+                // next idle poll, so the bubble is up before the user types.
+                PasswordPromptMonitor.shared.viewDidOutput(view)
             }
             guard let pane, Preferences.shared.showTabStatusIndicator else { return }
             // The single activity source. Output heartbeats fire from the pty

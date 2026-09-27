@@ -20,6 +20,14 @@ struct MactermConfigTests {
         #expect(!MactermConfig.defaultsBody.contains("split-inherit-working-directory"))
     }
 
+    /// Secure input at a password prompt stays on; only ghostty's lock badge
+    /// is off by default, and the user's config can turn it back on.
+    @Test
+    func secure_input_badge_is_off_by_default() {
+        #expect(MactermConfig.defaultsBody.contains("macos-secure-input-indication = false\n"))
+        #expect(!MactermConfig.defaultsBody.contains("macos-auto-secure-input"))
+    }
+
     /// Scrolling is libghostty's on every path (the #102 accumulator is gone),
     /// so `mouse-scroll-multiplier` keeps ghostty's own default — and
     /// `macos-shortcuts` defaults to `ask` in both. A pin would be noise.
