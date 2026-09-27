@@ -95,6 +95,12 @@ final class ControlHandler {
         case "layout.apply": return try layoutApply(args)
         case "layout.save": return try layoutSave(args)
         case "tutor.render": return try tutorRender(args)
+        case "widget.list": return widgetList()
+        case "widget.new": return try widgetNew(args)
+        case "widget.set": return try widgetSet(args)
+        case "widget.edit": return try widgetEdit(args)
+        case "widget.done": return widgetDone()
+        case "widget.remove": return try widgetRemove(args)
         default:
             throw ControlError(
                 code: .unknownCommand,
@@ -219,6 +225,134 @@ final class ControlHandler {
         return ControlData()
     }
 
+    // MARK: - Desktop widgets
+
+    private func widgetList() -> ControlData {
+        ControlData(widgets: zip(1..., appState.desktopWidgets).map(widgetInfo))
+    }
+
+    private func widgetInfo(index: Int, widget: DesktopWidget) -> ControlWidgetInfo {
+        ControlWidgetInfo(
+            index: index,
+            id: widget.id.uuidString,
+            name: widget.name,
+            session: widget.pane?.sessionName ?? "",
+            size: DesktopWidgetSize.name(of: widget.span),
+            columns: widget.span.columns,
+            rows: widget.span.rows,
+            editing: appState.editingDesktopWidgetID == widget.id,
+            x: widget.topLeft.x,
+            y: widget.topLeft.y,
+            command: widget.command
+        )
+    }
+
+    /// A desktop widget's pane named by `--session`. Widgets are outside every
+    /// workspace, so for the pane verbs that read or type into a pane (dump,
+    /// inspect, run, key) the session name — which the widget's shell also
+    /// sees as `MACTERM_SESSION` — is their address. Only a bare session
+    /// selector qualifies; with `--project` or `--pane` the caller means a
+    /// workspace pane. The lock is on the widget's own mouse and keyboard, so
+    /// a locked widget still answers here.
+    private func widgetTarget(_ args: ControlArgs) -> WidgetTarget? {
+        guard args.project == nil, args.pane == nil, let session = args.session, !session.isEmpty else { return nil }
+        for (index, widget) in zip(1..., appState.desktopWidgets) {
+            if let pane = widget.pane, pane.sessionName == session {
+                return WidgetTarget(index: index, widget: widget, pane: pane)
+            }
+        }
+        return nil
+    }
+
+    private struct WidgetTarget {
+        let index: Int
+        let widget: DesktopWidget
+        let pane: Pane
+    }
+
+    private static let widgetNotLive = ControlError(
+        code: .noSurface,
+        message: "the widget's terminal isn't live yet",
+        action: "retry once its window has opened"
+    )
+
+    private func parseWidgetSpan(_ raw: String?) throws -> DesktopWidgetSpan? {
+        guard let raw else { return nil }
+        guard let span = DesktopWidgetSize.parseSpan(raw) else {
+            let names = DesktopWidgetSize.allCases.map(\.rawValue).joined(separator: ", ")
+            throw ControlError(
+                code: .badRequest,
+                message: "unknown widget size \"\(raw)\" (expected one of: \(names), or a CxR span like 3x2)"
+            )
+        }
+        return span
+    }
+
+    private func resolveWidget(_ args: ControlArgs) throws -> (index: Int, widget: DesktopWidget) {
+        guard let selector = args.widget, !selector.isEmpty else {
+            throw ControlError(code: .badRequest, message: "a widget selector is required", action: "run `macterm widget list`")
+        }
+        let widgets = appState.desktopWidgets
+        if let id = UUID(uuidString: selector), let index = widgets.firstIndex(where: { $0.id == id }) {
+            return (index + 1, widgets[index])
+        }
+        if let index = parseIndex(selector, prefix: "widget"), widgets.indices.contains(index - 1) {
+            return (index, widgets[index - 1])
+        }
+        throw ControlError(code: .notFound, message: "no widget matches \"\(selector)\"", action: "run `macterm widget list`")
+    }
+
+    /// Locked and centered, like one made from the menu. Without `--size`,
+    /// Settings → Widgets' default size.
+    private func widgetNew(_ args: ControlArgs) throws -> ControlData {
+        let span = try parseWidgetSpan(args.size)
+        let command = args.run.flatMap { $0.isEmpty ? nil : $0 }
+        let name = args.name.flatMap { $0.isEmpty ? nil : $0 }
+        let widget = appState.createDesktopWidget(span: span, name: name, command: command)
+        return ControlData(widgets: [widgetInfo(index: appState.desktopWidgets.count, widget: widget)])
+    }
+
+    private func widgetSet(_ args: ControlArgs) throws -> ControlData {
+        let (index, widget) = try resolveWidget(args)
+        if let span = try parseWidgetSpan(args.size) {
+            appState.setDesktopWidgetSpan(span, id: widget.id)
+        }
+        return ControlData(widgets: [widgetInfo(index: index, widget: widget)])
+    }
+
+    /// Unlock a widget, as its Edit menu item does — refused while another
+    /// widget is being edited, which the user locks first.
+    private func widgetEdit(_ args: ControlArgs) throws -> ControlData {
+        let (index, widget) = try resolveWidget(args)
+        guard appState.beginEditingDesktopWidget(id: widget.id) else {
+            throw ControlError(
+                code: .busy,
+                message: "another widget is being edited",
+                action: "lock it first: `macterm widget done`"
+            )
+        }
+        return ControlData(widgets: [widgetInfo(index: index, widget: widget)])
+    }
+
+    /// Lock whichever widget is being edited; a no-op when none is.
+    private func widgetDone() -> ControlData {
+        appState.endEditingDesktopWidget()
+        return ControlData()
+    }
+
+    private func widgetRemove(_ args: ControlArgs) throws -> ControlData {
+        let (_, widget) = try resolveWidget(args)
+        if args.force != true, appState.desktopWidgetNeedsConfirmRemove(id: widget.id) {
+            throw ControlError(
+                code: .busy,
+                message: "a process is still running in this widget",
+                action: "pass --force to remove it anyway"
+            )
+        }
+        appState.removeDesktopWidget(id: widget.id)
+        return ControlData()
+    }
+
     private func paneList(_ args: ControlArgs) throws -> ControlData {
         let (_, workspace) = try resolveWorkspace(args)
         let tabs: [(Int, TerminalTab)]
@@ -238,9 +372,7 @@ final class ControlHandler {
     /// surface: a never-shown pane has no dimensions to report, so it's the
     /// same `no_surface` contract `pane.run` uses.
     private func paneInspect(_ args: ControlArgs) throws -> ControlData {
-        let (_, workspace) = try resolveWorkspace(args)
-        let target = try resolvePane(args, in: workspace)
-        let pane = target.pane
+        let pane = try widgetTarget(args)?.pane ?? resolvePane(args, in: resolveWorkspace(args).1).pane
         guard let view = pane.nsView, let size = view.surfaceSize else {
             throw ControlError(
                 code: .noSurface,
@@ -284,9 +416,7 @@ final class ControlHandler {
     /// Dump a pane's terminal cell text (#165): the viewport by default, or the
     /// full scrollback with `scrollback: true`. Needs a live surface.
     private func paneDump(_ args: ControlArgs) throws -> ControlData {
-        let (_, workspace) = try resolveWorkspace(args)
-        let target = try resolvePane(args, in: workspace)
-        let pane = target.pane
+        let pane = try widgetTarget(args)?.pane ?? resolvePane(args, in: resolveWorkspace(args).1).pane
         let scrollback = args.scrollback == true
         guard let view = pane.nsView, let text = view.readText(scrollback: scrollback) else {
             throw ControlError(
@@ -777,6 +907,10 @@ final class ControlHandler {
     /// Resolve the target pane and paste `text` into it, or report the
     /// `no_surface` miss.
     private func paneSendText(_ args: ControlArgs, text: String) throws -> ControlData {
+        if let target = widgetTarget(args) {
+            guard let view = target.pane.nsView, view.sendText(text) else { throw Self.widgetNotLive }
+            return ControlData(widgets: [widgetInfo(index: target.index, widget: target.widget)])
+        }
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
         guard let view = target.pane.nsView, view.sendText(text) else {
@@ -810,6 +944,12 @@ final class ControlHandler {
                 message: "unrecognized key chord '\(chord)'",
                 action: "use tokens like ctrl+c, escape, up, or ctrl+\\ (see `macterm pane key --help`)"
             )
+        }
+        if let target = widgetTarget(args) {
+            guard let view = target.pane.nsView, view.sendKey(keyCode: shortcut.keyCode, mods: shortcut.modifiers) else {
+                throw Self.widgetNotLive
+            }
+            return ControlData(widgets: [widgetInfo(index: target.index, widget: target.widget)])
         }
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
@@ -1367,10 +1507,16 @@ final class ControlHandler {
         // every workspace per call, which made this quadratic in pane count.
         // A stable partition, not `sorted`: "leader first" is not a strict
         // weak ordering, and Swift's sort is undefined for one.
-        appState.sessionAttachments().mapValues { panes in
+        var table = appState.sessionAttachments().mapValues { panes in
             let leading = panes.filter { appState.isLeader($0, among: panes) }
             let following = panes.filter { !appState.isLeader($0, among: panes) }
             return (leading + following).map(\.id.uuidString)
         }
+        // Desktop widget panes live outside every workspace; their sessions
+        // are bound all the same, never orphans.
+        for pane in appState.desktopWidgets.compactMap(\.pane) {
+            table[pane.sessionName, default: []].append(pane.id.uuidString)
+        }
+        return table
     }
 }

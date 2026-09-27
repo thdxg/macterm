@@ -447,6 +447,9 @@ enum ZmxSessionName {
     /// The quick terminal isn't a project; its sessions group under this slug.
     static let quickTerminalSlug = "quick"
 
+    /// Desktop widgets aren't projects either (`DesktopWidget`).
+    static let desktopWidgetSlug = "widget"
+
     static func make(projectName: String, paneSessionID: UUID) -> String {
         prefix + slug(projectName) + "-" + shortHex(paneSessionID)
     }

@@ -126,6 +126,9 @@ final class QuickTerminalService: NSObject {
     /// Ordering matters for `hide()`: the panel resigns key, and so hides,
     /// BEFORE the new window becomes key, so its focus bounce-back sees the
     /// other app still in front and leaves it alone.
+    ///
+    /// Desktop widget panels are non-activating too and call this from their
+    /// own `resignKey`, so one watcher serves every such panel.
     func panelDidResignKey() {
         awaitingKeyHandoff = true
         DispatchQueue.main.async { [weak self] in self?.awaitingKeyHandoff = false }

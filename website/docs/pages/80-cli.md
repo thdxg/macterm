@@ -52,6 +52,12 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `window new` | Open another window on the current project. |
 | `window focus <window>` | Bring a window to the front. |
 | `window close [--window W]` | Close a window. The last visible one hides instead. |
+| `widget list` | [Desktop widgets](/docs/desktop-widgets) in creation order (`widget:1`), with name, size, locked/editing and session name. |
+| `widget new [--size S] [--name N] [--run CMD]` | Add a locked desktop widget running your login shell, in the middle of the desktop. `S` is `small`, `medium`, `large`, `extra-large` or a grid span like `3x2`; the default is Settings → Widgets' default size. `--run` types CMD into the shell whenever the widget starts one. |
+| `widget set <widget> --size S` | Resize a widget. It snaps to the grid. |
+| `widget edit <widget>` | Unlock a widget for typing, moving and resizing. Returns `busy` while another widget is being edited. |
+| `widget done` | Lock the widget being edited. |
+| `widget remove <widget> [--force]` | Remove a widget, ending its shell. Returns `busy` when a program runs in it, unless forced. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, and execution state. |
 | `pane inspect [target]` | Snapshot of a pane's terminal core. Needs a live surface. |
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text. Text only, pipeline-friendly. |
@@ -83,6 +89,8 @@ Pane verbs resolve their target in this order:
 2. `--pane <uuid|index>`.
 3. `MACTERM_SESSION` — inside a pane, so a bare `macterm pane split` splits the pane you're in. An explicit `--tab` disables this.
 4. Otherwise, the focused pane of the active tab.
+
+A [desktop widget](/docs/desktop-widgets)'s pane belongs to no project, so `pane dump`, `pane inspect`, `pane run` and `pane key` reach it by `--session` alone, or by `MACTERM_SESSION` from inside the widget.
 
 `pane close` never uses the `MACTERM_SESSION` fallback. `pane focus --direction` treats the resolved target as the **origin**, and reports the pane that ended up focused.
 

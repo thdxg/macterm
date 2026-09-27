@@ -544,7 +544,9 @@ extension AppState {
     /// rewrite the file.
     func persistForTermination() {
         refreshPinnedDeclarationsFromLiveTabs()
+        refreshDesktopWidgetRecipes()
         saveWorkspaces()
+        writeWidgetLayout()
         // Nothing pinned and no file ever written this run → don't create
         // (or churn) pinned.yaml for users who never touch the feature. The
         // membership stamp can't stand in for this check — the launch

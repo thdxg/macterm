@@ -240,6 +240,9 @@ extension AppCommand {
             return { ctx.appState.sidebarVisible.toggle() }
         case .newWindow:
             return { ctx.appState.requestNewWindow() }
+        case .newDesktopWidget:
+            // Locked, like every widget until it is edited.
+            return { ctx.appState.createDesktopWidget() }
         case .closeWindow:
             // The window the user is in, not a remembered pointer — with
             // several open, "close the window" can only mean the focused one.

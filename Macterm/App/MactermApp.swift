@@ -99,6 +99,7 @@ struct MactermApp: App {
                 // menu shows whatever the user has bound rather than a
                 // hardcoded chord (New Window defaults to Cmd+N).
                 AppCommandMenuItem(command: .newWindow, appState: appState, projectStore: projectStore)
+                AppCommandMenuItem(command: .newDesktopWidget, appState: appState, projectStore: projectStore)
                 // "Show Window" survives alongside it, for the case New Window
                 // does not cover: every window HIDDEN rather than closed (the
                 // red button orders out to preserve surfaces), where there is
@@ -739,6 +740,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// refused activation that posts nothing.
     func activateForKeyHandoff(to window: NSWindow) {
         logger.info("\(String(describing: type(of: window)), privacy: .public) made key while inactive; activating for it")
+        activateWithoutReopen()
+    }
+
+    /// Activate the app for a window of ours that isn't the terminal window —
+    /// a key handoff, or an alert raised from a desktop widget — without the
+    /// Dock-click re-front (`reopenIfNeeded`) bringing a hidden terminal
+    /// window up over it. See `activateForKeyHandoff` for why it is forced.
+    func activateWithoutReopen() {
         skipReopenForKeyHandoff = true
         NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
@@ -778,6 +787,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // same reason (a shortcut can launch us, and its `perform()` arrives
         // before the launch restore has run).
         MactermIntentHost.shared.attach(appState: appState, projectStore: projectStore)
+        // Draws the restored widgets (the restore may land on either side of
+        // this) and every one created from here on.
+        DesktopWidgetWindows.shared.attach(appState: appState)
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
@@ -839,8 +851,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateCancel
     }
 
-    /// Walk every workspace + the quick terminal and emit one row per pane
-    /// whose ghostty surface still has a foreground process running.
+    /// Walk every workspace, the quick terminal and the desktop widgets, and
+    /// emit one row per pane whose ghostty surface still has a foreground
+    /// process running.
     private func collectRunningProcessRows() -> [RunningProcessRow] {
         var rows: [RunningProcessRow] = []
         let projectsByID = Dictionary(
@@ -867,6 +880,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         rows += collectQuickTerminalRows()
+        for widget in appState?.desktopWidgets ?? [] {
+            for pane in widget.tab.splitRoot.allPanes() where pane.needsConfirmClose {
+                pane.refreshForegroundProcess(trackExecution: false)
+                rows.append(RunningProcessRow(projectName: "Desktop Widget", processName: pane.processTitle))
+            }
+        }
         return rows
     }
 

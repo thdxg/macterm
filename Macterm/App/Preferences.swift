@@ -734,6 +734,11 @@ final class Preferences {
         didSet { Keys.quickTerminalFixedY.write(quickTerminalFixedY, to: defaults) }
     }
 
+    /// The size a new desktop widget starts at (Settings → Widgets).
+    var desktopWidgetDefaultSize: DesktopWidgetSize {
+        didSet { Keys.desktopWidgetDefaultSize.write(desktopWidgetDefaultSize, to: defaults) }
+    }
+
     /// How the panel's size is decided at show time: `fixed` uses the
     /// width/height sliders; `dynamic` makes the panel edge-resizable and
     /// reopens it at the size the user last resized it to.
@@ -835,6 +840,7 @@ final class Preferences {
         quickTerminalHeightFraction = Keys.quickTerminalHeight.read(defaults)
         quickTerminalPositionMode = Keys.quickTerminalPositionMode.read(defaults)
         quickTerminalFixedX = Keys.quickTerminalFixedX.read(defaults)
+        desktopWidgetDefaultSize = Keys.desktopWidgetDefaultSize.read(defaults)
         quickTerminalFixedY = Keys.quickTerminalFixedY.read(defaults)
         quickTerminalSizeMode = Keys.quickTerminalSizeMode.read(defaults)
         if let w = Keys.quickTerminalDynamicWidth.readStored(defaults),
@@ -997,6 +1003,10 @@ final class Preferences {
         static let quickTerminalHeight = PreferenceStorageKey("macterm.quickTerminal.height", default: 0.5) {
             clampFraction($0, fallback: 0.5)
         }
+
+        static let desktopWidgetDefaultSize = PreferenceStorageKey(
+            "macterm.desktopWidgets.defaultSize", default: DesktopWidgetSize.medium
+        )
 
         static let quickTerminalPositionMode = PreferenceStorageKey(
             "macterm.quickTerminal.positionMode", default: QuickTerminalAdjustMode.fixed

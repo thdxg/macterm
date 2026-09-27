@@ -24,6 +24,21 @@ enum Output {
         if let inspect = data.inspect { renderInspect(inspect) }
         if let dump = data.dump { renderDump(dump) }
         if let tutorial = data.tutorial { print(tutorial.text) }
+        if let widgets = data.widgets { renderWidgets(widgets) }
+    }
+
+    private static func renderWidgets(_ widgets: [ControlWidgetInfo]) {
+        let rows = widgets.map { widget -> [String] in
+            [
+                "widget:\(widget.index)",
+                widget.name ?? "-",
+                widget.size,
+                widget.editing ? "editing" : "locked",
+                widget.session,
+                widget.command ?? "-",
+            ]
+        }
+        printColumns(rows)
     }
 
     private static func renderStatus(_ status: ControlStatusInfo) {

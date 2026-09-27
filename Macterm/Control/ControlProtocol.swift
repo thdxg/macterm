@@ -124,6 +124,12 @@ struct ControlArgs: Codable, Equatable {
     /// the text but only the CLI can see whether its stdout is a tty, so the
     /// verdict travels with the request.
     var styled: Bool?
+    /// Desktop widget selector (`widget.*`): 1-based index (`widget:N` or
+    /// `N`) in `widget list` order, or its id.
+    var widget: String?
+    /// Desktop widget size (`widget.new`, `widget.set`): a family
+    /// (`DesktopWidgetSize`'s raw values) or a `CxR` grid span.
+    var size: String?
 
     init(
         project: String? = nil,
@@ -235,6 +241,8 @@ struct ControlData: Codable {
     var dump: ControlPaneDump?
     /// Rendered tutorial text (`tutor.render`).
     var tutorial: ControlTutorial?
+    /// Desktop widgets (`widget.*`).
+    var widgets: [ControlWidgetInfo]?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -245,7 +253,8 @@ struct ControlData: Codable {
         sessions: [ControlSessionInfo]? = nil,
         inspect: ControlPaneInspect? = nil,
         dump: ControlPaneDump? = nil,
-        tutorial: ControlTutorial? = nil
+        tutorial: ControlTutorial? = nil,
+        widgets: [ControlWidgetInfo]? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -256,6 +265,7 @@ struct ControlData: Codable {
         self.inspect = inspect
         self.dump = dump
         self.tutorial = tutorial
+        self.widgets = widgets
     }
 }
 
@@ -335,6 +345,27 @@ struct ControlWindowInfo: Codable, Equatable {
     /// Whether this window renders a mirror view of that tab because another
     /// window owns its panes (#345): the same sessions attached a second time.
     var mirrored: Bool?
+}
+
+/// One desktop widget: a terminal on the desktop.
+struct ControlWidgetInfo: Codable, Equatable {
+    /// 1-based position in creation order, rendered `widget:N`.
+    var index: Int
+    var id: String
+    var name: String?
+    /// The widget pane's zmx session name.
+    var session: String
+    /// The family name (`DesktopWidgetSize`'s raw value), else `CxR`.
+    var size: String
+    /// Grid span in cells.
+    var columns: Int
+    var rows: Int
+    /// Whether this is the widget unlocked for editing (at most one is).
+    var editing: Bool
+    /// Top-left corner in global screen points (AppKit's y-up space).
+    var x: Double
+    var y: Double
+    var command: String?
 }
 
 struct ControlSessionInfo: Codable, Equatable {

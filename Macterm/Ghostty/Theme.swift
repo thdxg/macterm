@@ -37,6 +37,8 @@ enum MactermTheme {
     @MainActor
     static var accent: Color { Color(nsColor: GhosttyApp.shared.accentColor) }
     @MainActor
+    static var nsAccent: NSColor { GhosttyApp.shared.accentColor }
+    @MainActor
     static var accentSoft: Color { Color(nsColor: GhosttyApp.shared.accentColor.withAlphaComponent(0.1)) }
     @MainActor
     static var terminalBg: Color { bg }

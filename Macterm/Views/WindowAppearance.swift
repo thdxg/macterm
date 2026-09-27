@@ -188,6 +188,10 @@ final class MactermTintBackdropView: NSView {
             .withAlphaComponent(rendererQuantizedAlpha(backgroundOpacity))
             .cgColor
         tintView.layer?.cornerRadius = cornerRadius ?? 0
+        // The system's corners are continuous. Inside a titled window the
+        // window's own mask decides the visible shape either way; on a
+        // borderless desktop widget this layer IS the shape.
+        tintView.layer?.cornerCurve = .continuous
     }
 
     func setTintHoles(_ rects: [CGRect]) {
@@ -283,6 +287,7 @@ final class MactermGlassView: NSView {
             .withAlphaComponent(rendererQuantizedAlpha(backgroundOpacity))
             .cgColor
         tintView.layer?.cornerRadius = cornerRadius ?? 0
+        tintView.layer?.cornerCurve = .continuous
     }
 
     func updateTopInset(_ offset: CGFloat) {
@@ -355,7 +360,7 @@ enum WindowAppearance {
                 window.backgroundColor = .clear
                 setWindowBackgroundBlur(window, radius: 0)
                 removeTintBackdrop(window: window)
-                syncGlass(window: window, backgroundColor: bg, opacity: opacity)
+                syncGlass(window: window, backgroundColor: bg, opacity: opacity, cornerRadius: windowCornerRadius(window))
             } else {
                 // One tinted layer for the whole interior — including the strip
                 // around the system glass sidebar — so it reads as a single
@@ -368,7 +373,12 @@ enum WindowAppearance {
                 // Apply blur unconditionally; passing 0 clears any previous blur.
                 setWindowBackgroundBlur(window, radius: blurRadius)
                 removeGlass(window: window)
-                syncTintBackdrop(window: window, backgroundColor: bg, opacity: opacity)
+                syncTintBackdrop(
+                    window: window,
+                    backgroundColor: bg,
+                    opacity: opacity,
+                    cornerRadius: windowCornerRadius(window)
+                )
             }
         } else {
             window.isOpaque = true
@@ -792,12 +802,12 @@ enum WindowAppearance {
                 panel.backgroundColor = .clear
                 setWindowBackgroundBlur(panel, radius: 0)
                 removeTintBackdrop(window: panel)
-                syncGlass(window: panel, backgroundColor: bg, opacity: opacity)
+                syncGlass(window: panel, backgroundColor: bg, opacity: opacity, cornerRadius: windowCornerRadius(panel))
             } else {
                 panel.backgroundColor = .clear
                 setWindowBackgroundBlur(panel, radius: Preferences.shared.windowBlurRadius)
                 removeGlass(window: panel)
-                syncTintBackdrop(window: panel, backgroundColor: bg, opacity: opacity)
+                syncTintBackdrop(window: panel, backgroundColor: bg, opacity: opacity, cornerRadius: windowCornerRadius(panel))
             }
         } else {
             panel.isOpaque = true
@@ -806,6 +816,34 @@ enum WindowAppearance {
             removeGlass(window: panel)
             removeTintBackdrop(window: panel)
         }
+    }
+
+    /// The desktop-widget variant of `syncPanel`. A widget's shape is its
+    /// backdrop — a borderless window has no system corner or mask — so it is
+    /// never an opaque window: at full opacity the backdrop is simply an
+    /// opaque rounded fill, and the corners outside it stay clear. Glass and
+    /// tint take the widget's continuous corner (`DesktopWidgetMetrics`), and
+    /// the CGS blur follows along: the window server blurs only where the
+    /// window has alpha (measured on a borderless window with a rounded
+    /// translucent layer — the corners outside it stayed sharp).
+    static func syncDesktopWidget(_ panel: NSPanel) {
+        let opacity = Preferences.shared.windowOpacity
+        let bg = MactermTheme.nsConfiguredBg
+        let radius = DesktopWidgetMetrics.cornerRadius
+        let isTransparent = opacity < 1.0
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        if glassSupported, Preferences.shared.windowGlassEnabled, isTransparent {
+            setWindowBackgroundBlur(panel, radius: 0)
+            removeTintBackdrop(window: panel)
+            syncGlass(window: panel, backgroundColor: bg, opacity: opacity, cornerRadius: radius)
+        } else {
+            setWindowBackgroundBlur(panel, radius: isTransparent ? Preferences.shared.windowBlurRadius : 0)
+            removeGlass(window: panel)
+            syncTintBackdrop(window: panel, backgroundColor: bg, opacity: opacity, cornerRadius: radius)
+        }
+        // The shadow follows the window's alpha, which just changed shape.
+        panel.invalidateShadow()
     }
 
     /// Hand the window's tinted backdrop the regions a terminal is painting
@@ -823,7 +861,12 @@ enum WindowAppearance {
     /// Install (if needed) and configure the flat tinted backdrop for the
     /// non-glass translucency path. Same placement as the glass view: below the
     /// content view, filling the window including the area under the titlebar.
-    private static func syncTintBackdrop(window: NSWindow, backgroundColor: NSColor, opacity: Double) {
+    private static func syncTintBackdrop(
+        window: NSWindow,
+        backgroundColor: NSColor,
+        opacity: Double,
+        cornerRadius: CGFloat?
+    ) {
         guard let contentView = window.contentView, let themeFrame = contentView.superview else { return }
 
         let backdrop = existingTintBackdrop(in: window) ?? {
@@ -842,7 +885,7 @@ enum WindowAppearance {
         backdrop.configure(
             backgroundColor: backgroundColor,
             backgroundOpacity: opacity,
-            cornerRadius: windowCornerRadius(window)
+            cornerRadius: cornerRadius
         )
     }
 
@@ -882,7 +925,7 @@ enum WindowAppearance {
     /// Install (if needed) and configure the liquid-glass background view so it
     /// fills the window behind SwiftUI's content, including the area under the
     /// titlebar. Installed once per window, then reconfigured in place.
-    private static func syncGlass(window: NSWindow, backgroundColor: NSColor, opacity: Double) {
+    private static func syncGlass(window: NSWindow, backgroundColor: NSColor, opacity: Double, cornerRadius: CGFloat?) {
         guard #available(macOS 26.0, *) else { return }
         guard let contentView = window.contentView, let themeFrame = contentView.superview else { return }
 
@@ -905,7 +948,7 @@ enum WindowAppearance {
             style: officialGlassStyle(Preferences.shared.windowGlassStyle),
             backgroundColor: backgroundColor,
             backgroundOpacity: opacity,
-            cornerRadius: windowCornerRadius(window)
+            cornerRadius: cornerRadius
         )
     }
 

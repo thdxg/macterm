@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/widgets.schema.json",
+  "title": "Macterm desktop widgets",
+  "description": "The desktop widgets, in ~/.config/macterm/widgets/widgets.yaml. Macterm maintains this file automatically — rewriting it whenever a widget is added, moved, resized or removed, and on quit — and reads your edits at launch and before each of its own writes. An added entry becomes a widget; removing an entry removes its widget at the next launch.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "widgets": {
+      "type": "array",
+      "description": "The widgets, in creation order. Entries carry no id: Macterm matches them to its widgets by `name`, then by content, then by position.",
+      "items": { "$ref": "#/$defs/widget" }
+    }
+  },
+  "$defs": {
+    "widget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Optional label, shown in Settings → Widgets. Naming an entry makes hand-edits unambiguous."
+        },
+        "size": {
+          "type": "string",
+          "description": "A size family — small (1×1 cells), medium (2×1), large (2×2), extra-large (4×2) — or any grid span as COLUMNSxROWS, e.g. \"3x2\". A cell is 164pt with a 16pt gap, the system widgets' own module. Defaults to Settings → Widgets' default size.",
+          "pattern": "^(small|medium|large|extra-large|[1-9][0-9]*x[1-9][0-9]*)$"
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The grid column of the widget's top-left corner, counted from the screen's left edge (0 is the first). With `row`; omit both to place the widget in the middle of the screen."
+        },
+        "row": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The grid row of the widget's top-left corner, counted from the top of the screen (0 is the first, just under the menu bar)."
+        },
+        "display": {
+          "type": "string",
+          "description": "The screen the widget is on, by its name as System Settings → Displays shows it. Omit for the primary display (the one with the menu bar); a name that matches no connected screen also means the primary display."
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Where the widget's shell starts when it starts fresh (absolute or ~-prefixed). Omit for the home directory. Captured from the widget's live shell."
+        },
+        "run": {
+          "type": "string",
+          "description": "A command typed into the widget's shell whenever it starts fresh — when the widget is created, when its shell exits, and at a launch that finds its session gone (e.g. after a reboot). Captured from what the widget is running, the way a pinned tab's is; a widget sitting at its prompt keeps the command it had."
+        }
+      }
+    }
+  }
+}

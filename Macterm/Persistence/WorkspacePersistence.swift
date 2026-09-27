@@ -16,7 +16,10 @@ private let logger = Logger(subsystem: appBundleID, category: "WorkspacePersiste
 /// older build would restore ignoring the window list and then SAVE without it,
 /// silently collapsing a multi-window setup back to one. The version gate turns
 /// that into refuse-to-save instead.
-private let currentSchemaVersion = 6
+/// v7 adds `desktopWidgets`, for v5's reason again: an older build would
+/// restore without the widgets and then save without them — and its orphan
+/// reaper would kill their sessions, since nothing it restored claims them.
+private let currentSchemaVersion = 7
 
 /// Top-level on-disk representation. Wraps the workspace array so we can
 /// evolve the file format (add fields, do migrations) without renaming the
@@ -45,6 +48,27 @@ struct WorkspacesFile: Codable {
     /// losing them is that build's normal behavior rather than data loss —
     /// not worth freezing the user's whole workspace persistence over.
     var quickTerminal: TabSnapshot?
+    /// Desktop widgets (v7+), in creation order. Optional so a v6 file
+    /// decodes with nil — no widgets.
+    var desktopWidgets: [DesktopWidgetSnapshot]?
+}
+
+/// One desktop widget's restorable state (v7+): its one tab (the session
+/// identity it reattaches by) and where it sits on the desktop. Whether it
+/// was being edited is deliberately absent — every widget launches locked.
+struct DesktopWidgetSnapshot: Codable {
+    var id: UUID
+    var name: String?
+    var tab: TabSnapshot
+    /// The widget's span in grid cells (`DesktopWidgetSpan`).
+    var columns: Int
+    var rows: Int
+    /// Top-left corner in global AppKit screen coordinates.
+    var topLeftX: Double
+    var topLeftY: Double
+    /// The respawn recipe (`DesktopWidget.command`/`cwd`).
+    var command: String?
+    var cwd: String?
 }
 
 /// One window's restorable state (v6+).
@@ -224,6 +248,8 @@ final class WorkspaceStore {
         /// The quick terminal's tab; nil for a file written before it was
         /// persisted.
         var quickTerminal: TabSnapshot?
+        /// Desktop widgets (v7+); empty for an older file.
+        var desktopWidgets: [DesktopWidgetSnapshot] = []
     }
 
     func load() -> Loaded {
@@ -259,7 +285,8 @@ final class WorkspaceStore {
                     pinned: migrated.pinned ?? [],
                     pinnedActiveTabID: migrated.pinnedActiveTabID,
                     windows: migrated.windows ?? [],
-                    quickTerminal: migrated.quickTerminal
+                    quickTerminal: migrated.quickTerminal,
+                    desktopWidgets: migrated.desktopWidgets ?? []
                 )
             }
             let migrated = migrate(file)
@@ -268,7 +295,8 @@ final class WorkspaceStore {
                 pinned: migrated.pinned ?? [],
                 pinnedActiveTabID: migrated.pinnedActiveTabID,
                 windows: migrated.windows ?? [],
-                quickTerminal: migrated.quickTerminal
+                quickTerminal: migrated.quickTerminal,
+                desktopWidgets: migrated.desktopWidgets ?? []
             )
         } catch let envelopeError {
             // Fallback: pre-envelope format where the file was a bare array of
@@ -290,7 +318,8 @@ final class WorkspaceStore {
         pinned: [PinnedTabSnapshot] = [],
         pinnedActiveTabID: UUID? = nil,
         windows: [WindowSnapshot]? = nil,
-        quickTerminal: TabSnapshot? = nil
+        quickTerminal: TabSnapshot? = nil,
+        desktopWidgets: [DesktopWidgetSnapshot] = []
     ) {
         guard !loadFailed else {
             logger.error("Refusing to save workspaces: prior load failed, file preserved")
@@ -303,7 +332,8 @@ final class WorkspaceStore {
                 pinned: pinned,
                 pinnedActiveTabID: pinnedActiveTabID,
                 windows: windows,
-                quickTerminal: quickTerminal
+                quickTerminal: quickTerminal,
+                desktopWidgets: desktopWidgets
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -326,7 +356,8 @@ final class WorkspaceStore {
                 pinned: file.pinned,
                 pinnedActiveTabID: file.pinnedActiveTabID,
                 windows: file.windows,
-                quickTerminal: file.quickTerminal
+                quickTerminal: file.quickTerminal,
+                desktopWidgets: file.desktopWidgets
             )
         }
         return file
