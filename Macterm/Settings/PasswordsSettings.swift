@@ -121,8 +121,9 @@ enum PasswordClipboard {
 /// One saved password, untruncated and editable: the command exactly as the
 /// process table reported it (the list shows a shortened form), the prompt
 /// line, and the password itself, shown behind the same authentication
-/// Autofill uses. Each row reads as text until its Edit button turns it into
-/// a field; the password's Edit reveals it first. Save files the entry under
+/// Autofill uses. Command and prompt are fields to type in; the password
+/// becomes one once shown. Nothing is written until Save; Cancel discards
+/// every edit. Save files the entry under
 /// the edited command and prompt through the same rules detection applies
 /// (`PasswordPromptIdentity.entryID`), so an edit lands where the next prompt
 /// will look. The revealed password lives only in this sheet's state and goes
@@ -138,9 +139,6 @@ private struct PasswordDetailsSheet: View {
     @State private var password: String?
     /// What the store held when revealed, to tell an edit from a look.
     @State private var storedPassword: String?
-    @State private var editingCommand = false
-    @State private var editingPrompt = false
-    @State private var editingPassword = false
     @State private var busy = false
     @State private var problem: String?
 
@@ -155,11 +153,13 @@ private struct PasswordDetailsSheet: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    editableRow("Command", text: $command, placeholder: "Any command", editing: $editingCommand)
-                    editableRow("Prompt", text: $prompt, editing: $editingPrompt)
+                    TextField("Command", text: $command, prompt: Text("Any command"))
+                        .font(.body.monospaced())
+                    TextField("Prompt", text: $prompt)
+                        .font(.body.monospaced())
                     LabeledContent("Password") {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            if editingPassword {
+                            if password != nil {
                                 TextField("Password", text: Binding(
                                     get: { password ?? "" },
                                     set: { password = $0 }
@@ -167,20 +167,13 @@ private struct PasswordDetailsSheet: View {
                                 .labelsHidden()
                                 .font(.body.monospaced())
                                 .multilineTextAlignment(.trailing)
-                                .onSubmit { editingPassword = false }
-                                Button("Done") { editingPassword = false }
+                                Button("Hide") { password = nil }
                             } else {
-                                Text(verbatim: password ?? "••••••••")
+                                Text(verbatim: "••••••••")
                                     .font(.body.monospaced())
-                                    .foregroundStyle(password == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                                    .textSelection(.enabled)
-                                    .multilineTextAlignment(.trailing)
+                                    .foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
-                                Button(password == nil ? "Show" : "Hide") {
-                                    if password == nil { reveal() } else { password = nil }
-                                }
-                                .disabled(busy)
-                                Button("Edit") { editPassword() }
+                                Button("Show") { reveal() }
                                     .disabled(busy)
                             }
                         }
@@ -211,40 +204,6 @@ private struct PasswordDetailsSheet: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// A value as text — wrapped in full, never truncated, since seeing all
-    /// of it is what this sheet is for — with Edit on the right, which turns
-    /// the row into a field, and Done (or Return) to turn it back. The text
-    /// claims the row's width so every row's buttons sit on the same
-    /// trailing edge.
-    private func editableRow(
-        _ label: String,
-        text: Binding<String>,
-        placeholder: String? = nil,
-        editing: Binding<Bool>
-    ) -> some View {
-        LabeledContent(label) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if editing.wrappedValue {
-                    TextField(label, text: text, prompt: placeholder.map { Text($0) })
-                        .labelsHidden()
-                        .font(.body.monospaced())
-                        .multilineTextAlignment(.trailing)
-                        .onSubmit { editing.wrappedValue = false }
-                    Button("Done") { editing.wrappedValue = false }
-                } else {
-                    let empty = text.wrappedValue.isEmpty
-                    Text(empty ? (placeholder ?? "") : text.wrappedValue)
-                        .font(.body.monospaced())
-                        .foregroundStyle(empty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                        .textSelection(.enabled)
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                    Button("Edit") { editing.wrappedValue = true }
-                }
-            }
-        }
-    }
-
     /// Where the edited entry will be filed — through detection's own rules,
     /// so `sudo apt update` still collapses to `sudo` and a key passphrase
     /// still drops its command.
@@ -267,7 +226,7 @@ private struct PasswordDetailsSheet: View {
         !proposedID.prompt.isEmpty && (password.map { !$0.isEmpty } ?? true)
     }
 
-    private func reveal(then continuation: @escaping @MainActor () -> Void = {}) {
+    private func reveal() {
         busy = true
         Task { @MainActor in
             defer { busy = false }
@@ -277,16 +236,6 @@ private struct PasswordDetailsSheet: View {
             guard authorized, let secret = vault.password(for: entry.id) else { return }
             storedPassword = secret
             password = secret
-            continuation()
-        }
-    }
-
-    /// Editing starts from the current password, so it is revealed first.
-    private func editPassword() {
-        if password != nil {
-            editingPassword = true
-        } else {
-            reveal { editingPassword = true }
         }
     }
 
