@@ -120,12 +120,13 @@ enum PasswordClipboard {
 
 /// One saved password, untruncated and editable: the command exactly as the
 /// process table reported it (the list shows a shortened form), the prompt
-/// line, and the password itself once revealed behind the same authentication
-/// Autofill uses. Command and prompt edit in place; the password becomes
-/// editable once shown. Save files the entry under the edited command and
-/// prompt through the same rules detection applies (`PasswordPromptIdentity.
-/// entryID`), so an edit lands where the next prompt will look. The revealed
-/// password lives only in this sheet's state and goes with it.
+/// line, and the password itself, shown behind the same authentication
+/// Autofill uses. Each row reads as text until its Edit button turns it into
+/// a field; the password's Edit reveals it first. Save files the entry under
+/// the edited command and prompt through the same rules detection applies
+/// (`PasswordPromptIdentity.entryID`), so an edit lands where the next prompt
+/// will look. The revealed password lives only in this sheet's state and goes
+/// with it.
 private struct PasswordDetailsSheet: View {
     let entry: SavedPassword
     let vault: PasswordVault
@@ -137,6 +138,9 @@ private struct PasswordDetailsSheet: View {
     @State private var password: String?
     /// What the store held when revealed, to tell an edit from a look.
     @State private var storedPassword: String?
+    @State private var editingCommand = false
+    @State private var editingPrompt = false
+    @State private var editingPassword = false
     @State private var busy = false
     @State private var problem: String?
 
@@ -151,26 +155,40 @@ private struct PasswordDetailsSheet: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    TextField("Command", text: $command, prompt: Text("Any command"))
-                        .font(.body.monospaced())
-                    TextField("Prompt", text: $prompt)
-                        .font(.body.monospaced())
-                    if password != nil {
-                        HStack(spacing: 8) {
-                            TextField("Password", text: Binding(
-                                get: { password ?? "" },
-                                set: { password = $0 }
-                            ))
+                    if editingCommand {
+                        TextField("Command", text: $command, prompt: Text("Any command"))
                             .font(.body.monospaced())
-                            Button("Copy") { PasswordClipboard.copy(password ?? "") }
+                    } else {
+                        readOnlyRow("Command", value: command.isEmpty ? "Any command" : command, dimmed: command.isEmpty) {
+                            editingCommand = true
                         }
+                    }
+                    if editingPrompt {
+                        TextField("Prompt", text: $prompt)
+                            .font(.body.monospaced())
+                    } else {
+                        readOnlyRow("Prompt", value: prompt) { editingPrompt = true }
+                    }
+                    if editingPassword {
+                        TextField("Password", text: Binding(
+                            get: { password ?? "" },
+                            set: { password = $0 }
+                        ))
+                        .font(.body.monospaced())
                     } else {
                         LabeledContent("Password") {
-                            HStack(spacing: 8) {
-                                Text(verbatim: "••••••••")
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(verbatim: password ?? "••••••••")
                                     .font(.body.monospaced())
-                                    .foregroundStyle(.secondary)
-                                Button("Show") { reveal() }
+                                    .foregroundStyle(password == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                                    .textSelection(.enabled)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                Button(password == nil ? "Show" : "Hide") {
+                                    if password == nil { reveal() } else { password = nil }
+                                }
+                                .disabled(busy)
+                                Button("Edit") { editPassword() }
                                     .disabled(busy)
                             }
                         }
@@ -201,6 +219,24 @@ private struct PasswordDetailsSheet: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// A value as text — wrapped in full, never truncated, since seeing all
+    /// of it is what this sheet is for — with its Edit button on the right.
+    /// The text claims the row's width so every row's buttons sit on the
+    /// same trailing edge.
+    private func readOnlyRow(_ label: String, value: String, dimmed: Bool = false, edit: @escaping () -> Void) -> some View {
+        LabeledContent(label) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(value)
+                    .font(.body.monospaced())
+                    .foregroundStyle(dimmed ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Button("Edit") { edit() }
+            }
+        }
+    }
+
     /// Where the edited entry will be filed — through detection's own rules,
     /// so `sudo apt update` still collapses to `sudo` and a key passphrase
     /// still drops its command.
@@ -223,7 +259,7 @@ private struct PasswordDetailsSheet: View {
         !proposedID.prompt.isEmpty && (password.map { !$0.isEmpty } ?? true)
     }
 
-    private func reveal() {
+    private func reveal(then continuation: @escaping @MainActor () -> Void = {}) {
         busy = true
         Task { @MainActor in
             defer { busy = false }
@@ -233,6 +269,16 @@ private struct PasswordDetailsSheet: View {
             guard authorized, let secret = vault.password(for: entry.id) else { return }
             storedPassword = secret
             password = secret
+            continuation()
+        }
+    }
+
+    /// Editing starts from the current password, so it is revealed first.
+    private func editPassword() {
+        if password != nil {
+            editingPassword = true
+        } else {
+            reveal { editingPassword = true }
         }
     }
 
