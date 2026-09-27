@@ -59,7 +59,10 @@ final class GhosttyCallbacks: @unchecked Sendable {
             guard let view = surfaceView(from: target) else { return true }
             let exitCode = action.action.command_finished.exit_code
             let duration = action.action.command_finished.duration
-            DispatchQueue.main.async { view.onCommandFinished?(exitCode, duration) }
+            DispatchQueue.main.async {
+                PasswordPromptMonitor.shared.viewDidFinishCommand(view, exitCode: Int32(exitCode))
+                view.onCommandFinished?(exitCode, duration)
+            }
             return true
         case GHOSTTY_ACTION_PROGRESS_REPORT:
             // OSC 9;4. Only the state is read — the percentage is never shown.

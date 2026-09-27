@@ -69,6 +69,24 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 /// That is harmless because the comparison versions can't collide: a beta sorts
 /// below the stable release of the same `X.Y.Z` and a tip sorts above it (see
 /// `sparkle_comparison_version` in scripts/_lib.sh).
+/// When Autofill asks the user to authenticate (Settings → Passwords). The raw
+/// values are persisted.
+enum PasswordAutofillAuthentication: String, CaseIterable, Identifiable {
+    /// Every Autofill, like Safari.
+    case everyTime
+    /// Once, then not again until the Mac locks or sleeps, or Macterm quits.
+    case untilLocked
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .everyTime: "Every time"
+        case .untilLocked: "Once until the Mac locks"
+        }
+    }
+}
+
 enum UpdateChannel: String, CaseIterable, Identifiable {
     case stable
     case beta
@@ -409,6 +427,18 @@ final class Preferences {
     /// every wake.
     var reconnectRemotePanes: Bool {
         didSet { Keys.reconnectRemotePanes.write(reconnectRemotePanes, to: defaults) }
+    }
+
+    /// After a password typed at a prompt works, offer to save it for the
+    /// command that asked (Settings → Passwords). Off stops the offer, not
+    /// autofill of passwords already saved.
+    var offerToSavePasswords: Bool {
+        didSet { Keys.offerToSavePasswords.write(offerToSavePasswords, to: defaults) }
+    }
+
+    /// When Autofill asks for Touch ID or the login password.
+    var passwordAutofillAuthentication: PasswordAutofillAuthentication {
+        didSet { Keys.passwordAutofillAuthentication.write(passwordAutofillAuthentication, to: defaults) }
     }
 
     /// Stable per-installation identity, lazily created on first use. Stamped
@@ -872,6 +902,8 @@ final class Preferences {
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
+        offerToSavePasswords = Keys.offerToSavePasswords.read(defaults)
+        passwordAutofillAuthentication = Keys.passwordAutofillAuthentication.read(defaults)
         peekSidebarWhenHidden = Keys.peekSidebarWhenHidden.read(defaults)
         let storedSidebarWidth = Keys.sidebarWidth.read(defaults)
         sidebarWidth = storedSidebarWidth
@@ -1028,6 +1060,10 @@ final class Preferences {
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)
         static let reconnectRemotePanes = PreferenceStorageKey("macterm.remote.reconnectDroppedPanes", default: true)
+        static let offerToSavePasswords = PreferenceStorageKey("macterm.passwords.offerToSave", default: true)
+        static let passwordAutofillAuthentication = PreferenceStorageKey(
+            "macterm.passwords.autofillAuthentication", default: PasswordAutofillAuthentication.everyTime
+        )
         static let peekSidebarWhenHidden = PreferenceStorageKey("macterm.sidebar.peekWhenHidden", default: true)
         static let sidebarWidth = PreferenceStorageKey("macterm.sidebar.width", default: defaultSidebarWidth) {
             clampSidebarWidth($0)
@@ -1060,5 +1096,6 @@ extension WindowGlassStyle: PreferenceValue {}
 extension QuickTerminalAdjustMode: PreferenceValue {}
 extension SidebarIconSize: PreferenceValue {}
 extension UpdateChannel: PreferenceValue {}
+extension PasswordAutofillAuthentication: PreferenceValue {}
 extension TabSwitcherVisibility: PreferenceValue {}
 extension TabSwitcherPosition: PreferenceValue {}

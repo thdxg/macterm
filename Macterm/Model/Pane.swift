@@ -722,6 +722,7 @@ final class Pane: Identifiable {
             remoteZmxPath: remoteZmxPath
         )
         hasBuiltSurface = true
+        view.owningPane = self
         _nsView = view
         return view
     }
@@ -843,6 +844,10 @@ final class Pane: Identifiable {
         // Release any secure-input scope this view holds (a pane closed
         // mid-password-prompt must not leave the OS state stuck on).
         view.passwordInput = false
+        view.detectedPasswordInput = false
+        // Drop any prompt, pending save or bubble this view anchors — a
+        // captured password must not outlive its pane.
+        PasswordPromptMonitor.shared.forget(view)
         // A notification whose pane no longer exists routes nowhere on tap, so
         // drop any still sitting in Notification Center. Ghostty does the same
         // when a surface is removed.

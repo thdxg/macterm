@@ -281,6 +281,38 @@ enum ProcessInspector {
         return !canonical || !echo
     }
 
+    /// Whether the program in the pane's foreground is reading a password:
+    /// the tty is in canonical mode with echo off. That is the mode
+    /// `readpassphrase(3)`, `getpass(3)`, ssh, sudo, su, Python's `getpass`,
+    /// Go's `term.ReadPassword` and Rust's `rpassword` all put it in, and
+    /// almost nothing else holds it — shells and TUIs run raw, ordinary
+    /// commands echo. It is ghostty's own rule (`termio/Exec.zig`), and
+    /// iTerm2's.
+    ///
+    /// Read from the same tty `terminalInputIsRaw` reads, for the same reason:
+    /// libghostty's own check sees the `zmx attach` client's pty, which is
+    /// permanently raw, so under zmx it never fires. A remote project's pane
+    /// has no local zmx, so its surface pty is where its ssh asks.
+    @MainActor
+    static func terminalIsReadingPassword(forPane pane: Pane) -> Bool {
+        let daemonTTY = ZmxForegroundResolver.daemonTTYPath(sessionName: pane.sessionName)
+        if daemonTTY == nil, pane.nsView?.isZmxWrapped == true { return false }
+        return terminalIsReadingPassword(ttyPath: daemonTTY ?? pane.nsView?.ttyName)
+    }
+
+    static func terminalIsReadingPassword(ttyPath: String?) -> Bool {
+        guard let ttyPath else { return false }
+        let fd = open(ttyPath, O_RDONLY | O_NOCTTY | O_NONBLOCK)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        var attrs = termios()
+        guard tcgetattr(fd, &attrs) == 0 else { return false }
+        let canonical = attrs.c_lflag & tcflag_t(ICANON) != 0
+        let echo = attrs.c_lflag & tcflag_t(ECHO) != 0
+        return canonical && !echo
+    }
+
     /// The current working directory of the pane's foreground process, read
     /// straight from the kernel (`proc_pidinfo(PROC_PIDVNODEPATHINFO)`), or nil.
     ///

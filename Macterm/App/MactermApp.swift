@@ -407,6 +407,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // policy can be decided. This line used to sit two below.
         _ = GhosttyApp.shared
         applyActivationPolicy(activating: true)
+        // Password prompts: detection, the autofill/save bubbles, and the
+        // secure-input shield under zmx (libghostty's own check can't see the
+        // session's tty).
+        PasswordPromptMonitor.shared.start()
         // Re-apply on every config change. `.mactermConfigDidChange` fires
         // more often than a file reload (a window-opacity drag posts it too),
         // which is harmless: `applyActivationPolicy` only calls AppKit when

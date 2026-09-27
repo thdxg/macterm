@@ -141,6 +141,10 @@ final class MactermConfig {
         // A new tab starts at the project root; ghostty would start it in the
         // focused surface's cwd. Splits keep ghostty's `true`.
         "tab-inherit-working-directory = false",
+        // Secure input still engages at a password prompt; the per-pane lock
+        // badge doesn't draw. The password bubble already marks the prompt,
+        // and the badge sat over the pane's content.
+        "macos-secure-input-indication = false",
     ].joined(separator: "\n") + "\n"
 
     /// The full text of `macterm-overrides.conf`. Pure — live inputs are

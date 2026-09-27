@@ -12,6 +12,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case animations = "Animations"
     case quickTerminal = "Quick Terminal"
     case keymaps = "Keymaps"
+    case passwords = "Passwords"
     case updates = "Updates"
 
     var id: String { rawValue }
@@ -25,6 +26,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .animations: "wand.and.sparkles"
         case .quickTerminal: "rectangle.bottomthird.inset.filled"
         case .keymaps: "keyboard"
+        case .passwords: "key"
         case .updates: "arrow.triangle.2.circlepath"
         }
     }
@@ -80,6 +82,7 @@ struct SettingsView: View {
         case .animations: AnimationsSettings()
         case .quickTerminal: QuickTerminalSettings()
         case .keymaps: KeymapSettings()
+        case .passwords: PasswordsSettings()
         case .updates: UpdatesSettings()
         }
     }

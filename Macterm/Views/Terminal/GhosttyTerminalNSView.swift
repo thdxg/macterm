@@ -357,6 +357,7 @@ final class GhosttyTerminalNSView: NSView {
     /// Unlike key-code inference, this distinguishes real content from an
     /// empty/whitespace clipboard or a remapped Command-V binding.
     func surfaceDidPasteText(_ text: String) {
+        PasswordPromptMonitor.shared.viewDidPaste(self, text: text)
         recordCommandInput(text)
         if TerminalCommandSubmission.textContainsNewline(text),
            TerminalCommandSubmission.textContainsContent(text)
@@ -453,18 +454,37 @@ final class GhosttyTerminalNSView: NSView {
     var currentPwd: String?
 
     /// True while libghostty reports the surface is at a password prompt
-    /// (surface-target `GHOSTTY_ACTION_SECURE_INPUT`). Registers this view
-    /// with the `SecureInput` manager so keystrokes are shielded from event
-    /// taps exactly while the prompt is focused.
+    /// (surface-target `GHOSTTY_ACTION_SECURE_INPUT`). libghostty reads its
+    /// own pty, which under zmx is the attach client's and never at a prompt,
+    /// so for a wrapped pane this stays false and `detectedPasswordInput`
+    /// carries the prompt instead.
     var passwordInput: Bool = false {
-        didSet {
-            guard passwordInput != oldValue else { return }
-            let id = ObjectIdentifier(self)
-            if passwordInput {
-                SecureInput.shared.setScoped(id, focused: hasKeyboardFocus)
-            } else {
-                SecureInput.shared.removeScoped(id)
-            }
+        didSet { syncSecureInputScope() }
+    }
+
+    /// True while Macterm's own read of the pane's real tty finds a password
+    /// prompt (`PasswordPromptMonitor`, honoring `macos-auto-secure-input`).
+    var detectedPasswordInput: Bool = false {
+        didSet { syncSecureInputScope() }
+    }
+
+    /// The pane this view belongs to, for the password monitor (which starts
+    /// from the focused view and needs the pane's session and command).
+    weak var owningPane: Pane?
+
+    /// Whether this view is registered with the `SecureInput` manager, which
+    /// shields keystrokes from event taps while a focused prompt is showing.
+    private var secureInputScoped = false
+
+    private func syncSecureInputScope() {
+        let wanted = passwordInput || detectedPasswordInput
+        guard wanted != secureInputScoped else { return }
+        secureInputScoped = wanted
+        let id = ObjectIdentifier(self)
+        if wanted {
+            SecureInput.shared.setScoped(id, focused: hasKeyboardFocus)
+        } else {
+            SecureInput.shared.removeScoped(id)
         }
     }
 
@@ -1046,7 +1066,7 @@ final class GhosttyTerminalNSView: NSView {
     /// keyboard focus — a prompt sitting in a background pane must not shield
     /// (and so break) typing that's going elsewhere.
     private func syncSecureInputFocus(_ focused: Bool) {
-        guard passwordInput else { return }
+        guard secureInputScoped else { return }
         SecureInput.shared.setScoped(ObjectIdentifier(self), focused: focused)
     }
 
@@ -1119,6 +1139,9 @@ final class GhosttyTerminalNSView: NSView {
         guard let surface else { super.keyDown(with: event)
             return
         }
+        // Before the key reaches libghostty, so the password monitor reads the
+        // tty while the prompt that will receive this key is still up.
+        PasswordPromptMonitor.shared.viewWillSendKey(self, event: event)
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // What zmx will count as user input: a key that reaches the pty. Cmd
@@ -1797,6 +1820,34 @@ extension GhosttyTerminalNSView {
             if hasContent { preserveProgrammaticCommandInput(text) }
         }
         return true
+    }
+
+    /// Type a saved password into the program reading it, then Return. The
+    /// same text path as `sendText` — not paste, so no bracketed-paste markers
+    /// reach the password read — minus everything that treats typed text as
+    /// a command: no submission evidence, no execution-tracking callbacks, no
+    /// liveness ping. A password is never a command.
+    @discardableResult
+    func sendSecret(_ secret: String) -> Bool {
+        guard let surface, !secret.isEmpty else { return false }
+        secret.withCString { ptr in
+            _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
+        }
+        return sendKey(keyCode: 36, mods: [])
+    }
+
+    /// The cursor cell, in this view's coordinates — where a popover about
+    /// the line being typed on points. libghostty reports it for the IME
+    /// candidate window (`firstRect(forCharacterRange:)` below), shift from
+    /// smooth scrolling included. Nil when there's no surface or the cursor is
+    /// outside the visible bounds (scrolled away).
+    func cursorCellRect() -> NSRect? {
+        guard let surface else { return nil }
+        var x: Double = 0, y: Double = 0, w: Double = 0, h: Double = 0
+        ghostty_surface_ime_point(surface, &x, &y, &w, &h)
+        guard h > 0 else { return nil }
+        let rect = NSRect(x: x, y: bounds.height - y - h, width: max(w, 1), height: h)
+        return bounds.intersects(rect) ? rect.intersection(bounds) : nil
     }
 
     /// Send a single key chord through libghostty's key-*encoding* path — the
