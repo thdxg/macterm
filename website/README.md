@@ -26,7 +26,7 @@ check-seo.mjs      Build-time guard: fails the build if the landing page's FAQ
                    markup and its FAQPage JSON-LD disagree, or if index.html's
                    canonical/og:url drift from SITE_URL
 Caddyfile          How the built site is served — used by dev and prod alike
-Dockerfile         Multi-stage image — Bun builds it, Caddy serves it
+Containerfile      Multi-stage image — Bun builds it, Caddy serves it
 ```
 
 ### Design
@@ -248,11 +248,12 @@ the language for a filename caption bar. To add a page, drop a new numbered
 
 ## Container image
 
-`.github/workflows/website.yml` builds `website/Dockerfile` for `linux/amd64`
-and `linux/arm64` on every push to `main` that touches `website/` or `assets/`,
-and publishes one multi-arch manifest to
-`ghcr.io/thdxg/macterm/website`. Pull requests build both architectures without
-pushing, so a broken Dockerfile fails the PR rather than `:latest`.
+`.github/workflows/website.yml` builds `website/Containerfile` with podman, for
+`linux/arm64` only, on every push to `main` that touches `website/` or
+`assets/`, and publishes it to `ghcr.io/thdxg/macterm/website`. Pull requests
+build without pushing, so a broken Containerfile fails the PR rather than
+`:latest`. There is no amd64 image: on an x86 host, `podman run` fails with an
+exec format error unless it is set up to emulate arm64.
 
 Three tags are published: `:latest` (what a human pulls), `:sha-<short>` (the
 way back to a specific build after a bad one), and a UTC timestamp tag,
@@ -266,15 +267,18 @@ timestamp does. The deployment manifest lives in the
 and its `filterTags` pattern hard-codes this format — the two move together.
 
 ```sh
-docker run --rm -p 3000:3000 ghcr.io/thdxg/macterm/website:latest
+podman run --rm -p 3000:3000 ghcr.io/thdxg/macterm/website:latest
 ```
 
-Build it locally the same way CI does — note the context is the **repository
-root**, because `public/assets` is a symlink to the root `assets/` dir:
+Build it locally the same way CI does. The context is the **repository root**,
+because `public/assets` is a symlink to the root `assets/` dir, and the
+context is filtered by the root `.containerignore`, which Docker doesn't read.
+So build with podman: `docker build` would send the whole repo, GhosttyKit
+included.
 
 ```sh
-bun run docker:build   # docker build -f Dockerfile -t macterm-website ..
-bun run docker:run     # docker run --rm -p 3000:3000 macterm-website
+bun run podman:build   # podman build --format docker --platform linux/arm64 -f Containerfile -t macterm-website ..
+bun run podman:run     # podman run --rm -p 3000:3000 macterm-website
 ```
 
 The image installs dependencies and renders the docs in Bun build stages, then

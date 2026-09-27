@@ -23,7 +23,7 @@
 //
 // Reads from public/assets/ rather than ../assets/ because that is the path
 // that exists in both trees: locally it is a symlink to the repo-root assets/,
-// and the Dockerfile replaces it with real files copied from the build context.
+// and the Containerfile replaces it with real files copied from the build context.
 
 import { readdirSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";

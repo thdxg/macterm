@@ -18,7 +18,7 @@ updates:
           - "*"
 
   # The website image's base (oven/bun). Nothing else in the repo builds an
-  # image, so this watches website/Dockerfile alone.
+  # image, so this watches website/Containerfile alone.
   - package-ecosystem: docker
     directory: "/website"
     schedule:

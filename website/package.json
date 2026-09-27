@@ -12,8 +12,8 @@
     "watch:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --watch",
     "serve": "PORT=${PORT:-8765} SITE_ROOT=$PWD/public caddy run --config Caddyfile",
     "dev": "bun run build && bun run serve",
-    "docker:build": "docker build -f Dockerfile -t macterm-website ..",
-    "docker:run": "docker run --rm -p 3000:3000 macterm-website"
+    "podman:build": "podman build --format docker --platform linux/arm64 -f Containerfile -t macterm-website ..",
+    "podman:run": "podman run --rm -p 3000:3000 macterm-website"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",

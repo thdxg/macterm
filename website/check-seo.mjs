@@ -1,6 +1,6 @@
 // Build-time guard for the two SEO invariants nothing else can enforce.
 // Runs after build-docs.mjs; exits non-zero (failing `bun run build`, and so
-// the Docker build and CI) when either is broken.
+// the image build and CI) when either is broken.
 //
 // 1. THE FAQ IS WRITTEN TWICE. public/index.html is hand-authored and no build
 //    step rewrites it, so the visible <section id="faq"> markup and the

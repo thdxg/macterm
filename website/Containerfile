@@ -1,23 +1,25 @@
-# syntax=docker/dockerfile:1
-
 # Container image for the marketing site and docs (see website/README.md).
 #
 # IMPORTANT: the build context is the REPOSITORY ROOT, not website/ —
 #
-#     docker build -f website/Dockerfile -t macterm-website .
+#     podman build --format docker -f website/Containerfile -t macterm-website .
 #
 # because website/public/assets is a symlink to the repo-root assets/ dir. A
 # context rooted at website/ would copy that symlink dangling; the build stage
-# below materializes it as real files instead. Dockerfile.dockerignore, beside
-# this file, keeps the context to just website/ and assets/ — its patterns are
-# relative to that root context, not to website/.
+# below materializes it as real files instead. The repo-root .containerignore
+# keeps the context to just website/ and assets/.
+#
+# `--format docker` because the OCI image format has no HEALTHCHECK: podman's
+# default would build the image and silently drop the one below.
 #
 # Bun builds, Caddy serves. The site is static once `bun run build` has
 # rendered the docs and compiled the CSS, so the runtime stage carries no
 # JavaScript at all — no Bun, no node_modules, just Caddy and public/.
 
-ARG BUN_IMAGE=oven/bun:1.3-alpine
-ARG CADDY_IMAGE=caddy:2-alpine
+# Fully qualified: podman resolves a short name through registries.conf, which
+# errors without a TTY when more than one search registry is configured.
+ARG BUN_IMAGE=docker.io/oven/bun:1.3-alpine
+ARG CADDY_IMAGE=docker.io/library/caddy:2-alpine
 
 # ---- deps: resolved once, cached until the lockfile moves -------------------
 FROM ${BUN_IMAGE} AS deps

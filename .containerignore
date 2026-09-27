@@ -1,0 +1,20 @@
+# Build-context filter for website/Containerfile, the only image the repo
+# builds. It lives at the repo root because that is the build context (see the
+# Containerfile header) and podman reads .containerignore from the context
+# root. Docker does not read this file at all; build with podman.
+#
+# Deny everything, then re-admit the two directories the build needs;
+# otherwise the Swift sources and the ~1GB GhosttyKit.xcframework ride along.
+*
+!website/
+!assets/
+
+# Regenerated inside the image by `bun run build` — never copy a host build in.
+website/node_modules/
+website/public/docs/
+website/public/tailwind.css
+website/public/sitemap.xml
+website/public/robots.txt
+
+website/Containerfile
+**/.DS_Store

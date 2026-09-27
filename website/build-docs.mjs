@@ -327,12 +327,12 @@ function main() {
 // outright, so emitting `weekly` on every URL was pure noise.
 //
 // `lastmod` — there is no honest value available here. Source mtimes are set
-// by `git checkout`, and the Docker build copies them from a fresh clone, so
+// by `git checkout`, and the image build copies them from a fresh clone, so
 // every page would claim to have changed on every deploy. Google discounts a
 // lastmod that behaves that way, and a discounted lastmod is worth less than
 // none: it costs the signal on the pages that genuinely did change. Emitting
 // it properly needs a per-page commit date, which means git history inside the
-// build stage — the Dockerfile copies only website/ and assets/.
+// build stage — the Containerfile copies only website/ and assets/.
 //
 // `priority` is likewise advisory-at-best, but unlike the other two it is
 // cheap, stable, and honest: it says the landing page and docs index matter
