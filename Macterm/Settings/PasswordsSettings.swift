@@ -158,7 +158,7 @@ private struct PasswordDetailsSheet: View {
                     editableRow("Command", text: $command, placeholder: "Any command", editing: $editingCommand)
                     editableRow("Prompt", text: $prompt, editing: $editingPrompt)
                     LabeledContent("Password") {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
                             if editingPassword {
                                 TextField("Password", text: Binding(
                                     get: { password ?? "" },
@@ -168,7 +168,7 @@ private struct PasswordDetailsSheet: View {
                                 .font(.body.monospaced())
                                 .multilineTextAlignment(.trailing)
                                 .onSubmit { editingPassword = false }
-                                iconButton("checkmark", help: "Done editing") { editingPassword = false }
+                                Button("Done") { editingPassword = false }
                             } else {
                                 Text(verbatim: password ?? "••••••••")
                                     .font(.body.monospaced())
@@ -176,11 +176,11 @@ private struct PasswordDetailsSheet: View {
                                     .textSelection(.enabled)
                                     .multilineTextAlignment(.trailing)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
-                                iconButton(password == nil ? "eye" : "eye.slash", help: password == nil ? "Show" : "Hide") {
+                                Button(password == nil ? "Show" : "Hide") {
                                     if password == nil { reveal() } else { password = nil }
                                 }
                                 .disabled(busy)
-                                iconButton("pencil", help: "Edit") { editPassword() }
+                                Button("Edit") { editPassword() }
                                     .disabled(busy)
                             }
                         }
@@ -212,10 +212,10 @@ private struct PasswordDetailsSheet: View {
     }
 
     /// A value as text — wrapped in full, never truncated, since seeing all
-    /// of it is what this sheet is for — with a pencil on the right that
-    /// turns the row into a field, and a check (or Return) that turns it
-    /// back. The text claims the row's width so every row's buttons sit on
-    /// the same trailing edge.
+    /// of it is what this sheet is for — with Edit on the right, which turns
+    /// the row into a field, and Done (or Return) to turn it back. The text
+    /// claims the row's width so every row's buttons sit on the same
+    /// trailing edge.
     private func editableRow(
         _ label: String,
         text: Binding<String>,
@@ -223,14 +223,14 @@ private struct PasswordDetailsSheet: View {
         editing: Binding<Bool>
     ) -> some View {
         LabeledContent(label) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if editing.wrappedValue {
                     TextField(label, text: text, prompt: placeholder.map { Text($0) })
                         .labelsHidden()
                         .font(.body.monospaced())
                         .multilineTextAlignment(.trailing)
                         .onSubmit { editing.wrappedValue = false }
-                    iconButton("checkmark", help: "Done editing") { editing.wrappedValue = false }
+                    Button("Done") { editing.wrappedValue = false }
                 } else {
                     let empty = text.wrappedValue.isEmpty
                     Text(empty ? (placeholder ?? "") : text.wrappedValue)
@@ -239,22 +239,10 @@ private struct PasswordDetailsSheet: View {
                         .textSelection(.enabled)
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: .infinity, alignment: .trailing)
-                    iconButton("pencil", help: "Edit") { editing.wrappedValue = true }
+                    Button("Edit") { editing.wrappedValue = true }
                 }
             }
         }
-    }
-
-    /// A bare symbol button, no bezel — the row's chrome, not a control that
-    /// competes with the sheet's Save and Cancel.
-    private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .frame(width: 18, height: 18)
-        }
-        .buttonStyle(.borderless)
-        .help(help)
-        .accessibilityLabel(help)
     }
 
     /// Where the edited entry will be filed — through detection's own rules,
