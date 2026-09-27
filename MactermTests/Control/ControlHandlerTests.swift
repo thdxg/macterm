@@ -1302,6 +1302,34 @@ struct ControlHandlerTests {
         #expect(applied.ok)
         #expect(appState.pendingDialog == nil)
     }
+
+    // MARK: - pane.password (debug-only)
+
+    @Test
+    func pane_password_reads_idle_for_a_pane_without_a_prompt() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+
+        let response = await handler.handle(request("pane.password", args: ControlArgs(pane: pane.id.uuidString)))
+        #expect(response.ok)
+        #expect(response.data?.password == ControlPasswordState(phase: "idle", saved: false))
+    }
+
+    @Test
+    func pane_password_rejects_an_unknown_answer_and_an_answer_with_no_bubble() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let tab = try #require(appState.workspaces[project.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first).id.uuidString
+
+        let unknown = await handler.handle(request("pane.password", args: ControlArgs(pane: pane, answer: "maybe")))
+        #expect(unknown.error?.code == .badRequest)
+
+        let nothingUp = await handler.handle(request("pane.password", args: ControlArgs(pane: pane, answer: "accept")))
+        #expect(nothingUp.error?.code == .badRequest)
+    }
 }
 
 /// Actor recording killed session names (kills hop through async closures).

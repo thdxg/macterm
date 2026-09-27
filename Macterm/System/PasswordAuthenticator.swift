@@ -42,6 +42,12 @@ final class PasswordAuthenticator {
     /// Ask the user to authenticate for `reason` (completes the system's
     /// "Macterm is trying to …" sentence) unless the standing unlock covers it.
     func authorize(reason: String) async -> Bool {
+        #if DEBUG
+        // The e2e suite autofills with nobody at the keyboard. Debug builds
+        // only, and only under a hermetic launch (in-memory store), so the
+        // password it types is one that same run captured.
+        if PasswordVault.isHermetic { return true }
+        #endif
         let policy = Preferences.shared.passwordAutofillAuthentication
         if policy == .untilLocked, unlocked { return true }
         let context = LAContext()

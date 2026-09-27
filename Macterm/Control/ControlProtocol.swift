@@ -102,6 +102,9 @@ struct ControlArgs: Codable, Equatable {
     var key: String?
     /// Drop zone for the debug-only `pane.move`: `left`/`right`/`top`/`bottom`.
     var zone: String?
+    /// Reply to the pane's password bubble (debug-only `pane.password`):
+    /// `accept`, `dismiss` or `autofill`. Nil just reads the state.
+    var answer: String?
     /// Destination pane selector for `pane.move` (same tab); nil = the
     /// workspace edge (a root-level move).
     var dest: String?
@@ -149,7 +152,8 @@ struct ControlArgs: Codable, Equatable {
         reset: Bool? = nil,
         submit: Bool? = nil,
         topic: String? = nil,
-        styled: Bool? = nil
+        styled: Bool? = nil,
+        answer: String? = nil
     ) {
         self.project = project
         self.tab = tab
@@ -169,6 +173,7 @@ struct ControlArgs: Codable, Equatable {
         self.key = key
         self.zone = zone
         self.dest = dest
+        self.answer = answer
         self.slot = slot
         self.title = title
         self.reset = reset
@@ -235,6 +240,8 @@ struct ControlData: Codable {
     var dump: ControlPaneDump?
     /// Rendered tutorial text (`tutor.render`).
     var tutorial: ControlTutorial?
+    /// The pane's password-prompt state (debug-only `pane.password`).
+    var password: ControlPasswordState?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -245,7 +252,8 @@ struct ControlData: Codable {
         sessions: [ControlSessionInfo]? = nil,
         inspect: ControlPaneInspect? = nil,
         dump: ControlPaneDump? = nil,
-        tutorial: ControlTutorial? = nil
+        tutorial: ControlTutorial? = nil,
+        password: ControlPasswordState? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -256,7 +264,23 @@ struct ControlData: Codable {
         self.inspect = inspect
         self.dump = dump
         self.tutorial = tutorial
+        self.password = password
     }
+}
+
+/// What the password monitor knows about a pane (debug-only `pane.password`):
+/// its phase, the prompt it confirmed, and which bubble is up. Never the
+/// password itself.
+struct ControlPasswordState: Codable, Equatable {
+    /// `idle`, `sighted`, `prompting` or `verifying`.
+    var phase: String
+    /// The confirmed prompt line and command while `prompting`.
+    var prompt: String?
+    var command: String?
+    /// A password is saved for the confirmed prompt.
+    var saved: Bool
+    /// `autofill`, `rejected`, `save`, `update`, or nil for no bubble.
+    var bubble: String?
 }
 
 struct ControlStatusInfo: Codable, Equatable {

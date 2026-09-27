@@ -86,6 +86,7 @@ final class ControlHandler {
         #if DEBUG
         case "pane.resize": return try paneResize(args)
         case "pane.move": return try paneMove(args)
+        case "pane.password": return try panePassword(args)
         case "tab.merge": return try tabMerge(args)
         #endif
         case "grid": return try grid(args)
@@ -893,6 +894,25 @@ final class ControlHandler {
             )
         }
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
+    }
+
+    /// DEBUG-ONLY: the password monitor's view of a pane, and the bubble's
+    /// buttons as a verb, so the e2e suite can drive save and autofill with
+    /// nobody at the keyboard. Reports phase, prompt, command and which bubble
+    /// is up — never a password. A pane with no surface yet is simply `idle`.
+    private func panePassword(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        let monitor = PasswordPromptMonitor.shared
+        if let answer = args.answer {
+            guard let reply = PasswordPromptMonitor.Reply(rawValue: answer) else {
+                throw ControlError(code: .badRequest, message: "answer must be accept, dismiss or autofill")
+            }
+            guard let view = target.pane.nsView, monitor.answer(reply, in: view) else {
+                throw ControlError(code: .badRequest, message: "no password bubble is up in that pane")
+            }
+        }
+        return ControlData(password: monitor.state(for: target.pane.nsView))
     }
 
     /// DEBUG-ONLY (#227): drive `TerminalTab.movePane(to:)` — the grab-handle

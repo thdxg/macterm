@@ -12,11 +12,11 @@ When a program in a pane asks for a password — `ssh`, `sudo`, `psql`, a key pa
 
 ## Saving a password
 
-Type the password as usual. Once it works (the login goes through, the command runs), a bubble asks **Save Password?** with the command and the prompt it's for. Click **Save**, or **Cancel** to forget it. A password that was rejected is never offered, and running another command in the pane dismisses the offer.
+Type the password as usual. Once it works (the login goes through, the command runs), a bubble asks **Save Password?** with the command and the prompt it's for. Press <kbd>Return</kbd> or click **Save**; press <kbd>Esc</kbd> or click **Cancel** to forget it. A password that was rejected is never offered, one-time codes are never offered, and running another command in the pane dismisses the offer.
 
 ## Autofill
 
-The next time the same command shows the same prompt, the bubble offers **Autofill**. Click it — or press <kbd>⌥⌘F</kbd> (**Autofill Password** in Settings → Keymaps) — and confirm with Touch ID or your login password. Macterm types the password and presses Return, exactly as if you had.
+The next time the same command shows the same prompt, the bubble offers **Autofill**. Press <kbd>Return</kbd>, click it, or press <kbd>⌥⌘F</kbd> (**Autofill Password** in Settings → Keymaps), and confirm with Touch ID or your login password. Macterm types the password and presses Return, exactly as if you had. <kbd>Esc</kbd> puts the bubble away; start typing and the keys are yours again.
 
 If a saved password stops working, the bubble says so. Type the new one, and Macterm offers to update the saved password once it works.
 

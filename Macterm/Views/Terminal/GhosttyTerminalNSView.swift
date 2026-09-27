@@ -1140,8 +1140,9 @@ final class GhosttyTerminalNSView: NSView {
             return
         }
         // Before the key reaches libghostty, so the password monitor reads the
-        // tty while the prompt that will receive this key is still up.
-        PasswordPromptMonitor.shared.viewWillSendKey(self, event: event)
+        // tty while the prompt that will receive this key is still up. A
+        // Return or Escape the password bubble answers is consumed there.
+        if PasswordPromptMonitor.shared.viewWillSendKey(self, event: event) { return }
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // What zmx will count as user input: a key that reaches the pty. Cmd
@@ -1810,6 +1811,9 @@ extension GhosttyTerminalNSView {
         // Same liveness signal a keystroke sends (execution tracking + poll
         // resume), so an injected command updates the tab title promptly.
         onInteraction?()
+        // Text a program reads at a password prompt is the password, whoever
+        // typed it — the e2e suite answers prompts this way.
+        PasswordPromptMonitor.shared.viewDidSendText(self, text: text)
         recordCommandInput(text)
         text.withCString { ptr in
             _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
@@ -1874,6 +1878,7 @@ extension GhosttyTerminalNSView {
     func sendKey(keyCode: UInt16, mods flags: NSEvent.ModifierFlags) -> Bool {
         guard let surface else { return false }
         onInteraction?()
+        PasswordPromptMonitor.shared.viewDidSendKey(self, keyCode: keyCode, mods: flags)
         if TerminalCommandSubmission.clearsInputEvidence(
             keyCode: keyCode,
             hasControl: flags.contains(.control),

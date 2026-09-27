@@ -68,6 +68,15 @@ struct PasswordPromptIdentityTests {
     }
 
     @Test
+    func one_time_codes_are_recognized() {
+        #expect(PasswordPromptIdentity.isOneTimeCode("Verification code:"))
+        #expect(PasswordPromptIdentity.isOneTimeCode("(ethan@host) Enter OTP:"))
+        #expect(PasswordPromptIdentity.isOneTimeCode("Two-factor code:"))
+        #expect(!PasswordPromptIdentity.isOneTimeCode("ethan@host's password:"))
+        #expect(!PasswordPromptIdentity.isOneTimeCode("Enter passphrase for key '/k':"))
+    }
+
+    @Test
     func remote_command_names_the_connection() {
         #expect(PasswordPromptIdentity.remoteCommand(user: "ethan", host: "prod") == "ssh ethan@prod")
         #expect(PasswordPromptIdentity.remoteCommand(user: nil, host: "prod") == "ssh prod")
@@ -115,6 +124,7 @@ struct PasswordLineCaptureTests {
         let (capture, outcome) = run([.text("abc"), .unknown, .text("d"), .submit])
         #expect(capture.isTainted)
         #expect(outcome == .submitted(""))
+        #expect(run([.text("abc"), .escape, .submit]).1 == .submitted(""))
     }
 }
 
@@ -166,6 +176,15 @@ struct PasswordSubmissionJudgeTests {
         #expect(observe(after: 3, output: ["Permission denied, please try again."]) == .failed)
         #expect(observe(after: 3, output: ["Sorry, try again."]) == .failed)
         #expect(observe(after: 3, output: ["sudo: 3 incorrect password attempts"]) == .failed)
+    }
+
+    @Test
+    func a_failure_word_deep_in_a_banner_is_not_a_failure() {
+        // The rejection is always on the line after the prompt; a MOTD that
+        // says "denied" four lines down is a successful login's banner.
+        let banner = ["Welcome to prod", "Last login: Sat", "* * * NOTICE * * *", "Unauthorized access is denied."]
+        #expect(observe(after: 1, output: banner) == .succeeded)
+        #expect(observe(after: 1, output: Array(banner.suffix(1))) == .failed)
     }
 
     @Test

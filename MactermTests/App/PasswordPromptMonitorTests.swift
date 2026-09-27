@@ -44,8 +44,20 @@ struct PasswordKeyInputTests {
     }
 
     @Test
+    func control_chords_are_read_from_their_control_character() {
+        // A Cyrillic layout's ⌃U: the letter is `г`, the byte is still U+0015.
+        #expect(key("\u{15}", ignoring: "г", code: 32, .control) == .killLine)
+        #expect(key("\u{17}", ignoring: "ц", code: 13, .control) == .killWord)
+        // The CLI's `pane key` has no characters: the letter decides.
+        #expect(PasswordKeyInput.from(keyCode: 32, flags: .control, characters: nil, charactersIgnoringModifiers: "u") == .killLine)
+        #expect(PasswordKeyInput.from(keyCode: 36, flags: [], characters: nil, charactersIgnoringModifiers: "return") == .submit)
+        #expect(PasswordKeyInput.from(keyCode: 0, flags: [], characters: "a", charactersIgnoringModifiers: "a") == .text("a"))
+    }
+
+    @Test
     func unmirrorable_keys_taint_and_command_chords_are_not_input() {
-        #expect(key("\u{1b}", code: 53) == .unknown)
+        #expect(key("\u{1b}", code: 53) == .escape)
+        #expect(key("\u{7f}", ignoring: "\u{7f}", code: 51, .option) == .unknown)
         #expect(key("\u{f700}", code: 126) == .unknown)
         #expect(key("\u{12}", ignoring: "r", code: 15, .control) == .unknown)
         #expect(key("v", code: 9, .command) == nil)

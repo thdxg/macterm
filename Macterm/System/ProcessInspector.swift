@@ -71,8 +71,10 @@ enum ProcessInspector {
         guard let pid = foregroundPID(forPane: pane) else { return nil }
         guard let args = argv(pid: pid), !args.isEmpty else { return nil }
         // Idle at a prompt: the foreground process is the shell itself. Nothing
-        // worth recording as a `run` command.
-        if isShell(args[0]) { return nil }
+        // worth recording as a `run` command. A shell running a script or a
+        // `-c` command is a command like any other (`isIdleShellInvocation`),
+        // which is what a password prompt inside `./deploy.sh` is filed under.
+        if isIdleShellInvocation(args) { return nil }
         return displayCommand(args)
     }
 

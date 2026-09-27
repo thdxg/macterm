@@ -166,11 +166,17 @@ final class PasswordVault {
     /// (`MACTERM_BENCHMARK_DATA_DIR` — the e2e harness and hand-run hermetic
     /// instances) keep passwords in memory, never in the developer's keychain.
     private static func defaultStore() -> PasswordStoring {
+        isHermetic ? InMemoryPasswordStore() : KeychainPasswordStore(service: KeychainPasswordStore.defaultService)
+    }
+
+    /// True for a launch that must not touch the user's keychain — and, in a
+    /// debug build, may skip Touch ID (`PasswordAuthenticator`): the only
+    /// passwords such a run can hold are ones typed into it.
+    nonisolated static var isHermetic: Bool {
         let env = ProcessInfo.processInfo.environment
-        let hermetic = Preferences.isTestRun
+        return Preferences.isTestRun
             || env["MACTERM_BENCHMARK"] == "1"
             || env["MACTERM_BENCHMARK_DATA_DIR"] != nil
-        return hermetic ? InMemoryPasswordStore() : KeychainPasswordStore(service: KeychainPasswordStore.defaultService)
     }
 
     func reload() {

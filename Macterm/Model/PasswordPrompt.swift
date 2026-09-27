@@ -83,6 +83,15 @@ enum PasswordPromptIdentity {
         prompt.range(of: #"^Enter passphrase for (key )?\S"#, options: .regularExpression) != nil
     }
 
+    /// A prompt for a code that is only good once — a 2FA verification code,
+    /// an authenticator or hardware-token response. Saving one would autofill
+    /// a stale code next time, so no save is ever offered for these.
+    static func isOneTimeCode(_ prompt: String) -> Bool {
+        let lower = prompt.lowercased()
+        return ["verification code", "one-time", "one time", "otp", "2fa", "two-factor", "authenticator", "token:", "passcode"]
+            .contains { lower.contains($0) }
+    }
+
     static func isSudo(_ command: String) -> Bool {
         let first = command.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
         return (first as NSString).lastPathComponent == "sudo"
@@ -109,6 +118,9 @@ enum PasswordKeyInput: Equatable {
     case submit
     /// ⌃C / ⌃D: the program abandons the read.
     case cancel
+    /// Escape. Like `unknown` for the line (the tty inserts it literally),
+    /// kept distinct so a visible bubble can take it as Dismiss.
+    case escape
     /// A key whose effect on the line can't be mirrored (arrows, escape,
     /// forward-delete, other control chords). The capture can no longer vouch
     /// for what the program received, so it will not offer to save it.
@@ -156,7 +168,8 @@ struct PasswordLineCapture: Equatable {
         case .cancel:
             buffer = ""
             return .cancelled
-        case .unknown:
+        case .unknown,
+             .escape:
             isTainted = true
         }
         return .editing
@@ -189,6 +202,11 @@ struct PasswordSubmissionJudge {
     /// line; a prompt still showing inside this window is the same read.
     static let settleDelay: TimeInterval = 0.3
     static let timeout: TimeInterval = 12
+
+    /// How many lines after the prompt a failure message is looked for. Every
+    /// program prints its rejection on the line right after the prompt; a
+    /// banner or MOTD further down that happens to say "denied" is not one.
+    static let failureWindow = 3
 
     /// Lowercased substrings of the lines auth failures print: ssh
     /// ("Permission denied, please try again."), sudo ("Sorry, try again.",
@@ -242,7 +260,7 @@ struct PasswordSubmissionJudge {
     }
 
     static func containsFailure(_ lines: [String]) -> Bool {
-        lines.contains { line in
+        lines.prefix(failureWindow).contains { line in
             let lower = line.lowercased()
             return failureMarkers.contains { lower.contains($0) }
         }

@@ -10,7 +10,9 @@ import SwiftUI
 /// It never keeps keyboard focus. Showing it doesn't take key, and when a
 /// click on one of its buttons makes the popover's own window key, the action
 /// hands key straight back to the terminal's window (`returnKey`), so the
-/// next keystroke lands in the pane.
+/// next keystroke lands in the pane. Return and Escape reach it through the
+/// terminal's own key path (`PasswordPromptMonitor`), never as popover
+/// shortcuts, which is why the buttons carry no key hints.
 @MainActor
 final class PasswordBubble: NSObject, NSPopoverDelegate {
     enum Content: Equatable {
@@ -20,10 +22,11 @@ final class PasswordBubble: NSObject, NSPopoverDelegate {
     }
 
     struct Actions {
+        /// Save / Update / OK — what Return does.
+        var primary: @MainActor () -> Void = {}
         var autofill: @MainActor () -> Void = {}
+        /// Not Now / Cancel — what Escape does.
         var dismiss: @MainActor () -> Void = {}
-        var save: @MainActor () -> Void = {}
-        var cancelOffer: @MainActor () -> Void = {}
         var removeSaved: @MainActor () -> Void = {}
     }
 
@@ -35,17 +38,22 @@ final class PasswordBubble: NSObject, NSPopoverDelegate {
     private var popover: NSPopover?
     private weak var anchorView: NSView?
 
+    var isShown: Bool { popover?.isShown ?? false }
+
     /// Show `content` at `anchor` (in `view`'s coordinates), move the arrow
-    /// if the popover is already up, or close it when either is nil.
-    func show(_ content: Content?, anchor: NSRect?, in view: NSView) {
+    /// if the popover is already up, or close it when either is nil. Returns
+    /// true when this call put up a bubble, or changed what one says.
+    @discardableResult
+    func show(_ content: Content?, anchor: NSRect?, in view: NSView) -> Bool {
         guard let content, let anchor else {
             close()
-            return
+            return false
         }
-        if model.content != content { model.content = content }
+        let changed = model.content != content
+        if changed { model.content = content }
         if let popover, popover.isShown, anchorView === view {
             if popover.positioningRect != anchor { popover.positioningRect = anchor }
-            return
+            return changed
         }
         close()
         let popover = NSPopover()
@@ -58,7 +66,8 @@ final class PasswordBubble: NSObject, NSPopoverDelegate {
         popover.show(relativeTo: anchor, of: view, preferredEdge: .minY)
         self.popover = popover
         anchorView = view
-        Self.returnKey(to: view)
+        returnKey(to: view)
+        return true
     }
 
     func close() {
@@ -73,31 +82,32 @@ final class PasswordBubble: NSObject, NSPopoverDelegate {
         anchorView = nil
     }
 
-    /// Hand key back to the window `view` lives in, if something of ours (the
-    /// popover, the authentication sheet) took it. The window keeps its own
-    /// first responder, so this restores whichever pane had focus.
-    static func returnKey(to view: NSView) {
+    /// Hand key back to the window `view` lives in when the popover took it
+    /// (a click on a button) or nothing holds it (the authentication sheet
+    /// just closed). Never when another window of ours is key: a save offer
+    /// arriving in a window the user has left must not pull them back. The
+    /// window keeps its own first responder, so whichever pane had focus
+    /// gets it.
+    func returnKey(to view: NSView) {
         guard let window = view.window, window.isVisible, NSApp.keyWindow !== window else { return }
+        let popoverWindow = popover?.contentViewController?.view.window
+        guard NSApp.keyWindow == nil || NSApp.keyWindow === popoverWindow else { return }
         window.makeKey()
     }
 
     private func wrapped(_ actions: Actions) -> Actions {
         let refocus: @MainActor () -> Void = { [weak self] in
-            if let view = self?.anchorView { Self.returnKey(to: view) }
+            if let self, let view = anchorView { returnKey(to: view) }
         }
         return Actions(
+            primary: {
+                refocus()
+                actions.primary()
+            },
             autofill: { actions.autofill() },
             dismiss: {
                 refocus()
                 actions.dismiss()
-            },
-            save: {
-                refocus()
-                actions.save()
-            },
-            cancelOffer: {
-                refocus()
-                actions.cancelOffer()
             },
             removeSaved: {
                 refocus()
@@ -128,12 +138,6 @@ private struct PasswordBubbleView: View {
                 )
                 entry(id)
                 HStack {
-                    if let shortcut = Self.autofillShortcut {
-                        Text(shortcut)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .help("Autofill Password")
-                    }
                     Spacer()
                     Button("Not Now") { model.actions.dismiss() }
                     Button("Autofill") { model.actions.autofill() }
@@ -150,7 +154,8 @@ private struct PasswordBubbleView: View {
                 HStack {
                     Button("Remove Saved Password", role: .destructive) { model.actions.removeSaved() }
                     Spacer()
-                    Button("OK") { model.actions.dismiss() }
+                    Button("OK") { model.actions.primary() }
+                        .buttonStyle(.borderedProminent)
                 }
             case let .save(id, isUpdate):
                 header(
@@ -161,8 +166,8 @@ private struct PasswordBubbleView: View {
                 entry(id, showsSecret: true)
                 HStack {
                     Spacer()
-                    Button("Cancel") { model.actions.cancelOffer() }
-                    Button(isUpdate ? "Update" : "Save") { model.actions.save() }
+                    Button("Cancel") { model.actions.dismiss() }
+                    Button(isUpdate ? "Update" : "Save") { model.actions.primary() }
                         .buttonStyle(.borderedProminent)
                 }
             case nil:
@@ -212,12 +217,5 @@ private struct PasswordBubbleView: View {
             }
         }
         .padding(.leading, 34)
-    }
-
-    /// The Autofill Password chord, as the menus draw it, or nil when unbound.
-    private static var autofillShortcut: String? {
-        let raw = HotkeyRegistry.selectedShortcutString(for: .autofillPassword)
-        guard HotkeyRegistry.parseShortcut(raw) != nil else { return nil }
-        return HotkeyRegistry.displayString(for: raw)
     }
 }
