@@ -198,6 +198,116 @@ struct DesktopWidgetTests {
         let straddling = CGRect(x: 1300, y: 100, width: 344, height: 164)
         #expect(DesktopWidgetGrid.screen(for: straddling, among: [screen, second]) == second)
     }
+
+    // MARK: - Placements
+
+    /// The two displays of the measured case: a 32-inch external at 3008×1692
+    /// (1662 visible below the menu bar) and the laptop at 1920×1243.
+    private let external = DesktopScreen(
+        name: "LG HDR 4K",
+        visibleFrame: CGRect(x: 0, y: 0, width: 3008, height: 1662),
+        resolution: CGSize(width: 3008, height: 1692)
+    )
+    private let laptop = DesktopScreen(
+        name: "Built-in Retina Display",
+        visibleFrame: CGRect(x: 0, y: 0, width: 1920, height: 1205),
+        resolution: CGSize(width: 1920, height: 1243)
+    )
+    private let medium = DesktopWidgetGrid.dimensions(of: .medium)
+
+    @Test
+    func a_placement_is_the_offset_from_the_visible_top_left() {
+        let placement = DesktopWidgetPlacement(topLeft: CGPoint(x: 386, y: 1449), on: external)
+        #expect((placement.offsetX, placement.offsetY) == (386, 213))
+        #expect((placement.column, placement.row) == (2, 1))
+        #expect(placement.topLeft(on: laptop) == CGPoint(x: 386, y: 992))
+    }
+
+    @Test
+    func recording_replaces_the_same_display_and_resolution_only() {
+        let first = DesktopWidgetPlacement(topLeft: CGPoint(x: 26, y: 1629), on: external)
+        let onLaptop = DesktopWidgetPlacement(topLeft: CGPoint(x: 26, y: 1172), on: laptop)
+        let moved = DesktopWidgetPlacement(topLeft: CGPoint(x: 206, y: 1629), on: external)
+        let placements = DesktopWidgetPlacement.recording(
+            moved,
+            into: DesktopWidgetPlacement.recording(onLaptop, into: [first])
+        )
+        #expect(placements == [onLaptop, moved])
+    }
+
+    @Test
+    func only_the_latest_placements_are_kept() {
+        var placements: [DesktopWidgetPlacement] = []
+        for width in 1 ... DesktopWidgetPlacement.limit + 3 {
+            let screen = DesktopScreen(name: "Display", visibleFrame: CGRect(x: 0, y: 0, width: 1000 + width, height: 800))
+            placements = DesktopWidgetPlacement.recording(
+                DesktopWidgetPlacement(topLeft: CGPoint(x: 26, y: 767), on: screen),
+                into: placements
+            )
+        }
+        #expect(placements.count == DesktopWidgetPlacement.limit)
+        #expect(placements.last?.width == Double(1000 + DesktopWidgetPlacement.limit + 3))
+    }
+
+    @Test
+    func a_placement_for_the_display_at_this_resolution_is_used_exactly() {
+        let placements = [DesktopWidgetPlacement(topLeft: CGPoint(x: 1826, y: 729), on: external)]
+        let resolved = DesktopWidgetPlacement.resolve(placements, size: medium, on: [external])
+        #expect(resolved?.topLeft == CGPoint(x: 1826, y: 729))
+        #expect(resolved?.exact == true)
+    }
+
+    /// What Notification Center did with the system's widgets: the same
+    /// offsets from the top-left, on the display that's there.
+    @Test
+    func another_display_gets_the_latest_placement_projected() throws {
+        let placements = [DesktopWidgetPlacement(topLeft: CGPoint(x: 386, y: 1449), on: external)]
+        let resolved = try #require(DesktopWidgetPlacement.resolve(placements, size: medium, on: [laptop]))
+        #expect(resolved.screen == laptop)
+        #expect(resolved.topLeft == CGPoint(x: 386, y: 992))
+        #expect(!resolved.exact)
+    }
+
+    @Test
+    func a_projection_is_kept_on_the_screen() {
+        // Near the external display's bottom-right, far outside the laptop.
+        let placements = [DesktopWidgetPlacement(topLeft: CGPoint(x: 2600, y: 300), on: external)]
+        let resolved = DesktopWidgetPlacement.resolve(placements, size: medium, on: [laptop])
+        #expect(resolved?.topLeft == CGPoint(x: 1920 - 344, y: 164))
+    }
+
+    /// With both connected, a widget stays on the display it was put on even
+    /// when that isn't the primary one.
+    @Test
+    func a_widget_goes_to_the_display_it_was_last_put_on() {
+        let side = DesktopScreen(
+            name: "LG HDR 4K",
+            visibleFrame: CGRect(x: 1920, y: 0, width: 3008, height: 1662),
+            resolution: external.resolution
+        )
+        let placements = [DesktopWidgetPlacement(topLeft: CGPoint(x: 1946, y: 1629), on: side)]
+        let resolved = DesktopWidgetPlacement.resolve(placements, size: medium, on: [laptop, side])
+        #expect(resolved?.screen == side)
+        #expect(resolved?.exact == true)
+    }
+
+    /// A display at a resolution it has no placement for takes its own latest
+    /// placement, not the other display's.
+    @Test
+    func a_display_projects_its_own_layout_before_another_displays() {
+        let scaled = DesktopScreen(
+            name: laptop.name,
+            visibleFrame: CGRect(x: 0, y: 0, width: 1470, height: 918),
+            resolution: CGSize(width: 1470, height: 956)
+        )
+        let placements = [
+            DesktopWidgetPlacement(topLeft: CGPoint(x: 206, y: 1172), on: laptop),
+            DesktopWidgetPlacement(topLeft: CGPoint(x: 1826, y: 729), on: external),
+        ]
+        let resolved = DesktopWidgetPlacement.resolve(placements, size: medium, on: [scaled])
+        #expect(resolved?.topLeft == CGPoint(x: 206, y: 885))
+        #expect(resolved?.exact == false)
+    }
 }
 
 /// The system's widget families, as spans — what these tests size widgets by.

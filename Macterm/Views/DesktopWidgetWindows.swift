@@ -21,6 +21,13 @@ final class DesktopWidgetWindows: DesktopWidgetPresenting {
 
     private weak var appState: AppState?
     private var panels: [UUID: DesktopWidgetPanel] = [:]
+    private var screenChange: DispatchWorkItem?
+
+    /// How long the displays must hold still before widgets are moved. A
+    /// connect or disconnect posts the screen-parameters notification several
+    /// times as the arrangement settles, and Notification Center moves the
+    /// system's widgets (which ours avoid) in the same window of time.
+    private static let screenChangeSettle: TimeInterval = 1
 
     private init() {
         _ = NotificationCenter.default.addObserver(
@@ -30,6 +37,22 @@ final class DesktopWidgetWindows: DesktopWidgetPresenting {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reapplyAppearance() }
         }
+        _ = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.screensChanged() }
+        }
+    }
+
+    private func screensChanged() {
+        screenChange?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.appState?.desktopScreensDidChange() }
+        }
+        screenChange = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.screenChangeSettle, execute: work)
     }
 
     func attach(appState: AppState) {

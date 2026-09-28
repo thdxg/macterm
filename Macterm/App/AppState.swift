@@ -1112,7 +1112,9 @@ final class AppState {
     /// tests don't depend on the machine's displays.
     @ObservationIgnored
     var desktopScreens: () -> [DesktopScreen] = {
-        NSScreen.screens.map { DesktopScreen(name: $0.localizedName, visibleFrame: $0.visibleFrame) }
+        NSScreen.screens.map {
+            DesktopScreen(name: $0.localizedName, visibleFrame: $0.visibleFrame, resolution: $0.frame.size)
+        }
     }
 
     /// Where the system's own desktop widgets are, so ours line up with and

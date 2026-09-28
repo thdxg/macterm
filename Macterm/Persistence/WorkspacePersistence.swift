@@ -68,12 +68,18 @@ struct DesktopWidgetSnapshot: Codable {
     /// The widget's span in grid cells (`DesktopWidgetSpan`).
     var columns: Int
     var rows: Int
-    /// Top-left corner in global AppKit screen coordinates.
+    /// Top-left corner in global AppKit screen coordinates — where it was at
+    /// the save, which after a display change can be a projection.
     var topLeftX: Double
     var topLeftY: Double
     /// The respawn recipe (`DesktopWidget.command`/`cwd`).
     var command: String?
     var cwd: String?
+    /// Where the user put it per display and resolution
+    /// (`DesktopWidget.placements`). Optional, with no schema bump: a
+    /// snapshot from before it existed decodes as nil and the widget's
+    /// placement is taken from `topLeft`, and an older build ignores it.
+    var placements: [DesktopWidgetPlacement]?
 }
 
 /// One window's restorable state (v6+).

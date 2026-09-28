@@ -373,10 +373,217 @@ extension AppStateDesktopWidgetsTests {
         try WidgetLayoutFile.parse(yaml: String(contentsOf: layoutFile(dir), encoding: .utf8)).widgets ?? []
     }
 
+    // MARK: - Display changes
+
+    /// The measured case: a 32-inch external display at 3008×1692 and the
+    /// laptop at 1920×1243, one connected at a time.
+    private static let external = DesktopScreen(
+        name: "LG HDR 4K",
+        visibleFrame: CGRect(x: 0, y: 0, width: 3008, height: 1662),
+        resolution: CGSize(width: 3008, height: 1692)
+    )
+    private static let laptop = DesktopScreen(
+        name: "Built-in Retina Display",
+        visibleFrame: CGRect(x: 0, y: 0, width: 1920, height: 1205),
+        resolution: CGSize(width: 1920, height: 1243)
+    )
+
+    /// The displays a test plugs in and out.
+    private final class Displays {
+        var screens: [DesktopScreen]
+        init(_ screens: [DesktopScreen]) {
+            self.screens = screens
+        }
+    }
+
+    private func makeDisplayFixture(_ displays: Displays) throws -> (state: AppState, storeURL: URL, dir: URL) {
+        let fixture = try makeFixture()
+        fixture.state.desktopScreens = { displays.screens }
+        fixture.state.restoreSelection(projects: [])
+        return fixture
+    }
+
+    /// Put `widget` at a default-lattice cell of `screen`, as a drag would.
+    private func place(_ widget: DesktopWidget, column: Int, row: Int, on screen: DesktopScreen, in state: AppState) {
+        state.settleDesktopWidget(id: widget.id, frame: DesktopWidgetGrid.frame(
+            topLeft: DesktopWidgetGrid.topLeft(column: column, row: row, in: screen.visibleFrame),
+            span: widget.span
+        ))
+    }
+
+    /// Unplugging moves the widget onto the laptop at the same offsets from
+    /// the top-left, records nothing there, and plugging back in puts it
+    /// exactly where it was. widgets.yaml keeps declaring the external cell.
+    @Test
+    func a_widget_follows_the_displays_and_comes_back_when_they_do() throws {
+        let displays = Displays([Self.external])
+        let (state, _, dir) = try makeDisplayFixture(displays)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let widget = state.createDesktopWidget(span: Self.medium)
+        place(widget, column: 2, row: 1, on: Self.external, in: state)
+        #expect(widget.topLeft == CGPoint(x: 386, y: 1449))
+        let recorded = widget.placements
+
+        displays.screens = [Self.laptop]
+        state.desktopScreensDidChange()
+        #expect(widget.topLeft == CGPoint(x: 386, y: 992))
+        #expect(widget.placements == recorded)
+        let entry = try #require(try declared(dir).first)
+        #expect((entry.display, entry.column, entry.row) == ("LG HDR 4K", 2, 1))
+
+        displays.screens = [Self.external]
+        state.desktopScreensDidChange()
+        #expect(widget.topLeft == CGPoint(x: 386, y: 1449))
+    }
+
+    /// Moving it on the laptop gives the laptop its own spot without costing
+    /// the external display its one.
+    @Test
+    func each_display_keeps_its_own_spot() throws {
+        let displays = Displays([Self.external])
+        let (state, _, dir) = try makeDisplayFixture(displays)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let widget = state.createDesktopWidget(span: Self.medium)
+        place(widget, column: 8, row: 4, on: Self.external, in: state)
+        let onExternal = widget.topLeft
+
+        displays.screens = [Self.laptop]
+        state.desktopScreensDidChange()
+        place(widget, column: 0, row: 0, on: Self.laptop, in: state)
+        let onLaptop = widget.topLeft
+        #expect(onLaptop == CGPoint(x: 26, y: 1172))
+
+        displays.screens = [Self.external]
+        state.desktopScreensDidChange()
+        #expect(widget.topLeft == onExternal)
+        displays.screens = [Self.laptop]
+        state.desktopScreensDidChange()
+        #expect(widget.topLeft == onLaptop)
+    }
+
+    /// Projections pushed in from beyond the small screen's edge would land
+    /// on each other; the second moves to a free cell instead.
+    @Test
+    func projected_widgets_never_stack() throws {
+        let displays = Displays([Self.external])
+        let (state, _, dir) = try makeDisplayFixture(displays)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let first = state.createDesktopWidget(span: Self.medium)
+        let second = state.createDesktopWidget(span: Self.medium)
+        place(first, column: 14, row: 1, on: Self.external, in: state)
+        place(second, column: 14, row: 2, on: Self.external, in: state)
+
+        displays.screens = [Self.laptop]
+        state.desktopScreensDidChange()
+        #expect(first.frame.maxX <= Self.laptop.visibleFrame.maxX)
+        #expect(second.frame.maxX <= Self.laptop.visibleFrame.maxX)
+        #expect(!first.frame.insetBy(dx: 1, dy: 1).intersects(second.frame))
+    }
+
+    /// Quit on the external display, relaunch on the laptop: the widget comes
+    /// back projected, and its placements come back with it.
+    @Test
+    func a_relaunch_on_another_display_projects_the_saved_placement() throws {
+        let displays = Displays([Self.external])
+        let (writer, storeURL, dir) = try makeDisplayFixture(displays)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let widget = writer.createDesktopWidget(span: Self.medium)
+        place(widget, column: 2, row: 1, on: Self.external, in: writer)
+
+        let laptopOnly = Displays([Self.laptop])
+        let state = makeState(storeURL: storeURL, dir: dir)
+        state.desktopScreens = { laptopOnly.screens }
+        state.restoreSelection(projects: [])
+        let restored = try #require(state.desktopWidget(id: widget.id))
+        #expect(restored.topLeft == CGPoint(x: 386, y: 992))
+        #expect(restored.placements == widget.placements)
+    }
+
+    /// A cell edited into widgets.yaml for a display that isn't connected is
+    /// where the widget goes when it is; meanwhile it stays put.
+    @Test
+    func a_declared_cell_on_a_disconnected_display_waits_for_it() throws {
+        let displays = Displays([Self.external])
+        let (state, _, dir) = try makeDisplayFixture(displays)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let widget = state.createDesktopWidget(span: Self.medium, name: "logs")
+        place(widget, column: 2, row: 1, on: Self.external, in: state)
+        displays.screens = [Self.laptop]
+        state.desktopScreensDidChange()
+        let onLaptop = widget.topLeft
+
+        try writeLayout("widgets:\n  - name: logs\n    size: 2x1\n    column: 5\n    row: 3\n    display: LG HDR 4K\n", in: dir)
+        state.writeWidgetLayout()
+        #expect(widget.topLeft == onLaptop)
+        let entry = try #require(try declared(dir).first)
+        #expect((entry.display, entry.column, entry.row) == ("LG HDR 4K", 5, 3))
+
+        displays.screens = [Self.external]
+        state.desktopScreensDidChange()
+        #expect(widget.topLeft == DesktopWidgetGrid.topLeft(column: 5, row: 3, in: Self.external.visibleFrame))
+    }
+
+    /// An entry written before displays were always named leaves out the
+    /// primary one; reading it back is not a move.
+    @Test
+    func an_entry_without_a_display_means_the_primary_one() throws {
+        let (state, _, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        state.restoreSelection(projects: [])
+        let neighbour = state.createDesktopWidget(span: Self.medium, name: "neighbour")
+        let widget = state.createDesktopWidget(span: Self.medium, name: "logs")
+        // Off the default lattice, joined to its neighbour's.
+        state.settleDesktopWidget(id: widget.id, frame: DesktopWidgetGrid.frame(
+            topLeft: CGPoint(x: neighbour.frame.minX, y: neighbour.frame.minY - DesktopWidgetGrid.gap),
+            span: widget.span
+        ))
+        let settled = widget.topLeft
+        let entry = state.desktopWidgetDeclaration(widget)
+        let column = try #require(entry.column)
+        let row = try #require(entry.row)
+        let yaml = "widgets:\n  - name: logs\n    size: 2x1\n    column: \(column)\n    row: \(row)\n"
+
+        let (neighbourColumn, neighbourRow) = try (
+            #require(state.desktopWidgetDeclaration(neighbour).column),
+            #require(state.desktopWidgetDeclaration(neighbour).row)
+        )
+        try writeLayout(yaml + "  - name: neighbour\n    size: 2x1\n    column: \(neighbourColumn)\n    row: \(neighbourRow)\n", in: dir)
+        state.writeWidgetLayout()
+        #expect(widget.topLeft == settled)
+    }
+
+    /// A snapshot from before placements existed takes its placement from
+    /// where the widget was, when that is still on a screen.
+    @Test
+    func a_snapshot_without_placements_takes_one_from_where_the_widget_was() throws {
+        let (state, _, dir) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        func snapshot(x: Double, y: Double) -> DesktopWidgetSnapshot {
+            DesktopWidgetSnapshot(
+                id: UUID(),
+                tab: WorkspaceSerializer.snapshotTab(TerminalTab(projectPath: NSHomeDirectory(), projectID: DesktopWidget.projectID)),
+                columns: 2, rows: 1, topLeftX: x, topLeftY: y
+            )
+        }
+        let onScreen = snapshot(x: 206, y: 662)
+        let offScreen = snapshot(x: 5000, y: 662)
+        state.restoreDesktopWidgets([onScreen, offScreen])
+
+        let kept = try #require(state.desktopWidget(id: onScreen.id))
+        #expect(kept.topLeft == CGPoint(x: 206, y: 662))
+        #expect(kept.placements == [DesktopWidgetPlacement(
+            topLeft: kept.topLeft,
+            on: DesktopScreen(name: "Screen 1", visibleFrame: Self.screen)
+        )])
+        let moved = try #require(state.desktopWidget(id: offScreen.id))
+        #expect(Self.screen.contains(moved.frame))
+        #expect(moved.placements.count == 1)
+    }
+
     // MARK: - widgets.yaml
 
     /// The file follows every change: it declares each widget's size, grid
-    /// cell and recipe, and the primary display goes unnamed.
+    /// cell, display and recipe.
     @Test
     func widgets_yaml_declares_every_widget_after_a_change() throws {
         let (state, _, dir) = try makeFixture()
@@ -386,7 +593,7 @@ extension AppStateDesktopWidgetsTests {
 
         let entries = try declared(dir)
         #expect(entries == [WidgetDeclaration(
-            name: "logs", size: "2x1", column: 3, row: 2, display: nil, cwd: nil, run: "tail -f log"
+            name: "logs", size: "2x1", column: 3, row: 2, display: "Screen 1", cwd: nil, run: "tail -f log"
         )])
         let text = try String(contentsOf: layoutFile(dir), encoding: .utf8)
         #expect(text.contains(WidgetLayoutFile.schemaModeline))

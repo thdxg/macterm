@@ -18,14 +18,16 @@ private let logger = Logger(subsystem: appBundleID, category: "WidgetLayoutStore
 //         size: 3x2               # grid span, COLUMNSxROWS
 //         column: 3               # the grid cell of its top-left corner,
 //         row: 1                  #   counted from the screen's top-left
-//         display: DELL U2723QE   # optional — the screen, by name; absent
-//                                 #   means the primary display
+//         display: DELL U2723QE   # the screen, by name — always written;
+//                                 #   absent means the primary display
 //         cwd: ~/dev/api          # optional — where a fresh shell starts
 //         run: tail -f dev.log    # optional — typed into a fresh shell
 //
 // Position is in grid cells, not points: widgets always sit on the grid
 // (`DesktopWidgetGrid`), and a cell survives a resolution change where a
-// point doesn't. `cwd` and `run` are the respawn recipe — used when the
+// point doesn't. The cell and display are where the user last put the
+// widget (`DesktopWidget.placements`), never where a display change moved
+// it. `cwd` and `run` are the respawn recipe — used when the
 // widget has no session to reattach (a reboot, or an entry added by hand) —
 // captured from the live pane the way a pinned tab's are.
 

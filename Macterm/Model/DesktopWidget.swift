@@ -92,6 +92,11 @@ final class DesktopWidget: Identifiable {
     /// (`AppState.refreshDesktopWidgetRecipes`), the way a pinned tab's is.
     var command: String?
     var cwd: String?
+    /// Where the user put the widget on each display and resolution it has
+    /// been on, most recent last (`DesktopWidgetPlacement`). `topLeft` is
+    /// where it is now, which after a display change can be a projection of
+    /// one of these rather than one of them.
+    var placements: [DesktopWidgetPlacement]
 
     init(
         id: UUID = UUID(),
@@ -100,7 +105,8 @@ final class DesktopWidget: Identifiable {
         span: DesktopWidgetSpan,
         topLeft: CGPoint,
         command: String? = nil,
-        cwd: String? = nil
+        cwd: String? = nil,
+        placements: [DesktopWidgetPlacement] = []
     ) {
         self.id = id
         self.name = name
@@ -108,6 +114,7 @@ final class DesktopWidget: Identifiable {
         self.topLeft = topLeft
         self.command = command
         self.cwd = cwd
+        self.placements = placements
         self.tab = tab ?? Self.freshTab(command: command, cwd: cwd)
     }
 
@@ -145,11 +152,125 @@ final class DesktopWidget: Identifiable {
     }
 }
 
-/// A screen widgets can sit on: its name (`widgets.yaml`'s `display:`) and
-/// the part of it windows may use.
+/// A screen widgets can sit on: its name (`widgets.yaml`'s `display:`), the
+/// part of it windows may use, and its resolution.
 struct DesktopScreen: Equatable {
     let name: String
     let visibleFrame: CGRect
+    /// The whole display in points, menu bar included. With the name, what a
+    /// placement is remembered by — the whole frame rather than the visible
+    /// one, so showing or hiding the Dock isn't a new resolution.
+    let resolution: CGSize
+
+    init(name: String, visibleFrame: CGRect, resolution: CGSize? = nil) {
+        self.name = name
+        self.visibleFrame = visibleFrame
+        self.resolution = resolution ?? visibleFrame.size
+    }
+}
+
+/// Where the user put a widget on one display at one resolution: its top-left
+/// corner measured from the display's visible top-left, rightward and down.
+///
+/// Notification Center's own model. It keeps the system widgets' layout per
+/// display and per resolution (it logs `Writing desktop widget placement
+/// storage to disk: [number: 0, resolutions: [size: 3008.0x1662.0, groups:
+/// […]]]`), and on a display it has no layout for it PROJECTS the latest one —
+/// the same offsets from the top-left corner (logged as `Desktop Widget
+/// Placement projection published`) — without saving anything. Only the
+/// user moving a widget records a layout there, so a trip to the laptop
+/// never costs the external display its arrangement. Measured going from a
+/// 3008×1692 display to a 1920×1243 one, 2026-09-28.
+struct DesktopWidgetPlacement: Codable, Equatable {
+    var display: String
+    var width: Double
+    var height: Double
+    var offsetX: Double
+    var offsetY: Double
+
+    init(display: String, resolution: CGSize, offset: CGPoint) {
+        self.display = display
+        width = resolution.width
+        height = resolution.height
+        offsetX = offset.x
+        offsetY = offset.y
+    }
+
+    /// Where a widget whose top-left is at `topLeft` sits on `screen`.
+    init(topLeft: CGPoint, on screen: DesktopScreen) {
+        self.init(
+            display: screen.name,
+            resolution: screen.resolution,
+            offset: CGPoint(x: topLeft.x - screen.visibleFrame.minX, y: screen.visibleFrame.maxY - topLeft.y)
+        )
+    }
+
+    var resolution: CGSize { CGSize(width: width, height: height) }
+
+    /// Whether this is the placement for `screen` as it is now.
+    func isFor(_ screen: DesktopScreen) -> Bool {
+        display == screen.name && resolution == screen.resolution
+    }
+
+    /// The same offset from `screen`'s visible top-left.
+    func topLeft(on screen: DesktopScreen) -> CGPoint {
+        CGPoint(x: screen.visibleFrame.minX + offsetX, y: screen.visibleFrame.maxY - offsetY)
+    }
+
+    /// The default-lattice cell the offset is nearest — how `widgets.yaml`
+    /// declares it (`DesktopWidgetGrid.origin`).
+    var column: Int {
+        Int(((offsetX - DesktopWidgetGrid.edgeInset.width) / DesktopWidgetGrid.pitch).rounded())
+    }
+
+    var row: Int {
+        Int(((offsetY - DesktopWidgetGrid.edgeInset.height) / DesktopWidgetGrid.pitch).rounded())
+    }
+
+    /// How many are kept per widget: plenty for a desk, a laptop and a
+    /// projector at a couple of resolutions each.
+    static let limit = 8
+
+    /// `placements` with `placement` as the most recent, replacing any for the
+    /// same display and resolution.
+    static func recording(_ placement: Self, into placements: [Self]) -> [Self] {
+        let kept = placements.filter { $0.display != placement.display || $0.resolution != placement.resolution }
+        return Array((kept + [placement]).suffix(limit))
+    }
+
+    /// Where `resolve` puts a widget. `exact` is false for a projection.
+    struct Resolved: Equatable {
+        let screen: DesktopScreen
+        let topLeft: CGPoint
+        let exact: Bool
+    }
+
+    /// Where a widget with `placements` goes on `screens` (primary first):
+    /// the display it was last put on, else the primary one; there, exactly
+    /// where it was put at this resolution, else the latest placement's
+    /// offsets projected onto it — kept on the screen, the widget's `size`
+    /// permitting. Nothing records a projection.
+    static func resolve(
+        _ placements: [Self],
+        size: CGSize,
+        on screens: [DesktopScreen]
+    ) -> Resolved? {
+        guard let latest = placements.last, let primary = screens.first else { return nil }
+        let screen = screens.first { $0.name == latest.display } ?? primary
+        if let exact = placements.last(where: { $0.isFor(screen) }) {
+            return Resolved(screen: screen, topLeft: exact.topLeft(on: screen), exact: true)
+        }
+        // A display's own most recent layout projects better than another
+        // display's: it is the shape the user chose for this screen.
+        let source = placements.last { $0.display == screen.name } ?? latest
+        let projected = source.topLeft(on: screen)
+        let visible = screen.visibleFrame
+        let topLeft = CGPoint(
+            x: max(visible.minX, min(projected.x, visible.maxX - size.width)),
+            y: min(visible.maxY, max(projected.y, visible.minY + size.height))
+        )
+        return Resolved(screen: screen, topLeft: topLeft, exact: false)
+    }
 }
 
 /// The lattices widgets snap to. A lattice is the system widgets' module —

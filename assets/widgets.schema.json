@@ -38,7 +38,7 @@
         },
         "display": {
           "type": "string",
-          "description": "The screen the widget is on, by its name as System Settings → Displays shows it. Omit for the primary display (the one with the menu bar); a name that matches no connected screen also means the primary display."
+          "description": "The screen `column` and `row` are on, by its name as System Settings → Displays shows it. Macterm always writes it, since which display is primary changes with what is plugged in. Omit it for the primary display (the one with the menu bar). A display that isn't connected keeps the cell for when it is, if the widget has been on it; otherwise the cell is taken on the primary display."
         },
         "cwd": {
           "type": "string",

@@ -35,6 +35,12 @@ Widgets snap to a grid when you let go of a move or a resize. The grid is the sy
 
 Like macOS, Macterm lines widgets up in groups. A widget you let go of next to another widget, including one of the system's, snaps into line with it. One let go in open space snaps to the screen's grid, which starts where macOS puts widgets against the top-left corner. Widgets never overlap, and never cover the system's widgets: one dropped onto another moves to the nearest free cell.
 
+## Changing displays
+
+Widgets follow your displays the way the system's widgets do. Each widget remembers where you put it on each display, at each resolution. Unplug an external display and its widgets move to the display that's left, at the same distance from its top-left corner (pulled back onto the screen if they'd land off it). Plug it back in and they return to exactly where you left them.
+
+Moving a widget on the smaller display gives it a spot there too, without losing its spot on the other one. A widget moved onto the screen by a display change isn't moved for good: nothing is saved until you move it yourself.
+
 ## Settings → Widgets
 
 The **Widgets** list shows every widget, including ones hidden behind windows or on another display, with its size and a **Remove** for each; the one you're editing has an accent-colored icon. **+** adds a widget.
@@ -53,7 +59,7 @@ widgets:
     size: 3x2               # the grid span, COLUMNSxROWS
     column: 3               # the grid cell of the top-left corner,
     row: 1                  #   counted from the top-left of the screen
-    display: DELL U2723QE   # optional; the screen by name, else the primary display
+    display: DELL U2723QE   # the screen by name; Macterm always writes it
     cwd: ~/dev/api          # where a fresh shell starts
     run: tail -f log/dev.log
 ```
@@ -64,7 +70,7 @@ widgets:
 | --- | --- |
 | Add an entry | Becomes a widget running its `run:`. |
 | Remove an entry | Its widget is removed on the next launch. |
-| Change `size`, `column`, `row` or `display` | The widget moves and resizes on the next launch, or the next time Macterm writes the file. |
+| Change `size`, `column`, `row` or `display` | The widget moves and resizes on the next launch, or the next time Macterm writes the file. A display that isn't connected keeps the cell for when it is. |
 | Change `run:` or `cwd:` | Applies the next time the widget starts fresh. |
 
 Entries carry no ids. Macterm matches them to widgets by `name:`, then by content, then by position, so name an entry before editing it heavily. Macterm re-reads the file before every write, so your edits are never clobbered. If the file stops parsing, auto-saving pauses with an alert until it parses again.

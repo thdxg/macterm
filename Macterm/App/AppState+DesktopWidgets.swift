@@ -66,7 +66,9 @@ extension AppState {
         let topLeft = desktopVisibleFrames().first.map {
             DesktopWidgetGrid.centered(span, in: $0, avoiding: occupied)
         } ?? .zero
-        return DesktopWidget(name: name, span: span, topLeft: topLeft, command: command, cwd: cwd)
+        let widget = DesktopWidget(name: name, span: span, topLeft: topLeft, command: command, cwd: cwd)
+        recordPlacement(of: widget)
+        return widget
     }
 
     /// Remove a widget for good: its shell ends and its session is killed.
@@ -145,6 +147,7 @@ extension AppState {
             let snapped = DesktopWidgetGrid.snap(frame, in: screen, avoiding: others)
             widget.topLeft = snapped.topLeft
             widget.span = snapped.span
+            recordPlacement(of: widget)
         } else {
             widget.topLeft = CGPoint(x: frame.minX, y: frame.maxY)
         }
@@ -163,6 +166,71 @@ extension AppState {
                 let snapped = DesktopWidgetGrid.snap(widget.frame, in: screen, avoiding: placed)
                 widget.topLeft = snapped.topLeft
                 widget.span = snapped.span
+                recordPlacement(of: widget)
+            }
+            placed.append(widget.frame)
+        }
+    }
+
+    // MARK: - Displays
+
+    /// Remember where `widget` is now as where the user put it on the screen
+    /// it is on (`DesktopWidgetPlacement`). Only what the user did is
+    /// recorded — creating, moving, resizing, declaring — never a projection
+    /// onto another display.
+    private func recordPlacement(of widget: DesktopWidget) {
+        let screens = desktopScreens()
+        guard let visible = DesktopWidgetGrid.screen(for: widget.frame, among: screens.map(\.visibleFrame)),
+              let screen = screens.first(where: { $0.visibleFrame == visible })
+        else { return }
+        widget.placements = DesktopWidgetPlacement.recording(
+            DesktopWidgetPlacement(topLeft: widget.topLeft, on: screen),
+            into: widget.placements
+        )
+    }
+
+    /// The displays changed — one was connected or disconnected, or a
+    /// resolution changed. Put every widget where the user put it on the
+    /// display it now belongs to, or project its latest placement there, the
+    /// way Notification Center moves the system's widgets
+    /// (`DesktopWidgetPlacement`). `DesktopWidgetWindows` calls this once the
+    /// reconfiguration has settled.
+    func desktopScreensDidChange() {
+        guard hasRestoredSelection, !desktopWidgets.isEmpty else { return }
+        let before = desktopWidgets.map(\.topLeft)
+        placeForCurrentScreens(desktopWidgets, avoiding: nativeDesktopWidgetFrames())
+        guard desktopWidgets.map(\.topLeft) != before else { return }
+        logger.info("displays changed; moved desktop widgets to match")
+        desktopWidgetsDidChange()
+    }
+
+    /// Place `widgets` on the screens as they are now. The ones with a
+    /// placement for their display at this resolution go first and exactly
+    /// there; projections go after, and one that would land on another widget
+    /// (the offsets came from a bigger screen, or were pushed in from its
+    /// edge) moves to the nearest free cell. The span is never changed —
+    /// shrinking a widget to fit a small display would lose its size for the
+    /// big one. A widget with no placement at all (a snapshot from before
+    /// placements, off every screen) goes in the middle of the primary display.
+    private func placeForCurrentScreens(_ widgets: [DesktopWidget], avoiding others: [CGRect]) {
+        let screens = desktopScreens()
+        guard let primary = screens.first else { return }
+        let ids = Set(widgets.map(\.id))
+        var placed = others + desktopWidgets.filter { !ids.contains($0.id) }.map(\.frame)
+        let targets = widgets.map { widget in
+            (widget, DesktopWidgetPlacement.resolve(widget.placements, size: widget.frame.size, on: screens))
+        }
+        let ordered = targets.filter { $0.1?.exact == true } + targets.filter { $0.1?.exact != true }
+        for (widget, target) in ordered {
+            guard let target else {
+                widget.topLeft = DesktopWidgetGrid.centered(widget.span, in: primary.visibleFrame, avoiding: placed)
+                recordPlacement(of: widget)
+                placed.append(widget.frame)
+                continue
+            }
+            widget.topLeft = target.topLeft
+            if placed.contains(where: { $0.insetBy(dx: 1, dy: 1).intersects(widget.frame) }) {
+                widget.topLeft = DesktopWidgetGrid.snap(widget.frame, in: target.screen.visibleFrame, avoiding: placed).topLeft
             }
             placed.append(widget.frame)
         }
@@ -184,13 +252,16 @@ extension AppState {
 
     /// Hand the persisted widgets back, all locked, and return the ids
     /// restored — `materializeRestoredDesktopWidgets` checks their sessions
-    /// before they are drawn. A widget whose saved spot is no longer on any
-    /// screen (its display went away) is placed afresh; a widget already
-    /// live under the same id is left alone.
+    /// before they are drawn. Each goes where the user put it on the displays
+    /// connected now, or a projection of that (`placeForCurrentScreens`) —
+    /// the displays may have changed while Macterm was quit. A snapshot from
+    /// before placements existed has its placement taken from where it was,
+    /// if that is still on a screen. A widget already live under the same id
+    /// is left alone.
     @discardableResult
     func restoreDesktopWidgets(_ snapshots: [DesktopWidgetSnapshot]) -> Set<UUID> {
         let frames = desktopVisibleFrames()
-        var restored: Set<UUID> = []
+        var widgets: [DesktopWidget] = []
         for snapshot in snapshots where desktopWidget(id: snapshot.id) == nil {
             let widget = DesktopWidget(
                 id: snapshot.id,
@@ -199,15 +270,17 @@ extension AppState {
                 span: DesktopWidgetSpan(columns: snapshot.columns, rows: snapshot.rows),
                 topLeft: CGPoint(x: snapshot.topLeftX, y: snapshot.topLeftY),
                 command: snapshot.command,
-                cwd: snapshot.cwd
+                cwd: snapshot.cwd,
+                placements: snapshot.placements ?? []
             )
-            if let screen = frames.first, !DesktopWidgetGrid.isReachable(widget.frame, on: frames) {
-                let occupied = desktopWidgets.map(\.frame) + nativeDesktopWidgetFrames()
-                widget.topLeft = DesktopWidgetGrid.centered(widget.span, in: screen, avoiding: occupied)
+            if widget.placements.isEmpty, DesktopWidgetGrid.isReachable(widget.frame, on: frames) {
+                recordPlacement(of: widget)
             }
-            desktopWidgets.append(widget)
-            restored.insert(widget.id)
+            widgets.append(widget)
         }
+        placeForCurrentScreens(widgets, avoiding: nativeDesktopWidgetFrames())
+        desktopWidgets += widgets
+        let restored = Set(widgets.map(\.id))
         pendingDesktopWidgetMaterialize.formUnion(restored)
         return restored
     }
@@ -250,7 +323,8 @@ extension AppState {
                 topLeftX: widget.topLeft.x,
                 topLeftY: widget.topLeft.y,
                 command: widget.command,
-                cwd: widget.cwd
+                cwd: widget.cwd,
+                placements: widget.placements
             )
         }
     }
@@ -286,28 +360,21 @@ extension AppState {
         }
     }
 
-    /// A widget as `widgets.yaml` declares it: its grid cell on its screen
-    /// (named only when it isn't the primary display).
+    /// A widget as `widgets.yaml` declares it: the grid cell and display of
+    /// where the user last put it (`placements`), never where a display
+    /// change projected it — or quitting on the laptop would write the
+    /// laptop's cell over the external display's, and the next launch on
+    /// that display would adopt it. The display is always named: which one
+    /// is primary changes with what is plugged in, so leaving it out
+    /// ("the primary display") would mean another display after the change.
     func desktopWidgetDeclaration(_ widget: DesktopWidget) -> WidgetDeclaration {
-        let screens = desktopScreens()
-        let frames = screens.map(\.visibleFrame)
-        var column: Int?
-        var row: Int?
-        var display: String?
-        if let frame = DesktopWidgetGrid.screen(for: widget.frame, among: frames),
-           let index = frames.firstIndex(of: frame)
-        {
-            let origin = DesktopWidgetGrid.origin(in: frame)
-            column = Int(((widget.topLeft.x - origin.x) / DesktopWidgetGrid.pitch).rounded())
-            row = Int(((origin.y - widget.topLeft.y) / DesktopWidgetGrid.pitch).rounded())
-            display = index == 0 ? nil : screens[index].name
-        }
+        let placement = widget.placements.last
         return WidgetDeclaration(
             name: widget.name,
             size: widget.span.description,
-            column: column,
-            row: row,
-            display: display,
+            column: placement?.column,
+            row: placement?.row,
+            display: placement?.display,
             cwd: widget.cwd,
             run: widget.command
         )
@@ -319,7 +386,13 @@ extension AppState {
     /// (`desktopWidgetDeclaration`). The file's cell is on the screen's
     /// default lattice and cannot express a widget that joined a neighbour's,
     /// so re-deriving an untouched entry moved such a widget off its
-    /// neighbour on every launch. Returns whether size or place changed.
+    /// neighbour on every launch. Returns whether size or place changed; a
+    /// place the caller then records (`tidyDesktopWidgets`).
+    ///
+    /// A cell on a display that isn't connected, but that the widget has been
+    /// on, becomes its placement there for when it is — the widget stays
+    /// where it is meanwhile. On a display it has never been on, the cell is
+    /// taken on the primary display, as for no `display:` at all.
     @discardableResult
     private func adopt(_ entry: WidgetDeclaration, into widget: DesktopWidget) -> Bool {
         let current = desktopWidgetDeclaration(widget)
@@ -331,11 +404,27 @@ extension AppState {
             widget.span = span
             moved = true
         }
-        if let column = entry.column, let row = entry.row,
-           column != current.column || row != current.row || entry.display != current.display,
-           let screen = desktopScreens().first(where: { $0.name == entry.display }) ?? desktopScreens().first
+        // No `display:` is the primary display — what every entry written
+        // before displays were always named says, so it isn't a change.
+        let screens = desktopScreens()
+        let display = entry.display ?? screens.first?.name
+        guard let column = entry.column, let row = entry.row,
+              column != current.column || row != current.row || display != current.display
+        else { return moved }
+        let cell = (column: max(0, column), row: max(0, row))
+        if let display = entry.display, !screens.contains(where: { $0.name == display }),
+           let known = widget.placements.last(where: { $0.display == display })
         {
-            widget.topLeft = DesktopWidgetGrid.topLeft(column: max(0, column), row: max(0, row), in: screen.visibleFrame)
+            let offset = CGPoint(
+                x: DesktopWidgetGrid.edgeInset.width + CGFloat(cell.column) * DesktopWidgetGrid.pitch,
+                y: DesktopWidgetGrid.edgeInset.height + CGFloat(cell.row) * DesktopWidgetGrid.pitch
+            )
+            widget.placements = DesktopWidgetPlacement.recording(
+                DesktopWidgetPlacement(display: display, resolution: known.resolution, offset: offset),
+                into: widget.placements
+            )
+        } else if let screen = screens.first(where: { $0.name == entry.display }) ?? screens.first {
+            widget.topLeft = DesktopWidgetGrid.topLeft(column: cell.column, row: cell.row, in: screen.visibleFrame)
             moved = true
         }
         return moved
