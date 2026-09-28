@@ -823,9 +823,8 @@ enum WindowAppearance {
     /// never an opaque window: at full opacity the backdrop is simply an
     /// opaque rounded fill, and the corners outside it stay clear. Glass and
     /// tint take the widget's continuous corner (`DesktopWidgetMetrics`), and
-    /// the CGS blur follows along: the window server blurs only where the
-    /// window has alpha (measured on a borderless window with a rounded
-    /// translucent layer — the corners outside it stayed sharp).
+    /// the CGS blur follows the window's shape, which the panel's own corner
+    /// mask sets to that same corner (`DesktopWidgetPanel.cornerMask`).
     static func syncDesktopWidget(_ panel: NSPanel) {
         let opacity = Preferences.shared.windowOpacity
         let bg = MactermTheme.nsConfiguredBg

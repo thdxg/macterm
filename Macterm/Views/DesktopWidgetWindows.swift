@@ -109,6 +109,39 @@ final class DesktopWidgetPanel: NSPanel {
         widgetContent.onDone = { [weak appState] in appState?.endEditingDesktopWidget() }
     }
 
+    /// The widget's continuous corner, as the shape the window server gives
+    /// this window. A borderless window's shape is otherwise derived from its
+    /// alpha, and coarsely: without glass the CGS background blur filled a
+    /// jagged, wider-cornered region than the rounded tint, so blurred
+    /// desktop showed around every corner and the widget lost its radius
+    /// (glass hides it by drawing its own material inside the curve). AppKit
+    /// asks a window for this image when it builds the window's shape — the
+    /// same hook `NSVisualEffectView.maskImage` uses — so it shapes the blur
+    /// and the shadow alike.
+    @objc(_cornerMask)
+    func cornerMask() -> NSImage? {
+        Self.cornerMaskImage
+    }
+
+    /// A nine-part image: the corners are drawn once and the edges stretch.
+    /// The caps cover the whole continuous curve, which runs past the radius.
+    private static let cornerMaskImage: NSImage = {
+        let radius = DesktopWidgetMetrics.cornerRadius
+        let cap = (radius * 1.6).rounded(.up)
+        let side = cap * 2 + 1
+        let image = NSImage(size: CGSize(width: side, height: side), flipped: false) { rect in
+            let path = RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect).cgPath
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.setFillColor(NSColor.black.cgColor)
+            context.addPath(path)
+            context.fillPath()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: cap, left: cap, bottom: cap, right: cap)
+        image.resizingMode = .stretch
+        return image
+    }()
+
     /// Keyboard input goes to the widget being edited and nowhere else.
     override var canBecomeKey: Bool { isEditing }
     override var canBecomeMain: Bool { false }
