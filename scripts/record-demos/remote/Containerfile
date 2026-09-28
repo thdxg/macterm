@@ -1,6 +1,10 @@
-# An ephemeral "remote host" for the remote-project demo: sshd, a login shell,
+# An ephemeral "remote host" for the remote-project demos: sshd, a login shell,
 # vim, and zmx — which Macterm's remote panes attach to on the host itself.
 # zmx publishes macOS binaries only, so build it here.
+#
+# It takes a key (demo 5, and every check the recorder makes) and a password
+# (demo 10, which is about the password bubble). Which one a pane uses is
+# decided on the client, by the ~/.ssh/config block remote_up writes.
 FROM debian:12 AS zmx
 ARG ZIG_VERSION=0.16.0
 ARG ZMX_REF=build-2026-09-06
@@ -26,7 +30,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /run/sshd
 COPY --from=zmx /src/zig-out/bin/zmx /usr/local/bin/zmx
 
+ARG DEMO_PASSWORD=macterm-demo
 RUN useradd -m -s /bin/bash demo \
+    && echo "demo:${DEMO_PASSWORD}" | chpasswd \
     && mkdir -p /home/demo/.ssh \
     && chmod 700 /home/demo/.ssh
 COPY authorized_keys /home/demo/.ssh/authorized_keys
@@ -41,10 +47,13 @@ RUN echo macterm-demo-container > /etc/macterm-demo
 
 RUN printf '%s\n' \
       'PermitRootLogin no' \
-      'PasswordAuthentication no' \
+      'PasswordAuthentication yes' \
+      'KbdInteractiveAuthentication no' \
       'AcceptEnv COLORTERM' \
       'PrintMotd no' \
-      > /etc/ssh/sshd_config.d/demo.conf
+      'PrintLastLog no' \
+      > /etc/ssh/sshd_config.d/demo.conf \
+    && : > /etc/motd && rm -f /etc/update-motd.d/*
 
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D", "-e"]
