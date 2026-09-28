@@ -9,8 +9,14 @@ private let logger = Logger(subsystem: appBundleID, category: "PasswordAuthentic
 /// Keychain can't enforce this itself (see `KeychainPasswordStore`), so it is
 /// the app's job, asked for at the moment of use.
 ///
-/// Under `PasswordAutofillAuthentication.untilLocked` one success stands until
-/// the screen locks, the Mac sleeps, the setting changes, or Macterm quits.
+/// Under `PasswordAutofillAuthentication.untilLocked` ("Once per app launch")
+/// one success stands until Macterm quits, the screen locks, the Mac sleeps,
+/// the session resigns active, or the setting changes. It is deliberately
+/// never persisted: a lock or user switch while Macterm isn't running leaves
+/// no reliable trace to check on relaunch (loginwindow's unified-log lines
+/// drop transitions, and `CGSessionCopyCurrentDictionary` is current state
+/// only), so a carried-over approval could outlive the lock that should
+/// have ended it.
 @MainActor
 final class PasswordAuthenticator {
     static let shared = PasswordAuthenticator()

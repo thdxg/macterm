@@ -72,8 +72,9 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 /// When Autofill asks the user to authenticate (Settings → Passwords). The raw
 /// values are persisted; the case order is the picker's.
 enum PasswordAutofillAuthentication: String, CaseIterable, Identifiable {
-    /// The default: the first Autofill asks, and the answer stands until the
-    /// Mac locks or sleeps, or Macterm quits.
+    /// The default, "Once per app launch": the first Autofill asks, and the
+    /// answer stands until Macterm quits, the Mac locks or sleeps, or the user
+    /// switches away. The raw value predates the label; it is persisted.
     case untilLocked
     /// Every Autofill, like Safari.
     case everyTime
@@ -82,7 +83,7 @@ enum PasswordAutofillAuthentication: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .untilLocked: "Once, until the Mac locks"
+        case .untilLocked: "Once per app launch"
         case .everyTime: "Every time"
         }
     }

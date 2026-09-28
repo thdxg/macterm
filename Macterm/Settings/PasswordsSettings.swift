@@ -87,6 +87,7 @@ struct PasswordsSettings: View {
 
     private static let offerCaption = "After a password you type works, offer to save it for that command."
     private static let authenticationCaption = "Autofill confirms with Touch ID, or your login password where Touch ID isn’t available. "
+        + "Once per app launch also asks again after the Mac locks or sleeps. "
         + "Passwords are stored in your login keychain."
 
     private var filtered: [SavedPassword] {

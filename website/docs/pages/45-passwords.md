@@ -32,7 +32,7 @@ Each password is filed under the command that asked for it plus the prompt line 
 | Setting | What it does |
 | --- | --- |
 | **Offer to save passwords** | Off stops the save offer. Saved passwords still autofill. |
-| **Ask for Touch ID** | **Once, until the Mac locks** (the default; also relocks on sleep and quit), or **Every time**. |
+| **Ask for Touch ID** | **Once per app launch** (the default; also asks again after the Mac locks or sleeps), or **Every time**. |
 | **Saved Passwords** | Search the list; a row's menu offers **Details…** (the full command and prompt, editable, and the password after Touch ID — shown, copied or changed), **Copy Password** and **Remove**. |
 
 Passwords are stored in your login keychain. Macterm never prints them, logs them, or exposes them to the `macterm` CLI or Shortcuts.
