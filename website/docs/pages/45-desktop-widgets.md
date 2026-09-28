@@ -3,14 +3,14 @@ slug: desktop-widgets
 title: Desktop widgets
 nav: Desktop widgets
 group: Everyday use
-description: Terminals that live on the desktop, sized and shaped like the system's widgets, whose shells survive a quit.
+description: Terminals that live on the desktop, on the system widgets' grid and shaped like them, whose shells survive a quit.
 -->
 
 # Desktop widgets
 
 A desktop widget is a terminal on your desktop. It sits with the system's own widgets, below every window, and stays put through Mission Control and Show Desktop. It appears on every Space.
 
-Add one with **File → New Desktop Widget**, **New Desktop Widget** in the command palette, or the **+** in **Settings → Widgets**. It opens in the middle of the desktop, running your login shell.
+Add one with **File → New Desktop Widget**, **New Desktop Widget** in the command palette, or the **+** in **Settings → Widgets**. It opens in the middle of the desktop, 3×3 grid cells, running your login shell.
 
 Its shell persists like a pinned tab's. Quit Macterm with something running in a widget and it keeps running. On the next launch the widget comes back in the same place, attached to the same shell.
 
@@ -31,13 +31,13 @@ Typing into a widget leaves the app you were in at the front.
 
 ## The grid
 
-Widgets snap to a grid when you let go of a move or a resize. The grid is the system widgets' own: 164-point cells with 16-point gaps. A widget can span any number of cells. The right-click menu offers the system's four sizes: **Small** (1×1), **Medium** (2×1), **Large** (2×2) and **Extra Large** (4×2).
+Widgets snap to a grid when you let go of a move or a resize. The grid is the system widgets' own: 164-point cells with 16-point gaps. A widget can span any number of cells; to change its size, edit it and drag an edge or corner. A new widget opens in the exact middle of the screen and joins the grid the first time you move or resize it. If the middle is taken, it opens in the nearest free cell instead.
 
 Like macOS, Macterm lines widgets up in groups. A widget you let go of next to another widget, including one of the system's, snaps into line with it. One let go in open space snaps to the screen's grid, which starts where macOS puts widgets against the top-left corner. Widgets never overlap, and never cover the system's widgets: one dropped onto another moves to the nearest free cell.
 
 ## Settings → Widgets
 
-**Default size** sets the size of new widgets. The **Widgets** list shows every widget, including ones hidden behind windows or on another display, with a size menu and **Remove** for each; the one you're editing has an accent-colored icon. **+** adds a widget.
+The **Widgets** list shows every widget, including ones hidden behind windows or on another display, with its size and a **Remove** for each; the one you're editing has an accent-colored icon. **+** adds a widget.
 
 Removing a widget ends its shell. If a program is still running in it, Macterm asks first.
 
@@ -50,7 +50,7 @@ The widgets live in `~/.config/macterm/widgets.yaml`, next to `pinned.yaml`. Mac
 ```yaml
 widgets:
   - name: logs              # optional; shown in Settings
-    size: medium            # small, medium, large, extra-large, or a span like 3x2
+    size: 3x2               # the grid span, COLUMNSxROWS
     column: 3               # the grid cell of the top-left corner,
     row: 1                  #   counted from the top-left of the screen
     display: DELL U2723QE   # optional; the screen by name, else the primary display
@@ -72,7 +72,7 @@ Entries carry no ids. Macterm matches them to widgets by `name:`, then by conten
 ## From the CLI
 
 ```sh
-macterm widget new --size large --name top --run htop
+macterm widget new --size 4x3 --name top --run htop
 macterm widget list
 macterm widget edit widget:1
 macterm widget done

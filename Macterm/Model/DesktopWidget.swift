@@ -38,7 +38,11 @@ struct DesktopWidgetSpan: Codable, Equatable, Hashable, CustomStringConvertible 
         self.rows = max(1, rows)
     }
 
-    /// `3x2` — the CLI's spelling of a span that isn't a family.
+    /// What a new widget starts as, three cells a side — a terminal wants
+    /// rows as much as columns, which none of the system's wide families give.
+    static let initial = DesktopWidgetSpan(columns: 3, rows: 3)
+
+    /// `3x2` — how the CLI and `widgets.yaml` spell a span.
     init?(parsing text: String) {
         let parts = text.lowercased().split(separator: "x")
         guard parts.count == 2, let columns = Int(parts[0]), let rows = Int(parts[1]), columns >= 1, rows >= 1 else {
@@ -49,59 +53,6 @@ struct DesktopWidgetSpan: Codable, Equatable, Hashable, CustomStringConvertible 
 
     var description: String { "\(columns)x\(rows)" }
 }
-
-/// The system widgets' size families, as the right-click menu offers them:
-/// the same names at the same dimensions.
-enum DesktopWidgetSize: String, CaseIterable, Codable {
-    case small
-    case medium
-    case large
-    case extraLarge = "extra-large"
-
-    var title: String {
-        switch self {
-        case .small: "Small"
-        case .medium: "Medium"
-        case .large: "Large"
-        case .extraLarge: "Extra Large"
-        }
-    }
-
-    var span: DesktopWidgetSpan {
-        switch self {
-        case .small: DesktopWidgetSpan(columns: 1, rows: 1)
-        case .medium: DesktopWidgetSpan(columns: 2, rows: 1)
-        case .large: DesktopWidgetSpan(columns: 2, rows: 2)
-        case .extraLarge: DesktopWidgetSpan(columns: 4, rows: 2)
-        }
-    }
-
-    /// The family a span is, if any.
-    init?(span: DesktopWidgetSpan) {
-        guard let match = Self.allCases.first(where: { $0.span == span }) else { return nil }
-        self = match
-    }
-
-    /// A family name or a `CxR` span.
-    static func parseSpan(_ text: String) -> DesktopWidgetSpan? {
-        Self(rawValue: text.lowercased())?.span ?? DesktopWidgetSpan(parsing: text)
-    }
-
-    /// The family name, else `CxR`.
-    static func name(of span: DesktopWidgetSpan) -> String {
-        Self(span: span)?.rawValue ?? span.description
-    }
-
-    /// The menu's and Settings' label for a span.
-    static func title(of span: DesktopWidgetSpan) -> String {
-        Self(span: span)?.title ?? "\(span.columns) × \(span.rows)"
-    }
-}
-
-/// Stored by raw value (Settings → Widgets' default size). Declared here, not
-/// beside the other preference enums: `PreferenceValue` needs `Sendable`,
-/// which only this file can conform the enum to.
-extension DesktopWidgetSize: PreferenceValue {}
 
 /// One terminal on the desktop: a single pane whose zmx session outlives a
 /// quit exactly like a pinned tab's, placed where the user left it.
@@ -131,7 +82,7 @@ final class DesktopWidget: Identifiable {
     /// The widget's top-left corner in global AppKit screen coordinates
     /// (y grows upward). Top-left rather than AppKit's bottom-left origin
     /// because that is the corner the grid is laid out from and the one that
-    /// stays put when a preset size is picked.
+    /// stays put when a widget is resized.
     var topLeft: CGPoint
     /// The respawn recipe (`widgets.yaml`'s `run:`/`cwd:`): typed into and
     /// started in a fresh shell whenever the widget starts a session — at
@@ -288,12 +239,24 @@ enum DesktopWidgetGrid {
         return (topLeft, span)
     }
 
-    /// Where a new widget of `span` goes: the free default-lattice cell
-    /// nearest the middle of the screen.
+    /// Where a new widget of `span` goes: the exact middle of the screen, off
+    /// the lattice — the lattice's cells are a pitch apart, so its cell
+    /// nearest the middle was visibly off-center — and onto the lattice at
+    /// the first move or resize, like any widget. When the middle would
+    /// overlap a widget in `occupied`, the free default-lattice cell nearest
+    /// it instead, since widgets never stack.
     static func centered(_ span: DesktopWidgetSpan, in visibleFrame: CGRect, avoiding occupied: [CGRect]) -> CGPoint {
         let lattice = origin(in: visibleFrame)
         let span = fitted(span, lattice: lattice, in: visibleFrame)
         let size = dimensions(of: span)
+        let middle = CGPoint(
+            x: (visibleFrame.midX - size.width / 2).rounded(),
+            y: (visibleFrame.midY + size.height / 2).rounded()
+        )
+        let candidate = frame(topLeft: middle, span: span)
+        if !occupied.contains(where: { $0.insetBy(dx: 1, dy: 1).intersects(candidate) }) {
+            return middle
+        }
         let columns = positions(from: lattice.x, length: size.width, lower: visibleFrame.minX, upper: visibleFrame.maxX)
         let rows = rowPositions(from: lattice.y, length: size.height, in: visibleFrame)
         let column = columns.map { ($0.lowerBound + $0.upperBound) / 2 } ?? 0

@@ -130,8 +130,7 @@ struct ControlArgs: Codable, Equatable {
     /// Desktop widget selector (`widget.*`): 1-based index (`widget:N` or
     /// `N`) in `widget list` order, or its id.
     var widget: String?
-    /// Desktop widget size (`widget.new`, `widget.set`): a family
-    /// (`DesktopWidgetSize`'s raw values) or a `CxR` grid span.
+    /// Desktop widget size (`widget.new`, `widget.set`): a `CxR` grid span.
     var size: String?
 
     init(
@@ -379,7 +378,7 @@ struct ControlWidgetInfo: Codable, Equatable {
     var name: String?
     /// The widget pane's zmx session name.
     var session: String
-    /// The family name (`DesktopWidgetSize`'s raw value), else `CxR`.
+    /// The grid span, `CxR`.
     var size: String
     /// Grid span in cells.
     var columns: Int

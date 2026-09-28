@@ -53,7 +53,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `window focus <window>` | Bring a window to the front. |
 | `window close [--window W]` | Close a window. The last visible one hides instead. |
 | `widget list` | [Desktop widgets](/docs/desktop-widgets) in creation order (`widget:1`), with name, size, locked/editing and session name. |
-| `widget new [--size S] [--name N] [--run CMD]` | Add a locked desktop widget running your login shell, in the middle of the desktop. `S` is `small`, `medium`, `large`, `extra-large` or a grid span like `3x2`; the default is Settings → Widgets' default size. `--run` types CMD into the shell whenever the widget starts one. |
+| `widget new [--size S] [--name N] [--run CMD]` | Add a locked desktop widget running your login shell, in the middle of the desktop. `S` is a grid span, `COLUMNSxROWS` like `3x2`; the default is `3x3`. `--run` types CMD into the shell whenever the widget starts one. |
 | `widget set <widget> --size S` | Resize a widget. It snaps to the grid. |
 | `widget edit <widget>` | Unlock a widget for typing, moving and resizing. Returns `busy` while another widget is being edited. |
 | `widget done` | Lock the widget being edited. |

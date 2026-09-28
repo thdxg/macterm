@@ -765,11 +765,6 @@ final class Preferences {
         didSet { Keys.quickTerminalFixedY.write(quickTerminalFixedY, to: defaults) }
     }
 
-    /// The size a new desktop widget starts at (Settings → Widgets).
-    var desktopWidgetDefaultSize: DesktopWidgetSize {
-        didSet { Keys.desktopWidgetDefaultSize.write(desktopWidgetDefaultSize, to: defaults) }
-    }
-
     /// How the panel's size is decided at show time: `fixed` uses the
     /// width/height sliders; `dynamic` makes the panel edge-resizable and
     /// reopens it at the size the user last resized it to.
@@ -873,7 +868,6 @@ final class Preferences {
         quickTerminalFixedX = Keys.quickTerminalFixedX.read(defaults)
         quickTerminalFixedY = Keys.quickTerminalFixedY.read(defaults)
         quickTerminalSizeMode = Keys.quickTerminalSizeMode.read(defaults)
-        desktopWidgetDefaultSize = Keys.desktopWidgetDefaultSize.read(defaults)
         if let w = Keys.quickTerminalDynamicWidth.readStored(defaults),
            let h = Keys.quickTerminalDynamicHeight.readStored(defaults)
         {
@@ -987,6 +981,12 @@ final class Preferences {
             defaults.removeObject(forKey: "macterm.intents.shortcutsAccess")
             defaults.set(true, forKey: Keys.migrationRetiredGhosttyOwnedKeys)
         }
+        // Desktop widgets lost their size presets: a new one is always
+        // `DesktopWidgetSpan.initial`, so Settings' default size is dead.
+        if !defaults.bool(forKey: Keys.migrationRetiredWidgetDefaultSize) {
+            defaults.removeObject(forKey: "macterm.desktopWidgets.defaultSize")
+            defaults.set(true, forKey: Keys.migrationRetiredWidgetDefaultSize)
+        }
     }
 
     /// Reads the two-layer config preference. The single-path key came from the
@@ -1036,10 +1036,6 @@ final class Preferences {
         static let quickTerminalHeight = PreferenceStorageKey("macterm.quickTerminal.height", default: 0.5) {
             clampFraction($0, fallback: 0.5)
         }
-
-        static let desktopWidgetDefaultSize = PreferenceStorageKey(
-            "macterm.desktopWidgets.defaultSize", default: DesktopWidgetSize.medium
-        )
 
         static let quickTerminalPositionMode = PreferenceStorageKey(
             "macterm.quickTerminal.positionMode", default: QuickTerminalAdjustMode.fixed
@@ -1096,6 +1092,7 @@ final class Preferences {
         static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"
         static let migrationRetiredPaneDimKey = "macterm.migration.retired_pane_dim_key"
         static let migrationRetiredGhosttyOwnedKeys = "macterm.migration.retired_ghostty_owned_keys"
+        static let migrationRetiredWidgetDefaultSize = "macterm.migration.retired_widget_default_size"
     }
 }
 

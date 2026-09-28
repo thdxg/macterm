@@ -8,36 +8,35 @@ struct DesktopWidgetTests {
     /// 842): 6 medium columns (0…5) and 4 rows (0…3) fit.
     private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
 
-    private func frame(column: Int, row: Int, _ size: DesktopWidgetSize) -> CGRect {
+    private func frame(column: Int, row: Int, _ span: DesktopWidgetSpan) -> CGRect {
         DesktopWidgetGrid.frame(
             topLeft: DesktopWidgetGrid.topLeft(column: column, row: row, in: screen),
-            span: size.span
+            span: span
         )
     }
 
     // MARK: - Metrics
 
     /// The system widgets' dimensions (chronod, macOS 27) are all spans of
-    /// the one grid — the whole point of the sizes is to sit among them.
+    /// the one grid — the whole point of the grid is to sit among them.
     @Test
-    func the_families_are_grid_spans_at_the_system_widget_sizes() {
-        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSize.small.span) == CGSize(width: 164, height: 164))
-        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSize.medium.span) == CGSize(width: 344, height: 164))
-        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSize.large.span) == CGSize(width: 344, height: 344))
-        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSize.extraLarge.span) == CGSize(width: 704, height: 344))
+    func the_system_widget_sizes_are_grid_spans() {
+        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSpan.small) == CGSize(width: 164, height: 164))
+        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSpan.medium) == CGSize(width: 344, height: 164))
+        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSpan.large) == CGSize(width: 344, height: 344))
+        #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSpan.extraLarge) == CGSize(width: 704, height: 344))
         #expect(DesktopWidgetGrid.dimensions(of: DesktopWidgetSpan(columns: 3, rows: 2)) == CGSize(width: 524, height: 344))
         #expect(DesktopWidgetMetrics.cornerRadius == 27.88)
     }
 
     @Test
-    func sizes_parse_as_a_family_name_or_a_span() {
-        #expect(DesktopWidgetSize.parseSpan("large") == DesktopWidgetSpan(columns: 2, rows: 2))
-        #expect(DesktopWidgetSize.parseSpan("Extra-Large") == DesktopWidgetSpan(columns: 4, rows: 2))
-        #expect(DesktopWidgetSize.parseSpan("3x2") == DesktopWidgetSpan(columns: 3, rows: 2))
-        #expect(DesktopWidgetSize.parseSpan("0x2") == nil)
-        #expect(DesktopWidgetSize.parseSpan("huge") == nil)
-        #expect(DesktopWidgetSize.name(of: DesktopWidgetSpan(columns: 2, rows: 1)) == "medium")
-        #expect(DesktopWidgetSize.name(of: DesktopWidgetSpan(columns: 3, rows: 2)) == "3x2")
+    func sizes_parse_as_a_span_and_nothing_else() {
+        #expect(DesktopWidgetSpan(parsing: "3x2") == DesktopWidgetSpan(columns: 3, rows: 2))
+        #expect(DesktopWidgetSpan(parsing: "3X2") == DesktopWidgetSpan(columns: 3, rows: 2))
+        #expect(DesktopWidgetSpan(parsing: "0x2") == nil)
+        #expect(DesktopWidgetSpan(parsing: "large") == nil)
+        #expect(DesktopWidgetSpan(columns: 2, rows: 1).description == "2x1")
+        #expect(DesktopWidgetSpan.initial == DesktopWidgetSpan(columns: 3, rows: 3))
     }
 
     // MARK: - Widget
@@ -45,9 +44,9 @@ struct DesktopWidgetTests {
     /// The frame hangs down from `topLeft`, the corner a size change keeps.
     @Test
     func the_frame_hangs_down_from_the_top_left_corner() {
-        let widget = DesktopWidget(span: DesktopWidgetSize.medium.span, topLeft: CGPoint(x: 100, y: 800))
+        let widget = DesktopWidget(span: DesktopWidgetSpan.medium, topLeft: CGPoint(x: 100, y: 800))
         #expect(widget.frame == CGRect(x: 100, y: 636, width: 344, height: 164))
-        widget.span = DesktopWidgetSize.large.span
+        widget.span = DesktopWidgetSpan.large
         #expect(widget.frame == CGRect(x: 100, y: 456, width: 344, height: 344))
     }
 
@@ -55,7 +54,7 @@ struct DesktopWidgetTests {
     /// and group under their own slug in `zmx ls`.
     @Test
     func a_widget_pane_is_routed_outside_every_project() throws {
-        let widget = DesktopWidget(span: DesktopWidgetSize.small.span, topLeft: .zero)
+        let widget = DesktopWidget(span: DesktopWidgetSpan.small, topLeft: .zero)
         let pane = try #require(widget.pane)
         #expect(pane.projectID == DesktopWidget.projectID)
         #expect(pane.sessionName.hasPrefix("macterm-widget-"))
@@ -64,7 +63,7 @@ struct DesktopWidgetTests {
 
     @Test
     func starting_over_gives_a_fresh_session_running_the_same_command() throws {
-        let widget = DesktopWidget(span: DesktopWidgetSize.small.span, topLeft: .zero, command: "htop")
+        let widget = DesktopWidget(span: DesktopWidgetSpan.small, topLeft: .zero, command: "htop")
         let before = try #require(widget.pane)
         widget.startOver()
         let after = try #require(widget.pane)
@@ -83,16 +82,20 @@ struct DesktopWidgetTests {
         #expect(DesktopWidgetGrid.origin(in: screen) == CGPoint(x: 26, y: 842))
     }
 
+    /// Exactly the middle, off the lattice — its nearest cell is up to half
+    /// a pitch away. 524pt square on a 1440×875 screen: (458, 437.5 + 262).
     @Test
-    func a_new_widget_goes_in_the_middle_of_the_screen() {
-        let topLeft = DesktopWidgetGrid.centered(DesktopWidgetSize.medium.span, in: screen, avoiding: [])
-        #expect(topLeft == CGPoint(x: 386, y: 662))
+    func a_new_widget_goes_in_the_exact_middle_of_the_screen() {
+        let topLeft = DesktopWidgetGrid.centered(.initial, in: screen, avoiding: [])
+        #expect(topLeft == CGPoint(x: 458, y: 700))
     }
 
     @Test
     func a_new_widget_takes_the_nearest_free_cell_when_the_middle_is_taken() {
-        let occupied = [frame(column: 2, row: 1, .medium)]
-        let topLeft = DesktopWidgetGrid.centered(DesktopWidgetSize.medium.span, in: screen, avoiding: occupied)
+        let middle = DesktopWidgetGrid.centered(DesktopWidgetSpan.medium, in: screen, avoiding: [])
+        #expect(middle == CGPoint(x: 548, y: 520))
+        let occupied = [DesktopWidgetGrid.frame(topLeft: middle, span: .medium)]
+        let topLeft = DesktopWidgetGrid.centered(DesktopWidgetSpan.medium, in: screen, avoiding: occupied)
         #expect(topLeft == CGPoint(x: 386, y: 842))
     }
 
@@ -102,7 +105,7 @@ struct DesktopWidgetTests {
         let dropped = CGRect(x: 400, y: 530, width: 344, height: 164)
         let snapped = DesktopWidgetGrid.snap(dropped, in: screen, avoiding: [])
         #expect(snapped.topLeft == CGPoint(x: 386, y: 662))
-        #expect(snapped.span == DesktopWidgetSize.medium.span)
+        #expect(snapped.span == DesktopWidgetSpan.medium)
     }
 
     /// A resize lands at any size; the widget settles into the nearest span.
@@ -195,4 +198,12 @@ struct DesktopWidgetTests {
         let straddling = CGRect(x: 1300, y: 100, width: 344, height: 164)
         #expect(DesktopWidgetGrid.screen(for: straddling, among: [screen, second]) == second)
     }
+}
+
+/// The system's widget families, as spans — what these tests size widgets by.
+private extension DesktopWidgetSpan {
+    static let small = DesktopWidgetSpan(columns: 1, rows: 1)
+    static let medium = DesktopWidgetSpan(columns: 2, rows: 1)
+    static let large = DesktopWidgetSpan(columns: 2, rows: 2)
+    static let extraLarge = DesktopWidgetSpan(columns: 4, rows: 2)
 }

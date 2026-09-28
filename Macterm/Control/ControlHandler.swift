@@ -238,7 +238,7 @@ final class ControlHandler {
             id: widget.id.uuidString,
             name: widget.name,
             session: widget.pane?.sessionName ?? "",
-            size: DesktopWidgetSize.name(of: widget.span),
+            size: widget.span.description,
             columns: widget.span.columns,
             rows: widget.span.rows,
             editing: appState.editingDesktopWidgetID == widget.id,
@@ -279,11 +279,10 @@ final class ControlHandler {
 
     private func parseWidgetSpan(_ raw: String?) throws -> DesktopWidgetSpan? {
         guard let raw else { return nil }
-        guard let span = DesktopWidgetSize.parseSpan(raw) else {
-            let names = DesktopWidgetSize.allCases.map(\.rawValue).joined(separator: ", ")
+        guard let span = DesktopWidgetSpan(parsing: raw) else {
             throw ControlError(
                 code: .badRequest,
-                message: "unknown widget size \"\(raw)\" (expected one of: \(names), or a CxR span like 3x2)"
+                message: "unknown widget size \"\(raw)\" (expected a COLUMNSxROWS grid span like 3x2)"
             )
         }
         return span

@@ -10,7 +10,7 @@ struct WidgetCommand: ParsableCommand {
     )
 
     /// The sizes, spelled as the socket takes them.
-    static let sizeHelp = "Size: small, medium, large, extra-large, or a grid span like 3x2."
+    static let sizeHelp = "Size as a grid span, COLUMNSxROWS, like 3x2."
 
     struct List: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "List desktop widgets.")
@@ -27,7 +27,7 @@ struct WidgetCommand: ParsableCommand {
             abstract: "Add a locked desktop widget running your login shell, centered on the desktop."
         )
 
-        @Option(help: ArgumentHelp(WidgetCommand.sizeHelp + " Defaults to the size set in Settings → Widgets."))
+        @Option(help: ArgumentHelp(WidgetCommand.sizeHelp + " Defaults to 3x3."))
         var size: String?
 
         @Option(help: "A name for it (shown in Settings and widgets.yaml).")

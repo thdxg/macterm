@@ -221,11 +221,12 @@ final class DesktopWidgetPanel: NSPanel {
     // MARK: Menu
 
     /// The system widgets' own right-click menu, as far as it applies: the
-    /// edit toggle, the size families, then removal.
+    /// edit toggle, then removal. No size families — a widget is resized by
+    /// its edges while being edited.
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        guard let appState, let widget = appState.desktopWidget(id: widgetID) else { return menu }
+        guard let appState, appState.desktopWidget(id: widgetID) != nil else { return menu }
         if isEditing {
             menu.addItem(item("Done Editing", #selector(finishEditingFromMenu)))
         } else {
@@ -235,13 +236,6 @@ final class DesktopWidgetPanel: NSPanel {
             edit.isEnabled = appState.canEditDesktopWidget(id: widgetID)
             if !edit.isEnabled { edit.toolTip = "Finish editing the other widget first." }
             menu.addItem(edit)
-        }
-        menu.addItem(.separator())
-        for size in DesktopWidgetSize.allCases {
-            let sizeItem = item(size.title, #selector(chooseSize(_:)))
-            sizeItem.representedObject = size.rawValue
-            sizeItem.state = widget.span == size.span ? .on : .off
-            menu.addItem(sizeItem)
         }
         menu.addItem(.separator())
         menu.addItem(item("Remove Widget", #selector(removeWidget)))
@@ -262,12 +256,6 @@ final class DesktopWidgetPanel: NSPanel {
     @objc
     private func finishEditingFromMenu() {
         appState?.endEditingDesktopWidget()
-    }
-
-    @objc
-    private func chooseSize(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let size = DesktopWidgetSize(rawValue: raw) else { return }
-        appState?.setDesktopWidgetSpan(size.span, id: widgetID)
     }
 
     @objc

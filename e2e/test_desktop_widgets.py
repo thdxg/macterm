@@ -38,15 +38,14 @@ def _session_names(app):
 
 @pytest.fixture
 def widget(app):
-    # Explicit size: the default is a preference, and the debug build's
-    # preferences domain is shared with the developer's own debug app.
-    info = app.cli_json("widget", "new", "--size", "medium")["widgets"][0]
+    # The default size, so the test pins what a bare `widget new` gives.
+    info = app.cli_json("widget", "new")["widgets"][0]
     yield info
     app.cli("widget", "remove", info["id"], "--force", check=False)
 
 
 def test_a_new_widget_runs_a_shell_that_takes_commands(app, widget):
-    assert widget["size"] == "medium"
+    assert (widget["size"], widget["columns"], widget["rows"]) == ("3x3", 3, 3)
     assert not widget["editing"]
     wait_for(lambda: _widget_text(app, widget["session"]), timeout=60, message="the widget's shell prompt")
 
@@ -59,18 +58,18 @@ def test_a_new_widget_runs_a_shell_that_takes_commands(app, widget):
     )
 
 
-def test_set_resizes_a_widget_to_a_family_or_a_span(app, widget):
-    app.cli("widget", "set", widget["id"], "--size", "large")
-    changed = next(w for w in _widgets(app) if w["id"] == widget["id"])
-    assert (changed["size"], changed["columns"], changed["rows"]) == ("large", 2, 2)
-
+def test_set_resizes_a_widget_to_a_span(app, widget):
     app.cli("widget", "set", widget["id"], "--size", "3x2")
     spanned = next(w for w in _widgets(app) if w["id"] == widget["id"])
     assert (spanned["size"], spanned["columns"], spanned["rows"]) == ("3x2", 3, 2)
 
+    refused = app.cli("widget", "set", widget["id"], "--size", "large", check=False)
+    assert refused.returncode == 1
+    assert next(w for w in _widgets(app) if w["id"] == widget["id"])["size"] == "3x2"
+
 
 def test_only_one_widget_is_edited_at_a_time(app, widget):
-    other = app.cli_json("widget", "new", "--size", "small")["widgets"][0]
+    other = app.cli_json("widget", "new", "--size", "1x1")["widgets"][0]
     try:
         app.cli("widget", "edit", widget["id"])
         assert [w["id"] for w in _widgets(app) if w["editing"]] == [widget["id"]]
@@ -90,7 +89,7 @@ def test_only_one_widget_is_edited_at_a_time(app, widget):
 
 
 def test_removing_a_widget_ends_its_session(app):
-    info = app.cli_json("widget", "new", "--size", "small")["widgets"][0]
+    info = app.cli_json("widget", "new", "--size", "1x1")["widgets"][0]
     wait_for(lambda: info["session"] in _session_names(app), timeout=60, message="the widget's session to start")
 
     app.cli("widget", "remove", info["id"], "--force")
@@ -111,7 +110,7 @@ def test_a_widget_comes_back_after_a_relaunch_on_the_same_shell(request):
     try:
         harness.launch()
         harness.wait_for_socket()
-        created = harness.cli_json("widget", "new", "--size", "large")["widgets"][0]
+        created = harness.cli_json("widget", "new", "--size", "2x2")["widgets"][0]
         session = created["session"]
         wait_for(lambda: _widget_text(harness, session), timeout=60, message="the widget's shell prompt")
         nonce = uuid.uuid4().hex[:12]
@@ -131,7 +130,7 @@ def test_a_widget_comes_back_after_a_relaunch_on_the_same_shell(request):
         harness.wait_for_socket()
 
         restored = wait_for(lambda: _widgets(harness), timeout=30, message="the widget to be restored")
-        assert [(w["id"], w["session"], w["size"]) for w in restored] == [(created["id"], session, "large")]
+        assert [(w["id"], w["session"], w["size"]) for w in restored] == [(created["id"], session, "2x2")]
         assert (restored[0]["x"], restored[0]["y"]) == (created["x"], created["y"])
         # The reattached session replays its screen; a fresh shell would show
         # a bare prompt (the marker is assembled at runtime, so the typed

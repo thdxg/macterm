@@ -15,7 +15,7 @@ private let logger = Logger(subsystem: appBundleID, category: "WidgetLayoutStore
 //
 //     widgets:
 //       - name: logs              # optional — display and matching only
-//         size: medium            # small | medium | large | extra-large | CxR
+//         size: 3x2               # grid span, COLUMNSxROWS
 //         column: 3               # the grid cell of its top-left corner,
 //         row: 1                  #   counted from the screen's top-left
 //         display: DELL U2723QE   # optional — the screen, by name; absent
@@ -32,8 +32,10 @@ private let logger = Logger(subsystem: appBundleID, category: "WidgetLayoutStore
 /// One entry of `widgets.yaml`.
 struct WidgetDeclaration: Codable, Equatable {
     var name: String?
-    /// A family name or a `CxR` span (`DesktopWidgetSize.parseSpan`). nil or
-    /// unparseable → Settings → Widgets' default size.
+    /// A `CxR` span (`DesktopWidgetSpan(parsing:)`). nil or unparseable →
+    /// `DesktopWidgetSpan.initial` for a new widget, the widget's own span
+    /// for an existing one (so a beta's `medium` keeps the widget's size and
+    /// is rewritten as its span).
     var size: String?
     var column: Int?
     var row: Int?

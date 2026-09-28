@@ -1,33 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// Settings → Widgets: what a new desktop widget starts as, and every widget
-/// on the desktop — each resizable and removable from here, since a widget
-/// can be hidden behind windows or on a display that isn't in front of the
-/// user. Editing is not offered here: it starts from the widget itself
-/// (right-click → Edit Widget), where the user types into it.
+/// Settings → Widgets: every widget on the desktop, each removable from here,
+/// since a widget can be hidden behind windows or on a display that isn't in
+/// front of the user. Editing — typing into it, moving and resizing it — is
+/// not offered here: it starts from the widget itself (right-click → Edit
+/// Widget).
 struct WidgetsSettings: View {
     @Environment(AppState.self)
     private var appState
 
-    @State
-    private var defaultSize: DesktopWidgetSize = Preferences.shared.desktopWidgetDefaultSize
-
     var body: some View {
         Form {
-            Section("New Widgets") {
-                Picker("Default size", selection: $defaultSize) {
-                    ForEach(DesktopWidgetSize.allCases, id: \.self) { size in
-                        Text(size.title).tag(size)
-                    }
-                }
-                .onChange(of: defaultSize) { _, size in
-                    Preferences.shared.desktopWidgetDefaultSize = size
-                }
-                Text("A new widget runs your login shell, opens locked at the center of the desktop, and snaps to the widget grid.")
-                    .settingsCaption()
-            }
-
             Section {
                 if appState.desktopWidgets.isEmpty {
                     Text("No widgets.")
@@ -59,6 +43,12 @@ struct WidgetsSettings: View {
                     .buttonStyle(.borderless)
                     .help("Add a widget at the center of the desktop")
                 }
+            } footer: {
+                Text(
+                    "A new widget runs your login shell and opens locked, 3 × 3 cells at the center of the desktop. "
+                        + "Edit it to move or resize it; it snaps to the widget grid."
+                )
+                .settingsCaption()
             }
         }
         .formStyle(.grouped)
@@ -101,17 +91,6 @@ private struct WidgetRow: View {
             // Widget), where the user is looking; the accent icon marks the
             // one being edited.
             Menu {
-                Picker("Size", selection: Binding(
-                    get: { DesktopWidgetSize(span: widget.span) },
-                    set: { size in
-                        if let size { appState.setDesktopWidgetSpan(size.span, id: widget.id) }
-                    }
-                )) {
-                    ForEach(DesktopWidgetSize.allCases, id: \.self) { size in
-                        Text(size.title).tag(DesktopWidgetSize?.some(size))
-                    }
-                }
-                Divider()
                 Button("Remove", role: .destructive) {
                     DesktopWidgetRemoval.confirmAndRemove(widget.id, in: appState)
                 }
@@ -126,17 +105,15 @@ private struct WidgetRow: View {
     }
 
     private var symbol: String {
-        switch DesktopWidgetSize(span: widget.span) {
-        case .small: "widget.small"
-        case .medium: "widget.medium"
-        default: "widget.large"
-        }
+        let span = widget.span
+        if span.columns == 1, span.rows == 1 { return "widget.small" }
+        return span.columns > span.rows ? "widget.medium" : "widget.large"
     }
 
     /// Size, then what it runs: its command, else its session — the name
     /// `pane dump --session` takes.
     private var subtitle: String {
-        let size = DesktopWidgetSize.title(of: widget.span)
+        let size = "\(widget.span.columns) × \(widget.span.rows)"
         let runs = widget.command ?? widget.pane?.sessionName ?? ""
         return runs.isEmpty ? size : "\(size) · \(runs)"
     }

@@ -29,48 +29,46 @@ struct ControlHandlerWidgetTests {
     }
 
     @Test
-    func widget_new_adds_a_locked_widget_at_the_default_size() async throws {
+    func widget_new_adds_a_locked_three_by_three_widget() async throws {
         let (handler, state) = makeHandler()
         let response = await handler.handle(ControlRequest(command: "widget.new", args: widgetArgs()))
         #expect(response.ok)
         let info = try #require(response.data?.widgets?.first)
         #expect(info.index == 1)
-        #expect(info.size == Preferences.shared.desktopWidgetDefaultSize.rawValue)
+        #expect(info.size == "3x3")
         #expect(!info.editing)
         #expect(info.command == nil)
         #expect(info.session == state.desktopWidgets.first?.pane?.sessionName)
     }
 
     @Test
-    func widget_new_takes_a_family_or_a_span_and_a_command() async throws {
+    func widget_new_takes_a_span_and_a_command() async throws {
         let (handler, state) = makeHandler()
-        let family = await handler.handle(ControlRequest(command: "widget.new", args: widgetArgs(size: "extra-large", run: "htop")))
-        let familyInfo = try #require(family.data?.widgets?.first)
-        #expect(familyInfo.size == "extra-large")
-        #expect((familyInfo.columns, familyInfo.rows) == (4, 2))
-        #expect(familyInfo.command == "htop")
+        let response = await handler.handle(ControlRequest(command: "widget.new", args: widgetArgs(size: "4x2", run: "htop")))
+        let info = try #require(response.data?.widgets?.first)
+        #expect(info.size == "4x2")
+        #expect((info.columns, info.rows) == (4, 2))
+        #expect(info.command == "htop")
         #expect(state.desktopWidgets.first?.pane?.command == "htop")
-
-        let span = await handler.handle(ControlRequest(command: "widget.new", args: widgetArgs(size: "3x2")))
-        let spanInfo = try #require(span.data?.widgets?.first)
-        #expect(spanInfo.size == "3x2")
-        #expect(spanInfo.index == 2)
     }
 
     @Test
-    func an_unknown_size_is_a_bad_request_naming_the_sizes() async {
+    func a_size_that_is_not_a_span_is_a_bad_request() async {
         let (handler, state) = makeHandler()
-        let response = await handler.handle(ControlRequest(command: "widget.new", args: widgetArgs(size: "huge")))
-        #expect(response.error?.code == .badRequest)
-        #expect(response.error?.message.contains("extra-large") == true)
+        // The retired family names included.
+        for size in ["huge", "large"] {
+            let response = await handler.handle(ControlRequest(command: "widget.new", args: widgetArgs(size: size)))
+            #expect(response.error?.code == .badRequest)
+            #expect(response.error?.message.contains("COLUMNSxROWS") == true)
+        }
         #expect(state.desktopWidgets.isEmpty)
     }
 
     @Test
     func widget_list_reports_every_widget_in_creation_order() async {
         let (handler, state) = makeHandler()
-        let first = state.createDesktopWidget(span: DesktopWidgetSize.small.span)
-        let second = state.createDesktopWidget(span: DesktopWidgetSize.large.span)
+        let first = state.createDesktopWidget(span: DesktopWidgetSpan.small)
+        let second = state.createDesktopWidget(span: DesktopWidgetSpan.large)
         state.beginEditingDesktopWidget(id: second.id)
         let response = await handler.handle(ControlRequest(command: "widget.list"))
         #expect(response.data?.widgets?.map(\.id) == [first.id.uuidString, second.id.uuidString])
@@ -82,15 +80,15 @@ struct ControlHandlerWidgetTests {
     @Test
     func widget_set_resizes_by_any_selector() async {
         let (handler, state) = makeHandler()
-        state.createDesktopWidget(span: DesktopWidgetSize.small.span)
-        let widget = state.createDesktopWidget(span: DesktopWidgetSize.small.span)
+        state.createDesktopWidget(span: DesktopWidgetSpan.small)
+        let widget = state.createDesktopWidget(span: DesktopWidgetSpan.small)
 
-        _ = await handler.handle(ControlRequest(command: "widget.set", args: widgetArgs("widget:2", size: "large")))
-        #expect(widget.span == DesktopWidgetSize.large.span)
-        _ = await handler.handle(ControlRequest(command: "widget.set", args: widgetArgs(widget.id.uuidString, size: "medium")))
-        #expect(widget.span == DesktopWidgetSize.medium.span)
-        let response = await handler.handle(ControlRequest(command: "widget.set", args: widgetArgs("2", size: "small")))
-        #expect(widget.span == DesktopWidgetSize.small.span)
+        _ = await handler.handle(ControlRequest(command: "widget.set", args: widgetArgs("widget:2", size: "2x2")))
+        #expect(widget.span == DesktopWidgetSpan.large)
+        _ = await handler.handle(ControlRequest(command: "widget.set", args: widgetArgs(widget.id.uuidString, size: "2x1")))
+        #expect(widget.span == DesktopWidgetSpan.medium)
+        let response = await handler.handle(ControlRequest(command: "widget.set", args: widgetArgs("2", size: "1x1")))
+        #expect(widget.span == DesktopWidgetSpan.small)
         #expect(response.data?.widgets?.first?.index == 2)
     }
 
@@ -152,4 +150,12 @@ struct ControlHandlerWidgetTests {
         let keyResponse = await handler.handle(ControlRequest(command: "pane.key", args: key))
         #expect(keyResponse.error?.code == .noSurface)
     }
+}
+
+/// The system's widget families, as spans — what these tests size widgets by.
+private extension DesktopWidgetSpan {
+    static let small = DesktopWidgetSpan(columns: 1, rows: 1)
+    static let medium = DesktopWidgetSpan(columns: 2, rows: 1)
+    static let large = DesktopWidgetSpan(columns: 2, rows: 2)
+    static let extraLarge = DesktopWidgetSpan(columns: 4, rows: 2)
 }

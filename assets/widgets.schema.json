@@ -23,8 +23,8 @@
         },
         "size": {
           "type": "string",
-          "description": "A size family — small (1×1 cells), medium (2×1), large (2×2), extra-large (4×2) — or any grid span as COLUMNSxROWS, e.g. \"3x2\". A cell is 164pt with a 16pt gap, the system widgets' own module. Defaults to Settings → Widgets' default size.",
-          "pattern": "^(small|medium|large|extra-large|[1-9][0-9]*x[1-9][0-9]*)$"
+          "description": "The grid span as COLUMNSxROWS, e.g. \"3x2\". A cell is 164pt with a 16pt gap, the system widgets' own module. Defaults to 3x3.",
+          "pattern": "^[1-9][0-9]*x[1-9][0-9]*$"
         },
         "column": {
           "type": "integer",

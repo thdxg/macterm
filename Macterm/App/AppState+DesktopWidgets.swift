@@ -49,8 +49,8 @@ extension AppState {
     }
 
     /// Put a new, locked widget running a fresh shell (and `command`, if
-    /// any) in the free grid cell nearest the middle of the primary display.
-    /// `span` defaults to Settings → Widgets' default size.
+    /// any) in the middle of the primary display (`DesktopWidgetGrid.centered`).
+    /// `span` defaults to `DesktopWidgetSpan.initial`.
     @discardableResult
     func createDesktopWidget(span: DesktopWidgetSpan? = nil, name: String? = nil, command: String? = nil) -> DesktopWidget {
         let widget = makeDesktopWidget(span: span, name: name, command: command, cwd: nil)
@@ -61,7 +61,7 @@ extension AppState {
     }
 
     private func makeDesktopWidget(span: DesktopWidgetSpan?, name: String?, command: String?, cwd: String?) -> DesktopWidget {
-        let span = span ?? Preferences.shared.desktopWidgetDefaultSize.span
+        let span = span ?? .initial
         let occupied = desktopWidgets.map(\.frame) + nativeDesktopWidgetFrames()
         let topLeft = desktopVisibleFrames().first.map {
             DesktopWidgetGrid.centered(span, in: $0, avoiding: occupied)
@@ -304,7 +304,7 @@ extension AppState {
         }
         return WidgetDeclaration(
             name: widget.name,
-            size: DesktopWidgetSize.name(of: widget.span),
+            size: widget.span.description,
             column: column,
             row: row,
             display: display,
@@ -327,7 +327,7 @@ extension AppState {
         widget.command = entry.run
         widget.cwd = entry.cwd
         var moved = false
-        if let size = entry.size, size != current.size, let span = DesktopWidgetSize.parseSpan(size) {
+        if let size = entry.size, size != current.size, let span = DesktopWidgetSpan(parsing: size) {
             widget.span = span
             moved = true
         }
@@ -345,7 +345,7 @@ extension AppState {
     /// its recipe, in its declared cell (else the middle of the screen).
     private func makeDeclaredWidget(_ entry: WidgetDeclaration) -> DesktopWidget {
         let widget = makeDesktopWidget(
-            span: entry.size.flatMap(DesktopWidgetSize.parseSpan),
+            span: entry.size.flatMap(DesktopWidgetSpan.init(parsing:)),
             name: entry.name,
             command: entry.run,
             cwd: entry.cwd

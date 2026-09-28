@@ -5,9 +5,9 @@ import Testing
 
 @MainActor
 struct AppStateDesktopWidgetsTests {
-    /// A centered medium widget lands at (386, 662) on this screen.
+    /// A centered medium widget lands at (548, 520) on this screen.
     private static let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
-    private static let medium = DesktopWidgetSize.medium.span
+    private static let medium = DesktopWidgetSpan.medium
 
     /// A store on disk plus an AppState placing widgets on a fixed screen.
     private func makeFixture() throws -> (state: AppState, storeURL: URL, dir: URL) {
@@ -68,7 +68,7 @@ struct AppStateDesktopWidgetsTests {
         let widget = state.createDesktopWidget(span: Self.medium, command: "htop")
 
         #expect(state.editingDesktopWidgetID == nil)
-        #expect(widget.topLeft == CGPoint(x: 386, y: 662))
+        #expect(widget.topLeft == CGPoint(x: 548, y: 520))
         let saved = try #require(savedWidgets(storeURL).first)
         #expect(saved.id == widget.id)
         #expect((saved.columns, saved.rows) == (2, 1))
@@ -88,11 +88,11 @@ struct AppStateDesktopWidgetsTests {
     }
 
     @Test
-    func a_widget_created_without_a_size_takes_the_default_size() throws {
+    func a_widget_created_without_a_size_is_three_by_three() throws {
         let (state, _, dir) = try makeFixture()
         defer { try? FileManager.default.removeItem(at: dir) }
         let widget = state.createDesktopWidget()
-        #expect(widget.span == Preferences.shared.desktopWidgetDefaultSize.span)
+        #expect(widget.span == DesktopWidgetSpan(columns: 3, rows: 3))
     }
 
     /// Until the launch restore has run, `workspaces` is empty — a save then
@@ -169,10 +169,14 @@ struct AppStateDesktopWidgetsTests {
         let (state, _, dir) = try makeFixture()
         defer { try? FileManager.default.removeItem(at: dir) }
         let still = state.createDesktopWidget(span: Self.medium)
+        // Onto the grid first: a new widget sits off it, in the exact middle.
+        state.settleDesktopWidget(id: still.id, frame: still.frame)
+        #expect(still.topLeft == CGPoint(x: 566, y: 482))
         let moving = state.createDesktopWidget(span: Self.medium)
+        #expect(moving.topLeft == CGPoint(x: 386, y: 662))
 
         state.settleDesktopWidget(id: moving.id, frame: moving.frame)
-        #expect(moving.topLeft == CGPoint(x: 386, y: 842))
+        #expect(moving.topLeft == CGPoint(x: 386, y: 662))
 
         state.settleDesktopWidget(id: moving.id, frame: still.frame)
         #expect(!moving.frame.insetBy(dx: 1, dy: 1).intersects(still.frame))
@@ -199,10 +203,12 @@ struct AppStateDesktopWidgetsTests {
     func picking_a_size_keeps_the_top_left_corner() throws {
         let (state, _, dir) = try makeFixture()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let widget = state.createDesktopWidget(span: DesktopWidgetSize.small.span)
+        let widget = state.createDesktopWidget(span: DesktopWidgetSpan.small)
+        // A new widget is off the grid until it first settles onto it.
+        state.settleDesktopWidget(id: widget.id, frame: widget.frame)
         let corner = widget.topLeft
-        state.setDesktopWidgetSpan(DesktopWidgetSize.large.span, id: widget.id)
-        #expect(widget.span == DesktopWidgetSize.large.span)
+        state.setDesktopWidgetSpan(DesktopWidgetSpan.large, id: widget.id)
+        #expect(widget.span == DesktopWidgetSpan.large)
         #expect(widget.topLeft == corner)
     }
 
@@ -216,7 +222,7 @@ struct AppStateDesktopWidgetsTests {
         let (writer, storeURL, dir) = try makeFixture()
         defer { try? FileManager.default.removeItem(at: dir) }
         writer.restoreSelection(projects: [])
-        let first = writer.createDesktopWidget(span: DesktopWidgetSize.small.span, command: "top")
+        let first = writer.createDesktopWidget(span: DesktopWidgetSpan.small, command: "top")
         let second = writer.createDesktopWidget(span: DesktopWidgetSpan(columns: 3, rows: 2))
         writer.beginEditingDesktopWidget(id: second.id)
 
@@ -226,7 +232,7 @@ struct AppStateDesktopWidgetsTests {
         #expect(state.desktopWidgets.map(\.id) == [first.id, second.id])
         #expect(state.editingDesktopWidgetID == nil)
         let restoredFirst = try #require(state.desktopWidget(id: first.id))
-        #expect(restoredFirst.span == DesktopWidgetSize.small.span)
+        #expect(restoredFirst.span == DesktopWidgetSpan.small)
         #expect(restoredFirst.command == "top")
         #expect(restoredFirst.topLeft == first.topLeft)
         #expect(restoredFirst.pane?.sessionName == first.pane?.sessionName)
@@ -380,7 +386,7 @@ extension AppStateDesktopWidgetsTests {
 
         let entries = try declared(dir)
         #expect(entries == [WidgetDeclaration(
-            name: "logs", size: "medium", column: 2, row: 1, display: nil, cwd: nil, run: "tail -f log"
+            name: "logs", size: "2x1", column: 3, row: 2, display: nil, cwd: nil, run: "tail -f log"
         )])
         let text = try String(contentsOf: layoutFile(dir), encoding: .utf8)
         #expect(text.contains(WidgetLayoutFile.schemaModeline))
@@ -400,7 +406,7 @@ extension AppStateDesktopWidgetsTests {
             names: ["Built-in", "Studio Display"]
         )
         state.restoreSelection(projects: [])
-        let widget = state.createDesktopWidget(span: DesktopWidgetSize.small.span)
+        let widget = state.createDesktopWidget(span: DesktopWidgetSpan.small)
         state.settleDesktopWidget(id: widget.id, frame: DesktopWidgetGrid.frame(
             topLeft: DesktopWidgetGrid.topLeft(column: 1, row: 2, in: external),
             span: widget.span
@@ -436,11 +442,11 @@ extension AppStateDesktopWidgetsTests {
         try writeLayout("""
         widgets:
           - name: kept
-            size: large
+            size: 2x2
             column: 0
             row: 0
           - name: added
-            size: small
+            size: 1x1
             column: 5
             row: 2
             run: htop
@@ -456,10 +462,10 @@ extension AppStateDesktopWidgetsTests {
         #expect(state.desktopWidgets.map(\.name) == ["kept", "added"])
         let restoredKept = try #require(state.desktopWidget(id: kept.id))
         #expect(restoredKept.pane?.sessionName == kept.pane?.sessionName)
-        #expect(restoredKept.span == DesktopWidgetSize.large.span)
+        #expect(restoredKept.span == DesktopWidgetSpan.large)
         #expect(restoredKept.topLeft == DesktopWidgetGrid.topLeft(column: 0, row: 0, in: Self.screen))
         let added = try #require(state.desktopWidgets.last)
-        #expect(added.span == DesktopWidgetSize.small.span)
+        #expect(added.span == DesktopWidgetSpan.small)
         #expect(added.topLeft == DesktopWidgetGrid.topLeft(column: 5, row: 2, in: Self.screen))
         #expect(added.pane?.command == "htop")
         await killed.settle(expecting: 1)
@@ -498,14 +504,14 @@ extension AppStateDesktopWidgetsTests {
         try writeLayout("""
         widgets:
           - name: resized
-            size: extra-large
+            size: 4x2
             column: 0
             row: 0
         """, in: dir)
 
-        state.createDesktopWidget(span: DesktopWidgetSize.small.span, name: "third")
+        state.createDesktopWidget(span: DesktopWidgetSpan.small, name: "third")
 
-        #expect(resized.span == DesktopWidgetSize.extraLarge.span)
+        #expect(resized.span == DesktopWidgetSpan.extraLarge)
         #expect(state.desktopWidget(id: unlisted.id) != nil)
         #expect(try declared(dir).map(\.name) == ["resized", "third"])
     }
@@ -562,14 +568,14 @@ extension AppStateDesktopWidgetsTests {
     @Test
     func entries_match_by_name_then_content_then_position() {
         let current = [
-            WidgetDeclaration(name: "a", size: "small"),
-            WidgetDeclaration(size: "large", column: 1, row: 1),
-            WidgetDeclaration(size: "medium"),
+            WidgetDeclaration(name: "a", size: "1x1"),
+            WidgetDeclaration(size: "2x2", column: 1, row: 1),
+            WidgetDeclaration(size: "2x1"),
         ]
         let entries = [
-            WidgetDeclaration(size: "large", column: 1, row: 1),
-            WidgetDeclaration(name: "a", size: "medium"),
-            WidgetDeclaration(size: "small"),
+            WidgetDeclaration(size: "2x2", column: 1, row: 1),
+            WidgetDeclaration(name: "a", size: "2x1"),
+            WidgetDeclaration(size: "1x1"),
             WidgetDeclaration(name: "new"),
         ]
         let matching = WidgetLayoutMatcher.match(entries: entries, current: current)
@@ -643,7 +649,7 @@ extension AppStateDesktopWidgetsTests {
         try writeLayout("""
         widgets:
           - name: keep
-            size: medium
+            size: 2x1
         """, in: dir)
 
         // Any change writes the file, absorbing the edit first.
@@ -689,11 +695,11 @@ extension AppStateDesktopWidgetsTests {
         writer.restoreSelection(projects: [])
         writer.createDesktopWidget(name: "a")
         let before = try String(contentsOf: storeURL, encoding: .utf8)
-        try writeLayout("widgets:\n  - name: a\n    size: large\n", in: dir)
+        try writeLayout("widgets:\n  - name: a\n    size: 2x2\n", in: dir)
 
         let state = makeState(storeURL: storeURL, dir: dir)
         state.restoreSelection(projects: [])
-        #expect(state.desktopWidgets.first?.span == DesktopWidgetSize.large.span)
+        #expect(state.desktopWidgets.first?.span == DesktopWidgetSpan.large)
         #expect(try String(contentsOf: storeURL, encoding: .utf8) == before)
     }
 
@@ -716,4 +722,12 @@ extension AppStateDesktopWidgetsTests {
         state.removeDesktopWidget(id: widget.id)
         #expect(try version() == 6)
     }
+}
+
+/// The system's widget families, as spans — what these tests size widgets by.
+private extension DesktopWidgetSpan {
+    static let small = DesktopWidgetSpan(columns: 1, rows: 1)
+    static let medium = DesktopWidgetSpan(columns: 2, rows: 1)
+    static let large = DesktopWidgetSpan(columns: 2, rows: 2)
+    static let extraLarge = DesktopWidgetSpan(columns: 4, rows: 2)
 }
