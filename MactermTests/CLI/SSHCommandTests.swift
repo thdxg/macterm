@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 /// `macterm ssh` captures ssh's arguments with `.captureForPassthrough`, so it
-/// answers a leading help flag itself, like `pane run`. The shell-integration
+/// answers a leading help flag itself (`startsWithHelpFlag`). The shell-integration
 /// relay must not notice: it calls `ghostty +ssh <flags> -- "$@"` (the bundled
 /// shim hands that to `macterm ssh` unchanged), so its capture starts with `--`
 /// and a help flag the user gave still reaches ssh — without the `--`, which

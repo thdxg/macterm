@@ -66,7 +66,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way. A no-op at the outermost edge, not an error. |
 | `pane close (--pane P \| --session S) [--force]` | Close a pane. Always requires an explicit target. |
-| `pane run [--no-submit] [target] <command…>` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. Flags go first: from the command's first word on, everything is typed. |
+| `pane run [--no-submit] [target] -- <command…>` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. See [Typing into a pane](#typing-into-a-pane). |
 | `pane key <chord> [target]` | Send one key press (`a`, `ctrl+c`, `escape`, `up`). |
 | `pane zoom [target]` | Toggle zoom on a pane. |
 | `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split on that axis. |
@@ -93,6 +93,16 @@ Pane verbs resolve their target in this order:
 A [desktop widget](/docs/desktop-widgets)'s pane belongs to no project, so `pane dump`, `pane inspect`, `pane run` and `pane key` reach it by `--session` alone, or by `MACTERM_SESSION` from inside the widget.
 
 `pane close` never uses the `MACTERM_SESSION` fallback. `pane focus --direction` treats the resolved target as the **origin**, and reports the pane that ended up focused.
+
+## Typing into a pane
+
+`pane run` types everything after `--` exactly as given, dashes included:
+
+```sh
+macterm pane run --session macterm-api-8f327ce4a3f8 -- ls -la
+```
+
+Before `--`, its own flags (`--no-submit`, the target selectors, `--socket`, `--json`) are read wherever they appear, and words without a leading dash are typed, so `macterm pane run ls` and `macterm pane run clear --session macterm-api-8f327ce4a3f8` need no `--`. Any other word starting with `-` before `--` is an error and nothing is typed: `macterm pane run ls -la` fails and prints the same command with its text moved after `--`. `--help` before `--` prints help.
 
 ## Reading a pane
 

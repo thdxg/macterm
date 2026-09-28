@@ -287,7 +287,7 @@ private struct CommandNode {
     let valueOptions: Set<String>
     let positionals: Int
     let repeatsPositionals: Bool
-    /// `pane run`'s text, `ssh`'s argv: past its first word nothing is parsed.
+    /// `ssh`'s argv: past its first word nothing is parsed.
     let takesRemainingInput: Bool
 
     init(json: [String: Any]) {
@@ -350,6 +350,12 @@ private struct CommandNode {
         while index < words.count {
             let word = words[index]
             index += 1
+            // ArgumentParser's terminator: every word after it is an argument
+            // (`pane run -- ls -la`).
+            if word == "--" {
+                arguments += words[index...]
+                break
+            }
             if word.hasPrefix("-"), word.count > 1 {
                 let spelling = String(word.split(separator: "=", maxSplits: 1)[0])
                 if node.flags.contains(spelling) { continue }

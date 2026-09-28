@@ -236,11 +236,10 @@ class MactermHarness:
     def cli(self, *args, check=True, timeout=60):
         """Run the bundled `macterm` CLI against this instance's socket.
 
-        `--socket` is appended AFTER the args, which is safe for every verb
-        except `pane run` (its passthrough capture would swallow trailing
-        flags into the typed command — and the CLI would then fall back to
-        socket discovery, possibly reaching a real Macterm). Use pane_run()
-        for that verb.
+        `--socket` is appended AFTER the args, so args must not contain a
+        `--` terminator: past one the flag is an argument (`pane run` would
+        type it) and the CLI falls back to socket discovery — possibly
+        reaching a real Macterm. Use pane_run() for that verb.
         """
         if not os.path.exists(self.cli_path):
             raise HarnessError("bundled macterm CLI missing from the app")
@@ -254,9 +253,9 @@ class MactermHarness:
 
     def pane_run(self, command, pane=None, session=None, submit=True):
         """Type `command` into a live pane's shell, with a trailing newline
-        unless `submit=False` (which leaves it on the prompt). Connection and
-        targeting flags are placed BEFORE the command because `pane run`
-        captures everything after its first positional — see cli()."""
+        unless `submit=False` (which leaves it on the prompt). The command goes
+        after `--`, so it is typed verbatim whatever it starts with, and every
+        flag goes before it — see cli()."""
         args = [self.cli_path, "pane", "run", "--socket", self.socket]
         if pane:
             args += ["--pane", pane]
@@ -264,7 +263,7 @@ class MactermHarness:
             args += ["--session", session]
         if not submit:
             args.append("--no-submit")
-        args.append(command)
+        args += ["--", command]
         result = sh(args, timeout=60)
         if result.returncode != 0:
             raise HarnessError(f"macterm pane run failed: {result.stderr.strip()}")

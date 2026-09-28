@@ -58,7 +58,7 @@ extension AgentSkills {
         unless they already told you the answer. Then type the task and submit it:
 
         ```sh
-        macterm pane run --session macterm-api-2a6f7e69fb6e --no-submit "Fix the failing test in parser_test.go."
+        macterm pane run --session macterm-api-2a6f7e69fb6e --no-submit -- "Fix the failing test in parser_test.go."
         macterm pane key --session macterm-api-2a6f7e69fb6e return
         ```
 
@@ -94,7 +94,7 @@ extension AgentSkills {
         `ctrl+c`), check that the pane is back at a shell prompt, then close it:
 
         ```sh
-        macterm pane run --session macterm-api-2a6f7e69fb6e --no-submit "/exit"
+        macterm pane run --session macterm-api-2a6f7e69fb6e --no-submit -- "/exit"
         macterm pane key --session macterm-api-2a6f7e69fb6e return
         macterm pane close --session macterm-api-2a6f7e69fb6e
         ```

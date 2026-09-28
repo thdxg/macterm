@@ -57,7 +57,7 @@ extension AgentSkills {
         ## Run a command and wait for it
 
         ```sh
-        macterm pane run --session macterm-api-8f327ce4a3f8 "/bin/sh -c 'make test; echo \$? > /tmp/make-4f1c.status'"
+        macterm pane run --session macterm-api-8f327ce4a3f8 -- "/bin/sh -c 'make test; echo \$? > /tmp/make-4f1c.status'"
         for i in $(seq 1 600); do [ -e /tmp/make-4f1c.status ] && break; sleep 0.5; done
         cat /tmp/make-4f1c.status
         macterm pane dump --session macterm-api-8f327ce4a3f8 --scrollback | tail -40
@@ -71,7 +71,7 @@ extension AgentSkills {
         marker in the pane's text instead:
 
         ```sh
-        macterm pane run --session macterm-api-8f327ce4a3f8 "/bin/sh -c 'make test; printf done-%s 7d2e; echo'"
+        macterm pane run --session macterm-api-8f327ce4a3f8 -- "/bin/sh -c 'make test; printf done-%s 7d2e; echo'"
         for i in $(seq 1 600); do
           macterm pane dump --session macterm-api-8f327ce4a3f8 --scrollback | grep -q done-7d2e && break
           sleep 1
@@ -98,12 +98,12 @@ extension AgentSkills {
         shows it is ready, then send one step at a time and read the screen after each:
 
         ```sh
-        macterm pane run --session macterm-api-8f327ce4a3f8 "python3 -q"
+        macterm pane run --session macterm-api-8f327ce4a3f8 -- "python3 -q"
         for i in $(seq 1 40); do
           macterm pane dump --session macterm-api-8f327ce4a3f8 | grep -q '^>>>' && break
           sleep 0.5
         done
-        macterm pane run --session macterm-api-8f327ce4a3f8 --no-submit "print(sum(range(10)))"
+        macterm pane run --session macterm-api-8f327ce4a3f8 --no-submit -- "print(sum(range(10)))"
         macterm pane key --session macterm-api-8f327ce4a3f8 return
         macterm pane dump --session macterm-api-8f327ce4a3f8 | tail -2
         macterm pane key --session macterm-api-8f327ce4a3f8 ctrl+d
@@ -124,11 +124,11 @@ extension AgentSkills {
         `--scrollback` adds nothing it drew. Editing a file in vim, for example:
 
         ```sh
-        macterm pane run --session macterm-api-8f327ce4a3f8 "vim notes.txt"
+        macterm pane run --session macterm-api-8f327ce4a3f8 -- "vim notes.txt"
         macterm pane key --session macterm-api-8f327ce4a3f8 i
-        macterm pane run --session macterm-api-8f327ce4a3f8 --no-submit "a new first line"
+        macterm pane run --session macterm-api-8f327ce4a3f8 --no-submit -- "a new first line"
         macterm pane key --session macterm-api-8f327ce4a3f8 escape
-        macterm pane run --session macterm-api-8f327ce4a3f8 --no-submit ":wq"
+        macterm pane run --session macterm-api-8f327ce4a3f8 --no-submit -- ":wq"
         macterm pane key --session macterm-api-8f327ce4a3f8 return
         ```
 

@@ -378,7 +378,7 @@ drive2() {
 demo2() {  # sidebar toggle, including over a full-screen TUI, across tabs
   say "demo 2 — sidebar and tabs"
   reset_project
-  "$MACTERM" pane run "hx AGENTS.md" >/dev/null; sleep 3
+  "$MACTERM" pane run -- "hx AGENTS.md" >/dev/null; sleep 3
   "$MACTERM" tab new --project macterm --run opencode >/dev/null; sleep 8
   "$MACTERM" tab select 1 --project macterm >/dev/null; sleep 1.5
   record sidebar-tabs drive2
@@ -663,7 +663,7 @@ demo6() {  # the tab switcher, over tabs that are actually doing something
   # A tab per kind of thing you would really have open, two of them split and
   # several redrawing on their own: the switcher's cards are LIVE previews, so
   # a set of still tabs would undersell the whole feature.
-  "$MACTERM" pane run "btop --update 100" >/dev/null; sleep 3
+  "$MACTERM" pane run -- "btop --update 100" >/dev/null; sleep 3
   "$MACTERM" tab new --project macterm --run "hx AGENTS.md" >/dev/null; sleep 3
   "$MACTERM" pane split --project macterm --tab 2 --direction down --run top >/dev/null; sleep 2.5
   "$MACTERM" tab new --project macterm --run opencode >/dev/null; sleep 8

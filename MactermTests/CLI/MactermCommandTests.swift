@@ -2,28 +2,31 @@ import Foundation
 @testable import Macterm
 import Testing
 
-/// `pane run` captures its text with `.captureForPassthrough`, which takes
-/// ArgumentParser's help flags along with it: until the verb answered a leading
-/// one itself, `macterm pane run --help` typed `--help` into the focused pane.
-/// Run against the bundled CLI with a stand-in control socket that records
-/// every request, so a regression shows up here as a request instead of as
-/// text typed into a real Macterm.
+/// `pane run` types the words after `--` verbatim and parses its own flags
+/// wherever they appear before it. It used to capture everything from its
+/// text's first word on, so `pane run clear --session X` typed
+/// `clear --session X` into the CURRENT pane. Run against the bundled CLI
+/// with a stand-in control socket that records every request, so a
+/// regression shows up here as a request instead of as text typed into a
+/// real Macterm.
 struct MactermCommandTests {
+    private static let session = "macterm-api-8f327ce4a3f8"
+
     @Test
-    func pane_run_prints_help_for_a_leading_help_flag_instead_of_typing_it() throws {
+    func pane_run_prints_help_for_a_help_flag_before_the_terminator() throws {
         let socket = RecordingSocket()
         defer { socket.stop() }
         let help = try socket.cli(["help", "pane", "run"])
         #expect(help.status == 0)
-        // Flags after the text are typed, so the usage line must list them first.
         let usage = try #require(help.stdout.components(separatedBy: "\n\n").first { $0.hasPrefix("USAGE:") })
-        #expect(usage.hasSuffix("<command> ..."), "the flags must come before the text: \(usage)")
+        #expect(usage.hasSuffix("[--] <command> ..."), "the usage line must show the terminator: \(usage)")
 
         for arguments in [
             ["pane", "run", "--help"],
             ["pane", "run", "-h"],
-            ["pane", "run", "--session", "macterm-api-8f327ce4a3f8", "--help"],
+            ["pane", "run", "--session", Self.session, "--help"],
             ["pane", "run", "--no-submit", "-h"],
+            ["pane", "run", "ls", "--help"],
         ] {
             let result = try socket.cli(arguments)
             let invocation = "macterm " + arguments.joined(separator: " ")
@@ -34,21 +37,59 @@ struct MactermCommandTests {
     }
 
     @Test
-    func pane_run_types_everything_from_the_first_word_of_its_text() throws {
+    func pane_run_parses_its_flags_anywhere_and_types_what_follows_the_terminator() throws {
         let socket = RecordingSocket()
         defer { socket.stop() }
-        for arguments in [
-            ["pane", "run", "ls", "--help"],
-            ["pane", "run", "--no-submit", "--session", "macterm-api-8f327ce4a3f8", "git", "commit", "-h"],
-        ] {
+        let cases: [(arguments: [String], run: String, session: String?, submit: Bool?)] = [
+            (["pane", "run", "ls"], "ls", nil, nil),
+            // The targeting trap: the flag after the text now targets.
+            (["pane", "run", "clear", "--session", Self.session], "clear", Self.session, nil),
+            (["pane", "run", "--session", Self.session, "--", "ls", "--help"], "ls --help", Self.session, nil),
+            (["pane", "run", "--no-submit", "--", "git", "commit", "-h"], "git commit -h", nil, false),
+            (["pane", "run", "--", "--session", Self.session], "--session \(Self.session)", nil, nil),
+            (["pane", "run", "echo", "--", "-n", "--", "hi"], "echo -n -- hi", nil, nil),
+            (["pane", "run", "cat", "-"], "cat -", nil, nil),
+            (["pane", "run", "/bin/sh -c 'ls -la'"], "/bin/sh -c 'ls -la'", nil, nil),
+        ]
+        for (arguments, _, _, _) in cases {
             let result = try socket.cli(arguments)
             #expect(result.status == 0, "`macterm \(arguments.joined(separator: " "))`: \(result.stderr)")
         }
         let requests = socket.requests
-        #expect(requests.map(\.command) == ["pane.run", "pane.run"])
-        #expect(requests.map { $0.args?.run } == ["ls --help", "git commit -h"])
-        #expect(requests.map { $0.args?.session } == [nil, "macterm-api-8f327ce4a3f8"])
-        #expect(requests.map { $0.args?.submit } == [nil, false])
+        #expect(requests.map(\.command) == cases.map { _ in "pane.run" })
+        #expect(requests.map { $0.args?.run } == cases.map(\.run))
+        #expect(requests.map { $0.args?.session } == cases.map(\.session))
+        #expect(requests.map { $0.args?.submit } == cases.map(\.submit))
+    }
+
+    @Test
+    func pane_run_refuses_a_dash_word_before_the_terminator_without_typing_it() throws {
+        let socket = RecordingSocket()
+        defer { socket.stop() }
+        let cases: [(arguments: [String], stray: String, retry: String)] = [
+            (["pane", "run", "ls", "-la"], "-la", "macterm pane run -- ls -la"),
+            (
+                ["pane", "run", "git", "commit", "-m", "two words", "--session", Self.session],
+                "-m",
+                "macterm pane run --session \(Self.session) -- git commit -m 'two words'"
+            ),
+            (
+                ["pane", "run", "--no-submit", "clear", "--sessio", Self.session],
+                "--sessio",
+                "macterm pane run --no-submit -- clear --sessio \(Self.session)"
+            ),
+        ]
+        for (arguments, stray, retry) in cases {
+            let result = try socket.cli(arguments)
+            let invocation = "macterm " + arguments.joined(separator: " ")
+            #expect(result.status != 0, "`\(invocation)` was accepted")
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("`\(stray)` is not a `pane run` option"), "\(invocation): \(result.stderr)")
+            // The retry it suggests keeps the target, or pasting it would type
+            // into the current pane.
+            #expect(result.stderr.contains("put the command line after `--`:\n  \(retry)\n"), "\(invocation): \(result.stderr)")
+        }
+        #expect(socket.requests.isEmpty, "typed into a pane: \(socket.requests.map { $0.args?.run ?? "" })")
     }
 }
 
