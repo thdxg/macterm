@@ -34,6 +34,28 @@ struct PasswordPromptIdentityTests {
     }
 
     @Test
+    func an_ssh_shows_without_the_options_macterms_wrapper_added() {
+        // `ssh demo-box` typed into a shell with ssh-env on runs as this.
+        let wrapped = "/usr/bin/ssh -o SetEnv=TERM=xterm-ghostty -o SendEnv=COLORTERM -o SendEnv=TERM_PROGRAM "
+            + "-o SendEnv=TERM_PROGRAM_VERSION -- demo-box"
+        let id = PasswordEntryID(command: wrapped, prompt: "demo@localhost's password:")
+        #expect(id.displayCommand == "ssh demo-box")
+        #expect(id.title == "ssh demo-box")
+        #expect(id.command == wrapped, "matching keeps the full argv")
+        // The user's own options stay, and so does anything else ssh runs with.
+        #expect(PasswordEntryID(
+            command: "ssh -o SetEnv=TERM=xterm-256color -o SendEnv=COLORTERM -o SendEnv=TERM_PROGRAM "
+                + "-o SendEnv=TERM_PROGRAM_VERSION -- -p 2222 prod uptime",
+            prompt: "p:"
+        ).displayCommand == "ssh -- -p 2222 prod uptime")
+        #expect(PasswordEntryID(command: "/usr/bin/ssh -- prod", prompt: "p:").displayCommand == "ssh prod")
+        #expect(PasswordEntryID(command: "/usr/bin/ssh -o SendEnv=COLORTERM prod", prompt: "p:").displayCommand
+            == "ssh -o SendEnv=COLORTERM prod")
+        // Only ssh is unwrapped.
+        #expect(PasswordEntryID(command: "/usr/bin/env -- prod", prompt: "p:").displayCommand == "env -- prod")
+    }
+
+    @Test
     func one_command_asking_twice_files_two_entries() {
         let bastion = PasswordPromptIdentity.entryID(prompt: "ethan@bastion's password:", command: "ssh -J bastion prod")
         let prod = PasswordPromptIdentity.entryID(prompt: "ethan@prod's password:", command: "ssh -J bastion prod")

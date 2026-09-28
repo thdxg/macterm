@@ -29,12 +29,22 @@ struct PasswordEntryID: Hashable, Codable {
     /// command resolved to (`python3` runs `/opt/homebrew/…/Python`), so a
     /// path in the program position is shortened to its name. Matching still
     /// uses the exact `command`.
+    ///
+    /// An `ssh` loses the options Macterm's own ssh wrapper added
+    /// (`SSHWrapper.userArguments`): `ssh demo-box` typed at a shell runs as
+    /// `ssh -o SetEnv=TERM=… -o SendEnv=… demo-box`.
     var displayCommand: String? {
         guard let command else { return nil }
         let parts = command.split(separator: " ", maxSplits: 1)
-        guard let program = parts.first, program.contains("/") else { return command }
-        let name = (String(program) as NSString).lastPathComponent
-        return parts.count > 1 ? "\(name) \(parts[1])" : name
+        guard let program = parts.first else { return command }
+        let name = program.contains("/") ? (String(program) as NSString).lastPathComponent : String(program)
+        guard parts.count > 1 else { return name }
+        var arguments = String(parts[1])
+        if name == "ssh" {
+            let words = arguments.split(separator: " ").map(String.init)
+            arguments = SSHWrapper.userArguments(fromExecArguments: words).joined(separator: " ")
+        }
+        return arguments.isEmpty ? name : "\(name) \(arguments)"
     }
 }
 

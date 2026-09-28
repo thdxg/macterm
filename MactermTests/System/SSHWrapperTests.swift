@@ -75,6 +75,23 @@ struct SSHWrapperTests {
     }
 
     @Test
+    func user_arguments_undo_exec_argv() {
+        let typed = ["-p", "2222", "prod"]
+        for term in ["xterm-ghostty", "xterm-256color", nil] {
+            let argv = SSHWrapper.execArgv(ssh: "ssh", term: term, sshArgs: typed)
+            #expect(SSHWrapper.userArguments(fromExecArguments: Array(argv.dropFirst())) == typed)
+        }
+        // An older wrapper passed the relay's `--` on; it goes when nothing
+        // after it needs it.
+        #expect(SSHWrapper.userArguments(fromExecArguments: SSHWrapper.forwardingOptions(term: "xterm-ghostty") + ["--", "prod"])
+            == ["prod"])
+        #expect(SSHWrapper.userArguments(fromExecArguments: ["--", "-p", "2222", "prod"]) == ["--", "-p", "2222", "prod"])
+        // Options that aren't exactly the wrapper's are the user's.
+        #expect(SSHWrapper.userArguments(fromExecArguments: ["-o", "SetEnv=TERM=dumb", "prod"]) == ["-o", "SetEnv=TERM=dumb", "prod"])
+        #expect(SSHWrapper.userArguments(fromExecArguments: ["--"]) == ["--"])
+    }
+
+    @Test
     func exec_argv_without_forwarding_is_plain_ssh() {
         #expect(
             SSHWrapper.execArgv(ssh: "ssh", term: nil, sshArgs: ["-p", "2222", "host"])

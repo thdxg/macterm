@@ -153,13 +153,14 @@ enum SSHWrapper {
     /// (forward-env off): plain ssh, untouched.
     static func execArgv(ssh: String, term: String?, sshArgs: [String]) -> [String] {
         guard let term else { return [ssh] + sshArgs }
-        return [
-            ssh,
-            "-o", "SetEnv=TERM=\(term)",
-            "-o", "SendEnv=COLORTERM",
-            "-o", "SendEnv=TERM_PROGRAM",
-            "-o", "SendEnv=TERM_PROGRAM_VERSION",
-        ] + sshArgs
+        return [ssh] + forwardingOptions(term: term) + sshArgs
+    }
+
+    /// The options `execArgv` puts ahead of the user's own when forward-env
+    /// is on.
+    static func forwardingOptions(term: String) -> [String] {
+        ["-o", "SetEnv=TERM=\(term)"]
+            + ["COLORTERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION"].flatMap { ["-o", "SendEnv=\($0)"] }
     }
 
     /// The ssh arguments in what the wrapper captured: every shell
@@ -168,6 +169,23 @@ enum SSHWrapper {
     /// parsing, so `ssh -p 2222 prod` would connect to a host named `-p`.
     static func relayedArguments(_ captured: [String]) -> [String] {
         captured.first == "--" ? Array(captured.dropFirst()) : captured
+    }
+
+    /// The arguments the user typed, recovered from an ssh the wrapper ran
+    /// (its argv minus the program): `forwardingOptions` stripped, then the
+    /// separator a wrapper predating `relayedArguments` passed on, unless what
+    /// follows it would read as an option without it. For showing a command
+    /// only — anything else is returned untouched, and matching keeps the
+    /// full argv.
+    static func userArguments(fromExecArguments arguments: [String]) -> [String] {
+        var rest = arguments
+        let setEnv = "SetEnv=TERM="
+        if rest.count >= 2, rest[0] == "-o", rest[1].hasPrefix(setEnv) {
+            let options = forwardingOptions(term: String(rest[1].dropFirst(setEnv.count)))
+            if rest.starts(with: options) { rest.removeFirst(options.count) }
+        }
+        if rest.count > 1, rest[0] == "--", !rest[1].hasPrefix("-") { rest.removeFirst() }
+        return rest
     }
 
     // MARK: - Install cache
