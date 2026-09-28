@@ -53,6 +53,7 @@ final class PasswordPromptMonitor {
     /// The monitor's reads of and writes to the world, injectable for tests.
     struct Probes {
         var isReadingPassword: @MainActor (Pane) -> Bool = ProcessInspector.terminalIsReadingPassword(forPane:)
+        var isNonCanonical: @MainActor (Pane) -> Bool = ProcessInspector.terminalIsNonCanonical(forPane:)
         var screenText: @MainActor (GhosttyTerminalNSView) -> String? = { $0.readText(scrollback: false) }
         /// The screen with its scrollback, so a submission's output is
         /// measured from where the transcript ended at Return.
@@ -293,7 +294,16 @@ final class PasswordPromptMonitor {
     /// Feed one input to the pane's state machine.
     private func receive(_ input: PasswordKeyInput, in view: GhosttyTerminalNSView) {
         let tracker = tracker(for: view)
+        let before = tracker.phase
         let atPrompt = step(tracker)
+        // `keyDown` reports a key once it has been sent, and a program
+        // reading the surface's own pty — a remote project's ssh, with no zmx
+        // hop in between — can finish its read on this very Return before
+        // the tty is looked at. The prompt that was up when the key went out
+        // is the one it answered.
+        if case .prompting = before, tracker.phase.isIdle, input.endsLine {
+            tracker.phase = before
+        }
         defer {
             refreshBubble(tracker)
             scheduleIfNeeded()
@@ -621,7 +631,8 @@ final class PasswordPromptMonitor {
                 since: submission.transcriptEnd,
                 in: probes.transcript(view) ?? ""
             ),
-            exitCode: submission.exitCode
+            exitCode: submission.exitCode,
+            inputIsNonCanonical: !atPrompt && view.owningPane.map(probes.isNonCanonical) == true
         )
     }
 

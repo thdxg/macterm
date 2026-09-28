@@ -148,6 +148,15 @@ struct PasswordLineCaptureTests {
         #expect(outcome == .submitted(""))
         #expect(run([.text("abc"), .escape, .submit]).1 == .submitted(""))
     }
+
+    @Test
+    func return_and_a_pasted_newline_end_the_line() {
+        #expect(PasswordKeyInput.submit.endsLine)
+        #expect(PasswordKeyInput.text("hunter2\n").endsLine)
+        #expect(!PasswordKeyInput.text("hunter2").endsLine)
+        #expect(!PasswordKeyInput.cancel.endsLine)
+        #expect(!PasswordKeyInput.killLine.endsLine)
+    }
 }
 
 struct PasswordSubmissionJudgeTests {
@@ -249,6 +258,27 @@ struct PasswordSubmissionJudgeTests {
             outputAfterPrompt: ["Permission denied, please try again."],
             exitCode: nil
         )) == .failed)
+    }
+
+    @Test
+    func the_tty_leaving_line_mode_is_a_success() {
+        /// A remote project's login: ssh goes raw to relay the session, and
+        /// zmx repaints the screen, so nothing is ever drawn below the prompt.
+        func lineModeLeft(after seconds: TimeInterval, output: [String] = []) -> PasswordSubmissionJudge.Verdict {
+            judge.evaluate(.init(
+                now: start.addingTimeInterval(seconds),
+                atPasswordPrompt: false,
+                currentPrompt: nil,
+                outputAfterPrompt: output,
+                exitCode: nil,
+                inputIsNonCanonical: true
+            ))
+        }
+        #expect(lineModeLeft(after: 1) == .succeeded)
+        #expect(lineModeLeft(after: 0.1) == .pending, "not before the settle window")
+        #expect(lineModeLeft(after: 1, output: ["Permission denied, please try again."]) == .failed)
+        // The same silence with the tty still in line mode proves nothing.
+        #expect(observe(after: 1) == .pending)
     }
 
     @Test

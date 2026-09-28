@@ -135,6 +135,16 @@ enum PasswordKeyInput: Equatable {
     /// forward-delete, other control chords). The capture can no longer vouch
     /// for what the program received, so it will not offer to save it.
     case unknown
+
+    /// Ends the line a read is collecting: Return, or text carrying a newline
+    /// (a paste).
+    var endsLine: Bool {
+        switch self {
+        case .submit: true
+        case let .text(text): text.contains(where: \.isNewline)
+        default: false
+        }
+    }
 }
 
 /// Mirrors the canonical-mode line editing a password read goes through, so
@@ -258,6 +268,9 @@ struct PasswordSubmissionJudge {
         /// The exit code shell integration reported for the command, if the
         /// command has finished (OSC 133;D).
         let exitCode: Int32?
+        /// The tty has left line mode (`ICANON` off): the program is reading
+        /// keys one at a time now.
+        var inputIsNonCanonical = false
     }
 
     func evaluate(_ o: Observation) -> Verdict {
@@ -273,6 +286,14 @@ struct PasswordSubmissionJudge {
         if !o.atPasswordPrompt, elapsed >= Self.settleDelay, !o.outputAfterPrompt.isEmpty {
             return .succeeded
         }
+        // The tty left line mode with no rejection printed: the program went
+        // on to read keys itself — ssh relaying the session it just logged
+        // in to, which no program does to ask again. A remote project's pane
+        // has only this: its login ends in zmx repainting the screen from the
+        // top, so nothing is ever drawn below the prompt.
+        if !o.atPasswordPrompt, elapsed >= Self.settleDelay, o.inputIsNonCanonical {
+            return .succeeded
+        }
         return elapsed >= Self.timeout ? .undetermined : .pending
     }
 
@@ -285,7 +306,8 @@ struct PasswordSubmissionJudge {
             atPasswordPrompt: o.atPasswordPrompt,
             currentPrompt: o.currentPrompt,
             outputAfterPrompt: o.outputAfterPrompt,
-            exitCode: o.exitCode
+            exitCode: o.exitCode,
+            inputIsNonCanonical: o.inputIsNonCanonical
         )
         let verdict = evaluate(forced)
         return verdict == .pending ? .succeeded : verdict

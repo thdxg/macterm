@@ -297,16 +297,22 @@ enum ProcessInspector {
     }
 
     static func terminalInputIsRaw(ttyPath: String?) -> Bool {
-        guard let ttyPath else { return false }
+        guard let flags = localModes(ttyPath: ttyPath) else { return false }
+        let canonical = flags & tcflag_t(ICANON) != 0
+        let echo = flags & tcflag_t(ECHO) != 0
+        return !canonical || !echo
+    }
+
+    /// The tty's local modes (`c_lflag`), or nil when it can't be read.
+    private static func localModes(ttyPath: String?) -> tcflag_t? {
+        guard let ttyPath else { return nil }
         let fd = open(ttyPath, O_RDONLY | O_NOCTTY | O_NONBLOCK)
-        guard fd >= 0 else { return false }
+        guard fd >= 0 else { return nil }
         defer { close(fd) }
 
         var attrs = termios()
-        guard tcgetattr(fd, &attrs) == 0 else { return false }
-        let canonical = attrs.c_lflag & tcflag_t(ICANON) != 0
-        let echo = attrs.c_lflag & tcflag_t(ECHO) != 0
-        return !canonical || !echo
+        guard tcgetattr(fd, &attrs) == 0 else { return nil }
+        return attrs.c_lflag
     }
 
     /// Whether the program in the pane's foreground is reading a password:
@@ -323,22 +329,35 @@ enum ProcessInspector {
     /// has no local zmx, so its surface pty is where its ssh asks.
     @MainActor
     static func terminalIsReadingPassword(forPane pane: Pane) -> Bool {
-        let daemonTTY = ZmxForegroundResolver.daemonTTYPath(sessionName: pane.sessionName)
-        if daemonTTY == nil, pane.nsView?.isZmxWrapped == true { return false }
-        return terminalIsReadingPassword(ttyPath: daemonTTY ?? pane.nsView?.ttyName)
+        terminalIsReadingPassword(ttyPath: lineDisciplineTTYPath(forPane: pane))
     }
 
     static func terminalIsReadingPassword(ttyPath: String?) -> Bool {
-        guard let ttyPath else { return false }
-        let fd = open(ttyPath, O_RDONLY | O_NOCTTY | O_NONBLOCK)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-
-        var attrs = termios()
-        guard tcgetattr(fd, &attrs) == 0 else { return false }
-        let canonical = attrs.c_lflag & tcflag_t(ICANON) != 0
-        let echo = attrs.c_lflag & tcflag_t(ECHO) != 0
+        guard let flags = localModes(ttyPath: ttyPath) else { return false }
+        let canonical = flags & tcflag_t(ICANON) != 0
+        let echo = flags & tcflag_t(ECHO) != 0
         return canonical && !echo
+    }
+
+    /// Whether the pane's tty has left line mode (`ICANON` off): the program
+    /// reads keys one by one — a shell's line editor, a TUI, or ssh relaying
+    /// a session once its login went through. Unlike `terminalInputIsRaw`, a
+    /// password read (canonical, echo off) is not raw here. Read from the tty
+    /// `terminalIsReadingPassword` reads.
+    @MainActor
+    static func terminalIsNonCanonical(forPane pane: Pane) -> Bool {
+        guard let flags = localModes(ttyPath: lineDisciplineTTYPath(forPane: pane)) else { return false }
+        return flags & tcflag_t(ICANON) == 0
+    }
+
+    /// The tty whose line discipline the pane's programs read through: the
+    /// zmx daemon's pty for a wrapped pane (nil until it is cached, never the
+    /// attach client's permanently raw one), the surface's own otherwise.
+    @MainActor
+    private static func lineDisciplineTTYPath(forPane pane: Pane) -> String? {
+        let daemonTTY = ZmxForegroundResolver.daemonTTYPath(sessionName: pane.sessionName)
+        if daemonTTY == nil, pane.nsView?.isZmxWrapped == true { return nil }
+        return daemonTTY ?? pane.nsView?.ttyName
     }
 
     /// The current working directory of the pane's foreground process, read

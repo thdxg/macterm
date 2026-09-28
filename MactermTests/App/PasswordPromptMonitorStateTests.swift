@@ -11,6 +11,8 @@ struct PasswordPromptMonitorStateTests {
     @MainActor
     final class World {
         var atPrompt = false
+        /// The tty has left line mode (a shell's editor, ssh relaying a session).
+        var nonCanonical = false
         var screen = ""
         var command: String? = "/usr/bin/ssh prod"
         var localShellInForeground = true
@@ -44,6 +46,7 @@ struct PasswordPromptMonitorStateTests {
             vault = PasswordVault(store: store)
             var probes = PasswordPromptMonitor.Probes()
             probes.isReadingPassword = { _ in world.atPrompt }
+            probes.isNonCanonical = { _ in world.nonCanonical }
             probes.screenText = { _ in world.screen }
             probes.transcript = { _ in world.screen }
             probes.command = { _ in world.command }
@@ -368,6 +371,40 @@ struct PasswordPromptMonitorStateTests {
         h.world.atPrompt = false
         h.monitor.viewDidFinishCommand(h.view, exitCode: 1)
         #expect(h.state.bubble == "save")
+    }
+
+    @Test
+    func a_remote_projects_login_is_captured_and_offered() {
+        // The pane's ssh reads the surface's own pty, so it has the line and
+        // has left the read by the time `keyDown` reports the Return.
+        let h = Harness()
+        h.prompt("demo@localhost's password:")
+        h.type("hunter2")
+        h.world.atPrompt = false
+        h.submit()
+        #expect(h.state.phase == "verifying")
+        // Logged in: ssh relays the session in raw mode, and zmx repaints the
+        // screen from the top — no line is ever drawn below the prompt.
+        h.world.nonCanonical = true
+        h.world.screen = "\n\n\n"
+        h.advance(PasswordSubmissionJudge.settleDelay + 0.1)
+        #expect(h.state.phase == "idle")
+        #expect(h.state.bubble == "save")
+        #expect(h.monitor.answer(.accept, in: h.view))
+        #expect(h.vault.password(for: PasswordEntryID(command: "/usr/bin/ssh prod", prompt: "demo@localhost's password:")) == "hunter2")
+    }
+
+    @Test
+    func only_a_line_end_is_credited_to_a_read_that_already_ended() {
+        let h = Harness()
+        h.prompt(login)
+        h.type("hunter2")
+        h.world.atPrompt = false
+        // A character typed after the read ended went to whatever reads now.
+        h.type("x")
+        #expect(h.state.phase == "idle")
+        h.submit()
+        #expect(h.state.phase == "idle", "the Return belongs to the program now")
     }
 
     @Test
