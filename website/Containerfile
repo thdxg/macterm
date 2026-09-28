@@ -16,20 +16,22 @@
 # rendered the docs and compiled the CSS, so the runtime stage carries no
 # JavaScript at all — no Bun, no node_modules, just Caddy and public/.
 
-# Fully qualified: podman resolves a short name through registries.conf, which
-# errors without a TTY when more than one search registry is configured.
-ARG BUN_IMAGE=docker.io/oven/bun:1.3-alpine
-ARG CADDY_IMAGE=docker.io/library/caddy:2-alpine
+# The base images are written out in each FROM, never passed through an ARG:
+# Dependabot reads only literal `FROM image:tag` lines, so an image named by a
+# variable is never tracked. They are fully qualified because podman resolves
+# a short name through registries.conf, which errors without a TTY when more
+# than one search registry is configured; Dependabot treats `docker.io/` as
+# Docker Hub, so the qualification costs it nothing.
 
 # ---- deps: resolved once, cached until the lockfile moves -------------------
-FROM ${BUN_IMAGE} AS deps
+FROM docker.io/oven/bun:1.3-alpine AS deps
 WORKDIR /app
 COPY website/package.json website/bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
 # ---- build: render docs/pages/*.md and compile Tailwind --------------------
-FROM ${BUN_IMAGE} AS build
+FROM docker.io/oven/bun:1.3-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY website/ ./
@@ -39,7 +41,7 @@ COPY assets/ ./public/assets/
 RUN bun run build
 
 # ---- runtime ---------------------------------------------------------------
-FROM ${CADDY_IMAGE} AS runtime
+FROM docker.io/library/caddy:2-alpine AS runtime
 
 COPY website/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/public /srv
