@@ -24,14 +24,14 @@
 # Docker Hub, so the qualification costs it nothing.
 
 # ---- deps: resolved once, cached until the lockfile moves -------------------
-FROM docker.io/oven/bun:1.3-alpine AS deps
+FROM docker.io/oven/bun:1.4-alpine AS deps
 WORKDIR /app
 COPY website/package.json website/bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
 # ---- build: render docs/pages/*.md and compile Tailwind --------------------
-FROM docker.io/oven/bun:1.3-alpine AS build
+FROM docker.io/oven/bun:1.4-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY website/ ./
