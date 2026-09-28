@@ -67,6 +67,14 @@ struct SSHWrapperTests {
     }
 
     @Test
+    func the_relays_separator_never_reaches_ssh() {
+        // `ghostty +ssh -- "$@"` for a typed `ssh -p 2222 prod`.
+        #expect(SSHWrapper.relayedArguments(["--", "-p", "2222", "prod"]) == ["-p", "2222", "prod"])
+        #expect(SSHWrapper.relayedArguments(["prod", "--", "ls"]) == ["prod", "--", "ls"])
+        #expect(SSHWrapper.relayedArguments(["--", "--", "prod"]) == ["--", "prod"], "the user's own `--` stays")
+    }
+
+    @Test
     func exec_argv_without_forwarding_is_plain_ssh() {
         #expect(
             SSHWrapper.execArgv(ssh: "ssh", term: nil, sshArgs: ["-p", "2222", "host"])

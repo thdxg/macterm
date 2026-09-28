@@ -5,8 +5,9 @@ import Testing
 /// answers a leading help flag itself, like `pane run`. The shell-integration
 /// relay must not notice: it calls `ghostty +ssh <flags> -- "$@"` (the bundled
 /// shim hands that to `macterm ssh` unchanged), so its capture starts with `--`
-/// and a help flag the user gave still reaches ssh. `/bin/echo` stands in for
-/// ssh, printing the arguments it was handed.
+/// and a help flag the user gave still reaches ssh — without the `--`, which
+/// would end ssh's option parsing (`SSHWrapper.relayedArguments`). `/bin/echo`
+/// stands in for ssh, printing the arguments it was handed.
 struct SSHCommandTests {
     @Test
     func a_leading_help_flag_prints_help() throws {
@@ -25,7 +26,9 @@ struct SSHCommandTests {
         let viaEcho = ["ssh", "--forward-env=false", "--terminfo=false", "--ssh", "/bin/echo"]
         let relayed = try BundledCLI.run(viaEcho + ["--", "--help"])
         #expect(relayed.status == 0)
-        #expect(relayed.stdout == "-- --help\n")
+        #expect(relayed.stdout == "--help\n")
+        let relayedOptions = try BundledCLI.run(viaEcho + ["--", "-p", "2222", "prod"])
+        #expect(relayedOptions.stdout == "-p 2222 prod\n", "ssh parses the user's options as options")
         let afterDestination = try BundledCLI.run(viaEcho + ["user@example.com", "-h"])
         #expect(afterDestination.status == 0)
         #expect(afterDestination.stdout == "user@example.com -h\n")

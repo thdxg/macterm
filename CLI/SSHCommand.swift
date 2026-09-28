@@ -64,11 +64,12 @@ struct SSHCommand: ParsableCommand {
     )
     var sshArgs: [String] = []
 
-    func run() throws {
+    mutating func run() throws {
         // Never fires for the relay: every shell integration calls `ghostty
         // +ssh <flags> -- "$@"` (and the alias is `macterm ssh --`), so the
         // capture starts with `--` and a user's own `ssh --help` reaches ssh.
         if startsWithHelpFlag(sshArgs) { throw CleanExit.helpRequest(self) }
+        sshArgs = SSHWrapper.relayedArguments(sshArgs)
         guard !sshArgs.isEmpty else {
             Output.printError("no ssh arguments provided")
             throw ExitCode(2)

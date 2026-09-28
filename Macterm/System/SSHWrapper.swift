@@ -162,6 +162,14 @@ enum SSHWrapper {
         ] + sshArgs
     }
 
+    /// The ssh arguments in what the wrapper captured: every shell
+    /// integration calls `ghostty +ssh <flags> -- "$@"`, and the passthrough
+    /// capture keeps that `--`. Handed on, it would end ssh's own option
+    /// parsing, so `ssh -p 2222 prod` would connect to a host named `-p`.
+    static func relayedArguments(_ captured: [String]) -> [String] {
+        captured.first == "--" ? Array(captured.dropFirst()) : captured
+    }
+
     // MARK: - Install cache
 
     /// What identifies "the entry currently bundled": a digest of the exact
