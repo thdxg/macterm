@@ -333,6 +333,23 @@ private enum SettingsWindowChrome {
             height: SettingsView.windowMinHeight
         )
     }
+
+    /// Makes the titlebar draggable again after a `Slider` drag.
+    ///
+    /// Once a slider's tracking loop ends, a titlebar drag stops moving this
+    /// window — the press reaches `NSThemeFrame` and nothing moves — until
+    /// something makes AppKit hand the window server its drag state again: a
+    /// click in the content, a pane switch, a programmatic move. `isMovable`
+    /// still reads true and the hit test lands on the toolbar throughout, so
+    /// nothing readable is wrong; flipping `isMovable` and back is the public
+    /// call that re-sends it (measured: the flip restores the drag, attaching
+    /// a debugger alone does not). Restores the prior value rather than
+    /// assuming true.
+    static func refreshWindowDrag(of window: NSWindow) {
+        let movable = window.isMovable
+        window.isMovable = !movable
+        window.isMovable = movable
+    }
 }
 
 // MARK: - Shared styling
@@ -413,6 +430,8 @@ private struct SettingsSlider: View {
     var step: Double?
     let display: (Double) -> String
 
+    @State private var host = HostWindow()
+
     var body: some View {
         // The `Slider` dims itself inside a `.disabled(_:)` scope, but the
         // flanking `Text`s are not controls and wouldn't follow on their own.
@@ -421,14 +440,57 @@ private struct SettingsSlider: View {
                 .frame(width: Self.labelWidth, alignment: .leading)
                 .dimsWhenDisabled()
             if let step {
-                Slider(value: $value, in: range, step: step)
+                Slider(value: $value, in: range, step: step, onEditingChanged: editingChanged)
             } else {
-                Slider(value: $value, in: range)
+                Slider(value: $value, in: range, onEditingChanged: editingChanged)
             }
             Text(display(value))
                 .monospacedDigit()
                 .frame(width: Self.valueWidth, alignment: .trailing)
                 .dimsWhenDisabled()
+        }
+        .background(HostWindowReader(host: host))
+    }
+
+    /// Once a drag ends, restore the window's titlebar drag — see
+    /// `SettingsWindowChrome.refreshWindowDrag`. Deferred a turn so the
+    /// slider's tracking loop has fully unwound first.
+    private func editingChanged(_ editing: Bool) {
+        guard !editing else { return }
+        DispatchQueue.main.async {
+            guard let window = host.window else { return }
+            SettingsWindowChrome.refreshWindowDrag(of: window)
+        }
+    }
+}
+
+/// The window a view is in, for the few AppKit calls SwiftUI has no route to.
+/// A class so the reader can fill it in without an update cycle.
+@MainActor
+private final class HostWindow {
+    weak var window: NSWindow?
+}
+
+private struct HostWindowReader: NSViewRepresentable {
+    let host: HostWindow
+
+    func makeNSView(context _: Context) -> NSView {
+        let view = Probe()
+        view.host = host
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context _: Context) {
+        (nsView as? Probe)?.host = host
+        host.window = nsView.window
+    }
+
+    private final class Probe: NSView {
+        weak var host: HostWindow?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            host?.window = window
         }
     }
 }
