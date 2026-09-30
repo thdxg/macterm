@@ -24,7 +24,9 @@ on:
     types: [completed]
     branches: [main]
   # Manual re-run for a wedged tip (a cancelled publish, a transient gh-pages
-  # push failure). Builds whatever main is at now.
+  # push failure, a failed tag push). Builds whatever main is at now — or, if
+  # that exact version is already in the feed, only moves the tag (see the
+  # build job's "Check whether this version is already published").
   workflow_dispatch:
 
 # Single-flight, and deliberately NOT cancel-in-progress. Publishing is a
@@ -141,10 +143,10 @@ jobs:
           # a HEAD against its per-commit R2 object; we have no such object, and
           # a tag needs no extra state either.)
           #
-          # A workflow_dispatch deliberately IGNORES the ledger: if a run ever
-          # dies between the tag move and the appcast push, the tag says "built"
-          # while the feed is a build behind, and re-dispatching is the recovery
-          # path. It must not skip itself.
+          # A workflow_dispatch deliberately IGNORES the ledger: it is the manual
+          # recovery path, and must not skip itself. Re-running a commit whose
+          # build is already in the feed is safe because the build job notices
+          # and only moves the tag.
           if git rev-parse -q --verify refs/tags/tip >/dev/null; then
             TIP_SHA=$(git rev-parse refs/tags/tip^{commit})
             if [[ "$TIP_SHA" == "$SHA" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
@@ -193,18 +195,67 @@ jobs:
           fetch-tags: true
           ref: ${{ needs.gate.outputs.sha }}
 
+      - name: Derive tip version
+        id: version
+        run: |
+          source scripts/_lib.sh
+          VERSION="$(macterm_tip_version)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Tip version: $VERSION  ($(sparkle_comparison_version "$VERSION"))"
+
+      # Is this exact build already in the feed? Then publishing it again
+      # would break it, so only the tag move below runs.
+      #
+      # The tag moves LAST, so a run that dies at the tag push (run 36758971974:
+      # `! [remote rejected] tip -> tip (failed)`) has already shipped: DMG on
+      # the release, item in the appcast. Re-running that commit derives the
+      # same version (it counts commits since the last vX.Y.Z tag, and main is
+      # linear, so a version names exactly one commit), rebuilds a DMG whose
+      # bytes differ (new signature, new image), and `--clobber`s the published
+      # asset of the same name — while publish-appcast.sh refuses to republish
+      # an equal version and keeps the OLD edSignature and length. Every tip
+      # follower's update then fails Sparkle's signature check.
+      #
+      # Read from the gh-pages BRANCH, not the served feed: that is what
+      # publish-appcast.sh itself reads and writes, and the CDNs in front of the
+      # site can serve a stale copy. A version missing from it (the upload
+      # landed but the gh-pages push failed) is republished in full, which is
+      # consistent: new DMG, new signature, one item.
+      - name: Check whether this version is already published
+        id: published
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          source scripts/_lib.sh
+          COMPARISON="$(sparkle_comparison_version "$VERSION")"
+          if ! git fetch --depth=1 origin gh-pages; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "No gh-pages branch to read; building."
+          elif git show FETCH_HEAD:appcast.xml 2>/dev/null \
+            | grep -qF "<sparkle:version>${COMPARISON}</sparkle:version>"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            printf '%s is already in the appcast; skipping the build and only moving the tip tag.\n' "$VERSION" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: jdx/mise-action@v4.3.0
+        if: steps.published.outputs.published != 'true'
 
       # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
       # currently ships, which is how macterm#340's type-check failure stayed
       # invisible here. See the action for the full rationale.
       - name: Select Xcode
         id: xcode
+        if: steps.published.outputs.published != 'true'
         uses: ./.github/actions/select-xcode
 
       # ISO week (YYYY-Www) — makes the GhosttyKit cache self-refresh weekly.
       - name: Cache epoch
         id: epoch
+        if: steps.published.outputs.published != 'true'
         run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
       # Identical key to test/benchmark/release, so tip rides the cache they
@@ -212,6 +263,7 @@ jobs:
       # clean universal Release build, same as a stable one, so the shipped
       # binary can't inherit a stale incremental artifact.
       - name: Cache GhosttyKit
+        if: steps.published.outputs.published != 'true'
         uses: actions/cache@v6
         with:
           path: |
@@ -226,27 +278,21 @@ jobs:
           key: ghosttykit-${{ hashFiles('scripts/setup.sh') }}-${{ steps.epoch.outputs.week }}
 
       - name: Setup GhosttyKit
+        if: steps.published.outputs.published != 'true'
         run: mise run setup --verbose
 
       # The SAME certificate stable and beta releases use. Signing tip with a
       # different identity (or ad-hoc) would reset the TCC privacy grants of
       # everyone who follows tip on every single build.
       - name: Import signing certificate
+        if: steps.published.outputs.published != 'true'
         uses: ./.github/actions/import-signing-cert
         with:
           certificate-p12: ${{ secrets.MACTERM_SIGNING_CERT_P12 }}
           certificate-password: ${{ secrets.MACTERM_SIGNING_CERT_PASSWORD }}
 
-      - name: Derive tip version
-        id: version
-        run: |
-          source scripts/_lib.sh
-          VERSION="$(macterm_tip_version)"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          echo "Tip version: $VERSION  ($(sparkle_comparison_version "$VERSION"))"
-
       - name: Build universal tip artifact
+        if: steps.published.outputs.published != 'true'
         env:
           SPARKLE_ED_PUBLIC_KEY: ${{ secrets.SPARKLE_ED_PUBLIC_KEY }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -304,7 +350,7 @@ jobs:
           fi
 
       - name: Update the tip release
-        if: steps.current.outputs.superseded != 'true'
+        if: steps.current.outputs.superseded != 'true' && steps.published.outputs.published != 'true'
         env:
           SHA: ${{ needs.gate.outputs.sha }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -371,7 +417,7 @@ jobs:
               done
 
       - name: Install Sparkle tools
-        if: steps.current.outputs.superseded != 'true'
+        if: steps.current.outputs.superseded != 'true' && steps.published.outputs.published != 'true'
         run: |
           SPARKLE_VERSION="2.9.1"
           curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
@@ -382,7 +428,7 @@ jobs:
       # never name an enclosure that isn't there yet. ROLLING=true replaces the
       # single tip item instead of appending one per commit.
       - name: Publish appcast
-        if: steps.current.outputs.superseded != 'true'
+        if: steps.current.outputs.superseded != 'true' && steps.published.outputs.published != 'true'
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -396,9 +442,10 @@ jobs:
       # already-built commit, so advancing it is the commit point of the whole
       # publish, and this order makes every failure self-heal on the next merge:
       # a failed asset upload or a failed gh-pages push leaves the ledger at the
-      # previous commit, so the next automatic run simply redoes this one (the
-      # appcast's own equal-version guard makes the redo a no-op if it was the
-      # tag push that failed). Move it any earlier and a mid-publish failure
+      # previous commit, so the next automatic run simply redoes this one. If it
+      # was this push that failed, the next merge's build supersedes it, and a
+      # re-run of the same commit finds its version already published and does
+      # nothing but this step. Move it any earlier and a mid-publish failure
       # leaves the ledger claiming a build nobody can download, with the gate
       # skipping that commit until someone re-dispatches by hand.
       #
