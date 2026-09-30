@@ -76,22 +76,58 @@ enum ProcessInspector {
         return displayCommand(args)
     }
 
-    /// The foreground command with its program named by the executable's
-    /// real path — what a saved password is filed under. `runningCommand`
-    /// above reads argv, which the process sets for itself: `exec -a ssh
-    /// ./fake prod` reports `ssh prod` and would collect the password saved
-    /// for the real ssh. `proc_pidpath` comes from the kernel's vnode, so
-    /// only the binary at that path matches. Arguments stay argv (the program
-    /// parses those itself, so it can't be lied to about them). A shell
-    /// running a script or a `-c` command counts as a command here
-    /// (`isIdleShellInvocation`), so a prompt inside `./deploy.sh` is filed
-    /// under the script; an idle shell is nil.
+    /// Who is reading a password in the pane: the foreground program named
+    /// by its executable's real path — what a saved password is filed under.
+    /// `runningCommand` above reads argv, which the process sets for itself:
+    /// `exec -a ssh ./fake prod` reports `ssh prod` and would collect the
+    /// password saved for the real ssh. `proc_pidpath` comes from the
+    /// kernel's vnode, so only the binary at that path matches. Arguments stay
+    /// argv (the program parses those itself, so it can't be lied to about
+    /// them). A shell running a script or a `-c` command counts as a program
+    /// here (`isIdleShellInvocation`), so a prompt inside `./deploy.sh` is
+    /// filed under the script; an idle shell is `.shell`. Anything unreadable
+    /// is `.unknown`, never `.shell`: a prompt-alone entry must not answer a
+    /// program Macterm merely failed to identify.
     @MainActor
-    static func trustedCommand(forPane pane: Pane) -> String? {
-        guard let pid = foregroundPID(forPane: pane) else { return nil }
-        guard let args = argv(pid: pid), !args.isEmpty, !isIdleShellInvocation(args) else { return nil }
-        guard let path = executablePath(pid: pid) else { return nil }
-        return displayCommand([path] + args.dropFirst())
+    static func passwordAsker(forPane pane: Pane) -> PasswordAsker {
+        guard let pid = foregroundPID(forPane: pane), let args = argv(pid: pid), !args.isEmpty else { return .unknown }
+        if isIdleShellInvocation(args) { return .shell }
+        guard let path = executablePath(pid: pid), let command = displayCommand([path] + args.dropFirst()) else {
+            return .unknown
+        }
+        return .program(path: path, command: command, isProtected: isProtectedExecutable(atPath: path))
+    }
+
+    /// Whether no process running as this user can have replaced or changed
+    /// the executable at `path`: it and every directory above it are owned by
+    /// root and not writable by us. That holds for the sealed system volume
+    /// (`/usr/bin/sudo`, `/usr/bin/ssh`) and for root-owned installs such as
+    /// the Command Line Tools; it fails for Homebrew (`/opt/homebrew` belongs
+    /// to the user), anything under the home directory, and a directory the
+    /// admin group can write when the user is an admin. `lstat`, so a symlink
+    /// the user owns anywhere on the way counts against it.
+    nonisolated static func isProtectedExecutable(atPath path: String) -> Bool {
+        guard path.hasPrefix("/") else { return false }
+        var current = (path as NSString).standardizingPath
+        while true {
+            var info = stat()
+            guard lstat(current, &info) == 0, info.st_uid == 0 else { return false }
+            // `access` answers for the real uid and folds in group and ACL
+            // grants; EACCES/EPERM/EROFS all mean "not by us".
+            if access(current, W_OK) == 0 { return false }
+            guard errno == EACCES || errno == EPERM || errno == EROFS else { return false }
+            if current == "/" { return true }
+            current = (current as NSString).deletingLastPathComponent
+        }
+    }
+
+    /// The executable of a remote project's local ssh client — the surface's
+    /// own foreground, since a remote pane has no zmx hop — as `passwordAsker`
+    /// would judge it. Nil when the surface has no readable foreground.
+    @MainActor
+    static func surfaceExecutable(forPane pane: Pane) -> (path: String, isProtected: Bool)? {
+        guard let pid = pane.nsView?.foregroundPID, let path = executablePath(pid: pid) else { return nil }
+        return (path, isProtectedExecutable(atPath: path))
     }
 
     /// The executable's resolved absolute path from the kernel

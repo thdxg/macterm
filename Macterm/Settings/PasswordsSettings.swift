@@ -210,7 +210,7 @@ private struct PasswordDetailsSheet: View {
     /// still drops its command.
     private var proposedID: PasswordEntryID {
         let trimmed = command.trimmingCharacters(in: .whitespaces)
-        return PasswordPromptIdentity.entryID(
+        return PasswordPromptIdentity.declaredEntryID(
             prompt: PasswordPromptIdentity.normalize(prompt),
             command: trimmed.isEmpty ? nil : trimmed
         )

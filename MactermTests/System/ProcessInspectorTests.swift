@@ -164,4 +164,26 @@ struct ProcessInspectorTests {
         #expect(!ProcessInspector.isInterpreterName("claude"))
         #expect(!ProcessInspector.isInterpreterName("zsh"))
     }
+
+    // MARK: - isProtectedExecutable
+
+    @Test
+    func system_binaries_are_protected() {
+        #expect(ProcessInspector.isProtectedExecutable(atPath: "/usr/bin/sudo"))
+        #expect(ProcessInspector.isProtectedExecutable(atPath: "/usr/bin/ssh"))
+    }
+
+    @Test
+    func a_binary_the_user_could_replace_is_not_protected() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pi-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fake = dir.appendingPathComponent("sudo")
+        try Data("#!/bin/sh\n".utf8).write(to: fake)
+        // Read-only doesn't help: the user owns it and can chmod it back.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: fake.path)
+        #expect(!ProcessInspector.isProtectedExecutable(atPath: fake.path))
+        #expect(!ProcessInspector.isProtectedExecutable(atPath: "/usr/bin/no-such-program"))
+        #expect(!ProcessInspector.isProtectedExecutable(atPath: "usr/bin/sudo"), "relative paths never are")
+    }
 }

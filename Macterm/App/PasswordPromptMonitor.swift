@@ -58,7 +58,7 @@ final class PasswordPromptMonitor {
         /// The screen with its scrollback, so a submission's output is
         /// measured from where the transcript ended at Return.
         var transcript: @MainActor (GhosttyTerminalNSView) -> String? = { $0.readText(scrollback: true) }
-        var command: @MainActor (Pane) -> String? = PasswordPromptMonitor.command(for:)
+        var asker: @MainActor (Pane) -> PasswordAsker = PasswordPromptMonitor.asker(for:)
         var foregroundIsLocalShell: @MainActor (Pane) -> Bool = ProcessInspector.foregroundProcessIsShell(forPane:)
         var anchor: @MainActor (GhosttyTerminalNSView) -> NSRect? = { view in
             PasswordPromptMonitor.isShowing(view) ? view.cursorCellRect() : nil
@@ -330,10 +330,10 @@ final class PasswordPromptMonitor {
             guard atPrompt, case .text = input else { return }
             settle(submission, in: tracker, view: view, atPrompt: true, time: now())
             guard case .sighted = tracker.phase else { return }
-            confirm(tracker)
+            confirmTyping(tracker)
         case .sighted:
             // Typing at it is evidence enough that it is a real prompt.
-            confirm(tracker)
+            confirmTyping(tracker)
         case .prompting:
             break
         }
@@ -593,7 +593,9 @@ final class PasswordPromptMonitor {
             tracker.phase = .idle
             return
         }
-        let id = PasswordPromptIdentity.entryID(prompt: prompt, command: probes.command(pane))
+        // Who is asking can't be read (yet): stay sighted and look again on
+        // the next tick (`confirmTyping` accounts for keys typed meanwhile).
+        guard let id = PasswordPromptIdentity.entryID(prompt: prompt, asker: probes.asker(pane)) else { return }
         let rejected = tracker.rejectedAutofill == id
         tracker.rejectedAutofill = nil
         tracker.phase = .prompting(Prompt(
@@ -605,15 +607,34 @@ final class PasswordPromptMonitor {
         logger.info("password prompt confirmed saved=\(self.vault.contains(id), privacy: .public)")
     }
 
-    /// The command that asked, named by its executable's real path so a
-    /// process can't pose as another (`trustedCommand`). A remote project's
-    /// pane is Macterm's own ssh wrapper, filed under the connection it makes.
-    static func command(for pane: Pane) -> String? {
+    /// `confirm` for a key typed at a sighted prompt. When it can't confirm
+    /// (who is asking is unreadable), the key reaches the program unmirrored,
+    /// so the capture is tainted: a later confirmation must not offer to save
+    /// a password missing its first characters.
+    private func confirmTyping(_ tracker: Tracker) {
+        confirm(tracker)
+        guard case let .sighted(since, capture) = tracker.phase else { return }
+        var tainted = capture
+        _ = tainted.apply(.unknown)
+        tracker.phase = .sighted(since: since, capture: tainted)
+    }
+
+    /// Who asked, named by its executable's real path so a process can't
+    /// pose as another (`ProcessInspector.passwordAsker`). A remote project's
+    /// pane is Macterm's own ssh wrapper, filed under the connection it makes;
+    /// whether its ssh can be trusted with a key's passphrase is the local
+    /// client's executable, as for any other program.
+    static func asker(for pane: Pane) -> PasswordAsker {
         if pane.isRemote {
-            guard case let .remote(user, host, _)? = ProjectPath.parse(pane.projectPath) else { return nil }
-            return PasswordPromptIdentity.remoteCommand(user: user, host: host)
+            guard case let .remote(user, host, _)? = ProjectPath.parse(pane.projectPath) else { return .unknown }
+            let client = ProcessInspector.surfaceExecutable(forPane: pane)
+            return .program(
+                path: client?.path ?? "",
+                command: PasswordPromptIdentity.remoteCommand(user: user, host: host),
+                isProtected: client?.isProtected ?? false
+            )
         }
-        return ProcessInspector.trustedCommand(forPane: pane)
+        return ProcessInspector.passwordAsker(forPane: pane)
     }
 
     private func observation(

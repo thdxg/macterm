@@ -16,10 +16,24 @@ struct PasswordPromptIdentityTests {
         #expect(PasswordPromptIdentity.promptLine(fromViewport: long)?.count == PasswordPromptIdentity.maxPromptLength)
     }
 
+    /// A program at `path`, as the process table reports it.
+    private func program(_ command: String, protected: Bool = true) -> PasswordAsker {
+        let path = String(command.split(separator: " ").first ?? "")
+        return .program(path: path, command: command, isProtected: protected)
+    }
+
     @Test
     func entry_is_the_command_plus_the_prompt() {
-        let id = PasswordPromptIdentity.entryID(prompt: "ethan@prod's password:", command: "ssh  prod")
-        #expect(id == PasswordEntryID(command: "ssh prod", prompt: "ethan@prod's password:"))
+        let id = PasswordPromptIdentity.entryID(prompt: "ethan@prod's password:", asker: program("/usr/bin/ssh  prod"))
+        #expect(id == PasswordEntryID(command: "/usr/bin/ssh prod", prompt: "ethan@prod's password:"))
+        #expect(id?.title == "ssh prod")
+        #expect(PasswordPromptIdentity.declaredEntryID(prompt: "ethan@prod's password:", command: "ssh  prod")
+            == PasswordEntryID(command: "ssh prod", prompt: "ethan@prod's password:"))
+    }
+
+    @Test
+    func account_and_title_come_from_the_command_and_prompt() {
+        let id = PasswordEntryID(command: "ssh prod", prompt: "ethan@prod's password:")
         #expect(id.account == "ssh prod — ethan@prod's password:")
         #expect(id.title == "ssh prod")
     }
@@ -28,7 +42,7 @@ struct PasswordPromptIdentityTests {
     func a_resolved_program_path_is_shown_by_name() {
         let id = PasswordEntryID(command: "/opt/homebrew/Cellar/python@3.14/Python /tmp/login.py", prompt: "Password:")
         #expect(id.displayCommand == "Python /tmp/login.py")
-        #expect(PasswordEntryID(command: "/usr/bin/sudo", prompt: "Password:").displayCommand == "sudo")
+        #expect(PasswordEntryID(command: "sudo", prompt: "Password:").displayCommand == "sudo")
         #expect(PasswordEntryID(command: "ssh prod", prompt: "p:").displayCommand == "ssh prod")
         #expect(PasswordEntryID(command: nil, prompt: "p:").title == "p:")
     }
@@ -57,36 +71,76 @@ struct PasswordPromptIdentityTests {
 
     @Test
     func one_command_asking_twice_files_two_entries() {
-        let bastion = PasswordPromptIdentity.entryID(prompt: "ethan@bastion's password:", command: "ssh -J bastion prod")
-        let prod = PasswordPromptIdentity.entryID(prompt: "ethan@prod's password:", command: "ssh -J bastion prod")
+        let bastion = PasswordPromptIdentity.entryID(prompt: "ethan@bastion's password:", asker: program("/usr/bin/ssh -J bastion prod"))
+        let prod = PasswordPromptIdentity.entryID(prompt: "ethan@prod's password:", asker: program("/usr/bin/ssh -J bastion prod"))
         #expect(bastion != prod)
     }
 
     @Test
     func sudo_files_under_the_bare_word() {
-        let update = PasswordPromptIdentity.entryID(prompt: "Password:", command: "sudo apt update")
-        let upgrade = PasswordPromptIdentity.entryID(prompt: "Password:", command: "/usr/bin/sudo -E make install")
+        let update = PasswordPromptIdentity.entryID(prompt: "Password:", asker: program("/usr/bin/sudo apt update"))
+        let upgrade = PasswordPromptIdentity.entryID(prompt: "Password:", asker: program("/usr/bin/sudo -E make install"))
         #expect(update == PasswordEntryID(command: "sudo", prompt: "Password:"))
         #expect(update == upgrade)
         // A command that merely mentions sudo is not sudo.
-        #expect(PasswordPromptIdentity.entryID(prompt: "Password:", command: "man sudo").command == "man sudo")
+        #expect(PasswordPromptIdentity.entryID(prompt: "Password:", asker: program("/usr/bin/man sudo"))?.command == "/usr/bin/man sudo")
+    }
+
+    @Test
+    func a_sudo_the_user_could_have_replaced_keeps_its_own_entries() {
+        let fake = PasswordPromptIdentity.entryID(prompt: "Password:", asker: program("/Users/e/bin/sudo apt update", protected: false))
+        #expect(fake == PasswordEntryID(command: "/Users/e/bin/sudo apt update", prompt: "Password:"))
+        // And it doesn't pass for the real one in the bubble.
+        #expect(fake?.displayCommand == "/Users/e/bin/sudo apt update")
+        #expect(PasswordEntryID(command: "\(NSHomeDirectory())/bin/sudo -E ls", prompt: "p:").displayCommand == "~/bin/sudo -E ls")
+        #expect(PasswordEntryID(command: "/opt/homebrew/bin/sudo", prompt: "p:").displayCommand == "/opt/homebrew/bin/sudo")
     }
 
     @Test
     func key_passphrase_belongs_to_the_key_not_the_command() {
-        let ssh = PasswordPromptIdentity.entryID(prompt: "Enter passphrase for key '/Users/e/.ssh/id_ed25519':", command: "ssh prod")
-        let add = PasswordPromptIdentity.entryID(prompt: "Enter passphrase for key '/Users/e/.ssh/id_ed25519':", command: "ssh-add")
-        #expect(ssh.command == nil)
+        let prompt = "Enter passphrase for key '/Users/e/.ssh/id_ed25519':"
+        let ssh = PasswordPromptIdentity.entryID(prompt: prompt, asker: program("/usr/bin/ssh prod"))
+        let add = PasswordPromptIdentity.entryID(prompt: prompt, asker: program("/usr/bin/ssh-add"))
+        #expect(ssh?.command == nil)
         #expect(ssh == add)
         #expect(PasswordPromptIdentity.isKeyPassphrase("Enter passphrase for /Users/e/.ssh/id_rsa:"))
         #expect(!PasswordPromptIdentity.isKeyPassphrase("Enter password:"))
     }
 
     @Test
-    func no_command_files_by_prompt_alone() {
+    func a_passphrase_asked_by_a_replaceable_program_is_filed_under_that_program() {
+        let prompt = "Enter passphrase for key '/Users/e/.ssh/id_ed25519':"
+        let brew = "/opt/homebrew/Cellar/openssh/10.0p1/bin/ssh"
+        let prod = PasswordPromptIdentity.entryID(prompt: prompt, asker: program("\(brew) prod", protected: false))
+        let staging = PasswordPromptIdentity.entryID(prompt: prompt, asker: program("\(brew) staging", protected: false))
+        #expect(prod == PasswordEntryID(command: brew, prompt: prompt), "one entry per key for that program")
+        #expect(prod == staging)
+        #expect(prod?.displayCommand == "ssh")
+        // A remote project's ssh whose client couldn't be read keeps the connection.
+        let remote = PasswordPromptIdentity.entryID(
+            prompt: prompt,
+            asker: .program(path: "", command: "ssh e@host", isProtected: false)
+        )
+        #expect(remote == PasswordEntryID(command: "ssh e@host", prompt: prompt))
+    }
+
+    @Test
+    func the_shell_itself_files_by_prompt_alone_and_an_unreadable_asker_files_nothing() {
         // A shell builtin (`read -s`) leaves no foreground command.
-        #expect(PasswordPromptIdentity.entryID(prompt: "Vault password:", command: nil).command == nil)
-        #expect(PasswordPromptIdentity.entryID(prompt: "Vault password:", command: "  ").command == nil)
+        #expect(PasswordPromptIdentity.entryID(prompt: "Vault password:", asker: .shell) == PasswordEntryID(
+            command: nil,
+            prompt: "Vault password:"
+        ))
+        #expect(PasswordPromptIdentity.entryID(prompt: "Vault password:", asker: .unknown) == nil)
+    }
+
+    @Test
+    func a_declared_entry_collapses_like_a_detected_one() {
+        #expect(PasswordPromptIdentity.declaredEntryID(prompt: "Password:", command: "sudo apt update")
+            == PasswordEntryID(command: "sudo", prompt: "Password:"))
+        #expect(PasswordPromptIdentity.declaredEntryID(prompt: "Enter passphrase for key '/k':", command: "ssh prod").command == nil)
+        #expect(PasswordPromptIdentity.declaredEntryID(prompt: "Vault password:", command: nil).command == nil)
+        #expect(PasswordPromptIdentity.declaredEntryID(prompt: "Vault password:", command: "  ").command == nil)
     }
 
     @Test

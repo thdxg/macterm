@@ -14,7 +14,7 @@ struct PasswordPromptMonitorStateTests {
         /// The tty has left line mode (a shell's editor, ssh relaying a session).
         var nonCanonical = false
         var screen = ""
-        var command: String? = "/usr/bin/ssh prod"
+        var asker = PasswordAsker.program(path: "/usr/bin/ssh", command: "/usr/bin/ssh prod", isProtected: true)
         var localShellInForeground = true
         var offerToSave = true
         var authorized = true
@@ -49,7 +49,7 @@ struct PasswordPromptMonitorStateTests {
             probes.isNonCanonical = { _ in world.nonCanonical }
             probes.screenText = { _ in world.screen }
             probes.transcript = { _ in world.screen }
-            probes.command = { _ in world.command }
+            probes.asker = { _ in world.asker }
             probes.foregroundIsLocalShell = { _ in world.localShellInForeground }
             probes.anchor = { _ in NSRect(x: 0, y: 0, width: 10, height: 10) }
             probes.makeBubble = { bubble }
@@ -425,6 +425,46 @@ struct PasswordPromptMonitorStateTests {
 final class FailingPasswordStore: PasswordStoring, @unchecked Sendable {
     struct Failure: Error, LocalizedError {
         var errorDescription: String? { "The keychain is locked." }
+    }
+
+    @Test
+    func an_unreadable_asker_holds_the_prompt_unconfirmed() {
+        let h = Harness()
+        h.world.asker = .unknown
+        h.prompt(login)
+        h.advance(0.3)
+        #expect(h.state.phase == "sighted", "no entry to match it against")
+        h.world.asker = .program(path: "/usr/bin/ssh", command: "/usr/bin/ssh prod", isProtected: true)
+        h.advance(0.15)
+        #expect(h.state.phase == "prompting")
+        #expect(h.state.command == "/usr/bin/ssh prod")
+    }
+
+    @Test
+    func keys_typed_while_the_asker_is_unreadable_offer_nothing() {
+        let h = Harness()
+        h.world.asker = .unknown
+        h.prompt(login)
+        h.type("hun")
+        #expect(h.state.phase == "sighted")
+        h.world.asker = .program(path: "/usr/bin/ssh", command: "/usr/bin/ssh prod", isProtected: true)
+        h.type("ter2")
+        #expect(h.state.phase == "prompting")
+        h.submit()
+        h.respond("welcome")
+        #expect(h.state.bubble == nil, "the capture is missing keys the program received")
+    }
+
+    @Test
+    func a_fake_sudo_is_not_offered_the_real_sudo_password() {
+        let h = Harness()
+        #expect(h.vault.save("login-password", for: PasswordEntryID(command: "sudo", prompt: "Password:")))
+        h.world.asker = .program(path: "/Users/e/bin/sudo", command: "/Users/e/bin/sudo ls", isProtected: false)
+        h.prompt("Password:")
+        h.advance(0.3)
+        #expect(h.state.phase == "prompting")
+        #expect(h.state.command == "/Users/e/bin/sudo ls")
+        #expect(h.state.bubble == nil, "no autofill for another program's entry")
     }
 
     func list() throws -> [SavedPassword] {

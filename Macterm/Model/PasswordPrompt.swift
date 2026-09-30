@@ -7,10 +7,16 @@ import Foundation
 ///
 /// `command` is nil for a prompt that names its own secret regardless of who
 /// asks — a key passphrase belongs to the key file, not to `ssh prod` or
-/// `ssh-add`. Every other command is matched exactly as the process table
-/// reports it, except `sudo`, which is filed under the bare word: its password
-/// is the user's login password whatever it runs, so one entry covers every
-/// `sudo …`.
+/// `ssh-add` — and for a prompt the pane's own shell prints (`read -s`). Every
+/// other command is matched exactly as the process table reports it, except
+/// `sudo`, which is filed under the bare word: its password is the user's
+/// login password whatever it runs, so one entry covers every `sudo …`.
+///
+/// Those two shared entries answer whoever asks, so only a program the user's
+/// own processes can't replace is filed under them (`PasswordAsker
+/// .isProtected`): anything else named `sudo` — a `~/bin/sudo` earlier on
+/// PATH — or printing a passphrase prompt is filed under its own path, and is
+/// never offered the real sudo's password or the key's passphrase.
 struct PasswordEntryID: Hashable, Codable {
     let command: String?
     let prompt: String
@@ -33,11 +39,19 @@ struct PasswordEntryID: Hashable, Codable {
     /// An `ssh` loses the options Macterm's own ssh wrapper added
     /// (`SSHWrapper.userArguments`): `ssh demo-box` typed at a shell runs as
     /// `ssh -o SetEnv=TERM=… -o SendEnv=… demo-box`.
+    ///
+    /// A program named `sudo` keeps its path (`~`-abbreviated): the real sudo
+    /// is filed as the bare word, so a path here is some other program that
+    /// calls itself sudo, and the bubble must not let it pass for the real one.
     var displayCommand: String? {
         guard let command else { return nil }
         let parts = command.split(separator: " ", maxSplits: 1)
         guard let program = parts.first else { return command }
-        let name = program.contains("/") ? (String(program) as NSString).lastPathComponent : String(program)
+        let path = String(program)
+        let name = path.contains("/") ? (path as NSString).lastPathComponent : path
+        if name == "sudo", path.contains("/") {
+            return (path as NSString).abbreviatingWithTildeInPath + (parts.count > 1 ? " \(parts[1])" : "")
+        }
         guard parts.count > 1 else { return name }
         var arguments = String(parts[1])
         if name == "ssh" {
@@ -73,8 +87,35 @@ enum PasswordPromptIdentity {
         line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
-    /// The entry a prompt files under (see `PasswordEntryID`).
-    static func entryID(prompt: String, command: String?) -> PasswordEntryID {
+    /// The entry a prompt files under (see `PasswordEntryID`), or nil when
+    /// who is asking can't be told — such a prompt is neither autofilled nor
+    /// offered for saving, since it could be matched against any entry.
+    static func entryID(prompt: String, asker: PasswordAsker) -> PasswordEntryID? {
+        switch asker {
+        case .unknown:
+            return nil
+        case .shell:
+            return PasswordEntryID(command: nil, prompt: prompt)
+        case let .program(path, command, isProtected):
+            let command = normalize(command)
+            if isKeyPassphrase(prompt) {
+                // The key's own entry answers only a program that can't be
+                // swapped out; anything else keeps one entry per key of its own.
+                if isProtected { return PasswordEntryID(command: nil, prompt: prompt) }
+                return PasswordEntryID(command: path.isEmpty ? command : path, prompt: prompt)
+            }
+            if isProtected, (path as NSString).lastPathComponent == "sudo" {
+                return PasswordEntryID(command: "sudo", prompt: prompt)
+            }
+            return PasswordEntryID(command: command.isEmpty ? nil : command, prompt: prompt)
+        }
+    }
+
+    /// The entry a person declares in Settings → Passwords → Details: the
+    /// command as typed, under the same collapsing rules, trusted because the
+    /// user wrote it — `sudo apt update` files as `sudo`, a passphrase prompt
+    /// drops its command, and an empty command matches the prompt alone.
+    static func declaredEntryID(prompt: String, command: String?) -> PasswordEntryID {
         if isKeyPassphrase(prompt) {
             return PasswordEntryID(command: nil, prompt: prompt)
         }
@@ -113,6 +154,21 @@ enum PasswordPromptIdentity {
     static func remoteCommand(user: String?, host: String) -> String {
         if let user, !user.isEmpty { "ssh \(user)@\(host)" } else { "ssh \(host)" }
     }
+}
+
+/// Who is reading a password, as far as the process table can vouch for it.
+enum PasswordAsker: Equatable {
+    /// A program. `path` is its executable's real path (`proc_pidpath`),
+    /// `command` that path plus its arguments — or, for a remote project's own
+    /// login, the connection it makes (`ssh user@host`). `isProtected`: the
+    /// executable and every directory above it belong to root and aren't
+    /// writable by the user (`ProcessInspector.isProtectedExecutable`), so no
+    /// process of the user's can have put it there or changed it.
+    case program(path: String, command: String, isProtected: Bool)
+    /// The pane's own idle shell, reading with a builtin (`read -s`).
+    case shell
+    /// The foreground couldn't be read.
+    case unknown
 }
 
 /// One key as the password prompt's line discipline will see it. Built from
