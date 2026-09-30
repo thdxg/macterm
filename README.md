@@ -59,7 +59,7 @@
 - **Desktop widgets** \
   Put a terminal on your desktop beside the system's own widgets, on the same grid and in the same shape. Its shell keeps running through quits, and the widget comes back where you left it.
 - **Password autofill** \
-  When `ssh`, `sudo`, or any other program asks for a password, Macterm offers to save it to your keychain once it works, then fills it in with Touch ID the next time the same prompt appears.
+  When `ssh`, `sudo`, or any other program asks for a password, Macterm offers to save it to your keychain once it works, then fills it in after Touch ID or your login password the next time the same prompt appears.
 - **Adaptive background** \
   The window picks up the background color the running program paints. A full-screen TUI tints the whole window to match; in a split, each pane takes its own.
 - **Ghostty compatibility** \
