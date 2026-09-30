@@ -431,11 +431,12 @@ final class Preferences {
         didSet { Keys.reconnectRemotePanes.write(reconnectRemotePanes, to: defaults) }
     }
 
-    /// After a password typed at a prompt works, offer to save it for the
-    /// command that asked (Settings → Passwords). Off stops the offer, not
-    /// autofill of passwords already saved.
-    var offerToSavePasswords: Bool {
-        didSet { Keys.offerToSavePasswords.write(offerToSavePasswords, to: defaults) }
+    /// The password manager (Settings → Passwords): offering to save a
+    /// password once it works, and autofilling a saved one. Off, the monitor
+    /// captures, offers and fills nothing; prompt detection still drives
+    /// `macos-auto-secure-input`. Saved passwords stay in the keychain.
+    var passwordManagerEnabled: Bool {
+        didSet { Keys.passwordManagerEnabled.write(passwordManagerEnabled, to: defaults) }
     }
 
     /// When Autofill asks for Touch ID or the login password.
@@ -904,7 +905,7 @@ final class Preferences {
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
-        offerToSavePasswords = Keys.offerToSavePasswords.read(defaults)
+        passwordManagerEnabled = Keys.passwordManagerEnabled.read(defaults)
         passwordAutofillAuthentication = Keys.passwordAutofillAuthentication.read(defaults)
         peekSidebarWhenHidden = Keys.peekSidebarWhenHidden.read(defaults)
         let storedSidebarWidth = Keys.sidebarWidth.read(defaults)
@@ -1068,7 +1069,9 @@ final class Preferences {
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)
         static let reconnectRemotePanes = PreferenceStorageKey("macterm.remote.reconnectDroppedPanes", default: true)
-        static let offerToSavePasswords = PreferenceStorageKey("macterm.passwords.offerToSave", default: true)
+        /// The key of the "Offer to save passwords" toggle this replaced, so a
+        /// user who switched that off finds the whole feature off, never on.
+        static let passwordManagerEnabled = PreferenceStorageKey("macterm.passwords.offerToSave", default: true)
         static let passwordAutofillAuthentication = PreferenceStorageKey(
             "macterm.passwords.autofillAuthentication", default: PasswordAutofillAuthentication.untilLocked
         )

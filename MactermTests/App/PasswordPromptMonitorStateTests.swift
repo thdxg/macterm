@@ -16,7 +16,7 @@ struct PasswordPromptMonitorStateTests {
         var screen = ""
         var asker = PasswordAsker.program(path: "/usr/bin/ssh", command: "/usr/bin/ssh prod", isProtected: true)
         var localShellInForeground = true
-        var offerToSave = true
+        var enabled = true
         var authorized = true
         var now = Date(timeIntervalSinceReferenceDate: 1000)
     }
@@ -54,7 +54,7 @@ struct PasswordPromptMonitorStateTests {
             probes.anchor = { _ in NSRect(x: 0, y: 0, width: 10, height: 10) }
             probes.makeBubble = { bubble }
             probes.autoSecureInput = { false }
-            probes.offerToSave = { world.offerToSave }
+            probes.isEnabled = { world.enabled }
             probes.authorize = { _ in world.authorized }
             probes.focusedView = { nil }
             probes.isAppActive = { false }
@@ -354,12 +354,32 @@ struct PasswordPromptMonitorStateTests {
         h.respond("welcome")
         #expect(h.state.bubble == nil)
 
-        h.world.offerToSave = false
+        h.world.enabled = false
         h.prompt(login)
         h.type("hunter2")
         h.submit()
         h.respond("welcome")
         #expect(h.state.bubble == nil)
+    }
+
+    @Test
+    func switched_off_it_neither_autofills_nor_keeps_an_offer() {
+        let h = Harness()
+        h.prompt(login)
+        h.type("hunter2")
+        h.submit()
+        h.respond("welcome")
+        #expect(h.state.bubble == "save")
+        h.world.enabled = false
+        h.advance(0.1)
+        #expect(h.state.bubble == nil, "the unanswered offer and its secret are dropped")
+
+        #expect(h.vault.save("hunter2", for: entry))
+        h.prompt(login)
+        h.advance(0.3)
+        #expect(h.state.phase == "idle")
+        #expect(h.state.bubble == nil)
+        #expect(!h.monitor.answer(.autofill, in: h.view))
     }
 
     @Test
@@ -408,26 +428,6 @@ struct PasswordPromptMonitorStateTests {
     }
 
     @Test
-    func forgetting_a_view_drops_everything() {
-        let h = Harness()
-        h.prompt(login)
-        h.type("hunter2")
-        h.submit()
-        h.respond("welcome")
-        #expect(h.state.bubble == "save")
-        h.monitor.forget(h.view)
-        #expect(h.state.phase == "idle")
-        #expect(h.state.bubble == nil)
-    }
-}
-
-/// A store whose writes fail, for the keychain-error paths.
-final class FailingPasswordStore: PasswordStoring, @unchecked Sendable {
-    struct Failure: Error, LocalizedError {
-        var errorDescription: String? { "The keychain is locked." }
-    }
-
-    @Test
     func an_unreadable_asker_holds_the_prompt_unconfirmed() {
         let h = Harness()
         h.world.asker = .unknown
@@ -465,6 +465,26 @@ final class FailingPasswordStore: PasswordStoring, @unchecked Sendable {
         #expect(h.state.phase == "prompting")
         #expect(h.state.command == "/Users/e/bin/sudo ls")
         #expect(h.state.bubble == nil, "no autofill for another program's entry")
+    }
+
+    @Test
+    func forgetting_a_view_drops_everything() {
+        let h = Harness()
+        h.prompt(login)
+        h.type("hunter2")
+        h.submit()
+        h.respond("welcome")
+        #expect(h.state.bubble == "save")
+        h.monitor.forget(h.view)
+        #expect(h.state.phase == "idle")
+        #expect(h.state.bubble == nil)
+    }
+}
+
+/// A store whose writes fail, for the keychain-error paths.
+final class FailingPasswordStore: PasswordStoring, @unchecked Sendable {
+    struct Failure: Error, LocalizedError {
+        var errorDescription: String? { "The keychain is locked." }
     }
 
     func list() throws -> [SavedPassword] {

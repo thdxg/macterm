@@ -9,7 +9,7 @@ import SwiftUI
 struct PasswordsSettings: View {
     private var vault: PasswordVault { .shared }
 
-    @State private var offerToSave: Bool = Preferences.shared.offerToSavePasswords
+    @State private var enabled: Bool = Preferences.shared.passwordManagerEnabled
     @State private var authentication: String = Preferences.shared.passwordAutofillAuthentication.rawValue
     @State private var query = ""
     @State private var pendingRemoval: SavedPassword?
@@ -20,22 +20,25 @@ struct PasswordsSettings: View {
     var body: some View {
         Form {
             Section("Password Manager") {
-                Toggle("Offer to save passwords", isOn: $offerToSave)
-                    .onChange(of: offerToSave) { _, v in
-                        Preferences.shared.offerToSavePasswords = v
+                Toggle("Enable password manager", isOn: $enabled)
+                    .onChange(of: enabled) { _, v in
+                        Preferences.shared.passwordManagerEnabled = v
                     }
-                Text(Self.offerCaption).settingsCaption()
+                Text(Self.enabledCaption).settingsCaption()
 
-                Picker("Ask for Touch ID", selection: $authentication) {
-                    ForEach(PasswordAutofillAuthentication.allCases) { option in
-                        Text(option.displayName).tag(option.rawValue)
+                Group {
+                    Picker("Require authentication", selection: $authentication) {
+                        ForEach(PasswordAutofillAuthentication.allCases) { option in
+                            Text(option.displayName).tag(option.rawValue)
+                        }
                     }
+                    .onChange(of: authentication) { _, v in
+                        Preferences.shared.passwordAutofillAuthentication = PasswordAutofillAuthentication(rawValue: v) ?? .untilLocked
+                        PasswordAuthenticator.shared.lock()
+                    }
+                    Text(Self.authenticationCaption).settingsCaption()
                 }
-                .onChange(of: authentication) { _, v in
-                    Preferences.shared.passwordAutofillAuthentication = PasswordAutofillAuthentication(rawValue: v) ?? .untilLocked
-                    PasswordAuthenticator.shared.lock()
-                }
-                Text(Self.authenticationCaption).settingsCaption()
+                .disabled(!enabled)
             }
 
             Section("Saved Passwords") {
@@ -85,8 +88,10 @@ struct PasswordsSettings: View {
         }
     }
 
-    private static let offerCaption = "After a password you type works, offer to save it for that command."
-    private static let authenticationCaption = "Autofill confirms with Touch ID, or your login password where Touch ID isn’t available. "
+    private static let enabledCaption = "Offer to save a password you type at a prompt once it works, and fill it in "
+        + "the next time that prompt appears. Off, nothing is saved or filled in; saved passwords stay in your keychain."
+    private static let authenticationCaption = "Autofill, and showing or copying a saved password, asks for Touch ID, "
+        + "or your login password on a Mac without it. "
         + "Once per app launch also asks again after the Mac locks or sleeps. "
         + "Passwords are stored in your login keychain."
 

@@ -66,7 +66,7 @@ final class PasswordPromptMonitor {
 
         var makeBubble: @MainActor () -> PasswordBubble = { PasswordBubble() }
         var autoSecureInput: @MainActor () -> Bool = { GhosttyApp.shared.autoSecureInput }
-        var offerToSave: @MainActor () -> Bool = { Preferences.shared.offerToSavePasswords }
+        var isEnabled: @MainActor () -> Bool = { Preferences.shared.passwordManagerEnabled }
         var authorize: @MainActor (String) async -> Bool = { await PasswordAuthenticator.shared.authorize(reason: $0) }
         var focusedView: @MainActor () -> GhosttyTerminalNSView? = {
             guard NSApp.isActive else { return nil }
@@ -562,6 +562,15 @@ final class PasswordPromptMonitor {
         guard let view = tracker.view, let pane = view.owningPane else { return false }
         let atPrompt = probes.isReadingPassword(pane)
         view.detectedPasswordInput = atPrompt && probes.autoSecureInput()
+        // Switched off: secure input above still follows the prompt, but
+        // nothing is captured, offered or filled, and whatever was in flight
+        // — a secret waiting on its verdict or its offer — is dropped.
+        guard probes.isEnabled() else {
+            tracker.phase = .idle
+            tracker.offers.removeAll()
+            tracker.rejectedAutofill = nil
+            return atPrompt
+        }
         let time = now()
         switch tracker.phase {
         case .idle:
@@ -695,7 +704,6 @@ final class PasswordPromptMonitor {
         case .succeeded:
             let wantsOffer = !submission.fromAutofill
                 && !submission.secret.isEmpty
-                && probes.offerToSave()
                 && !PasswordPromptIdentity.isOneTimeCode(submission.id.prompt)
                 && (!submission.wasSaved || submission.savedWasRejected)
             if wantsOffer {
