@@ -268,6 +268,40 @@ struct PaneTitleTests {
         #expect(tab.autoTitle == "✳ session")
     }
 
+    // MARK: - Throttle wiring
+
+    /// A flood of reported titles reaches the expensive path twice: once on
+    /// the first title, once at the window's end for the newest held one —
+    /// counted by the `.terminalPollEvent` that path posts, since without a
+    /// surface every title is prompt churn and adopts nothing. The pure
+    /// throttle is `TitleReportThrottleTests`; this pins the pane's flush
+    /// timer to it.
+    @Test
+    func a_flood_of_titles_is_evaluated_once_per_window() async {
+        let pane = Pane(projectPath: "/", projectID: UUID(), titleReportInterval: 0.05)
+        let posts = LockedBox(0)
+        let token = NotificationCenter.default.addObserver(
+            forName: .terminalPollEvent,
+            object: nil,
+            queue: nil
+        ) { _ in posts.mutate { $0 += 1 } }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        for i in 0 ..< 500 {
+            pane.receiveReportedTitle("t\(i)")
+        }
+        // The leading edge's post is deferred one run-loop turn, the trailing
+        // flush lands after the window: poll rather than sleep a fixed multiple
+        // (see PaneTests.quietPollWake…).
+        for _ in 0 ..< 200 where posts.value < 2 {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(posts.value == 2)
+        // And nothing else is pending once the flush ran.
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(posts.value == 2)
+    }
+
     // MARK: - Auto-naming toggle
 
     @Test

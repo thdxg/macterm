@@ -270,6 +270,16 @@ final class Pane: Identifiable {
     private var activityQuietPollWork: DispatchWorkItem?
     private let activityQuietPollDelay: TimeInterval
 
+    /// Rate limit on what a reported title costs (`TitleReportThrottle`):
+    /// the first title after a quiet window is evaluated at once, the rest
+    /// of the window's titles are held and the newest flushed once at its
+    /// end by `titleFlushWork`. Not observed: the title it holds is not yet
+    /// the pane's.
+    @ObservationIgnored
+    private var titleReportThrottle: TitleReportThrottle
+    @ObservationIgnored
+    private var titleFlushWork: DispatchWorkItem?
+
     /// Re-read the foreground process name from the process table and publish it
     /// only when it changed (so a steady poll doesn't churn `@Observable` and
     /// re-render the sidebar every tick). Driven by `AppState`'s poll.
@@ -560,16 +570,57 @@ final class Pane: Identifiable {
         cancelActivityQuietPollIfNeeded()
     }
 
-    /// Handle an OSC 0/2 title reported by the surface. Always refreshes the
+    /// Handle an OSC 0/2 title reported by the surface. Refreshes the
     /// foreground process (a title arrival is a command boundary); adopts the
     /// string as `programTitle` only when a real program — not the shell — is
     /// in the foreground (see `programTitle` for why).
+    ///
+    /// Throttled (`TitleReportThrottle`): the provenance lookup and the
+    /// refresh are ~100µs of syscalls, which a zmx session replaying
+    /// prompt-heavy scrollback at launch — a title per prompt, 150k of them
+    /// measured as 14s of frozen main thread — cannot pay per title. The
+    /// first title after a quiet window is handled here and now; the rest of
+    /// the window's titles are held, and the newest is handled once at the
+    /// window's end (`flushHeldTitle`), gated against the foreground that
+    /// holds the pane then — no later than the poll's own next tick would
+    /// have looked. `receiveReportedTitle(_:programPID:)` is the unthrottled
+    /// core.
     func receiveReportedTitle(_ title: String) {
+        switch titleReportThrottle.receive(title, at: Date()) {
+        case .evaluate:
+            evaluateReportedTitle(title)
+        case let .held(flushAfter):
+            guard let flushAfter else { return }
+            let work = DispatchWorkItem { [weak self] in self?.flushHeldTitle() }
+            titleFlushWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + flushAfter, execute: work)
+        }
+    }
+
+    private func flushHeldTitle() {
+        titleFlushWork = nil
+        guard let title = titleReportThrottle.flush(at: Date()) else { return }
+        evaluateReportedTitle(title)
+    }
+
+    /// The unthrottled title path: the remote gate, or the local provenance
+    /// lookup feeding `receiveReportedTitle(_:programPID:)`.
+    private func evaluateReportedTitle(_ title: String) {
         if isRemote {
             receiveRemoteReportedTitle(title)
             return
         }
         receiveReportedTitle(title, programPID: ProcessInspector.foregroundProgramPID(forPane: self))
+    }
+
+    /// Drop a title held for a surface that is going away, and the flush
+    /// scheduled for it. The throttle forgets its window too, so the next
+    /// surface's first title is evaluated at once rather than held with no
+    /// flush coming.
+    private func cancelHeldTitle() {
+        titleFlushWork?.cancel()
+        titleFlushWork = nil
+        titleReportThrottle.reset()
     }
 
     /// Remote-pane title path (#104): there is no local foreground pid to
@@ -819,6 +870,7 @@ final class Pane: Identifiable {
         // analogue: a final bell-off transition). Before the guard, so a pane
         // torn down before its view ever existed still settles.
         acknowledgeBell()
+        cancelHeldTitle()
         guard let view = _nsView else { return }
         // Null callbacks before destroy so any in-flight ghostty events
         // triggered by destroySurface() itself can't re-enter.
@@ -937,8 +989,10 @@ final class Pane: Identifiable {
         command: String? = nil,
         shell: String? = nil,
         env: [String: String]? = nil,
-        activityQuietPollDelay: TimeInterval = TerminalActivityTiming.quietPollDelay
+        activityQuietPollDelay: TimeInterval = TerminalActivityTiming.quietPollDelay,
+        titleReportInterval: TimeInterval = PollCadence.fastInterval
     ) {
+        titleReportThrottle = TitleReportThrottle(interval: titleReportInterval)
         self.projectPath = projectPath
         self.projectID = projectID
         self.sessionID = sessionID
