@@ -1,0 +1,207 @@
+name: Bump zmx
+
+# zmx is pinned to one thdxg/zmx release (ZMX_TAG in scripts/setup.sh) for the
+# same reason GhosttyKit is, and goes stale the same way without a way back off
+# the pin: this opens the PR, weekly, and CI is the gate. It is
+# bump-ghosttykit.yml with the API review swapped for a downstream-patch review —
+# read that file for why each step is shaped the way it is.
+#
+# The PR is a real test. `Macterm/Resources/zmx` rides the GhosttyKit cache,
+# whose key hashes scripts/setup.sh, so the run downloads the NEW zmx from
+# scratch and puts it through Unit, End-to-end, and the benchmark. End-to-end is
+# the part that matters: zmx is a wire dependency (the leadership claim,
+# ZmxLeadership.claimSequence) as well as a binary, and nothing compiles against
+# it, so no build step can notice a broken contract.
+#
+# Kept separate from the GhosttyKit bump so a red PR names the dependency that
+# broke it. The two pins sit far enough apart in setup.sh that the PRs never
+# conflict.
+on:
+  schedule:
+    # Mondays, beside the GhosttyKit bump and dependabot's actions group.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: bump-zmx
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # Not GITHUB_TOKEN: a PR it opens triggers no workflows, and CI on the
+      # bump PR is the only thing that tests the new pin. Same secret as the
+      # GhosttyKit bump; see bump-ghosttykit.yml.
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+    steps:
+      - name: Check the bump token
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            {
+              echo "error: the GH_PAT repo secret is unset or empty."
+              echo "  This workflow needs a token that is NOT GITHUB_TOKEN, because a PR"
+              echo "  opened by GITHUB_TOKEN triggers no workflows — and CI on the bump PR"
+              echo "  is the only thing that tests the new pin."
+              echo "  Fix: add a fine-grained PAT scoped to this repo, with Contents"
+              echo "  read+write and Pull requests read+write, as the GH_PAT secret."
+            } >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - name: Resolve latest, compare with the pin
+        id: check
+        run: |
+          CURRENT=$(grep -oE 'ZMX_TAG:-[^}]+' scripts/setup.sh | cut -d- -f2- | sed 's/^://')
+          if [[ -z "$CURRENT" ]]; then
+            echo "error: could not parse ZMX_TAG out of scripts/setup.sh" >&2
+            exit 1
+          fi
+          LATEST=$(gh release list --repo thdxg/zmx --limit 1 --json tagName -q '.[0].tagName')
+          if [[ -z "$LATEST" ]]; then
+            echo "error: could not resolve the latest thdxg/zmx release" >&2
+            exit 1
+          fi
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+          if [[ "$CURRENT" == "$LATEST" ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Pin is already at $LATEST — nothing to do."
+            exit 0
+          fi
+
+          BRANCH="chore/zmx-${LATEST}"
+          if gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q .; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "PR for $BRANCH is already open — leaving it alone."
+            exit 0
+          fi
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Pin $CURRENT is behind $LATEST."
+
+      # What moved between the two tags: the commits, and which downstream
+      # patches changed. The fork rewrites its downstream delta onto pristine
+      # upstream at every sync, so the compare is "diverged" — it always lists
+      # one delta commit, and its file list shows every patch as "added" because
+      # the merge base predates them all. So the patches are compared directly,
+      # by blob sha at each tag; that list is what says whether Macterm-facing
+      # behavior moved. Upstream PR numbers are written as neurosnap/zmx PRs in
+      # code spans, never bare: a bare #N links to a Macterm PR, and an
+      # auto-linked neurosnap/zmx#N backlinks every bump onto the upstream PR.
+      - name: Build the change review
+        id: review
+        if: steps.check.outputs.proceed == 'true'
+        env:
+          CURRENT: ${{ steps.check.outputs.current }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          # Advisory: a bad report must never block the bump PR, since the PR is
+          # how the new pin gets tested at all.
+          if ! gh api "repos/thdxg/zmx/compare/${CURRENT}...${LATEST}" > compare.json \
+            || ! gh api "repos/thdxg/zmx/contents/.github/downstream?ref=${CURRENT}" > old-patches.json \
+            || ! gh api "repos/thdxg/zmx/contents/.github/downstream?ref=${LATEST}" > new-patches.json
+          then
+            echo "warning: the GitHub API failed; opening the PR without a review section" >&2
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "### Commits"
+            echo
+            jq -r '.commits[] | "- `\(.sha[0:7])` \(.commit.message | split("\n")[0] | gsub("`"; "'"'"'") | gsub("\\(#(?<n>[0-9]+)\\)"; "(`neurosnap/zmx#\(.n)`)"))"' compare.json
+            echo
+            echo "### Downstream patches"
+            echo
+            PATCHES=$(jq -rn --slurpfile o old-patches.json --slurpfile n new-patches.json '
+              ($o[0] | map({(.name): .sha}) | add // {}) as $old
+              | ($n[0] | map({(.name): .sha}) | add // {}) as $new
+              | ([$old, $new] | map(keys) | add | unique)[] as $f
+              | if $old[$f] == null then "- `\($f)` (added)"
+                elif $new[$f] == null then "- `\($f)` (removed)"
+                elif $old[$f] != $new[$f] then "- `\($f)` (changed)"
+                else empty end')
+            if [[ -n "$PATCHES" ]]; then
+              echo "$PATCHES"
+              echo
+              echo "A changed downstream patch is a change to behavior Macterm depends on — 0003 is the leadership claim (\`ZmxLeadership.claimSequence\`), 0004 the responsible-process disclaim (#419). Read those diffs, not just CI."
+            else
+              echo "_None changed — this bump is upstream changes only._"
+            fi
+          } > review.md
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+          cat review.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open the bump PR
+        if: steps.check.outputs.proceed == 'true'
+        env:
+          CURRENT: ${{ steps.check.outputs.current }}
+          LATEST: ${{ steps.check.outputs.latest }}
+          BRANCH: ${{ steps.check.outputs.branch }}
+          REVIEW_OK: ${{ steps.review.outputs.ok }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+
+          # Rewrite only the default in the parameter expansion, so the ZMX_TAG
+          # override keeps working.
+          sed -i -E "s/(ZMX_TAG:-)[^}]+/\1${LATEST}/" scripts/setup.sh
+          if git diff --quiet scripts/setup.sh; then
+            echo "error: sed matched nothing; the ZMX_TAG line must have changed shape" >&2
+            exit 1
+          fi
+          APPLIED=$(grep -oE 'ZMX_TAG:-[^}]+' scripts/setup.sh | cut -d- -f2- | sed 's/^://')
+          if [[ "$APPLIED" != "$LATEST" ]]; then
+            echo "error: pin reads '$APPLIED' after rewrite, expected '$LATEST'" >&2
+            exit 1
+          fi
+
+          git add scripts/setup.sh
+          git commit -m "chore(deps): bump zmx to ${LATEST}" \
+                     -m "Moves the pinned thdxg/zmx release from ${CURRENT} to ${LATEST}. Opened by .github/workflows/bump-zmx.yml."
+          # --force: the branch is per target tag and owned by this workflow, and
+          # the check step already returned if a PR for it is open. See
+          # bump-ghosttykit.yml.
+          git push --force origin "$BRANCH"
+
+          {
+            echo "Moves the pinned \`thdxg/zmx\` release (\`ZMX_TAG\` in \`scripts/setup.sh\`) from \`${CURRENT}\` to \`${LATEST}\`."
+            echo
+            echo "**CI on this PR is the gate.** Editing \`scripts/setup.sh\` changes the cache key the bundled zmx rides, so this run downloads the new pin from scratch and exercises it through Unit, End-to-end, and the benchmark. End-to-end is the check that counts: nothing compiles against zmx, so a broken wire contract shows up only there."
+            echo
+            echo "Before merging, update the comment above \`ZMX_TAG\` (what upstream it carries, which downstream patches)."
+            echo
+            echo "Compare: [\`${CURRENT}...${LATEST}\`](https://github.com/thdxg/zmx/compare/${CURRENT}...${LATEST})"
+            echo
+            echo "---"
+            echo
+            if [[ "$REVIEW_OK" == "true" && -f review.md ]]; then
+              cat review.md
+            else
+              echo "_The change review could not be generated for this bump — check the workflow log. Review the compare link by hand._"
+            fi
+          } > pr-body.md
+
+          if ! gh pr create \
+            --base main --head "$BRANCH" \
+            --title "chore(deps): bump zmx to ${LATEST}" \
+            --label dependencies --label area:ci \
+            --body-file pr-body.md
+          then
+            {
+              echo "error: the bump commit is pushed to $BRANCH, but opening its PR failed."
+              echo "  If the message above is 'Resource not accessible by personal access"
+              echo "  token', GH_PAT is missing Pull requests: read+write on this repo."
+              echo "  Grant it and re-run — the branch is reused, not duplicated."
+            } >&2
+            exit 1
+          fi
