@@ -74,7 +74,7 @@ Two per-row checkboxes, mutually exclusive:
 **Settings → Appearance → Projects** picks how the sidebar shows projects:
 
 - **Rows** (default): each project is a row you can select, with its tabs nested beneath it.
-- **Section headers**: each project is a label over its tabs, the way Music and Mail head their sidebar groups, and the tabs are the sidebar's rows. Hover a label for its collapse chevron and, beside it, the new-tab button. Right-click it for the project menu, double-click it to rename, and drag it onto another label to reorder.
+- **Section headers**: each project is a label over its tabs, the way Music and Mail head their sidebar groups, and the tabs are the sidebar's rows. Hover a label for its collapse chevron and, beside it, the new-tab button. Right-click it for the project menu (rename lives there), and drag it onto another label to reorder.
 
 ## Project colors
 

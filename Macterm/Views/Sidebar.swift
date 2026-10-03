@@ -35,6 +35,18 @@ private let sidebarRowHighlightOverhang: CGFloat = 3
 
 private let projectActionTrailingInset: CGFloat = -sidebarRowHighlightOverhang
 
+/// How far in from each side of a List row the row's HOVER region starts —
+/// the region the List reveals a section header's chevron for. MEASURED, the
+/// same way as the overhang above: sweeping the pointer across a header in
+/// 2pt steps, the chevron came up between 6 and 10pt from the row's leading
+/// edge and went down between 208 and 210pt of a 220pt row. That is the rect
+/// the selection capsule is drawn in, which is the row as the eye reads it;
+/// the row view itself spans the whole column, scroller strip and all, and
+/// the header's content view ends 2pt short of it, so neither of those edges
+/// is the one the chevron goes by. `RowHoverTracker` uses this to agree with
+/// the List about when the pointer is on a row.
+private let sidebarRowHoverInset: CGFloat = 10
+
 /// The title's trailing inset while the action is revealed. `max` is the
 /// contract, not a nicety: the title yields room ONLY if the action's box
 /// would otherwise reach back over it, and can never end up WIDER on hover
@@ -1212,7 +1224,11 @@ private struct SidebarProjectHeader: View {
         // nobody can see.
         .allowsHitTesting(isRevealed)
         .padding(.trailing, style == .rows ? projectActionTrailingInset : 0)
-        .help("New Tab")
+        // No tooltip on a section header: the tooltip window coming up
+        // takes the hover away from the List's header, which hides its
+        // chevron and lets the content box — this button with it — grow
+        // into the chevron's place under the pointer.
+        .help(style == .rows ? "New Tab" : "")
         // Left reachable by VoiceOver at all times: a pointer-only
         // affordance is no affordance for a keyboard or VoiceOver user, and
         // hit testing and accessibility are separate gates.
@@ -1220,10 +1236,21 @@ private struct SidebarProjectHeader: View {
     }
 }
 
-/// Reports pointer enter/exit for the view it backs, through an AppKit
-/// tracking area rather than SwiftUI's `.onHover` — see
+/// Reports pointer enter/exit for the List ROW the view it backs sits in,
+/// through an AppKit tracking area rather than SwiftUI's `.onHover` — see
 /// `SidebarProjectHeader` for why that distinction matters, and
 /// `PaneDragDrop.DragSourceView` for the same pattern over a pane.
+///
+/// The region is the enclosing `NSTableRowView`, never the content's own
+/// box, because the content box is not what the user sees as the row. A
+/// section header's box stops where the List's own hover chevron begins, so
+/// tracking it put the pointer "outside" over that chevron and hid the
+/// new-tab button beside it; a tooltip appearing over the button did the
+/// same. The List reveals its chevron for the whole row, and a control that
+/// should sit beside that chevron has to come and go with it. The tracking
+/// area is installed on the row view with this view as its owner and moved
+/// whenever layout finds a different row (row views are reused), and the
+/// row is also what `pointerIsInside` measures against.
 ///
 /// The self-heal in `updateTrackingAreas` is the part worth keeping: a row
 /// that reshapes, scrolls out of view, or loses its window mid-hover never
@@ -1249,6 +1276,19 @@ private struct RowHoverTracker: NSViewRepresentable {
     final class TrackerView: NSView {
         var onHoverChanged: ((Bool) -> Void)?
         private var isInside = false
+        /// The view the tracking area is installed on: the enclosing row,
+        /// or this view until it has one.
+        private weak var trackedView: NSView?
+        private var trackingArea: NSTrackingArea?
+
+        /// The List row this content belongs to, if it is in one yet.
+        private var rowView: NSView? {
+            var view = superview
+            while let candidate = view, !(candidate is NSTableRowView) {
+                view = candidate.superview
+            }
+            return view
+        }
 
         /// Transparent to the mouse: the row beneath owns every click, drag,
         /// scroll and right-click. Tracking-area enter/exit is dispatched by
@@ -1259,19 +1299,7 @@ private struct RowHoverTracker: NSViewRepresentable {
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
-            trackingAreas.forEach { removeTrackingArea($0) }
-            // `.activeInActiveApp` means a BACKGROUND Macterm reveals
-            // nothing on hover — deliberate, and the same choice
-            // `PaneDragDrop` makes: an inactive window should not offer a
-            // one-click action the user can trip over on their way to
-            // focusing it. `.inVisibleRect` keeps the area matched to the
-            // row as the List scrolls without a callback per frame.
-            addTrackingArea(NSTrackingArea(
-                rect: .zero,
-                options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
-                owner: self,
-                userInfo: nil
-            ))
+            installTrackingArea(on: rowView ?? self)
             // Re-derive the truth on every layout pass, rather than trusting
             // that an exit event arrived. Deferred because this runs inside
             // AppKit's layout, and the report writes SwiftUI state.
@@ -1283,29 +1311,107 @@ private struct RowHoverTracker: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            if window == nil { report(false) }
+            if window == nil {
+                removeTrackingArea()
+                report(false)
+            }
+        }
+
+        private func installTrackingArea(on host: NSView) {
+            if host === trackedView, trackingArea != nil { return }
+            removeTrackingArea()
+            // `.activeInActiveApp` means a BACKGROUND Macterm reveals
+            // nothing on hover — deliberate, and the same choice
+            // `PaneDragDrop` makes: an inactive window should not offer a
+            // one-click action the user can trip over on their way to
+            // focusing it. `.inVisibleRect` keeps the area matched to the
+            // row as the List scrolls without a callback per frame.
+            // `.mouseMoved` (delivered only while inside the row) is what
+            // lets `pointerIsInside` notice the row's edge strips — see
+            // there — on the way across them, not only at the row's edge.
+            let area = NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .mouseMoved, .activeInActiveApp, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            host.addTrackingArea(area)
+            trackedView = host
+            trackingArea = area
+        }
+
+        private func removeTrackingArea() {
+            if let trackingArea, let trackedView {
+                trackedView.removeTrackingArea(trackingArea)
+            }
+            trackingArea = nil
+            trackedView = nil
         }
 
         override func mouseEntered(with _: NSEvent) {
-            report(true)
+            // Not an unconditional true: the tracking rect is the whole
+            // row, and an entry through one of its edge strips is outside
+            // the region the List goes by.
+            report(pointerIsInside)
         }
 
         override func mouseExited(with _: NSEvent) {
             report(false)
         }
 
+        override func mouseMoved(with _: NSEvent) {
+            report(pointerIsInside)
+        }
+
         /// Where the pointer actually is, asked of the window rather than
-        /// inferred from the last event we happened to receive.
+        /// inferred from the last event we happened to receive: within the
+        /// tracked row's visible rect, inset from each side by
+        /// `sidebarRowHoverInset` when that is a List row. The inset is the
+        /// List's own rule for its header chevron: just inside the row's
+        /// edges — the overlay scroller's strip on the right, the margin on
+        /// the left — it drops its hover, and a control meant to sit beside
+        /// the chevron has to drop out with it. With the plain bounds the
+        /// button stayed up there and slid into the chevron's place; with a
+        /// window hit-test it still did, since the strip hit-tests as the
+        /// row. The row's rect is 220pt here; measuring, not deriving, is
+        /// what found the region.
         private var pointerIsInside: Bool {
             guard let window, NSApp.isActive else { return false }
+            let host = trackedView ?? self
+            var region = host.visibleRect
+            if host is NSTableRowView { region = region.insetBy(dx: sidebarRowHoverInset, dy: 0) }
             let inWindow = window.mouseLocationOutsideOfEventStream
-            return visibleRect.contains(convert(inWindow, from: nil))
+            return region.contains(host.convert(inWindow, from: nil))
         }
 
         private func report(_ inside: Bool) {
             guard inside != isInside else { return }
             isInside = inside
             onHoverChanged?(inside)
+        }
+    }
+}
+
+/// A row's title owns its clicks (`InlineRenameClickTarget`: a single click
+/// stands in for the selection the List would have made, a double click
+/// renames). A section header's title owns none: a header has no selection,
+/// and every click belongs to the List, whose whole header toggles the
+/// section. Nor is a double click a rename there — the List toggles on the
+/// first click of the pair and ignores the second (measured on a bare
+/// `Section(isExpanded:)`, with nothing of ours on it), so the rename would
+/// arrive with the section collapsed under it. Rename a section-header
+/// project from its context menu.
+private struct TitleClickTarget: ViewModifier {
+    let style: SidebarProjectStyle
+    let onSelect: (NSEvent.ModifierFlags) -> Void
+    let onBeginRename: () -> Void
+
+    func body(content: Content) -> some View {
+        switch style {
+        case .rows:
+            content.inlineRenameClickTarget(onSelect: onSelect, onBeginRename: onBeginRename)
+        case .sections:
+            content
         }
     }
 }
@@ -1347,7 +1453,7 @@ private struct SidebarProjectRow: View {
                         .help(project.path)
                 }
             }
-            .inlineRenameClickTarget(onSelect: select, onBeginRename: beginRename)
+            .modifier(TitleClickTarget(style: style, onSelect: select, onBeginRename: beginRename))
         }
     }
 
@@ -1355,8 +1461,11 @@ private struct SidebarProjectRow: View {
         Group {
             if style == .sections {
                 // A section header is a label, not a row: no glyph, and the
-                // List's own header styling for the text.
+                // List's own header color for the text — but at the rows'
+                // own size, since the List's header size is a caption and a
+                // project's name heads the sidebar's main content here.
                 titleContent
+                    .font(.body.weight(.semibold))
             } else if projectIconSymbol == Preferences.noIcon {
                 titleContent
                     .padding(.leading, 6)
