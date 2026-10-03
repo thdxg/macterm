@@ -1085,7 +1085,6 @@ private struct AppearanceSettings: View {
     @State private var showAgentIcons: Bool = Preferences.shared.showAgentIcons
     @State private var showTabStatusIndicator: Bool = Preferences.shared.showTabStatusIndicator
     @State private var showSpinnerOverAgentIcons: Bool = Preferences.shared.showSpinnerOverAgentIcons
-    @State private var autoNameTabs: Bool = Preferences.shared.autoNameTabs
     @State private var autoAssignProjectColors: Bool = Preferences.shared.autoAssignProjectColors
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
@@ -1206,13 +1205,6 @@ private struct AppearanceSettings: View {
                 .onChange(of: sidebarIconSize) { _, v in
                     Preferences.shared.sidebarIconSize = SidebarIconSize(rawValue: v) ?? .medium
                 }
-
-                Toggle("Auto-name tabs", isOn: $autoNameTabs)
-                    .onChange(of: autoNameTabs) { _, v in
-                        Preferences.shared.autoNameTabs = v
-                    }
-                Text("Names tabs after the running program. When off, tabs show the shell or host name.")
-                    .settingsCaption()
 
                 Toggle("Auto-assign project colors", isOn: $autoAssignProjectColors)
                     .onChange(of: autoAssignProjectColors) { _, v in
