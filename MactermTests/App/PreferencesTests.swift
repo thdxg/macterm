@@ -40,6 +40,18 @@ struct PreferencesTests {
     }
 
     @Test
+    func sidebar_project_style_round_trips() {
+        let prior = Preferences.shared.sidebarProjectStyle
+        defer { Preferences.shared.sidebarProjectStyle = prior }
+
+        Preferences.shared.sidebarProjectStyle = .sections
+        #expect(Preferences.defaults.string(forKey: Preferences.Keys.sidebarProjectStyle.name) == "sections")
+
+        Preferences.shared.sidebarProjectStyle = .rows
+        #expect(Preferences.defaults.string(forKey: Preferences.Keys.sidebarProjectStyle.name) == "rows")
+    }
+
+    @Test
     func reconnect_remote_panes_defaults_on_and_round_trips() {
         let prior = Preferences.shared.reconnectRemotePanes
         defer { Preferences.shared.reconnectRemotePanes = prior }

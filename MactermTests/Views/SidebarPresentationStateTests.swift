@@ -198,4 +198,43 @@ struct SidebarPresentationStateTests {
 
         #expect(!FocusRestoration.isEditingInlineName)
     }
+
+    @Test
+    func a_project_starts_collapsed_as_a_row_and_expanded_as_a_section() {
+        let state = SidebarPresentationState()
+        let id = UUID()
+
+        #expect(!state.isExpanded(id, style: .rows))
+        #expect(state.isExpanded(id, style: .sections))
+    }
+
+    @Test
+    func each_style_keeps_its_own_collapse_state() {
+        let state = SidebarPresentationState()
+        let id = UUID()
+
+        state.setExpanded(id, true, style: .rows)
+        state.setExpanded(id, false, style: .sections)
+
+        #expect(state.isExpanded(id, style: .rows))
+        #expect(!state.isExpanded(id, style: .sections))
+
+        state.setExpanded(id, false, style: .rows)
+        state.setExpanded(id, true, style: .sections)
+
+        #expect(!state.isExpanded(id, style: .rows))
+        #expect(state.isExpanded(id, style: .sections))
+    }
+
+    @Test
+    func revealing_a_project_opens_it_in_both_styles() {
+        let state = SidebarPresentationState()
+        let id = UUID()
+        state.setExpanded(id, false, style: .sections)
+
+        state.reveal(id)
+
+        #expect(state.isExpanded(id, style: .rows))
+        #expect(state.isExpanded(id, style: .sections))
+    }
 }

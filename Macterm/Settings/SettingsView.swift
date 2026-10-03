@@ -1106,6 +1106,8 @@ private struct AppearanceSettings: View {
     private var adaptiveTerminalChrome: Bool = Preferences.shared.adaptiveTerminalChromeEnabled
     @State
     private var sidebarPeekStyle: SidebarPeekStyle = Preferences.shared.sidebarPeekStyle
+    @State
+    private var sidebarProjectStyle: SidebarProjectStyle = Preferences.shared.sidebarProjectStyle
     /// Inverted view of `Preferences.hideTitleBar`: the control reads as
     /// "Show toolbar" (on by default), the preference stores the hide.
     @State
@@ -1184,12 +1186,28 @@ private struct AppearanceSettings: View {
                 }
                 .disabled(!peekSidebarWhenHidden)
 
-                Picker("Project icon", selection: $projectIconSymbol) {
+                Picker("Projects", selection: $sidebarProjectStyle) {
+                    ForEach(SidebarProjectStyle.allCases) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+                .onChange(of: sidebarProjectStyle) { _, style in
+                    Preferences.shared.sidebarProjectStyle = style
+                }
+                Text(sidebarProjectStyle.explanation)
+                    .settingsCaption()
+
+                // A section header draws no glyph, so the choice would do
+                // nothing there.
+                Picker(selection: $projectIconSymbol) {
                     ForEach(Preferences.projectIconChoices, id: \.self) { name in
                         iconPickerLabel(name).tag(name)
                     }
+                } label: {
+                    Text("Project icon").dimsWhenDisabled()
                 }
                 .onChange(of: projectIconSymbol) { _, v in Preferences.shared.projectIconSymbol = v }
+                .disabled(sidebarProjectStyle == .sections)
 
                 Picker("Tab icon", selection: $tabIconSymbol) {
                     ForEach(Preferences.tabIconChoices, id: \.self) { name in
@@ -1257,7 +1275,7 @@ private struct AppearanceSettings: View {
                     .onChange(of: showProjectNewTabButton) { _, v in
                         Preferences.shared.showProjectNewTabButton = v
                     }
-                Text("Shows the button while the pointer rests on a project row.")
+                Text("Shows the button while the pointer rests on a project.")
                     .settingsCaption()
             }
 

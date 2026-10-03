@@ -71,6 +71,7 @@ struct PreferenceStorageKeyTests {
             Preferences.Keys.quickTerminalWidth.name, Preferences.Keys.quickTerminalHeight.name,
             Preferences.Keys.activeProjectID.name, Preferences.Keys.updateChannel.name,
             Preferences.Keys.recentTabCandidates.name, Preferences.Keys.sidebarIconSize.name,
+            Preferences.Keys.sidebarProjectStyle.name, Preferences.Keys.sidebarPeekStyle.name,
         ]
         #expect(Set(names).count == names.count)
         #expect(names.allSatisfy { $0.hasPrefix("macterm.") })

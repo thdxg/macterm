@@ -232,6 +232,34 @@ enum SidebarPeekStyle: String, CaseIterable, Identifiable {
     }
 }
 
+/// How the sidebar presents a project: as a row of its own whose tabs nest
+/// beneath it in a disclosure group (`rows`), or as a section header — a
+/// label, the way Music and Mail head their sidebar groups — whose tabs are
+/// the top-level rows (`sections`). Both collapse. The raw values are
+/// persisted.
+enum SidebarProjectStyle: String, CaseIterable, Identifiable {
+    case rows
+    case sections
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .rows: "Rows"
+        case .sections: "Section headers"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .rows:
+            "Each project is a row you can select, with its tabs nested beneath it."
+        case .sections:
+            "Each project is a label heading its tabs, which become the sidebar's rows."
+        }
+    }
+}
+
 /// Single observable source of truth for UserDefaults-backed preferences.
 ///
 /// Macterm only stores app-shaped state here (window opacity/blur, quick
@@ -313,6 +341,12 @@ final class Preferences {
     /// always the native split-view column.
     var sidebarPeekStyle: SidebarPeekStyle {
         didSet { Keys.sidebarPeekStyle.write(sidebarPeekStyle, to: defaults) }
+    }
+
+    /// Whether projects are rows of their own or section headers over their
+    /// tabs (see `SidebarProjectStyle`).
+    var sidebarProjectStyle: SidebarProjectStyle {
+        didSet { Keys.sidebarProjectStyle.write(sidebarProjectStyle, to: defaults) }
     }
 
     // MARK: - Sidebar icons
@@ -856,6 +890,7 @@ final class Preferences {
         cursorTrail = Keys.cursorTrail.read(defaults)
         animatedSplits = Keys.animatedSplits.read(defaults)
         sidebarPeekStyle = Keys.sidebarPeekStyle.read(defaults)
+        sidebarProjectStyle = Keys.sidebarProjectStyle.read(defaults)
         windowOpacity = Keys.windowOpacity.read(defaults)
         windowBlurRadius = Keys.windowBlurRadius.read(defaults)
         windowGlassEnabled = Keys.windowGlassEnabled.read(defaults)
@@ -1024,6 +1059,7 @@ final class Preferences {
         static let cursorTrail = PreferenceStorageKey("macterm.terminal.cursorTrail", default: false)
         static let animatedSplits = PreferenceStorageKey("macterm.terminal.animatedSplits", default: true)
         static let sidebarPeekStyle = PreferenceStorageKey("macterm.sidebar.presentation", default: SidebarPeekStyle.resizeTerminal)
+        static let sidebarProjectStyle = PreferenceStorageKey("macterm.sidebar.projectStyle", default: SidebarProjectStyle.rows)
         static let windowOpacity = PreferenceStorageKey("macterm.window.opacity", default: 1.0)
         static let windowBlurRadius = PreferenceStorageKey("macterm.window.blurRadius", default: 0)
         static let windowGlassEnabled = PreferenceStorageKey("macterm.window.glassEnabled", default: false)
@@ -1104,6 +1140,7 @@ final class Preferences {
 // enums, because `PreferenceValue` is `Sendable` and a retroactive `Sendable`
 // must live in the enum's own file.
 extension SidebarPeekStyle: PreferenceValue {}
+extension SidebarProjectStyle: PreferenceValue {}
 extension WindowGlassStyle: PreferenceValue {}
 extension QuickTerminalAdjustMode: PreferenceValue {}
 extension SidebarIconSize: PreferenceValue {}

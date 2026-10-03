@@ -21,7 +21,13 @@ enum SidebarRenameTarget: Equatable {
 /// shared state makes them one logical sidebar without lifecycle arbitration.
 @MainActor @Observable
 final class SidebarPresentationState {
+    /// Projects open in the `rows` style, where a project starts collapsed.
     var expandedProjects: Set<UUID> = []
+    /// Projects closed in the `sections` style, where a project starts open —
+    /// its tabs ARE the sidebar's rows there, so a section hidden by default
+    /// would hide most of the sidebar. Kept apart from `expandedProjects` so
+    /// switching styles returns each one to the state the user left it in.
+    var collapsedSections: Set<UUID> = []
     var selection: Set<SidebarItem> = []
     var scrollPosition: SidebarItem?
     var renameText = ""
@@ -39,6 +45,30 @@ final class SidebarPresentationState {
     /// switch). AppKit keeps the same anchor for the List's own rows, so
     /// tracking single-selection is what keeps the two in step.
     var selectionAnchor: SidebarItem?
+
+    func isExpanded(_ projectID: UUID, style: SidebarProjectStyle) -> Bool {
+        switch style {
+        case .rows: expandedProjects.contains(projectID)
+        case .sections: !collapsedSections.contains(projectID)
+        }
+    }
+
+    func setExpanded(_ projectID: UUID, _ expanded: Bool, style: SidebarProjectStyle) {
+        switch style {
+        case .rows:
+            if expanded { expandedProjects.insert(projectID) } else { expandedProjects.remove(projectID) }
+        case .sections:
+            if expanded { collapsedSections.remove(projectID) } else { collapsedSections.insert(projectID) }
+        }
+    }
+
+    /// Open a project in both styles — for the moments its tabs must be
+    /// visible whichever style is showing (it became active, a tab was
+    /// created or dropped into it, a drag hovers it).
+    func reveal(_ projectID: UUID) {
+        expandedProjects.insert(projectID)
+        collapsedSections.remove(projectID)
+    }
 
     private(set) var renameTarget: SidebarRenameTarget?
     private(set) var originalCustomTitle: String?

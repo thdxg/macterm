@@ -244,6 +244,8 @@ struct SidebarContent: View {
     private var projectStore
     @AppStorage(Preferences.Keys.showNewProjectButton)
     private var showNewProjectButton: Bool
+    @AppStorage(Preferences.Keys.sidebarProjectStyle)
+    private var projectStyle: SidebarProjectStyle
     @Bindable
     private var presentation: SidebarPresentationState
     private let isInteractive: Bool
@@ -299,7 +301,10 @@ struct SidebarContent: View {
                 }
             }
             ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { projectIndex, project in
-                projectSection(index: projectIndex, project: project)
+                switch projectStyle {
+                case .rows: projectSection(index: projectIndex, project: project)
+                case .sections: projectHeaderSection(index: projectIndex, project: project)
+                }
             }
             // Project reordering is a `MovableProject` drag from one header
             // onto another (see `projectHeader`); the context menus' Move
@@ -322,6 +327,12 @@ struct SidebarContent: View {
             //   every drag over the sidebar, so unhandled drops don't bubble
             //   to enclosing views.
         }
+        // A fresh List per project style. Swapping every project between a
+        // DisclosureGroup and a Section in place leaves the outline view
+        // reusing row views laid out for the other shape (measured: tab rows
+        // kept the disclosure indent and the selected row drew its icon and
+        // title twice), so a style change rebuilds the table instead.
+        .id(projectStyle)
         // A single list-level context menu instead of one per row: the native
         // multi-select menu. Its closure receives the exact set the menu should
         // act on — right-clicking inside a multi-selection yields all selected
@@ -417,7 +428,7 @@ struct SidebarContent: View {
         }
         .onChange(of: windowState.activeProjectID) { _, newID in
             if let newID, newID != PinnedTabs.projectID {
-                presentation.expandedProjects.insert(newID)
+                presentation.reveal(newID)
             }
             syncSelection()
         }
@@ -425,7 +436,7 @@ struct SidebarContent: View {
             syncSelection()
         }
         .onAppear {
-            if let id = windowState.activeProjectID { presentation.expandedProjects.insert(id) }
+            if let id = windowState.activeProjectID { presentation.reveal(id) }
             syncSelection()
         }
         .overlay(alignment: .top) {
@@ -512,40 +523,60 @@ struct SidebarContent: View {
     private func projectSection(index projectIndex: Int, project: Project) -> some View {
         let ws = appState.workspaces[project.id]
         let tabs = ws?.tabs ?? []
-        DisclosureGroup(isExpanded: Binding(
-            get: { presentation.expandedProjects.contains(project.id) },
-            set: {
-                if $0 {
-                    presentation.expandedProjects.insert(project.id)
-                } else {
-                    presentation.expandedProjects.remove(project.id)
-                }
-            }
-        )) {
-            ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
-                tabRow(tab: tab, index: tabIndex, project: project)
-            }
-            // Single drop mechanism for every case: SwiftUI reports the
-            // insertion `offset` within THIS project's tab list. A tab drop
-            // from the same project reorders to that slot; one from another
-            // project moves the tab in at that slot; a PANE drop (the grab
-            // handle drag from the workspace) separates that pane into a new
-            // tab landing at the same slot. Replaces the old `.onMove` (which
-            // is per-section and can't express a cross-project move).
-            .dropDestination(for: TabSlotDropItem.self) { items, offset in
-                for item in items {
-                    switch item {
-                    case let .tab(tab):
-                        receiveTabDrop([tab], into: project, at: offset)
-                    case let .pane(pane):
-                        receivePaneDrop([pane], into: project, at: offset)
-                    }
-                }
-            }
+        DisclosureGroup(isExpanded: isExpanded(project)) {
+            tabRows(tabs, project: project)
         } label: {
             projectHeader(index: projectIndex, project: project)
+                .tag(SidebarItem.project(project.id))
         }
         .id(SidebarItem.project(project.id))
+    }
+
+    /// The `sections` style's counterpart of `projectSection`: the project is
+    /// a native collapsible section HEADER (the Music/Mail sidebar label, with
+    /// the system's own hover chevron) and its tabs are top-level rows. The
+    /// header is not a row, so it carries no selection tag — it can't be
+    /// selected, which is the point of the style — and a right-click on it is
+    /// handled by its own menu rather than the List's selection menu.
+    private func projectHeaderSection(index projectIndex: Int, project: Project) -> some View {
+        let tabs = appState.workspaces[project.id]?.tabs ?? []
+        return Section(isExpanded: isExpanded(project)) {
+            tabRows(tabs, project: project)
+        } header: {
+            projectHeader(index: projectIndex, project: project)
+                .contextMenu { projectMenu(project) }
+        }
+        .id(SidebarItem.project(project.id))
+    }
+
+    private func isExpanded(_ project: Project) -> Binding<Bool> {
+        Binding(
+            get: { presentation.isExpanded(project.id, style: projectStyle) },
+            set: { presentation.setExpanded(project.id, $0, style: projectStyle) }
+        )
+    }
+
+    private func tabRows(_ tabs: [TerminalTab], project: Project) -> some View {
+        ForEach(Array(tabs.enumerated()), id: \.element.id) { tabIndex, tab in
+            tabRow(tab: tab, index: tabIndex, project: project)
+        }
+        // Single drop mechanism for every case: SwiftUI reports the
+        // insertion `offset` within THIS project's tab list. A tab drop
+        // from the same project reorders to that slot; one from another
+        // project moves the tab in at that slot; a PANE drop (the grab
+        // handle drag from the workspace) separates that pane into a new
+        // tab landing at the same slot. Replaces the old `.onMove` (which
+        // is per-section and can't express a cross-project move).
+        .dropDestination(for: TabSlotDropItem.self) { items, offset in
+            for item in items {
+                switch item {
+                case let .tab(tab):
+                    receiveTabDrop([tab], into: project, at: offset)
+                case let .pane(pane):
+                    receivePaneDrop([pane], into: project, at: offset)
+                }
+            }
+        }
     }
 
     private func tabRow(tab: TerminalTab, index tabIndex: Int, project: Project) -> some View {
@@ -591,12 +622,12 @@ struct SidebarContent: View {
         SidebarProjectHeader(
             project: project,
             index: projectIndex + 1,
+            style: projectStyle,
             presentation: presentation,
             isInteractive: isInteractive,
             onRename: { appState.renameProject(project.id, to: $0, store: projectStore) },
             onNewTab: { createTab(in: project) }
         )
-        .tag(SidebarItem.project(project.id))
         // ONE drop destination for every payload (see `SidebarDropItem` for
         // why stacking two is a landmine). A TAB dropped here appends to this
         // project — the only drop path for a collapsed or empty project,
@@ -624,7 +655,7 @@ struct SidebarContent: View {
             // project drags (the union payload can't be inspected here); the
             // hovered header itself doesn't move when it expands, so the
             // drop stays on target.
-            if targeted { presentation.expandedProjects.insert(project.id) }
+            if targeted { presentation.reveal(project.id) }
         }
     }
 
@@ -638,8 +669,11 @@ struct SidebarContent: View {
             .tab(projectID: PinnedTabs.projectID, tabID: $0.id)
         }
         for project in projectStore.projects {
-            items.append(.project(project.id))
-            guard presentation.expandedProjects.contains(project.id) else { continue }
+            // A section header is not a row: nothing selects it, so a
+            // shift-click range runs straight from one project's tabs into
+            // the next one's.
+            if projectStyle == .rows { items.append(.project(project.id)) }
+            guard presentation.isExpanded(project.id, style: projectStyle) else { continue }
             items.append(contentsOf: (appState.workspaces[project.id]?.tabs ?? []).map {
                 .tab(projectID: project.id, tabID: $0.id)
             })
@@ -674,7 +708,7 @@ struct SidebarContent: View {
                 )
             }
         }
-        presentation.expandedProjects.insert(project.id)
+        presentation.reveal(project.id)
     }
 
     /// Apply a pane drag-and-drop: the pane leaves its split tree and becomes
@@ -693,7 +727,7 @@ struct SidebarContent: View {
                 at: index
             )
         }
-        presentation.expandedProjects.insert(project.id)
+        presentation.reveal(project.id)
     }
 
     /// Apply a project drag-and-drop onto a section (header or tab row): move
@@ -827,7 +861,7 @@ struct SidebarContent: View {
     private func createTab(in project: Project) {
         appState.selectProject(project, in: windowState)
         appState.createTab(projectID: project.id, projects: projectStore.projects)
-        presentation.expandedProjects.insert(project.id)
+        presentation.reveal(project.id)
     }
 
     /// `createTab(in:)` with the worktree's directory as the working directory
@@ -835,7 +869,7 @@ struct SidebarContent: View {
     private func createTab(in project: Project, worktree: GitWorktree) {
         appState.selectProject(project, in: windowState)
         appState.createTab(projectID: project.id, projects: projectStore.projects, workingDirectory: worktree.path)
-        presentation.expandedProjects.insert(project.id)
+        presentation.reveal(project.id)
     }
 
     /// A pinned row's menu — two exits with distinct semantics: Unpin (a
@@ -876,7 +910,7 @@ struct SidebarContent: View {
                             to: destination.id,
                             destPath: destination.path
                         )
-                        presentation.expandedProjects.insert(destination.id)
+                        presentation.reveal(destination.id)
                     }
                 }
             }
@@ -926,7 +960,7 @@ struct SidebarContent: View {
                 ForEach(moveTargets) { destination in
                     Button(destination.name) {
                         appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
-                        presentation.expandedProjects.insert(destination.id)
+                        presentation.reveal(destination.id)
                     }
                 }
             }
@@ -958,6 +992,7 @@ struct SidebarContent: View {
     /// bulk path so both prune identically.
     private func removeProject(_ project: Project) {
         presentation.expandedProjects.remove(project.id)
+        presentation.collapsedSections.remove(project.id)
         appState.removeProject(project.id)
         projectStore.remove(id: project.id)
     }
@@ -997,7 +1032,7 @@ struct SidebarContent: View {
 
     private func openProject() {
         if let project = appState.openProject(store: projectStore) {
-            presentation.expandedProjects.insert(project.id)
+            presentation.reveal(project.id)
         }
     }
 
@@ -1089,6 +1124,7 @@ extension View {
 private struct SidebarProjectHeader: View {
     let project: Project
     let index: Int
+    let style: SidebarProjectStyle
     @Bindable
     var presentation: SidebarPresentationState
     let isInteractive: Bool
@@ -1114,6 +1150,7 @@ private struct SidebarProjectHeader: View {
         SidebarProjectRow(
             project: project,
             index: index,
+            style: style,
             presentation: presentation,
             isInteractive: isInteractive,
             onRename: onRename
@@ -1134,7 +1171,7 @@ private struct SidebarProjectHeader: View {
         // the ordinary row inset and is laid out precisely as it was before
         // this feature. The title yields 14pt to the pointer and takes it
         // straight back.
-        .padding(.trailing, isRevealed ? projectActionRevealedInset : rowTrailingInset)
+        .padding(.trailing, titleTrailingInset)
         // Overlaid at the trailing edge rather than placed in an `HStack`, so
         // the button's own position is fixed and only the TITLE's inset
         // moves — and applied OUTSIDE the title's inset, which is what puts
@@ -1146,6 +1183,17 @@ private struct SidebarProjectHeader: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RowHoverTracker(isHovered: $isHovered))
         .animation(projectActionRevealAnimation, value: isRevealed)
+    }
+
+    /// A row's title stops at the row inset and yields to the action only
+    /// while it shows. A section header's content box already ends where the
+    /// system's own hover chevron begins, so there the action sits flush at
+    /// that edge — beside the chevron — and the title gives way to it.
+    private var titleTrailingInset: CGFloat {
+        switch style {
+        case .rows: isRevealed ? projectActionRevealedInset : rowTrailingInset
+        case .sections: isRevealed ? projectActionSize + projectActionGap : 0
+        }
     }
 
     private var newTabButton: some View {
@@ -1163,7 +1211,7 @@ private struct SidebarProjectHeader: View {
         // title — a click meant to select or rename the project — to a button
         // nobody can see.
         .allowsHitTesting(isRevealed)
-        .padding(.trailing, projectActionTrailingInset)
+        .padding(.trailing, style == .rows ? projectActionTrailingInset : 0)
         .help("New Tab")
         // Left reachable by VoiceOver at all times: a pointer-only
         // affordance is no affordance for a keyboard or VoiceOver user, and
@@ -1265,6 +1313,7 @@ private struct RowHoverTracker: NSViewRepresentable {
 private struct SidebarProjectRow: View {
     let project: Project
     let index: Int
+    let style: SidebarProjectStyle
     @Bindable
     var presentation: SidebarPresentationState
     let isInteractive: Bool
@@ -1304,7 +1353,11 @@ private struct SidebarProjectRow: View {
 
     var body: some View {
         Group {
-            if projectIconSymbol == Preferences.noIcon {
+            if style == .sections {
+                // A section header is a label, not a row: no glyph, and the
+                // List's own header styling for the text.
+                titleContent
+            } else if projectIconSymbol == Preferences.noIcon {
                 titleContent
                     .padding(.leading, 6)
             } else {
@@ -1342,7 +1395,8 @@ private struct SidebarProjectRow: View {
     }
 
     private func select(_ modifiers: NSEvent.ModifierFlags) {
-        guard isInteractive else { return }
+        // A section header has no row to select.
+        guard isInteractive, style == .rows else { return }
         presentation.selectRow(selectionItem, modifiers: modifiers)
     }
 

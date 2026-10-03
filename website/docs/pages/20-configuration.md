@@ -69,9 +69,16 @@ Two per-row checkboxes, mutually exclusive:
 - **Pass to TUI** — hands the chord to the program in the focused pane instead of running the action. List the programs under **Passthrough Programs** at the top of the tab, comma-separated, matching the name the tab shows.
 - **Global** — registers the chord system-wide, so the action runs while another app is frontmost. No Accessibility permission needed. If the chord is already taken, the row says so.
 
+## Sidebar style
+
+**Settings → Appearance → Projects** picks how the sidebar shows projects:
+
+- **Rows** (default): each project is a row you can select, with its tabs nested beneath it.
+- **Section headers**: each project is a label over its tabs, the way Music and Mail head their sidebar groups, and the tabs are the sidebar's rows. Hover a label for its collapse chevron and, beside it, the new-tab button. Right-click it for the project menu, double-click it to rename, and drag it onto another label to reorder.
+
 ## Project colors
 
-Set a color from a project's sidebar context menu (**Color**) or **Settings → Projects**. It tints the project's sidebar icon and its tabs' icons. **Settings → Appearance → Auto-assign project colors** (off by default) colors each new project automatically.
+Set a color from a project's sidebar context menu (**Color**) or **Settings → Projects**. It tints the project's sidebar icon and its tabs' icons (a section-header project has no icon, so only its tabs'). **Settings → Appearance → Auto-assign project colors** (off by default) colors each new project automatically.
 
 ## Animations
 
