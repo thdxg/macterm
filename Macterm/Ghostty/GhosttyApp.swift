@@ -10,6 +10,16 @@ private let logger = Logger(subsystem: appBundleID, category: "GhosttyApp")
 final class GhosttyApp {
     static let shared = GhosttyApp()
 
+    /// libghostty's version string (`1.3.2-main+b368389`), the value it sets
+    /// as `TERM_PROGRAM_VERSION` in a local pane. A build constant, so
+    /// `ghostty_info` needs no `ghostty_init` first. nil if it comes back empty.
+    static let version: String? = {
+        let info = ghostty_info()
+        guard let pointer = info.version, info.version_len > 0 else { return nil }
+        let bytes = UnsafeRawBufferPointer(start: pointer, count: Int(info.version_len))
+        return String(decoding: bytes, as: UTF8.self)
+    }()
+
     @ObservationIgnored
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
