@@ -186,8 +186,10 @@ final class Pane: Identifiable {
             if oldValue == .done, completionFailed { completionFailed = false }
             // A remote pane's OSC title expires when its command ends — the
             // execution edge is the pid-change analogue local panes get from
-            // the poll (see `receiveRemoteReportedTitle`).
-            if isRemote, oldValue == .running, programTitle != nil {
+            // the poll (see `receiveRemoteReportedTitle`) — unless the probe
+            // still sees a program in front: an agent finishing a turn ends
+            // its run but keeps the foreground, and its idle title with it.
+            if isRemote, oldValue == .running, programTitle != nil, !remoteProgramHoldsForeground {
                 programTitle = nil
             }
             // Any execution transition on a remote pane is also a naming
@@ -624,11 +626,16 @@ final class Pane: Identifiable {
     }
 
     /// Remote-pane title path (#104): there is no local foreground pid to
-    /// gate provenance on (the local process is always `ssh`), so the OSC 133
-    /// execution state stands in — a title arriving while a command runs is
-    /// the program naming itself; one arriving at the prompt is shell churn,
-    /// discarded exactly like the local gate discards it. Expiry is the
-    /// running→ended edge in `executionState.didSet`.
+    /// gate provenance on (the local process is always `ssh`), so two remote
+    /// signals stand in. A title arriving while a command runs (OSC 133 /
+    /// activity) is the program naming itself, and so is one arriving while
+    /// the probe sees a non-shell program in front — the remote form of the
+    /// local rule, and what keeps an agent's titles while it idles between
+    /// turns (Claude Code's `✳ task`, which no run state covers). One arriving
+    /// at the prompt is shell churn, discarded exactly like the local gate
+    /// discards it. Expiry is the running→ended edge in
+    /// `executionState.didSet`, or the probe reporting the shell again
+    /// (`applyRemoteForeground`).
     func receiveRemoteReportedTitle(_ title: String) {
         // A title arrival is a command boundary — wake the poll (it drives
         // the remote foreground probe). Deferred for the same render-loop
@@ -636,7 +643,7 @@ final class Pane: Identifiable {
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
         }
-        guard executionState == .running else { return }
+        guard executionState == .running || remoteProgramHoldsForeground else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         // Discard a bare version number (see the local path) — e.g. remote
@@ -644,6 +651,15 @@ final class Pane: Identifiable {
         guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
         if trimmed != programTitle { programTitle = trimmed }
         programTitlePID = nil
+    }
+
+    /// Whether the remote probe's latest sample is a program rather than a
+    /// shell — the host's own verdict and the shell name both, so a nested
+    /// shell's prompt titles don't count. Lags the host by up to a probe
+    /// interval, which is why the run state also opens the title gate.
+    private var remoteProgramHoldsForeground: Bool {
+        guard let sample = foregroundSample, sample.origin == .remoteProbe, let name = sample.name else { return false }
+        return !sample.isIdleShell && !ProcessInspector.isShellProcessName(name)
     }
 
     /// The full command line of the remote foreground process, from the probe
@@ -695,6 +711,11 @@ final class Pane: Identifiable {
         remoteForegroundCommand = ProcessInspector.isShellProcessName(base)
             ? nil
             : (foreground.command ?? base)
+        // The shell is back in front: whatever program titled the pane has
+        // gone, and the run-state edge may never have fired (it ended idle).
+        if !remoteProgramHoldsForeground, executionState != .running, programTitle != nil {
+            programTitle = nil
+        }
         // The agent logo, by the local rule: `comm` first, then the invoked
         // name, which the probe's `ps -o args=` carries in place of the local
         // KERN_PROCARGS2 argv. A remote Claude Code's native install has a

@@ -214,6 +214,49 @@ struct PaneTitleTests {
     }
 
     @Test
+    func remote_title_is_adopted_while_the_probe_sees_a_program() {
+        // An agent idling between turns has no run state, but it is still
+        // the program naming the pane — the local rule, by the probe.
+        let pane = makeRemotePane()
+        pane.applyRemoteForeground(RemoteForeground(comm: "2.1.289", isIdle: false, command: "claude"))
+        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
+        #expect(pane.programTitle == "✳ Terminal session icons")
+    }
+
+    @Test
+    func remote_title_survives_a_run_ending_while_the_program_stays() {
+        let pane = makeRemotePane()
+        pane.applyRemoteForeground(RemoteForeground(comm: "2.1.289", isIdle: false, command: "claude"))
+        pane.recordUserInteraction()
+        pane.markCommandRunning()
+        pane.receiveRemoteReportedTitle("◐ Terminal session icons")
+        pane.markProgressFinished()
+        #expect(pane.programTitle == "◐ Terminal session icons")
+    }
+
+    @Test
+    func remote_title_expires_when_the_probe_sees_the_shell_again() {
+        let pane = makeRemotePane()
+        pane.applyRemoteForeground(RemoteForeground(comm: "2.1.289", isIdle: false, command: "claude"))
+        pane.receiveRemoteReportedTitle("✳ Terminal session icons")
+        pane.applyRemoteForeground(RemoteForeground(comm: "-zsh", isIdle: true, command: "-zsh"))
+        #expect(pane.programTitle == nil)
+        // And the shell's own prompt titles stay out.
+        pane.receiveRemoteReportedTitle("~/dev")
+        #expect(pane.programTitle == nil)
+    }
+
+    @Test
+    func remote_title_from_a_nested_shell_is_discarded() {
+        // The host says the session's shell doesn't own the tty, but what
+        // does is another shell: its prompt titles are churn.
+        let pane = makeRemotePane()
+        pane.applyRemoteForeground(RemoteForeground(comm: "zsh", isIdle: false, command: "zsh"))
+        pane.receiveRemoteReportedTitle("~/dev")
+        #expect(pane.programTitle == nil)
+    }
+
+    @Test
     func remote_pane_idle_title_is_the_host() {
         let pane = makeRemotePane()
         #expect(pane.displayTitle == "devbox")
