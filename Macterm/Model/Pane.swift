@@ -695,6 +695,18 @@ final class Pane: Identifiable {
         remoteForegroundCommand = ProcessInspector.isShellProcessName(base)
             ? nil
             : (foreground.command ?? base)
+        // The agent logo, by the local rule: `comm` first, then the invoked
+        // name, which the probe's `ps -o args=` carries in place of the local
+        // KERN_PROCARGS2 argv. A remote Claude Code's native install has a
+        // version for its comm (`2.1.207`) and only argv names it. `args` is
+        // space-joined with its quoting lost, so a path with a space in it
+        // can't be recovered; agents' invoked names don't have one.
+        let icon = isIdleShell ? nil : AgentIcon.match(comm: base) {
+            foreground.command.flatMap { command in
+                ProcessInspector.invokedName(argv: command.split(separator: " ").map(String.init))
+            }
+        }
+        if icon != agentIcon { agentIcon = icon }
     }
 
     /// Name-only convenience over `applyRemoteForeground` (no probed args,

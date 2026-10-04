@@ -82,7 +82,7 @@ tabs:
 | `macterm: cannot cd to …` | The directory doesn't exist on the host. The pane drops to a shell in your home directory. |
 | Slow tab/split opening | Add `ControlMaster` to your ssh config (example above). |
 | Touch ID prompts repeatedly | Add `ControlMaster`, so background polls reuse the pane's authenticated connection. Cancelling once also stops polling that host until you open a new pane on it. |
-| Any background prompt at all | Turn off **Settings → General → Remote Projects → Background SSH connections**. You lose live tab naming, remote `run:` capture in Save Layout, orphan cleanup, and busy-close warnings without [shell integration](https://ghostty.org/docs/features/shell-integration) on the host. |
+| Any background prompt at all | Turn off **Settings → General → Remote Projects → Background SSH connections**. You lose live tab naming and agent logos, remote `run:` capture in Save Layout, orphan cleanup, and busy-close warnings without [shell integration](https://ghostty.org/docs/features/shell-integration) on the host. |
 
 ## Limitations
 

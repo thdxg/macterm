@@ -630,6 +630,63 @@ struct PaneTests {
         #expect(pane.agentIcon == nil)
     }
 
+    @Test
+    func remote_pane_matches_an_agent_from_the_probe() {
+        let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        pane.applyRemoteForeground(RemoteForeground(comm: "/opt/homebrew/bin/codex", command: "codex --yolo"))
+        #expect(pane.agentIcon == .codex)
+    }
+
+    @Test
+    func remote_pane_matches_a_version_named_agent_by_its_command_line() {
+        // Claude Code's native install: macOS `ps -o comm=` gives the versioned
+        // binary's path, and only args names the CLI.
+        let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        pane.applyRemoteForeground(RemoteForeground(
+            comm: "/Users/me/.local/share/claude/versions/2.1.207",
+            isIdle: false,
+            command: "claude --resume"
+        ))
+        #expect(pane.agentIcon == .claude)
+    }
+
+    @Test
+    func remote_pane_matches_an_interpreter_run_agent_by_its_script() {
+        let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        pane.applyRemoteForeground(RemoteForeground(
+            comm: "node",
+            isIdle: false,
+            command: "node /usr/local/lib/node_modules/@google/gemini-cli/bin/gemini"
+        ))
+        #expect(pane.agentIcon == .gemini)
+    }
+
+    @Test
+    func remote_pane_loses_its_agent_when_the_shell_returns() {
+        let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        pane.applyRemoteForeground(RemoteForeground(comm: "2.1.207", isIdle: false, command: "claude"))
+        #expect(pane.agentIcon == .claude)
+        pane.applyRemoteForeground(RemoteForeground(comm: "-zsh", isIdle: true, command: "-zsh"))
+        #expect(pane.agentIcon == nil)
+    }
+
+    @Test
+    func remote_pane_keeps_its_agent_through_a_probe_blip() {
+        // nil (session missing from a successful probe) changes nothing, as
+        // for the name and the command.
+        let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        pane.applyRemoteForeground(RemoteForeground(comm: "2.1.207", isIdle: false, command: "claude"))
+        pane.applyRemoteForeground(nil)
+        #expect(pane.agentIcon == .claude)
+    }
+
+    @Test
+    func remote_pane_shows_no_agent_for_an_ordinary_program() {
+        let pane = Pane(projectPath: "me@host.example:proj", projectID: UUID())
+        pane.applyRemoteForeground(RemoteForeground(comm: "btop", isIdle: false, command: "btop --utf-force"))
+        #expect(pane.agentIcon == nil)
+    }
+
     // MARK: - Close confirmation (needsConfirmClose)
 
     @Test
