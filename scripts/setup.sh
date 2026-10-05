@@ -47,8 +47,14 @@ GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-09-30}"
 # is exactly what a stale CI cache did once — `Macterm/Resources/zmx` rides the
 # GhosttyKit cache, whose key hashes THIS file, so a zmx bump must change it.
 #
-# build-2026-09-26: upstream through #266 (a kitty keyboard status reply no
-# longer takes leadership) + downstream patches 0001–0004.
+# build-2026-10-05: upstream through 2d23c0d (#272 symlink-loop fix; a passive
+# client's terminal query replies — DA, DECRPM, kitty flags — no longer take
+# leadership, which is what a mirror pane answering a query used to do; the
+# scoped-history Capture message at wire tag 22) + downstream patches
+# 0001–0004, with 0003's Claim tag moved from 22 to 23 because upstream took
+# 22 (thdxg/zmx#9). 0001 and 0002 are no-ops against this upstream. A session
+# daemon left over from an older build ignores the new tag until the session
+# is recreated; leadership then still moves on the next keystroke.
 ZMX_TAG="${ZMX_TAG:-build-2026-10-05}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
