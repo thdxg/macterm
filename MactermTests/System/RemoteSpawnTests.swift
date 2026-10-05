@@ -85,11 +85,11 @@ struct RemoteSpawnTests {
         // Claude Code sends OSC 9;4 progress — the agent's busy/done dot —
         // only to TERM_PROGRAM=ghostty at 1.2.0 or later, and ssh carries
         // neither variable on its own.
-        let cmd = RemoteSpawn.paneCommand(
-            remote: remote, sessionName: "macterm-api-abc123", terminalVersion: "1.3.2-main+b368389"
-        ) ?? ""
-        #expect(cmd.contains("TERM_PROGRAM=ghostty; export TERM_PROGRAM;"))
-        #expect(cmd.contains("TERM_PROGRAM_VERSION=1.3.2-main+b368389; export TERM_PROGRAM_VERSION;"))
+        let cmd = RemoteSpawn.paneCommand(remote: remote, sessionName: "macterm-api-abc123") ?? ""
+        #expect(cmd.contains(RemoteSpawn.remoteTerminalProgramPreamble))
+        #expect(RemoteSpawn.remoteTerminalProgramPreamble.hasPrefix("TERM_PROGRAM=ghostty; export TERM_PROGRAM; "))
+        let preamble = RemoteSpawn.terminalProgramPreamble(version: "1.3.2-main+b368389")
+        #expect(preamble.contains("TERM_PROGRAM_VERSION=1.3.2-main+b368389; export TERM_PROGRAM_VERSION;"))
         let op = RemoteSpawn.opArgv(remote: remote, zmxArguments: ["ls"])?.joined(separator: " ") ?? ""
         let probe = RemoteSpawn.foregroundProbeArgv(remote: remote)?.joined(separator: " ") ?? ""
         #expect(!op.contains("TERM_PROGRAM"))
@@ -99,7 +99,7 @@ struct RemoteSpawnTests {
     @Test
     func terminal_program_preamble_drops_a_version_that_is_not_plain() {
         for version in [nil, "", "1.3; rm -rf ~", "1.3 beta", "1.3\"", "$(id)"] {
-            let preamble = RemoteSpawn.remoteTerminalProgramPreamble(version: version)
+            let preamble = RemoteSpawn.terminalProgramPreamble(version: version)
             #expect(preamble == "TERM_PROGRAM=ghostty; export TERM_PROGRAM; ")
         }
     }

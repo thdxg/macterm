@@ -12,8 +12,9 @@ final class GhosttyApp {
 
     /// libghostty's version string (`1.3.2-main+b368389`), the value it sets
     /// as `TERM_PROGRAM_VERSION` in a local pane. A build constant, so
-    /// `ghostty_info` needs no `ghostty_init` first. nil if it comes back empty.
-    static let version: String? = {
+    /// `ghostty_info` needs no `ghostty_init` first, and no actor either, so
+    /// `RemoteSpawn`'s constants can read it. nil if it comes back empty.
+    nonisolated static let version: String? = {
         let info = ghostty_info()
         guard let pointer = info.version, info.version_len > 0 else { return nil }
         let bytes = UnsafeRawBufferPointer(start: pointer, count: Int(info.version_len))

@@ -612,8 +612,7 @@ final class GhosttyTerminalNSView: NSView {
             // because there's no BatchMode: prompts render in the pane, and
             // any connect failure surfaces on ghostty's abnormal-exit screen.
             if let sshCommand = RemoteSpawn.paneCommand(
-                remote: remoteSpec, sessionName: sessionName, zmxPath: remoteZmxPath,
-                terminalVersion: GhosttyApp.version
+                remote: remoteSpec, sessionName: sessionName, zmxPath: remoteZmxPath
             ) {
                 config.command = cString(sshCommand)
             }

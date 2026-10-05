@@ -160,12 +160,15 @@ enum RemoteSpawn {
     /// only for `TERM_PROGRAM=ghostty` at version 1.2.0 or later, so a remote
     /// agent showed its logo and never its status.
     ///
-    /// `version` is libghostty's own (`GhosttyApp.version`), exactly what a
-    /// local pane sees. It is dropped unless it is all `[A-Za-z0-9.+_-]`, so
-    /// nothing from it can reach the shell as syntax; `TERM_PROGRAM` is
-    /// exported regardless. Like COLORTERM, only sessions created from here on
-    /// pick it up.
-    static func remoteTerminalProgramPreamble(version: String?) -> String {
+    /// The version is libghostty's own (`GhosttyApp.version`), exactly what a
+    /// local pane sees, and like the rest a process constant. Like COLORTERM,
+    /// only sessions created from here on pick it up.
+    static let remoteTerminalProgramPreamble = terminalProgramPreamble(version: GhosttyApp.version)
+
+    /// Testable core of `remoteTerminalProgramPreamble`. The version is
+    /// dropped unless it is all `[A-Za-z0-9.+_-]`, so nothing from it can
+    /// reach the shell as syntax; `TERM_PROGRAM` is exported regardless.
+    static func terminalProgramPreamble(version: String?) -> String {
         var preamble = "TERM_PROGRAM=ghostty; export TERM_PROGRAM; "
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.+_-")
         if let version, !version.isEmpty, version.unicodeScalars.allSatisfy(allowed.contains) {
@@ -203,14 +206,8 @@ enum RemoteSpawn {
     /// Delivered as `sh -c '<single-quote-free script>'` (see `remoteShell`):
     /// portable across every `/bin/sh`, and the single-quoted argument
     /// tokenizes identically whether sshd hands the outer string to bash, zsh,
-    /// fish, or nu. `terminalVersion` is libghostty's version, exported as
-    /// `TERM_PROGRAM_VERSION` (see `remoteTerminalProgramPreamble`).
-    static func paneCommand(
-        remote: ProjectPath,
-        sessionName: String,
-        zmxPath: String? = nil,
-        terminalVersion: String? = nil
-    ) -> String? {
+    /// fish, or nu.
+    static func paneCommand(remote: ProjectPath, sessionName: String, zmxPath: String? = nil) -> String? {
         guard case let .remote(user, host, directory) = remote else { return nil }
         // On failure DON'T let the script exit — that closes the pane with no
         // explanation (the surface's command exiting fires closeSurface).
@@ -225,7 +222,7 @@ enum RemoteSpawn {
         // the pane. No `-l` (unportable — see remoteShell).
         let fallbackShell = "exec ${SHELL:-/bin/sh}"
         let preamble = remoteEnvPreamble + remoteTermPreamble + remoteColorPreamble
-            + remoteTerminalProgramPreamble(version: terminalVersion)
+            + remoteTerminalProgramPreamble
         let script = assertSingleQuoteFree(preamble + [
             zmxPresenceGuard(zmx: zmx, fallbackShell: fallbackShell),
             "cd \(quotedDir) || "
