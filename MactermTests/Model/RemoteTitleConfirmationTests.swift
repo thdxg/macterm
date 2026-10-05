@@ -63,6 +63,18 @@ struct RemoteTitleConfirmationTests {
     }
 
     @Test
+    func the_same_title_held_again_leaves_the_probe_in_flight_valid() {
+        // A program re-emitting its idle title must not keep voiding probes,
+        // or a title re-emitted faster than a round trip is never confirmed.
+        var confirmation = RemoteTitleConfirmation()
+        confirmation.hold("✳ task")
+        confirmation.noteProbeDispatched()
+        confirmation.hold("✳ task")
+        #expect(confirmation.resolve(programInFront: true) == .adopt("✳ task"))
+        #expect(!confirmation.awaitsProbe)
+    }
+
+    @Test
     func dropping_the_held_title_keeps_a_demoted_one() {
         var confirmation = RemoteTitleConfirmation()
         confirmation.demoteShown()

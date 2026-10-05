@@ -56,8 +56,14 @@ struct RemoteTitleConfirmation: Equatable {
         case clear
     }
 
-    /// Hold a title reported outside a run. The newest one wins.
+    /// Hold a title reported outside a run. The newest one wins, but the
+    /// same title held again changes nothing: a program that re-emits its
+    /// idle title on every redraw would otherwise advance the revision each
+    /// time, voiding any probe already in flight, and a title re-emitted
+    /// more often than a probe round trip (~3s plus the ssh connect) would
+    /// never be confirmed and shown.
     mutating func hold(_ title: String) {
+        guard title != pending else { return }
         pending = title
         revision &+= 1
     }
