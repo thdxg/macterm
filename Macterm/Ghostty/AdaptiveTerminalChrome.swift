@@ -63,7 +63,7 @@ final class AdaptiveTerminalChrome {
             clearPresentation(of: view)
         }
         for window in windows {
-            WindowAppearance.updateTerminalPaintRegions(in: window, rects: [])
+            WindowAppearance.updateTerminalPaintRegions(in: window, regions: [])
             GhosttyApp.shared.adoptAdaptiveBackgroundColor(nil, for: window)
         }
     }
@@ -277,19 +277,22 @@ final class AdaptiveTerminalChrome {
         // tinted backdrop under it is a second layer of the same color: the
         // pane composites to `1-(1-opacity)²` while the chrome stays at plain
         // `opacity`, which reads as the TUI being far more solid than the app
-        // around it. Hand those regions to the backdrop so it cuts its tint
-        // there and both surfaces carry exactly one tinted layer.
+        // around it. Hand those panes to the backdrop so it cuts its tint
+        // under them, refilling the unpainted margin — libghostty's
+        // `window-padding` — in the pane's own color, so a split pane's
+        // padding matches its TUI rather than framing it in the theme.
         if let previous = lastPaintRegionWindow, previous !== window, !isOverlayPanel {
-            WindowAppearance.updateTerminalPaintRegions(in: previous, rects: [])
+            WindowAppearance.updateTerminalPaintRegions(in: previous, regions: [])
         }
         WindowAppearance.updateTerminalPaintRegions(
             in: window,
-            rects: zip(views, candidates).compactMap { view, color in
-                Self.tintHole(
+            regions: zip(views, candidates).compactMap { view, color in
+                Self.paintRegion(
                     color: color,
+                    frame: view.bounds,
                     paintedRect: view.sampledPaintedRect,
                     hiddenInLayout: view.hiddenInLayout
-                ).map { view.convert($0, to: nil) }
+                ).map { $0.inWindow(of: view) }
             }
         )
         // A lone pane can lend its color to the whole window. In a split, each
@@ -310,10 +313,11 @@ final class AdaptiveTerminalChrome {
         color.alphaComponent >= 0.999 ? color : nil
     }
 
-    /// The hole a pane cuts in the window tint (in the pane's coordinates), or
-    /// nil when it cuts none: no detected color, an opaque one (the pane fill
-    /// stands in for the tint there), no sampled paint yet — or a pane the
-    /// layout is holding invisible behind a zoomed sibling.
+    /// The pane's claim on the window tint (in the pane's coordinates): its
+    /// whole frame cut out and refilled in its color, except under its paint.
+    /// Nil when it claims none: no detected color, an opaque one (the pane
+    /// fill stands in for the tint there), no sampled paint yet — or a pane
+    /// the layout is holding invisible behind a zoomed sibling.
     ///
     /// That last case is why this is a rule and not two guards inline. A
     /// zoomed-away pane stays mounted at opacity 0 with its frame, its
@@ -323,9 +327,14 @@ final class AdaptiveTerminalChrome {
     /// on top of it, and with the pane invisible the cut showed the bare
     /// material — the desktop through the window — inside whatever pane was
     /// zoomed over it.
-    static func tintHole(color: NSColor?, paintedRect: CGRect?, hiddenInLayout: Bool) -> CGRect? {
-        guard !hiddenInLayout, let color, paneFill(color) == nil else { return nil }
-        return paintedRect
+    static func paintRegion(
+        color: NSColor?,
+        frame: CGRect,
+        paintedRect: CGRect?,
+        hiddenInLayout: Bool
+    ) -> TerminalPaintRegion? {
+        guard !hiddenInLayout, let color, paneFill(color) == nil, let paintedRect else { return nil }
+        return TerminalPaintRegion(frame: frame, painted: paintedRect, color: color.withAlphaComponent(1).cgColor)
     }
 
     /// The animated split layout hid this pane behind a zoomed sibling, or

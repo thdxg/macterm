@@ -97,48 +97,94 @@ func rendererQuantizedAlpha(_ opacity: Double) -> CGFloat {
     CGFloat(UInt8(clamping: Int(255 * max(0, min(1, opacity))))) / 255
 }
 
+/// A pane's claim on the window tint, in a container's coordinates: the
+/// pane's whole `frame` is cut out of the window tint and refilled with the
+/// pane's own `color` at the window opacity, except under `painted`, where the
+/// terminal's cells already carry that color at that opacity.
+struct TerminalPaintRegion: Equatable {
+    var frame: CGRect
+    var painted: CGRect
+    /// The pure hue; the cutout applies the window opacity itself.
+    var color: CGColor
+
+    /// This region, given in `view`'s coordinates, in its window's.
+    func inWindow(of view: NSView) -> TerminalPaintRegion {
+        TerminalPaintRegion(frame: view.convert(frame, to: nil), painted: view.convert(painted, to: nil), color: color)
+    }
+
+    /// This region, given in window coordinates, in `view`'s.
+    func fromWindow(into view: NSView) -> TerminalPaintRegion {
+        TerminalPaintRegion(frame: view.convert(frame, from: nil), painted: view.convert(painted, from: nil), color: color)
+    }
+}
+
 /// The cut a window's tinted backdrop takes where a terminal is painting its
-/// own background at the window opacity.
+/// own background at the window opacity, and the pane-colored tint that
+/// replaces it around that paint.
 ///
-/// Both translucency paths need it for the same reason. The tint is one layer
-/// at `opacity`; a TUI's cells are a second layer at the same `opacity` on top
-/// of it, so the pane composites to `1-(1-opacity)²` while the chrome beside it
-/// stays at plain `opacity` — the pane reads near-solid next to a translucent
-/// app. Cutting the tint under the paint leaves exactly one tinted layer
-/// everywhere: the terminal's own inside the paint, the backdrop's outside it.
-/// Only the tint is cut, never the material or blur behind it, so both
-/// surfaces keep the same backdrop.
+/// Both translucency paths need the cut for the same reason. The tint is one
+/// layer at `opacity`; a TUI's cells are a second layer at the same `opacity`
+/// on top of it, so the pane composites to `1-(1-opacity)²` while the chrome
+/// beside it stays at plain `opacity` — the pane reads near-solid next to a
+/// translucent app. Cutting the tint under the paint leaves exactly one tinted
+/// layer everywhere: the terminal's own inside the paint, the backdrop's
+/// outside it. Only the tint is cut, never the material or blur behind it, so
+/// both surfaces keep the same backdrop.
+///
+/// The refill is what gives a pane its *padding*. libghostty leaves
+/// `window-padding` unpainted, so inside the paint the pane shows the TUI's
+/// color and in the margin around it whatever the window tint is — the TUI's
+/// color only while a lone pane has lent it to the whole window. In a split
+/// the window keeps the configured theme, and every pane's margin showed that
+/// theme as a frame around the TUI. So the cut is the whole pane, and the
+/// margin is refilled with the pane's own color at the same opacity, on a
+/// sibling layer the mask doesn't reach. The refill is cut under the paint
+/// for the same double-layer reason the tint is.
 struct TintCutout {
     private let mask = CAShapeLayer()
-    private var holes: [CGRect] = []
+    private var regions: [TerminalPaintRegion] = []
 
     /// Returns true when the regions actually changed — this runs on every
-    /// sample, and rebuilding an identical mask is wasted render work.
-    mutating func set(_ rects: [CGRect]) -> Bool {
-        guard rects != holes else { return false }
-        holes = rects
+    /// sample, and rebuilding identical layers is wasted render work.
+    mutating func set(_ regions: [TerminalPaintRegion]) -> Bool {
+        guard regions != self.regions else { return false }
+        self.regions = regions
         return true
     }
 
-    /// Cut `view` (a tinted layer) to the regions, which are in `container`'s
-    /// coordinates.
+    /// Cut `tint` (a tinted layer) around the regions and lay their refills on
+    /// `refill`, a sibling above it. Regions are in `container`'s coordinates;
+    /// `alpha` is the opacity the tint itself is drawn at.
     @MainActor
-    func apply(to view: NSView, in container: NSView) {
-        guard let layer = view.layer else { return }
-        guard !holes.isEmpty else {
+    func apply(to tint: NSView, refill: NSView, alpha: CGFloat, in container: NSView) {
+        refill.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
+        guard let layer = tint.layer else { return }
+        guard !regions.isEmpty else {
             layer.mask = nil
             return
         }
         let path = CGMutablePath()
-        path.addRect(view.bounds)
-        for hole in holes {
-            path.addRect(view.convert(hole, from: container))
+        path.addRect(tint.bounds)
+        for region in regions {
+            path.addRect(tint.convert(region.frame, from: container))
         }
-        mask.frame = view.bounds
+        mask.frame = tint.bounds
         mask.fillRule = .evenOdd
         mask.fillColor = NSColor.black.cgColor
         mask.path = path
         layer.mask = mask
+
+        for region in regions {
+            let margin = CAShapeLayer()
+            let outline = CGMutablePath()
+            outline.addRect(refill.convert(region.frame, from: container))
+            outline.addRect(refill.convert(region.painted, from: container))
+            margin.frame = refill.bounds
+            margin.fillRule = .evenOdd
+            margin.fillColor = region.color.copy(alpha: alpha)
+            margin.path = outline
+            refill.layer?.addSublayer(margin)
+        }
     }
 }
 
@@ -151,8 +197,11 @@ struct TintCutout {
 /// it, and mirrors how the glass path installs `MactermGlassView`.
 final class MactermTintBackdropView: NSView {
     private let tintView = NSView()
+    /// The pane-colored refills of `TintCutout`, above the (masked) tint.
+    private let refillView = NSView()
     private var topConstraint: NSLayoutConstraint!
     private var cutout = TintCutout()
+    private var tintAlpha: CGFloat = 1
 
     init(topOffset: CGFloat) {
         super.init(frame: .zero)
@@ -166,6 +215,15 @@ final class MactermTintBackdropView: NSView {
             tintView.leadingAnchor.constraint(equalTo: leadingAnchor),
             tintView.bottomAnchor.constraint(equalTo: bottomAnchor),
             tintView.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+        refillView.translatesAutoresizingMaskIntoConstraints = false
+        refillView.wantsLayer = true
+        addSubview(refillView, positioned: .above, relativeTo: tintView)
+        NSLayoutConstraint.activate([
+            refillView.topAnchor.constraint(equalTo: tintView.topAnchor),
+            refillView.leadingAnchor.constraint(equalTo: tintView.leadingAnchor),
+            refillView.bottomAnchor.constraint(equalTo: tintView.bottomAnchor),
+            refillView.trailingAnchor.constraint(equalTo: tintView.trailingAnchor),
         ])
     }
 
@@ -184,8 +242,9 @@ final class MactermTintBackdropView: NSView {
     }
 
     func configure(backgroundColor: NSColor, backgroundOpacity: Double, cornerRadius: CGFloat?) {
+        tintAlpha = rendererQuantizedAlpha(backgroundOpacity)
         tintView.layer?.backgroundColor = backgroundColor
-            .withAlphaComponent(rendererQuantizedAlpha(backgroundOpacity))
+            .withAlphaComponent(tintAlpha)
             .cgColor
         tintView.layer?.cornerRadius = cornerRadius ?? 0
         // The system's corners are continuous. Inside a titled window the
@@ -194,14 +253,14 @@ final class MactermTintBackdropView: NSView {
         tintView.layer?.cornerCurve = .continuous
     }
 
-    func setTintHoles(_ rects: [CGRect]) {
-        guard cutout.set(rects) else { return }
-        cutout.apply(to: tintView, in: self)
+    func setPaintRegions(_ regions: [TerminalPaintRegion]) {
+        guard cutout.set(regions) else { return }
+        cutout.apply(to: tintView, refill: refillView, alpha: tintAlpha, in: self)
     }
 
     override func layout() {
         super.layout()
-        cutout.apply(to: tintView, in: self)
+        cutout.apply(to: tintView, refill: refillView, alpha: tintAlpha, in: self)
     }
 }
 
@@ -235,8 +294,11 @@ final class MactermTintBackdropView: NSView {
 final class MactermGlassView: NSView {
     private let glassEffectView = NSGlassEffectView()
     private let tintView = NSView()
+    /// The pane-colored refills of `TintCutout`, above the (masked) tint.
+    private let refillView = NSView()
     private var topConstraint: NSLayoutConstraint!
     private var tintCutout = TintCutout()
+    private var tintAlpha: CGFloat = 1
 
     init(topOffset: CGFloat) {
         super.init(frame: .zero)
@@ -268,6 +330,15 @@ final class MactermGlassView: NSView {
             tintView.bottomAnchor.constraint(equalTo: glassEffectView.bottomAnchor),
             tintView.trailingAnchor.constraint(equalTo: glassEffectView.trailingAnchor),
         ])
+        refillView.translatesAutoresizingMaskIntoConstraints = false
+        refillView.wantsLayer = true
+        addSubview(refillView, positioned: .above, relativeTo: tintView)
+        NSLayoutConstraint.activate([
+            refillView.topAnchor.constraint(equalTo: tintView.topAnchor),
+            refillView.leadingAnchor.constraint(equalTo: tintView.leadingAnchor),
+            refillView.bottomAnchor.constraint(equalTo: tintView.bottomAnchor),
+            refillView.trailingAnchor.constraint(equalTo: tintView.trailingAnchor),
+        ])
     }
 
     @available(*, unavailable)
@@ -283,8 +354,9 @@ final class MactermGlassView: NSView {
     ) {
         glassEffectView.style = style
         glassEffectView.cornerRadius = cornerRadius ?? 0
+        tintAlpha = rendererQuantizedAlpha(backgroundOpacity)
         tintView.layer?.backgroundColor = backgroundColor
-            .withAlphaComponent(rendererQuantizedAlpha(backgroundOpacity))
+            .withAlphaComponent(tintAlpha)
             .cgColor
         tintView.layer?.cornerRadius = cornerRadius ?? 0
         tintView.layer?.cornerCurve = .continuous
@@ -294,21 +366,22 @@ final class MactermGlassView: NSView {
         topConstraint.constant = offset
     }
 
-    /// Cut the tint away under regions a terminal is already painting itself at
-    /// the window opacity (`rects` in this view's coordinates). The glass
-    /// material stays, so the pane and the chrome sit on the same backdrop.
-    func setTintHoles(_ rects: [CGRect]) {
-        guard tintCutout.set(rects) else { return }
-        applyTintHoles()
+    /// Cut the tint away under panes painting their own background at the
+    /// window opacity, and refill their margins in their own colors (`regions`
+    /// in this view's coordinates). The glass material stays, so the pane and
+    /// the chrome sit on the same backdrop.
+    func setPaintRegions(_ regions: [TerminalPaintRegion]) {
+        guard tintCutout.set(regions) else { return }
+        applyPaintRegions()
     }
 
     override func layout() {
         super.layout()
-        applyTintHoles()
+        applyPaintRegions()
     }
 
-    private func applyTintHoles() {
-        tintCutout.apply(to: tintView, in: self)
+    private func applyPaintRegions() {
+        tintCutout.apply(to: tintView, refill: refillView, alpha: tintAlpha, in: self)
     }
 }
 
@@ -845,16 +918,17 @@ enum WindowAppearance {
         panel.invalidateShadow()
     }
 
-    /// Hand the window's tinted backdrop the regions a terminal is painting
-    /// itself, in window coordinates, so the tint is cut away there. An opaque
+    /// Hand the window's tinted backdrop the panes painting their own
+    /// background, in window coordinates, so the tint is cut away under them
+    /// and their margins refilled in their colors (`TintCutout`). An opaque
     /// window has no tint to cut and is left alone.
-    static func updateTerminalPaintRegions(in window: NSWindow?, rects: [CGRect]) {
+    static func updateTerminalPaintRegions(in window: NSWindow?, regions: [TerminalPaintRegion]) {
         guard let window else { return }
         if glassSupported, #available(macOS 26.0, *), let glass = existingGlass(in: window) {
-            glass.setTintHoles(rects.map { glass.convert($0, from: nil) })
+            glass.setPaintRegions(regions.map { $0.fromWindow(into: glass) })
         }
         guard let backdrop = existingTintBackdrop(in: window) else { return }
-        backdrop.setTintHoles(rects.map { backdrop.convert($0, from: nil) })
+        backdrop.setPaintRegions(regions.map { $0.fromWindow(into: backdrop) })
     }
 
     /// Install (if needed) and configure the flat tinted backdrop for the
