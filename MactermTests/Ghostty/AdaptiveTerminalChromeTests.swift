@@ -42,4 +42,27 @@ struct AdaptiveTerminalChromeTests {
             AdaptiveTerminalChrome.tintHole(color: translucent, paintedRect: paint, hiddenInLayout: true) == nil
         )
     }
+
+    /// libghostty reports an OSC 11 color as a bare RGB triple. Under the
+    /// user's `background-opacity-cells` the cells carrying it are painted at
+    /// the window opacity, so the report is read at that alpha — taken as
+    /// opaque, it answered a translucent paint with an opaque pane fill and
+    /// no tint hole (Helix 25.07 reports its background on `:theme`).
+    @Test
+    func a_reported_color_is_painted_at_the_cell_opacity() {
+        let alpha = AdaptiveTerminalChrome.reportedPaintAlpha(backgroundOpacityCells: true, windowOpacity: 0.8)
+        #expect(alpha == 0.8)
+        let reported = opaque.withAlphaComponent(alpha)
+        #expect(AdaptiveTerminalChrome.paneFill(reported) == nil)
+        #expect(AdaptiveTerminalChrome.tintHole(color: reported, paintedRect: paint, hiddenInLayout: false) == paint)
+    }
+
+    /// Without the flag every explicitly colored cell is opaque, and so is
+    /// the report; a window at full opacity paints opaque either way.
+    @Test
+    func a_reported_color_is_opaque_when_cells_are() {
+        #expect(AdaptiveTerminalChrome.reportedPaintAlpha(backgroundOpacityCells: false, windowOpacity: 0.8) == 1)
+        #expect(AdaptiveTerminalChrome.reportedPaintAlpha(backgroundOpacityCells: true, windowOpacity: 1) == 1)
+        #expect(AdaptiveTerminalChrome.reportedPaintAlpha(backgroundOpacityCells: true, windowOpacity: 1.5) == 1)
+    }
 }

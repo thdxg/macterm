@@ -437,6 +437,7 @@ final class GhosttyApp {
         static let bellAudioVolume = GhosttyConfigKey.double("bell-audio-volume")
         static let autoSecureInput = GhosttyConfigKey.bool("macos-auto-secure-input")
         static let secureInputIndication = GhosttyConfigKey.bool("macos-secure-input-indication")
+        static let backgroundOpacityCells = GhosttyConfigKey.bool("background-opacity-cells")
         static let tabInheritWorkingDirectory = GhosttyConfigKey.bool("tab-inherit-working-directory")
         static let splitInheritWorkingDirectory = GhosttyConfigKey.bool("split-inherit-working-directory")
     }
@@ -479,6 +480,14 @@ final class GhosttyApp {
     /// badge while secure input is active.
     var secureInputIndication: Bool {
         read(Keys.secureInputIndication) ?? true
+    }
+
+    /// `background-opacity-cells`: whether the renderer paints explicitly
+    /// colored cell backgrounds at `background-opacity` rather than opaque.
+    /// Read by the adaptive chrome, which has to know the alpha a TUI's paint
+    /// arrives at — a reported OSC 11 color says nothing about it.
+    var backgroundOpacityCells: Bool {
+        read(Keys.backgroundOpacityCells) ?? false
     }
 
     /// `macos-hidden`: whether the app runs as an accessory (no Dock tile, no

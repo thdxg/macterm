@@ -95,22 +95,39 @@ final class AdaptiveTerminalChrome {
     }
 
     /// OSC 11 is explicit terminal-native evidence and takes effect
-    /// immediately; inferred IOSurface colors retain two-observation
-    /// stabilization.
-    func terminalBackgroundDidChange(_ color: NSColor, in view: GhosttyTerminalNSView) {
+    /// immediately, over whatever inference holds (`currentCandidate`);
+    /// inferred IOSurface colors retain two-observation stabilization.
+    ///
+    /// A report is presented, never written into the inference state. It
+    /// used to reset the stabilizer to the reported color, which left the
+    /// pane's *sampled* color — the presentation's fallback — wherever
+    /// inference had last put it. libghostty reports a program's OSC 111
+    /// (Helix sends one on quit) as a change *to the configured background*,
+    /// which this read as "no candidate" and answered by resetting the
+    /// stabilizer to clear: the stale sampled color became the presentation,
+    /// and every later observation of the unpainted shell was a no-op against
+    /// a stabilizer already clear — a tint hole over bare material that only
+    /// a new surface's config reload could repair. Inference keeps running
+    /// under a report, so withdrawing it lands on a current color and the
+    /// TUI's exit clears the way any other exit does.
+    func terminalBackgroundDidChange(_: NSColor, in view: GhosttyTerminalNSView) {
         guard shouldHandleEvent(from: view) else { return }
-        let candidate = effectiveCandidate(color)
-        var stabilizer = stabilizers[view.paneID] ?? AdaptiveTerminalBackgroundStabilizer()
-        stabilizer.reset(to: candidate)
-        stabilizers[view.paneID] = stabilizer
         refreshPresentation(for: monitoredViews())
+        // The repaint that comes with the report moves the paint too, and the
+        // hole under a translucently reported color is cut from the sampled
+        // geometry.
+        requestSamplingBurst(delay: 0.12, retries: 2)
     }
 
+    /// The surface's config changed and its report no longer stands
+    /// (`GhosttyTerminalNSView.surfaceConfigDidChange`). The presentation
+    /// falls back to the inferred color, which is current — see
+    /// `terminalBackgroundDidChange` — and is re-judged against the new
+    /// configured background by the samples that follow.
     func terminalBackgroundDidReset(in view: GhosttyTerminalNSView) {
         guard shouldHandleEvent(from: view) else { return }
-        stabilizers[view.paneID] = AdaptiveTerminalBackgroundStabilizer()
-        view.sampledDominantBackgroundColor = nil
-        scheduleSample(delay: 0)
+        refreshPresentation(for: monitoredViews())
+        requestSamplingBurst(delay: 0, retries: 2)
     }
 
     private func scheduleSample(delay: TimeInterval) {
@@ -170,12 +187,11 @@ final class AdaptiveTerminalChrome {
         var stabilizer = stabilizers[id]
             ?? AdaptiveTerminalBackgroundStabilizer(seededWith: view.sampledDominantBackgroundColor)
 
-        if let reported = effectiveCandidate(view.reportedBackgroundColor) {
-            stabilizer.reset(to: reported)
-            stabilizers[id] = stabilizer
-            return false
-        }
-
+        // A reported (OSC 11) color is presented over whatever this finds
+        // (`currentCandidate`) but never stops inference: the sampled color
+        // and paint geometry stay current, which is what the presentation
+        // falls back to the moment the report is withdrawn, and what cuts the
+        // tint under a translucently reported paint.
         var paintedBounds: CGRect?
         let candidate: NSColor? = if let surface = view.layer?.contents as? IOSurface {
             effectiveCandidate(
@@ -339,8 +355,33 @@ final class AdaptiveTerminalChrome {
     }
 
     private func currentCandidate(for view: GhosttyTerminalNSView) -> NSColor? {
-        effectiveCandidate(view.reportedBackgroundColor)
-            ?? effectiveCandidate(view.sampledDominantBackgroundColor)
+        reportedCandidate(for: view) ?? effectiveCandidate(view.sampledDominantBackgroundColor)
+    }
+
+    /// The pane's OSC 11 report as a candidate, carrying the alpha the
+    /// renderer paints it at. libghostty hands the report over as an RGB
+    /// triple — the color the program asked for — and it used to be taken as
+    /// opaque, which under the user's `background-opacity-cells` is wrong: the
+    /// cells carrying that color are painted at the window opacity, and an
+    /// opaque candidate answered them with an opaque pane fill and no tint
+    /// hole, the one solid slab in a translucent window. Helix 25.07 reports
+    /// its theme's background on `:theme`, which is where it showed.
+    private func reportedCandidate(for view: GhosttyTerminalNSView) -> NSColor? {
+        guard let reported = view.reportedBackgroundColor else { return nil }
+        let alpha = Self.reportedPaintAlpha(
+            backgroundOpacityCells: GhosttyApp.shared.backgroundOpacityCells,
+            windowOpacity: Preferences.shared.windowOpacity
+        )
+        return effectiveCandidate(reported.withAlphaComponent(alpha))
+    }
+
+    /// The alpha a terminal paints a reported background at — the rule the
+    /// renderer applies to every explicitly colored cell
+    /// (`renderer/generic.zig`): the window opacity under
+    /// `background-opacity-cells`, opaque otherwise. Macterm forces
+    /// `background-opacity` to the window opacity, so the two agree.
+    static func reportedPaintAlpha(backgroundOpacityCells: Bool, windowOpacity: Double) -> CGFloat {
+        backgroundOpacityCells ? CGFloat(max(0, min(1, windowOpacity))) : 1
     }
 
     private func updateRetryTimer(isNeeded: Bool) {
