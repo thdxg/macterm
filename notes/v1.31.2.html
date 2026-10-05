@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.31.2 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li>AI agents running in a remote project now show their logo, busy and done status, and their own tab titles in the sidebar, just like local ones. (#473, #480)</li>
+<li>New installs open with a translucent, blurred window; if you never changed the opacity or blur sliders, you get the new look too. (#477)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li>The window background no longer turns into a solid slab or keeps a stale tint after Helix changes its theme or quits. (#479)</li>
+<li>A saved <code class="notranslate">sudo</code> password or key passphrase is now offered only to the real system program, never to a look-alike placed earlier on your PATH. (#468)</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Settings → Appearance → Auto-name tabs is gone: a tab is always named after the program running in it, falling back to the shell or host name when nothing is. (#472)</li>
+<li>Settings → Passwords: "Offer to save passwords" is now <strong>Enable password manager</strong>, a master switch that also turns autofill off, and "Ask for Touch ID" is now <strong>Require authentication</strong>. (#468)</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> and <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/timchesney/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/timchesney">@timchesney</a> for this release.</p>
+</body>
+</html>
