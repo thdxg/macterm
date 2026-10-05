@@ -256,14 +256,20 @@ enum RemoteSpawn {
     /// tty's foreground process — the same session→leader→tpgid→comm pipeline
     /// `ZmxForegroundResolver` runs locally, expressed as portable POSIX sh
     /// (Linux, BSD, macOS remotes). Emits
-    /// `session<TAB>comm<TAB>idleflag<TAB>args` lines; parsed by
+    /// `session<TAB>comm<TAB>idleflag<TAB>shellflag<TAB>args` lines; parsed by
     /// `RemoteForegroundResolver.parseProbeOutput`. The idle flag is the
     /// HOST's own verdict — `1` when the tty's foreground process group IS
     /// the session leader's (the shell owns its prompt), `0` when some other
     /// group holds it — so busyness never depends on the local Mac's shell
     /// database recognizing a remote-only shell; a failed pgid read emits an
     /// empty flag, which parses as "unknown" and falls back to the local
-    /// heuristic rather than inventing a verdict. `args` is the foreground's
+    /// heuristic rather than inventing a verdict. The shell flag is `1` when
+    /// the foreground's name is listed in the HOST's `/etc/shells`, so a
+    /// shell the Mac has never seen (`elvish`, `xonsh`) still counts as a
+    /// shell when it is nested inside the session's own; `0` otherwise, and
+    /// empty when the host has no `/etc/shells` to ask. Terminal multiplexers
+    /// are always `0`: Debian's tmux and screen packages add themselves to
+    /// `/etc/shells`, but `tmux attach` is a program to record and title. `args` is the foreground's
     /// full command line (the remote analogue of the local KERN_PROCARGS2
     /// argv that Save Layout records as `run:`) — it may contain tabs, so it
     /// is the LAST field, consumed as the unsplit remainder.
@@ -293,8 +299,18 @@ enum RemoteSpawn {
       if [ -n "$g" ]; then
         if [ "$t" = "$g" ]; then i=1; else i=0; fi
       fi
+      s=
+      if [ -r /etc/shells ]; then
+        s=0; b=${c##*/}; b=${b#-}
+        case "$b" in
+          tmux|screen|zellij) ;;
+          *) while read -r l; do
+               case "$l" in */"$b") s=1; break ;; esac
+             done < /etc/shells ;;
+        esac
+      fi
       a=$(ps -o args= -p "$t" 2>/dev/null)
-      printf "%s\\t%s\\t%s\\t%s\\n" "$n" "$c" "$i" "$a"
+      printf "%s\\t%s\\t%s\\t%s\\t%s\\n" "$n" "$c" "$i" "$s" "$a"
     done
     """
 

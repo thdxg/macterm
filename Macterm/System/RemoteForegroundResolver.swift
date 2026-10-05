@@ -17,16 +17,23 @@ struct RemoteForeground: Equatable {
     /// compute one (pgid read failure, older wire format) — consumers fall
     /// back to the local shell-database heuristic.
     let isIdle: Bool?
+    /// The host's own shell verdict: whether `comm` is listed in the host's
+    /// `/etc/shells`. nil when the probe couldn't say (no `/etc/shells`, or
+    /// a caller that has no probe line) — consumers then fall back to the
+    /// local shell database, which misses a shell only the host has.
+    let isShell: Bool?
     /// The full `ps -o args=` command line, nil when the probe line carried
     /// none. May describe a shell at its prompt — `Pane.applyRemoteForeground`
     /// decides whether it counts as a running command.
     let command: String?
 
-    /// `isIdle` defaults to nil (no host verdict) so name+command call sites
-    /// — tests, the name-only convenience — read unchanged.
-    init(comm: String, isIdle: Bool? = nil, command: String?) {
+    /// `isIdle` and `isShell` default to nil (no host verdict) so
+    /// name+command call sites — tests, the name-only convenience — read
+    /// unchanged.
+    init(comm: String, isIdle: Bool? = nil, isShell: Bool? = nil, command: String?) {
         self.comm = comm
         self.isIdle = isIdle
+        self.isShell = isShell
         self.command = command
     }
 }
@@ -96,7 +103,10 @@ final class RemoteForegroundResolver {
     /// only effect is *not* changing a name, so there's no state edge to poll.
     var isIdle: Bool { inflight.isEmpty }
 
-    init(minInterval: TimeInterval = 3) {
+    /// The per-host interval between scheduled probes.
+    nonisolated static let defaultMinInterval: TimeInterval = 3
+
+    init(minInterval: TimeInterval = defaultMinInterval) {
         self.minInterval = minInterval
     }
 
@@ -135,7 +145,14 @@ final class RemoteForegroundResolver {
             if pane.remoteProbePending { boundaryDests.insert(dest) }
         }
         for (dest, spec) in specByDest {
-            guard !authRefusedDests.contains(dest) else { continue }
+            guard !authRefusedDests.contains(dest) else {
+                // No probe will answer for this host, so nothing can confirm
+                // a title waiting on one.
+                for pane in panesByDest[dest] ?? [] {
+                    pane.abandonRemoteTitleConfirmation()
+                }
+                continue
+            }
             guard !inflight.contains(dest) else { continue }
             if !boundaryDests.contains(dest),
                let last = lastProbeAt[dest], now.timeIntervalSince(last) < minInterval { continue }
@@ -163,6 +180,11 @@ final class RemoteForegroundResolver {
             // tick retries. Logged once per failure, never surfaced — a
             // flaky link must not nag.
             logger.info("Remote foreground probe failed for \(dest, privacy: .public)")
+            // A title waiting on this probe would otherwise stay up for as
+            // long as the host is unreachable.
+            for pane in panes {
+                pane.abandonRemoteTitleConfirmation()
+            }
         case .authRefused:
             // The host denied our BatchMode auth — further probes can only
             // repeat the refusal (or re-raise a biometric key's dialog, the
@@ -175,6 +197,9 @@ final class RemoteForegroundResolver {
             ssh ControlMaster so probes reuse the pane's connection)
             """)
             authRefusedDests.insert(dest)
+            for pane in panes {
+                pane.abandonRemoteTitleConfirmation()
+            }
         case let .success(map):
             for pane in panes {
                 if let foreground = map[pane.sessionName] {
@@ -188,37 +213,50 @@ final class RemoteForegroundResolver {
                     // slot — otherwise the consumed request would strand it nil,
                     // and every close would take the conservative busy fallback.
                     pane.noteRemoteProbeMiss()
+                    // A named pane's miss is a blip (see `noteRemoteProbeMiss`):
+                    // its title waits for the next answer instead.
+                    if pane.foregroundProcessName == nil {
+                        pane.abandonRemoteTitleConfirmation()
+                    }
                 }
             }
         }
     }
 
-    /// Parse `session<TAB>comm<TAB>idleflag<TAB>args` probe lines into a
-    /// name → foreground map. The idle flag is the HOST's own verdict
-    /// (`1` = the session leader's process group owns the tty, i.e. the
-    /// shell sits at its prompt; `0` = some other group holds the
-    /// foreground) — absent or unparseable, it maps to nil and the sampling
+    /// Parse `session<TAB>comm<TAB>idleflag<TAB>shellflag<TAB>args` probe
+    /// lines into a name → foreground map. The idle flag is the HOST's own
+    /// verdict (`1` = the session leader's process group owns the tty, i.e.
+    /// the shell sits at its prompt; `0` = some other group holds the
+    /// foreground), and the shell flag is the host's `/etc/shells` verdict on
+    /// `comm` — absent or unparseable, either maps to nil and the sampling
     /// site falls back to the local-database heuristic. The args field is
     /// optional (a `ps` that reported nothing) and may itself contain tabs
     /// — it's the unsplit remainder of the line, which is why the
-    /// fixed-width flag sits before it. Two-field lines (degraded probes)
+    /// fixed-width flags sit before it. Two-field lines (degraded probes)
     /// still parse as name-only. Pure.
     nonisolated static func parseProbeOutput(_ stdout: String) -> [String: RemoteForeground] {
         var map: [String: RemoteForeground] = [:]
         for line in stdout.split(separator: "\n") {
-            let parts = line.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false)
+            let parts = line.split(separator: "\t", maxSplits: 4, omittingEmptySubsequences: false)
             guard parts.count >= 2 else { continue }
             let name = parts[0].trimmingCharacters(in: .whitespaces)
             let comm = parts[1].trimmingCharacters(in: .whitespaces)
             guard name.hasPrefix("macterm-"), !comm.isEmpty else { continue }
-            let flag = parts.count >= 3 ? parts[2].trimmingCharacters(in: .whitespaces) : ""
-            let isIdle: Bool? = switch flag {
-            case "1": true
-            case "0": false
-            default: nil
+            func flag(_ index: Int) -> Bool? {
+                guard parts.count > index else { return nil }
+                return switch parts[index].trimmingCharacters(in: .whitespaces) {
+                case "1": true
+                case "0": false
+                default: nil
+                }
             }
-            let args = parts.count > 3 ? parts[3].trimmingCharacters(in: .whitespaces) : ""
-            map[name] = RemoteForeground(comm: comm, isIdle: isIdle, command: args.isEmpty ? nil : args)
+            let args = parts.count > 4 ? parts[4].trimmingCharacters(in: .whitespaces) : ""
+            map[name] = RemoteForeground(
+                comm: comm,
+                isIdle: flag(2),
+                isShell: flag(3),
+                command: args.isEmpty ? nil : args
+            )
         }
         return map
     }

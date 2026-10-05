@@ -1408,8 +1408,11 @@ final class AppState {
                         // remote probe below. A pane holding a boundary
                         // request rides along from ANY project — a command
                         // finishing in a background project must still
-                        // rename its tab without waiting for a switch.
-                        if projectID == activeProjectID || pane.remoteProbePending {
+                        // rename its tab without waiting for a switch — and
+                        // so does a title waiting on a probe to confirm it.
+                        if projectID == activeProjectID || pane.remoteProbePending
+                            || pane.awaitsRemoteTitleConfirmation
+                        {
                             activeRemotePanes.append(pane)
                         }
                     } else {
@@ -1445,7 +1448,7 @@ final class AppState {
         // of waiting for an interaction.
         let panesToProbe = isAnyWindowVisible()
             ? activeRemotePanes
-            : activeRemotePanes.filter(\.remoteProbePending)
+            : activeRemotePanes.filter { $0.remoteProbePending || $0.awaitsRemoteTitleConfirmation }
         // The background-connections toggle gates ALL probe kinds — scheduled,
         // boundary, and priming requests alike — because each is a fresh ssh
         // connection, and one connection is one Touch ID dialog on a
@@ -1453,6 +1456,11 @@ final class AppState {
         // so the check lives here rather than inside the resolver.
         if !panesToProbe.isEmpty, Preferences.shared.backgroundSSHConnections {
             remoteForegroundResolver.refresh(panes: panesToProbe, probe: zmx.remoteForegrounds)
+        } else {
+            // Turned off with a title still waiting on a probe: none is coming.
+            for pane in panesToProbe {
+                pane.abandonRemoteTitleConfirmation()
+            }
         }
     }
 

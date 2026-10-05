@@ -249,6 +249,9 @@ struct RemoteSpawnTests {
         #expect(RemoteSpawn.foregroundProbeScript.contains("pgid"))
         // The full command line rides along for layout `run:` capture.
         #expect(RemoteSpawn.foregroundProbeScript.contains("ps -o args="))
+        // The shell verdict is the host's own /etc/shells, not the Mac's.
+        #expect(RemoteSpawn.foregroundProbeScript.contains("done < /etc/shells"))
+        #expect(RemoteSpawn.foregroundProbeScript.contains("tmux|screen|zellij) ;;"))
         // The sh -c wrapper only survives arbitrary login shells while the
         // script stays free of single quotes.
         #expect(!RemoteSpawn.foregroundProbeScript.contains("'"))

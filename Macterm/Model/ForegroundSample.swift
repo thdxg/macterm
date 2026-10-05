@@ -31,9 +31,9 @@ struct ForegroundSample: Equatable {
     var name: String?
 
     /// Whether `name` is a shell sitting at its prompt-owner position, judged
-    /// by the origin (locally: /etc/shells + login shell; remote: currently
-    /// the same local database — moving host-side is planned, and recording
-    /// the verdict here is what makes that swap a one-file change).
+    /// by the origin (locally: /etc/shells + login shell; remote: the host's
+    /// own verdicts, from its process groups and its /etc/shells, with the
+    /// local database only as a fallback — see `Pane.applyRemoteForeground`).
     var isIdleShell: Bool
 
     var origin: Origin

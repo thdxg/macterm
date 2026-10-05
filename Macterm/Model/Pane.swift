@@ -186,11 +186,21 @@ final class Pane: Identifiable {
             if oldValue == .done, completionFailed { completionFailed = false }
             // A remote pane's OSC title expires when its command ends — the
             // execution edge is the pid-change analogue local panes get from
-            // the poll (see `receiveRemoteReportedTitle`) — unless the probe
-            // still sees a program in front: an agent finishing a turn ends
-            // its run but keeps the foreground, and its idle title with it.
-            if isRemote, oldValue == .running, programTitle != nil, !remoteProgramHoldsForeground {
-                programTitle = nil
+            // the poll (see `receiveRemoteReportedTitle`). But an agent
+            // finishing a turn ends its run and keeps the foreground, so the
+            // title stays on screen, unconfirmed, until the probe this edge
+            // requests says whether a program is still in front
+            // (`RemoteTitleConfirmation`). The last sample is no guide either
+            // way: it may predate the program starting or quitting. With
+            // probing off no probe will answer, so the title goes now.
+            if isRemote, oldValue == .running, programTitle != nil {
+                if isRemoteProbingEnabled() {
+                    remoteTitleConfirmation.demoteShown()
+                    scheduleRemoteTitleRetries()
+                } else {
+                    programTitle = nil
+                    remoteTitleConfirmation.reset()
+                }
             }
             // Any execution transition on a remote pane is also a naming
             // boundary (idle→running: a program took the foreground;
@@ -246,8 +256,74 @@ final class Pane: Identifiable {
 
     /// The resolver fired a probe covering this pane's host — the pending
     /// boundary request is answered.
+    /// It is also the moment the probe's answer starts to count for a held
+    /// title (`RemoteTitleConfirmation.noteProbeDispatched`).
     func consumeRemoteProbeRequest() {
         remoteProbeRequest.consume()
+        remoteTitleConfirmation.noteProbeDispatched()
+    }
+
+    /// The remote title waiting on a probe (see `RemoteTitleConfirmation`).
+    @ObservationIgnored
+    private var remoteTitleConfirmation = RemoteTitleConfirmation()
+
+    /// Whether remote probes may run (Background SSH connections, #272).
+    /// Injectable so the title tests don't race the tests that turn the
+    /// shared preference off.
+    @ObservationIgnored
+    var isRemoteProbingEnabled: () -> Bool = { Preferences.shared.backgroundSSHConnections }
+
+    /// A remote title waits on the next probe, so the poll probes this pane
+    /// from any project. Unlike `remoteProbePending`, this keeps the
+    /// resolver's throttle.
+    var awaitsRemoteTitleConfirmation: Bool { remoteTitleConfirmation.awaitsProbe }
+
+    /// A wake for a title still waiting on a probe. The probe that would
+    /// confirm it may have been throttled or already in flight, and with
+    /// every window hidden the poll is paused, so nothing else would send
+    /// the next one. Bounded, so a pane no poll probes can't keep waking.
+    @ObservationIgnored
+    private var remoteTitleRetryWork: DispatchWorkItem?
+    @ObservationIgnored
+    private var remoteTitleRetriesLeft = 0
+    private let remoteTitleRetryDelay: TimeInterval
+
+    /// Just past the resolver's per-host interval, so the retry's probe isn't
+    /// throttled in turn.
+    nonisolated static let defaultRemoteTitleRetryDelay = RemoteForegroundResolver.defaultMinInterval + 0.25
+    static let remoteTitleRetryLimit = 3
+
+    /// Something new waits on a probe: start the retries afresh.
+    private func scheduleRemoteTitleRetries() {
+        remoteTitleRetriesLeft = Self.remoteTitleRetryLimit
+        guard remoteTitleRetryWork == nil else { return }
+        scheduleRemoteTitleRetry()
+    }
+
+    private func scheduleRemoteTitleRetry() {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            remoteTitleRetryWork = nil
+            guard remoteTitleConfirmation.awaitsProbe, remoteTitleRetriesLeft > 0 else { return }
+            remoteTitleRetriesLeft -= 1
+            NotificationCenter.default.post(name: .terminalPollEvent, object: self)
+            scheduleRemoteTitleRetry()
+        }
+        remoteTitleRetryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + remoteTitleRetryDelay, execute: work)
+    }
+
+    /// The probe can't answer for this pane: the host refused it or was
+    /// unreachable, the session was missing from the listing, Background SSH
+    /// is off, or the surface is going away. A title still waiting on a
+    /// probe goes, so the tab falls back to the process name instead of
+    /// keeping a title nothing can confirm.
+    func abandonRemoteTitleConfirmation() {
+        remoteTitleRetryWork?.cancel()
+        remoteTitleRetryWork = nil
+        guard remoteTitleConfirmation.awaitsProbe else { return }
+        if remoteTitleConfirmation.shownUnconfirmed { programTitle = nil }
+        remoteTitleConfirmation.reset()
     }
 
     /// The resolver's probe succeeded but its listing had no entry for this
@@ -419,6 +495,14 @@ final class Pane: Identifiable {
 
     func notePromptReturned() {
         executionTracker.notePromptReturned()
+        // On a remote pane, OSC 133;D is the host's shell saying it owns the
+        // prompt again. That is surer than any probe sample, so the program's
+        // title goes now. Agents don't emit OSC 133; the shell around them
+        // does.
+        if isRemote {
+            programTitle = nil
+            remoteTitleConfirmation.reset()
+        }
     }
 
     /// A progress report ended the pane's run: REMOVE or PAUSE, or ERROR when
@@ -552,6 +636,11 @@ final class Pane: Identifiable {
             allowInPlaceOutputStart: allowInPlaceOutputStart,
             hasContent: hasContent
         )
+        // A line sent before a probe confirmed the held title: whatever
+        // reported it is being given new work, and will title that. Only the
+        // held title goes; one on screen may be an agent's, which is exactly
+        // what the user is typing into.
+        if hasContent { remoteTitleConfirmation.dropPending() }
         acknowledgeCommandCompletion()
         NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
     }
@@ -626,15 +715,17 @@ final class Pane: Identifiable {
     }
 
     /// Remote-pane title path (#104): there is no local foreground pid to
-    /// gate provenance on (the local process is always `ssh`), so two remote
+    /// gate provenance on (the local process is always `ssh`), so remote
     /// signals stand in. A title arriving while a command runs (OSC 133 /
-    /// activity) is the program naming itself, and so is one arriving while
-    /// the probe sees a non-shell program in front — the remote form of the
-    /// local rule, and what keeps an agent's titles while it idles between
-    /// turns (Claude Code's `✳ task`, which no run state covers). One arriving
-    /// at the prompt is shell churn, discarded exactly like the local gate
-    /// discards it. Expiry is the running→ended edge in
-    /// `executionState.didSet`, or the probe reporting the shell again
+    /// activity / progress) is the program naming itself and is shown at
+    /// once. One arriving at a prompt OSC 133;D announced is shell churn,
+    /// discarded exactly like the local gate discards it. Any other title is
+    /// held until a probe sent after it sees a program in front (an agent
+    /// idling between turns: Claude Code's `✳ task`, which no run state
+    /// covers) or the shell (a prompt title from a host without shell
+    /// integration). See `RemoteTitleConfirmation`. Expiry is the
+    /// running→ended edge in `executionState.didSet`, OSC 133;D
+    /// (`notePromptReturned`), or the probe reporting the shell again
     /// (`applyRemoteForeground`).
     func receiveRemoteReportedTitle(_ title: String) {
         // A title arrival is a command boundary — wake the poll (it drives
@@ -643,23 +734,36 @@ final class Pane: Identifiable {
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .terminalPollEvent, object: nil)
         }
-        guard executionState == .running || remoteProgramHoldsForeground else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         // Discard a bare version number (see the local path) — e.g. remote
         // Claude Code emitting `2.1.202` as its title.
         guard !ProcessInspector.looksLikeVersionString(trimmed) else { return }
-        if trimmed != programTitle { programTitle = trimmed }
-        programTitlePID = nil
+        if executionState == .running {
+            remoteTitleConfirmation.reset()
+            if trimmed != programTitle { programTitle = trimmed }
+            programTitlePID = nil
+            return
+        }
+        guard !isShellAtPrompt else { return }
+        // Only a probe can vouch for it. With probing off, none ever will.
+        guard isRemoteProbingEnabled() else { return }
+        remoteTitleConfirmation.hold(trimmed)
+        scheduleRemoteTitleRetries()
     }
 
     /// Whether the remote probe's latest sample is a program rather than a
     /// shell — the host's own verdict and the shell name both, so a nested
     /// shell's prompt titles don't count. Lags the host by up to a probe
-    /// interval, which is why the run state also opens the title gate.
+    /// round trip, so it is never enough on its own to show a title (see
+    /// `RemoteTitleConfirmation`). A sample left over from before Background
+    /// SSH was turned off will never be refreshed, so it counts for nothing,
+    /// as in `ForegroundPolicy.needsConfirmClose`.
     private var remoteProgramHoldsForeground: Bool {
-        guard let sample = foregroundSample, sample.origin == .remoteProbe, let name = sample.name else { return false }
-        return !sample.isIdleShell && !ProcessInspector.isShellProcessName(name)
+        guard isRemoteProbingEnabled(),
+              let sample = foregroundSample, sample.origin == .remoteProbe, sample.name != nil
+        else { return false }
+        return !sample.isIdleShell && !remoteForegroundIsShell
     }
 
     /// The full command line of the remote foreground process, from the probe
@@ -676,41 +780,57 @@ final class Pane: Identifiable {
     /// Tier-2 naming input for remote panes (#104): the remote resolver's
     /// probed foreground for this pane's session. A macOS remote reports
     /// `comm` as a full executable path — keep the basename, matching local
-    /// kernel-comm behavior. nil (session missing from a successful probe)
+    /// kernel-comm behavior. A version-shaped `comm` (Claude Code's native
+    /// install sets its own to `2.1.207`) is named by its invoked name
+    /// instead, as `ProcessInspector.runningProcessName` falls back to the
+    /// executable locally. nil (session missing from a successful probe)
     /// keeps the last-known name and command: a blip must not flap tab titles.
     ///
-    /// The sample's idle verdict prefers the HOST's own reading
-    /// (`foreground.isIdle` — foreground pgid == session leader, computed
-    /// where the processes live), falling back to the local shell database
-    /// only when the probe couldn't compute one. The local database is wrong
-    /// in both directions across hosts: a remote-only login shell it doesn't
-    /// list would read busy at an idle prompt forever, and a NESTED shell
-    /// running inside the session shell would read idle even though closing
-    /// kills it — the host-side verdict matches libghostty's local surface
-    /// semantics (a nested shell is a running child) instead.
+    /// Both verdicts prefer the HOST's own reading, falling back to the local
+    /// shell database only when the probe couldn't give one. The idle verdict
+    /// (`foreground.isIdle`) is foreground pgid == session leader, and the
+    /// shell verdict (`foreground.isShell`) is the host's `/etc/shells`. The
+    /// local database is wrong in both directions across hosts: a remote-only
+    /// login shell it doesn't list would read busy at an idle prompt forever
+    /// and its nested prompt titles as a program's, and a NESTED shell running
+    /// inside the session shell would read idle even though closing kills it
+    /// — the host-side verdict matches libghostty's local surface semantics
+    /// (a nested shell is a running child) instead.
     ///
     /// `remoteForegroundCommand` follows the local `runningCommand` contract:
-    /// a shell-NAMED foreground records no command, anything else records the
+    /// a shell foreground records no command, anything else records the
     /// probe's full command line — falling back to the comm basename when the
-    /// probe line carried no args field. Deliberately name-based (not the
-    /// host idle verdict): locally, `runningCommand` returns nil for any
-    /// shell argv[0], nested or not, and layout capture mirrors that.
+    /// probe line carried no args field. Deliberately the shell verdict, not
+    /// the idle one: locally, `runningCommand` returns nil for any shell
+    /// argv[0], nested or not, and layout capture mirrors that.
+    ///
+    /// Every answer also settles a title waiting on a probe
+    /// (`RemoteTitleConfirmation`), if this probe went out after it.
     func applyRemoteForeground(_ foreground: RemoteForeground?) {
         guard let foreground, !foreground.comm.isEmpty else { return }
-        let base = Self.normalizeRemoteComm(foreground.comm)
-        guard !base.isEmpty else { return }
-        let isIdleShell = foreground.isIdle ?? ProcessInspector.isShellProcessName(base)
-        if base != foregroundProcessName || isIdleShell != foregroundSample?.isIdleShell {
+        let name = Self.remoteProcessName(comm: foreground.comm, command: foreground.command)
+        guard !name.isEmpty else { return }
+        let isShell = foreground.isShell ?? ProcessInspector.isShellProcessName(name)
+        let isIdleShell = foreground.isIdle ?? isShell
+        if name != foregroundProcessName || isIdleShell != foregroundSample?.isIdleShell {
             foregroundSample = ForegroundSample(
-                name: base,
+                name: name,
                 isIdleShell: isIdleShell,
                 origin: .remoteProbe,
                 sampledAt: Date()
             )
         }
-        remoteForegroundCommand = ProcessInspector.isShellProcessName(base)
-            ? nil
-            : (foreground.command ?? base)
+        remoteForegroundIsShell = isShell
+        remoteForegroundCommand = isShell ? nil : (foreground.command ?? name)
+        switch remoteTitleConfirmation.resolve(programInFront: remoteProgramHoldsForeground) {
+        case let .adopt(title):
+            if let title, title != programTitle { programTitle = title }
+            programTitlePID = nil
+        case .clear:
+            programTitle = nil
+        case .undecided:
+            break
+        }
         // The shell is back in front: whatever program titled the pane has
         // gone, and the run-state edge may never have fired (it ended idle).
         if !remoteProgramHoldsForeground, executionState != .running, programTitle != nil {
@@ -718,16 +838,41 @@ final class Pane: Identifiable {
         }
         // The agent logo, by the local rule: `comm` first, then the invoked
         // name, which the probe's `ps -o args=` carries in place of the local
-        // KERN_PROCARGS2 argv. A remote Claude Code's native install has a
-        // version for its comm (`2.1.207`) and only argv names it. `args` is
-        // space-joined with its quoting lost, so a path with a space in it
-        // can't be recovered; agents' invoked names don't have one.
-        let icon = isIdleShell ? nil : AgentIcon.match(comm: base) {
+        // KERN_PROCARGS2 argv. Re-matched only when the probe's answer
+        // changes, as the local path caches against the pid.
+        guard foreground != lastAppliedRemoteForeground else { return }
+        lastAppliedRemoteForeground = foreground
+        let icon = isIdleShell ? nil : AgentIcon.match(comm: name) {
             foreground.command.flatMap { command in
-                ProcessInspector.invokedName(argv: command.split(separator: " ").map(String.init))
+                ProcessInspector.remoteInvokedNames(commandLine: command).first {
+                    AgentIcon.match(processName: $0) != nil
+                }
             }
         }
         if icon != agentIcon { agentIcon = icon }
+    }
+
+    /// The probe's latest shell verdict on the foreground (see
+    /// `applyRemoteForeground`).
+    @ObservationIgnored
+    private var remoteForegroundIsShell = false
+
+    /// The probe answer the agent logo was last matched against.
+    @ObservationIgnored
+    private var lastAppliedRemoteForeground: RemoteForeground?
+
+    /// The tab name for a probed remote foreground: the basename of `comm`
+    /// (`normalizeRemoteComm`), or, when that is a bare version, the name the
+    /// command line was invoked as. That is its first word: `args` loses
+    /// argv's quoting, so an invoked path with a space in it names the tab
+    /// after the part before the space. Pure + static for testing.
+    static func remoteProcessName(comm: String, command: String?) -> String {
+        let base = normalizeRemoteComm(comm)
+        guard ProcessInspector.looksLikeVersionString(base),
+              let argv0 = command?.split(separator: " ").first
+        else { return base }
+        let invoked = normalizeRemoteComm(String(argv0))
+        return invoked.isEmpty ? base : invoked
     }
 
     /// Name-only convenience over `applyRemoteForeground` (no probed args,
@@ -904,6 +1049,7 @@ final class Pane: Identifiable {
         // torn down before its view ever existed still settles.
         acknowledgeBell()
         cancelHeldTitle()
+        abandonRemoteTitleConfirmation()
         guard let view = _nsView else { return }
         // Null callbacks before destroy so any in-flight ghostty events
         // triggered by destroySurface() itself can't re-enter.
@@ -1015,7 +1161,8 @@ final class Pane: Identifiable {
         shell: String? = nil,
         env: [String: String]? = nil,
         activityQuietPollDelay: TimeInterval = TerminalActivityTiming.quietPollDelay,
-        titleReportInterval: TimeInterval = PollCadence.fastInterval
+        titleReportInterval: TimeInterval = PollCadence.fastInterval,
+        remoteTitleRetryDelay: TimeInterval = Pane.defaultRemoteTitleRetryDelay
     ) {
         titleReportThrottle = TitleReportThrottle(interval: titleReportInterval)
         self.projectPath = projectPath
@@ -1048,6 +1195,7 @@ final class Pane: Identifiable {
         self.shell = shell
         self.env = env
         self.activityQuietPollDelay = activityQuietPollDelay
+        self.remoteTitleRetryDelay = remoteTitleRetryDelay
         executionTracker = TerminalExecutionTracker(hasUserInteraction: command != nil)
         // Prime the first probe for a remote pane. Scheduled probes cover only
         // the frontmost project, so without this a restored pane in a

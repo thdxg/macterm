@@ -212,6 +212,39 @@ enum ProcessInspector {
         return name
     }
 
+    /// The names a remote foreground may have been invoked as, from its
+    /// `ps -o args=` line — the remote stand-in for `invokedName(argv:)`.
+    /// `args` joins argv with spaces and loses the quoting, so for an
+    /// interpreter the script path's end can't be read back: `node /home/me/My
+    /// Tools/gemini/bin/gemini --yolo`. So each possible end is offered in
+    /// turn, shortest first (`My`, then `gemini`), and the caller takes the
+    /// first one it recognizes. A word starting with `-` (a flag), `/` or `~`
+    /// (another path: a spaced path continues with `Tools/…`, never `/…`),
+    /// or a path with a script extension ends the script path. Anything else
+    /// is argv[0] alone, which an invoked name rarely puts a space in.
+    static func remoteInvokedNames(commandLine: String) -> [String] {
+        let words = commandLine.split(separator: " ").map(String.init)
+        guard let argv0 = words.first else { return [] }
+        guard words.count > 1, let program = invokedName(argv: [argv0]), isInterpreterName(program) else {
+            return invokedName(argv: [argv0]).map { [$0] } ?? []
+        }
+        var names: [String] = []
+        var script = ""
+        for word in words.dropFirst().prefix(maxRemoteScriptWords) {
+            guard !word.hasPrefix("-"), script.isEmpty || !(word.hasPrefix("/") || word.hasPrefix("~")) else {
+                break
+            }
+            script = script.isEmpty ? word : script + " " + word
+            if let name = invokedName(argv: [argv0, script]) { names.append(name) }
+            if scriptExtensions.contains((script as NSString).pathExtension.lowercased()) { break }
+        }
+        return names
+    }
+
+    /// Bounds `remoteInvokedNames` on a long command line. A script path
+    /// with more spaces than this is left unrecognized.
+    private static let maxRemoteScriptWords = 8
+
     /// Whether `name` is a script interpreter — a process name that can never
     /// identify the CLI being run (the script in argv[1] does).
     static func isInterpreterName(_ name: String) -> Bool {
