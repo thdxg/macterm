@@ -120,9 +120,15 @@ final class TerminalTab: Identifiable {
         return didAcknowledge
     }
 
-    init(projectPath: String, projectID: UUID, sessionSlug: String? = nil, command: String? = nil) {
+    init(
+        projectPath: String,
+        projectID: UUID,
+        sessionSlug: String? = nil,
+        command: String? = nil,
+        env: [String: String]? = nil
+    ) {
         id = UUID()
-        let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug, command: command)
+        let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug, command: command, env: env)
         splitRoot = .pane(pane)
         focusedPaneID = pane.id
     }
@@ -159,13 +165,15 @@ final class TerminalTab: Identifiable {
     /// A `command` spawns in the new pane via libghostty's `initial_input`
     /// (the layout `run:` path — typed into the fresh shell verbatim).
     /// `newPaneWorkingDirectory` overrides cwd inheritance without changing
-    /// the source pane's project-scoped session slug.
+    /// the source pane's project-scoped session slug. `env` is extra
+    /// environment for the new pane's shell.
     @discardableResult
     func split(
         paneID: UUID,
         direction: SplitDirection,
         position: SplitPosition = .second,
         command: String? = nil,
+        env: [String: String]? = nil,
         newPaneWorkingDirectory: String? = nil
     ) -> UUID? {
         // Bail before any side effect if the pane isn't in this tab — otherwise
@@ -193,7 +201,8 @@ final class TerminalTab: Identifiable {
             position: position,
             projectPath: sourcePath,
             projectID: sourceProjectID,
-            command: command
+            command: command,
+            env: env
         )
         splitRoot = newRoot
         // Splitting reveals a new pane — exit zoom so it's visible.
@@ -289,12 +298,18 @@ final class TerminalTab: Identifiable {
     /// splits top/bottom. Falls back to a horizontal split when the focused
     /// pane's NSView isn't attached yet and has no measurable bounds.
     @discardableResult
-    func autoSplit(paneID: UUID, newPaneWorkingDirectory: String? = nil) -> UUID? {
+    func autoSplit(
+        paneID: UUID,
+        command: String? = nil,
+        env: [String: String]? = nil,
+        newPaneWorkingDirectory: String? = nil
+    ) -> UUID? {
         let bounds = splitRoot.findPane(id: paneID)?.nsView?.bounds.size ?? .zero
-        let direction: SplitDirection = bounds.height > bounds.width ? .vertical : .horizontal
         return split(
             paneID: paneID,
-            direction: direction,
+            direction: SplitDirection.auto(for: bounds),
+            command: command,
+            env: env,
             newPaneWorkingDirectory: newPaneWorkingDirectory
         )
     }
@@ -483,12 +498,18 @@ final class Workspace: Identifiable {
     }
 
     @discardableResult
-    func createTab(projectPath: String, sessionSlug: String? = nil, command: String? = nil) -> TerminalTab {
+    func createTab(
+        projectPath: String,
+        sessionSlug: String? = nil,
+        command: String? = nil,
+        env: [String: String]? = nil
+    ) -> TerminalTab {
         let tab = TerminalTab(
             projectPath: projectPath,
             projectID: projectID,
             sessionSlug: sessionSlug,
-            command: command
+            command: command,
+            env: env
         )
         tabs.append(tab)
         if let current = activeTabID { tabHistory.push(current) }

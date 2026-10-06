@@ -175,7 +175,15 @@ final class GhosttyCallbacks: @unchecked Sendable {
                 as: UTF8.self
             )
             let kind = payload.kind
-            DispatchQueue.main.async { Self.openURL(urlString, kind: kind) }
+            // A link clicked in the grid (kind `.unknown`, the regex's) goes
+            // to the pane first: a file path — `src/app.ts:42` included,
+            // which no opener understands — is resolved against the pane's
+            // cwd there. OSC 8 targets and keybind opens skip it.
+            let view = kind == GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN ? surfaceView(from: target) : nil
+            DispatchQueue.main.async {
+                if view?.onOpenLink?(urlString) == true { return }
+                Self.openURL(urlString, kind: kind)
+            }
             return true
         case GHOSTTY_ACTION_MOUSE_SHAPE:
             // The pointer shape for the current mouse position — I-beam over

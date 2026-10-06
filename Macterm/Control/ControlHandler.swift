@@ -785,8 +785,7 @@ final class ControlHandler {
             // pane's live NSView bounds; a never-shown pane measures zero and
             // falls back to horizontal — same as TerminalTab.autoSplit. `auto`
             // has no side to infer, so the new pane trails the target.
-            let bounds = pane.nsView?.bounds.size ?? .zero
-            return (bounds.height > bounds.width ? .vertical : .horizontal, .second)
+            return (SplitDirection.auto(for: pane.nsView?.bounds.size ?? .zero), .second)
         default:
             throw ControlError(code: .badRequest, message: "direction must be right, left, down, up, or auto")
         }

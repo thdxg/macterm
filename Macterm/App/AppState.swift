@@ -1064,6 +1064,17 @@ final class AppState {
     var newTabInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.tabInheritsWorkingDirectory }
     @ObservationIgnored
     var newSplitInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.splitInheritsWorkingDirectory }
+    /// Settings → General → Text Files, read when a file opens. Injectable
+    /// so tests drive both placements without touching shared preferences.
+    @ObservationIgnored
+    var textFileSettings: () -> (command: String, placement: TextFilePlacement) = {
+        (Preferences.shared.textFileEditorCommand, Preferences.shared.textFilePlacement)
+    }
+
+    /// Whether Launch Services opens a clicked file with this app — the one
+    /// case a click keeps its line. Injectable for the same reason.
+    @ObservationIgnored
+    var opensTextFileHere: (URL) -> Bool = { TextFileOpening.isDefaultApp(for: $0) }
     @ObservationIgnored
     var dockBadgeWriter: (String?) -> Void = { BellBadge.apply($0) }
     /// The label last handed to `dockBadgeWriter`, so a sync that changes
@@ -2395,10 +2406,11 @@ final class AppState {
         projectID: UUID,
         projectPath: String,
         sessionSlug: String? = nil,
-        command: String? = nil
+        command: String? = nil,
+        env: [String: String]? = nil
     ) -> UUID? {
         guard let ws = workspaces[projectID] else { return nil }
-        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command)
+        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command, env: env)
         logger.debug("createTab: project=\(projectID, privacy: .public) tabs=\(ws.tabs.count, privacy: .public)")
         saveWorkspaces()
         return tab.id
@@ -2408,7 +2420,12 @@ final class AppState {
     /// Active pane falls back to the project path when no local cwd is available.
     /// The pinned workspace falls back to home.
     @discardableResult
-    func createTab(projectID: UUID, projects: [Project], command: String? = nil) -> UUID? {
+    func createTab(
+        projectID: UUID,
+        projects: [Project],
+        command: String? = nil,
+        env: [String: String]? = nil
+    ) -> UUID? {
         guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
             return nil
         }
@@ -2419,13 +2436,25 @@ final class AppState {
             projectDirectory: projectDirectory,
             activePaneDirectory: activePaneDirectory
         ) ?? projectDirectory
-        return createTab(projectID: projectID, projects: projects, workingDirectory: newTabDirectory, command: command)
+        return createTab(
+            projectID: projectID,
+            projects: projects,
+            workingDirectory: newTabDirectory,
+            command: command,
+            env: env
+        )
     }
 
     /// Creates a tab in an explicit `workingDirectory` — one of the project's
     /// git worktrees, from the sidebar's Worktrees menu.
     @discardableResult
-    func createTab(projectID: UUID, projects: [Project], workingDirectory: String, command: String? = nil) -> UUID? {
+    func createTab(
+        projectID: UUID,
+        projects: [Project],
+        workingDirectory: String,
+        command: String? = nil,
+        env: [String: String]? = nil
+    ) -> UUID? {
         guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
             return nil
         }
@@ -2435,12 +2464,13 @@ final class AppState {
             projectID: projectID,
             projectPath: workingDirectory,
             sessionSlug: projectSessionSlug,
-            command: command
+            command: command,
+            env: env
         )
     }
 
     /// Returns the configured project root, including the synthetic pinned workspace fallback.
-    private func configuredProjectDirectory(projectID: UUID, projects: [Project]) -> String? {
+    func configuredProjectDirectory(projectID: UUID, projects: [Project]) -> String? {
         if projectID == PinnedTabs.projectID { return PinnedTabs.fallbackRoot }
         return projects.first(where: { $0.id == projectID })?.path
     }
@@ -3001,7 +3031,8 @@ final class AppState {
         position: SplitPosition = .second,
         projectID: UUID,
         projectDirectory: String,
-        command: String? = nil
+        command: String? = nil,
+        env: [String: String]? = nil
     ) -> UUID? {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
@@ -3021,6 +3052,7 @@ final class AppState {
             position: position,
             projectID: projectID,
             command: command,
+            env: env,
             newPaneWorkingDirectory: newPaneDirectory
         )
     }
@@ -3036,6 +3068,7 @@ final class AppState {
         position: SplitPosition = .second,
         projectID: UUID,
         command: String? = nil,
+        env: [String: String]? = nil,
         newPaneWorkingDirectory: String? = nil
     ) -> UUID? {
         guard let ws = workspaces[projectID],
@@ -3046,6 +3079,7 @@ final class AppState {
             direction: direction,
             position: position,
             command: command,
+            env: env,
             newPaneWorkingDirectory: newPaneWorkingDirectory
         )
         saveWorkspaces()

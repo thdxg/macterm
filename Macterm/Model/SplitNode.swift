@@ -1,7 +1,18 @@
 import CoreGraphics
 import Foundation
 
-enum SplitDirection: String, Codable { case horizontal, vertical }
+enum SplitDirection: String, Codable {
+    case horizontal
+    case vertical
+
+    /// The axis Split Automatically picks for a pane `size` on screen: its
+    /// longer one (Ghostty's `new_split`), so a wide pane splits left/right
+    /// and a tall one top/bottom. A never-shown pane measures zero and splits
+    /// left/right.
+    static func auto(for size: CGSize) -> SplitDirection {
+        size.height > size.width ? .vertical : .horizontal
+    }
+}
 
 /// Which side of a split a node occupies along the branch's axis: `.first` is
 /// the leading edge (left of a horizontal split, top of a vertical one),
@@ -120,14 +131,15 @@ extension SplitNode {
         position: SplitPosition,
         projectPath: String,
         projectID: UUID,
-        command: String? = nil
+        command: String? = nil,
+        env: [String: String]? = nil
     ) -> (node: SplitNode, newPaneID: UUID?) {
         switch self {
         case let .pane(p) where p.id == paneID:
             // Inherit the source pane's session slug so the new sibling groups
             // under the same project in `zmx ls`.
             let newPane = Pane(
-                projectPath: projectPath, projectID: projectID, sessionSlug: p.sessionSlug, command: command
+                projectPath: projectPath, projectID: projectID, sessionSlug: p.sessionSlug, command: command, env: env
             )
             let first: SplitNode = position == .first ? .pane(newPane) : .pane(p)
             let second: SplitNode = position == .first ? .pane(p) : .pane(newPane)
@@ -141,7 +153,8 @@ extension SplitNode {
                 position: position,
                 projectPath: projectPath,
                 projectID: projectID,
-                command: command
+                command: command,
+                env: env
             )
             branch.first = newFirst
             if id1 != nil { return (.split(branch), id1) }
@@ -151,7 +164,8 @@ extension SplitNode {
                 position: position,
                 projectPath: projectPath,
                 projectID: projectID,
-                command: command
+                command: command,
+                env: env
             )
             branch.second = newSecond
             return (.split(branch), id2)

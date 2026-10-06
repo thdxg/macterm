@@ -430,6 +430,11 @@ final class GhosttyTerminalNSView: NSView {
     /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
     /// when the pointer leaves it. Drives the pane's hover-URL banner.
     var onLinkHover: ((String?) -> Void)?
+    /// A clicked link (`GHOSTTY_ACTION_OPEN_URL` from the link regex), given
+    /// first refusal: true means it was handled — a local file opened in its
+    /// default app or the user's editor (`AppState.openClickedLink`) — and
+    /// false sends it to the system opener as before.
+    var onOpenLink: ((String) -> Bool)?
     /// The pointer cursor libghostty wants over the grid
     /// (`GHOSTTY_ACTION_MOUSE_SHAPE`) — I-beam over text, a pointing hand
     /// over links. The hosting `SurfaceScrollView` applies it as its

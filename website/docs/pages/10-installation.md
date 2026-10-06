@@ -35,7 +35,7 @@ Any of these adds the folder as a new project and switches to it, launching Mact
 - Drop a folder onto Macterm's Dock icon.
 - Run `open -a Macterm ~/code/myproject`.
 
-Files are ignored. If the Finder service is missing, enable it under System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
+A file opened these ways goes to your terminal editor instead — see [Text files](/docs/configuration#text-files). If the Finder service is missing, enable it under System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
 
 ## Dock menu
 

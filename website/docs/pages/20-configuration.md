@@ -69,6 +69,20 @@ Two per-row checkboxes, mutually exclusive:
 - **Pass to TUI** — hands the chord to the program in the focused pane instead of running the action. List the programs under **Passthrough Programs** at the top of the tab, comma-separated, matching the name the tab shows.
 - **Global** — registers the chord system-wide, so the action runs while another app is frontmost. No Accessibility permission needed. If the chord is already taken, the row says so.
 
+## Text files
+
+Macterm can open text files in a terminal editor such as Helix or Neovim, which macOS can't make a default app on its own.
+
+1. In Finder, select a file, choose **File → Get Info**, pick **Macterm** under **Open with**, and click **Change All**. Repeat for each file type you want.
+2. In **Settings → General → Text Files**, set **Editor command** (`hx`, `nvim`). Leave it empty to use `$EDITOR` from your shell config.
+3. Choose **Open in**: **New split** (beside the current pane, along its longer side) or **New tab**.
+
+Double-clicking such a file, opening it with **Open With → Macterm**, or `open -a Macterm file.rs` opens it in the project that contains it. If no project does, Macterm creates one for the file's folder.
+
+<kbd>⌘</kbd>-click a path in a pane to open it with its default app. Paths like `src/main.rs:42:7`, as printed by compilers and test runners, work too. When Macterm is the default app, the file opens at that line: the editor gets `+42` before the path, which vi, Vim, Neovim, Helix, Kakoune, Emacs, nano and micro all understand. Other apps can't be told a line, so they get just the file.
+
+Quitting the editor closes its split or tab. Paths printed in a [remote project](/docs/remote-projects) don't open in the editor, since the file is on the host.
+
 ## Project colors
 
 Set a color from a project's sidebar context menu (**Color**) or **Settings → Projects**. It tints the project's sidebar icon and its tabs' icons. **Settings → Appearance → Auto-assign project colors** (off by default) colors each new project automatically.

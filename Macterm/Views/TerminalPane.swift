@@ -138,6 +138,9 @@ private struct TerminalSurface: NSViewRepresentable {
     /// in its environment, and its one tab has no rename UI anyway — the
     /// tab-title actions just no-op there.
     @Environment(AppState.self) private var appState: AppState?
+    /// Optional for the same reason; only a clicked file link reads it, for
+    /// the project directory a split or tab starts in.
+    @Environment(ProjectStore.self) private var projectStore: ProjectStore?
 
     final class Coordinator {
         var wasFocused = false
@@ -373,6 +376,14 @@ private struct TerminalSurface: NSViewRepresentable {
         }
         view.onLinkHover = { [weak pane] url in
             pane?.hoverURL = url
+        }
+        view.onOpenLink = { [weak appState, weak projectStore, weak pane] text in
+            // The quick terminal's and desktop widgets' hosting views carry
+            // no environment, and their clicks need the app's state too.
+            let delegate = QuickTerminalService.shared.appDelegate
+            guard let pane, let state = appState ?? delegate?.appState else { return false }
+            let projects = (projectStore ?? delegate?.projectStore)?.projects ?? []
+            return state.openClickedLink(text, in: pane, projects: projects)
         }
         view.onTerminalRender = { [weak view] in
             guard let view else { return }
