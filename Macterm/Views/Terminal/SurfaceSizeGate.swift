@@ -23,13 +23,47 @@ enum SurfaceSizeGate {
     static let minimumColumns: UInt32 = 8
     static let minimumRows: UInt32 = 2
 
-    /// Whether a backing-pixel size may be applied to a surface whose cells
-    /// measure `cellWidthPx` × `cellHeightPx`. Zero cell metrics (the surface
-    /// has not measured its font yet) admit every non-empty size, since the
-    /// grid cannot be judged; an empty size never passes.
-    static func admits(widthPx: UInt32, heightPx: UInt32, cellWidthPx: UInt32, cellHeightPx: UInt32) -> Bool {
+    /// What the gate judges a size against: the surface's cell size and its
+    /// chrome, the pixels that hold no cells (see `chrome`).
+    struct Metrics {
+        var cellWidthPx: UInt32
+        var cellHeightPx: UInt32
+        var chromeWidthPx: UInt32
+        var chromeHeightPx: UInt32
+    }
+
+    /// Whether a backing-pixel size may be applied to a surface measuring
+    /// `metrics`. Zero cell metrics (the surface has not measured its font
+    /// yet) admit every non-empty size, since the grid cannot be judged; an
+    /// empty size never passes.
+    ///
+    /// The grid is counted inside the chrome. Counting the whole size let a
+    /// split peeling open from its seam through at one row: Macterm's 16pt
+    /// `window-padding-y` is more than a cell, so a pane two cells tall is a
+    /// one-row grid. Born at that size, a new pane's zmx client printed
+    /// `session "…" created` and a newline, which scrolled the line into
+    /// scrollback where the client's `ESC[2J` can't reach it, and growing the
+    /// pane pulled it back down above the prompt.
+    static func admits(widthPx: UInt32, heightPx: UInt32, metrics: Metrics) -> Bool {
         guard widthPx > 0, heightPx > 0 else { return false }
-        guard cellWidthPx > 0, cellHeightPx > 0 else { return true }
-        return widthPx / cellWidthPx >= minimumColumns && heightPx / cellHeightPx >= minimumRows
+        guard metrics.cellWidthPx > 0, metrics.cellHeightPx > 0 else { return true }
+        let columns = widthPx.subtractingClamped(metrics.chromeWidthPx) / metrics.cellWidthPx
+        let rows = heightPx.subtractingClamped(metrics.chromeHeightPx) / metrics.cellHeightPx
+        return columns >= minimumColumns && rows >= minimumRows
+    }
+
+    /// The pixels along one axis of a surface's current size that hold no
+    /// cells: `window-padding` plus the leftover under a cell. libghostty
+    /// doesn't report its padding, so this stands in for it — overstating it
+    /// by under a cell, which only makes the gate refuse a size slightly
+    /// sooner.
+    static func chrome(totalPx: UInt32, cells: UInt16, cellPx: UInt32) -> UInt32 {
+        totalPx.subtractingClamped(UInt32(cells) * cellPx)
+    }
+}
+
+private extension UInt32 {
+    func subtractingClamped(_ other: UInt32) -> UInt32 {
+        self > other ? self - other : 0
     }
 }
