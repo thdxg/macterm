@@ -50,7 +50,8 @@ enum UntrustedURLAlert {
 
     /// A sheet on the window of the pane whose link was clicked, else a modal.
     /// A modal in an inactive app never comes forward, so the app is
-    /// activated for it first.
+    /// activated for it first — forced, since cooperative activation is
+    /// refused silently (see `MacosHidden.activateForWindowRequest`).
     private static func present(
         _ alert: NSAlert,
         in window: NSWindow?,
@@ -59,7 +60,7 @@ enum UntrustedURLAlert {
         if let window = window ?? NSApp.keyWindow {
             alert.beginSheetModal(for: window, completionHandler: completion)
         } else {
-            NSApp.activate()
+            NSApp.activate(ignoringOtherApps: true)
             completion(alert.runModal())
         }
     }

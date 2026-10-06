@@ -45,7 +45,11 @@ struct UntrustedURLTests {
         "file:///tmp/document.txt#frag",
     ])
     func rejectsRemoteHostsQueriesAndFragmentsInFileURLs(_ value: String) {
-        #expect(UntrustedURL(value).decision == .deny(.malformedURL))
+        #expect(UntrustedURL(value).decision == .deny(.unsupportedFileURL))
+        // Shown as written: `URL.path` would drop the host, query and
+        // fragment and the blocked alert would name a local file the link
+        // never pointed at.
+        #expect(UntrustedURL(value).displayString == value)
     }
 
     @Test
@@ -118,8 +122,8 @@ struct UntrustedURLTests {
     @Test
     func otherHostsStayRemoteEvenWithAHostnameKnown() {
         let value = "file://other-mac.local/tmp/document.txt"
-        #expect(UntrustedURL(value, localHostname: "my-mac.local").decision == .deny(.malformedURL))
-        #expect(UntrustedURL(value, localHostname: nil).decision == .deny(.malformedURL))
+        #expect(UntrustedURL(value, localHostname: "my-mac.local").decision == .deny(.unsupportedFileURL))
+        #expect(UntrustedURL(value, localHostname: nil).decision == .deny(.unsupportedFileURL))
     }
 
     @Test

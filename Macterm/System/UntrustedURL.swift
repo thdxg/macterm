@@ -17,6 +17,9 @@ struct UntrustedURL: Equatable {
         case malformedURL
         case unsafeCharacters
         case invalidWebURL
+        /// A `file:` URL that names another computer, or carries a query or
+        /// fragment — well-formed, but naming nothing on this disk.
+        case unsupportedFileURL
         case inaccessibleFile
         case unsafeFile
 
@@ -28,6 +31,8 @@ struct UntrustedURL: Equatable {
                 "The target contains invisible or line-breaking characters."
             case .invalidWebURL:
                 "The web target does not contain a valid host."
+            case .unsupportedFileURL:
+                "The file target names another computer, or carries a query or fragment."
             case .inaccessibleFile:
                 "The local target does not exist or is not a regular file or directory."
             case .unsafeFile:
@@ -118,14 +123,17 @@ struct UntrustedURL: Equatable {
         }
     }
 
-    /// The effective target on one line, for the alerts. A file URL is
+    /// The effective target on one line, for the alerts. A local file URL is
     /// standardized exactly as `decision` standardizes it before opening —
     /// symlinks resolved — so dot traversal and repeated separators can't make
     /// the shown and the opened targets differ; other URLs stay byte-for-byte,
-    /// since repeated separators can mean something to their handler.
+    /// since repeated separators can mean something to their handler. That
+    /// includes a file URL `decision` refuses for its host, query or
+    /// fragment: `URL.path` would drop all three, and the blocked alert (and
+    /// its Copy Link) would then show a local path the link never named.
     var displayString: String {
         let normalized = if let url = URL(string: string), url.scheme != nil {
-            url.isFileURL ? url.standardizedFileURL.resolvingSymlinksInPath().path : string
+            url.isFileURL && isPlainLocalFile(url) ? url.standardizedFileURL.resolvingSymlinksInPath().path : string
         } else {
             // Never opened, but still shown in the blocked alert: standardize
             // so slash padding and dot traversal can't hide the real path.
@@ -154,16 +162,8 @@ struct UntrustedURL: Equatable {
 
 private extension UntrustedURL {
     func fileDecision(for url: URL) -> Decision {
-        // A query or fragment names no part of a filesystem object, and Launch
-        // Services handlers may read one inconsistently.
-        guard url.isFileURL, url.query == nil, url.fragment == nil else {
-            return .deny(.malformedURL)
-        }
-
-        // An empty host, `localhost` and this Mac's own hostname are this
-        // machine; any other host could trigger network access.
-        if let host = url.host, !host.isEmpty, !isLocalHost(host) {
-            return .deny(.malformedURL)
+        guard url.isFileURL, isPlainLocalFile(url) else {
+            return .deny(.unsupportedFileURL)
         }
 
         // Classify the effective object, not the spelling the program wrote:
@@ -193,6 +193,17 @@ private extension UntrustedURL {
             return .deny(.unsafeFile)
         }
         return .allow(canonicalURL)
+    }
+
+    /// Whether a `file:` URL names something on this disk and nothing more.
+    /// A query or fragment names no part of a filesystem object, and Launch
+    /// Services handlers may read one inconsistently. An empty host,
+    /// `localhost` and this Mac's own hostname are this machine; any other
+    /// host could trigger network access.
+    func isPlainLocalFile(_ url: URL) -> Bool {
+        guard url.query == nil, url.fragment == nil else { return false }
+        if let host = url.host, !host.isEmpty, !isLocalHost(host) { return false }
+        return true
     }
 
     func isLocalHost(_ host: String) -> Bool {
