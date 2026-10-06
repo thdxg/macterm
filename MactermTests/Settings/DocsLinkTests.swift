@@ -41,11 +41,13 @@ struct DocsLinkTests {
     }
 
     @Test
-    func every_section_points_at_a_heading_that_exists() throws {
+    func every_section_points_at_a_page_and_heading_that_exist() throws {
         for section in DocsSection.allCases {
             let anchors = try Self.anchors(onPage: section.page)
             #expect(!anchors.isEmpty, "no docs page with slug \(section.page)")
-            #expect(anchors.contains(section.anchor), "\(section) → no heading with anchor \(section.anchor)")
+            if let anchor = section.anchor {
+                #expect(anchors.contains(anchor), "\(section) → no heading with anchor \(anchor)")
+            }
         }
     }
 
@@ -60,5 +62,9 @@ struct DocsLinkTests {
     func the_url_is_the_page_and_anchor_on_the_docs_site() {
         #expect(DocsSection.textFiles.url.absoluteString
             == "https://macterm.thdxg.dev/docs/configuration#open-files-in-your-terminal-editor")
+        #expect(DocsSection.passwords.url.absoluteString == "https://macterm.thdxg.dev/docs/passwords")
+        #expect(DocsSection.passwords.anchor == nil)
+        // An arrow in a heading drops out, as in the docs build.
+        #expect(Self.anchor(for: "Settings → Passwords") == "settings-passwords")
     }
 }

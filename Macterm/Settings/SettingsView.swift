@@ -596,9 +596,7 @@ private struct GeneralSettings: View {
                     .help("Re-read your Ghostty config. Click after saving external edits.")
                 }
             } header: {
-                HStack {
-                    Text("Ghostty Config")
-                    Spacer()
+                DocsSectionHeader("Ghostty Config", docs: .ghosttyConfig) {
                     // Mirrors the Projects pane's add affordance: a plus in the
                     // header, with the creation paths in its menu.
                     Menu {
@@ -636,14 +634,10 @@ private struct GeneralSettings: View {
                 Text("Opens files in your shell's $VISUAL or $EDITOR.")
                     .settingsCaption()
             } header: {
-                HStack {
-                    Text("Text Files")
-                    Spacer()
-                    DocsLink(.textFiles)
-                }
+                DocsSectionHeader("Text Files", docs: .textFiles)
             }
 
-            Section("Remote Projects") {
+            Section {
                 Toggle("Background SSH connections", isOn: $backgroundSSHConnections)
                     .onChange(of: backgroundSSHConnections) { _, v in
                         Preferences.shared.backgroundSSHConnections = v
@@ -662,6 +656,8 @@ private struct GeneralSettings: View {
                         + "the Mac or return to the app."
                 )
                 .settingsCaption()
+            } header: {
+                DocsSectionHeader("Remote Projects", docs: .remoteProjects)
             }
 
             // Shells always keep running after quit and reattach on the next
@@ -1407,19 +1403,20 @@ private struct AnimationsSettings: View {
 
     var body: some View {
         Form {
-            Section("Scrolling") {
+            Section {
                 Toggle("Smooth scrolling", isOn: $smoothScrolling)
                     .onChange(of: smoothScrolling) { _, v in
                         Preferences.shared.smoothScrolling = v
                     }
                 Text(
-                    "Trackpad scrolling moves scrollback by pixels instead of whole rows. "
-                        + "Programs that draw their own screen (editors, pagers) still scroll by rows."
+                    "Trackpad scrolling moves scrollback by pixels instead of whole rows."
                 )
                 .settingsCaption()
+            } header: {
+                DocsSectionHeader("Scrolling", docs: .animations)
             }
 
-            Section("Cursor") {
+            Section {
                 Toggle("Smooth cursor", isOn: $smoothCursor)
                     .onChange(of: smoothCursor) { _, v in
                         Preferences.shared.smoothCursor = v
@@ -1433,15 +1430,19 @@ private struct AnimationsSettings: View {
                     }
                 Text("A fading streak follows the cursor across larger moves.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Cursor", docs: .animations)
             }
 
-            Section("Splits") {
+            Section {
                 Toggle("Animate splits", isOn: $animatedSplits)
                     .onChange(of: animatedSplits) { _, v in
                         Preferences.shared.animatedSplits = v
                     }
-                Text("Panes slide in and out as the layout changes. Turns itself off when Reduce Motion is on.")
+                Text("Panes slide in and out as the layout changes.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Splits", docs: .animations)
             }
         }
         .formStyle(.grouped)
@@ -1468,18 +1469,20 @@ private struct QuickTerminalSettings: View {
 
     var body: some View {
         Form {
-            Section("Quick Terminal") {
+            Section {
                 LabeledContent(
                     "Shortcut",
                     value: HotkeyRegistry.displayString(
                         for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
                     )
                 )
-                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps, or clear it to disable the quick terminal.")
+                Text("Works even when Macterm isn't active.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Quick Terminal", docs: .quickTerminal)
             }
 
-            Section("Position") {
+            Section {
                 Picker("Mode", selection: $positionMode) {
                     ForEach(QuickTerminalAdjustMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
@@ -1514,9 +1517,11 @@ private struct QuickTerminalSettings: View {
                     Preferences.shared.quickTerminalFixedY = 1 - v
                 }
                 .disabled(positionMode != .fixed)
+            } header: {
+                DocsSectionHeader("Position", docs: .quickTerminalGeometry)
             }
 
-            Section("Size") {
+            Section {
                 Picker("Mode", selection: $sizeMode) {
                     ForEach(QuickTerminalAdjustMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
@@ -1551,6 +1556,8 @@ private struct QuickTerminalSettings: View {
                     Preferences.shared.quickTerminalHeightFraction = v
                 }
                 .disabled(sizeMode != .fixed)
+            } header: {
+                DocsSectionHeader("Size", docs: .quickTerminalGeometry)
             }
         }
         .formStyle(.grouped)
@@ -1637,7 +1644,7 @@ private struct KeymapSettings: View {
 
     var body: some View {
         Form {
-            Section("Passthrough Programs") {
+            Section {
                 TextField(
                     "Programs",
                     text: Binding(
@@ -1647,10 +1654,12 @@ private struct KeymapSettings: View {
                     prompt: Text(verbatim: "nvim, hx")
                 )
                 Text(
-                    "Keybinds with Pass to TUI checked below yield to these programs instead "
-                        + "of running their action. Match the name shown in the tab title; separate with commas."
+                    "Keybinds with Pass to TUI checked go to these programs instead of running their action. "
+                        + "Separate names with commas."
                 )
                 .settingsCaption()
+            } header: {
+                DocsSectionHeader("Passthrough Programs", docs: .keybinds)
             }
 
             ForEach(actionsByCategory, id: \.category) { group in
@@ -1931,7 +1940,7 @@ private struct UpdatesSettings: View {
             // Deliberately its own section, and NOT disabled when automatic
             // checks are off: the channel governs which updates are visible to
             // any check, including a manual "Check for Updates Now".
-            Section("Channel") {
+            Section {
                 Picker("Update channel", selection: $updateChannel) {
                     ForEach(UpdateChannel.allCases) { option in
                         Text(option.displayName).tag(option.rawValue)
@@ -1943,6 +1952,8 @@ private struct UpdatesSettings: View {
 
                 Text("Tip builds come from every commit that passes CI and are not release-tested.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Channel", docs: .updateChannels)
             }
 
             Section("Version") {
