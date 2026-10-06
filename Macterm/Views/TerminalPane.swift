@@ -78,12 +78,14 @@ struct TerminalPane: View {
 }
 
 /// Safari-style link preview shown while the mouse hovers an OSC 8 / detected
-/// URL in the terminal (`GHOSTTY_ACTION_MOUSE_OVER_LINK`).
+/// URL in the terminal (`GHOSTTY_ACTION_MOUSE_OVER_LINK`). Invisible and
+/// bidirectional characters are spelled out (`UntrustedURL`), so an OSC 8
+/// target can't show as something it isn't.
 private struct LinkHoverBanner: View {
     let url: String
 
     var body: some View {
-        Text(url)
+        Text(verbatim: UntrustedURL.escapingUnsafeCharacters(url))
             .font(.caption)
             .lineLimit(1)
             .truncationMode(.middle)
