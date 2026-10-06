@@ -1089,10 +1089,8 @@ private struct AppearanceSettings: View {
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var showProjectNewTabButton: Bool = Preferences.shared.showProjectNewTabButton
-    @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
     @State private var showTabSwitcherOverlay: Bool = Preferences.shared.showTabSwitcherOverlay
     @State private var recentTabCandidates: Int = Preferences.shared.recentTabCandidates
-    @State private var tabSwitcherPosition: String = Preferences.shared.tabSwitcherPosition.rawValue
     @State
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
     @State
@@ -1105,10 +1103,20 @@ private struct AppearanceSettings: View {
     private var adaptiveTerminalChrome: Bool = Preferences.shared.adaptiveTerminalChromeEnabled
     @State
     private var sidebarPeekStyle: SidebarPeekStyle = Preferences.shared.sidebarPeekStyle
+    /// The toolbar controls bind to `Preferences` directly rather than a
+    /// seeded `@State` copy: each can also change from the toolbar's own
+    /// right-click menu (`ToolbarMenu`), and a copy would go stale under an
+    /// open Settings window.
+    @Bindable private var preferences = Preferences.shared
+
     /// Inverted view of `Preferences.hideTitleBar`: the control reads as
     /// "Show toolbar" (on by default), the preference stores the hide.
-    @State
-    private var showToolbar: Bool = !Preferences.shared.hideTitleBar
+    private var showToolbar: Binding<Bool> {
+        Binding(
+            get: { !preferences.hideTitleBar },
+            set: { preferences.hideTitleBar = !$0 }
+        )
+    }
 
     var body: some View {
         Form {
@@ -1278,41 +1286,32 @@ private struct AppearanceSettings: View {
             }
 
             Section("Toolbar") {
-                Toggle("Show toolbar", isOn: $showToolbar)
-                    .onChange(of: showToolbar) { _, v in
-                        Preferences.shared.hideTitleBar = !v
-                    }
+                Toggle("Show toolbar", isOn: showToolbar)
                 Text("Hiding it removes the title bar, window buttons, and drag area; switch tabs via the sidebar or ⌘ and the tab number.")
                     .settingsCaption()
 
                 Group {
-                    Picker(selection: $tabSwitcherVisibility) {
+                    Picker(selection: $preferences.tabSwitcherVisibility) {
                         ForEach(TabSwitcherVisibility.allCases) { option in
-                            Text(option.displayName).tag(option.rawValue)
+                            Text(option.displayName).tag(option)
                         }
                     } label: {
                         Text("Tab switcher").dimsWhenDisabled()
                     }
-                    .onChange(of: tabSwitcherVisibility) { _, v in
-                        Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
-                    }
                     Text("Numbered control in the title bar for switching tabs by index.")
                         .settingsCaption()
 
-                    Picker(selection: $tabSwitcherPosition) {
+                    Picker(selection: $preferences.tabSwitcherPosition) {
                         ForEach(TabSwitcherPosition.allCases) { option in
-                            Text(option.displayName).tag(option.rawValue)
+                            Text(option.displayName).tag(option)
                         }
                     } label: {
                         Text("Tab switcher position").dimsWhenDisabled()
                     }
-                    .onChange(of: tabSwitcherPosition) { _, v in
-                        Preferences.shared.tabSwitcherPosition = TabSwitcherPosition(rawValue: v) ?? .trailing
-                    }
                     Text("Left places the switcher before the window title, next to the sidebar.")
                         .settingsCaption()
                 }
-                .disabled(!showToolbar)
+                .disabled(preferences.hideTitleBar)
             }
         }
         .formStyle(.grouped)

@@ -113,7 +113,9 @@ struct MactermApp: App {
                 AppCommandMenuItem(command: .newTab, appState: appState, projectStore: projectStore, titleOverride: "New Tab")
                 AppCommandMenuItem(command: .openProject, appState: appState, projectStore: projectStore, titleOverride: "Open Project…")
             }
-            CommandGroup(replacing: .toolbar) {}
+            CommandGroup(replacing: .toolbar) {
+                ToolbarVisibilityMenuItem()
+            }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesMenuItem()
             }
@@ -794,6 +796,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Draws the restored widgets (the restore may land on either side of
         // this) and every one created from here on.
         DesktopWidgetWindows.shared.attach(appState: appState)
+        ToolbarMenu.shared.attach(appState: appState)
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
