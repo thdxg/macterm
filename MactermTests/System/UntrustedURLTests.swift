@@ -88,6 +88,45 @@ struct UntrustedURLTests {
         }
     }
 
+    @Test(arguments: ["my-mac.local", "MY-MAC.LOCAL"])
+    func allowsFileURLsNamingThisMachinesHostname(_ host: String) throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appending(path: "document.txt")
+        try "safe".write(to: file, atomically: true, encoding: .utf8)
+
+        // What `fd --hyperlink` and `ls --hyperlink` write.
+        let value = "file://\(host)\(file.path)"
+        guard case let .allow(result) = UntrustedURL(value, localHostname: "my-mac.local").decision else {
+            Issue.record("expected this machine's hostname to be local")
+            return
+        }
+        #expect(result == file.standardizedFileURL.resolvingSymlinksInPath())
+    }
+
+    @Test
+    func hostnameDoesNotExemptExecutables() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let payload = directory.appending(path: "payload.command")
+        try "#!/bin/sh\n".write(to: payload, atomically: true, encoding: .utf8)
+
+        let value = "file://my-mac.local\(payload.path)"
+        #expect(UntrustedURL(value, localHostname: "my-mac.local").decision == .deny(.unsafeFile))
+    }
+
+    @Test
+    func otherHostsStayRemoteEvenWithAHostnameKnown() {
+        let value = "file://other-mac.local/tmp/document.txt"
+        #expect(UntrustedURL(value, localHostname: "my-mac.local").decision == .deny(.malformedURL))
+        #expect(UntrustedURL(value, localHostname: nil).decision == .deny(.malformedURL))
+    }
+
+    @Test
+    func readsThisMachinesHostname() {
+        #expect(UntrustedURL.currentHostname()?.isEmpty == false)
+    }
+
     @Test(arguments: ["payload.command", "payload.tool", "payload.app", "payload.workflow", "payload.terminal"])
     func rejectsDangerousLocalFileExtensions(_ filename: String) throws {
         let directory = try makeTemporaryDirectory()

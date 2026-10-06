@@ -46,9 +46,25 @@ struct UntrustedURL: Equatable {
     }
 
     let string: String
+    /// This Mac's hostname, which a `file://` URL may name as its host: the
+    /// tools that emit OSC 8 file links (GNU `ls --hyperlink`, `fd
+    /// --hyperlink`) write `file://<hostname>/path`, per the spec's advice. Injectable for
+    /// tests; nil when it couldn't be read, which leaves only `localhost`.
+    let localHostname: String?
 
-    init(_ string: String) {
+    init(_ string: String, localHostname: String? = Self.currentHostname()) {
         self.string = string
+        self.localHostname = localHostname
+    }
+
+    /// `gethostname(3)` — the name ghostty's own `os.hostname.isLocal` checks
+    /// an OSC 7 host against. Not `ProcessInfo.hostName`, which can block on
+    /// a DNS lookup.
+    static func currentHostname() -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
+        guard gethostname(&buffer, buffer.count - 1) == 0 else { return nil }
+        let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return bytes.isEmpty ? nil : String(decoding: bytes, as: UTF8.self)
     }
 
     var decision: Decision {
@@ -144,11 +160,9 @@ private extension UntrustedURL {
             return .deny(.malformedURL)
         }
 
-        // An empty host and `localhost` are this machine; any other host could
-        // trigger network access.
-        if let host = url.host, !host.isEmpty,
-           host.caseInsensitiveCompare("localhost") != .orderedSame
-        {
+        // An empty host, `localhost` and this Mac's own hostname are this
+        // machine; any other host could trigger network access.
+        if let host = url.host, !host.isEmpty, !isLocalHost(host) {
             return .deny(.malformedURL)
         }
 
@@ -179,6 +193,13 @@ private extension UntrustedURL {
             return .deny(.unsafeFile)
         }
         return .allow(canonicalURL)
+    }
+
+    func isLocalHost(_ host: String) -> Bool {
+        // Hostnames compare case-insensitively.
+        if host.caseInsensitiveCompare("localhost") == .orderedSame { return true }
+        guard let localHostname else { return false }
+        return host.caseInsensitiveCompare(localHostname) == .orderedSame
     }
 
     static func isUnsafeFile(_ url: URL, resourceValues: URLResourceValues) -> Bool {
