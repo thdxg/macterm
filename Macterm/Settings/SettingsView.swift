@@ -624,7 +624,7 @@ private struct GeneralSettings: View {
                     .settingsCaption()
             }
 
-            Section("Text Files") {
+            Section {
                 Picker("Open in", selection: $textFilePlacement) {
                     ForEach(TextFilePlacement.allCases) { option in
                         Text(option.displayName).tag(option)
@@ -633,12 +633,14 @@ private struct GeneralSettings: View {
                 .onChange(of: textFilePlacement) { _, v in
                     Preferences.shared.textFilePlacement = v
                 }
-                Text(
-                    "Files opened with \(appDisplayName) run in your shell's $VISUAL or $EDITOR. "
-                        + "To make it a file type's default, use Get Info › Open with › Change All in Finder; "
-                        + "⌘-clicking a path:line in a pane then opens it at that line."
-                )
-                .settingsCaption()
+                Text("Opens files in your shell's $VISUAL or $EDITOR.")
+                    .settingsCaption()
+            } header: {
+                HStack {
+                    Text("Text Files")
+                    Spacer()
+                    DocsLink(.textFiles)
+                }
             }
 
             Section("Remote Projects") {
