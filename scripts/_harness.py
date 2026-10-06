@@ -142,6 +142,39 @@ class MactermHarness:
         state = result.stdout.strip()
         return result.returncode == 0 and bool(state) and not state.startswith("Z")
 
+    def is_frontmost(self):
+        """Whether this instance is the active app — LaunchServices' front
+        process, read with `lsappinfo` (no TCC grant, unlike System Events).
+        False too when the pid is unknown or nothing is front at all."""
+        if self.pid is None:
+            return False
+        front = sh(["lsappinfo", "front"]).stdout.strip()
+        if not front:
+            return False
+        info = sh(["lsappinfo", "info", "-only", "pid", front]).stdout
+        match = re.search(r"\bpid\s*=\s*(\d+)", info)
+        return match is not None and int(match.group(1)) == self.pid
+
+    def activate(self, timeout=30):
+        """Make this instance the active app and wait until LaunchServices
+        agrees. Launch-time activation is not for keeps: `open -n` of another
+        instance (a test with a harness of its own) fronts that one, and when
+        it is killed macOS hands the front to Finder, not back to us — after
+        which the app's key window is gone and anything keyed off it (the
+        password monitor polls only the key window's focused pane, and runs
+        no timer at all while the app is inactive) stops. The bench `activate`
+        hook forces activation (`ignoringOtherApps`), since the cooperative
+        request is refused once another app holds the front; re-posted each
+        poll, as one request can still be dropped on a busy desktop."""
+
+        def taken():
+            if self.is_frontmost():
+                return True
+            notify("activate")
+            return False
+
+        wait_for(taken, timeout=timeout, interval=1, message="the app to become the active app")
+
     def open_project(self, attempts=30):
         """Ask the app to open a project so a real shell + surface is on
         screen. ProjectStore.add saves projects.json into the isolated data
