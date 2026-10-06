@@ -439,14 +439,6 @@ final class Preferences {
         didSet { Keys.reconnectRemotePanes.write(reconnectRemotePanes, to: defaults) }
     }
 
-    /// The command a text file opened with Macterm runs in (Settings →
-    /// General → Text Files), given `+LINE` and the path. Empty means the
-    /// `$EDITOR` of the shell the file opens in — read there, not here,
-    /// because a shell sets it in its own rc file (`TextFileEditor`).
-    var textFileEditorCommand: String {
-        didSet { Keys.textFileEditorCommand.write(textFileEditorCommand, to: defaults) }
-    }
-
     /// Where a text file opened with Macterm gets its editor: a split beside
     /// the pane (or the project's focused pane), or a tab of its own.
     var textFilePlacement: TextFilePlacement {
@@ -926,7 +918,6 @@ final class Preferences {
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
-        textFileEditorCommand = Keys.textFileEditorCommand.read(defaults)
         textFilePlacement = Keys.textFilePlacement.read(defaults)
         passwordManagerEnabled = Keys.passwordManagerEnabled.read(defaults)
         passwordAutofillAuthentication = Keys.passwordAutofillAuthentication.read(defaults)
@@ -1098,7 +1089,6 @@ final class Preferences {
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)
         static let reconnectRemotePanes = PreferenceStorageKey("macterm.remote.reconnectDroppedPanes", default: true)
-        static let textFileEditorCommand = PreferenceStorageKey("macterm.textFiles.editorCommand", default: "")
         static let textFilePlacement = PreferenceStorageKey("macterm.textFiles.placement", default: TextFilePlacement.split)
         /// The key of the "Offer to save passwords" toggle this replaced, so a
         /// user who switched that off finds the whole feature off, never on.

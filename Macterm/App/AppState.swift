@@ -1067,9 +1067,7 @@ final class AppState {
     /// Settings → General → Text Files, read when a file opens. Injectable
     /// so tests drive both placements without touching shared preferences.
     @ObservationIgnored
-    var textFileSettings: () -> (command: String, placement: TextFilePlacement) = {
-        (Preferences.shared.textFileEditorCommand, Preferences.shared.textFilePlacement)
-    }
+    var textFilePlacement: () -> TextFilePlacement = { Preferences.shared.textFilePlacement }
 
     /// Whether Launch Services opens a clicked file with this app — the one
     /// case a click keeps its line. Injectable for the same reason.

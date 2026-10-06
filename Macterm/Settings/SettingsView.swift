@@ -516,7 +516,6 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
-    @State private var textFileEditorCommand: String = Preferences.shared.textFileEditorCommand
     @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
 
     /// Why session persistence is inactive, when it is. Missing binary is a
@@ -626,10 +625,6 @@ private struct GeneralSettings: View {
             }
 
             Section("Text Files") {
-                TextField("Editor command", text: $textFileEditorCommand, prompt: Text("$EDITOR"))
-                    .onChange(of: textFileEditorCommand) { _, v in
-                        Preferences.shared.textFileEditorCommand = v
-                    }
                 Picker("Open in", selection: $textFilePlacement) {
                     ForEach(TextFilePlacement.allCases) { option in
                         Text(option.displayName).tag(option)
@@ -639,10 +634,9 @@ private struct GeneralSettings: View {
                     Preferences.shared.textFilePlacement = v
                 }
                 Text(
-                    "Runs a terminal editor for files opened with \(appDisplayName). "
+                    "Files opened with \(appDisplayName) run in your shell's $VISUAL or $EDITOR. "
                         + "To make it a file type's default, use Get Info › Open with › Change All in Finder; "
-                        + "⌘-clicking a path:line in a pane then opens it at that line. "
-                        + "Leave the command empty to use your shell's $EDITOR."
+                        + "⌘-clicking a path:line in a pane then opens it at that line."
                 )
                 .settingsCaption()
             }

@@ -74,8 +74,8 @@ Two per-row checkboxes, mutually exclusive:
 Macterm can open text files in a terminal editor such as Helix or Neovim, which macOS can't make a default app on its own.
 
 1. In Finder, select a file, choose **File → Get Info**, pick **Macterm** under **Open with**, and click **Change All**. Repeat for each file type you want.
-2. In **Settings → General → Text Files**, set **Editor command** (`hx`, `nvim`). Leave it empty to use `$EDITOR` from your shell config.
-3. Choose **Open in**: **New split** (beside the current pane, along its longer side) or **New tab**.
+2. Set `$EDITOR` (or `$VISUAL`, which wins) in your shell config, e.g. `$env.EDITOR = "hx"` in nu or `export EDITOR=nvim` in zsh. Without either, files open in `vi`.
+3. In **Settings → General → Text Files**, choose **Open in**: **New split** (beside the current pane, along its longer side) or **New tab**.
 
 Double-clicking such a file, opening it with **Open With → Macterm**, or `open -a Macterm file.rs` opens it in the project that contains it. If no project does, Macterm creates one for the file's folder.
 
