@@ -965,13 +965,10 @@ final class GhosttyTerminalNSView: NSView {
         let widthPx = UInt32(backingSize.width)
         let heightPx = UInt32(backingSize.height)
         let cells = ghostty_surface_size(surface)
-        let metrics = SurfaceSizeGate.Metrics(
-            cellWidthPx: cells.cell_width_px,
-            cellHeightPx: cells.cell_height_px,
-            chromeWidthPx: SurfaceSizeGate.chrome(totalPx: cells.width_px, cells: cells.columns, cellPx: cells.cell_width_px),
-            chromeHeightPx: SurfaceSizeGate.chrome(totalPx: cells.height_px, cells: cells.rows, cellPx: cells.cell_height_px)
+        guard SurfaceSizeGate.admits(
+            widthPx: widthPx, heightPx: heightPx,
+            cellWidthPx: cells.cell_width_px, cellHeightPx: cells.cell_height_px
         )
-        guard SurfaceSizeGate.admits(widthPx: widthPx, heightPx: heightPx, metrics: metrics)
         else {
             let size = "\(widthPx)x\(heightPx)"
             logger.debug("refusing degenerate surface size \(size, privacy: .public)px for \(self.sessionName, privacy: .public)")
