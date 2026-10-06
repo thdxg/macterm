@@ -142,18 +142,25 @@ class MactermHarness:
         state = result.stdout.strip()
         return result.returncode == 0 and bool(state) and not state.startswith("Z")
 
-    def is_frontmost(self):
-        """Whether this instance is the active app — LaunchServices' front
-        process, read with `lsappinfo` (no TCC grant, unlike System Events).
-        False too when the pid is unknown or nothing is front at all."""
-        if self.pid is None:
-            return False
+    def front_pid(self):
+        """The pid of the active app — LaunchServices' front process, read
+        with `lsappinfo` (no TCC grant, unlike System Events) — or None with
+        the raw text when nothing is front or the answer can't be read. The
+        key has been spelled both `"pid"=N` and `pid = N` across macOS
+        releases; a third spelling fails loudly through the text."""
         front = sh(["lsappinfo", "front"]).stdout.strip()
         if not front:
-            return False
+            return None, "lsappinfo front: (nothing)"
         info = sh(["lsappinfo", "info", "-only", "pid", front]).stdout
-        match = re.search(r"\bpid\s*=\s*(\d+)", info)
-        return match is not None and int(match.group(1)) == self.pid
+        match = re.search(r'"?pid"?\s*=\s*(\d+)', info)
+        if match is None:
+            return None, f"lsappinfo front: {front}; info -only pid: {info.strip()!r}"
+        return int(match.group(1)), front
+
+    def is_frontmost(self):
+        """Whether this instance is the active app. False too when its pid
+        is unknown or nothing is front at all."""
+        return self.pid is not None and self.front_pid()[0] == self.pid
 
     def activate(self, timeout=30):
         """Make this instance the active app and wait until LaunchServices
@@ -167,13 +174,19 @@ class MactermHarness:
         request is refused once another app holds the front; re-posted each
         poll, as one request can still be dropped on a busy desktop."""
 
+        last = [""]
+
         def taken():
             if self.is_frontmost():
                 return True
+            last[0] = self.front_pid()[1]
             notify("activate")
             return False
 
-        wait_for(taken, timeout=timeout, interval=1, message="the app to become the active app")
+        try:
+            wait_for(taken, timeout=timeout, interval=1, message="the app to become the active app")
+        except HarnessError as error:
+            raise HarnessError(f"{error} (pid {self.pid}; {last[0]})") from None
 
     def open_project(self, attempts=30):
         """Ask the app to open a project so a real shell + surface is on
