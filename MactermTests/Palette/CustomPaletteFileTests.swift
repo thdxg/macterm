@@ -143,4 +143,67 @@ struct CustomPaletteFileTests {
             try CustomPaletteFile.parse(yaml: "nodes: {}")
         }
     }
+
+    // MARK: - The docs' examples
+
+    /// Every complete palette file the docs show: a fenced `yaml` block
+    /// captioned with a path in `~/.config/macterm/palettes/`, keyed by the
+    /// file's stem. Read from the source tree, like `DocsLinkTests`, so a
+    /// copy-pasted example that no longer reads fails here first.
+    static func docsExamples() throws -> [String: String] {
+        let pages = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // Palette
+            .deletingLastPathComponent() // MactermTests
+            .deletingLastPathComponent() // repo root
+            .appendingPathComponent("website/docs/pages")
+        var examples: [String: String] = [:]
+        for file in try FileManager.default.contentsOfDirectory(at: pages, includingPropertiesForKeys: nil)
+            where file.pathExtension == "md"
+        {
+            var current: (id: String, lines: [String])?
+            for line in try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n") {
+                if let open = current {
+                    if line == "```" {
+                        examples[open.id] = open.lines.joined(separator: "\n")
+                        current = nil
+                    } else {
+                        current?.lines.append(line)
+                    }
+                } else if let match = line.firstMatch(of: #/^```yaml title="~/\.config/macterm/palettes/([a-z0-9-]+)\.yaml"$/#) {
+                    current = (String(match.output.1), [])
+                }
+            }
+        }
+        return examples
+    }
+
+    @Test
+    func every_palette_file_in_the_docs_reads() throws {
+        let examples = try Self.docsExamples()
+        #expect(Set(examples.keys) == ["git", "docker", "ssh", "kubernetes"])
+        for (id, yaml) in examples {
+            #expect(throws: Never.self, "the docs' \(id).yaml doesn't read") {
+                try Self.palette(yaml, id: id)
+            }
+        }
+    }
+
+    @Test
+    func the_cookbook_kubernetes_palette_reads_a_port_by_index_and_a_namespace_from_above() throws {
+        let palette = try Self.palette(#require(Self.docsExamples()["kubernetes"]), id: "kubernetes")
+        guard case let .listing(services)? = palette.nodes["services"]?.kind else {
+            Issue.record("services is not a listing")
+            return
+        }
+        let output = #"{"items":[{"metadata":{"name":"api","namespace":"prod"},"spec":{"type":"ClusterIP","ports":[{"port":8080}]}}]}"#
+        let rows = try CustomPaletteRows.parse(output: output, listing: services)
+        #expect(rows.map(\.exports) == [["SERVICE": "api", "NAMESPACE": "prod", "PORT": "8080"]])
+
+        guard case let .listing(pods)? = palette.nodes["pods"]?.kind else {
+            Issue.record("pods is not a listing")
+            return
+        }
+        #expect(pods.command.contains(#"set -- -n "$NAMESPACE""#), "a namespace picked above scopes the listing")
+        #expect(pods.outcome == .enter(node: "pod-menu"))
+    }
 }
