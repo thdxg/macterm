@@ -24,9 +24,11 @@ enum PaletteMotion {
     /// `progress` 0 is blurred, clear and slightly small; 1 is the view as
     /// drawn. Animatable so the transition interpolates it.
     struct BlurIn: ViewModifier, Animatable {
-        var progress: Double
+        /// Nonisolated: `Animatable` is not main-actor bound while
+        /// `ViewModifier` is, and the interpolated value is a plain Double.
+        nonisolated var progress: Double
 
-        var animatableData: Double {
+        nonisolated var animatableData: Double {
             get { progress }
             set { progress = newValue }
         }
