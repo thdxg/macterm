@@ -3,65 +3,29 @@ import SwiftUI
 
 // MARK: - Motion
 
-/// The one motion the palette has: how the panel and its pills appear and
-/// go. A view resolves out of a blur while it fades in and grows the last
-/// few percent from its top edge, and dissolves back the same way — the
-/// shape of the system's own blur-in, drawn by hand because SwiftUI's
-/// `blurReplace` fixes a radius too faint to read in the 80 ms this takes
-/// (measured frame by frame: its blur was gone within three frames of a
-/// six-frame run and the rest was a fade). The scrim only fades. Every
-/// appearance and dismissal in the palette uses this pair, so the pills
-/// come and go exactly as the panel does.
+/// The palette's one motion: the pills. A frame pushed or popped comes and
+/// goes through SwiftUI's `blurReplace`, the system's own blur-and-scale,
+/// on a short curve. The panel itself appears and vanishes in one frame — a
+/// view inside the window cannot get the window-level fade and backdrop
+/// blur a panel like the quick terminal's gets for free, and a transition
+/// drawn in its place read as a slower fade, so it has none.
 enum PaletteMotion {
-    static let duration: TimeInterval = 0.08
-
-    static var animation: Animation { .easeOut(duration: duration) }
-
-    static var transition: AnyTransition {
-        .modifier(active: BlurIn(progress: 0), identity: BlurIn(progress: 1))
-    }
-
-    /// `progress` 0 is blurred, clear and slightly small; 1 is the view as
-    /// drawn. Animatable so the transition interpolates it.
-    struct BlurIn: ViewModifier, Animatable {
-        /// Nonisolated: `Animatable` is not main-actor bound while
-        /// `ViewModifier` is, and the interpolated value is a plain Double.
-        nonisolated var progress: Double
-
-        nonisolated var animatableData: Double {
-            get { progress }
-            set { progress = newValue }
-        }
-
-        func body(content: Content) -> some View {
-            content
-                .blur(radius: (1 - progress) * 18)
-                .opacity(progress)
-                .scaleEffect(0.97 + 0.03 * progress, anchor: .top)
-        }
-    }
+    static var animation: Animation { .easeOut(duration: 0.12) }
+    static var transition: BlurReplaceTransition { .blurReplace }
 }
 
 // MARK: - Mount
 
-/// Puts the palette over a window while it is visible: the scrim fades,
-/// the panel comes and goes through `PaletteMotion`, and Reduce Motion
-/// lands both in one frame. One place owns this so every window's palette
-/// appears the same way.
+/// Puts the palette over a window while it is visible, in one frame, and
+/// takes it away the same way. One place owns this so every window's
+/// palette appears the same way.
 struct CommandPaletteMount: View {
     let isVisible: Bool
 
-    @Environment(\.accessibilityReduceMotion)
-    private var reduceMotion
-
     var body: some View {
-        ZStack {
-            if isVisible {
-                CommandPaletteOverlay()
-                    .transition(.opacity)
-            }
+        if isVisible {
+            CommandPaletteOverlay()
         }
-        .animation(reduceMotion ? nil : PaletteMotion.animation, value: isVisible)
     }
 }
 
@@ -104,8 +68,6 @@ struct CommandPaletteOverlay: View {
                         PaletteBreadcrumb(frames: windowState.paletteStack) { index in
                             windowState.popPaletteFrames(above: index)
                         }
-                        // The panel's own motion, so a screen opening reads
-                        // as the palette's appearance did.
                         .transition(PaletteMotion.transition)
                     }
                     CommandPalettePanel()
@@ -113,7 +75,6 @@ struct CommandPaletteOverlay: View {
                 }
                 .frame(width: 500)
                 .padding(.top, max(0, geo.size.height * 0.15 - breadcrumb))
-                .transition(PaletteMotion.transition)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(reduceMotion ? nil : PaletteMotion.animation, value: windowState.paletteStack.count)
