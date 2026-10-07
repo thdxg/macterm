@@ -63,6 +63,26 @@ struct MainAppResponderTests {
     }
 
     @Test
+    func a_worktrees_chord_outside_a_repository_says_so_instead_of_reaching_the_terminal() throws {
+        let fx = makeFixture()
+        let action = HotkeyAction.worktrees
+        let prior = Preferences.defaults.string(forKey: action.defaultsKey)
+        defer { HotkeyRegistry.setShortcutString(prior ?? action.defaultShortcut, for: action) }
+        HotkeyRegistry.setShortcutString("cmd+opt+ctrl+shift+k", for: action)
+
+        let plain = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-not-a-repo-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: plain) }
+        let project = Project(name: "plain", path: plain.path, sortOrder: 0)
+        fx.projects.add(project)
+        fx.state.selectProject(project)
+
+        #expect(try fx.responder.handle(keyDown(for: action)) == .handled)
+        #expect(fx.state.activeToast?.title == "Project is not a git repository")
+    }
+
+    @Test
     func a_chord_whose_command_does_not_apply_passes_through() throws {
         let fx = makeFixture()
         // No project selected: every project-scoped command's action is nil,

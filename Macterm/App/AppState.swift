@@ -974,9 +974,10 @@ final class AppState {
         layoutFilesVersion &+= 1
     }
 
-    /// The transient success confirmation showing in `ToastOverlay`, if any.
-    /// Only for outcomes that leave no visible trace — failures still raise a
-    /// dialog, which a toast must never replace.
+    /// The transient confirmation showing in `ToastOverlay`, if any. Only for
+    /// outcomes that leave no visible trace — a success, or a keybind that
+    /// had nothing to act on (`AppCommand.unavailableNotice`) — failures
+    /// still raise a dialog, which a toast must never replace.
     private(set) var activeToast: Toast?
 
     /// Show `toast`, replacing any toast already up (the newest outcome is the

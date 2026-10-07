@@ -270,6 +270,9 @@ extension AppCommand {
             // The master switch covers on-demand filling too.
             guard Preferences.shared.passwordManagerEnabled else { return nil }
             return { ctx.appState.toggleCommandPalette(scope: .passwords) }
+        case .worktrees:
+            guard let current, Self.worktreesUnavailableReason(for: current) == nil else { return nil }
+            return { ctx.appState.toggleCommandPalette(scope: .worktrees) }
         case .checkForUpdate:
             // Always present in the palette; the guard only no-ops when a check
             // is already in flight (canCheckForUpdates flips false during one).
@@ -292,6 +295,7 @@ extension AppCommand {
         if self == .passwordManager {
             return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Password Manager"
         }
+        if self == .worktrees { return unavailableNotice(in: ctx) }
         guard self == .applyLayout,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
@@ -305,6 +309,27 @@ extension AppCommand {
              .invalid:
             return nil
         }
+    }
+
+    /// What a keybind says, as a toast, when it fires while this command
+    /// doesn't apply — for a command whose being unavailable is news (the
+    /// project isn't a repository) rather than a context that plainly isn't
+    /// there. nil lets the chord fall through to the terminal, as every
+    /// other inapplicable binding does.
+    @MainActor
+    func unavailableNotice(in ctx: AppCommandContext) -> String? {
+        guard self == .worktrees,
+              let projectID = ctx.appState.activeProjectID,
+              let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
+        else { return nil }
+        return Self.worktreesUnavailableReason(for: current)
+    }
+
+    /// Why `project` has no Worktrees screen, or nil when it has one.
+    @MainActor
+    static func worktreesUnavailableReason(for project: Project) -> String? {
+        if project.isRemote { return "Worktrees aren’t available for remote projects" }
+        return GitWorktrees.isRepository(projectPath: project.path) ? nil : "Project is not a git repository"
     }
 
     /// Secondary line for an *enabled* palette row. Only "Apply Layout" uses

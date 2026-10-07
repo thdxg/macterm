@@ -10,9 +10,11 @@ import AppKit
 @MainActor
 final class PaletteResponder: KeyResponder {
     private let appState: AppState
+    private let projectStore: ProjectStore
 
-    init(appState: AppState) {
+    init(appState: AppState, projectStore: ProjectStore) {
         self.appState = appState
+        self.projectStore = projectStore
     }
 
     func handle(_ event: NSEvent) -> KeyDisposition {
@@ -23,10 +25,19 @@ final class PaletteResponder: KeyResponder {
         // A palette screen's chord with the palette already up: the app-level
         // responder that runs bindings stands aside while the palette is
         // visible, so switch to the screen (or close it) here.
-        if appState.isCommandPaletteVisible, HotkeyRegistry.matches(event, action: .passwordManager),
-           Preferences.shared.passwordManagerEnabled
+        if appState.isCommandPaletteVisible,
+           let action = HotkeyAction.allCases.first(where: {
+               $0.appCommand.paletteScope != nil && HotkeyRegistry.matches(event, action: $0)
+           })
         {
-            appState.toggleCommandPalette(scope: .passwords)
+            let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
+            if let run = action.appCommand.action(in: ctx) {
+                run()
+            } else if let notice = action.appCommand.unavailableNotice(in: ctx) {
+                appState.presentToast(notice)
+            } else {
+                return .passThrough
+            }
             return .handled
         }
         // While the palette is visible, SwiftUI owns arrow / escape / etc.
@@ -229,7 +240,13 @@ final class MainAppResponder: KeyResponder {
         // open/close policy in `AppCommandActions`.
         if let action = HotkeyAction.allCases.first(where: { HotkeyRegistry.matches(event, action: $0) }) {
             let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
-            guard let run = action.appCommand.action(in: ctx) else { return .passThrough }
+            guard let run = action.appCommand.action(in: ctx) else {
+                // Unavailable for a reason worth saying (Worktrees outside a
+                // repository): say it rather than hand the chord on.
+                guard let notice = action.appCommand.unavailableNotice(in: ctx) else { return .passThrough }
+                appState.presentToast(notice)
+                return .handled
+            }
             run()
             return .handled
         }
