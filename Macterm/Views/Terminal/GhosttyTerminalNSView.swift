@@ -1081,9 +1081,13 @@ final class GhosttyTerminalNSView: NSView {
 
     private func setupTrackingArea() {
         if let existing = currentTrackingArea { removeTrackingArea(existing) }
+        // `.activeAlways`, as in Ghostty.app: a program reporting the mouse
+        // still hears it move, and links still highlight, in a window that
+        // isn't key. What covers the pane is filtered per event instead
+        // (`ownsPointer`).
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self
         )
         addTrackingArea(area)
@@ -1380,22 +1384,56 @@ final class GhosttyTerminalNSView: NSView {
         _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods(event))
     }
 
+    /// A drag belongs to the view the press went to wherever the pointer goes
+    /// — over the sidebar, out of the window — so it reports unfiltered.
     override func mouseDragged(with event: NSEvent) {
-        mouseMoved(with: event)
+        sendMousePos(event)
     }
 
     override func rightMouseDragged(with event: NSEvent) {
-        mouseMoved(with: event)
+        sendMousePos(event)
     }
 
     override func otherMouseDragged(with event: NSEvent) {
-        mouseMoved(with: event)
+        sendMousePos(event)
     }
 
     override func mouseMoved(with event: NSEvent) {
+        guard ownsPointer(event) else { return }
+        sendMousePos(event)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        // Undoes the exit's "outside the viewport" below: mouse reporting and
+        // link hover both read the position libghostty last heard.
+        guard ownsPointer(event) else { return }
+        sendMousePos(event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        // A drag that leaves keeps reporting through `mouseDragged`.
+        guard NSEvent.pressedMouseButtons == 0, let surface else { return }
+        // Negative coordinates are libghostty's "the pointer left": it drops
+        // the hovered link (underline, banner, pointing hand) with them.
+        ghostty_surface_mouse_pos(surface, -1, -1, mods(event))
+    }
+
+    private func sendMousePos(_ event: NSEvent) {
         guard let surface else { return }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
+    }
+
+    /// Whether the pointer is over this view rather than over something
+    /// covering it. The tracking area fires by geometry alone, and what sits
+    /// on a pane — a locked desktop widget's shield, a split's resize band —
+    /// owns the pointer where it is; a shielded widget's program must not hear
+    /// the pointer move any more than it hears a click.
+    private func ownsPointer(_ event: NSEvent) -> Bool {
+        guard let hit = window?.contentView?.hitTest(event.locationInWindow) else { return false }
+        return hit === self || hit.isDescendant(of: self)
     }
 
     override func rightMouseDown(with event: NSEvent) {
