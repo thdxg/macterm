@@ -87,7 +87,7 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 /// That is harmless because the comparison versions can't collide: a beta sorts
 /// below the stable release of the same `X.Y.Z` and a tip sorts above it (see
 /// `sparkle_comparison_version` in scripts/_lib.sh).
-/// When Autofill asks the user to authenticate (Settings → Passwords). The raw
+/// When Autofill asks the user to authenticate (Settings → Password Manager). The raw
 /// values are persisted; the case order is the picker's.
 enum PasswordAutofillAuthentication: String, CaseIterable, Identifiable {
     /// The default, "Once per app launch": the first Autofill asks, and the
@@ -444,7 +444,7 @@ final class Preferences {
         didSet { Keys.textFilePlacement.write(textFilePlacement, to: defaults) }
     }
 
-    /// The password manager (Settings → Passwords): offering to save a
+    /// The password manager (Settings → Password Manager): offering to save a
     /// password once it works, and autofilling a saved one. Off, the monitor
     /// captures, offers and fills nothing; prompt detection still drives
     /// `macos-auto-secure-input`. Saved passwords stay in the keychain.

@@ -13,7 +13,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case quickTerminal = "Quick Terminal"
     case widgets = "Widgets"
     case keymaps = "Keymaps"
-    case passwords = "Passwords"
+    case passwords = "Password Manager"
     case updates = "Updates"
 
     var id: String { rawValue }

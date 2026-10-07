@@ -1303,16 +1303,16 @@ for b in blocks:
         print(acct)
 ' "$PW_SERVICE" | while IFS= read -r acct; do
     security delete-generic-password -s "$PW_SERVICE" -a "$acct" >/dev/null 2>&1 \
-      || printf '\033[33m..\033[0m could not remove "%s" — do it in Settings → Passwords\n' "$acct"
+      || printf '\033[33m..\033[0m could not remove "%s" — do it in Settings → Password Manager\n' "$acct"
   done
 }
 
-# Settings → Passwords re-reads the keychain when it appears: a retake's way
+# Settings → Password Manager re-reads the keychain when it appears: a retake's way
 # to make Macterm forget the last take's entry without a relaunch (which
 # would lock autofill behind Touch ID again). The window is titled after its
 # pane and its sidebar rows carry no labels, so the pane goes by position —
-# SettingsPane's order, Passwords eighth.
-SETTINGS_PANES='{"General", "Projects", "Appearance", "Animations", "Quick Terminal", "Widgets", "Keymaps", "Passwords", "Updates"}'
+# SettingsPane's order, Password Manager eighth.
+SETTINGS_PANES='{"General", "Projects", "Appearance", "Animations", "Quick Terminal", "Widgets", "Keymaps", "Password Manager", "Updates"}'
 vault_reload() {
   focus_app; sleep 0.3; kc 43 "$CMD"; sleep 1.5          # ⌘,
   # by index, not by name: the window's title changes with the pane
@@ -1324,7 +1324,7 @@ vault_reload() {
          if n is 0 then error \"no Settings window\"
          select row 8 of outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1 of window n
          delay 1.2
-         if (name of window n as text) is not \"Passwords\" then error \"Passwords pane did not open\"
+         if (name of window n as text) is not \"Password Manager\" then error \"Password Manager pane did not open\"
          select row 1 of outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1 of window n
        end tell" >/dev/null || return 1
   sleep 0.5; kc $K_W "$CMD"; sleep 0.6                    # close Settings
@@ -1422,11 +1422,11 @@ demo10() {  # save a password typed at an ssh login, autofill the next one
   # A take that saved the demo-box password leaves it in this Macterm's
   # in-memory list even after pw_cleanup deletes it from the keychain, and a
   # retake would open on Autofill instead of the save. Only a relaunch
-  # re-reads the keychain (so does opening Settings → Passwords).
+  # re-reads the keychain (so does opening Settings → Password Manager).
   local pid; pid="$("$MACTERM" status | sed -n 's/.*(pid \([0-9]*\)).*/\1/p')"
   pw_cleanup
   if [ -n "$pid" ] && [ "$(cat "$WORK/pw-saved-pid" 2>/dev/null)" = "$pid" ]; then
-    vault_reload || die "this Macterm still lists demo 10's password — open Settings → Passwords (or relaunch it) before a retake"
+    vault_reload || die "this Macterm still lists demo 10's password — open Settings → Password Manager (or relaunch it) before a retake"
   fi
   remote_up password
   terminfo_prime

@@ -121,7 +121,7 @@ enum PasswordPromptIdentity {
         }
     }
 
-    /// The entry a person declares in Settings → Passwords → Details: the
+    /// The entry a person declares in Settings → Password Manager → Details: the
     /// command as typed, under the same collapsing rules, trusted because the
     /// user wrote it — `sudo apt update` files as `sudo`, a passphrase prompt
     /// drops its command, an empty command matches the prompt alone, and an

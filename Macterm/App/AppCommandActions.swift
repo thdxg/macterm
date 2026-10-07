@@ -290,7 +290,7 @@ extension AppCommand {
     func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
         // Off by the master switch: say where it is rather than vanish.
         if self == .passwordManager {
-            return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Passwords"
+            return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Password Manager"
         }
         guard self == .applyLayout,
               let projectID = ctx.appState.activeProjectID,
