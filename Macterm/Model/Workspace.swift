@@ -11,6 +11,17 @@ final class TerminalTab: Identifiable {
     /// itself is untouched — clearing this restores the full layout.
     /// Transient: not persisted across launches.
     var zoomedPaneID: UUID?
+
+    /// Bumped by every ratio change that should ANIMATE — the keyboard
+    /// resize (`resize(_:delta:)`), i.e. Resize Split Left/Right/Up/Down from
+    /// a keybind, the palette or a menu. `SplitLayout.animationKey` folds it
+    /// in, so the frames that follow in the same transaction animate like a
+    /// split. A divider drag writes `SplitBranch.ratio` directly and the
+    /// control CLI's `pane resize-split` goes through `setSplitRatio`;
+    /// neither bumps this, so both land immediately — a drag must follow the
+    /// pointer, and a script that sets a ratio then reads pane widths must
+    /// see the geometry it asked for. In memory only, never persisted.
+    var animatedResizeGeneration = 0
     /// For a mirror view of another tab (#345): the `shapeSignature` of the
     /// real tab it was built from, so `AppState.shadow(of:for:)` can tell a
     /// still-matching mirror from one the real tab has outgrown.
@@ -315,9 +326,12 @@ final class TerminalTab: Identifiable {
     }
 
     /// Adjust the nearest matching-axis split ratio around the focused pane.
+    /// The keyboard path, and the one ratio change that animates (see
+    /// `animatedResizeGeneration`).
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
         guard let paneID = focusedPaneID else { return }
         splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
+        animatedResizeGeneration &+= 1
     }
 
     /// Set an absolute ratio on the nearest matching-axis split around a pane

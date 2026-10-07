@@ -1028,6 +1028,7 @@ struct WorkspaceView: View {
             zoomedPaneID: zoomedPaneID,
             isActiveProject: true,
             projectID: project.id,
+            resizeGeneration: tab.animatedResizeGeneration,
             nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab),
             onFocusPane: { paneID in focus(paneID, in: view) },
             onSplit: { paneID, dir, position in split(paneID, direction: dir, position: position, in: view) },

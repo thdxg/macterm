@@ -52,6 +52,7 @@ Window chrome Macterm draws itself, so these are ignored or forced:
 | --- | --- |
 | `tab-inherit-working-directory` | `false` (Macterm's default) starts new tabs at the project root; `true` uses the focused pane's directory. |
 | `split-inherit-working-directory` | Same, for splits. |
+| `focus-follows-mouse` | `true` focuses the pane under the pointer in the active window, as clicking it would. Never takes focus from the command palette, the search bar or a rename field. |
 | `macos-shortcuts` | Gates [Shortcuts](/docs/shortcuts): `ask` (default), `allow`, `deny`. |
 | `macos-icon = custom` + `macos-custom-icon` | Replaces the Dock icon. Absolute path to a PNG, JPEG, or ICNS. Other `macos-icon` values are ignored. |
 | `macos-hidden = always` | Runs Macterm with no Dock icon, no menu bar, and no <kbd>⌘</kbd><kbd>⇥</kbd> entry. See below. |
@@ -95,8 +96,8 @@ Set a color from a project's sidebar context menu (**Color**) or **Settings → 
 | --- | --- |
 | **Smooth scrolling** | Trackpad scrolling and divider drags move by pixels instead of whole rows. Full-screen programs that scroll a region of the screen (`less`, for one) slide too; ones that redraw every row still move by rows. |
 | **Animate splits** | Panes slide in and out of the split layout. Off automatically under Reduce Motion. |
-| **Smooth cursor** | The cursor glides between positions. Sets `cursor-opacity = 0` while on. |
-| **Cursor trail** | A fading streak follows the cursor. Turn off any community trail shader, or you'll see two. |
+| **Smooth cursor** | The cursor glides between positions, and the text it passes over is cursor-colored exactly as far as it's covered. Programs that draw their own cursor (a second one in Helix, say) still move it by cells. |
+| **Cursor trail** | A fading streak follows the cursor across larger moves, drawn under the text. Turn off any community trail shader, or you'll see two. |
 
 ## Running without a Dock icon
 

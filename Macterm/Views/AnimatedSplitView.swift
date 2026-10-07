@@ -15,6 +15,8 @@ struct SplitRootView: View {
     let zoomedPaneID: UUID?
     let isActiveProject: Bool
     let projectID: UUID
+    /// `TerminalTab.animatedResizeGeneration`: a keyboard resize animates.
+    var resizeGeneration: Int = 0
     var nonLeaderPaneIDs: Set<UUID> = []
     let onFocusPane: (UUID) -> Void
     let onSplit: (UUID, SplitDirection, SplitPosition) -> Void
@@ -30,6 +32,7 @@ struct SplitRootView: View {
                 root: root,
                 focusedPaneID: focusedPaneID,
                 zoomedPaneID: zoomedPaneID,
+                resizeGeneration: resizeGeneration,
                 isActiveProject: isActiveProject,
                 nonLeaderPaneIDs: nonLeaderPaneIDs,
                 onFocusPane: onFocusPane,
@@ -76,9 +79,24 @@ struct SplitRootView: View {
 /// through, its own outer edge of the split: the right pane of a side-by-
 /// side split slides right, the left pane left; the bottom pane of a stacked
 /// split slides down, the top pane up.
+///
+/// A spring, deliberately, and one defined by when it SETTLES. SwiftUI
+/// drives a spring itself, frame by frame, so every frame reaches the
+/// surfaces as a resize and the text reflows along with the edge (and the
+/// fork's resize leftover slides it). A timing curve (`easeOut`, a cubic
+/// bezier) is bridged to Core Animation for a representable's frame
+/// instead: the view is sized once and its layer is animated, so the
+/// surface is stretched for the duration and resized at the end (measured:
+/// two SIGWINCHs per split, start and finish, nothing between). And a
+/// spring named by `.smooth(duration:)` has a *perceptual* duration — it
+/// kept settling for ~250 ms past it, a pixel or two per frame, each one a
+/// pty resize and a full redraw for the program for motion nobody could
+/// see. `settlingDuration` is the moment the spring is at rest.
 enum SplitAnimation {
     static let duration: TimeInterval = 0.3
-    static var curve: Animation { .smooth(duration: duration) }
+    static var curve: Animation {
+        .spring(Spring(settlingDuration: duration, dampingRatio: 1.0))
+    }
 }
 
 /// The split tree laid out flat: every pane is a child of one ZStack, keyed
@@ -133,16 +151,21 @@ enum SplitAnimation {
 ///   `GhosttyTerminalNSView.hiddenInLayout`. Dividers ARE removed while
 ///   zoomed: a grab band is an NSView and would catch drags through the
 ///   zoomed pane even when invisible.
-/// - **Only structure animates.** The animation is keyed to
-///   `SplitLayout.animationKey` (pane identities and axes plus the zoomed
-///   pane), never to ratios, so a divider drag lands immediately and a
-///   window resize doesn't animate the tiles.
+/// - **Structure animates, and the keyboard resize; nothing else.** The
+///   animation is keyed to `SplitLayout.animationKey` (pane identities and
+///   axes, the zoomed pane, and `TerminalTab.animatedResizeGeneration`),
+///   never to ratios themselves, so a divider drag lands immediately, a
+///   window resize doesn't animate the tiles, and the control CLI's
+///   `pane resize-split` sets the geometry a script then reads. Resize Split
+///   Left/Right/Up/Down bumps the generation in the same transaction as its
+///   ratio change, so that one ratio change slides like a split does.
 /// - Every animation frame resizes each moving pane's surface, the same path
 ///   a divider drag takes. Reduce Motion turns the animation off.
 struct AnimatedSplitView: View {
     let root: SplitNode
     let focusedPaneID: UUID?
     let zoomedPaneID: UUID?
+    let resizeGeneration: Int
     let isActiveProject: Bool
     let nonLeaderPaneIDs: Set<UUID>
     let onFocusPane: (UUID) -> Void
@@ -301,7 +324,10 @@ struct AnimatedSplitView: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-            .animation(animation, value: SplitLayout.animationKey(of: root, zoomedPaneID: zoomed))
+            .animation(
+                animation,
+                value: SplitLayout.animationKey(of: root, zoomedPaneID: zoomed, resizeGeneration: resizeGeneration)
+            )
             .onAppear {
                 settledIDs = Set(placed.map(\.id)).union(layout.dividers.map(\.id))
             }

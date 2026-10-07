@@ -451,6 +451,7 @@ final class GhosttyApp {
         static let backgroundOpacityCells = GhosttyConfigKey.bool("background-opacity-cells")
         static let tabInheritWorkingDirectory = GhosttyConfigKey.bool("tab-inherit-working-directory")
         static let splitInheritWorkingDirectory = GhosttyConfigKey.bool("split-inherit-working-directory")
+        static let focusFollowsMouse = GhosttyConfigKey.bool("focus-follows-mouse")
     }
 
     // MARK: - Bell & secure input config (read by GhosttyCallbacks)
@@ -528,6 +529,13 @@ final class GhosttyApp {
     /// Ghostty's default (true) is Macterm's too, so nothing pins it.
     var splitInheritsWorkingDirectory: Bool {
         read(Keys.splitInheritWorkingDirectory) ?? true
+    }
+
+    /// `focus-follows-mouse`: moving the pointer over a pane of the key window
+    /// focuses it, as clicking it would. Read live by the terminal view on
+    /// each pointer move, so a config reload takes effect at once.
+    var focusFollowsMouse: Bool {
+        read(Keys.focusFollowsMouse) ?? false
     }
 
     private func loadConfig() -> (ghostty_config_t?, ReloadResult) {

@@ -33,7 +33,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # checkout holding a stale copy needs `rm -rf GhosttyKit.xcframework
 # Macterm/Resources/terminfo && mise run setup` once. CI's download cache
 # hashes this file, so a bump here also refreshes it.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-05}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-07}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
@@ -47,18 +47,25 @@ GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-05}"
 # is exactly what a stale CI cache did once — `Macterm/Resources/zmx` rides the
 # GhosttyKit cache, whose key hashes THIS file, so a zmx bump must change it.
 #
-# build-2026-10-06: upstream through 2d23c0d (#272 symlink-loop fix; a passive
+# build-2026-10-07: upstream through 2d23c0d (#272 symlink-loop fix; a passive
 # client's terminal query replies — DA, DECRPM, kitty flags — no longer take
 # leadership, which is what a mirror pane answering a query used to do; the
 # scoped-history Capture message at wire tag 22) + downstream patches
-# 0001–0005. 0003's Claim tag is 23 because upstream took 22 (thdxg/zmx#9); a
+# 0001–0006. 0003's Claim tag is 23 because upstream took 22 (thdxg/zmx#9); a
 # session daemon left over from an older build ignores it until the session is
 # recreated, and leadership then still moves on the next keystroke. 0005
 # (thdxg/zmx#10) stops `zmx attach` announcing the session it creates: a pane
 # born mid split animation is a row tall, and the line's newline scrolled it
-# out of reach of attach's clear, so it stayed above the prompt. 0001 and 0002
-# are no-ops against this upstream.
-ZMX_TAG="${ZMX_TAG:-build-2026-10-06}"
+# out of reach of attach's clear, so it stayed above the prompt. 0006
+# (thdxg/zmx#11) replays the mouse mode a program set last on reattach:
+# ghostty's formatter replays the modes in numeric order, so crossterm's
+# `?1015h ?1006h` (Helix) came back as urxvt, whose releases don't name the
+# button, and right click broke after every relaunch. It runs in the session
+# daemon, so a session from an older build keeps the bug until it is
+# recreated. Drop 0006 once upstream ghostty's formatter replays
+# `flags.mouse_format`/`mouse_event` itself. 0001 and 0002 are no-ops against
+# this upstream.
+ZMX_TAG="${ZMX_TAG:-build-2026-10-07}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.

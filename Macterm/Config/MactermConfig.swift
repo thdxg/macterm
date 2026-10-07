@@ -26,14 +26,11 @@ final class MactermConfig {
 
     let defaultsURL: URL
     let overridesURL: URL
-    /// Where `AnimationShaders` installs the rendered cursor shaders.
-    let shadersURL: URL
 
     private init() {
         let dir = FileStorage.appSupportDirectory()
         defaultsURL = dir.appendingPathComponent("macterm-defaults.conf")
         overridesURL = dir.appendingPathComponent("macterm-overrides.conf")
-        shadersURL = dir.appendingPathComponent("shaders", isDirectory: true)
         regenerate()
     }
 
@@ -56,46 +53,39 @@ final class MactermConfig {
             animations: .init(
                 smoothScrolling: Preferences.shared.smoothScrolling,
                 smoothCursor: Preferences.shared.smoothCursor,
-                trail: Preferences.shared.cursorTrail,
-                shaderDirectory: AnimationShaders.install(
-                    into: shadersURL,
-                    encoding: .from(userConfigText: userConfigText)
-                )
+                trail: Preferences.shared.cursorTrail
             )
         )
         write(Data(body.utf8), to: overridesURL)
     }
 
     /// The Settings → Animations toggles that are ghostty-side switches the
-    /// overrides file flips. Smooth scrolling ships on; the two cursor
-    /// shaders are opt-in, so a user who never opens the pane gets the
-    /// user-config cursor behavior.
+    /// overrides file flips, each a fork key the renderer reads. Smooth
+    /// scrolling ships on; the two cursor effects are opt-in, so a user who
+    /// never opens the pane gets the user-config cursor behavior.
     ///
-    /// - Smooth scrolling is the fork's `smooth-scroll` key: libghostty
-    ///   already accumulates precise trackpad deltas in pixels, and with the
-    ///   key on it renders the sub-row remainder. Macterm forwards every
-    ///   wheel event untouched (#393), so the gate must live on that side.
-    /// - Smooth cursor and cursor trail are bundled custom shaders
-    ///   (`Resources/shaders/`, installed by `AnimationShaders` with the
-    ///   framebuffer-encoding header) appended to the user's own
-    ///   `custom-shader` list — the key is repeatable, and the overrides load last, so the
-    ///   user's shaders stay and run first. The trail is listed before the
-    ///   glide so it renders beneath the drawn cursor. The smooth cursor also
-    ///   forces `cursor-opacity = 0`: the shader draws the focused cursor
-    ///   itself, and ghostty's would otherwise jump ahead of it. libghostty
-    ///   applies that key only while focused, so unfocused panes keep the
-    ///   native hollow cursor. It is the one user-visible ghostty key a
-    ///   Macterm setting overrides, which is why that toggle defaults to off
-    ///   while smooth scrolling does not.
+    /// - Smooth scrolling is `smooth-scroll`: libghostty already accumulates
+    ///   precise trackpad deltas in pixels, and with the key on it renders
+    ///   the sub-row remainder. Macterm forwards every wheel event untouched
+    ///   (#393), so the gate must live on that side.
+    /// - Smooth cursor is `smooth-cursor`: the renderer's own cell shaders
+    ///   draw the focused cursor at an eased rectangle and color the text
+    ///   under it by coverage, so a glyph the cursor is halfway across is
+    ///   two-toned. It replaced a custom shader that could only move a block
+    ///   over an already-composited frame (the destination glyph was
+    ///   cursor-colored from the first frame, and a partly covered cell's
+    ///   own background was lost), and the `cursor-opacity = 0` override
+    ///   that shader needed.
+    /// - Cursor trail is `cursor-trail`: the streak behind the same motion,
+    ///   drawn by the background shader under the text. It replaced a
+    ///   bundled custom shader, which cost a full re-render of every frame
+    ///   at the display's refresh for as long as it was loaded (libghostty
+    ///   animates any custom shader continuously while focused) and could
+    ///   only read the cursor's cell, not where the glide had drawn it.
     struct Animations: Equatable {
         var smoothScrolling = false
         var smoothCursor = false
         var trail = false
-        /// Where `AnimationShaders.install` put the rendered shaders, or
-        /// nil when the bundle lacks the templates or the install failed —
-        /// then no shader line is emitted rather than a `custom-shader`
-        /// path libghostty would fail to load.
-        var shaderDirectory: String?
 
         static let none = Animations()
 
@@ -104,13 +94,11 @@ final class MactermConfig {
             if smoothScrolling {
                 lines.append("smooth-scroll = true")
             }
-            guard let shaderDirectory else { return lines }
-            if trail {
-                lines.append("custom-shader = \(shaderDirectory)/cursor_trail.glsl")
-            }
             if smoothCursor {
-                lines.append("custom-shader = \(shaderDirectory)/cursor_glide.glsl")
-                lines.append("cursor-opacity = 0")
+                lines.append("smooth-cursor = true")
+            }
+            if trail {
+                lines.append("cursor-trail = true")
             }
             return lines
         }
