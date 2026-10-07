@@ -10,6 +10,8 @@ description: A global drop-down terminal on a hotkey, whose shells survive a qui
 
 A drop-down terminal available from any app. Press <kbd>⌃`</kbd>, or pick **View → Quick Terminal**, or **Toggle Quick Terminal** from the Dock icon's right-click menu.
 
+The shortcut works even when Macterm isn't the active app. Change it under **Toggle Quick Terminal** in **Settings → Keymaps**, or clear it there to turn the shortcut off.
+
 Its shells persist like every other pane's: quit with a build running and it keeps running. Closing a pane in the panel is what ends its session.
 
 ## Position and size

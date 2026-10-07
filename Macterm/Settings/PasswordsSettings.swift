@@ -19,7 +19,7 @@ struct PasswordsSettings: View {
 
     var body: some View {
         Form {
-            Section("Password Manager") {
+            Section {
                 Toggle("Enable password manager", isOn: $enabled)
                     .onChange(of: enabled) { _, v in
                         Preferences.shared.passwordManagerEnabled = v
@@ -39,9 +39,11 @@ struct PasswordsSettings: View {
                     Text(Self.authenticationCaption).settingsCaption()
                 }
                 .disabled(!enabled)
+            } header: {
+                DocsSectionHeader("Password Manager", docs: .passwords)
             }
 
-            Section("Saved Passwords") {
+            Section {
                 SearchField(text: $query, prompt: "Search saved passwords")
                 if vault.entries.isEmpty {
                     Text("No saved passwords.")
@@ -62,6 +64,8 @@ struct PasswordsSettings: View {
                 if let error = vault.lastError {
                     Text(error).settingsCaption()
                 }
+            } header: {
+                DocsSectionHeader("Saved Passwords", docs: .savedPasswords)
             }
         }
         .formStyle(.grouped)
@@ -88,12 +92,10 @@ struct PasswordsSettings: View {
         }
     }
 
-    private static let enabledCaption = "Offer to save a password you type at a prompt once it works, and fill it in "
-        + "the next time that prompt appears. Off, nothing is saved or filled in; saved passwords stay in your keychain."
-    private static let authenticationCaption = "Autofill, and showing or copying a saved password, asks for Touch ID, "
-        + "or your login password on a Mac without it. "
-        + "Once per app launch also asks again after the Mac locks or sleeps. "
-        + "Passwords are stored in your login keychain."
+    private static let enabledCaption = "Offers to save a password you type at a prompt once it works, "
+        + "and fills it in the next time that prompt appears."
+    private static let authenticationCaption = "Asks for Touch ID, or your login password, before autofilling "
+        + "or showing a saved password. Passwords are stored in your login keychain."
 
     private var filtered: [SavedPassword] {
         vault.entries(matching: query)

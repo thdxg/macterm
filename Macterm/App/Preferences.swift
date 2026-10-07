@@ -294,10 +294,9 @@ final class Preferences {
         }
     }
 
-    /// The cursor glides between cells instead of jumping. Implemented as a
-    /// bundled ghostty custom shader (`Resources/shaders/cursor_glide.glsl`)
-    /// that Macterm appends to the config through the overrides file, along
-    /// with `cursor-opacity = 0` so the shader can be the focused cursor.
+    /// The cursor glides between cells instead of jumping, and the text it
+    /// covers on the way is cursor-colored exactly as far as it is covered.
+    /// The fork's `smooth-cursor` key, written through the overrides file.
     /// See `MactermConfig.Animations`.
     var smoothCursor: Bool {
         didSet {
@@ -306,8 +305,8 @@ final class Preferences {
         }
     }
 
-    /// A fading streak follows the cursor across larger moves. The bundled
-    /// `cursor_trail.glsl`, injected the same way as `smoothCursor`.
+    /// A fading streak follows the cursor across larger moves. The fork's
+    /// `cursor-trail` key, written through the overrides file.
     var cursorTrail: Bool {
         didSet {
             Keys.cursorTrail.write(cursorTrail, to: defaults)
@@ -437,14 +436,6 @@ final class Preferences {
     /// every wake.
     var reconnectRemotePanes: Bool {
         didSet { Keys.reconnectRemotePanes.write(reconnectRemotePanes, to: defaults) }
-    }
-
-    /// The command a text file opened with Macterm runs in (Settings →
-    /// General → Text Files), given `+LINE` and the path. Empty means the
-    /// `$EDITOR` of the shell the file opens in — read there, not here,
-    /// because a shell sets it in its own rc file (`TextFileEditor`).
-    var textFileEditorCommand: String {
-        didSet { Keys.textFileEditorCommand.write(textFileEditorCommand, to: defaults) }
     }
 
     /// Where a text file opened with Macterm gets its editor: a split beside
@@ -926,7 +917,6 @@ final class Preferences {
         showProjectNewTabButton = Keys.showProjectNewTabButton.read(defaults)
         backgroundSSHConnections = Keys.backgroundSSHConnections.read(defaults)
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
-        textFileEditorCommand = Keys.textFileEditorCommand.read(defaults)
         textFilePlacement = Keys.textFilePlacement.read(defaults)
         passwordManagerEnabled = Keys.passwordManagerEnabled.read(defaults)
         passwordAutofillAuthentication = Keys.passwordAutofillAuthentication.read(defaults)
@@ -1098,7 +1088,6 @@ final class Preferences {
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)
         static let reconnectRemotePanes = PreferenceStorageKey("macterm.remote.reconnectDroppedPanes", default: true)
-        static let textFileEditorCommand = PreferenceStorageKey("macterm.textFiles.editorCommand", default: "")
         static let textFilePlacement = PreferenceStorageKey("macterm.textFiles.placement", default: TextFilePlacement.split)
         /// The key of the "Offer to save passwords" toggle this replaced, so a
         /// user who switched that off finds the whole feature off, never on.

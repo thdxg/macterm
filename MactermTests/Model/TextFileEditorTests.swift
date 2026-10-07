@@ -22,24 +22,24 @@ struct TextFileEditorTests {
         let line = TextFileEditor.typedCommand
         #expect(line.contains("$" + TextFileEditor.fileVariable))
         #expect(line.contains("$" + TextFileEditor.lineVariable))
-        #expect(line.contains("${" + TextFileEditor.commandVariable + ":-"))
+        // The editor is the user's own, in the order git and less use.
+        #expect(line.contains("${VISUAL:-${EDITOR:-vi}}"))
     }
 
     @Test
-    func the_environment_carries_the_file_line_and_command() {
-        let env = TextFileEditor.environment(path: "/a b/it's.swift", line: 42, command: "  hx ")
+    func the_environment_carries_the_file_and_line() {
+        let env = TextFileEditor.environment(path: "/a b/it's.swift", line: 42)
         #expect(env == [
             "MACTERM_EDITOR_FILE": "/a b/it's.swift",
             "MACTERM_EDITOR_LINE": "42",
-            "MACTERM_EDITOR": "hx",
         ])
     }
 
     @Test
-    func no_line_and_a_blank_command_leave_both_unset() {
-        // Unset, not empty: the script falls back to the shell's $EDITOR.
-        let env = TextFileEditor.environment(path: "/x.md", line: nil, command: "   ")
-        #expect(env == ["MACTERM_EDITOR_FILE": "/x.md"])
+    func no_line_leaves_the_line_unset() {
+        // Unset, not empty: the script then passes no `+LINE` at all.
+        #expect(TextFileEditor.environment(path: "/x.md", line: nil) == ["MACTERM_EDITOR_FILE": "/x.md"])
+        #expect(TextFileEditor.environment(path: "/x.md", line: 0) == ["MACTERM_EDITOR_FILE": "/x.md"])
     }
 
     @Test
@@ -68,11 +68,15 @@ struct TextFileEditorTests {
             return String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         }
 
-        let withLine = TextFileEditor.environment(path: "/a b/it's $x.rs", line: 7, command: editor.path + " --wait")
+        // $EDITOR with arguments, a line, and a path no shell grammar likes.
+        var withLine = TextFileEditor.environment(path: "/a b/it's $x.rs", line: 7)
+        withLine["EDITOR"] = editor.path + " --wait"
         #expect(try run(withLine) == "[--wait][+7][/a b/it's $x.rs]")
 
-        var fromEditorVariable = TextFileEditor.environment(path: "/x.md", line: nil, command: "")
-        fromEditorVariable["EDITOR"] = editor.path
-        #expect(try run(fromEditorVariable) == "[/x.md]")
+        // $VISUAL wins over $EDITOR.
+        var visual = TextFileEditor.environment(path: "/x.md", line: nil)
+        visual["VISUAL"] = editor.path
+        visual["EDITOR"] = "/nonexistent/editor"
+        #expect(try run(visual) == "[/x.md]")
     }
 }

@@ -31,9 +31,7 @@ struct WidgetsSettings: View {
                     .disabled(!FileManager.default.fileExists(atPath: appState.widgetLayoutStore.fileURL.path))
                 }
             } header: {
-                HStack {
-                    Text("Widgets")
-                    Spacer()
+                DocsSectionHeader("Widgets", docs: .desktopWidgets) {
                     Button {
                         appState.createDesktopWidget()
                     } label: {
@@ -44,11 +42,8 @@ struct WidgetsSettings: View {
                     .help("Add a widget at the center of the desktop")
                 }
             } footer: {
-                Text(
-                    "A new widget runs your login shell and opens locked, 3 × 3 cells at the center of the desktop. "
-                        + "Edit it to move or resize it; it snaps to the widget grid."
-                )
-                .settingsCaption()
+                Text("A widget is a terminal on your desktop. Edit one to move or resize it.")
+                    .settingsCaption()
             }
         }
         .formStyle(.grouped)
