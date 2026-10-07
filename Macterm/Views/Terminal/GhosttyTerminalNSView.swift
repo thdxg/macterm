@@ -1441,12 +1441,14 @@ final class GhosttyTerminalNSView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         onInteraction?()
-        guard let surface else { return }
+        guard let surface else { return super.rightMouseDown(with: event) }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
-        if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods(event)) {
-            presentContextMenu(with: event)
+        if ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods(event)) {
+            return
         }
+        // Not consumed: AppKit's own right-click handling asks `menu(for:)`.
+        super.rightMouseDown(with: event)
     }
 
     override func rightMouseUp(with event: NSEvent) {
@@ -1637,13 +1639,43 @@ final class GhosttyTerminalNSView: NSView {
 
     // MARK: - Context menu
 
-    private func presentContextMenu(with event: NSEvent) {
+    /// AppKit asks for the menu on a right click libghostty didn't consume
+    /// (`rightMouseDown` hands those to super) and on a ⌃-click, which it asks
+    /// about before any mouse event.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        switch event.type {
+        case .rightMouseDown:
+            break
+        case .leftMouseDown:
+            // Ghostty.app's rule: ⌃-click is a right click, unless a program
+            // is capturing the mouse — then it gets the ⌃-click as a click.
+            guard event.modifierFlags.contains(.control), let surface,
+                  !ghostty_surface_mouse_captured(surface)
+            else { return nil }
+            // With a menu up the press never reaches `mouseDown`, so send the
+            // right press a right click would have: `right-click-action` acts
+            // on it (by default, selecting the word for the menu's Copy).
+            let pt = mousePoint(from: event)
+            ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
+            _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods(event))
+        default:
+            return nil
+        }
+        return contextMenu()
+    }
+
+    private func contextMenu() -> NSMenu {
         let menu = NSMenu(title: "Terminal")
         // Auto-enabling would override every `isEnabled` below: with no
         // `validateMenuItem` on the target, AppKit enables any item whose target
         // responds to its action, which is what kept Paste enabled on an empty
         // pasteboard. Off, the explicit states (Paste, Jump to Top/Bottom) hold.
         menu.autoenablesItems = false
+        if let surface, ghostty_surface_has_selection(surface) {
+            let copy = NSMenuItem(title: "Copy", action: #selector(handleCopy), keyEquivalent: "")
+            copy.target = self
+            menu.addItem(copy)
+        }
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
         paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
@@ -1665,7 +1697,12 @@ final class GhosttyTerminalNSView: NSView {
             zoom.target = self
             menu.addItem(zoom)
         }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
+        return menu
+    }
+
+    @objc
+    private func handleCopy() {
+        sendBindingAction("copy_to_clipboard")
     }
 
     @objc
