@@ -1589,6 +1589,8 @@ private struct KeymapSettings: View {
     private var global: [String: Bool] = [:]
     @State
     private var capturingActionID: String?
+    @State
+    private var query = ""
 
     /// Observed so a chord the system refuses to register shows its reason
     /// under the row the moment the toggle or the rebind lands.
@@ -1645,10 +1647,15 @@ private struct KeymapSettings: View {
     /// so the keymaps list mirrors the command palette's sectioning instead of
     /// being one long flat list. Categories appear in `AppCommand.allCases`
     /// declaration order; actions keep their order within each.
+    /// Only the actions the search matches (`TextFilter` over
+    /// `HotkeyAction.searchFields`); a category left with none drops out.
     private var actionsByCategory: [(category: AppCommand.Category, actions: [HotkeyAction])] {
         var order: [AppCommand.Category] = []
         var grouped: [AppCommand.Category: [HotkeyAction]] = [:]
-        for action in HotkeyAction.allCases {
+        let matching = HotkeyAction.allCases.filter {
+            TextFilter.matches(query, in: $0.searchFields(shortcut: values[$0.id] ?? $0.defaultShortcut))
+        }
+        for action in matching {
             let category = action.appCommand.category
             if grouped[category] == nil { order.append(category) }
             grouped[category, default: []].append(action)
@@ -1656,24 +1663,21 @@ private struct KeymapSettings: View {
         return order.map { ($0, grouped[$0] ?? []) }
     }
 
+    private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
+
     var body: some View {
         Form {
             Section {
-                TextField(
-                    "Programs",
-                    text: Binding(
-                        get: { Preferences.shared.passthroughPrograms },
-                        set: { Preferences.shared.passthroughPrograms = $0 }
-                    ),
-                    prompt: Text(verbatim: "nvim, hx")
-                )
-                Text(
-                    "Keybinds with Pass to TUI checked go to these programs instead of running their action. "
-                        + "Separate names with commas."
-                )
-                .settingsCaption()
-            } header: {
-                DocsSectionHeader("Passthrough Programs", docs: .keybinds)
+                SettingsSearchField(text: $query, prompt: "Search by action or keybind")
+                if isSearching, actionsByCategory.isEmpty {
+                    Text("No keybinds match “\(query.trimmingCharacters(in: .whitespaces))”.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Out of the way while searching, so the matches sit at the top.
+            if !isSearching {
+                passthroughSection
             }
 
             ForEach(actionsByCategory, id: \.category) { group in
@@ -1713,6 +1717,26 @@ private struct KeymapSettings: View {
         .onDisappear {
             capturingActionID = nil
             HotkeyCaptureState.shared.isCapturing = false
+        }
+    }
+
+    private var passthroughSection: some View {
+        Section {
+            TextField(
+                "Programs",
+                text: Binding(
+                    get: { Preferences.shared.passthroughPrograms },
+                    set: { Preferences.shared.passthroughPrograms = $0 }
+                ),
+                prompt: Text(verbatim: "nvim, hx")
+            )
+            Text(
+                "Keybinds with Pass to TUI checked go to these programs instead of running their action. "
+                    + "Separate names with commas."
+            )
+            .settingsCaption()
+        } header: {
+            DocsSectionHeader("Passthrough Programs", docs: .keybinds)
         }
     }
 

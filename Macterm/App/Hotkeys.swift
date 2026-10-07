@@ -59,6 +59,16 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     /// Settings don't drift apart.
     var title: String { appCommand.title }
 
+    /// What Settings → Keymaps' search looks in (`TextFilter`): the title,
+    /// the section it sits in, and the chord both as shown (`⌘D`, `None` when
+    /// unbound) and as written (`cmd+d`).
+    func searchFields(shortcut: String) -> [String] {
+        let shown = HotkeyRegistry.displayString(for: shortcut)
+        var fields = [title, appCommand.category.rawValue, shown]
+        if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
+        return fields
+    }
+
     var defaultsKey: String { "macterm.hotkey.\(rawValue)" }
 
     /// Per-action opt-in (default off): while a full-screen program owns the
