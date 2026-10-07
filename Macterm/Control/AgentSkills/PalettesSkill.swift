@@ -48,7 +48,7 @@ extension AgentSkills {
               - { title: Pods, enter: pods }
               - { title: Set as current context, action: { run: kubectl config set-context --current --namespace "$NAMESPACE" } }
           pods:
-            list: kubectl get pods ${NAMESPACE:+-n "$NAMESPACE"} ${NAMESPACE:--A} -o json
+            list: if [ -n "$NAMESPACE" ]; then set -- -n "$NAMESPACE"; else set -- -A; fi; kubectl get pods "$@" -o json
             rows: .items
             title: .metadata.name
             subtitle: .status.phase

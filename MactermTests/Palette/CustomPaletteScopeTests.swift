@@ -108,7 +108,7 @@ struct CustomPaletteScopeTests {
     func a_listing_runs_its_command_once_with_the_exports_in_the_environment_and_filters_the_cached_rows() async throws {
         let (context, _, _) = try makeContext(files: ["kubernetes.yaml": CustomPaletteFileTests.kubernetes])
         let recorder = Recorder()
-        let command = "kubectl get pods ${NAMESPACE:+-n \"$NAMESPACE\"} ${NAMESPACE:--A} -o json"
+        let command = "if [ -n \"$NAMESPACE\" ]; then set -- -n \"$NAMESPACE\"; else set -- -A; fi; kubectl get pods \"$@\" -o json"
         recorder.outputs[command] = CustomPaletteCommandResult(stdout: Self.podsJSON, stderr: "", status: 0)
         let target = CustomPaletteTarget(
             paletteID: "kubernetes", node: "pods", exports: ["NAMESPACE": "prod"],

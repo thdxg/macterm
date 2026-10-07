@@ -27,7 +27,7 @@ import Yams
 //         items:
 //           - { title: Pods, enter: pods }
 //       pods:
-//         list: kubectl get pods ${NAMESPACE:+-n "$NAMESPACE"} ${NAMESPACE:--A} -o json
+//         list: if [ -n "$NAMESPACE" ]; then set -- -n "$NAMESPACE"; else set -- -A; fi; kubectl get pods "$@" -o json
 //         rows: .items
 //         title: .metadata.name
 //         subtitle: .status.phase
