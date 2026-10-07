@@ -128,6 +128,9 @@ struct CommandPalettePanel: View {
                     .focused($isFieldFocused)
                     .onSubmit { execute() }
             }
+            // One height whether or not a scope's pill is up, so entering a
+            // scope never moves the input or the list below it.
+            .frame(height: PaletteScopePill.height)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
 
@@ -403,6 +406,9 @@ private extension CommandPalettePanel {
 /// liquid glass on macOS 26 where the window draws glass, the theme's raised
 /// surface otherwise.
 private struct PaletteScopePill: View {
+    /// The pill's height, and the palette input row's with or without it.
+    static let height: CGFloat = 22
+
     let pill: PalettePill
 
     var body: some View {
@@ -412,7 +418,7 @@ private struct PaletteScopePill: View {
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 9)
-            .padding(.vertical, 3)
+            .frame(height: Self.height)
             .modifier(PillBackground())
     }
 
