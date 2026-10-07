@@ -302,9 +302,9 @@ extension AppCommand {
         else { return nil }
         switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
         case .none:
-            return "No project file for this project — use “Save Layout” to create one"
+            return "No layout file for this project"
         case .emptyTabs:
-            return "The project file declares no tabs"
+            return "The layout file declares no tabs"
         case .applicable,
              .invalid:
             return nil

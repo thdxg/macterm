@@ -67,6 +67,7 @@ struct PreferenceStorageKeyTests {
         // other; the table is the only place the names live now.
         let names = [
             Preferences.Keys.autoTiling.name, Preferences.Keys.smoothScrolling.name,
+            Preferences.Keys.snapScrollToRow.name,
             Preferences.Keys.windowOpacity.name, Preferences.Keys.sidebarWidth.name,
             Preferences.Keys.quickTerminalWidth.name, Preferences.Keys.quickTerminalHeight.name,
             Preferences.Keys.activeProjectID.name, Preferences.Keys.updateChannel.name,

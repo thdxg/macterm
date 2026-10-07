@@ -1194,10 +1194,12 @@ private struct AppearanceSettings: View {
                     .settingsCaption()
 
                 Group {
-                    Picker("Peek style", selection: $sidebarPeekStyle) {
+                    Picker(selection: $sidebarPeekStyle) {
                         ForEach(SidebarPeekStyle.allCases) { style in
                             Text(style.displayName).tag(style)
                         }
+                    } label: {
+                        Text("Peek style").dimsWhenDisabled()
                     }
                     .onChange(of: sidebarPeekStyle) { _, style in
                         Preferences.shared.sidebarPeekStyle = style
@@ -1206,6 +1208,7 @@ private struct AppearanceSettings: View {
                         .settingsCaption()
                 }
                 .disabled(!peekSidebarWhenHidden)
+                .padding(.leading, 16)
 
                 Picker("Project icon", selection: $projectIconSymbol) {
                     ForEach(Preferences.projectIconChoices, id: \.self) { name in
@@ -1264,7 +1267,7 @@ private struct AppearanceSettings: View {
                 .disabled(!(showTabStatusIndicator && showAgentIcons))
                 .padding(.leading, 16)
 
-                Toggle("Show New Project button", isOn: $showNewProjectButton)
+                Toggle("Show new project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
                 Text("When hidden, create projects via the command palette or context menu.")
                     .settingsCaption()
@@ -1395,6 +1398,8 @@ private struct AnimationsSettings: View {
     @State
     private var smoothScrolling: Bool = Preferences.shared.smoothScrolling
     @State
+    private var snapScrollToRow: Bool = Preferences.shared.snapScrollToRow
+    @State
     private var smoothCursor: Bool = Preferences.shared.smoothCursor
     @State
     private var cursorTrail: Bool = Preferences.shared.cursorTrail
@@ -1408,10 +1413,19 @@ private struct AnimationsSettings: View {
                     .onChange(of: smoothScrolling) { _, v in
                         Preferences.shared.smoothScrolling = v
                     }
-                Text(
-                    "Trackpad scrolling moves scrollback by pixels instead of whole rows."
-                )
-                .settingsCaption()
+
+                Group {
+                    Toggle(isOn: $snapScrollToRow) {
+                        Text("Snap to whole row").dimsWhenDisabled()
+                    }
+                    .onChange(of: snapScrollToRow) { _, v in
+                        Preferences.shared.snapScrollToRow = v
+                    }
+                    Text("When a scroll comes to rest, it settles onto the nearest row instead of stopping between rows.")
+                        .settingsCaption()
+                }
+                .disabled(!smoothScrolling)
+                .padding(.leading, 16)
             } header: {
                 DocsSectionHeader("Scrolling", docs: .animations)
             }

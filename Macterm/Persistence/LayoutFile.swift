@@ -201,8 +201,8 @@ enum LayoutFileError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .parse(underlying): "The layout file is invalid and was not applied.\n\n\(underlying.localizedDescription)"
-        case let .noProjectFile(projectPath): "No project file declares \(projectPath). Use “Save Layout” to create one."
-        case .noTabs: "The project file declares no tabs, so there is no layout to apply."
+        case let .noProjectFile(projectPath): "No layout file declares \(projectPath). Use “Save Layout” to create one."
+        case .noTabs: "The layout file declares no tabs, so there is no layout to apply."
         case let .outsideProjectsDirectory(filename): "“\(filename)” is not in the projects directory."
         }
     }

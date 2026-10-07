@@ -294,6 +294,16 @@ final class Preferences {
         }
     }
 
+    /// When a smooth-scroll gesture ends, settle the viewport onto the
+    /// nearest whole row instead of leaving it between rows. Off by default
+    /// and meaningful only under `smoothScrolling`. Macterm-side, read live by
+    /// `GhosttyTerminalNSView` when a gesture ends — the fork has no such key,
+    /// and the settle rides the same synthetic precision scroll a scroller
+    /// drag uses (`RowSnap`).
+    var snapScrollToRow: Bool {
+        didSet { Keys.snapScrollToRow.write(snapScrollToRow, to: defaults) }
+    }
+
     /// The cursor glides between cells instead of jumping, and the text it
     /// covers on the way is cursor-colored exactly as far as it is covered.
     /// The fork's `smooth-cursor` key, written through the overrides file.
@@ -865,6 +875,7 @@ final class Preferences {
         self.defaults = defaults
         autoTilingEnabled = Keys.autoTiling.read(defaults)
         smoothScrolling = Keys.smoothScrolling.read(defaults)
+        snapScrollToRow = Keys.snapScrollToRow.read(defaults)
         smoothCursor = Keys.smoothCursor.read(defaults)
         cursorTrail = Keys.cursorTrail.read(defaults)
         animatedSplits = Keys.animatedSplits.read(defaults)
@@ -1040,6 +1051,7 @@ final class Preferences {
     enum Keys {
         static let autoTiling = PreferenceStorageKey("macterm.autoTiling.enabled", default: false)
         static let smoothScrolling = PreferenceStorageKey("macterm.terminal.smoothScrolling", default: true)
+        static let snapScrollToRow = PreferenceStorageKey("macterm.terminal.snapScrollToRow", default: false)
         static let smoothCursor = PreferenceStorageKey("macterm.terminal.smoothCursor", default: false)
         static let cursorTrail = PreferenceStorageKey("macterm.terminal.cursorTrail", default: false)
         static let animatedSplits = PreferenceStorageKey("macterm.terminal.animatedSplits", default: true)
