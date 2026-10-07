@@ -63,6 +63,8 @@ final class FinderServiceProvider: NSObject {
     private weak var projectStore: ProjectStore?
     /// Directories requested before `attach` ran.
     private var pending: [String] = []
+    /// Text files requested before `attach` ran.
+    private var pendingFiles: [String] = []
 
     /// Hand the provider its targets once they exist (from
     /// `AppDelegate.installResponders`), flushing anything requested earlier.
@@ -72,6 +74,9 @@ final class FinderServiceProvider: NSObject {
         let queued = pending
         pending = []
         if !queued.isEmpty { open(paths: queued) }
+        let queuedFiles = pendingFiles
+        pendingFiles = []
+        if !queuedFiles.isEmpty { openTextFiles(queuedFiles) }
     }
 
     /// "New Macterm Project Here": a project per selected folder, the last one
@@ -104,20 +109,39 @@ final class FinderServiceProvider: NSObject {
         appState.performWhenRestored { [weak appState, weak projectStore] in
             guard let appState, let projectStore else { return }
             logger.info("newProjectHere: \(paths.count, privacy: .public) directories")
-            var selected: Project?
-            for path in paths {
-                // Always create, like the folder picker and `project create`:
-                // a directory is not an identity, and a second project on the
-                // same folder is a legitimate ask.
-                selected = projectStore.create(name: (path as NSString).lastPathComponent, path: path)
-            }
-            if let selected {
-                // The same selection path as the sidebar.
-                appState.selectProject(selected)
-            }
+            appState.openProjects(atPaths: paths, store: projectStore)
             // The gesture happened in Finder, so Macterm is in the background
             // (or has no visible window, or was just launched); bring the
             // project the user asked for in front of them.
+            appState.appDelegate?.showWindow()
+        }
+    }
+
+    /// Open each text file in the user's terminal editor (see
+    /// `AppState.openTextFile`), in the project that holds it — made for the
+    /// file's folder when no local project exists — selected and brought
+    /// forward. `line` is a clicked link's, from a pane that has no split of
+    /// its own to put the editor in (a desktop widget's).
+    func openTextFiles(_ files: [String], line: Int? = nil) {
+        guard let appState, let projectStore else {
+            pendingFiles.append(contentsOf: files)
+            return
+        }
+        appState.performWhenRestored { [weak appState, weak projectStore] in
+            guard let appState, let projectStore else { return }
+            logger.info("openTextFiles: \(files.count, privacy: .public) files")
+            for file in files {
+                let project = TextFileProject.project(
+                    for: file,
+                    in: projectStore.projects,
+                    activeProjectID: appState.activeProjectID
+                ) ?? {
+                    let folder = (file as NSString).deletingLastPathComponent
+                    return projectStore.create(name: (folder as NSString).lastPathComponent, path: folder)
+                }()
+                appState.selectProject(project)
+                appState.openTextFile(file, line: line, inProject: project.id, projects: projectStore.projects)
+            }
             appState.appDelegate?.showWindow()
         }
     }

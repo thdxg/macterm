@@ -113,7 +113,9 @@ struct MactermApp: App {
                 AppCommandMenuItem(command: .newTab, appState: appState, projectStore: projectStore, titleOverride: "New Tab")
                 AppCommandMenuItem(command: .openProject, appState: appState, projectStore: projectStore, titleOverride: "Open Project…")
             }
-            CommandGroup(replacing: .toolbar) {}
+            CommandGroup(replacing: .toolbar) {
+                ToolbarVisibilityMenuItem()
+            }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesMenuItem()
             }
@@ -794,6 +796,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Draws the restored widgets (the restore may land on either side of
         // this) and every one created from here on.
         DesktopWidgetWindows.shared.attach(appState: appState)
+        ToolbarMenu.shared.attach(appState: appState)
         KeyRouter.shared.register(PaletteResponder(appState: appState))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
@@ -974,23 +977,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// A folder opened with Macterm — Finder's "Open With", a drop on the Dock
-    /// icon, `open -a Macterm <dir>` — becomes a project, always a new one
-    /// (see `FolderOpenRequest`). Reached through SwiftUI's forwarding
-    /// delegate, which passes this method on to the adaptor; only
-    /// `public.directory` is declared in `Info.plist`, so a file here means
-    /// the plist was bypassed and it is dropped rather than guessed at.
+    /// icon, `open -a Macterm <dir>` — becomes a project, always a new one,
+    /// and a file opens in the user's terminal editor in the project holding
+    /// it (see `DocumentOpenRequest`). Reached through SwiftUI's forwarding
+    /// delegate, which passes this method on to the adaptor.
     ///
     /// On a cold launch this arrives during launch handling, before the window
     /// exists and before the launch restore has run, which is exactly what the
     /// provider's queue and `AppState.performWhenRestored` absorb — the same
     /// path a Services pick that launched the app takes.
     func application(_: NSApplication, open urls: [URL]) {
-        let resolution = FolderOpenRequest.resolve(urls)
+        let resolution = DocumentOpenRequest.resolve(urls)
         for url in resolution.skipped {
-            logger.info("open: ignoring non-folder \(url.absoluteString, privacy: .public)")
+            logger.info("open: ignoring non-file \(url.absoluteString, privacy: .public)")
         }
-        guard !resolution.directories.isEmpty else { return }
-        logger.info("open: \(resolution.directories.count, privacy: .public) folders as projects")
-        finderServices.open(paths: resolution.directories)
+        if !resolution.directories.isEmpty {
+            logger.info("open: \(resolution.directories.count, privacy: .public) folders as projects")
+            finderServices.open(paths: resolution.directories)
+        }
+        if !resolution.files.isEmpty {
+            logger.info("open: \(resolution.files.count, privacy: .public) files in the editor")
+            finderServices.openTextFiles(resolution.files)
+        }
     }
 }

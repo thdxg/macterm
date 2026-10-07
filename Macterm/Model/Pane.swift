@@ -1064,6 +1064,7 @@ final class Pane: Identifiable {
         view.onInteraction = nil
         view.onCommandSubmitted = nil
         view.onSplitRequest = nil
+        view.onOpenLink = nil
         view.onDesktopNotification = nil
         view.onCommandFinished = nil
         view.onProgressStarted = nil

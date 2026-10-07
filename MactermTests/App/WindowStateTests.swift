@@ -520,6 +520,61 @@ struct WindowStateTests {
     }
 
     @Test
+    func every_window_reopens_at_its_own_saved_frame() {
+        // #496: the frame was left to SwiftUI's autosave, whose key changes
+        // every launch, so windows always came back at the default size. It
+        // is the window's own snapshot entry now — the first window adopts
+        // entry 0's frame, and each restored window its own.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+        let firstFrame = "100 200 1400 900 0 0 3008 1662 "
+        let secondFrame = "1508 9 1492 1645 0 0 3008 1662 "
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.restoreSelection(projects: [p])
+        writer.selectProject(p)
+        let w1 = WindowState(activeProjectID: p.id)
+        let w2 = WindowState(activeProjectID: p.id)
+        w1.frame = firstFrame
+        w2.frame = secondFrame
+        writer.registerWindow(w1)
+        writer.registerWindow(w2)
+        writer.saveWorkspaces()
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.restoreSelection(projects: [p])
+        let first = WindowState()
+        reader.registerWindow(first)
+        reader.noteKeyWindow(first)
+        reader.restoreWindows(adopting: first)
+        let second = WindowState()
+        reader.registerWindow(second)
+
+        #expect(first.frame == firstFrame)
+        #expect(second.frame == secondFrame)
+
+        // A window the user opens afterwards has no saved frame to adopt; it
+        // opens wherever the scene puts it.
+        let opened = WindowState()
+        reader.registerWindow(opened)
+        #expect(opened.frame == nil)
+    }
+
+    @Test
+    func a_snapshot_saved_before_frames_were_persisted_still_restores() throws {
+        // `frame` is optional, so a v6 file written by an older build decodes
+        // and its windows open at the default size.
+        let json = #"{"activeProjectID":null,"sidebarWidth":200,"isKey":true}"#
+        let snapshot = try JSONDecoder().decode(WindowSnapshot.self, from: Data(json.utf8))
+        #expect(snapshot.frame == nil)
+        #expect(snapshot.sidebarWidth == 200)
+    }
+
+    @Test
     func a_window_the_user_opens_comes_up_at_the_default_sidebar_state() {
         // Not at whatever was last dragged in some other (possibly since
         // closed) window, and never collapsed.

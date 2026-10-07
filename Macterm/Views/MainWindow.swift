@@ -265,7 +265,8 @@ struct MainWindow: View {
             onWindowBecameKey: { window in
                 appState.noteKeyWindow(appState.canonicalWindowState(for: window, proposed: windowState))
             },
-            shouldHideOnClose: { appState.appDelegate?.hidesInsteadOfClosing($0) ?? true }
+            shouldHideOnClose: { appState.appDelegate?.hidesInsteadOfClosing($0) ?? true },
+            onWindowFrameChanged: { appState.windowFrameDidChange($0) }
         ))
         .overlay {
             if windowState.isCommandPaletteVisible {
@@ -1027,6 +1028,7 @@ struct WorkspaceView: View {
             zoomedPaneID: zoomedPaneID,
             isActiveProject: true,
             projectID: project.id,
+            resizeGeneration: tab.animatedResizeGeneration,
             nonLeaderPaneIDs: appState.nonLeaderPaneIDs(in: tab),
             onFocusPane: { paneID in focus(paneID, in: view) },
             onSplit: { paneID, dir, position in split(paneID, direction: dir, position: position, in: view) },
@@ -1199,6 +1201,9 @@ private struct WindowStyler: NSViewRepresentable {
     /// Whether the red close button should hide the window rather than close
     /// it — the app's one close policy (`AppDelegate.hidesInsteadOfClosing`).
     var shouldHideOnClose: (NSWindow) -> Bool = { _ in true }
+    /// The window moved or resized — what `AppState` records as the frame the
+    /// next launch reopens it at (#496).
+    var onWindowFrameChanged: (NSWindow) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -1238,6 +1243,9 @@ private struct WindowStyler: NSViewRepresentable {
             // visible boundary, which is jarring when both are translucent.
             window.styleMask.insert(.fullSizeContentView)
             window.titleVisibility = hideTitle ? .hidden : .visible
+            // Before `onWindowAttached`, which restores the saved frame: from
+            // here on the frame is ours to persist, not SwiftUI's autosave.
+            WindowAppearance.disownFrameAutosave(window: window)
             WindowAppearance.sync(window: window)
             coordinator.syncWindowCornerRadius(window: window)
             coordinator.syncWindowTopSafeAreaInset(window: window)
@@ -1245,7 +1253,11 @@ private struct WindowStyler: NSViewRepresentable {
             coordinator.observe(window: window)
             coordinator.onWindowBecameKey = onWindowBecameKey
             coordinator.shouldHideOnClose = shouldHideOnClose
+            coordinator.onWindowFrameChanged = onWindowFrameChanged
             onWindowAttached(window)
+            // Record the frame it attached at (or was just restored to), so a
+            // window that is never moved still reopens where it was.
+            onWindowFrameChanged(window)
             // A window that opens already key never posts didBecomeKey, so
             // seed the app's notion of the frontmost project from it.
             if window.isKeyWindow { onWindowBecameKey(window) }
@@ -1337,6 +1349,17 @@ private struct WindowStyler: NSViewRepresentable {
 
         var onWindowBecameKey: (NSWindow) -> Void = { _ in }
         var shouldHideOnClose: (NSWindow) -> Bool = { _ in true }
+        var onWindowFrameChanged: (NSWindow) -> Void = { _ in }
+
+        func windowDidResize(_ notification: Notification) {
+            if let window = notification.object as? NSWindow { onWindowFrameChanged(window) }
+            swiftuiDelegate?.windowDidResize?(notification)
+        }
+
+        func windowDidMove(_ notification: Notification) {
+            if let window = notification.object as? NSWindow { onWindowFrameChanged(window) }
+            swiftuiDelegate?.windowDidMove?(notification)
+        }
 
         func windowDidBecomeKey(_ notification: Notification) {
             if let window = notification.object as? NSWindow { onWindowBecameKey(window) }

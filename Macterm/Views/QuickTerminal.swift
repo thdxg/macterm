@@ -462,9 +462,13 @@ final class QuickTerminalSplitState {
         onStructureChange()
     }
 
-    func autoSplit(paneID: UUID) {
-        tab.autoSplit(paneID: paneID)
+    /// `command`/`env` spawn in the new pane, as in `TerminalTab.split` —
+    /// the text-file editor's path (`AppState.openTextFile`).
+    @discardableResult
+    func autoSplit(paneID: UUID, command: String? = nil, env: [String: String]? = nil) -> UUID? {
+        let newID = tab.autoSplit(paneID: paneID, command: command, env: env)
         onStructureChange()
+        return newID
     }
 
     func movePane(_ paneID: UUID, to target: TabDropResolution.Target) {
@@ -631,6 +635,7 @@ private struct QuickTerminalView: View {
             zoomedPaneID: state.tab.zoomedPaneID,
             isActiveProject: true,
             projectID: QuickTerminalService.projectID,
+            resizeGeneration: state.tab.animatedResizeGeneration,
             onFocusPane: { state.focusPane($0) },
             onSplit: { paneID, dir, position in state.split(paneID: paneID, direction: dir, position: position) },
             onClosePane: { state.closePane($0) },

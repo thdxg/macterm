@@ -430,6 +430,11 @@ final class GhosttyTerminalNSView: NSView {
     /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
     /// when the pointer leaves it. Drives the pane's hover-URL banner.
     var onLinkHover: ((String?) -> Void)?
+    /// A clicked link (`GHOSTTY_ACTION_OPEN_URL` from the link regex), given
+    /// first refusal: true means it was handled — a local file opened in its
+    /// default app or the user's editor (`AppState.openClickedLink`) — and
+    /// false sends it to the system opener as before.
+    var onOpenLink: ((String) -> Bool)?
     /// The pointer cursor libghostty wants over the grid
     /// (`GHOSTTY_ACTION_MOUSE_SHAPE`) — I-beam over text, a pointing hand
     /// over links. The hosting `SurfaceScrollView` applies it as its
@@ -1076,9 +1081,13 @@ final class GhosttyTerminalNSView: NSView {
 
     private func setupTrackingArea() {
         if let existing = currentTrackingArea { removeTrackingArea(existing) }
+        // `.activeAlways`, as in Ghostty.app: a program reporting the mouse
+        // still hears it move, and links still highlight, in a window that
+        // isn't key. What covers the pane is filtered per event instead
+        // (`ownsPointer`).
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self
         )
         addTrackingArea(area)
@@ -1369,38 +1378,90 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        // A force click's stages belong to the press it rode on.
+        prevPressureStage = 0
         guard let surface else { return }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
         _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods(event))
+        ghostty_surface_mouse_pressure(surface, 0, 0)
     }
 
+    /// A drag belongs to the view the press went to wherever the pointer goes
+    /// — over the sidebar, out of the window — so it reports unfiltered.
     override func mouseDragged(with event: NSEvent) {
-        mouseMoved(with: event)
+        sendMousePos(event)
     }
 
     override func rightMouseDragged(with event: NSEvent) {
-        mouseMoved(with: event)
+        sendMousePos(event)
     }
 
     override func otherMouseDragged(with event: NSEvent) {
-        mouseMoved(with: event)
+        sendMousePos(event)
     }
 
     override func mouseMoved(with event: NSEvent) {
+        guard ownsPointer(event) else { return }
+        sendMousePos(event)
+        focusFollowingMouse()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        // Undoes the exit's "outside the viewport" below: mouse reporting and
+        // link hover both read the position libghostty last heard.
+        guard ownsPointer(event) else { return }
+        sendMousePos(event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        // A drag that leaves keeps reporting through `mouseDragged`.
+        guard NSEvent.pressedMouseButtons == 0, let surface else { return }
+        // Negative coordinates are libghostty's "the pointer left": it drops
+        // the hovered link (underline, banner, pointing hand) with them.
+        ghostty_surface_mouse_pos(surface, -1, -1, mods(event))
+    }
+
+    private func sendMousePos(_ event: NSEvent) {
         guard let surface else { return }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
+    }
+
+    /// Whether the pointer is over this view rather than over something
+    /// covering it. The tracking area fires by geometry alone, and what sits
+    /// on a pane — a locked desktop widget's shield, a split's resize band —
+    /// owns the pointer where it is; a shielded widget's program must not hear
+    /// the pointer move any more than it hears a click.
+    private func ownsPointer(_ event: NSEvent) -> Bool {
+        guard let hit = window?.contentView?.hitTest(event.locationInWindow) else { return false }
+        return hit === self || hit.isDescendant(of: self)
+    }
+
+    /// Ghostty's `focus-follows-mouse`: the pointer moving over a pane of the
+    /// key window focuses it, as a click would. Only focus held by another
+    /// pane moves — the palette, the search bar or a rename field keeps it,
+    /// which is Ghostty.app's command-palette exception generalized.
+    private func focusFollowingMouse() {
+        guard let window, window.isKeyWindow, !hasKeyboardFocus,
+              window.firstResponder is GhosttyTerminalNSView,
+              GhosttyApp.shared.focusFollowsMouse
+        else { return }
+        window.makeFirstResponder(self)
     }
 
     override func rightMouseDown(with event: NSEvent) {
         onInteraction?()
-        guard let surface else { return }
+        guard let surface else { return super.rightMouseDown(with: event) }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
-        if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods(event)) {
-            presentContextMenu(with: event)
+        if ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods(event)) {
+            return
         }
+        // Not consumed: AppKit's own right-click handling asks `menu(for:)`.
+        super.rightMouseDown(with: event)
     }
 
     override func rightMouseUp(with event: NSEvent) {
@@ -1431,6 +1492,49 @@ final class GhosttyTerminalNSView: NSView {
             Self.mouseButton(fromNSEventButtonNumber: event.buttonNumber),
             mods(event)
         )
+    }
+
+    // MARK: - Force click
+
+    /// The force-click stage the current press has reached; reset on release.
+    private var prevPressureStage = 0
+
+    override func pressureChange(with event: NSEvent) {
+        guard let surface else { return }
+        // libghostty first: a deep press under a held left button selects the
+        // word there, and Look Up reads the state it sets.
+        ghostty_surface_mouse_pressure(surface, UInt32(event.stage), Double(event.pressure))
+        // Look Up once per press, on the move into stage 2 (the force click).
+        guard prevPressureStage < 2 else { return }
+        prevPressureStage = event.stage
+        guard event.stage == 2, Self.forceClickLooksUp else { return }
+        quickLook(with: event)
+    }
+
+    /// System Settings → Trackpad → "Force Click and haptic feedback". There
+    /// is no API for it; Ghostty.app reads the same global key.
+    private static var forceClickLooksUp: Bool {
+        CFPreferencesGetAppBooleanValue("com.apple.trackpad.forceClick" as CFString, kCFPreferencesAnyApplication, nil)
+    }
+
+    /// Look Up (force click, ⌃⌘D, a three-finger tap): the dictionary popover
+    /// for the word under the pointer, drawn in the terminal's font.
+    override func quickLook(with event: NSEvent) {
+        guard let surface else { return super.quickLook(with: event) }
+        var text = ghostty_text_s()
+        guard ghostty_surface_quicklook_word(surface, &text) else { return super.quickLook(with: event) }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard text.text_len > 0 else { return super.quickLook(with: event) }
+        var attributes: [NSAttributedString.Key: Any] = [:]
+        if let fontRaw = ghostty_surface_quicklook_font(surface) {
+            // A +1 copy: the dictionary keeps its own reference.
+            let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
+            attributes[.font] = font.takeUnretainedValue()
+            font.release()
+        }
+        // libghostty's origin is top-left, AppKit's bottom-left.
+        let origin = NSPoint(x: text.tl_px_x, y: bounds.height - text.tl_px_y)
+        showDefinition(for: NSAttributedString(string: String(cString: text.text), attributes: attributes), at: origin)
     }
 
     /// NSEvent.buttonNumber → libghostty button, mirroring the Ghostty mac
@@ -1548,13 +1652,43 @@ final class GhosttyTerminalNSView: NSView {
 
     // MARK: - Context menu
 
-    private func presentContextMenu(with event: NSEvent) {
+    /// AppKit asks for the menu on a right click libghostty didn't consume
+    /// (`rightMouseDown` hands those to super) and on a ⌃-click, which it asks
+    /// about before any mouse event.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        switch event.type {
+        case .rightMouseDown:
+            break
+        case .leftMouseDown:
+            // Ghostty.app's rule: ⌃-click is a right click, unless a program
+            // is capturing the mouse — then it gets the ⌃-click as a click.
+            guard event.modifierFlags.contains(.control), let surface,
+                  !ghostty_surface_mouse_captured(surface)
+            else { return nil }
+            // With a menu up the press never reaches `mouseDown`, so send the
+            // right press a right click would have: `right-click-action` acts
+            // on it (by default, selecting the word for the menu's Copy).
+            let pt = mousePoint(from: event)
+            ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
+            _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods(event))
+        default:
+            return nil
+        }
+        return contextMenu()
+    }
+
+    private func contextMenu() -> NSMenu {
         let menu = NSMenu(title: "Terminal")
         // Auto-enabling would override every `isEnabled` below: with no
         // `validateMenuItem` on the target, AppKit enables any item whose target
         // responds to its action, which is what kept Paste enabled on an empty
         // pasteboard. Off, the explicit states (Paste, Jump to Top/Bottom) hold.
         menu.autoenablesItems = false
+        if let surface, ghostty_surface_has_selection(surface) {
+            let copy = NSMenuItem(title: "Copy", action: #selector(handleCopy), keyEquivalent: "")
+            copy.target = self
+            menu.addItem(copy)
+        }
         let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
         paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
@@ -1576,7 +1710,12 @@ final class GhosttyTerminalNSView: NSView {
             zoom.target = self
             menu.addItem(zoom)
         }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
+        return menu
+    }
+
+    @objc
+    private func handleCopy() {
+        sendBindingAction("copy_to_clipboard")
     }
 
     @objc

@@ -516,6 +516,7 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
+    @State private var textFilePlacement: TextFilePlacement = Preferences.shared.textFilePlacement
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -595,9 +596,7 @@ private struct GeneralSettings: View {
                     .help("Re-read your Ghostty config. Click after saving external edits.")
                 }
             } header: {
-                HStack {
-                    Text("Ghostty Config")
-                    Spacer()
+                DocsSectionHeader("Ghostty Config", docs: .ghosttyConfig) {
                     // Mirrors the Projects pane's add affordance: a plus in the
                     // header, with the creation paths in its menu.
                     Menu {
@@ -623,7 +622,22 @@ private struct GeneralSettings: View {
                     .settingsCaption()
             }
 
-            Section("Remote Projects") {
+            Section {
+                Picker("Open in", selection: $textFilePlacement) {
+                    ForEach(TextFilePlacement.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .onChange(of: textFilePlacement) { _, v in
+                    Preferences.shared.textFilePlacement = v
+                }
+                Text("Opens files in your shell's $VISUAL or $EDITOR.")
+                    .settingsCaption()
+            } header: {
+                DocsSectionHeader("Text Files", docs: .textFiles)
+            }
+
+            Section {
                 Toggle("Background SSH connections", isOn: $backgroundSSHConnections)
                     .onChange(of: backgroundSSHConnections) { _, v in
                         Preferences.shared.backgroundSSHConnections = v
@@ -642,6 +656,8 @@ private struct GeneralSettings: View {
                         + "the Mac or return to the app."
                 )
                 .settingsCaption()
+            } header: {
+                DocsSectionHeader("Remote Projects", docs: .remoteProjects)
             }
 
             // Shells always keep running after quit and reattach on the next
@@ -1089,10 +1105,8 @@ private struct AppearanceSettings: View {
     @State private var peekSidebarWhenHidden: Bool = Preferences.shared.peekSidebarWhenHidden
     @State private var showNewProjectButton: Bool = Preferences.shared.showNewProjectButton
     @State private var showProjectNewTabButton: Bool = Preferences.shared.showProjectNewTabButton
-    @State private var tabSwitcherVisibility: String = Preferences.shared.tabSwitcherVisibility.rawValue
     @State private var showTabSwitcherOverlay: Bool = Preferences.shared.showTabSwitcherOverlay
     @State private var recentTabCandidates: Int = Preferences.shared.recentTabCandidates
-    @State private var tabSwitcherPosition: String = Preferences.shared.tabSwitcherPosition.rawValue
     @State
     private var backgroundOpacity: Double = Preferences.shared.windowOpacity
     @State
@@ -1105,10 +1119,20 @@ private struct AppearanceSettings: View {
     private var adaptiveTerminalChrome: Bool = Preferences.shared.adaptiveTerminalChromeEnabled
     @State
     private var sidebarPeekStyle: SidebarPeekStyle = Preferences.shared.sidebarPeekStyle
+    /// The toolbar controls bind to `Preferences` directly rather than a
+    /// seeded `@State` copy: each can also change from the toolbar's own
+    /// right-click menu (`ToolbarMenu`), and a copy would go stale under an
+    /// open Settings window.
+    @Bindable private var preferences = Preferences.shared
+
     /// Inverted view of `Preferences.hideTitleBar`: the control reads as
     /// "Show toolbar" (on by default), the preference stores the hide.
-    @State
-    private var showToolbar: Bool = !Preferences.shared.hideTitleBar
+    private var showToolbar: Binding<Bool> {
+        Binding(
+            get: { !preferences.hideTitleBar },
+            set: { preferences.hideTitleBar = !$0 }
+        )
+    }
 
     var body: some View {
         Form {
@@ -1278,41 +1302,32 @@ private struct AppearanceSettings: View {
             }
 
             Section("Toolbar") {
-                Toggle("Show toolbar", isOn: $showToolbar)
-                    .onChange(of: showToolbar) { _, v in
-                        Preferences.shared.hideTitleBar = !v
-                    }
+                Toggle("Show toolbar", isOn: showToolbar)
                 Text("Hiding it removes the title bar, window buttons, and drag area; switch tabs via the sidebar or ⌘ and the tab number.")
                     .settingsCaption()
 
                 Group {
-                    Picker(selection: $tabSwitcherVisibility) {
+                    Picker(selection: $preferences.tabSwitcherVisibility) {
                         ForEach(TabSwitcherVisibility.allCases) { option in
-                            Text(option.displayName).tag(option.rawValue)
+                            Text(option.displayName).tag(option)
                         }
                     } label: {
                         Text("Tab switcher").dimsWhenDisabled()
                     }
-                    .onChange(of: tabSwitcherVisibility) { _, v in
-                        Preferences.shared.tabSwitcherVisibility = TabSwitcherVisibility(rawValue: v) ?? .whenMultiple
-                    }
                     Text("Numbered control in the title bar for switching tabs by index.")
                         .settingsCaption()
 
-                    Picker(selection: $tabSwitcherPosition) {
+                    Picker(selection: $preferences.tabSwitcherPosition) {
                         ForEach(TabSwitcherPosition.allCases) { option in
-                            Text(option.displayName).tag(option.rawValue)
+                            Text(option.displayName).tag(option)
                         }
                     } label: {
                         Text("Tab switcher position").dimsWhenDisabled()
                     }
-                    .onChange(of: tabSwitcherPosition) { _, v in
-                        Preferences.shared.tabSwitcherPosition = TabSwitcherPosition(rawValue: v) ?? .trailing
-                    }
                     Text("Left places the switcher before the window title, next to the sidebar.")
                         .settingsCaption()
                 }
-                .disabled(!showToolbar)
+                .disabled(preferences.hideTitleBar)
             }
         }
         .formStyle(.grouped)
@@ -1374,8 +1389,8 @@ private struct AppearanceSettings: View {
 // MARK: - Animations
 
 /// Motion: what moves, and how. Smooth scrolling and split animations are on
-/// by default; the two cursor effects are bundled ghostty shaders and stay
-/// opt-in, because the glide takes over drawing the focused cursor.
+/// by default; the two cursor effects stay opt-in, since they change how the
+/// focused cursor is drawn.
 private struct AnimationsSettings: View {
     @State
     private var smoothScrolling: Bool = Preferences.shared.smoothScrolling
@@ -1388,19 +1403,20 @@ private struct AnimationsSettings: View {
 
     var body: some View {
         Form {
-            Section("Scrolling") {
+            Section {
                 Toggle("Smooth scrolling", isOn: $smoothScrolling)
                     .onChange(of: smoothScrolling) { _, v in
                         Preferences.shared.smoothScrolling = v
                     }
                 Text(
-                    "Trackpad scrolling moves scrollback by pixels instead of whole rows. "
-                        + "Programs that draw their own screen (editors, pagers) still scroll by rows."
+                    "Trackpad scrolling moves scrollback by pixels instead of whole rows."
                 )
                 .settingsCaption()
+            } header: {
+                DocsSectionHeader("Scrolling", docs: .animations)
             }
 
-            Section("Cursor") {
+            Section {
                 Toggle("Smooth cursor", isOn: $smoothCursor)
                     .onChange(of: smoothCursor) { _, v in
                         Preferences.shared.smoothCursor = v
@@ -1414,15 +1430,19 @@ private struct AnimationsSettings: View {
                     }
                 Text("A fading streak follows the cursor across larger moves.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Cursor", docs: .animations)
             }
 
-            Section("Splits") {
+            Section {
                 Toggle("Animate splits", isOn: $animatedSplits)
                     .onChange(of: animatedSplits) { _, v in
                         Preferences.shared.animatedSplits = v
                     }
-                Text("Panes slide in and out as the layout changes. Turns itself off when Reduce Motion is on.")
+                Text("Panes slide in and out as the layout changes.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Splits", docs: .animations)
             }
         }
         .formStyle(.grouped)
@@ -1449,18 +1469,20 @@ private struct QuickTerminalSettings: View {
 
     var body: some View {
         Form {
-            Section("Quick Terminal") {
+            Section {
                 LabeledContent(
                     "Shortcut",
                     value: HotkeyRegistry.displayString(
                         for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
                     )
                 )
-                Text("Works globally, even when Macterm isn't active. Rebind it in Keymaps, or clear it to disable the quick terminal.")
+                Text("Works even when Macterm isn't active.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Quick Terminal", docs: .quickTerminal)
             }
 
-            Section("Position") {
+            Section {
                 Picker("Mode", selection: $positionMode) {
                     ForEach(QuickTerminalAdjustMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
@@ -1495,9 +1517,11 @@ private struct QuickTerminalSettings: View {
                     Preferences.shared.quickTerminalFixedY = 1 - v
                 }
                 .disabled(positionMode != .fixed)
+            } header: {
+                DocsSectionHeader("Position", docs: .quickTerminalGeometry)
             }
 
-            Section("Size") {
+            Section {
                 Picker("Mode", selection: $sizeMode) {
                     ForEach(QuickTerminalAdjustMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
@@ -1532,6 +1556,8 @@ private struct QuickTerminalSettings: View {
                     Preferences.shared.quickTerminalHeightFraction = v
                 }
                 .disabled(sizeMode != .fixed)
+            } header: {
+                DocsSectionHeader("Size", docs: .quickTerminalGeometry)
             }
         }
         .formStyle(.grouped)
@@ -1618,7 +1644,7 @@ private struct KeymapSettings: View {
 
     var body: some View {
         Form {
-            Section("Passthrough Programs") {
+            Section {
                 TextField(
                     "Programs",
                     text: Binding(
@@ -1628,10 +1654,12 @@ private struct KeymapSettings: View {
                     prompt: Text(verbatim: "nvim, hx")
                 )
                 Text(
-                    "Keybinds with Pass to TUI checked below yield to these programs instead "
-                        + "of running their action. Match the name shown in the tab title; separate with commas."
+                    "Keybinds with Pass to TUI checked go to these programs instead of running their action. "
+                        + "Separate names with commas."
                 )
                 .settingsCaption()
+            } header: {
+                DocsSectionHeader("Passthrough Programs", docs: .keybinds)
             }
 
             ForEach(actionsByCategory, id: \.category) { group in
@@ -1912,7 +1940,7 @@ private struct UpdatesSettings: View {
             // Deliberately its own section, and NOT disabled when automatic
             // checks are off: the channel governs which updates are visible to
             // any check, including a manual "Check for Updates Now".
-            Section("Channel") {
+            Section {
                 Picker("Update channel", selection: $updateChannel) {
                     ForEach(UpdateChannel.allCases) { option in
                         Text(option.displayName).tag(option.rawValue)
@@ -1924,6 +1952,8 @@ private struct UpdatesSettings: View {
 
                 Text("Tip builds come from every commit that passes CI and are not release-tested.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Channel", docs: .updateChannels)
             }
 
             Section("Version") {

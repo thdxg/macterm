@@ -72,6 +72,15 @@ final class WindowState: Identifiable {
     /// of the key window's copy for the app-wide code paths (hotkeys, palette
     /// commands, the CLI) that mean "the window the user is in".
     var sidebarVisible = true
+
+    /// This window's frame, as AppKit's `frameDescriptor` — what the next
+    /// launch reopens it at (`WindowSnapshot.frame`). Written on every move
+    /// and resize outside full screen, so it holds the windowed frame while
+    /// the window is full screen. Unobserved: nothing renders from it, and a
+    /// live resize would otherwise invalidate the window's views per event.
+    @ObservationIgnored
+    var frame: String?
+
     var isCommandPaletteVisible = false
     var isNewRemoteProjectSheetPresented = false
 

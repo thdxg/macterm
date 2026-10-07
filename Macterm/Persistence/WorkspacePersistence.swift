@@ -108,6 +108,14 @@ struct WindowSnapshot: Codable {
     /// leaked one window's collapsed state into the next window at that slot.
     /// nil (an older snapshot) means shown.
     var sidebarVisible: Bool?
+    /// The window's frame, as AppKit's own `frameDescriptor` string (the frame
+    /// plus the screen it was on, so `setFrame(from:)` can fit it to a display
+    /// that has since changed). Owned here rather than left to SwiftUI's
+    /// `WindowGroup` autosave, whose key embeds runtime addresses and so is
+    /// written fresh and never read back on every launch (#496). nil (an older
+    /// snapshot, or a window that never reported a frame) opens at the
+    /// scene's default size.
+    var frame: String?
 }
 
 // MARK: - Snapshot types

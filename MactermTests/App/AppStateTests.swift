@@ -96,6 +96,42 @@ struct AppStateTests {
         #expect(remoteWorkspace.activeTab?.focusedPane?.projectPath == remoteProject.path)
     }
 
+    /// Environment forwarding (text-file editors) and no-focus creation must
+    /// compose through every creation layer; both extend the same APIs.
+    @Test(arguments: ["tab", "split"], [false, true])
+    func creation_preserves_environment_with_either_focus_policy(kind: String, focus: Bool) throws {
+        let state = makeAppState()
+        let project = seedProject(state)
+        let workspace = try #require(state.workspaces[project.id])
+        let originalTab = try #require(workspace.activeTab)
+        let source = try #require(originalTab.focusedPane)
+        let environment = ["MACTERM_TEST_ENV": "literal $value with spaces"]
+        var warmed: [Pane] = []
+        state.warmPane = { warmed.append($0) }
+
+        let created: Pane
+        if kind == "tab" {
+            let tabID = try #require(state.createTab(
+                projectID: project.id, projects: [project], command: "test-command",
+                env: environment, focus: focus
+            ))
+            let tab = try #require(workspace.tabs.first { $0.id == tabID })
+            created = try #require(tab.focusedPane)
+            #expect(workspace.activeTabID == (focus ? tabID : originalTab.id))
+        } else {
+            let paneID = try #require(state.splitPane(
+                source.id, direction: .horizontal, projectID: project.id,
+                projectDirectory: project.path, command: "test-command",
+                env: environment, focus: focus
+            ))
+            created = try #require(originalTab.splitRoot.findPane(id: paneID))
+            #expect(originalTab.focusedPaneID == (focus ? paneID : source.id))
+        }
+        #expect(created.env == environment)
+        #expect(created.command == "test-command")
+        #expect(warmed.map(\.id) == (focus ? [] : [created.id]))
+    }
+
     // MARK: - Splits
 
     @Test

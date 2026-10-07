@@ -36,11 +36,16 @@
 	<string>NSApplication</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
-	<!-- Folders only: Finder's "Open With", a drop on the Dock icon and
-	     `open -a Macterm <dir>` all deliver the folder as a document, which
-	     AppDelegate.application(_:open:) turns into a project. Alternate rank
-	     keeps Finder the default opener; no file types are declared, so a
-	     file is never offered to Macterm. Mirrors Ghostty's entry. -->
+	<!-- Finder's "Open With", a drop on the Dock icon and `open -a Macterm`
+	     all deliver a document, which AppDelegate.application(_:open:) turns
+	     into a project (a folder) or the user's terminal editor (a file).
+	     Every entry is Alternate rank, so Macterm is never a default opener
+	     until the user picks it with Get Info > Open with > Change All.
+	     Text files are public.text, which covers every type macOS knows is
+	     text (source code, scripts, JSON, YAML, Markdown); the extension list
+	     names common ones it doesn't know, which it would otherwise type as
+	     plain data (go, rs) or not text at all (ts, a video format) - the same
+	     split Zed's Info.plist makes. Folders mirror Ghostty's entry. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -53,6 +58,99 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>public.directory</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Text Files</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.text</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Source Files</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>go</string>
+				<string>rs</string>
+				<string>zig</string>
+				<string>ts</string>
+				<string>cts</string>
+				<string>jsx</string>
+				<string>cjs</string>
+				<string>kt</string>
+				<string>kts</string>
+				<string>lua</string>
+				<string>nu</string>
+				<string>fish</string>
+				<string>conf</string>
+				<string>lock</string>
+				<string>env</string>
+				<string>ex</string>
+				<string>exs</string>
+				<string>erb</string>
+				<string>heex</string>
+				<string>scala</string>
+				<string>dart</string>
+				<string>vue</string>
+				<string>svelte</string>
+				<string>astro</string>
+				<string>hcl</string>
+				<string>tf</string>
+				<string>tfvars</string>
+				<string>graphql</string>
+				<string>gql</string>
+				<string>nix</string>
+				<string>elm</string>
+				<string>clj</string>
+				<string>cljs</string>
+				<string>hs</string>
+				<string>ml</string>
+				<string>mli</string>
+				<string>gleam</string>
+				<string>sol</string>
+				<string>cue</string>
+				<string>jsonc</string>
+				<string>json5</string>
+				<string>gradle</string>
+				<string>groovy</string>
+				<string>cmake</string>
+				<string>rst</string>
+				<string>adoc</string>
+				<string>org</string>
+				<string>tex</string>
+				<string>bib</string>
+				<string>vim</string>
+				<string>el</string>
+				<string>rkt</string>
+				<string>scm</string>
+				<string>lisp</string>
+				<string>jl</string>
+				<string>ps1</string>
+				<string>bat</string>
+				<string>cs</string>
+				<string>fsx</string>
+				<string>vb</string>
+				<string>tcl</string>
+				<string>awk</string>
+				<string>sed</string>
+				<string>mdx</string>
+				<string>properties</string>
+				<string>editorconfig</string>
+				<string>gitignore</string>
+				<string>gitattributes</string>
+				<string>dockerignore</string>
+				<string>npmrc</string>
 			</array>
 		</dict>
 	</array>

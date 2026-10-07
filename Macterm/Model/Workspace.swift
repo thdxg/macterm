@@ -11,6 +11,17 @@ final class TerminalTab: Identifiable {
     /// itself is untouched — clearing this restores the full layout.
     /// Transient: not persisted across launches.
     var zoomedPaneID: UUID?
+
+    /// Bumped by every ratio change that should ANIMATE — the keyboard
+    /// resize (`resize(_:delta:)`), i.e. Resize Split Left/Right/Up/Down from
+    /// a keybind, the palette or a menu. `SplitLayout.animationKey` folds it
+    /// in, so the frames that follow in the same transaction animate like a
+    /// split. A divider drag writes `SplitBranch.ratio` directly and the
+    /// control CLI's `pane resize-split` goes through `setSplitRatio`;
+    /// neither bumps this, so both land immediately — a drag must follow the
+    /// pointer, and a script that sets a ratio then reads pane widths must
+    /// see the geometry it asked for. In memory only, never persisted.
+    var animatedResizeGeneration = 0
     /// For a mirror view of another tab (#345): the `shapeSignature` of the
     /// real tab it was built from, so `AppState.shadow(of:for:)` can tell a
     /// still-matching mirror from one the real tab has outgrown.
@@ -120,9 +131,15 @@ final class TerminalTab: Identifiable {
         return didAcknowledge
     }
 
-    init(projectPath: String, projectID: UUID, sessionSlug: String? = nil, command: String? = nil) {
+    init(
+        projectPath: String,
+        projectID: UUID,
+        sessionSlug: String? = nil,
+        command: String? = nil,
+        env: [String: String]? = nil
+    ) {
         id = UUID()
-        let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug, command: command)
+        let pane = Pane(projectPath: projectPath, projectID: projectID, sessionSlug: sessionSlug, command: command, env: env)
         splitRoot = .pane(pane)
         focusedPaneID = pane.id
     }
@@ -159,14 +176,16 @@ final class TerminalTab: Identifiable {
     /// A `command` spawns in the new pane via libghostty's `initial_input`
     /// (the layout `run:` path — typed into the fresh shell verbatim).
     /// `newPaneWorkingDirectory` overrides cwd inheritance without changing
-    /// the source pane's project-scoped session slug. With `focus: false`,
-    /// preserve focus, history and zoom; the caller must start a hidden pane.
+    /// the source pane's project-scoped session slug. `env` is extra
+    /// environment for the new pane's shell. With `focus: false`, preserve
+    /// focus, history and zoom; the caller must start a hidden pane.
     @discardableResult
     func split(
         paneID: UUID,
         direction: SplitDirection,
         position: SplitPosition = .second,
         command: String? = nil,
+        env: [String: String]? = nil,
         newPaneWorkingDirectory: String? = nil,
         focus: Bool = true
     ) -> UUID? {
@@ -195,7 +214,8 @@ final class TerminalTab: Identifiable {
             position: position,
             projectPath: sourcePath,
             projectID: sourceProjectID,
-            command: command
+            command: command,
+            env: env
         )
         splitRoot = newRoot
         if focus {
@@ -293,20 +313,29 @@ final class TerminalTab: Identifiable {
     /// splits top/bottom. Falls back to a horizontal split when the focused
     /// pane's NSView isn't attached yet and has no measurable bounds.
     @discardableResult
-    func autoSplit(paneID: UUID, newPaneWorkingDirectory: String? = nil) -> UUID? {
+    func autoSplit(
+        paneID: UUID,
+        command: String? = nil,
+        env: [String: String]? = nil,
+        newPaneWorkingDirectory: String? = nil
+    ) -> UUID? {
         let bounds = splitRoot.findPane(id: paneID)?.nsView?.bounds.size ?? .zero
-        let direction: SplitDirection = bounds.height > bounds.width ? .vertical : .horizontal
         return split(
             paneID: paneID,
-            direction: direction,
+            direction: SplitDirection.auto(for: bounds),
+            command: command,
+            env: env,
             newPaneWorkingDirectory: newPaneWorkingDirectory
         )
     }
 
     /// Adjust the nearest matching-axis split ratio around the focused pane.
+    /// The keyboard path, and the one ratio change that animates (see
+    /// `animatedResizeGeneration`).
     func resize(_ direction: PaneFocusDirection, delta: CGFloat = 0.03) {
         guard let paneID = focusedPaneID else { return }
         splitRoot = splitRoot.resizing(paneID: paneID, direction: direction, delta: delta)
+        animatedResizeGeneration &+= 1
     }
 
     /// Set an absolute ratio on the nearest matching-axis split around a pane
@@ -489,12 +518,19 @@ final class Workspace: Identifiable {
     /// Append without visiting when `focus` is false: a select-and-restore
     /// would publish a transient selection and pollute the recent-tab history.
     @discardableResult
-    func createTab(projectPath: String, sessionSlug: String? = nil, command: String? = nil, focus: Bool = true) -> TerminalTab {
+    func createTab(
+        projectPath: String,
+        sessionSlug: String? = nil,
+        command: String? = nil,
+        env: [String: String]? = nil,
+        focus: Bool = true
+    ) -> TerminalTab {
         let tab = TerminalTab(
             projectPath: projectPath,
             projectID: projectID,
             sessionSlug: sessionSlug,
-            command: command
+            command: command,
+            env: env
         )
         tabs.append(tab)
         if focus {

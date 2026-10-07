@@ -168,6 +168,13 @@ final class GhosttyCallbacks: @unchecked Sendable {
             // Ghostty.app. The url bytes are NOT null-terminated (`len`
             // bounds them) and the pointer is owned by libghostty for this
             // call only, so copy synchronously.
+            //
+            // An OSC 8 hyperlink's target is chosen by whatever program wrote
+            // it, so that kind never reaches `NSWorkspace` unexamined:
+            // `UntrustedURL` opens web and mail links, confirms a custom
+            // scheme and refuses anything malformed, deceptive or executable
+            // (`UntrustedURLAlert`). Every kind still answers true — false
+            // makes libghostty retry with its own unrestricted opener.
             let payload = action.action.open_url
             guard let ptr = payload.url, payload.len > 0 else { return true }
             let urlString = String(
@@ -175,7 +182,16 @@ final class GhosttyCallbacks: @unchecked Sendable {
                 as: UTF8.self
             )
             let kind = payload.kind
-            DispatchQueue.main.async { Self.openURL(urlString, kind: kind) }
+            // A link clicked in the grid (kind `.unknown`, the regex's) goes
+            // to the pane first: a file path — `src/app.ts:42` included,
+            // which no opener understands — is resolved against the pane's
+            // cwd there. OSC 8 targets and keybind opens skip it; an OSC 8
+            // target's alert sheets on the clicked pane's window.
+            let view = surfaceView(from: target)
+            DispatchQueue.main.async {
+                if kind == GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN, view?.onOpenLink?(urlString) == true { return }
+                Self.openURL(urlString, kind: kind, from: view?.window)
+            }
             return true
         case GHOSTTY_ACTION_MOUSE_SHAPE:
             // The pointer shape for the current mouse position — I-beam over
@@ -428,7 +444,13 @@ final class GhosttyCallbacks: @unchecked Sendable {
         return URL(fileURLWithPath: (string as NSString).standardizingPath)
     }
 
-    private static func openURL(_ string: String, kind: ghostty_action_open_url_kind_e) {
+    /// `window` is the clicked pane's, where an untrusted link's alert sheets.
+    @MainActor
+    private static func openURL(_ string: String, kind: ghostty_action_open_url_kind_e, from window: NSWindow? = nil) {
+        if kind == GHOSTTY_ACTION_OPEN_URL_KIND_OSC8 {
+            openUntrustedURL(string, from: window)
+            return
+        }
         let url = resolvedOpenTarget(string)
         // `.text` asks for the payload to be *viewed as text* (scrollback
         // dumps land here): prefer the default app for the file's extension,
@@ -439,6 +461,23 @@ final class GhosttyCallbacks: @unchecked Sendable {
             return
         }
         NSWorkspace.shared.open(url)
+    }
+
+    /// An OSC 8 target, through `UntrustedURL`'s policy. Deliberately not
+    /// `resolvedOpenTarget`: a schemeless string is refused, not read as a path.
+    @MainActor
+    private static func openUntrustedURL(_ string: String, from window: NSWindow?) {
+        let target = UntrustedURL(string)
+        switch target.decision {
+        case let .allow(url):
+            NSWorkspace.shared.open(url)
+        case let .confirm(url):
+            logger.info("OSC 8 link needs confirmation: \(target.displayString, privacy: .public)")
+            UntrustedURLAlert.presentConfirmation(for: url, displayString: target.displayString, in: window)
+        case let .deny(reason):
+            logger.notice("OSC 8 link blocked (\(String(describing: reason), privacy: .public)): \(target.displayString, privacy: .public)")
+            UntrustedURLAlert.presentBlock(reason: reason, displayString: target.displayString, in: window)
+        }
     }
 
     private static func defaultTextEditor(for url: URL) -> URL? {

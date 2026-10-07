@@ -4,6 +4,8 @@ These tests only READ the initial project pane; mutation tests take
 `fresh_tab` and work in their own tab.
 """
 
+import subprocess
+
 from _harness import wait_for
 
 
@@ -46,3 +48,17 @@ def test_foreground_process_resolves(app):
     )
     assert process  # login-shell name; environment-dependent (zsh on CI)
     assert pane["session"]  # unchanged by polling
+
+
+def test_the_front_is_taken_back_from_another_app(app):
+    """`_active_app`'s premise, proven on the runner it exists for: once
+    another app holds the front — Finder, as it does after a test's own
+    scripted instance is killed — the bench `activate` hook takes it back
+    (the cooperative request would be refused). `open -a` is LaunchServices,
+    so it needs no TCC grant, unlike System Events. The password monitor is
+    the consumer: it watches the active app's key window only, and
+    test_passwords.py sat behind Finder for both its timeouts on CI."""
+    subprocess.run(["open", "-a", "Finder"], check=True)
+    wait_for(lambda: not app.is_frontmost(), timeout=10, message="Finder to take the front")
+    app.activate()
+    assert app.is_frontmost()

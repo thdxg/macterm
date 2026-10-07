@@ -171,6 +171,10 @@ final class AppState {
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
+        if let frame = saved[0].frame {
+            first.frame = frame
+            applyRestoredFrame(of: first)
+        }
         recordRestoredTab(saved[0].activeTabID, in: first)
         if keyWindowID == first.id {
             activeProjectID = first.activeProjectID
@@ -361,6 +365,7 @@ final class AppState {
             }
             if let width = restoring.sidebarWidth { window.sidebarWidth = width }
             if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
+            if let frame = restoring.frame { window.frame = frame }
         } else if hasRestoredWindows {
             // A window the user opened, not one being restored: the sidebar
             // comes up at the app's defaults — shown, at the default width.
@@ -374,10 +379,36 @@ final class AppState {
         // A new window opens on whatever the user was last looking at, which
         // is both the useful default and what a single-window build did.
         if window.activeProjectID == nil { window.activeProjectID = activeProjectID }
+        // A restored window, or the scene's own window when `restoreWindows`
+        // handed it the first saved entry before it attached.
+        applyRestoredFrame(of: window)
         windows.append(window)
         reconcileWindowViews()
         logger.debug("registerWindow: \(window.id, privacy: .public) count=\(self.windows.count)")
         frontRestoredKeyWindowIfNeeded()
+        persistWindows()
+    }
+
+    /// Put a restored window at the frame it was saved with. A no-op until
+    /// the window has attached (and so always under tests); both callers run
+    /// again once it has — `registerWindow` is called at attachment, and
+    /// `restoreWindows` for a window that attached first.
+    private func applyRestoredFrame(of window: WindowState) {
+        guard let frame = window.frame, let nsWindow = nsWindow(for: window) else { return }
+        WindowAppearance.restoreFrame(frame, window: nsWindow)
+    }
+
+    /// A terminal window moved or resized: record the frame the next launch
+    /// reopens it at. Full screen is skipped, so the windowed frame survives
+    /// a quit made while full screen (macOS restores no full-screen state
+    /// here, and a screen-sized frame is not one the user chose).
+    func windowFrameDidChange(_ nsWindow: NSWindow) {
+        guard !nsWindow.styleMask.contains(.fullScreen),
+              let window = windowStatesByNSWindow.object(forKey: nsWindow)
+        else { return }
+        let frame = nsWindow.frameDescriptor
+        guard window.frame != frame else { return }
+        window.frame = frame
         persistWindows()
     }
 
@@ -1064,6 +1095,15 @@ final class AppState {
     var newTabInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.tabInheritsWorkingDirectory }
     @ObservationIgnored
     var newSplitInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.splitInheritsWorkingDirectory }
+    /// Settings → General → Text Files, read when a file opens. Injectable
+    /// so tests drive both placements without touching shared preferences.
+    @ObservationIgnored
+    var textFilePlacement: () -> TextFilePlacement = { Preferences.shared.textFilePlacement }
+
+    /// Whether Launch Services opens a clicked file with this app — the one
+    /// case a click keeps its line. Injectable for the same reason.
+    @ObservationIgnored
+    var opensTextFileHere: (URL) -> Bool = { TextFileOpening.isDefaultApp(for: $0) }
     @ObservationIgnored
     var dockBadgeWriter: (String?) -> Void = { BellBadge.apply($0) }
     /// The label last handed to `dockBadgeWriter`, so a sync that changes
@@ -1588,7 +1628,8 @@ final class AppState {
                         sidebarWidth: window.sidebarWidth,
                         isKey: window.id == keyWindowID,
                         activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
-                        sidebarVisible: window.sidebarVisible
+                        sidebarVisible: window.sidebarVisible,
+                        frame: window.frame
                     )
                 },
             quickTerminal: quickTerminalSnapshot(),
@@ -2199,6 +2240,21 @@ final class AppState {
         return project
     }
 
+    /// A project per directory, in order, with the last one selected in
+    /// `window` (the key window's selection when nil) — what the Finder
+    /// service, Open With and a folder dropped on the sidebar all do. Always
+    /// creates, like the folder picker: a directory is not an identity, and a
+    /// second project on the same folder is a legitimate ask.
+    @discardableResult
+    func openProjects(atPaths paths: [String], store: ProjectStore, in window: WindowState? = nil) -> Project? {
+        var selected: Project?
+        for path in paths {
+            selected = store.create(name: (path as NSString).lastPathComponent, path: path)
+        }
+        if let selected { selectProject(selected, in: window) }
+        return selected
+    }
+
     /// Rename a project from its sidebar row (the inline edit, which Rename
     /// Current Project opens too). A name the pinned workspace reserves is
     /// refused with a notice and the old name stays — as `project rename`
@@ -2412,10 +2468,11 @@ final class AppState {
         projectPath: String,
         sessionSlug: String? = nil,
         command: String? = nil,
+        env: [String: String]? = nil,
         focus: Bool = true
     ) -> UUID? {
         guard let ws = workspaces[projectID] else { return nil }
-        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command, focus: focus)
+        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command, env: env, focus: focus)
         if !focus {
             for pane in tab.splitRoot.allPanes() {
                 warmBackgroundPane(pane)
@@ -2430,7 +2487,13 @@ final class AppState {
     /// Active pane falls back to the project path when no local cwd is available.
     /// The pinned workspace falls back to home.
     @discardableResult
-    func createTab(projectID: UUID, projects: [Project], command: String? = nil, focus: Bool = true) -> UUID? {
+    func createTab(
+        projectID: UUID,
+        projects: [Project],
+        command: String? = nil,
+        env: [String: String]? = nil,
+        focus: Bool = true
+    ) -> UUID? {
         guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
             return nil
         }
@@ -2441,13 +2504,27 @@ final class AppState {
             projectDirectory: projectDirectory,
             activePaneDirectory: activePaneDirectory
         ) ?? projectDirectory
-        return createTab(projectID: projectID, projects: projects, workingDirectory: newTabDirectory, command: command, focus: focus)
+        return createTab(
+            projectID: projectID,
+            projects: projects,
+            workingDirectory: newTabDirectory,
+            command: command,
+            env: env,
+            focus: focus
+        )
     }
 
     /// Creates a tab in an explicit `workingDirectory` — one of the project's
     /// git worktrees, from the sidebar's Worktrees menu.
     @discardableResult
-    func createTab(projectID: UUID, projects: [Project], workingDirectory: String, command: String? = nil, focus: Bool = true) -> UUID? {
+    func createTab(
+        projectID: UUID,
+        projects: [Project],
+        workingDirectory: String,
+        command: String? = nil,
+        env: [String: String]? = nil,
+        focus: Bool = true
+    ) -> UUID? {
         guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
             return nil
         }
@@ -2458,12 +2535,13 @@ final class AppState {
             projectPath: workingDirectory,
             sessionSlug: projectSessionSlug,
             command: command,
+            env: env,
             focus: focus
         )
     }
 
     /// Returns the configured project root, including the synthetic pinned workspace fallback.
-    private func configuredProjectDirectory(projectID: UUID, projects: [Project]) -> String? {
+    func configuredProjectDirectory(projectID: UUID, projects: [Project]) -> String? {
         if projectID == PinnedTabs.projectID { return PinnedTabs.fallbackRoot }
         return projects.first(where: { $0.id == projectID })?.path
     }
@@ -3025,6 +3103,7 @@ final class AppState {
         projectID: UUID,
         projectDirectory: String,
         command: String? = nil,
+        env: [String: String]? = nil,
         focus: Bool = true
     ) -> UUID? {
         guard let ws = workspaces[projectID],
@@ -3045,6 +3124,7 @@ final class AppState {
             position: position,
             projectID: projectID,
             command: command,
+            env: env,
             newPaneWorkingDirectory: newPaneDirectory,
             focus: focus
         )
@@ -3062,6 +3142,7 @@ final class AppState {
         position: SplitPosition = .second,
         projectID: UUID,
         command: String? = nil,
+        env: [String: String]? = nil,
         newPaneWorkingDirectory: String? = nil,
         focus: Bool = true
     ) -> UUID? {
@@ -3073,6 +3154,7 @@ final class AppState {
             direction: direction,
             position: position,
             command: command,
+            env: env,
             newPaneWorkingDirectory: newPaneWorkingDirectory,
             focus: focus
         )

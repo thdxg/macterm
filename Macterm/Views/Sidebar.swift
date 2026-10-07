@@ -435,6 +435,23 @@ struct SidebarContent: View {
                 )
             }
         }
+        // A folder dropped anywhere on the sidebar opens as a project. Over
+        // everything, including the rows' own drop targets, which it can't
+        // disturb: it takes file drags only (see `SidebarFolderDropTarget`).
+        .overlay {
+            SidebarFolderDropTarget(isEnabled: isInteractive) { paths in
+                openDroppedFolders(paths)
+            }
+        }
+    }
+
+    /// Folders dropped on the sidebar: a project each, the last selected in
+    /// this window and scrolled into view — new projects go to the end of the
+    /// list, which may be well below the fold.
+    private func openDroppedFolders(_ paths: [String]) {
+        guard let project = appState.openProjects(atPaths: paths, store: projectStore, in: windowState) else { return }
+        presentation.expandedProjects.insert(project.id)
+        presentation.scrollPosition = .project(project.id)
     }
 
     // MARK: - Pinned rows

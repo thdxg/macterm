@@ -78,12 +78,14 @@ struct TerminalPane: View {
 }
 
 /// Safari-style link preview shown while the mouse hovers an OSC 8 / detected
-/// URL in the terminal (`GHOSTTY_ACTION_MOUSE_OVER_LINK`).
+/// URL in the terminal (`GHOSTTY_ACTION_MOUSE_OVER_LINK`). Invisible and
+/// bidirectional characters are spelled out (`UntrustedURL`), so an OSC 8
+/// target can't show as something it isn't.
 private struct LinkHoverBanner: View {
     let url: String
 
     var body: some View {
-        Text(url)
+        Text(verbatim: UntrustedURL.escapingUnsafeCharacters(url))
             .font(.caption)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -138,6 +140,9 @@ private struct TerminalSurface: NSViewRepresentable {
     /// in its environment, and its one tab has no rename UI anyway — the
     /// tab-title actions just no-op there.
     @Environment(AppState.self) private var appState: AppState?
+    /// Optional for the same reason; only a clicked file link reads it, for
+    /// the project directory a split or tab starts in.
+    @Environment(ProjectStore.self) private var projectStore: ProjectStore?
 
     final class Coordinator {
         var wasFocused = false
@@ -373,6 +378,14 @@ private struct TerminalSurface: NSViewRepresentable {
         }
         view.onLinkHover = { [weak pane] url in
             pane?.hoverURL = url
+        }
+        view.onOpenLink = { [weak appState, weak projectStore, weak pane] text in
+            // The quick terminal's and desktop widgets' hosting views carry
+            // no environment, and their clicks need the app's state too.
+            let delegate = QuickTerminalService.shared.appDelegate
+            guard let pane, let state = appState ?? delegate?.appState else { return false }
+            let projects = (projectStore ?? delegate?.projectStore)?.projects ?? []
+            return state.openClickedLink(text, in: pane, projects: projects)
         }
         view.onTerminalRender = { [weak view] in
             guard let view else { return }
