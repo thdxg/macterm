@@ -171,6 +171,10 @@ final class AppState {
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
+        if let frame = saved[0].frame {
+            first.frame = frame
+            applyRestoredFrame(of: first)
+        }
         recordRestoredTab(saved[0].activeTabID, in: first)
         if keyWindowID == first.id {
             activeProjectID = first.activeProjectID
@@ -361,6 +365,7 @@ final class AppState {
             }
             if let width = restoring.sidebarWidth { window.sidebarWidth = width }
             if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
+            if let frame = restoring.frame { window.frame = frame }
         } else if hasRestoredWindows {
             // A window the user opened, not one being restored: the sidebar
             // comes up at the app's defaults — shown, at the default width.
@@ -374,10 +379,36 @@ final class AppState {
         // A new window opens on whatever the user was last looking at, which
         // is both the useful default and what a single-window build did.
         if window.activeProjectID == nil { window.activeProjectID = activeProjectID }
+        // A restored window, or the scene's own window when `restoreWindows`
+        // handed it the first saved entry before it attached.
+        applyRestoredFrame(of: window)
         windows.append(window)
         reconcileWindowViews()
         logger.debug("registerWindow: \(window.id, privacy: .public) count=\(self.windows.count)")
         frontRestoredKeyWindowIfNeeded()
+        persistWindows()
+    }
+
+    /// Put a restored window at the frame it was saved with. A no-op until
+    /// the window has attached (and so always under tests); both callers run
+    /// again once it has — `registerWindow` is called at attachment, and
+    /// `restoreWindows` for a window that attached first.
+    private func applyRestoredFrame(of window: WindowState) {
+        guard let frame = window.frame, let nsWindow = nsWindow(for: window) else { return }
+        WindowAppearance.restoreFrame(frame, window: nsWindow)
+    }
+
+    /// A terminal window moved or resized: record the frame the next launch
+    /// reopens it at. Full screen is skipped, so the windowed frame survives
+    /// a quit made while full screen (macOS restores no full-screen state
+    /// here, and a screen-sized frame is not one the user chose).
+    func windowFrameDidChange(_ nsWindow: NSWindow) {
+        guard !nsWindow.styleMask.contains(.fullScreen),
+              let window = windowStatesByNSWindow.object(forKey: nsWindow)
+        else { return }
+        let frame = nsWindow.frameDescriptor
+        guard window.frame != frame else { return }
+        window.frame = frame
         persistWindows()
     }
 
@@ -1597,7 +1628,8 @@ final class AppState {
                         sidebarWidth: window.sidebarWidth,
                         isKey: window.id == keyWindowID,
                         activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
-                        sidebarVisible: window.sidebarVisible
+                        sidebarVisible: window.sidebarVisible,
+                        frame: window.frame
                     )
                 },
             quickTerminal: quickTerminalSnapshot(),

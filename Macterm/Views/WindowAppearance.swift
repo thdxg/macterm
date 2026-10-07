@@ -714,7 +714,9 @@ enum WindowAppearance {
     /// so SwiftUI's address-bearing name (see above) doesn't just fail to
     /// restore — it writes a **brand-new key on every launch**, forever. They
     /// accumulate unread: 9 in one release domain, 51 in a debug one. Pinning
-    /// the name gives AppKit a single key it rewrites in place.
+    /// the name gives AppKit a single key it rewrites in place. The window's
+    /// own frame autosave had the same name and the same problem (#496); see
+    /// `disownFrameAutosave`.
     ///
     /// This is hygiene, not the restore: `restoreSidebarWidth` above stays the
     /// authority on the launch width, because when AppKit consults its own
@@ -728,7 +730,7 @@ enum WindowAppearance {
     /// One shared name would have every window writing its frames to the same
     /// AppKit key, so they fight. A per-window name has to stay BOUNDED,
     /// though — an unstable one is exactly what produced the unbounded
-    /// `NSSplitView Subview Frames` accumulation `pruneChurnedSidebarAutosaveKeys`
+    /// `NSSplitView Subview Frames` accumulation `pruneChurnedAutosaveKeys`
     /// below exists to clean up (49 keys in one real domain, one per launch).
     /// A reused slot index is bounded by how many windows are open at once; a
     /// UUID per window would not be.
@@ -759,7 +761,7 @@ enum WindowAppearance {
         let name = autosaveName(forSlot: sidebarAutosaveSlot(for: window))
         guard split.autosaveName != name else { return }
         split.autosaveName = name
-        pruneChurnedSidebarAutosaveKeys()
+        pruneChurnedAutosaveKeys()
     }
 
     /// Drop the frames AppKit autosaved for a closed window's slot.
@@ -769,7 +771,7 @@ enum WindowAppearance {
     /// how a new window inherited a closed window's collapsed sidebar and
     /// width. Skipped while terminating: the launch path still reads slot 0
     /// before the window's own record takes over. Reads `UserDefaults.standard`
-    /// for the same reason `pruneChurnedSidebarAutosaveKeys` does — that is
+    /// for the same reason `pruneChurnedAutosaveKeys` does — that is
     /// the only domain AppKit wrote it to — and is likewise skipped under a
     /// test run.
     private static func clearSidebarAutosave(slot: Int) {
@@ -777,25 +779,84 @@ enum WindowAppearance {
         UserDefaults.standard.removeObject(forKey: "NSSplitView Subview Frames \(autosaveName(forSlot: slot))")
     }
 
-    /// Drop the per-launch keys written before the name was pinned. Matched on
-    /// the address marker, so the stable names (ours, and the Settings
-    /// window's `com_apple_SwiftUI_Settings_window…`) are never touched.
+    /// Drop the per-launch keys SwiftUI's address-bearing names left behind:
+    /// the sidebar's `NSSplitView Subview Frames …` from before the name was
+    /// pinned, and every `NSWindow Frame …` the main window ever wrote (239 in
+    /// one release domain, over a thousand in a debug one — one per launch).
+    /// Matched on the address marker, so the stable names (ours, and the
+    /// Settings window's `com_apple_SwiftUI_Settings_window…`) are never
+    /// touched.
     ///
     /// Reads `UserDefaults.standard` deliberately, against the usual rule:
     /// AppKit wrote these keys to the app's real domain, so that is the only
     /// place they exist. Skipped under a test run so a hosted suite can't
     /// reach into the developer's live domain.
-    private static func pruneChurnedSidebarAutosaveKeys() {
+    private static func pruneChurnedAutosaveKeys() {
         guard !Preferences.isTestRun else { return }
         let defaults = UserDefaults.standard
-        let stale = defaults.dictionaryRepresentation().keys.filter {
-            $0.hasPrefix("NSSplitView Subview Frames ") && $0.contains("(unknown context at $")
+        let stale = defaults.dictionaryRepresentation().keys.filter { key in
+            (key.hasPrefix("NSSplitView Subview Frames ") || key.hasPrefix("NSWindow Frame "))
+                && key.contains("(unknown context at $")
         }
         guard !stale.isEmpty else { return }
         for key in stale {
             defaults.removeObject(forKey: key)
         }
-        logger.info("pruned \(stale.count, privacy: .public) churned sidebar autosave keys")
+        logger.info("pruned \(stale.count, privacy: .public) churned autosave keys")
+    }
+
+    /// Stop AppKit autosaving this window's frame under SwiftUI's name.
+    ///
+    /// SwiftUI names a `WindowGroup` window's frame autosave after the scene's
+    /// whole content type, in which private types — ours (`AppColorScheme`)
+    /// and SwiftUI's own (the `ActionsModifier` behind every `.alert`) — print
+    /// as `(unknown context at $ADDR)`: an address that moves every launch
+    /// with ASLR, and with every reboot and OS update for SwiftUI's. So the
+    /// frame was saved under a new key on every launch and never read back,
+    /// and every window opened at the scene's `defaultSize` (#496). Making
+    /// our modifier non-private would not fix it — SwiftUI's own types are in
+    /// the name too. The frame is persisted per window in `WindowSnapshot`
+    /// instead (`restoreFrame`), so AppKit's autosave is switched off rather
+    /// than pinned: one owner, and no slot for a closed window's frame to
+    /// leak into the next one, as the sidebar's slots did.
+    static func disownFrameAutosave(window: NSWindow) {
+        guard !window.frameAutosaveName.isEmpty else { return }
+        window.setFrameAutosaveName("")
+        pruneChurnedAutosaveKeys()
+    }
+
+    /// Reopen a restored window at its saved frame. `setFrame(from:)` is the
+    /// call AppKit's own autosave restores through: the descriptor carries the
+    /// screen the frame was saved on, and AppKit fits it to the current
+    /// displays.
+    ///
+    /// Not every saved frame can be fitted, though: a window manager parks
+    /// windows on a hidden workspace just off a screen's corner (AeroSpace
+    /// leaves 1pt showing), and that is the frame the move reports. A restored
+    /// frame with too little of itself on any screen keeps its size and is
+    /// centered on the main screen instead.
+    static func restoreFrame(_ descriptor: String, window: NSWindow) {
+        guard !window.styleMask.contains(.fullScreen) else { return }
+        window.setFrame(from: descriptor)
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        if !DesktopWidgetGrid.isReachable(window.frame, on: visibleFrames),
+           let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
+        {
+            let size = CGSize(
+                width: min(window.frame.width, screen.width),
+                height: min(window.frame.height, screen.height)
+            )
+            let centered = CGRect(
+                x: screen.midX - size.width / 2,
+                y: screen.midY - size.height / 2,
+                width: size.width,
+                height: size.height
+            )
+            window.setFrame(centered, display: false)
+            logger.info("saved window frame \(descriptor, privacy: .public) is off screen; centered it")
+            return
+        }
+        logger.info("window frame restored to \(descriptor, privacy: .public)")
     }
 
     /// Kill NSSplitView's windowed "proactive peek" of the collapsed sidebar:
