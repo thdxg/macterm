@@ -109,17 +109,7 @@ final class FinderServiceProvider: NSObject {
         appState.performWhenRestored { [weak appState, weak projectStore] in
             guard let appState, let projectStore else { return }
             logger.info("newProjectHere: \(paths.count, privacy: .public) directories")
-            var selected: Project?
-            for path in paths {
-                // Always create, like the folder picker and `project create`:
-                // a directory is not an identity, and a second project on the
-                // same folder is a legitimate ask.
-                selected = projectStore.create(name: (path as NSString).lastPathComponent, path: path)
-            }
-            if let selected {
-                // The same selection path as the sidebar.
-                appState.selectProject(selected)
-            }
+            appState.openProjects(atPaths: paths, store: projectStore)
             // The gesture happened in Finder, so Macterm is in the background
             // (or has no visible window, or was just launched); bring the
             // project the user asked for in front of them.

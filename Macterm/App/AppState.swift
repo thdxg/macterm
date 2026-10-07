@@ -2193,6 +2193,21 @@ final class AppState {
         return project
     }
 
+    /// A project per directory, in order, with the last one selected in
+    /// `window` (the key window's selection when nil) — what the Finder
+    /// service, Open With and a folder dropped on the sidebar all do. Always
+    /// creates, like the folder picker: a directory is not an identity, and a
+    /// second project on the same folder is a legitimate ask.
+    @discardableResult
+    func openProjects(atPaths paths: [String], store: ProjectStore, in window: WindowState? = nil) -> Project? {
+        var selected: Project?
+        for path in paths {
+            selected = store.create(name: (path as NSString).lastPathComponent, path: path)
+        }
+        if let selected { selectProject(selected, in: window) }
+        return selected
+    }
+
     /// Rename a project from its sidebar row (the inline edit, which Rename
     /// Current Project opens too). A name the pinned workspace reserves is
     /// refused with a notice and the old name stays — as `project rename`
