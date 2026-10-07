@@ -62,6 +62,7 @@ enum MactermKeybind: String, AppEnum {
     case autofillPassword = "autofill_password"
     case passwordManager = "password_manager"
     case worktrees
+    case files
 
     /// The action this case names, nil if it has been retired upstream.
     var hotkeyAction: HotkeyAction? { HotkeyAction(rawValue: rawValue) }
@@ -114,6 +115,7 @@ enum MactermKeybind: String, AppEnum {
         .autofillPassword: "Autofill Password",
         .passwordManager: "Password Manager",
         .worktrees: "Worktrees",
+        .files: "Files",
     ]
 }
 

@@ -7,11 +7,14 @@ import Foundation
 /// read from git's files each time the screen draws (`GitWorktrees.list`), so
 /// it is never older than the keystroke.
 @MainActor
-struct WorktreesPaletteScope: PaletteScope {
-    var list: @MainActor (String) -> [GitWorktree] = GitWorktrees.list(projectPath:)
+final class WorktreesPaletteScope: PaletteScope {
+    let list: @MainActor (String) -> [GitWorktree]
 
-    let pill = PalettePill(title: "Worktrees", systemImage: "arrow.triangle.branch")
     let placeholder = "Search by branch or path..."
+
+    init(list: @escaping @MainActor (String) -> [GitWorktree] = GitWorktrees.list(projectPath:)) {
+        self.list = list
+    }
 
     func sections(for query: PaletteQuery, context: PaletteContext) -> [PaletteSection] {
         guard let projectID = context.appState.activeProjectID,

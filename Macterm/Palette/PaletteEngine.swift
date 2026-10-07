@@ -30,6 +30,17 @@ struct PaletteItem: Identifiable {
     /// Set on an item that is a way into a palette scope: running it shows
     /// that scope instead of closing the palette, and `action` is not called.
     let opensScope: PaletteScopeID?
+    /// An SF Symbol drawn at the row's leading edge. A row that opens a
+    /// scope shows the scope's pill glyph by default, with a chevron at the
+    /// trailing edge, so a place to go reads differently from a thing to do.
+    let icon: String?
+    /// Something wrong with what the row opens — a palette file that
+    /// didn't read — shown as a warning glyph at the trailing edge, with
+    /// this text as its tooltip. The row stays enabled: entering it shows
+    /// the diagnosis.
+    let warning: String?
+    /// The row's ⌥ action, if it has one.
+    let alt: PaletteAltAction?
     let action: () -> Void
 
     init(
@@ -42,6 +53,9 @@ struct PaletteItem: Identifiable {
         score: Int = 1,
         isEnabled: Bool = true,
         opensScope: PaletteScopeID? = nil,
+        icon: String? = nil,
+        warning: String? = nil,
+        alt: PaletteAltAction? = nil,
         action: @escaping () -> Void
     ) {
         self.id = id ?? "\(category ?? "")/\(title)"
@@ -53,6 +67,9 @@ struct PaletteItem: Identifiable {
         self.score = score
         self.isEnabled = isEnabled
         self.opensScope = opensScope
+        self.icon = icon ?? opensScope?.pill.systemImage
+        self.warning = warning
+        self.alt = alt
         self.action = action
     }
 
@@ -71,9 +88,21 @@ struct PaletteItem: Identifiable {
             score: score,
             isEnabled: isEnabled,
             opensScope: opensScope,
+            icon: icon,
+            warning: warning,
+            alt: alt,
             action: action
         )
     }
+}
+
+/// What a row does with ⌥ held: a second action, named so the row can show
+/// it (the subtitle swaps to this title while Option is down, with an ⌥↩
+/// keycap). ⌥↩ or an ⌥-click runs it; a row without one runs its primary
+/// action either way.
+struct PaletteAltAction {
+    let title: String
+    let action: () -> Void
 }
 
 struct PaletteSection {

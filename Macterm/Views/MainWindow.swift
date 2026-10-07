@@ -436,7 +436,7 @@ struct MainWindow: View {
             // Every close lands back on the root next time, however it closed
             // (⌘P included); a scope's search text goes with it.
             if windowState.paletteScope != nil {
-                windowState.paletteScope = nil
+                windowState.resetPaletteStack()
                 appState.commandPaletteQuery = ""
             }
             // Run a post-dismiss action if one was registered, otherwise return

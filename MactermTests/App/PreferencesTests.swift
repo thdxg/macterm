@@ -40,6 +40,25 @@ struct PreferencesTests {
     }
 
     @Test
+    func palettes_are_on_by_default_and_the_off_set_round_trips() {
+        let prior = Preferences.shared.disabledPaletteIDs
+        defer { Preferences.shared.disabledPaletteIDs = prior }
+
+        #expect(Preferences.shared.disabledPaletteIDs.isEmpty)
+        #expect(Preferences.shared.isPaletteEnabled("worktrees"))
+
+        Preferences.shared.setPalette("worktrees", enabled: false)
+        Preferences.shared.setPalette("worktrees", enabled: false)
+        #expect(Preferences.shared.disabledPaletteIDs == ["worktrees"], "turning off twice records it once")
+        #expect(!Preferences.shared.isPaletteEnabled("worktrees"))
+        #expect(Preferences.defaults.stringArray(forKey: Preferences.Keys.disabledPaletteIDs.name) == ["worktrees"])
+
+        Preferences.shared.setPalette("worktrees", enabled: true)
+        #expect(Preferences.shared.isPaletteEnabled("worktrees"))
+        #expect(Preferences.shared.disabledPaletteIDs.isEmpty)
+    }
+
+    @Test
     func reconnect_remote_panes_defaults_on_and_round_trips() {
         let prior = Preferences.shared.reconnectRemotePanes
         defer { Preferences.shared.reconnectRemotePanes = prior }

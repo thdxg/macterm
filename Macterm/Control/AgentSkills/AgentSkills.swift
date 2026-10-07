@@ -26,7 +26,8 @@ struct AgentSkill: Equatable {
 
 /// The skills `macterm skills` prints, teaching coding agents to drive Macterm
 /// through the `macterm` CLI: running commands in panes, building a workspace
-/// that persists, and running sub-agents in their own panes.
+/// that persists, running sub-agents in their own panes, and writing custom
+/// palette files.
 ///
 /// Compiled into BOTH the app and the `MactermCLI` tool target (the
 /// `ControlProtocol` / `SSHWrapper` pattern). The CLI prints the text offline,
@@ -41,9 +42,9 @@ struct AgentSkill: Equatable {
 /// after a `delimiter` line naming its path.
 ///
 /// Agents load one skill at a time, so every skill must stand alone: each
-/// embeds `groundRules`, the CLI rules all three workflows depend on.
+/// embeds `groundRules`, the CLI rules every workflow depends on.
 enum AgentSkills {
-    static let all: [AgentSkill] = [panes, workspace, subagents]
+    static let all: [AgentSkill] = [panes, workspace, subagents, palettes]
 
     static func named(_ name: String) -> AgentSkill? {
         all.first { $0.name == name }

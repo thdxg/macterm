@@ -8,11 +8,14 @@ import AppKit
 /// matching entries first and offers to add a password with the text typed
 /// as its command (an entry always has one; see `PasswordEditorSheet`).
 @MainActor
-struct PasswordPaletteScope: PaletteScope {
-    var vault: PasswordVault = .shared
+final class PasswordPaletteScope: PaletteScope {
+    let vault: PasswordVault
 
-    let pill = PalettePill(title: "Password Manager", systemImage: "key.fill")
     let placeholder = "Search by command or prompt..."
+
+    init(vault: PasswordVault = .shared) {
+        self.vault = vault
+    }
 
     func sections(for query: PaletteQuery, context: PaletteContext) -> [PaletteSection] {
         let canFill = Self.targetPane(context.appState) != nil

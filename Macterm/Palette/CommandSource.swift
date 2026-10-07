@@ -23,7 +23,46 @@ struct CommandSource: PaletteSource {
     // MARK: - Composition
 
     private func allItems(_ ctx: PaletteContext) -> [PaletteItem] {
-        AppCommand.allCases.compactMap { make(command: $0, ctx: ctx) }
+        var items: [PaletteItem] = []
+        var customAdded = false
+        for command in AppCommand.allCases {
+            // The custom palettes join the Palettes section right after the
+            // built-in screens, before the first command of another kind.
+            if !customAdded, command.category != .palettes {
+                items += customPaletteItems(ctx)
+                customAdded = true
+            }
+            if let item = make(command: command, ctx: ctx) { items.append(item) }
+        }
+        if !customAdded { items += customPaletteItems(ctx) }
+        return items
+    }
+
+    /// One row per custom palette file (`CustomPaletteStore`): a way into
+    /// its root. A file that couldn't be read keeps a normal row, named as
+    /// far as its YAML parses, with a warning glyph before the chevron;
+    /// entering it shows the error — so a typo in the YAML is found where
+    /// the palette was expected rather than nowhere. A palette turned off in
+    /// Settings is hidden, as a built-in screen is.
+    private func customPaletteItems(_ ctx: PaletteContext) -> [PaletteItem] {
+        let store = ctx.appState.customPalettes
+        return store.entries.compactMap { entry in
+            guard Preferences.shared.isPaletteEnabled(entry.settingsID), let target = store.rootTarget(id: entry.id) else { return nil }
+            let chord = PaletteHotkeys.shared.selectedShortcutString(paletteID: entry.id)
+            let symbols = HotkeyRegistry.displaySymbols(for: chord)
+            return PaletteItem(
+                id: "palette:\(entry.id)",
+                title: entry.pill.title,
+                subtitle: entry.description,
+                category: AppCommand.Category.palettes.rawValue,
+                keybind: symbols.isEmpty ? nil : HotkeyRegistry.displayString(for: chord),
+                keybindSymbols: symbols.isEmpty ? nil : symbols,
+                score: 0,
+                opensScope: .custom(target),
+                warning: entry.failure?.localizedDescription,
+                action: {}
+            )
+        }
     }
 
     /// Builds a PaletteItem for `command`, or returns nil when the command

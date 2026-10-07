@@ -53,6 +53,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case autofillPassword = "autofill_password"
     case passwordManager = "password_manager"
     case worktrees
+    case files
 
     var id: String { rawValue }
 
@@ -63,6 +64,13 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     /// What Settings → Keymaps' search looks in (`TextFilter`): the title,
     /// the section it sits in, and the chord both as shown (`⌘D`, `None` when
     /// unbound) and as written (`cmd+d`).
+    /// Every bindable action in the order the command palette lists its
+    /// commands (`AppCommand.allCases`), so Settings → Keymaps sections run
+    /// in the palette's order — Palettes first — rather than in this enum's.
+    static var inCommandOrder: [HotkeyAction] {
+        AppCommand.allCases.compactMap(\.hotkeyAction)
+    }
+
     func searchFields(shortcut: String) -> [String] {
         let shown = HotkeyRegistry.displayString(for: shortcut)
         var fields = [title, appCommand.category.rawValue, shown]
@@ -153,6 +161,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // Unbound by default: ⌥⌘F, the obvious chord, is Autofill Password's.
         case .passwordManager: "none"
         case .worktrees: "none"
+        case .files: "none"
         }
     }
 }

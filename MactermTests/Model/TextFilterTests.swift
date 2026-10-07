@@ -20,6 +20,22 @@ struct TextFilterTests {
 @MainActor
 struct KeymapSearchTests {
     @Test
+    func keymaps_list_every_bindable_action_in_the_palettes_order_palettes_first() {
+        let ordered = HotkeyAction.inCommandOrder
+        #expect(Set(ordered) == Set(HotkeyAction.allCases), "every bindable action is listed once")
+        #expect(ordered.count == HotkeyAction.allCases.count)
+        #expect(ordered.first?.appCommand.category == .palettes)
+        #expect(ordered.prefix(3).map(\.appCommand) == [.toggleCommandPalette, .passwordManager, .worktrees])
+        // Categories are contiguous runs, as the palette's sections are.
+        let categories = ordered.map(\.appCommand.category)
+        var seen: [AppCommand.Category] = []
+        for category in categories where seen.last != category {
+            #expect(!seen.contains(category), "\(category) appears in two runs")
+            seen.append(category)
+        }
+    }
+
+    @Test
     func an_action_is_found_by_title_section_or_chord_either_way_written() {
         let fields = HotkeyAction.splitRight.searchFields(shortcut: "cmd+d")
         #expect(TextFilter.matches("split", in: fields))

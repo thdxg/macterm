@@ -13,6 +13,8 @@ struct CommandPaletteOverlay: View {
     /// window's palette, not whichever window happens to be key.
     @Environment(WindowState.self)
     private var windowState
+    @Environment(\.accessibilityReduceMotion)
+    private var reduceMotion
 
     /// Matches the macOS Tahoe window corner radius so the palette reads as a
     /// native floating surface.
@@ -20,6 +22,11 @@ struct CommandPaletteOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
+            // The PANEL sits 15% down, with or without screens open: the
+            // breadcrumb floats in the space above it, outside the glass, so
+            // entering a screen never moves the input or the list, and the
+            // panel's own surface never grows.
+            let breadcrumb = windowState.paletteStack.isEmpty ? 0 : PaletteBreadcrumb.height + PaletteBreadcrumb.gap
             ZStack(alignment: .top) {
                 // Click-outside scrim. Transparent but hit-testable.
                 Color.black.opacity(0.001)
@@ -28,12 +35,22 @@ struct CommandPaletteOverlay: View {
                         windowState.isCommandPaletteVisible = false
                     }
 
-                CommandPalettePanel()
-                    .frame(width: 500)
-                    .glassPanel(cornerRadius: Self.cornerRadius)
-                    .padding(.top, geo.size.height * 0.15)
+                VStack(alignment: .leading, spacing: PaletteBreadcrumb.gap) {
+                    if !windowState.paletteStack.isEmpty {
+                        PaletteBreadcrumb(frames: windowState.paletteStack) { index in
+                            windowState.popPaletteFrames(above: index)
+                        }
+                        // In from behind the panel, which is drawn over it.
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    CommandPalettePanel()
+                        .glassPanel(cornerRadius: Self.cornerRadius)
+                }
+                .frame(width: 500)
+                .padding(.top, max(0, geo.size.height * 0.15 - breadcrumb))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: windowState.paletteStack.count)
         }
     }
 }
@@ -52,6 +69,13 @@ struct CommandPalettePanel: View {
     private var selectedIndex = 0
     @State
     private var sections: [PaletteSection] = []
+    /// The top screen's listing in flight, read off its scope on every
+    /// refresh (`PaletteScope.loading`).
+    @State
+    private var loading: PaletteLoading?
+    /// The top screen's failed listing, likewise (`PaletteScope.failure`).
+    @State
+    private var failure: PaletteFailure?
     /// Knows which `selectedIndex` changes came from mouse hover, so the
     /// auto-scroll-to-center (keyboard nav) can skip them.
     @State
@@ -67,6 +91,13 @@ struct CommandPalettePanel: View {
     private var viewportHeight: CGFloat = 0
     @FocusState
     private var isFieldFocused: Bool
+    /// Whether Option is down, for the rows' alt-action display only: what
+    /// runs is decided from the Return or click event itself, so a missed
+    /// key-up can never run the wrong action.
+    @State
+    private var optionHeld = false
+    @State
+    private var flagsMonitor: FlagsMonitor?
 
     /// Coordinate space the results scroll view and row frames share.
     private let rowSpace = "paletteRows"
@@ -88,8 +119,9 @@ struct CommandPalettePanel: View {
         )
     }
 
-    /// The palette screen showing, nil for the root (`PaletteScope`).
-    private var scope: (any PaletteScope)? { windowState.paletteScope?.makeScope() }
+    /// The palette screen showing, nil for the root (`PaletteScope`). The
+    /// instance is the top frame's, kept for as long as the frame is up.
+    private var scope: (any PaletteScope)? { windowState.paletteStack.last?.scope }
 
     private var flatItems: [PaletteItem] { sections.flatMap(\.items) }
 
@@ -114,22 +146,21 @@ struct CommandPalettePanel: View {
         return VStack(spacing: 0) {
             // Search field
             HStack(spacing: 8) {
-                if let pill = scope?.pill {
-                    PaletteScopePill(pill: pill)
-                } else {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 14))
-                        .foregroundStyle(MactermTheme.fgMuted)
-                }
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14))
+                    .foregroundStyle(MactermTheme.fgMuted)
                 TextField(placeholderText, text: $appState.commandPaletteQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundStyle(MactermTheme.fg)
                     .focused($isFieldFocused)
-                    .onSubmit { execute() }
+                // A screen refreshing rows it already shows spins here; one
+                // with no rows yet spins in the list instead (one spinner).
+                if loading != nil, !sections.isEmpty {
+                    ProgressView()
+                        .controlSize(.small)
+                }
             }
-            // One height whether or not a scope's pill is up, so entering a
-            // scope never moves the input or the list below it.
             .frame(height: PaletteScopePill.height)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -142,6 +173,17 @@ struct CommandPalettePanel: View {
                 let indexByID = flatIndexByID
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        // A screen's notices: centered in the results, and
+                        // filling them when there are no rows — a compact
+                        // strip above rows an earlier listing left.
+                        if let failure {
+                            PaletteFailureNotice(failure: failure) { scope?.retry() }
+                                .frame(maxWidth: .infinity, minHeight: sections.isEmpty ? viewportHeight : 0)
+                        }
+                        if sections.isEmpty, failure == nil, let loading {
+                            PaletteLoadingNotice(loading: loading)
+                                .frame(maxWidth: .infinity, minHeight: viewportHeight)
+                        }
                         ForEach(Array(sections.enumerated()), id: \.offset) { sectionIndex, section in
                             if let header = section.header {
                                 Text(header)
@@ -155,9 +197,9 @@ struct CommandPalettePanel: View {
                                 let idx = indexByID[item.id] ?? 0
                                 Button {
                                     selectedIndex = idx
-                                    execute()
+                                    execute(alt: NSEvent.modifierFlags.contains(.option))
                                 } label: {
-                                    CommandPaletteRow(item: item, isSelected: idx == selectedIndex)
+                                    CommandPaletteRow(item: item, isSelected: idx == selectedIndex, optionHeld: optionHeld)
                                 }
                                 .buttonStyle(.plain)
                                 .id(idx)
@@ -213,6 +255,10 @@ struct CommandPalettePanel: View {
             // Don't clear `query` — it lives on AppState and is deliberately
             // preserved across close/reopen.
             selectedIndex = 0
+            optionHeld = NSEvent.modifierFlags.contains(.option)
+            flagsMonitor = FlagsMonitor { optionHeld = $0.contains(.option) }
+            appState.customPalettes.reloadIfChanged()
+            activateScope()
             refresh()
             // Defer focus to the next runloop so the TextField has been created.
             DispatchQueue.main.async {
@@ -226,8 +272,9 @@ struct CommandPalettePanel: View {
             selectedIndex = 0
             refresh()
         }
-        .onChange(of: windowState.paletteScope) {
+        .onChange(of: windowState.paletteStack) {
             selectedIndex = 0
+            activateScope()
             refresh()
         }
         .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { _ in
@@ -248,8 +295,26 @@ struct CommandPalettePanel: View {
             moveSelection(1)
             return .handled
         }
+        .onDisappear {
+            flagsMonitor = nil
+            optionHeld = false
+        }
+        // Return runs the selected row — with ⌥, its alt action. Read off
+        // the press rather than `optionHeld`, which is display state.
+        .onKeyPress(keys: [.return]) { press in
+            execute(alt: press.modifiers.contains(.option))
+            return .handled
+        }
         .onKeyPress(.tab) {
             completeQuery()
+        }
+        // ⌘R runs a screen's listing again. Rename Tab's chord, but the app
+        // responder stands aside while the palette is up, and on the root
+        // it stays ignored.
+        .onKeyPress(characters: .init(charactersIn: "r")) { press in
+            guard press.modifiers == .command, let scope else { return .ignored }
+            scope.retry()
+            return .handled
         }
         // Backspace with nothing left to delete steps out of a scope.
         .onKeyPress(.delete) {
@@ -267,12 +332,25 @@ struct CommandPalettePanel: View {
         }
     }
 
+    /// Tell the top screen it is showing (`PaletteScope.activate`); its
+    /// redraws come back through `refresh`. Idempotent on the scope's side,
+    /// so a frame that returns to the top after a pop is simply told again.
+    private func activateScope() {
+        guard let scope else { return }
+        let context = PaletteContext(appState: appState, projectStore: projectStore)
+        scope.activate(context: context) { refresh() }
+    }
+
     private func refresh() {
         if let scope {
             let context = PaletteContext(appState: appState, projectStore: projectStore)
             sections = scope.sections(for: PaletteQuery(raw: query), context: context)
+            loading = scope.loading
+            failure = scope.failure
         } else {
             sections = engine.search(query)
+            loading = nil
+            failure = nil
         }
         // Never rest the selection on a muted row (e.g. when it's the top
         // match after a query change).
@@ -367,13 +445,21 @@ struct CommandPalettePanel: View {
         // Otherwise the row is already comfortably visible — leave it alone.
     }
 
-    private func execute() {
+    /// Run the selected row: its alt action when `alt` and it has one, else
+    /// its primary action — or enter the screen it opens.
+    private func execute(alt: Bool = false) {
         guard selectedIndex >= 0, selectedIndex < flatItems.count else { return }
         let item = flatItems[selectedIndex]
         // A muted row explains why it can't run; Enter on it is a no-op that
         // keeps the palette open (selection normally can't land here — this
         // guards the mouse-hover path).
         guard item.isEnabled else { return }
+        if let altAction = item.alt, alt {
+            query = ""
+            windowState.isCommandPaletteVisible = false
+            altAction.action()
+            return
+        }
         if let next = item.opensScope {
             enterScope(next)
             return
@@ -386,37 +472,118 @@ struct CommandPalettePanel: View {
     }
 }
 
-private extension CommandPalettePanel {
-    /// Show `next` in place, starting from an empty query. The root's text
-    /// isn't kept: it was the search that found the way in.
-    func enterScope(_ next: PaletteScopeID) {
-        query = ""
-        windowState.paletteScope = next
+/// A local monitor for modifier changes while the palette is up, removed
+/// when the palette goes — SwiftUI's `onKeyPress` never sees a bare
+/// modifier press.
+private final class FlagsMonitor {
+    /// The monitor is installed and removed on the main thread; `deinit` is
+    /// nonisolated under Swift 6, hence the unchecked storage.
+    nonisolated(unsafe) private var token: Any?
+
+    @MainActor
+    init(_ onChange: @escaping @MainActor (NSEvent.ModifierFlags) -> Void) {
+        token = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            MainActor.assumeIsolated { onChange(event.modifierFlags.intersection(.deviceIndependentFlagsMask)) }
+            return event
+        }
     }
 
-    func leaveScope() {
-        query = ""
-        windowState.paletteScope = nil
+    deinit {
+        if let token { NSEvent.removeMonitor(token) }
     }
 }
 
-// MARK: - Scope pill
+private extension CommandPalettePanel {
+    /// Show `next` over the screen showing, starting from an empty query.
+    /// The text isn't kept: it was the search that found the way in.
+    func enterScope(_ next: PaletteScopeID) {
+        query = ""
+        windowState.pushPaletteFrame(PaletteFrame(next))
+    }
 
-/// The pill at the input's leading edge naming the palette screen showing:
-/// liquid glass on macOS 26 where the window draws glass, the theme's raised
-/// surface otherwise.
+    /// Back one screen, starting its search empty.
+    func leaveScope() {
+        query = ""
+        windowState.popPaletteFrame()
+    }
+}
+
+// MARK: - Breadcrumb
+
+/// The screens open, as a row of pills floating above the panel, root
+/// first: Finder's path bar in miniature, outside the glass rather than in
+/// it — a nested palette needs several pills, the input's width is the
+/// search's, and the panel's surface stays the panel's. The current
+/// screen's pill is drawn in full and takes the width first; its ancestors
+/// are muted, shrink first (middle-truncated) and pop the stack back to
+/// themselves when clicked. The row never outgrows the panel: a current
+/// pill named by a long row title truncates in the middle rather than
+/// pushing the panel off its anchor.
+struct PaletteBreadcrumb: View {
+    /// The row's height — what the overlay lifts the panel's anchor by,
+    /// with `gap`, so it must be exact.
+    static let height: CGFloat = PaletteScopePill.height
+    /// Between the pills and the panel's top edge.
+    static let gap: CGFloat = 8
+
+    let frames: [PaletteFrame]
+    let popTo: (Int) -> Void
+
+    var body: some View {
+        pills
+            .frame(height: Self.height, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var pills: some View {
+        if #available(macOS 26.0, *), WindowAppearance.glassSupported {
+            GlassEffectContainer { row }
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(frames.enumerated()), id: \.element.id) { index, frame in
+                if index > 0 {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(MactermTheme.fgMuted)
+                        .shadow(color: .black.opacity(0.5), radius: 2)
+                }
+                let isCurrent = index == frames.count - 1
+                Button {
+                    popTo(index)
+                } label: {
+                    PaletteScopePill(pill: frame.pill, isCurrent: isCurrent)
+                }
+                .buttonStyle(.plain)
+                .disabled(isCurrent)
+                .layoutPriority(isCurrent ? 1 : 0)
+            }
+        }
+    }
+}
+
+/// One frame's pill: liquid glass on macOS 26 where the window draws glass,
+/// the panel's material otherwise — it floats over the terminal, so the
+/// theme's translucent surface alone would vanish into it — with the
+/// panel's hairline and a shadow of its own.
 private struct PaletteScopePill: View {
-    /// The pill's height, and the palette input row's with or without it.
+    /// The pill's height, and the palette input row's.
     static let height: CGFloat = 22
 
     let pill: PalettePill
+    let isCurrent: Bool
 
     var body: some View {
         Label(pill.title, systemImage: pill.systemImage)
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(MactermTheme.fg)
+            .foregroundStyle(isCurrent ? MactermTheme.fg : MactermTheme.fgMuted)
             .lineLimit(1)
-            .fixedSize()
+            .truncationMode(.middle)
             .padding(.horizontal, 9)
             .frame(height: Self.height)
             .modifier(PillBackground())
@@ -425,13 +592,68 @@ private struct PaletteScopePill: View {
     private struct PillBackground: ViewModifier {
         func body(content: Content) -> some View {
             if #available(macOS 26.0, *), WindowAppearance.glassSupported {
-                content.glassEffect(.regular, in: .capsule)
+                content
+                    .glassEffect(.regular, in: .capsule)
+                    .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 3)
             } else {
                 content
-                    .background(MactermTheme.surface, in: Capsule())
+                    .background(.regularMaterial, in: Capsule())
                     .overlay(Capsule().strokeBorder(MactermTheme.border, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 3)
             }
         }
+    }
+}
+
+// MARK: - Loading
+
+/// The results while a screen's first listing is in flight: a spinner and
+/// what it waits on, centered.
+private struct PaletteLoadingNotice: View {
+    let loading: PaletteLoading
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text(loading.message)
+                .font(.system(size: 13))
+                .foregroundStyle(MactermTheme.fgMuted)
+                .lineLimit(1)
+        }
+        .padding(20)
+    }
+}
+
+/// A screen's listing that failed: the failure color's warning glyph, what
+/// failed over why, and Retry, centered. Not a result row — it is never
+/// selected and Enter never lands on it — so it is a notice.
+private struct PaletteFailureNotice: View {
+    let failure: PaletteFailure
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(MactermTheme.failure)
+            Text(failure.title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(MactermTheme.fg)
+            if let detail = failure.detail {
+                Text(detail)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(MactermTheme.fgMuted)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .textSelection(.enabled)
+            }
+            Button("Retry", action: retry)
+                .controlSize(.small)
+                .padding(.top, 4)
+        }
+        .padding(.horizontal, 40)
+        .padding(.vertical, 20)
     }
 }
 
@@ -452,22 +674,55 @@ private struct RowFramesKey: PreferenceKey {
 private struct CommandPaletteRow: View {
     let item: PaletteItem
     let isSelected: Bool
+    /// Option is down: a row with an alt action shows that action's title
+    /// in place of its subtitle, and ⌥↩ in place of its keybind.
+    let optionHeld: Bool
+
+    private var showsAlt: Bool { optionHeld && item.alt != nil }
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
+            if let icon = item.icon {
+                Image(systemName: icon)
+                    .font(.system(size: 13))
+                    .foregroundStyle(item.isEnabled ? MactermTheme.fgMuted : MactermTheme.fgDim)
+                    .frame(width: 18)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.system(size: 13))
                     .foregroundStyle(item.isEnabled ? MactermTheme.fg : MactermTheme.fgDim)
-                if let subtitle = item.subtitle {
+                if let subtitle = showsAlt ? item.alt?.title : item.subtitle {
                     Text(subtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(item.isEnabled ? MactermTheme.fgMuted : MactermTheme.fgDim)
                         .lineLimit(1)
                 }
             }
+            // At least a key-cap tall, so a row with a keybind and one
+            // without measure the same (the caps outgrow a single title line).
+            .frame(minHeight: KeyCap.height)
             Spacer()
-            keybindView
+            if showsAlt {
+                HStack(spacing: 4) {
+                    KeyCap(symbol: "⌥")
+                    KeyCap(symbol: "↩")
+                }
+            } else {
+                keybindView
+            }
+            if let warning = item.warning {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(MactermTheme.failure)
+                    .help(warning)
+            }
+            // A way into a screen, not a thing to do.
+            if item.opensScope != nil {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(MactermTheme.fgDim)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -498,6 +753,9 @@ private struct CommandPaletteRow: View {
 
 /// A single rounded key-cap, e.g. `⌘` or `Tab`, rendered Raycast-style.
 private struct KeyCap: View {
+    /// Every cap's height, and the floor of every row's text column.
+    static let height: CGFloat = 18
+
     let symbol: String
 
     var body: some View {
@@ -505,7 +763,7 @@ private struct KeyCap: View {
             .font(.system(size: 11, weight: .medium, design: .rounded))
             .foregroundStyle(MactermTheme.fgMuted)
             .frame(minWidth: 16)
-            .padding(.vertical, 2)
+            .frame(height: Self.height)
             .padding(.horizontal, 4)
             .background(MactermTheme.surface, in: .rect(cornerRadius: 5))
             .overlay(

@@ -22,6 +22,14 @@ final class PaletteResponder: KeyResponder {
             appState.isCommandPaletteVisible.toggle()
             return .handled
         }
+        // A custom palette's chord: the same two outcomes as a built-in
+        // screen's, with `PaletteHotkeys` as the table.
+        if appState.isCommandPaletteVisible,
+           let paletteID = PaletteHotkeys.shared.matchingPaletteID(for: event)
+        {
+            appState.openCustomPalette(id: paletteID)
+            return .handled
+        }
         // A palette screen's chord with the palette already up: the app-level
         // responder that runs bindings stands aside while the palette is
         // visible, so switch to the screen (or close it) here.
@@ -248,6 +256,14 @@ final class MainAppResponder: KeyResponder {
                 return .handled
             }
             run()
+            return .handled
+        }
+
+        // A custom palette's chord (`PaletteHotkeys`), after the actions'
+        // so a chord bound to both still runs the action, as two actions on
+        // one chord resolve by order.
+        if let paletteID = PaletteHotkeys.shared.matchingPaletteID(for: event) {
+            appState.openCustomPalette(id: paletteID)
             return .handled
         }
 

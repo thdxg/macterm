@@ -813,14 +813,30 @@ final class AppState {
         set { keyOrFirstWindow?.isCommandPaletteVisible = newValue }
     }
 
-    /// Show the palette on `scope` (nil: the root). A different screen
-    /// starts from an empty query — text typed for one search means nothing
-    /// to another.
+    /// Show the palette on `scope` alone (nil: the root), whatever stack of
+    /// screens was up. A different screen starts from an empty query — text
+    /// typed for one search means nothing to another.
     func openCommandPalette(scope: PaletteScopeID?) {
         guard let window = keyOrFirstWindow else { return }
-        if window.paletteScope != scope { commandPaletteQuery = "" }
-        window.paletteScope = scope
+        if window.paletteScope != scope || window.paletteStack.count > 1 {
+            commandPaletteQuery = ""
+            window.showPaletteScope(scope)
+        }
         window.isCommandPaletteVisible = true
+    }
+
+    /// A custom palette's chord (`PaletteHotkeys`): toggles the palette on
+    /// its root like a built-in screen's chord, says so for a palette turned
+    /// off in Settings → Palettes or whose file no longer reads.
+    func openCustomPalette(id: String) {
+        customPalettes.reloadIfChanged()
+        guard let entry = customPalettes.entry(id: id) else { return }
+        guard Preferences.shared.isPaletteEnabled(entry.settingsID) else {
+            presentToast("\(entry.pill.title) is turned off in Settings → Palettes")
+            return
+        }
+        guard let target = customPalettes.rootTarget(id: id) else { return }
+        toggleCommandPalette(scope: .custom(target))
     }
 
     /// A screen's own chord: shows the palette on `scope`, or closes it when
@@ -1192,6 +1208,9 @@ final class AppState {
     /// `~/.config/macterm/widgets.yaml` (`AppState+DesktopWidgets`).
     @ObservationIgnored
     let widgetLayoutStore: WidgetLayoutStore
+    /// The custom palettes (`~/.config/macterm/palettes/*.yaml`), re-read
+    /// when the palette opens.
+    let customPalettes: CustomPaletteStore
 
     /// The exact text of our last `widgets.yaml` write — anything else on
     /// disk is an edit to absorb before the next write.
@@ -1263,6 +1282,7 @@ final class AppState {
             legacyDirectoryURL: projectFiles.directoryURL
         )
         widgetLayoutStore = WidgetLayoutStore(directoryURL: projectFiles.configDirectoryURL)
+        customPalettes = CustomPaletteStore(configDirectoryURL: projectFiles.configDirectoryURL)
         if let quickTerminal { adoptQuickTerminal(quickTerminal) }
         let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,

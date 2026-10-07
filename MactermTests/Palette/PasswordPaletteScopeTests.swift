@@ -86,7 +86,8 @@ struct PasswordPaletteScopeTests {
         let item = CommandSource().emptyItems(context: makeContext())?
             .first { $0.title == AppCommand.passwordManager.title }
         #expect(item?.opensScope == .passwords)
+        #expect(item?.icon == "key.fill", "a row that opens a screen wears the screen's glyph")
         #expect(AppCommand.passwordManager.paletteScope == .passwords)
-        #expect(PaletteScopeID.passwords.makeScope().pill.title == "Password Manager")
+        #expect(PaletteScopeID.passwords.pill.title == "Password Manager")
     }
 }

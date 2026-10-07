@@ -937,6 +937,58 @@ struct PaletteScopeWindowTests {
     }
 
     @Test
+    func screens_stack_and_pop_back_through_their_frames() {
+        let window = WindowState()
+        #expect(window.paletteScope == nil)
+
+        window.pushPaletteFrame(PaletteFrame(.passwords))
+        window.pushPaletteFrame(PaletteFrame(.worktrees))
+        window.pushPaletteFrame(PaletteFrame(.worktrees, pill: PalettePill(title: "feature", systemImage: "tag")))
+        #expect(window.paletteStack.map(\.scopeID) == [.passwords, .worktrees, .worktrees])
+        #expect(
+            window.paletteStack.map(\.pill.title) == ["Password Manager", "Worktrees", "feature"],
+            "a frame is named by its own pill unless the row that opened it says otherwise"
+        )
+        #expect(window.paletteScope == .worktrees)
+        #expect(window.paletteStack[1] != window.paletteStack[2], "two frames of one scope are two frames")
+
+        window.popPaletteFrame()
+        #expect(window.paletteStack.count == 2)
+
+        window.popPaletteFrames(above: 2)
+        #expect(window.paletteStack.count == 2, "an index past the top pops nothing")
+        window.popPaletteFrames(above: 0)
+        #expect(window.paletteStack.map(\.scopeID) == [.passwords], "a pill click keeps its own frame")
+
+        window.popPaletteFrame()
+        window.popPaletteFrame()
+        #expect(window.paletteStack.isEmpty, "popping the root is nothing")
+    }
+
+    @Test
+    func a_screens_chord_replaces_a_nested_stack_with_that_screen_alone() {
+        let state = makeAppState()
+        let window = WindowState()
+        state.registerWindow(window)
+        state.noteKeyWindow(window)
+
+        window.pushPaletteFrame(PaletteFrame(.worktrees))
+        window.pushPaletteFrame(PaletteFrame(.passwords))
+        state.commandPaletteQuery = "prod"
+        state.openCommandPalette(scope: .passwords)
+        #expect(window.paletteStack.map(\.scopeID) == [.passwords], "the screen asked for, from the root")
+        #expect(state.commandPaletteQuery.isEmpty, "a different stack is a different search")
+
+        // Already alone on that screen: the chord leaves the search typed.
+        state.commandPaletteQuery = "prod"
+        state.openCommandPalette(scope: .passwords)
+        #expect(state.commandPaletteQuery == "prod")
+
+        window.resetPaletteStack()
+        #expect(window.paletteStack.isEmpty)
+    }
+
+    @Test
     func password_manager_is_a_bindable_command_that_is_a_palette_screen() {
         #expect(AppCommand.passwordManager.hotkeyAction == .passwordManager)
         #expect(HotkeyAction.passwordManager.appCommand == .passwordManager)

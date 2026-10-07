@@ -17,6 +17,7 @@ struct MactermCommand: ParsableCommand {
             TabCommand.self,
             WindowCommand.self,
             WidgetCommand.self,
+            PaletteCommand.self,
             PaneCommand.self,
             Grid.self,
             SessionCommand.self,

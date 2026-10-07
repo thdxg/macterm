@@ -16,6 +16,10 @@ extension AppCommand {
     /// command palette and the menu bar so the two stay in sync.
     @MainActor
     func action(in ctx: AppCommandContext) -> (@MainActor () -> Void)? {
+        // A screen turned off in Settings → Palettes has no command: its row
+        // leaves the palette, its menu item disables, its chord says so.
+        if let scope = paletteScope, !scope.isEnabled { return nil }
+
         let projectID = ctx.appState.activeProjectID
         let current = projectID.flatMap { id in ctx.projectStore.projects.first(where: { $0.id == id }) }
 
@@ -273,6 +277,9 @@ extension AppCommand {
         case .worktrees:
             guard let current, Self.worktreesUnavailableReason(for: current) == nil else { return nil }
             return { ctx.appState.toggleCommandPalette(scope: .worktrees) }
+        case .files:
+            guard let current, Self.filesUnavailableReason(for: current) == nil else { return nil }
+            return { ctx.appState.toggleCommandPalette(scope: .files) }
         case .checkForUpdate:
             // Always present in the palette; the guard only no-ops when a check
             // is already in flight (canCheckForUpdates flips false during one).
@@ -291,11 +298,14 @@ extension AppCommand {
     /// keeps the plain disabled look either way.
     @MainActor
     func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
+        // Turned off as a palette: gone, not muted — that is what turning
+        // it off is for.
+        if let scope = paletteScope, !scope.isEnabled { return nil }
         // Off by the master switch: say where it is rather than vanish.
         if self == .passwordManager {
             return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Password Manager"
         }
-        if self == .worktrees { return unavailableNotice(in: ctx) }
+        if self == .worktrees || self == .files { return unavailableNotice(in: ctx) }
         guard self == .applyLayout,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
@@ -318,11 +328,21 @@ extension AppCommand {
     /// other inapplicable binding does.
     @MainActor
     func unavailableNotice(in ctx: AppCommandContext) -> String? {
-        guard self == .worktrees,
+        if let scope = paletteScope, !scope.isEnabled {
+            return "\(title) is turned off in Settings → Palettes"
+        }
+        guard self == .worktrees || self == .files,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
         else { return nil }
-        return Self.worktreesUnavailableReason(for: current)
+        return self == .files ? Self.filesUnavailableReason(for: current) : Self.worktreesUnavailableReason(for: current)
+    }
+
+    /// Why `project` has no Files screen, or nil when it has one: the index
+    /// walks the local file system, which a remote project's files aren't on.
+    @MainActor
+    static func filesUnavailableReason(for project: Project) -> String? {
+        project.isRemote ? "Files aren’t available for remote projects" : nil
     }
 
     /// Why `project` has no Worktrees screen, or nil when it has one.
