@@ -20,7 +20,7 @@ struct PaletteScopeTests {
 
         func sections(for query: PaletteQuery, context _: PaletteContext) -> [PaletteSection] {
             let items = rows
-                .filter { query.isEmpty || fuzzyScore(query: query.trimmed, target: $0) != nil }
+                .filter { query.isEmpty || Search.matches(query.trimmed, in: [$0]) }
                 .map { PaletteItem(id: $0, title: $0, action: {}) }
             return items.isEmpty ? [] : [PaletteSection(header: nil, items: items)]
         }

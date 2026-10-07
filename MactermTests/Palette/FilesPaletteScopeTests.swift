@@ -67,18 +67,19 @@ struct FilesPaletteScopeTests {
     @Test
     func a_partial_path_finds_a_file_and_a_name_prefix_ranks_first() throws {
         let entries = try FileIndex.scan(root: makeTree())
-        #expect(FileIndex.matches(entries, query: "pal/eng", limit: 50).map(\.entry.relativePath) == ["src/palette/engine.swift"])
-        let scope = FileIndex.matches(entries, query: "scope", limit: 50).map(\.entry.relativePath)
-        #expect(scope == ["src/palette/scope.swift"])
-        // "s" starts src, src/main.swift's path and scope.swift's name alike
-        // (all score 0); the listing's order breaks the tie, shallow first.
-        let s = FileIndex.matches(entries, query: "s", limit: 2).map(\.entry.relativePath)
-        #expect(s == ["src", "src/main.swift"])
-        #expect(
-            FileIndex.matches(entries, query: "", limit: 3).map(\.entry.relativePath) == ["docs", "Makefile", "README.md"],
-            "empty: the top of the tree"
-        )
-        #expect(FileIndex.matches(entries, query: "zzz", limit: 50).isEmpty)
+        let index = FileIndex.searchIndex(for: entries)
+        func paths(_ query: String, limit: Int = 50) -> [String] {
+            FileIndex.matches(entries, index: index, query: query, limit: limit).map(\.entry.relativePath)
+        }
+        #expect(paths("pal/eng") == ["src/palette/engine.swift"])
+        #expect(paths("scope") == ["src/palette/scope.swift"])
+        let engine = FileIndex.matches(entries, index: index, query: "eng", limit: 1).first
+        #expect(engine?.highlights == [0, 1, 2], "the name's matched characters, for the row's emphasis")
+        // "s" starts src and scope.swift's name alike; the shorter title wins
+        // the tie, and a name match beats the same match deep in a path.
+        #expect(paths("s", limit: 2) == ["src", "src/palette/scope.swift"])
+        #expect(paths("", limit: 3) == ["docs", "Makefile", "README.md"], "empty: the top of the tree")
+        #expect(paths("zzz").isEmpty)
     }
 
     @Test

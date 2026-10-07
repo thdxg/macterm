@@ -21,7 +21,8 @@ struct PaletteItem: Identifiable {
     /// row can render each as its own key-cap. `nil` when the item has no
     /// keybind. Mirrors `keybind`, which keeps the joined form.
     let keybindSymbols: [String]?
-    /// Lower is better. 0 = exact prefix match, ~5 = substring, ~40 = subsequence.
+    /// Lower is better: the negated `Search` score, so the engine's best
+    /// match sorts first; 0 for an empty query.
     let score: Int
     /// A disabled item renders muted, is skipped by keyboard selection, and
     /// never executes — visible so the user learns *why* it's unavailable
@@ -41,6 +42,8 @@ struct PaletteItem: Identifiable {
     let warning: String?
     /// The row's ⌥ action, if it has one.
     let alt: PaletteAltAction?
+    /// Scalar offsets in `title` the query matched, drawn emphasized.
+    let highlights: [Int]
     let action: () -> Void
 
     init(
@@ -56,6 +59,7 @@ struct PaletteItem: Identifiable {
         icon: String? = nil,
         warning: String? = nil,
         alt: PaletteAltAction? = nil,
+        highlights: [Int] = [],
         action: @escaping () -> Void
     ) {
         self.id = id ?? "\(category ?? "")/\(title)"
@@ -70,6 +74,7 @@ struct PaletteItem: Identifiable {
         self.icon = icon ?? opensScope?.pill.systemImage
         self.warning = warning
         self.alt = alt
+        self.highlights = highlights
         self.action = action
     }
 
@@ -77,7 +82,7 @@ struct PaletteItem: Identifiable {
     /// that re-score a prebuilt item on query use this so a newly-added field
     /// (e.g. `isEnabled`) can't be silently dropped to its default by a
     /// hand-copied initializer call.
-    func with(score: Int) -> PaletteItem {
+    func with(score: Int, highlights: [Int]? = nil) -> PaletteItem {
         PaletteItem(
             id: id,
             title: title,
@@ -91,8 +96,16 @@ struct PaletteItem: Identifiable {
             icon: icon,
             warning: warning,
             alt: alt,
+            highlights: highlights ?? self.highlights,
             action: action
         )
+    }
+
+    /// A copy scored by `match` (`Search.match`): its score negated into the
+    /// palette's lower-is-better order, its highlights carried. `boost` is
+    /// subtracted, for a source that should win ties.
+    func with(_ match: Search.Match, boost: Int = 0) -> PaletteItem {
+        with(score: -Int(match.score) - boost, highlights: match.highlights)
     }
 }
 
@@ -139,7 +152,8 @@ struct PaletteQuery {
 @MainActor
 protocol PaletteSource {
     /// Items for a non-empty, non-path query. Implementations return items
-    /// with `score` populated (use `fuzzyScore`); non-matching items are omitted.
+    /// scored by `Search.match` (`PaletteItem.with(_:)`); non-matching items
+    /// are omitted.
     func items(query: String, context: PaletteContext) -> [PaletteItem]
 
     /// Items shown when the input is empty. `nil` means "no empty-state items"
@@ -186,7 +200,8 @@ struct PaletteEngine {
         // Total, deterministic order: score, then title, then id — Swift's
         // `sort` isn't guaranteed stable, so equal scores need explicit
         // tiebreakers rather than relying on incidental input order.
-        all.sort { ($0.score, $0.title, $0.id) < ($1.score, $1.title, $1.id) }
+        // Equal scores go to the shorter title, fzf's tiebreak.
+        all.sort { ($0.score, $0.title.count, $0.title, $0.id) < ($1.score, $1.title.count, $1.title, $1.id) }
         return all.isEmpty ? [] : [PaletteSection(header: nil, items: all)]
     }
 
@@ -203,28 +218,4 @@ struct PaletteEngine {
             PaletteSection(header: cat.isEmpty ? nil : cat, items: grouped[cat] ?? [])
         }
     }
-}
-
-// MARK: - Fuzzy
-
-/// Returns a score (lower = better match) or nil if no match.
-/// 0 = exact prefix, <10 = substring hit, <50 = subsequence hit.
-func fuzzyScore(query: String, target: String) -> Int? {
-    let q = query.lowercased()
-    let t = target.lowercased()
-    guard !q.isEmpty else { return 0 }
-    if t.hasPrefix(q) { return 0 }
-    if let range = t.range(of: q) {
-        // Clamp to just under the subsequence floor (40) so every contiguous
-        // substring hit always outranks every scattered subsequence hit, even
-        // when the substring sits deep in a long target.
-        return min(5 + t.distance(from: t.startIndex, to: range.lowerBound), 39)
-    }
-    // Subsequence
-    var qi = q.startIndex
-    for ch in t where ch == q[qi] {
-        qi = q.index(after: qi)
-        if qi == q.endIndex { return 40 + (t.count - q.count) }
-    }
-    return nil
 }

@@ -60,26 +60,31 @@ enum FileIndex {
     /// the relative path is the target (so `pal/eng` finds
     /// `Palette/PaletteEngine.swift`), and a match on the name alone counts
     /// as well so a file name's prefix ranks first wherever the file is.
-    /// A match: the entry, where it came in the listing, and how well it
-    /// matched.
-    struct Match: Equatable {
-        let entry: FileIndexEntry
-        let offset: Int
-        let score: Int
+    /// The search index over `entries` (`Macterm/Search/`, built for long
+    /// lists): the name is the title field, the relative path the second, so
+    /// `pal/eng` finds `Palette/PaletteEngine.swift` and a match on the name
+    /// outranks the same match deep in a path. Prepared once per scan, off
+    /// the main actor like the scan itself.
+    static func searchIndex(for entries: [FileIndexEntry]) -> SearchIndex {
+        SearchIndex(entries.map { [$0.name, $0.relativePath] })
     }
 
-    static func matches(_ entries: [FileIndexEntry], query: String, limit: Int) -> [Match] {
-        guard !query.isEmpty else {
-            return entries.prefix(limit).enumerated().map { Match(entry: $0.element, offset: $0.offset, score: 0) }
+    /// A match: the entry, the engine's score (higher is better) and the
+    /// offsets in its name the query matched.
+    struct Match: Equatable {
+        let entry: FileIndexEntry
+        let score: Int32
+        let highlights: [Int]
+    }
+
+    /// The best `limit` entries for `query`, the engine's order; the first
+    /// `limit` entries, in listing order, for an empty query.
+    static func matches(_ entries: [FileIndexEntry], index: SearchIndex, query: String, limit: Int) -> [Match] {
+        let search = SearchQuery(query)
+        guard !search.isEmpty else { return entries.prefix(limit).map { Match(entry: $0, score: 0, highlights: []) } }
+        return index.search(search, limit: limit).map { match in
+            Match(entry: entries[match.index], score: match.score, highlights: index.highlights(search, at: match.index))
         }
-        return entries.enumerated().compactMap { offset, entry -> Match? in
-            let scores = [fuzzyScore(query: query, target: entry.name), fuzzyScore(query: query, target: entry.relativePath)]
-            guard let best = scores.compactMap(\.self).min() else { return nil }
-            return Match(entry: entry, offset: offset, score: best)
-        }
-        .sorted { ($0.score, $0.offset) < ($1.score, $1.offset) }
-        .prefix(limit)
-        .map(\.self)
     }
 }
 
@@ -99,6 +104,7 @@ final class FilesPaletteScope: PaletteScope {
     private(set) var loading: PaletteLoading?
     private(set) var failure: PaletteFailure?
     private var entries: [FileIndexEntry]?
+    private var index: SearchIndex?
     private var root: URL?
     private var task: Task<Void, Never>?
     private var onChange: (@MainActor () -> Void)?
@@ -133,6 +139,7 @@ final class FilesPaletteScope: PaletteScope {
         guard task == nil else { return }
         failure = nil
         entries = nil
+        index = nil
         startScan()
     }
 
@@ -148,25 +155,30 @@ final class FilesPaletteScope: PaletteScope {
         onChange?()
         let scan = scan
         task = Task { @MainActor [weak self] in
-            let found = await Task.detached(priority: .userInitiated) { scan(root) }.value
+            let (found, index) = await Task.detached(priority: .userInitiated) { () -> ([FileIndexEntry], SearchIndex) in
+                let entries = scan(root)
+                return (entries, FileIndex.searchIndex(for: entries))
+            }.value
             guard let self, !Task.isCancelled else { return }
             task = nil
             loading = nil
             entries = found
+            self.index = index
             self.onChange?()
         }
     }
 
     func sections(for query: PaletteQuery, context: PaletteContext) -> [PaletteSection] {
         self.context = context
-        guard let entries, let root, let (project, _) = Self.projectRoot(context) else { return [] }
-        let items = FileIndex.matches(entries, query: query.trimmed, limit: Self.shownLimit).map { match in
-            item(for: match.entry, score: match.score, root: root, project: project, context: context)
+        guard let entries, let index, let root, let (project, _) = Self.projectRoot(context) else { return [] }
+        let items = FileIndex.matches(entries, index: index, query: query.trimmed, limit: Self.shownLimit).map { match in
+            item(for: match, root: root, project: project, context: context)
         }
         return items.isEmpty ? [] : [PaletteSection(header: nil, items: items)]
     }
 
-    private func item(for entry: FileIndexEntry, score: Int, root: URL, project: Project, context: PaletteContext) -> PaletteItem {
+    private func item(for match: FileIndex.Match, root: URL, project: Project, context: PaletteContext) -> PaletteItem {
+        let entry = match.entry
         let url = root.appendingPathComponent(entry.relativePath, isDirectory: entry.isDirectory)
         let appState = context.appState
         let projects = context.projectStore.projects
@@ -174,11 +186,12 @@ final class FilesPaletteScope: PaletteScope {
             id: "file:\(entry.relativePath)",
             title: entry.name,
             subtitle: entry.parent.isEmpty ? nil : entry.parent,
-            score: score,
+            score: -Int(match.score),
             icon: entry.isDirectory ? "folder" : "doc",
             alt: PaletteAltAction(title: "Open with Default App") {
                 NSWorkspace.shared.open(url)
-            }
+            },
+            highlights: match.highlights
         ) {
             FilesPaletteActions.openInSplit(url, isDirectory: entry.isDirectory, project: project, appState: appState, projects: projects)
         }

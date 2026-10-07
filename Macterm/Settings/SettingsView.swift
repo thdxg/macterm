@@ -1665,7 +1665,7 @@ private struct KeymapSettings: View {
             let shortcut = values[rowID] ?? "disabled"
             var fields = [entry.pill.title, AppCommand.Category.palettes.rawValue, HotkeyRegistry.displayString(for: shortcut)]
             if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
-            return TextFilter.matches(query, in: fields)
+            return Search.matches(query, in: fields)
         }
     }
 
@@ -1673,13 +1673,14 @@ private struct KeymapSettings: View {
     /// so the keymaps list mirrors the command palette's sectioning instead of
     /// being one long flat list. Categories and actions appear in
     /// `AppCommand.allCases` declaration order (`HotkeyAction.inCommandOrder`),
-    /// the palette's own. Only the actions the search matches (`TextFilter`
-    /// over `HotkeyAction.searchFields`); a category left with none drops out.
+    /// the palette's own. While searching, only the matches (`Search.rank`
+    /// over `HotkeyAction.searchFields`), best first: a category comes in
+    /// where its best match ranks, and one left with none drops out.
     private var actionsByCategory: [(category: AppCommand.Category, actions: [HotkeyAction])] {
         var order: [AppCommand.Category] = []
         var grouped: [AppCommand.Category: [HotkeyAction]] = [:]
-        let matching = HotkeyAction.inCommandOrder.filter {
-            TextFilter.matches(query, in: $0.searchFields(shortcut: values[$0.id] ?? $0.defaultShortcut))
+        let matching = Search.rank(HotkeyAction.inCommandOrder, by: query) {
+            $0.searchFields(shortcut: values[$0.id] ?? $0.defaultShortcut)
         }
         for action in matching {
             let category = action.appCommand.category

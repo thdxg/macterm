@@ -61,7 +61,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     /// Settings don't drift apart.
     var title: String { appCommand.title }
 
-    /// What Settings → Keymaps' search looks in (`TextFilter`): the title,
+    /// What Settings → Keymaps' search looks in (`Search`): the title,
     /// the section it sits in, and the chord both as shown (`⌘D`, `None` when
     /// unbound) and as written (`cmd+d`).
     /// Every bindable action in the order the command palette lists its

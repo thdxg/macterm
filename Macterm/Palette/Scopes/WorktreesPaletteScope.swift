@@ -35,9 +35,10 @@ final class WorktreesPaletteScope: PaletteScope {
 
         // Empty, the listing's own order; searching, best match first with
         // that order breaking ties.
+        let search = SearchQuery(query.trimmed)
         let ranked = worktrees.compactMap { worktree -> PaletteItem? in
-            let score = query.isEmpty ? 0 : Self.score(worktree, query: query.trimmed)
-            return score.map { item(for: worktree, score: $0, in: project, context: context) }
+            guard let match = Search.match(search, fields: [Self.title(for: worktree), worktree.displayPath]) else { return nil }
+            return item(for: worktree, score: 0, in: project, context: context).with(match)
         }
         .enumerated()
         .sorted { ($0.element.score, $0.offset) < ($1.element.score, $1.offset) }
@@ -53,12 +54,6 @@ final class WorktreesPaletteScope: PaletteScope {
         case let .detached(sha): "\(sha.prefix(7)) (detached)"
         case nil: "Unknown HEAD"
         }
-    }
-
-    static func score(_ worktree: GitWorktree, query: String) -> Int? {
-        [title(for: worktree), worktree.displayPath]
-            .compactMap { fuzzyScore(query: query, target: $0) }
-            .min()
     }
 
     private func item(for worktree: GitWorktree, score: Int, in project: Project, context: PaletteContext) -> PaletteItem {

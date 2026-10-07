@@ -180,35 +180,33 @@ final class CustomPaletteScope: PaletteScope {
                 ),
             ])]
         }
+        let search = SearchQuery(query.trimmed)
         let items: [PaletteItem] = switch node.kind {
         case let .menu(entries):
             entries.enumerated().compactMap { index, entry in
-                let fields = [entry.title, entry.subtitle].compactMap(\.self)
-                guard let score = Self.score(fields, query: query) else { return nil }
+                guard let match = Search.match(search, fields: [entry.title, entry.subtitle].compactMap(\.self)) else { return nil }
                 return item(Row(
                     id: "menu:\(index)",
                     title: entry.title,
                     subtitle: entry.subtitle,
                     icon: entry.icon ?? node.icon,
-                    score: score,
                     exports: entry.exports,
                     outcome: entry.outcome,
                     operand: nil
-                ), context: context)
+                ), context: context).with(match)
             }
         case let .listing(listing):
             (rows ?? []).enumerated().compactMap { index, row in
-                guard let score = Self.score(row.match, query: query) else { return nil }
+                guard let match = Search.match(search, fields: row.match) else { return nil }
                 return item(Row(
                     id: "row:\(index)",
                     title: row.title,
                     subtitle: row.subtitle,
                     icon: row.icon ?? node.icon,
-                    score: score,
                     exports: row.exports,
                     outcome: listing.outcome,
                     operand: row.operand
-                ), context: context)
+                ), context: context).with(match)
             }
         }
         // Empty, the listing's own order; searching, best match first with
@@ -219,11 +217,6 @@ final class CustomPaletteScope: PaletteScope {
         return ranked.isEmpty ? [] : [PaletteSection(header: nil, items: ranked)]
     }
 
-    private static func score(_ fields: [String], query: PaletteQuery) -> Int? {
-        guard !query.isEmpty else { return 0 }
-        return fields.compactMap { fuzzyScore(query: query.trimmed, target: $0) }.min()
-    }
-
     /// What a menu item and a listing row have in common once resolved:
     /// everything a palette row is built from.
     private struct Row {
@@ -231,7 +224,6 @@ final class CustomPaletteScope: PaletteScope {
         let title: String
         let subtitle: String?
         let icon: String?
-        let score: Int
         let exports: [String: String]
         let outcome: CustomPaletteOutcome
         let operand: String?
@@ -246,7 +238,6 @@ final class CustomPaletteScope: PaletteScope {
                 id: "\(target.node)/\(row.id)",
                 title: row.title,
                 subtitle: row.subtitle,
-                score: row.score,
                 opensScope: .custom(next),
                 icon: row.icon,
                 action: {}
@@ -258,7 +249,6 @@ final class CustomPaletteScope: PaletteScope {
                 id: "\(target.node)/\(row.id)",
                 title: row.title,
                 subtitle: row.subtitle,
-                score: row.score,
                 icon: row.icon,
                 action: { [appState = context.appState, projects = context.projectStore.projects] in
                     CustomPaletteActions.perform(action, operand: operand, exports: exports, appState: appState, projects: projects)

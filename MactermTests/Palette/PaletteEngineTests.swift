@@ -4,44 +4,6 @@ import Testing
 
 @MainActor
 struct PaletteEngineTests {
-    // MARK: - fuzzyScore
-
-    @Test
-    func fuzzy_empty_query_scores_zero() {
-        #expect(fuzzyScore(query: "", target: "anything") == 0)
-    }
-
-    @Test
-    func fuzzy_prefix_match_scores_zero() {
-        #expect(fuzzyScore(query: "git", target: "git status") == 0)
-    }
-
-    @Test
-    func fuzzy_substring_match_scores_above_five() throws {
-        let score = fuzzyScore(query: "stat", target: "git status")
-        #expect(score != nil)
-        #expect(try #require(score) >= 5)
-    }
-
-    @Test
-    func fuzzy_subsequence_match_scores_high() throws {
-        let score = fuzzyScore(query: "gs", target: "git status")
-        #expect(score != nil)
-        #expect(try #require(score) >= 40)
-    }
-
-    @Test
-    func fuzzy_no_match_returns_nil() {
-        #expect(fuzzyScore(query: "xyz", target: "git status") == nil)
-    }
-
-    @Test
-    func fuzzy_prefer_earlier_substring_hit() throws {
-        let early = try #require(fuzzyScore(query: "stat", target: "status bar"))
-        let late = try #require(fuzzyScore(query: "stat", target: "git status"))
-        #expect(early < late)
-    }
-
     // MARK: - Engine + fake source
 
     /// Test-only source that returns items parameterized by a static list.
@@ -52,13 +14,8 @@ struct PaletteEngineTests {
 
         func items(query: String, context _: PaletteContext) -> [PaletteItem] {
             titles.compactMap { title in
-                guard let score = fuzzyScore(query: query, target: title) else { return nil }
-                return PaletteItem(
-                    title: title,
-                    category: category,
-                    score: score,
-                    action: {}
-                )
+                guard let match = Search.match(query, fields: [title]) else { return nil }
+                return PaletteItem(title: title, category: category, action: {}).with(match)
             }
         }
 
@@ -130,7 +87,7 @@ struct PaletteEngineTests {
             context: ctx,
             pathSource: nil
         )
-        // Both are prefix matches ("git"), so both score 0. Sort must be stable by score.
+        // Both are prefix matches ("git"); the merged list holds both.
         let result = engine.search("git")
         #expect(result.count == 1)
         #expect(result[0].header == nil) // merged section has no header

@@ -77,7 +77,8 @@ struct DirectorySource: PaletteSource {
                 // the hidden namespace (e.g. `~/.conf` should complete `.config`).
                 if !prefix.hasPrefix("."), name.hasPrefix(".") { return false }
                 if prefix.isEmpty { return true }
-                return name.lowercased().hasPrefix(prefix.lowercased())
+                // Completion, not search: a prefix, folded as `Search` folds.
+                return Search.hasPrefix(name, prefix)
             }
             // `contentsOfDirectory` order is unspecified; sort so BOTH which 10
             // children survive the cap AND their ranking are deterministic

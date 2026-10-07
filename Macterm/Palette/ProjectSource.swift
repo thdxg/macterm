@@ -1,21 +1,19 @@
 import AppKit
 
-/// Palette source for projects. Active search fuzzy-matches name + path and
-/// gives projects a small score boost over commands; empty state shows up to
+/// Palette source for projects. Active search matches the name, then the path
+/// (`Search`), and gives projects a small score boost over commands; empty state shows up to
 /// 5 recently-visited projects (falling back to the store if recency is empty).
 @MainActor
 struct ProjectSource: PaletteSource {
-    /// Subtracted from each project's score so same-raw-score matches rank
-    /// projects above commands. A very strong command match (score 0) still
-    /// beats a weak project match.
-    private let projectBoost = -1
+    /// Wins a tie with a command: a project matched as well as a command is
+    /// the one listed first. A stronger command match still beats it.
+    private let projectBoost = 1
 
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
-        context.projectStore.projects.compactMap { project in
-            let titleScore = fuzzyScore(query: query, target: project.name)
-            let pathScore = fuzzyScore(query: query, target: project.path)
-            guard let best = [titleScore, pathScore].compactMap(\.self).min() else { return nil }
-            return makeItem(project: project, category: "Project", score: best + projectBoost, context: context)
+        let query = SearchQuery(query)
+        return context.projectStore.projects.compactMap { project in
+            guard let match = Search.match(query, fields: [project.name, project.path]) else { return nil }
+            return makeItem(project: project, category: "Project", score: 0, context: context).with(match, boost: projectBoost)
         }
     }
 
