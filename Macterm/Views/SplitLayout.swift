@@ -247,13 +247,16 @@ struct SplitLayout: Equatable {
     }
 
     /// What must change for a layout change to be animated: the tree's
-    /// structure by pane identity, plus the zoomed pane. Ratios are left out
-    /// on purpose — a divider drag or `pane resize-split` changes ratios only
-    /// and must land immediately, while a split or rebalance that changes
-    /// ratios in the same transaction as the structure animates with it.
+    /// structure by pane identity, the zoomed pane, and the tab's
+    /// `animatedResizeGeneration`. Ratios themselves are left out on purpose
+    /// — a divider drag or `pane resize-split` changes ratios only and must
+    /// land immediately, while a split or rebalance that changes ratios in
+    /// the same transaction as the structure animates with it. A keyboard
+    /// resize changes ratios only too, but bumps the generation in the same
+    /// transaction, which is what makes it animate and a drag not.
     @MainActor
-    static func animationKey(of node: SplitNode, zoomedPaneID: UUID?) -> String {
-        "\(structure(of: node))|\(zoomedPaneID?.uuidString ?? "-")"
+    static func animationKey(of node: SplitNode, zoomedPaneID: UUID?, resizeGeneration: Int = 0) -> String {
+        "\(structure(of: node))|\(zoomedPaneID?.uuidString ?? "-")|\(resizeGeneration)"
     }
 
     @MainActor

@@ -232,6 +232,33 @@ struct SplitLayoutTests {
     }
 
     @Test
+    func animation_key_tracks_the_keyboard_resize_generation() {
+        let (tree, _) = build(H(pane("l"), pane("r"), ratio: 0.5))
+        let before = SplitLayout.animationKey(of: tree, zoomedPaneID: nil, resizeGeneration: 3)
+        #expect(SplitLayout.animationKey(of: tree, zoomedPaneID: nil, resizeGeneration: 3) == before)
+        // The keyboard resize bumps the generation with its ratio change, so
+        // that change animates; a drag changes the ratio alone and does not.
+        #expect(SplitLayout.animationKey(of: tree, zoomedPaneID: nil, resizeGeneration: 4) != before)
+    }
+
+    @Test
+    func keyboard_resize_bumps_the_tab_generation_and_a_direct_ratio_write_does_not() throws {
+        let (tree, ids) = build(H(pane("l"), pane("r"), ratio: 0.5))
+        let tab = TerminalTab(id: UUID(), splitRoot: tree, focusedPaneID: ids["l"])
+        let before = tab.animatedResizeGeneration
+        tab.resize(.right)
+        #expect(tab.animatedResizeGeneration == before + 1)
+        guard case let .split(branch) = tab.splitRoot else {
+            Issue.record("expected a split")
+            return
+        }
+        branch.ratio = 0.3
+        #expect(tab.animatedResizeGeneration == before + 1)
+        #expect(try tab.setSplitRatio(paneID: #require(ids["l"]), axis: .horizontal, ratio: 0.6))
+        #expect(tab.animatedResizeGeneration == before + 1)
+    }
+
+    @Test
     func animation_key_tracks_structure_and_zoom() throws {
         let (tree, ids) = build(H(pane("l"), pane("r")))
         let flat = SplitLayout.animationKey(of: tree, zoomedPaneID: nil)

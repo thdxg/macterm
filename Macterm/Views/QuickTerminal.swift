@@ -635,6 +635,7 @@ private struct QuickTerminalView: View {
             zoomedPaneID: state.tab.zoomedPaneID,
             isActiveProject: true,
             projectID: QuickTerminalService.projectID,
+            resizeGeneration: state.tab.animatedResizeGeneration,
             onFocusPane: { state.focusPane($0) },
             onSplit: { paneID, dir, position in state.split(paneID: paneID, direction: dir, position: position) },
             onClosePane: { state.closePane($0) },

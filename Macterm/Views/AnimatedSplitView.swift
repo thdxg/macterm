@@ -15,6 +15,8 @@ struct SplitRootView: View {
     let zoomedPaneID: UUID?
     let isActiveProject: Bool
     let projectID: UUID
+    /// `TerminalTab.animatedResizeGeneration`: a keyboard resize animates.
+    var resizeGeneration: Int = 0
     var nonLeaderPaneIDs: Set<UUID> = []
     let onFocusPane: (UUID) -> Void
     let onSplit: (UUID, SplitDirection, SplitPosition) -> Void
@@ -30,6 +32,7 @@ struct SplitRootView: View {
                 root: root,
                 focusedPaneID: focusedPaneID,
                 zoomedPaneID: zoomedPaneID,
+                resizeGeneration: resizeGeneration,
                 isActiveProject: isActiveProject,
                 nonLeaderPaneIDs: nonLeaderPaneIDs,
                 onFocusPane: onFocusPane,
@@ -148,16 +151,21 @@ enum SplitAnimation {
 ///   `GhosttyTerminalNSView.hiddenInLayout`. Dividers ARE removed while
 ///   zoomed: a grab band is an NSView and would catch drags through the
 ///   zoomed pane even when invisible.
-/// - **Only structure animates.** The animation is keyed to
-///   `SplitLayout.animationKey` (pane identities and axes plus the zoomed
-///   pane), never to ratios, so a divider drag lands immediately and a
-///   window resize doesn't animate the tiles.
+/// - **Structure animates, and the keyboard resize; nothing else.** The
+///   animation is keyed to `SplitLayout.animationKey` (pane identities and
+///   axes, the zoomed pane, and `TerminalTab.animatedResizeGeneration`),
+///   never to ratios themselves, so a divider drag lands immediately, a
+///   window resize doesn't animate the tiles, and the control CLI's
+///   `pane resize-split` sets the geometry a script then reads. Resize Split
+///   Left/Right/Up/Down bumps the generation in the same transaction as its
+///   ratio change, so that one ratio change slides like a split does.
 /// - Every animation frame resizes each moving pane's surface, the same path
 ///   a divider drag takes. Reduce Motion turns the animation off.
 struct AnimatedSplitView: View {
     let root: SplitNode
     let focusedPaneID: UUID?
     let zoomedPaneID: UUID?
+    let resizeGeneration: Int
     let isActiveProject: Bool
     let nonLeaderPaneIDs: Set<UUID>
     let onFocusPane: (UUID) -> Void
@@ -316,7 +324,10 @@ struct AnimatedSplitView: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-            .animation(animation, value: SplitLayout.animationKey(of: root, zoomedPaneID: zoomed))
+            .animation(
+                animation,
+                value: SplitLayout.animationKey(of: root, zoomedPaneID: zoomed, resizeGeneration: resizeGeneration)
+            )
             .onAppear {
                 settledIDs = Set(placed.map(\.id)).union(layout.dividers.map(\.id))
             }
