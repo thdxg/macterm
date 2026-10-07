@@ -94,6 +94,16 @@ extension String: PreferenceValue {
     }
 }
 
+extension [String]: PreferenceValue {
+    static func readPreference(from defaults: UserDefaults, key: String) -> [String]? {
+        defaults.stringArray(forKey: key)
+    }
+
+    func writePreference(to defaults: UserDefaults, key: String) {
+        defaults.set(self, forKey: key)
+    }
+}
+
 extension PreferenceValue where Self: RawRepresentable, RawValue: PreferenceValue {
     static func readPreference(from defaults: UserDefaults, key: String) -> Self? {
         RawValue.readPreference(from: defaults, key: key).flatMap(Self.init(rawValue:))

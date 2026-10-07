@@ -17,6 +17,11 @@ import Foundation
 /// .isProtected`): anything else named `sudo` — a `~/bin/sudo` earlier on
 /// PATH — or printing a passphrase prompt is filed under its own path, and is
 /// never offered the real sudo's password or the key's passphrase.
+///
+/// An empty `prompt` is an entry the user added for a command alone
+/// (`isOnDemandOnly`). Detection never reads an empty prompt line, so such an
+/// entry is never autofilled at a prompt; it is typed only when picked from
+/// the palette's Password Manager, where the user is the one naming it.
 struct PasswordEntryID: Hashable, Codable {
     let command: String?
     let prompt: String
@@ -24,8 +29,13 @@ struct PasswordEntryID: Hashable, Codable {
     /// The Keychain account string. Readable in Keychain Access, deterministic
     /// for a lookup, and never parsed back — the entry's metadata is.
     var account: String {
-        if let command { "\(command) — \(prompt)" } else { prompt }
+        if prompt.isEmpty { return "\(command ?? "") — on demand" }
+        if let command { return "\(command) — \(prompt)" }
+        return prompt
     }
+
+    /// Filled only from the palette, never offered at a prompt.
+    var isOnDemandOnly: Bool { prompt.isEmpty }
 
     /// What a person reads as "which one": the command, or the prompt when
     /// the entry is command-independent.
@@ -111,10 +121,11 @@ enum PasswordPromptIdentity {
         }
     }
 
-    /// The entry a person declares in Settings → Passwords → Details: the
+    /// The entry a person declares in Settings → Password Manager → Details: the
     /// command as typed, under the same collapsing rules, trusted because the
     /// user wrote it — `sudo apt update` files as `sudo`, a passphrase prompt
-    /// drops its command, and an empty command matches the prompt alone.
+    /// drops its command, an empty command matches the prompt alone, and an
+    /// empty prompt makes an on-demand entry (`PasswordEntryID.isOnDemandOnly`).
     static func declaredEntryID(prompt: String, command: String?) -> PasswordEntryID {
         if isKeyPassphrase(prompt) {
             return PasswordEntryID(command: nil, prompt: prompt)
@@ -169,6 +180,44 @@ enum PasswordAsker: Equatable {
     case shell
     /// The foreground couldn't be read.
     case unknown
+}
+
+/// How a pane's tty is reading input right now, from its local modes
+/// (`ProcessInspector.terminalLineMode`).
+enum TerminalLineMode: Equatable {
+    /// Canonical with echo off: a password read.
+    case password
+    /// Canonical with echo on: whatever is typed is drawn on screen and, at a
+    /// shell, ends up in its history.
+    case echoing
+    /// Not in line mode: a shell's line editor, a TUI, or ssh relaying a
+    /// remote session — whose own tty Macterm can't see.
+    case raw
+
+    init(localModes flags: tcflag_t) {
+        let canonical = flags & tcflag_t(ICANON) != 0
+        let echo = flags & tcflag_t(ECHO) != 0
+        self = canonical ? (echo ? .echoing : .password) : .raw
+    }
+}
+
+/// What typing a password picked from the palette does to a pane, decided
+/// by the pane's tty (`TerminalLineMode`; nil when it can't be read). The
+/// user named the entry, so no prompt has to match and nothing is asked.
+/// Return follows only at a verified password read: anywhere else — ssh or
+/// tmux relaying a remote prompt, a shell's line editor, a line that echoes —
+/// the password is left typed for the user to submit, so a wrong pick never
+/// runs as a command or lands in a history; a remote `sudo` costs one Return.
+struct OnDemandPasswordFill: Equatable {
+    /// The tty is at a password read: ⌃U (the line discipline's kill)
+    /// clears a half-typed line first, Return follows, the fill is judged
+    /// like an autofill, and it must still find that read after
+    /// authentication.
+    let isVerified: Bool
+
+    init(mode: TerminalLineMode?) {
+        isVerified = mode == .password
+    }
 }
 
 /// One key as the password prompt's line discipline will see it. Built from

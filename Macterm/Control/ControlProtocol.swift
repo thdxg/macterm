@@ -254,6 +254,8 @@ struct ControlData: Codable {
     var password: ControlPasswordState?
     /// Desktop widgets (`widget.*`).
     var widgets: [ControlWidgetInfo]?
+    /// Custom palette files (`palette.list`).
+    var palettes: [ControlPaletteInfo]?
 
     init(
         status: ControlStatusInfo? = nil,
@@ -266,7 +268,8 @@ struct ControlData: Codable {
         dump: ControlPaneDump? = nil,
         tutorial: ControlTutorial? = nil,
         password: ControlPasswordState? = nil,
-        widgets: [ControlWidgetInfo]? = nil
+        widgets: [ControlWidgetInfo]? = nil,
+        palettes: [ControlPaletteInfo]? = nil
     ) {
         self.status = status
         self.projects = projects
@@ -278,6 +281,7 @@ struct ControlData: Codable {
         self.dump = dump
         self.tutorial = tutorial
         self.password = password
+        self.palettes = palettes
         self.widgets = widgets
     }
 }
@@ -358,6 +362,21 @@ struct ControlPaneInfo: Codable, Equatable {
 
 /// One open terminal window. `project` is what its titlebar and the macOS
 /// Window menu show — each window tracks its own.
+/// One custom palette file (`CustomPaletteStore.Entry`), as `palette list`
+/// reports it: the file's stem is its id, `error` is why it didn't read.
+struct ControlPaletteInfo: Codable, Equatable {
+    var id: String
+    var file: String
+    /// The palette's `name:`; absent when the file didn't read.
+    var name: String?
+    var description: String?
+    /// Settings → Palettes' switch.
+    var enabled: Bool
+    /// Its keybind as the user wrote it, when bound.
+    var keybind: String?
+    var error: String?
+}
+
 struct ControlWindowInfo: Codable, Equatable {
     /// 1-based position in creation order, rendered `window:N`.
     var index: Int

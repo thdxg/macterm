@@ -350,6 +350,24 @@ struct GitWorktreesTests {
     }
 }
 
+extension GitWorktreesTests {
+    @Test
+    func only_a_repositorys_top_is_a_repository() throws {
+        let scratch = try Scratch()
+        defer { scratch.remove() }
+        try scratch.writeGitDir("repo/.git")
+        try scratch.addWorktree("linked", id: "linked", commonDir: "repo/.git", head: "ref: refs/heads/linked")
+        try scratch.write("plain/file", "")
+        try scratch.write("repo/sub/file", "")
+
+        #expect(GitWorktrees.isRepository(projectPath: scratch.path("repo")))
+        #expect(GitWorktrees.isRepository(projectPath: scratch.path("linked")), "a linked worktree's .git file counts")
+        #expect(!GitWorktrees.isRepository(projectPath: scratch.path("plain")))
+        #expect(!GitWorktrees.isRepository(projectPath: scratch.path("repo/sub")), "list never looks below the top")
+        #expect(!GitWorktrees.isRepository(projectPath: "devbox:\(scratch.path("repo"))"), "remote files are out of reach")
+    }
+}
+
 /// A throwaway directory for one test's repositories.
 private struct Scratch {
     let root: URL

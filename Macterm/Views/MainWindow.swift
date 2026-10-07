@@ -269,9 +269,7 @@ struct MainWindow: View {
             onWindowFrameChanged: { appState.windowFrameDidChange($0) }
         ))
         .overlay {
-            if windowState.isCommandPaletteVisible {
-                CommandPaletteOverlay()
-            }
+            CommandPaletteMount(isVisible: windowState.isCommandPaletteVisible)
         }
         // Below the palette (the two can't be up together — cycling commits on
         // modifier release), above the terminal it describes.
@@ -292,6 +290,11 @@ struct MainWindow: View {
         .sheet(isPresented: $windowState.isNewRemoteProjectSheetPresented) {
             NewRemoteProjectSheet()
         }
+        .sheet(
+            item: $windowState.passwordEditor,
+            onDismiss: { appState.restoreFocusToActivePane() },
+            content: { PasswordEditorSheet(request: $0, vault: .shared) }
+        )
         .environment(windowState)
         // Applied here rather than in the scene so each copy knows WHICH
         // window it is: they stay grouped in these three modifiers, which is
@@ -428,6 +431,12 @@ struct MainWindow: View {
         }
         .onChange(of: windowState.isCommandPaletteVisible) { _, visible in
             guard !visible else { return }
+            // Every close lands back on the root next time, however it closed
+            // (⌘P included); a scope's search text goes with it.
+            if windowState.paletteScope != nil {
+                windowState.resetPaletteStack()
+                appState.commandPaletteQuery = ""
+            }
             // Run a post-dismiss action if one was registered, otherwise return
             // focus to the active terminal pane so typing resumes immediately.
             if let action = appState.postPaletteAction {

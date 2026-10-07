@@ -97,6 +97,7 @@ final class ControlHandler {
         case "layout.save": return try layoutSave(args)
         case "tutor.render": return try tutorRender(args)
         case "widget.list": return widgetList()
+        case "palette.list": return paletteList()
         case "widget.new": return try widgetNew(args)
         case "widget.set": return try widgetSet(args)
         case "widget.edit": return try widgetEdit(args)
@@ -151,6 +152,26 @@ final class ControlHandler {
     }
 
     // MARK: - Windows (#345)
+
+    /// `palette list`: every file in the palettes folder, read afresh, with
+    /// the error for one that didn't parse — the check an agent runs after
+    /// writing a palette.
+    private func paletteList() -> ControlData {
+        appState.customPalettes.reloadIfChanged()
+        let infos = appState.customPalettes.entries.map { entry in
+            let chord = PaletteHotkeys.shared.selectedShortcutString(paletteID: entry.id)
+            return ControlPaletteInfo(
+                id: entry.id,
+                file: entry.fileURL.path(percentEncoded: false),
+                name: entry.palette?.name,
+                description: entry.palette?.description,
+                enabled: Preferences.shared.isPaletteEnabled(entry.settingsID),
+                keybind: HotkeyRegistry.parseShortcut(chord) == nil ? nil : chord,
+                error: entry.failure?.localizedDescription
+            )
+        }
+        return ControlData(palettes: infos)
+    }
 
     private func windowList() -> ControlData {
         let infos = zip(1..., appState.windows).map { index, window in

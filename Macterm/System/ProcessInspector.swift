@@ -408,6 +408,13 @@ enum ProcessInspector {
         return canonical && !echo
     }
 
+    /// How the pane's tty is reading input (`TerminalLineMode`), or nil when
+    /// it can't be read. Read from the tty `terminalIsReadingPassword` reads.
+    @MainActor
+    static func terminalLineMode(forPane pane: Pane) -> TerminalLineMode? {
+        localModes(ttyPath: lineDisciplineTTYPath(forPane: pane)).map(TerminalLineMode.init(localModes:))
+    }
+
     /// Whether the pane's tty has left line mode (`ICANON` off): the program
     /// reads keys one by one — a shell's line editor, a TUI, or ssh relaying
     /// a session once its login went through. Unlike `terminalInputIsRaw`, a

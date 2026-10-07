@@ -74,6 +74,15 @@ final class PasswordPromptMonitor {
         }
 
         var isAppActive: @MainActor () -> Bool = { NSApp.isActive }
+        var lineMode: @MainActor (Pane) -> TerminalLineMode? = ProcessInspector.terminalLineMode(forPane:)
+        /// Types a secret for an on-demand fill: the text path minus
+        /// command-submission evidence; ⌃U before and Return after only at a
+        /// verified read.
+        var typeSecret: @MainActor (GhosttyTerminalNSView, String, OnDemandPasswordFill) -> Void = { view, secret, plan in
+            // ⌃U, the tty's line kill, so a half-typed line can't prefix it.
+            if plan.isVerified { view.sendKey(keyCode: 32, mods: .control) }
+            view.sendSecret(secret, submit: plan.isVerified)
+        }
     }
 
     struct Prompt {
@@ -500,6 +509,72 @@ final class PasswordPromptMonitor {
         ))
         logger.info("autofilled saved password; judging")
         scheduleIfNeeded()
+    }
+
+    // MARK: - On demand
+
+    /// Type the saved password `id` into `pane`, picked by the user from the
+    /// palette's Password Manager rather than offered at a detected prompt.
+    /// No prompt has to match and nothing is confirmed — the pick is the
+    /// authorization; Return follows only at a verified password read
+    /// (`OnDemandPasswordFill`).
+    func fillOnDemand(_ id: PasswordEntryID, in pane: Pane) {
+        guard probes.isEnabled(), let view = pane.nsView else {
+            NSSound.beep()
+            return
+        }
+        Task { @MainActor [weak view] in
+            guard let view else { return }
+            await self.performOnDemandFill(id, in: view)
+        }
+    }
+
+    /// `fillOnDemand`'s body, awaitable for tests. True when it typed.
+    @discardableResult
+    func performOnDemandFill(_ id: PasswordEntryID, in view: GhosttyTerminalNSView) async -> Bool {
+        guard let pane = view.owningPane else { return false }
+        let wasVerified = probes.lineMode(pane) == .password
+        let authorized = await probes.authorize("type the password for “\(id.title)”")
+        guard authorized, let pane = view.owningPane else { return false }
+        // Authentication took a moment; plan for the pane as it is now. A read
+        // that was up when the entry was picked must still be: one that ended
+        // meanwhile (sudo timed out) left something nobody picked it for.
+        let plan = OnDemandPasswordFill(mode: probes.lineMode(pane))
+        if wasVerified, !plan.isVerified {
+            NSSound.beep()
+            return false
+        }
+        guard let secret = vault.password(for: id) else {
+            NSSound.beep()
+            return false
+        }
+        let tracker = tracker(for: view)
+        let screen = probes.screenText(view) ?? ""
+        let transcriptEnd = PasswordSubmissionJudge.transcriptEnd(probes.transcript(view) ?? "")
+        isInjecting = true
+        probes.typeSecret(view, secret, plan)
+        isInjecting = false
+        logger.info("typed on-demand password verified=\(plan.isVerified, privacy: .public)")
+        // At a verified read it is judged like an autofill, so a rejection
+        // says so at the next sighting of that same entry and nothing typed
+        // is offered for saving. Elsewhere there is no read to judge.
+        if plan.isVerified {
+            tracker.phase = .verifying(Submission(
+                id: id,
+                secret: "",
+                judge: PasswordSubmissionJudge(
+                    submittedPrompt: PasswordPromptIdentity.promptLine(fromViewport: screen) ?? id.prompt,
+                    submittedAt: now()
+                ),
+                transcriptEnd: transcriptEnd,
+                fromAutofill: true,
+                wasSaved: true,
+                savedWasRejected: false
+            ))
+            refreshBubble(tracker)
+            scheduleIfNeeded()
+        }
+        return true
     }
 
     // MARK: - Polling

@@ -7,6 +7,13 @@ import Foundation
 /// command is rebindable; palette-only commands (like renaming the current
 /// project) return nil.
 enum AppCommand: String, CaseIterable, Identifiable {
+    // Palettes — the command palette's own chord and every screen of it
+    // (`PaletteScopeID`), listed first: they are places to go, and with
+    // custom palettes they are the user's own entries.
+    case toggleCommandPalette
+    case passwordManager
+    case worktrees
+    case files
     // Tabs
     case newTab
     case closePane
@@ -54,7 +61,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case newWindow
     case newDesktopWidget
     case closeWindow
-    case toggleCommandPalette
     case reloadGhosttyConfig
     case toggleQuickTerminal
     case checkForUpdate
@@ -92,12 +98,15 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .resizeDown: "Resize Pane Down"
         case .copySessionID: "Copy Session ID"
         case .autofillPassword: "Autofill Password"
+        case .passwordManager: "Password Manager"
         case .openProject: "Open Project"
         case .newRemoteProject: "New Remote Project"
         case .renameProject: "Rename Current Project"
         case .unloadProject: "Unload Current Project"
         case .removeProject: "Remove Current Project"
         case .replaceProjectPathWithCurrentDir: "Replace Project Path with Current Directory"
+        case .worktrees: "Worktrees"
+        case .files: "Files"
         case .applyLayout: "Apply Layout"
         case .saveLayout: "Save Layout"
         case .nextProject: "Next Project"
@@ -115,6 +124,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
 
     var category: Category {
         switch self {
+        case .toggleCommandPalette,
+             .passwordManager,
+             .worktrees,
+             .files: .palettes
         case .newTab,
              .closePane,
              .closeTab,
@@ -157,8 +170,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .toggleSidebar,
              .newWindow,
              .newDesktopWidget,
-             .closeWindow,
-             .toggleCommandPalette: .window
+             .closeWindow: .window
         case .reloadGhosttyConfig,
              .toggleQuickTerminal,
              .checkForUpdate: .other
@@ -208,6 +220,9 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .renameProject: .renameProject
         case .copySessionID: .copySessionID
         case .autofillPassword: .autofillPassword
+        case .passwordManager: .passwordManager
+        case .worktrees: .worktrees
+        case .files: .files
         case .applyLayout: .applyLayout
         case .saveLayout: .saveLayout
         case .newRemoteProject,
@@ -219,7 +234,20 @@ enum AppCommand: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The palette screen this command is (`PaletteScope`), if it is one.
+    /// Its palette row enters the scope in place; anywhere else — the menu
+    /// bar, a keybind — its action opens the palette on it.
+    var paletteScope: PaletteScopeID? {
+        switch self {
+        case .passwordManager: .passwords
+        case .worktrees: .worktrees
+        case .files: .files
+        default: nil
+        }
+    }
+
     enum Category: String {
+        case palettes = "Palettes"
         case tabs = "Tabs"
         case panes = "Panes"
         case projects = "Projects"

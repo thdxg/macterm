@@ -21,12 +21,29 @@ struct PaletteItem: Identifiable {
     /// row can render each as its own key-cap. `nil` when the item has no
     /// keybind. Mirrors `keybind`, which keeps the joined form.
     let keybindSymbols: [String]?
-    /// Lower is better. 0 = exact prefix match, ~5 = substring, ~40 = subsequence.
+    /// Lower is better: the negated `Search` score, so the engine's best
+    /// match sorts first; 0 for an empty query.
     let score: Int
     /// A disabled item renders muted, is skipped by keyboard selection, and
     /// never executes — visible so the user learns *why* it's unavailable
     /// (the subtitle carries the reason) instead of wondering where it went.
     let isEnabled: Bool
+    /// Set on an item that is a way into a palette scope: running it shows
+    /// that scope instead of closing the palette, and `action` is not called.
+    let opensScope: PaletteScopeID?
+    /// An SF Symbol drawn at the row's leading edge. A row that opens a
+    /// scope shows the scope's pill glyph by default, with a chevron at the
+    /// trailing edge, so a place to go reads differently from a thing to do.
+    let icon: String?
+    /// Something wrong with what the row opens — a palette file that
+    /// didn't read — shown as a warning glyph at the trailing edge, with
+    /// this text as its tooltip. The row stays enabled: entering it shows
+    /// the diagnosis.
+    let warning: String?
+    /// The row's ⌥ action, if it has one.
+    let alt: PaletteAltAction?
+    /// Scalar offsets in `title` the query matched, drawn emphasized.
+    let highlights: [Int]
     let action: () -> Void
 
     init(
@@ -38,6 +55,11 @@ struct PaletteItem: Identifiable {
         keybindSymbols: [String]? = nil,
         score: Int = 1,
         isEnabled: Bool = true,
+        opensScope: PaletteScopeID? = nil,
+        icon: String? = nil,
+        warning: String? = nil,
+        alt: PaletteAltAction? = nil,
+        highlights: [Int] = [],
         action: @escaping () -> Void
     ) {
         self.id = id ?? "\(category ?? "")/\(title)"
@@ -48,6 +70,11 @@ struct PaletteItem: Identifiable {
         self.keybindSymbols = keybindSymbols
         self.score = score
         self.isEnabled = isEnabled
+        self.opensScope = opensScope
+        self.icon = icon ?? opensScope?.pill.systemImage
+        self.warning = warning
+        self.alt = alt
+        self.highlights = highlights
         self.action = action
     }
 
@@ -55,7 +82,7 @@ struct PaletteItem: Identifiable {
     /// that re-score a prebuilt item on query use this so a newly-added field
     /// (e.g. `isEnabled`) can't be silently dropped to its default by a
     /// hand-copied initializer call.
-    func with(score: Int) -> PaletteItem {
+    func with(score: Int, highlights: [Int]? = nil) -> PaletteItem {
         PaletteItem(
             id: id,
             title: title,
@@ -65,9 +92,29 @@ struct PaletteItem: Identifiable {
             keybindSymbols: keybindSymbols,
             score: score,
             isEnabled: isEnabled,
+            opensScope: opensScope,
+            icon: icon,
+            warning: warning,
+            alt: alt,
+            highlights: highlights ?? self.highlights,
             action: action
         )
     }
+
+    /// A copy scored by `match` (`Search.match`): its score negated into the
+    /// palette's lower-is-better order, its highlights carried. `boost` is
+    /// subtracted, for a source that should win ties.
+    func with(_ match: Search.Match, boost: Int = 0) -> PaletteItem {
+        with(score: -Int(match.score) - boost, highlights: match.highlights)
+    }
+}
+
+/// What a row does with ⌥ held: a second action, named so the row can show
+/// it (the subtitle swaps to this title while Option is down). ⌥↩ or an
+/// ⌥-click runs it; a row without one runs its primary action either way.
+struct PaletteAltAction {
+    let title: String
+    let action: () -> Void
 }
 
 struct PaletteSection {
@@ -104,7 +151,8 @@ struct PaletteQuery {
 @MainActor
 protocol PaletteSource {
     /// Items for a non-empty, non-path query. Implementations return items
-    /// with `score` populated (use `fuzzyScore`); non-matching items are omitted.
+    /// scored by `Search.match` (`PaletteItem.with(_:)`); non-matching items
+    /// are omitted.
     func items(query: String, context: PaletteContext) -> [PaletteItem]
 
     /// Items shown when the input is empty. `nil` means "no empty-state items"
@@ -151,7 +199,8 @@ struct PaletteEngine {
         // Total, deterministic order: score, then title, then id — Swift's
         // `sort` isn't guaranteed stable, so equal scores need explicit
         // tiebreakers rather than relying on incidental input order.
-        all.sort { ($0.score, $0.title, $0.id) < ($1.score, $1.title, $1.id) }
+        // Equal scores go to the shorter title, fzf's tiebreak.
+        all.sort { ($0.score, $0.title.count, $0.title, $0.id) < ($1.score, $1.title.count, $1.title, $1.id) }
         return all.isEmpty ? [] : [PaletteSection(header: nil, items: all)]
     }
 
@@ -168,28 +217,4 @@ struct PaletteEngine {
             PaletteSection(header: cat.isEmpty ? nil : cat, items: grouped[cat] ?? [])
         }
     }
-}
-
-// MARK: - Fuzzy
-
-/// Returns a score (lower = better match) or nil if no match.
-/// 0 = exact prefix, <10 = substring hit, <50 = subsequence hit.
-func fuzzyScore(query: String, target: String) -> Int? {
-    let q = query.lowercased()
-    let t = target.lowercased()
-    guard !q.isEmpty else { return 0 }
-    if t.hasPrefix(q) { return 0 }
-    if let range = t.range(of: q) {
-        // Clamp to just under the subsequence floor (40) so every contiguous
-        // substring hit always outranks every scattered subsequence hit, even
-        // when the substring sits deep in a long target.
-        return min(5 + t.distance(from: t.startIndex, to: range.lowerBound), 39)
-    }
-    // Subsequence
-    var qi = q.startIndex
-    for ch in t where ch == q[qi] {
-        qi = q.index(after: qi)
-        if qi == q.endIndex { return 40 + (t.count - q.count) }
-    }
-    return nil
 }

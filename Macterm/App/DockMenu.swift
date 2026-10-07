@@ -57,7 +57,9 @@ enum DockMenu {
         // itself — it is here for the App Intent.
         case .newTab,
              .openProject,
-             .toggleCommandPalette: .frontTerminalWindow
+             .toggleCommandPalette,
+             .passwordManager,
+             .worktrees: .frontTerminalWindow
         case .toggleQuickTerminal: .none
         default: .activate
         }
