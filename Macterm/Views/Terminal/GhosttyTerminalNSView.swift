@@ -1404,6 +1404,7 @@ final class GhosttyTerminalNSView: NSView {
     override func mouseMoved(with event: NSEvent) {
         guard ownsPointer(event) else { return }
         sendMousePos(event)
+        focusFollowingMouse()
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -1437,6 +1438,18 @@ final class GhosttyTerminalNSView: NSView {
     private func ownsPointer(_ event: NSEvent) -> Bool {
         guard let hit = window?.contentView?.hitTest(event.locationInWindow) else { return false }
         return hit === self || hit.isDescendant(of: self)
+    }
+
+    /// Ghostty's `focus-follows-mouse`: the pointer moving over a pane of the
+    /// key window focuses it, as a click would. Only focus held by another
+    /// pane moves — the palette, the search bar or a rename field keeps it,
+    /// which is Ghostty.app's command-palette exception generalized.
+    private func focusFollowingMouse() {
+        guard let window, window.isKeyWindow, !hasKeyboardFocus,
+              window.firstResponder is GhosttyTerminalNSView,
+              GhosttyApp.shared.focusFollowsMouse
+        else { return }
+        window.makeFirstResponder(self)
     }
 
     override func rightMouseDown(with event: NSEvent) {

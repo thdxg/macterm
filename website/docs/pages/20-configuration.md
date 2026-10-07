@@ -52,6 +52,7 @@ Window chrome Macterm draws itself, so these are ignored or forced:
 | --- | --- |
 | `tab-inherit-working-directory` | `false` (Macterm's default) starts new tabs at the project root; `true` uses the focused pane's directory. |
 | `split-inherit-working-directory` | Same, for splits. |
+| `focus-follows-mouse` | `true` focuses the pane under the pointer in the active window, as clicking it would. Never takes focus from the command palette, the search bar or a rename field. |
 | `macos-shortcuts` | Gates [Shortcuts](/docs/shortcuts): `ask` (default), `allow`, `deny`. |
 | `macos-icon = custom` + `macos-custom-icon` | Replaces the Dock icon. Absolute path to a PNG, JPEG, or ICNS. Other `macos-icon` values are ignored. |
 | `macos-hidden = always` | Runs Macterm with no Dock icon, no menu bar, and no <kbd>⌘</kbd><kbd>⇥</kbd> entry. See below. |
