@@ -79,7 +79,7 @@ struct OpenFolderTests {
         let delegate = AppDelegate()
         delegate.finderServices.attach(appState: state, projectStore: store)
 
-        state.textFileSettings = { ("hx", .split) }
+        state.textFilePlacement = { .split }
         delegate.application(NSApplication.shared, open: [file, dir])
 
         // The folder's project, which the file then opens in: no second
@@ -97,7 +97,7 @@ struct OpenFolderTests {
         let state = makeAppState()
         let store = makeProjectStore()
         state.restoreWindows(adopting: WindowState())
-        state.textFileSettings = { ("", .split) }
+        state.textFilePlacement = { .split }
         let delegate = AppDelegate()
         delegate.finderServices.attach(appState: state, projectStore: store)
 

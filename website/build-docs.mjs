@@ -118,8 +118,28 @@ function highlightYaml(code) {
 }
 
 // ---- Markdown renderer: dark code blocks ----------------------------------
-function buildRenderer() {
+// A heading's anchor: lowercased words joined by hyphens, as GitHub makes
+// them, so `/docs/configuration#project-colors` and the app's help buttons
+// (`DocsLink` in Macterm) can point at a section. A repeat on the same page
+// gets `-2`, `-3`.
+const slugifyHeading = (text) =>
+  text
+    .toLowerCase()
+    .replace(/<[^>]*>/g, "")
+    .replace(/&[a-z]+;/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+
+function buildRenderer(seenAnchors) {
   return {
+    heading({ tokens, depth, text }) {
+      const base = slugifyHeading(text);
+      const count = (seenAnchors.get(base) || 0) + 1;
+      seenAnchors.set(base, count);
+      const id = count === 1 ? base : `${base}-${count}`;
+      return `<h${depth} id="${id}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+    },
     code({ text, lang }) {
       const langBase = (lang || "").split(/\s+/)[0];
       const titleMatch = (lang || "").match(/title="([^"]*)"/);
@@ -226,12 +246,15 @@ function main() {
   });
 
   const template = readFileSync(TEMPLATE, "utf8");
+  // Anchors are unique per page, so the table is cleared before each one.
+  const seenAnchors = new Map();
   const marked = new Marked({ gfm: true });
-  marked.use({ renderer: buildRenderer() });
+  marked.use({ renderer: buildRenderer(seenAnchors) });
 
   mkdirSync(OUT_DIR, { recursive: true });
 
   for (const [index, page] of pages.entries()) {
+    seenAnchors.clear();
     const content = marked.parse(page.body);
     const sidebar = renderSidebar(pages, page.meta.slug);
     const title =

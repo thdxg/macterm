@@ -107,14 +107,28 @@ enum BenchmarkControl {
         case .openProject:
             openProject()
         case .activate:
-            NSApp.activate()
-            mainWindow?.makeKeyAndOrderFront(nil)
+            activate()
         case .minimize:
             mainWindow?.miniaturize(nil)
         case .restore:
             mainWindow?.deminiaturize(nil)
-            NSApp.activate()
-            mainWindow?.makeKeyAndOrderFront(nil)
+            activate()
+        }
+    }
+
+    /// Take the front, whoever holds it. The harness asks for this after
+    /// launch too — a second scripted instance's `open -n` fronts that one,
+    /// and killing it hands the front to Finder, not back to us — and by then
+    /// the cooperative `NSApp.activate()` is refused (silently; measured in
+    /// `MacosHidden.activateForWindowRequest`, whose forcing overload this
+    /// is). The launch-time nudges keep the plain call: a launch holds the
+    /// activation right already.
+    private static func activate() {
+        NSApp.activate(ignoringOtherApps: true)
+        mainWindow?.makeKeyAndOrderFront(nil)
+        // Activation lands asynchronously; a verdict for the harness's log.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            logger.info("bench activate: active=\(NSApp.isActive, privacy: .public)")
         }
     }
 

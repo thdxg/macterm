@@ -3,9 +3,10 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "TextFiles")
 
-/// Opening a text file in the user's terminal editor (Settings → General →
-/// Text Files) — a ⌘-click on a path in a pane, or a file opened WITH
-/// Macterm from Finder, the Dock or `open -a` (`FinderServiceProvider`).
+/// Opening a text file in the user's terminal editor (`$VISUAL`, else
+/// `$EDITOR`; Settings → General → Text Files picks a split or a tab) — a
+/// ⌘-click on a path in a pane, or a file opened WITH Macterm from Finder,
+/// the Dock or `open -a` (`FinderServiceProvider`).
 ///
 /// Macterm is the file's editor only where the user made it so: `Info.plist`
 /// declares text files at `Alternate` rank, so it is never anyone's default
@@ -50,10 +51,10 @@ extension AppState {
     /// `FinderServiceProvider` has chosen and selected the project.
     @discardableResult
     func openTextFile(_ path: String, line: Int?, inProject projectID: UUID, projects: [Project]) -> UUID? {
-        let settings = textFileSettings()
-        let env = TextFileEditor.environment(path: path, line: line, command: settings.command)
+        let placement = textFilePlacement()
+        let env = TextFileEditor.environment(path: path, line: line)
         logger.info("open: \(path, privacy: .public) in project \(projectID, privacy: .public)")
-        if settings.placement == .split,
+        if placement == .split,
            let pane = focusedPane(for: projectID),
            let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects)
         {
@@ -120,8 +121,8 @@ extension AppState {
         projects: [Project],
         anchor: EditorAnchor?
     ) -> Bool {
-        let settings = textFileSettings()
-        let env = TextFileEditor.environment(path: path, line: line, command: settings.command)
+        let placement = textFilePlacement()
+        let env = TextFileEditor.environment(path: path, line: line)
         let command = TextFileEditor.typedCommand
         // The pane the user clicked, which for a mirror is not the real one:
         // its own size is what they are looking at.
@@ -132,7 +133,7 @@ extension AppState {
             // A pinned tab's editor always splits: a tab born pinned is
             // pinned for good, and quitting the editor would leave it behind
             // as a dimmed, unloaded row.
-            if settings.placement == .tab, projectID != PinnedTabs.projectID {
+            if placement == .tab, projectID != PinnedTabs.projectID {
                 return createTab(projectID: projectID, projects: projects, command: command, env: env) != nil
             }
             let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects)

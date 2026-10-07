@@ -73,7 +73,7 @@ struct ProjectsSettings: View {
                 }
             }
 
-            Section("Layouts") {
+            Section {
                 if layouts.isEmpty {
                     Text("No layout files.")
                         .foregroundStyle(.secondary)
@@ -97,6 +97,8 @@ struct ProjectsSettings: View {
                 }
                 Text("Removing a layout deletes its file. The project is kept.")
                     .settingsCaption()
+            } header: {
+                DocsSectionHeader("Layouts", docs: .layouts)
             }
         }
         .formStyle(.grouped)

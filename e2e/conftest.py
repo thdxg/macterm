@@ -98,6 +98,22 @@ def _install_ssh_shim(harness):
 
 
 @pytest.fixture(autouse=True)
+def _active_app(app):
+    """The shared instance is the ACTIVE app for every test, as it is for a
+    user at the keyboard. Launch activates it, but a test that launches an
+    instance of its own (`open -n` fronts that one) leaves the shared one
+    behind Finder once that instance is killed — and an inactive app has no
+    key window: the password monitor then watches no pane and runs no timer,
+    so a password prompt is never detected (the CI flake in
+    test_passwords.py, both tests at once, Finder in the screenshot's menu
+    bar). Re-taken here rather than trusted from launch, since a shared
+    runner can take the front away for reasons of its own too. Cheap when
+    already front: one `lsappinfo` read."""
+    if not app.is_frontmost():
+        app.activate()
+
+
+@pytest.fixture(autouse=True)
 def _tab_janitor(app):
     """Close (force) any tab the test created, so tests can't leak state into
     each other. Snapshot-based: pre-existing tabs are never touched."""

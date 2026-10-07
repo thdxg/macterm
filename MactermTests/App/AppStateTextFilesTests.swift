@@ -6,13 +6,13 @@ import Testing
 /// pane, and a file Finder hands Macterm (`AppState+TextFiles`).
 @MainActor
 struct AppStateTextFilesTests {
-    private func makeAppState(placement: TextFilePlacement, command: String = "hx") -> AppState {
+    private func makeAppState(placement: TextFilePlacement) -> AppState {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-\(UUID().uuidString).json")
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-tests-projects-\(UUID().uuidString)", isDirectory: true)
         let state = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: ProjectFileStore(directoryURL: dir))
-        state.textFileSettings = { (command, placement) }
+        state.textFilePlacement = { placement }
         state.opensTextFileHere = { _ in true }
         return state
     }
@@ -55,7 +55,6 @@ struct AppStateTextFilesTests {
         #expect(editor.env == [
             TextFileEditor.fileVariable: root + "/src/main.rs",
             TextFileEditor.lineVariable: "12",
-            TextFileEditor.commandVariable: "hx",
         ])
     }
 
@@ -111,7 +110,7 @@ struct AppStateTextFilesTests {
 
     @Test
     func a_file_from_finder_splits_the_projects_focused_pane() throws {
-        let state = makeAppState(placement: .split, command: "")
+        let state = makeAppState(placement: .split)
         let project = seedProject(state, path: "/proj")
         let tab = try #require(state.workspaces[project.id]?.activeTab)
         let before = try #require(tab.focusedPaneID)
@@ -121,7 +120,6 @@ struct AppStateTextFilesTests {
         #expect(tab.splitRoot.allPanes().count == 2)
         #expect(newID != before)
         let editor = try #require(tab.splitRoot.findPane(id: newID))
-        // No command configured: the shell's $EDITOR decides.
         #expect(editor.env == [TextFileEditor.fileVariable: "/proj/README.md"])
     }
 
