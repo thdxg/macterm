@@ -1710,8 +1710,11 @@ private struct KeymapSettings: View {
                     Text("No keybinds match “\(query.trimmingCharacters(in: .whitespaces))”.")
                         .foregroundStyle(.secondary)
                 }
+                if !actionsByCategory.isEmpty {
+                    columnHeader
+                }
                 ForEach(actionsByCategory, id: \.category) { group in
-                    columnHeader(group.category.rawValue)
+                    sectionLabel(group.category.rawValue)
                     ForEach(group.actions) { action in
                         hotkeyRow(action)
                     }
@@ -1782,15 +1785,20 @@ private struct KeymapSettings: View {
         }
     }
 
-    /// A category's divider row: its name where the rows' titles go, over
-    /// the three column names. Repeated per category rather than once per
-    /// pane because a long list scrolls them away, and a header that has
-    /// scrolled away explains nothing.
-    private func columnHeader(_ category: String) -> some View {
+    /// A category's divider inside the block: its name alone, small and
+    /// gray, where the rows' titles go.
+    private func sectionLabel(_ category: String) -> some View {
+        Text(category)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The one header row of the table, under the search: the three column
+    /// names over the boxes every row lines its controls up in.
+    private var columnHeader: some View {
         HStack(spacing: Self.columnGap) {
-            Text(category)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.primary)
+            Text("Action")
             Spacer(minLength: 0)
             Text(Self.globalTitle)
                 .frame(width: Self.globalColumn, alignment: .center)
