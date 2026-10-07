@@ -1769,6 +1769,11 @@ private struct KeymapSettings: View {
                 flags[action.id] = HotkeyRegistry.passesThroughToPrograms(for: action)
                 globals[action.id] = HotkeyRegistry.isGlobal(action)
             }
+            for paletteID in PaletteHotkeys.shared.paletteIDs {
+                let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
+                flags[rowID] = PaletteHotkeys.shared.passesThrough(paletteID: paletteID)
+                globals[rowID] = PaletteHotkeys.shared.isGlobal(paletteID: paletteID)
+            }
             values = map.merging(PaletteHotkeys.shared.shortcutStringsByRowID()) { _, palette in palette }
             passthrough = flags
             global = globals
@@ -1849,10 +1854,31 @@ private struct KeymapSettings: View {
         )
     }
 
-    /// A custom palette's row: the same five children as `hotkeyRow`, with
-    /// the Global and Pass to TUI boxes left empty — a palette's chord is
-    /// local only (`PaletteHotkeys`) — so its columns line up with the
-    /// header and every action row.
+    private func palettePassthroughBinding(_ paletteID: String) -> Binding<Bool> {
+        let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
+        return Binding(
+            get: { passthrough[rowID] ?? false },
+            set: { enabled in
+                passthrough[rowID] = enabled
+                PaletteHotkeys.shared.setPassesThrough(enabled, paletteID: paletteID)
+            }
+        )
+    }
+
+    private func paletteGlobalBinding(_ paletteID: String) -> Binding<Bool> {
+        let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
+        return Binding(
+            get: { global[rowID] ?? false },
+            set: { enabled in
+                global[rowID] = enabled
+                PaletteHotkeys.shared.setGlobal(enabled, paletteID: paletteID)
+            }
+        )
+    }
+
+    /// A custom palette's row: the same five children as `hotkeyRow`, its
+    /// flags kept by `PaletteHotkeys`, so its columns line up with the header
+    /// and every action row.
     @ViewBuilder
     private func customPaletteRow(_ entry: CustomPaletteStore.Entry) -> some View {
         let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
@@ -1863,8 +1889,16 @@ private struct KeymapSettings: View {
             HStack(spacing: Self.columnGap) {
                 Text(entry.pill.title)
                 Spacer(minLength: 0)
-                Spacer().frame(width: Self.globalColumn)
-                Spacer().frame(width: Self.passthroughColumn)
+                Toggle("", isOn: paletteGlobalBinding(entry.id))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .frame(width: Self.globalColumn, alignment: .center)
+                    .help(Self.globalHelp)
+                Toggle("", isOn: palettePassthroughBinding(entry.id))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .frame(width: Self.passthroughColumn, alignment: .center)
+                    .help(Self.passthroughHelp)
                 Button {
                     HotkeyCaptureState.shared.isCapturing = true
                     capturingActionID = rowID
@@ -1901,6 +1935,11 @@ private struct KeymapSettings: View {
             }
             if !partners.isEmpty {
                 Text("Conflicts with \(partners.joined(separator: ", "))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(MactermTheme.warning)
+            }
+            if let refusal = globalHotkeys.refusals[.palette(entry.id)] {
+                Text(refusal.message)
                     .font(.system(size: 11))
                     .foregroundStyle(MactermTheme.warning)
             }
@@ -1994,7 +2033,7 @@ private struct KeymapSettings: View {
             // than left silent: the binding still works inside Macterm, so
             // nothing looks broken until the user tries it from another app —
             // where the keystroke never reaches us at all.
-            if let refusal = globalHotkeys.refusals[action] {
+            if let refusal = globalHotkeys.refusals[.action(action)] {
                 Text(refusal.message)
                     .font(.system(size: 11))
                     .foregroundStyle(MactermTheme.warning)

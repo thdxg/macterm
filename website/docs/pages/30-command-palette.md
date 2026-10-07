@@ -68,7 +68,7 @@ The rules, each one a line in the file:
 - **An action is exactly one of** `run:` (typed into a new tab, or a split with `in: split`, with the exported variables in its environment), `copy:` (to the clipboard) or `open:` (a URL or file, with its default app).
 - **While a listing runs** the screen shows a spinner; **if it fails** — command not found, a non-zero exit, output that isn't the shape asked for — the screen says why, with the command's stderr, and **Retry** (also <kbd>⌘R</kbd>) runs it again. A listing that takes more than 30 seconds is given up on.
 - **A file that doesn't read** keeps its row, with a warning glyph before the chevron; entering it shows the error, and <kbd>⌘R</kbd> reads the file again once it is fixed. Settings → Palettes shows the same warning beside its switch.
-- **Keybind** any palette in Settings → Keymaps under **Palettes**; its chord opens the command palette straight on it. Custom palettes' chords work inside Macterm only.
+- **Keybind** any palette in Settings → Keymaps under **Palettes**; its chord opens the command palette straight on it, and takes **Global** and **Pass to TUI** like any other keybind.
 
 A schema for editors that understand `yaml-language-server` is at [`assets/palette.schema.json`](https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json). Coding agents can write a palette for you: `macterm skills` prints a skill that teaches the format.
 

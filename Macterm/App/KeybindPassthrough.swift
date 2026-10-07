@@ -74,7 +74,18 @@ enum KeybindPassthrough {
         programs: () -> Set<String> = { programNames(from: Preferences.shared.passthroughPrograms) },
         foregroundName: (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) }
     ) -> Bool {
-        guard HotkeyRegistry.passesThroughToPrograms(for: action) else { return false }
+        yields(binding: .action(action), pane: pane, programs: programs, foregroundName: foregroundName)
+    }
+
+    /// The same verdict for any chord owner — an action or a custom palette
+    /// (`HotkeyBinding`).
+    static func yields(
+        binding: HotkeyBinding,
+        pane: Pane?,
+        programs: () -> Set<String> = { programNames(from: Preferences.shared.passthroughPrograms) },
+        foregroundName: (Pane) -> String? = { ProcessInspector.runningProcessName(forPane: $0) }
+    ) -> Bool {
+        guard binding.passesThroughToPrograms else { return false }
         let listed = programs()
         guard !listed.isEmpty else { return false }
         guard let pane else { return false }
@@ -90,21 +101,22 @@ enum KeybindPassthrough {
         return listed.contains(normalized(name))
     }
 
-    /// The flagged action whose chord `event` matches, or nil — the gate the
-    /// key responders run before their action branches.
+    /// The flagged binding — an action or a custom palette — whose chord
+    /// `event` matches, or nil: the gate the key responders run before their
+    /// action branches.
     ///
-    /// Scans only the flagged actions (see `HotkeyRegistry.passthroughActions`),
+    /// Scans only the flagged bindings (`HotkeyBinding.passthroughBindings`),
     /// so an unflagged configuration costs one `isEmpty` check per keystroke.
-    static func matchedAction(for event: NSEvent) -> HotkeyAction? {
-        let flagged = HotkeyRegistry.passthroughActions()
+    static func matchedBinding(for event: NSEvent) -> HotkeyBinding? {
+        let flagged = HotkeyBinding.passthroughBindings
         guard !flagged.isEmpty else { return nil }
-        return flagged.first { HotkeyRegistry.matches(event, action: $0) }
+        return flagged.first { $0.matches(event) }
     }
 
     /// Combined gate for a responder: true when `event` matches a flagged
-    /// action and `pane` is running a program the user listed.
+    /// binding and `pane` is running a program the user listed.
     static func yields(event: NSEvent, pane: Pane?) -> Bool {
-        guard let action = matchedAction(for: event) else { return false }
-        return yields(action: action, pane: pane)
+        guard let binding = matchedBinding(for: event) else { return false }
+        return yields(binding: binding, pane: pane)
     }
 }

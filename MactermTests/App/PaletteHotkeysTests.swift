@@ -54,6 +54,42 @@ struct PaletteHotkeysTests {
     }
 
     @Test
+    func a_palettes_global_and_passthrough_flags_round_trip_and_the_gate_sees_them() {
+        let hotkeys = PaletteHotkeys.shared
+        let priorIDs = hotkeys.paletteIDs
+        defer {
+            hotkeys.clearShortcut(paletteID: "k8s")
+            hotkeys.setPassesThrough(false, paletteID: "k8s")
+            hotkeys.setGlobal(false, paletteID: "k8s")
+            hotkeys.paletteIDs = priorIDs
+        }
+        hotkeys.paletteIDs = ["k8s"]
+        #expect(!hotkeys.passesThrough(paletteID: "k8s"))
+        #expect(!hotkeys.isGlobal(paletteID: "k8s"))
+        #expect(hotkeys.passthroughPaletteIDs().isEmpty)
+        #expect(hotkeys.globalPaletteIDs().isEmpty)
+
+        hotkeys.setShortcutString("ctrl+k", paletteID: "k8s")
+        hotkeys.setPassesThrough(true, paletteID: "k8s")
+        #expect(hotkeys.passthroughPaletteIDs() == ["k8s"])
+        #expect(Preferences.defaults.bool(forKey: PaletteHotkeys.passthroughDefaultsKey(paletteID: "k8s")))
+        let k = keyDown("k", keyCode: 40, flags: [.control])
+        #expect(KeybindPassthrough.matchedBinding(for: k) == .palette("k8s"), "the passthrough gate sees a flagged palette's chord")
+        #expect(HotkeyBinding.palette("k8s").passesThroughToPrograms)
+        #expect(
+            !KeybindPassthrough.yields(binding: .palette("k8s"), pane: nil, programs: { ["nvim"] }, foregroundName: { _ in "nvim" }),
+            "no pane, nothing to yield to"
+        )
+
+        hotkeys.setGlobal(true, paletteID: "k8s")
+        #expect(hotkeys.globalPaletteIDs() == ["k8s"])
+        #expect(HotkeyBinding.globalBindings.contains(.palette("k8s")))
+        #expect(HotkeyBinding.palette("k8s").selectedShortcut?.id == "ctrl+k")
+        #expect(HotkeyBinding.palette("k8s").id == "palette:k8s")
+        #expect(HotkeyBinding.palette("k8s") < HotkeyBinding.palette("web"))
+    }
+
+    @Test
     func row_ids_round_trip_and_never_collide_with_an_action() {
         #expect(PaletteHotkeys.rowID(paletteID: "k8s") == "palette:k8s")
         #expect(PaletteHotkeys.paletteID(fromRowID: "palette:k8s") == "k8s")
