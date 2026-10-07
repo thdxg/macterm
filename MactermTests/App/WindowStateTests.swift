@@ -897,3 +897,49 @@ struct WindowStateTests {
         #expect(reader.selectedTab(for: PinnedTabs.projectID, in: restored)?.id == created.id)
     }
 }
+
+/// The palette's screens (`PaletteScope`) on the window the user is in.
+@MainActor
+struct PaletteScopeWindowTests {
+    private func makeAppState() -> AppState {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        return AppState(
+            workspaceStore: WorkspaceStore(fileURL: tmp),
+            projectFiles: ProjectFileStore(directoryURL: projects)
+        )
+    }
+
+    @Test
+    func a_screens_chord_opens_it_switches_to_it_and_closes_it() {
+        let state = makeAppState()
+        let window = WindowState()
+        state.registerWindow(window)
+        state.noteKeyWindow(window)
+
+        state.toggleCommandPalette(scope: .passwords)
+        #expect(window.isCommandPaletteVisible)
+        #expect(window.paletteScope == .passwords)
+
+        state.toggleCommandPalette(scope: .passwords)
+        #expect(!window.isCommandPaletteVisible, "pressed again on its own screen, it closes")
+
+        // Up on the root with a search typed: the chord switches screens and
+        // starts that screen's search empty.
+        state.commandPaletteQuery = "split"
+        state.openCommandPalette(scope: nil)
+        state.toggleCommandPalette(scope: .passwords)
+        #expect(window.isCommandPaletteVisible)
+        #expect(window.paletteScope == .passwords)
+        #expect(state.commandPaletteQuery.isEmpty)
+    }
+
+    @Test
+    func password_manager_is_a_bindable_command_that_is_a_palette_screen() {
+        #expect(AppCommand.passwordManager.hotkeyAction == .passwordManager)
+        #expect(HotkeyAction.passwordManager.appCommand == .passwordManager)
+        #expect(HotkeyAction.passwordManager.defaultShortcut == "none")
+    }
+}

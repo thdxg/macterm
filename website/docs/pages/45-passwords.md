@@ -31,7 +31,7 @@ If a saved password stops working, the bubble says so. Type the new one, and Mac
 
 ## Typing a password on demand
 
-Some prompts Macterm can't see — `sudo` on a server you reached with `ssh`, or a prompt inside tmux — and a password you added yourself may not belong to any prompt at all. For those, open the command palette (<kbd>⌘P</kbd>) and choose **Password Manager**. The palette switches to your saved passwords; type to search them by command or prompt, and pick one to type it into the focused pane. <kbd>Esc</kbd>, or <kbd>Delete</kbd> with nothing typed, goes back to the full palette.
+Some prompts Macterm can't see — `sudo` on a server you reached with `ssh`, or a prompt inside tmux — and a password you added yourself may not belong to any prompt at all. For those, open the command palette (<kbd>⌘P</kbd>) and choose **Password Manager** — or go straight there from **View → Password Manager**, or a shortcut you give **Password Manager** in Settings → Keymaps (none by default; pressing it again closes the palette). The palette switches to your saved passwords; type to search them by command or prompt, and pick one to type it into the focused pane. <kbd>Esc</kbd>, or <kbd>Delete</kbd> with nothing typed, goes back to the full palette.
 
 After Touch ID, as for Autofill, Macterm types the password. Picking it is the go-ahead: nothing asks whether the pane is really at a password prompt. What Macterm decides is whether to press Return after it:
 

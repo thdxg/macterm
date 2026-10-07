@@ -20,6 +20,15 @@ final class PaletteResponder: KeyResponder {
             appState.isCommandPaletteVisible.toggle()
             return .handled
         }
+        // A palette screen's chord with the palette already up: the app-level
+        // responder that runs bindings stands aside while the palette is
+        // visible, so switch to the screen (or close it) here.
+        if appState.isCommandPaletteVisible, HotkeyRegistry.matches(event, action: .passwordManager),
+           Preferences.shared.passwordManagerEnabled
+        {
+            appState.toggleCommandPalette(scope: .passwords)
+            return .handled
+        }
         // While the palette is visible, SwiftUI owns arrow / escape / etc.
         return .passThrough
     }

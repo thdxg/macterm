@@ -823,6 +823,16 @@ final class AppState {
         window.isCommandPaletteVisible = true
     }
 
+    /// A screen's own chord: shows the palette on `scope`, or closes it when
+    /// that screen is already up — what ⌘P is to the root.
+    func toggleCommandPalette(scope: PaletteScopeID) {
+        if isCommandPaletteVisible, keyOrFirstWindow?.paletteScope == scope {
+            isCommandPaletteVisible = false
+        } else {
+            openCommandPalette(scope: scope)
+        }
+    }
+
     /// Presents the password editor sheet in the window the user is in.
     func presentPasswordEditor(_ request: PasswordEditorRequest) {
         keyOrFirstWindow?.passwordEditor = request

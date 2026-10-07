@@ -140,6 +140,12 @@ struct MactermApp: App {
                     titleOverride: "Command Palette"
                 )
                 AppCommandMenuItem(
+                    command: .passwordManager,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Password Manager"
+                )
+                AppCommandMenuItem(
                     command: .toggleQuickTerminal,
                     appState: appState,
                     projectStore: projectStore,

@@ -51,6 +51,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case pinTab = "pin_tab"
     case unpinTab = "unpin_tab"
     case autofillPassword = "autofill_password"
+    case passwordManager = "password_manager"
 
     var id: String { rawValue }
 
@@ -138,6 +139,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // pane is at a prompt with a saved password; anywhere else it passes
         // through to the terminal.
         case .autofillPassword: "cmd+opt+f"
+        // Unbound by default: ⌥⌘F, the obvious chord, is Autofill Password's.
+        case .passwordManager: "none"
         }
     }
 }

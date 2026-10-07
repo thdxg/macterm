@@ -211,10 +211,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .renameProject: .renameProject
         case .copySessionID: .copySessionID
         case .autofillPassword: .autofillPassword
+        case .passwordManager: .passwordManager
         case .applyLayout: .applyLayout
         case .saveLayout: .saveLayout
         case .newRemoteProject,
-             .passwordManager,
              .newDesktopWidget,
              .unloadProject,
              .removeProject,

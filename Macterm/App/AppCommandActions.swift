@@ -269,7 +269,7 @@ extension AppCommand {
         case .passwordManager:
             // The master switch covers on-demand filling too.
             guard Preferences.shared.passwordManagerEnabled else { return nil }
-            return { ctx.appState.openCommandPalette(scope: .passwords) }
+            return { ctx.appState.toggleCommandPalette(scope: .passwords) }
         case .checkForUpdate:
             // Always present in the palette; the guard only no-ops when a check
             // is already in flight (canCheckForUpdates flips false during one).
