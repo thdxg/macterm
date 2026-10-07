@@ -305,8 +305,8 @@ final class Preferences {
         }
     }
 
-    /// A fading streak follows the cursor across larger moves. The bundled
-    /// `cursor_trail.glsl`, appended to the config through the overrides file.
+    /// A fading streak follows the cursor across larger moves. The fork's
+    /// `cursor-trail` key, written through the overrides file.
     var cursorTrail: Bool {
         didSet {
             Keys.cursorTrail.write(cursorTrail, to: defaults)
