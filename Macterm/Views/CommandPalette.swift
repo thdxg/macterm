@@ -1,6 +1,31 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Mount
+
+/// Puts the palette over a window while it is visible, with the system's
+/// own transitions: the scrim fades, and the panel fades while scaling in
+/// from just under full size at its top edge — the shape Spotlight's
+/// appearance has — in and out alike, on a short snappy curve. Reduce Motion
+/// lands both in one frame. One place owns this so every window's palette
+/// comes and goes the same way.
+struct CommandPaletteMount: View {
+    let isVisible: Bool
+
+    @Environment(\.accessibilityReduceMotion)
+    private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            if isVisible {
+                CommandPaletteOverlay()
+                    .transition(.opacity)
+            }
+        }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: isVisible)
+    }
+}
+
 // MARK: - Overlay
 
 /// A SwiftUI overlay hosting the command palette. Mounts only when visible,
@@ -48,6 +73,9 @@ struct CommandPaletteOverlay: View {
                 }
                 .frame(width: 500)
                 .padding(.top, max(0, geo.size.height * 0.15 - breadcrumb))
+                // With the mount's fade: the panel grows in from its top edge
+                // as it appears and shrinks back as it goes.
+                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: windowState.paletteStack.count)
@@ -96,8 +124,10 @@ struct CommandPalettePanel: View {
     /// key-up can never run the wrong action.
     @State
     private var optionHeld = false
+    /// Modifier changes and Backspace, watched at the event level while the
+    /// palette is up (`PaletteEventMonitor`).
     @State
-    private var flagsMonitor: FlagsMonitor?
+    private var eventMonitor: PaletteEventMonitor?
 
     /// Coordinate space the results scroll view and row frames share.
     private let rowSpace = "paletteRows"
@@ -256,7 +286,18 @@ struct CommandPalettePanel: View {
             // preserved across close/reopen.
             selectedIndex = 0
             optionHeld = NSEvent.modifierFlags.contains(.option)
-            flagsMonitor = FlagsMonitor { optionHeld = $0.contains(.option) }
+            eventMonitor = PaletteEventMonitor(
+                onFlags: { optionHeld = $0.contains(.option) },
+                onBackspace: { isRepeat in
+                    // Backspace with nothing left to delete steps out of a
+                    // screen — on a fresh press only: a Backspace held down
+                    // to clear the input stops at the empty field instead of
+                    // running on out of the screen.
+                    guard windowState.paletteScope != nil, query.isEmpty, !isRepeat else { return false }
+                    leaveScope()
+                    return true
+                }
+            )
             appState.customPalettes.reloadIfChanged()
             activateScope()
             refresh()
@@ -296,7 +337,7 @@ struct CommandPalettePanel: View {
             return .handled
         }
         .onDisappear {
-            flagsMonitor = nil
+            eventMonitor = nil
             optionHeld = false
         }
         // Return runs the selected row — with ⌥, its alt action. Read off
@@ -314,12 +355,6 @@ struct CommandPalettePanel: View {
         .onKeyPress(characters: .init(charactersIn: "r")) { press in
             guard press.modifiers == .command, let scope else { return .ignored }
             scope.retry()
-            return .handled
-        }
-        // Backspace with nothing left to delete steps out of a scope.
-        .onKeyPress(.delete) {
-            guard windowState.paletteScope != nil, query.isEmpty else { return .ignored }
-            leaveScope()
             return .handled
         }
         .onKeyPress(.escape) {
@@ -472,24 +507,38 @@ struct CommandPalettePanel: View {
     }
 }
 
-/// A local monitor for modifier changes while the palette is up, removed
-/// when the palette goes — SwiftUI's `onKeyPress` never sees a bare
-/// modifier press.
-private final class FlagsMonitor {
-    /// The monitor is installed and removed on the main thread; `deinit` is
-    /// nonisolated under Swift 6, hence the unchecked storage.
-    nonisolated(unsafe) private var token: Any?
+/// Local monitors for what SwiftUI's `onKeyPress` cannot see while the
+/// palette is up: a bare modifier press (for the ⌥ display), and Backspace
+/// with its repeat flag — the field editor takes Backspace before the key
+/// press reaches the hierarchy, and `onKeyPress`'s `phases:` filter does
+/// not see it at all. Removed when the palette goes.
+private final class PaletteEventMonitor {
+    /// Installed and removed on the main thread; `deinit` is nonisolated
+    /// under Swift 6, hence the unchecked storage.
+    nonisolated(unsafe) private var tokens: [Any] = []
 
+    /// `onBackspace` is handed whether the press is an auto-repeat and
+    /// returns whether it consumed the key.
     @MainActor
-    init(_ onChange: @escaping @MainActor (NSEvent.ModifierFlags) -> Void) {
-        token = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            MainActor.assumeIsolated { onChange(event.modifierFlags.intersection(.deviceIndependentFlagsMask)) }
+    init(onFlags: @escaping @MainActor (NSEvent.ModifierFlags) -> Void, onBackspace: @escaping @MainActor (Bool) -> Bool) {
+        if let flags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged, handler: { event in
+            MainActor.assumeIsolated { onFlags(event.modifierFlags.intersection(.deviceIndependentFlagsMask)) }
             return event
+        }) {
+            tokens.append(flags)
+        }
+        if let keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { event in
+            guard event.keyCode == 51, event.modifierFlags.isDisjoint(with: [.command, .control, .option]) else { return event }
+            return MainActor.assumeIsolated { onBackspace(event.isARepeat) } ? nil : event
+        }) {
+            tokens.append(keys)
         }
     }
 
     deinit {
-        if let token { NSEvent.removeMonitor(token) }
+        for token in tokens {
+            NSEvent.removeMonitor(token)
+        }
     }
 }
 
@@ -675,7 +724,8 @@ private struct CommandPaletteRow: View {
     let item: PaletteItem
     let isSelected: Bool
     /// Option is down: a row with an alt action shows that action's title
-    /// in place of its subtitle, and ⌥↩ in place of its keybind.
+    /// in place of its subtitle and drops its keybind caps — the chord is
+    /// implied by the key being held.
     let optionHeld: Bool
 
     private var showsAlt: Bool { optionHeld && item.alt != nil }
@@ -703,12 +753,7 @@ private struct CommandPaletteRow: View {
             // without measure the same (the caps outgrow a single title line).
             .frame(minHeight: KeyCap.height)
             Spacer()
-            if showsAlt {
-                HStack(spacing: 4) {
-                    KeyCap(symbol: "⌥")
-                    KeyCap(symbol: "↩")
-                }
-            } else {
+            if !showsAlt {
                 keybindView
             }
             if let warning = item.warning {

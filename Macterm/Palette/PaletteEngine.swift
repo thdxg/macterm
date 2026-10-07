@@ -110,9 +110,8 @@ struct PaletteItem: Identifiable {
 }
 
 /// What a row does with ⌥ held: a second action, named so the row can show
-/// it (the subtitle swaps to this title while Option is down, with an ⌥↩
-/// keycap). ⌥↩ or an ⌥-click runs it; a row without one runs its primary
-/// action either way.
+/// it (the subtitle swaps to this title while Option is down). ⌥↩ or an
+/// ⌥-click runs it; a row without one runs its primary action either way.
 struct PaletteAltAction {
     let title: String
     let action: () -> Void

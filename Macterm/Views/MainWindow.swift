@@ -269,9 +269,7 @@ struct MainWindow: View {
             onWindowFrameChanged: { appState.windowFrameDidChange($0) }
         ))
         .overlay {
-            if windowState.isCommandPaletteVisible {
-                CommandPaletteOverlay()
-            }
+            CommandPaletteMount(isVisible: windowState.isCommandPaletteVisible)
         }
         // Below the palette (the two can't be up together — cycling commits on
         // modifier release), above the terminal it describes.
