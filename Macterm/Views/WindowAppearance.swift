@@ -808,17 +808,22 @@ enum WindowAppearance {
     /// Stop AppKit autosaving this window's frame under SwiftUI's name.
     ///
     /// SwiftUI names a `WindowGroup` window's frame autosave after the scene's
-    /// whole content type, in which private types — ours (`AppColorScheme`)
-    /// and SwiftUI's own (the `ActionsModifier` behind every `.alert`) — print
-    /// as `(unknown context at $ADDR)`: an address that moves every launch
-    /// with ASLR, and with every reboot and OS update for SwiftUI's. So the
-    /// frame was saved under a new key on every launch and never read back,
-    /// and every window opened at the scene's `defaultSize` (#496). Making
-    /// our modifier non-private would not fix it — SwiftUI's own types are in
-    /// the name too. The frame is persisted per window in `WindowSnapshot`
-    /// instead (`restoreFrame`), so AppKit's autosave is switched off rather
-    /// than pinned: one owner, and no slot for a closed window's frame to
-    /// leak into the next one, as the sidebar's slots did.
+    /// whole content type, in which a private type — `AppColorScheme` today,
+    /// and SwiftUI's own `ActionsModifier` back when the alerts sat in the
+    /// scene closure — prints as `(unknown context at $ADDR)`: an address that
+    /// moves every launch with ASLR. So the frame was saved under a new key on
+    /// every launch and never read back, and every window opened at the
+    /// scene's `defaultSize` (#496).
+    ///
+    /// A stable name would not have been enough. Measured with
+    /// `AppColorScheme` made internal: the first window then came back at its
+    /// frame, but every window of the group wrote that one `AppWindow-1` key
+    /// (each window is NAMED `AppWindow-N`, yet only `-1` is ever written), so
+    /// SwiftUI keeps one frame per group — the last window moved — and every
+    /// other restored window opened at the default size. The key also changes
+    /// whenever the scene closure's modifiers do, resetting everyone's size.
+    /// The frame is persisted per window in `WindowSnapshot` instead
+    /// (`restoreFrame`), and AppKit's autosave is switched off: one owner.
     static func disownFrameAutosave(window: NSWindow) {
         guard !window.frameAutosaveName.isEmpty else { return }
         window.setFrameAutosaveName("")
