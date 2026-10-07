@@ -193,6 +193,7 @@ struct MactermApp: App {
                     projectStore: projectStore,
                     titleOverride: "Set Project Path to Current Directory"
                 )
+                AppCommandMenuItem(command: .worktrees, appState: appState, projectStore: projectStore, titleOverride: "Worktrees")
                 Divider()
                 AppCommandMenuItem(command: .nextProject, appState: appState, projectStore: projectStore, titleOverride: "Next Project")
                 AppCommandMenuItem(
@@ -803,7 +804,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // this) and every one created from here on.
         DesktopWidgetWindows.shared.attach(appState: appState)
         ToolbarMenu.shared.attach(appState: appState)
-        KeyRouter.shared.register(PaletteResponder(appState: appState))
+        KeyRouter.shared.register(PaletteResponder(appState: appState, projectStore: projectStore))
         KeyRouter.shared.register(QuickTerminalResponder())
         let mainResponder = MainAppResponder(appState: appState, projectStore: projectStore)
         mainResponder.mainWindow = mainWindow

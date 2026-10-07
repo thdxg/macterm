@@ -52,6 +52,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case unpinTab = "unpin_tab"
     case autofillPassword = "autofill_password"
     case passwordManager = "password_manager"
+    case worktrees
 
     var id: String { rawValue }
 
@@ -141,6 +142,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .autofillPassword: "cmd+opt+f"
         // Unbound by default: ⌥⌘F, the obvious chord, is Autofill Password's.
         case .passwordManager: "none"
+        case .worktrees: "none"
         }
     }
 }

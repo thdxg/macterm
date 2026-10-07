@@ -72,6 +72,14 @@ enum GitWorktrees {
         return list(projectRoot: ProjectPath.canonicalLocal(path))
     }
 
+    /// Whether the project at `projectPath` is the top of a git repository —
+    /// the only place `list` looks. False for a remote project, whose files
+    /// are only reachable over ssh.
+    static func isRepository(projectPath: String) -> Bool {
+        guard case let .local(path)? = ProjectPath.parse(projectPath) else { return false }
+        return gitDir(atRoot: ProjectPath.canonicalLocal(path)) != nil
+    }
+
     /// Every worktree of the repository at `projectRoot` except the root
     /// itself — the main worktree first, then the rest in Finder order of
     /// their display paths. Empty when the root is not a repository's top.

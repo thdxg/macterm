@@ -46,6 +46,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case unloadProject
     case removeProject
     case replaceProjectPathWithCurrentDir
+    case worktrees
     case applyLayout
     case saveLayout
     case nextProject
@@ -100,6 +101,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .unloadProject: "Unload Current Project"
         case .removeProject: "Remove Current Project"
         case .replaceProjectPathWithCurrentDir: "Replace Project Path with Current Directory"
+        case .worktrees: "Worktrees"
         case .applyLayout: "Apply Layout"
         case .saveLayout: "Save Layout"
         case .nextProject: "Next Project"
@@ -153,6 +155,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
+             .worktrees,
              .applyLayout,
              .saveLayout,
              .nextProject,
@@ -212,6 +215,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .copySessionID: .copySessionID
         case .autofillPassword: .autofillPassword
         case .passwordManager: .passwordManager
+        case .worktrees: .worktrees
         case .applyLayout: .applyLayout
         case .saveLayout: .saveLayout
         case .newRemoteProject,
@@ -229,6 +233,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     var paletteScope: PaletteScopeID? {
         switch self {
         case .passwordManager: .passwords
+        case .worktrees: .worktrees
         default: nil
         }
     }

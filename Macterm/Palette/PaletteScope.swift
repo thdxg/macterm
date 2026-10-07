@@ -12,11 +12,13 @@ import Foundation
 /// what turns its palette row into a way in rather than a command.
 enum PaletteScopeID: String, Hashable {
     case passwords
+    case worktrees
 
     @MainActor
     func makeScope() -> any PaletteScope {
         switch self {
         case .passwords: PasswordPaletteScope()
+        case .worktrees: WorktreesPaletteScope()
         }
     }
 }
