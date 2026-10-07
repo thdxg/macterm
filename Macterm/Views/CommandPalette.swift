@@ -51,10 +51,14 @@ struct CommandPaletteOverlay: View {
     var body: some View {
         GeometryReader { geo in
             // The PANEL sits 15% down, with or without screens open: the
-            // breadcrumb floats in the space above it, outside the glass, so
-            // entering a screen never moves the input or the list, and the
-            // panel's own surface never grows.
-            let breadcrumb = windowState.paletteStack.isEmpty ? 0 : PaletteBreadcrumb.height + PaletteBreadcrumb.gap
+            // breadcrumb row floats in the space above it, outside the glass,
+            // so entering a screen never moves the input or the list, and the
+            // panel's own surface never grows. The row is ALWAYS laid out,
+            // empty on the root: inserted with the first frame, its own
+            // geometry animated in from nothing and the first pill rode that
+            // slide, while later pills — inserted into a row already there —
+            // only blurred in. Now every pill is a row insertion.
+            let breadcrumb = PaletteBreadcrumb.height + PaletteBreadcrumb.gap
             ZStack(alignment: .top) {
                 // Click-outside scrim. Transparent but hit-testable.
                 Color.black.opacity(0.001)
@@ -64,11 +68,8 @@ struct CommandPaletteOverlay: View {
                     }
 
                 VStack(alignment: .leading, spacing: PaletteBreadcrumb.gap) {
-                    if !windowState.paletteStack.isEmpty {
-                        PaletteBreadcrumb(frames: windowState.paletteStack) { index in
-                            windowState.popPaletteFrames(above: index)
-                        }
-                        .transition(PaletteMotion.transition)
+                    PaletteBreadcrumb(frames: windowState.paletteStack) { index in
+                        windowState.popPaletteFrames(above: index)
                     }
                     CommandPalettePanel()
                         .glassPanel(cornerRadius: Self.cornerRadius)
@@ -561,12 +562,14 @@ private extension CommandPalettePanel {
 /// The screens open, as a row of pills floating above the panel, root
 /// first: Finder's path bar in miniature, outside the glass rather than in
 /// it — a nested palette needs several pills, the input's width is the
-/// search's, and the panel's surface stays the panel's. The current
-/// screen's pill is drawn in full and takes the width first; its ancestors
-/// are muted, shrink first (middle-truncated) and pop the stack back to
-/// themselves when clicked. The row never outgrows the panel: a current
-/// pill named by a long row title truncates in the middle rather than
-/// pushing the panel off its anchor.
+/// search's, and the panel's surface stays the panel's. The row is always
+/// laid out, empty on the root, so each pill — the first included — is an
+/// insertion into a row that is already there and blurs in where it lands.
+/// The current screen's pill is drawn in full and takes the width first; its
+/// ancestors are muted, shrink first (middle-truncated) and pop the stack
+/// back to themselves when clicked. The row never outgrows the panel: a
+/// current pill named by a long row title truncates in the middle rather
+/// than pushing the panel off its anchor.
 struct PaletteBreadcrumb: View {
     /// The row's height — what the overlay lifts the panel's anchor by,
     /// with `gap`, so it must be exact.
