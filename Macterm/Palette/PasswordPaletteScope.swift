@@ -28,9 +28,10 @@ struct PasswordPaletteScope: PaletteScope {
         }
 
         let text = query.trimmed
+        let search = SearchQuery(text)
         let matches = vault.entries.compactMap { entry -> PaletteItem? in
-            guard let score = Self.score(entry.id, query: text) else { return nil }
-            return item(for: entry, score: score, canFill: canFill, context: context)
+            guard let match = Search.match(search, fields: Self.fields(entry.id)) else { return nil }
+            return item(for: entry, score: 0, canFill: canFill, context: context).with(match)
         }
         .sorted { ($0.score, $0.title, $0.id) < ($1.score, $1.title, $1.id) }
 
@@ -49,13 +50,10 @@ struct PasswordPaletteScope: PaletteScope {
         return sections
     }
 
-    /// Best match over what the entry is shown as and what it is filed
-    /// under: the shortened command, the full one, and the prompt.
-    static func score(_ id: PasswordEntryID, query: String) -> Int? {
-        [id.displayCommand, id.command, id.isOnDemandOnly ? nil : id.prompt]
-            .compactMap(\.self)
-            .compactMap { fuzzyScore(query: query, target: $0) }
-            .min()
+    /// What an entry is found by: its title (as shown), the full command,
+    /// and the prompt.
+    static func fields(_ id: PasswordEntryID) -> [String] {
+        [id.title, id.command, id.isOnDemandOnly ? nil : id.prompt].compactMap(\.self)
     }
 
     /// The pane a picked password is typed into: the focused pane of the

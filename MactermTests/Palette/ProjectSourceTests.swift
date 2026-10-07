@@ -47,12 +47,12 @@ struct ProjectSourceTests {
 
     @Test
     func items_use_best_of_name_or_path_score() throws {
-        // Name is an exact prefix (score 0 before boost); path is a worse match.
-        // The best-of should win, and the projectBoost (-1) applies.
+        // The name is a whole-word match, the path a later field's: the
+        // name's score wins, and the project boost (1) comes off it.
         let (ctx, _, _) = makeContext([Project(name: "server", path: "/tmp/xyz/server")])
         let item = try #require(ProjectSource().items(query: "server", context: ctx).first)
-        // Prefix name match (0) + projectBoost (-1) = -1.
-        #expect(item.score == -1)
+        let name = try #require(Search.match("server", fields: ["server"]))
+        #expect(item.score == -Int(name.score) - 1)
     }
 
     @Test
@@ -63,7 +63,7 @@ struct ProjectSourceTests {
 
     @Test
     func items_boost_ranks_project_below_command_only_when_worse() throws {
-        // The boost is -1: a project match ranks just above an equal raw score.
+        // The boost puts a project just above a command matched equally well.
         let (ctx, _, _) = makeContext([Project(name: "status", path: "/tmp/status")])
         let item = try #require(ProjectSource().items(query: "status", context: ctx).first)
         #expect(item.score < 0) // boosted below a bare command's typical positive score

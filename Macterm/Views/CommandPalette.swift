@@ -456,7 +456,7 @@ private struct CommandPaletteRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
+                Text(highlightedTitle)
                     .font(.system(size: 13))
                     .foregroundStyle(item.isEnabled ? MactermTheme.fg : MactermTheme.fgDim)
                 if let subtitle = item.subtitle {
@@ -476,6 +476,37 @@ private struct CommandPaletteRow: View {
         // inset below, so the highlight's curve aligns with the palette's edge.
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .padding(.horizontal, 6)
+    }
+
+    /// The title with the characters the query matched in semibold — what
+    /// `Search` lined up, so the user sees why a row ranked where it did.
+    private var highlightedTitle: AttributedString {
+        guard !item.highlights.isEmpty else { return AttributedString(item.title) }
+        let matched = Set(item.highlights)
+        var out = AttributedString()
+        var run = ""
+        var runMatched = false
+        var offset = 0
+        func flush() {
+            guard !run.isEmpty else { return }
+            var part = AttributedString(run)
+            if runMatched { part.font = .system(size: 13, weight: .semibold) }
+            out += part
+            run = ""
+        }
+        for character in item.title {
+            // A character is matched when any of its scalars was.
+            let scalars = character.unicodeScalars.count
+            let isMatched = (offset ..< offset + scalars).contains { matched.contains($0) }
+            if isMatched != runMatched {
+                flush()
+                runMatched = isMatched
+            }
+            run.append(character)
+            offset += scalars
+        }
+        flush()
+        return out
     }
 
     @ViewBuilder
