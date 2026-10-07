@@ -59,6 +59,13 @@ struct ControlProtocolTests {
         #expect(decoded.args == ControlArgs())
     }
 
+    @Test(arguments: [nil, true, false] as [Bool?])
+    func creation_focus_roundtrips_as_an_optional_field(focus: Bool?) throws {
+        let request = ControlRequest(command: "tab.new", args: ControlArgs(focus: focus))
+        let decoded = try ControlProtocol.decodeRequest(ControlProtocol.encode(request))
+        #expect(decoded.args?.focus == focus)
+    }
+
     @Test
     func error_codes_use_snake_case_raw_values() {
         #expect(ControlErrorCode.notFound.rawValue == "not_found")

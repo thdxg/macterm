@@ -422,8 +422,8 @@ extension AppState {
     /// (`warmStaggered`). `warmPane` (the incubator) is idempotent, so a pane
     /// SwiftUI has already spawned — the active pinned tab of an active
     /// pinned workspace — just no-ops. After each warm the pane's
-    /// process-exit callback is wired: the incubator wires no `onProcessExit`
-    /// (background PROJECT tabs never needed one), but a background pinned
+    /// process-exit callback is wired: the bare incubator wires no
+    /// `onProcessExit` (CLI creation uses `warmBackgroundPane`), but a pinned
     /// tab must unload when its shell dies, or the row keeps posing as
     /// running with a dead surface behind it. `TerminalPane` re-wires the
     /// same destination when the tab is rendered, so the two never fight.

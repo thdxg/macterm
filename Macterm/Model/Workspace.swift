@@ -159,14 +159,16 @@ final class TerminalTab: Identifiable {
     /// A `command` spawns in the new pane via libghostty's `initial_input`
     /// (the layout `run:` path — typed into the fresh shell verbatim).
     /// `newPaneWorkingDirectory` overrides cwd inheritance without changing
-    /// the source pane's project-scoped session slug.
+    /// the source pane's project-scoped session slug. With `focus: false`,
+    /// preserve focus, history and zoom; the caller must start a hidden pane.
     @discardableResult
     func split(
         paneID: UUID,
         direction: SplitDirection,
         position: SplitPosition = .second,
         command: String? = nil,
-        newPaneWorkingDirectory: String? = nil
+        newPaneWorkingDirectory: String? = nil,
+        focus: Bool = true
     ) -> UUID? {
         // Bail before any side effect if the pane isn't in this tab — otherwise
         // an unknown ID would clear the user's zoom and rebalance ratios for a
@@ -196,9 +198,11 @@ final class TerminalTab: Identifiable {
             command: command
         )
         splitRoot = newRoot
-        // Splitting reveals a new pane — exit zoom so it's visible.
-        zoomedPaneID = nil
-        if let newID { focusPane(newID) }
+        if focus {
+            // A foreground split reveals and focuses the new pane.
+            zoomedPaneID = nil
+            if let newID { focusPane(newID) }
+        }
         if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
         return newID
     }
@@ -482,8 +486,10 @@ final class Workspace: Identifiable {
         }
     }
 
+    /// Append without visiting when `focus` is false: a select-and-restore
+    /// would publish a transient selection and pollute the recent-tab history.
     @discardableResult
-    func createTab(projectPath: String, sessionSlug: String? = nil, command: String? = nil) -> TerminalTab {
+    func createTab(projectPath: String, sessionSlug: String? = nil, command: String? = nil, focus: Bool = true) -> TerminalTab {
         let tab = TerminalTab(
             projectPath: projectPath,
             projectID: projectID,
@@ -491,8 +497,10 @@ final class Workspace: Identifiable {
             command: command
         )
         tabs.append(tab)
-        if let current = activeTabID { tabHistory.push(current) }
-        activeTabID = tab.id
+        if focus {
+            if let current = activeTabID { tabHistory.push(current) }
+            activeTabID = tab.id
+        }
         return tab
     }
 

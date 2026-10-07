@@ -78,6 +78,9 @@ struct ControlArgs: Codable, Equatable {
     /// (`tab.new`, `pane.split`, `grid`), typed into the live shell for
     /// `pane.run`.
     var run: String?
+    /// Whether `tab.new` / `pane.split` selects the new terminal. Absent means
+    /// true; `--no-focus` sends false, preserving selection and focus history.
+    var focus: Bool?
     /// Direction, with a per-command vocabulary: `right`/`left`/`down`/`up`/`auto`
     /// for `pane.split` and `pane.mirror` (`auto` picks the longer on-screen
     /// axis), `left`/`down`/`up`/`right` for `pane.focus` (where it makes the
@@ -142,6 +145,7 @@ struct ControlArgs: Codable, Equatable {
         name: String? = nil,
         select: Bool? = nil,
         run: String? = nil,
+        focus: Bool? = nil,
         direction: String? = nil,
         force: Bool? = nil,
         rows: Int? = nil,
@@ -168,6 +172,7 @@ struct ControlArgs: Codable, Equatable {
         self.name = name
         self.select = select
         self.run = run
+        self.focus = focus
         self.direction = direction
         self.force = force
         self.rows = rows

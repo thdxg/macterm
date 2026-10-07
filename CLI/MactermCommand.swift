@@ -362,7 +362,7 @@ struct TabCommand: ParsableCommand {
     }
 
     struct New: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Open a new tab (becomes active).")
+        static let configuration = CommandConfiguration(abstract: "Open a new tab (becomes active unless --no-focus).")
 
         @Option(help: "Project (name, UUID, or index). Defaults to the active project.")
         var project: String?
@@ -370,12 +370,15 @@ struct TabCommand: ParsableCommand {
         @Option(name: .customLong("run"), help: "Command to run in the new tab's shell.")
         var runCommand: String?
 
+        @Flag(help: "Start the tab in the background without changing selection.")
+        var noFocus = false
+
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
             try runControlCommand(
                 command: "tab.new",
-                args: ControlArgs(project: project, run: runCommand),
+                args: ControlArgs(project: project, run: runCommand, focus: noFocus ? false : nil),
                 options: options
             )
         }
@@ -551,6 +554,9 @@ struct PaneCommand: ParsableCommand {
         @Option(name: .customLong("run"), help: "Command to run in the new pane's shell.")
         var runCommand: String?
 
+        @Flag(help: "Start the new pane without changing focus or zoom.")
+        var noFocus = false
+
         @OptionGroup var target: PaneTarget
         @OptionGroup var options: ConnectionOptions
 
@@ -558,6 +564,7 @@ struct PaneCommand: ParsableCommand {
             var args = target.controlArgs()
             args.direction = direction
             args.run = runCommand
+            args.focus = noFocus ? false : nil
             try runControlCommand(command: "pane.split", args: args, options: options)
         }
     }

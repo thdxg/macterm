@@ -1655,6 +1655,21 @@ final class AppState {
         warmStaggered(Self.panesToWarm(in: ws))
     }
 
+    /// Start a newly requested background terminal and give it the same exit
+    /// handling as a rendered pane. The incubator only supplies a window and
+    /// title callback; without this, a never-viewed shell's exit is lost.
+    /// Read the pane's project at exit time, since a tab can move meanwhile.
+    /// Explicit creation also ends a project's unloaded state without selecting
+    /// it: the row must not claim its shells are stopped once one is running.
+    private func warmBackgroundPane(_ pane: Pane) {
+        unloadedProjectIDs.remove(pane.projectID)
+        warmPane(pane)
+        pane.nsView?.onProcessExit = { [weak self, weak pane] in
+            guard let self, let pane else { return }
+            self.handleProcessExit(pane.id, projectID: pane.projectID)
+        }
+    }
+
     /// Start panes' shells off-screen, staggered 125ms apart: each warm is a
     /// login shell (PAM, rc files) and — when restoring — a `zmx attach`
     /// reattaching a daemon, and firing them all in one tick multiplies
@@ -2389,16 +2404,23 @@ final class AppState {
 
     /// A `command` spawns in the new tab's pane via `initial_input` (layout
     /// `run:` semantics). Returns the new tab's ID, nil when the project has
-    /// no live workspace.
+    /// no live workspace. `focus: false` leaves selection/history untouched
+    /// and warms the pane off-screen so its shell starts without a visit.
     @discardableResult
     func createTab(
         projectID: UUID,
         projectPath: String,
         sessionSlug: String? = nil,
-        command: String? = nil
+        command: String? = nil,
+        focus: Bool = true
     ) -> UUID? {
         guard let ws = workspaces[projectID] else { return nil }
-        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command)
+        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command, focus: focus)
+        if !focus {
+            for pane in tab.splitRoot.allPanes() {
+                warmBackgroundPane(pane)
+            }
+        }
         logger.debug("createTab: project=\(projectID, privacy: .public) tabs=\(ws.tabs.count, privacy: .public)")
         saveWorkspaces()
         return tab.id
@@ -2408,7 +2430,7 @@ final class AppState {
     /// Active pane falls back to the project path when no local cwd is available.
     /// The pinned workspace falls back to home.
     @discardableResult
-    func createTab(projectID: UUID, projects: [Project], command: String? = nil) -> UUID? {
+    func createTab(projectID: UUID, projects: [Project], command: String? = nil, focus: Bool = true) -> UUID? {
         guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
             return nil
         }
@@ -2419,13 +2441,13 @@ final class AppState {
             projectDirectory: projectDirectory,
             activePaneDirectory: activePaneDirectory
         ) ?? projectDirectory
-        return createTab(projectID: projectID, projects: projects, workingDirectory: newTabDirectory, command: command)
+        return createTab(projectID: projectID, projects: projects, workingDirectory: newTabDirectory, command: command, focus: focus)
     }
 
     /// Creates a tab in an explicit `workingDirectory` — one of the project's
     /// git worktrees, from the sidebar's Worktrees menu.
     @discardableResult
-    func createTab(projectID: UUID, projects: [Project], workingDirectory: String, command: String? = nil) -> UUID? {
+    func createTab(projectID: UUID, projects: [Project], workingDirectory: String, command: String? = nil, focus: Bool = true) -> UUID? {
         guard let projectDirectory = configuredProjectDirectory(projectID: projectID, projects: projects) else {
             return nil
         }
@@ -2435,7 +2457,8 @@ final class AppState {
             projectID: projectID,
             projectPath: workingDirectory,
             sessionSlug: projectSessionSlug,
-            command: command
+            command: command,
+            focus: focus
         )
     }
 
@@ -3001,7 +3024,8 @@ final class AppState {
         position: SplitPosition = .second,
         projectID: UUID,
         projectDirectory: String,
-        command: String? = nil
+        command: String? = nil,
+        focus: Bool = true
     ) -> UUID? {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
@@ -3021,14 +3045,16 @@ final class AppState {
             position: position,
             projectID: projectID,
             command: command,
-            newPaneWorkingDirectory: newPaneDirectory
+            newPaneWorkingDirectory: newPaneDirectory,
+            focus: focus
         )
     }
 
     /// Split a SPECIFIC pane — found in whichever of the project's tabs holds
     /// it, unlike the focused-pane overload above — optionally spawning
     /// `command` in the new pane. The control CLI's split path. Returns the
-    /// new pane's ID.
+    /// new pane's ID. `focus: false` preserves focus/history/zoom and warms
+    /// the new pane, including when its tab or project isn't being displayed.
     @discardableResult
     func splitPane(
         _ paneID: UUID,
@@ -3036,7 +3062,8 @@ final class AppState {
         position: SplitPosition = .second,
         projectID: UUID,
         command: String? = nil,
-        newPaneWorkingDirectory: String? = nil
+        newPaneWorkingDirectory: String? = nil,
+        focus: Bool = true
     ) -> UUID? {
         guard let ws = workspaces[projectID],
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil })
@@ -3046,8 +3073,10 @@ final class AppState {
             direction: direction,
             position: position,
             command: command,
-            newPaneWorkingDirectory: newPaneWorkingDirectory
+            newPaneWorkingDirectory: newPaneWorkingDirectory,
+            focus: focus
         )
+        if !focus, let newID, let pane = tab.splitRoot.findPane(id: newID) { warmBackgroundPane(pane) }
         saveWorkspaces()
         return newID
     }

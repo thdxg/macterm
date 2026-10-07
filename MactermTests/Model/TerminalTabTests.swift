@@ -65,6 +65,24 @@ struct TerminalTabTests {
         #expect(tab.focusedPaneID == newID)
     }
 
+    @Test(arguments: [false, true])
+    func split_without_focus_preserves_focus_history_and_zoom(zoomed: Bool) throws {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        let sourceID = try #require(ids["a"])
+        let currentID = try #require(ids["b"])
+        tab.focusPane(currentID)
+        if zoomed { tab.toggleZoom(paneID: currentID) }
+        let history = tab.paneFocusHistory.items
+        let zoom = tab.zoomedPaneID
+
+        let newID = try #require(tab.split(paneID: sourceID, direction: .vertical, focus: false))
+
+        #expect(tab.splitRoot.findPane(id: newID) != nil)
+        #expect(tab.focusedPaneID == currentID)
+        #expect(tab.paneFocusHistory.items == history)
+        #expect(tab.zoomedPaneID == zoom)
+    }
+
     @Test
     func split_position_first_places_new_pane_before_the_target() throws {
         let (tab, ids) = makeTab(pane("a"), focused: "a")

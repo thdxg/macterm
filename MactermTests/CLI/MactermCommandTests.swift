@@ -13,6 +13,28 @@ struct MactermCommandTests {
     private static let session = "macterm-api-8f327ce4a3f8"
 
     @Test
+    func creation_no_focus_is_explicit_and_omission_keeps_the_wire_default() throws {
+        let socket = RecordingSocket()
+        defer { socket.stop() }
+        for command in [["tab", "new"], ["pane", "split"]] {
+            for noFocus in [false, true] {
+                let flags = noFocus ? ["--no-focus"] : []
+                let result = try socket.cli(command + ["--project", "target", "--run", "echo hello"] + flags)
+                #expect(result.status == 0, "\(result.stderr)")
+                let request = try #require(socket.requests.last)
+                #expect(request.command == command.joined(separator: "."))
+                #expect(request.args?.project == "target")
+                #expect(request.args?.run == "echo hello")
+                #expect(request.args?.focus == (noFocus ? false : nil))
+            }
+            let help = try socket.cli(command + ["--help"])
+            #expect(help.status == 0)
+            #expect(help.stdout.contains("--no-focus"))
+        }
+        #expect(socket.requests.count == 4)
+    }
+
+    @Test
     func pane_run_prints_help_for_a_help_flag_before_the_terminator() throws {
         let socket = RecordingSocket()
         defer { socket.stop() }

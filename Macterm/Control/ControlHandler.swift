@@ -651,7 +651,8 @@ final class ControlHandler {
         guard let tabID = appState.createTab(
             projectID: project.id,
             projects: projectStore.projects,
-            command: args.run
+            command: args.run,
+            focus: args.focus ?? true
         ),
             let index = workspace.tabs.firstIndex(where: { $0.id == tabID })
         else {
@@ -802,7 +803,8 @@ final class ControlHandler {
             position: placement.position,
             projectID: project.id,
             projectDirectory: project.path,
-            command: args.run
+            command: args.run,
+            focus: args.focus ?? true
         ), let newPane = target.tab.splitRoot.findPane(id: newID)
         else {
             throw ControlError(code: .internalError, message: "split failed")

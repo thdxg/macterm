@@ -43,7 +43,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `project rename <project> <name>` | Rename a project. `Pinned` is reserved. |
 | `project remove <project> [--force]` | Remove a project, killing its sessions. Returns `busy` when a pane runs a program, unless forced. Deletes no files. |
 | `tab list [--project P]` | Tabs of a project (default: active). |
-| `tab new [--project P] [--run CMD]` | New tab, becomes active. `--run` types CMD into the fresh shell. |
+| `tab new [--project P] [--run CMD] [--no-focus]` | New tab, becomes active unless `--no-focus`. `--run` types CMD into the fresh shell. |
 | `tab select <tab> [--window W]` | Activate a tab (`tab:3`, index, UUID, or exact title). |
 | `tab move <tab> <slot>` | Reorder a tab. `slot` is its **final** 1-based position. |
 | `tab rename <tab> [title] [--reset]` | Rename a tab, or restore the automatic title. |
@@ -61,7 +61,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, and execution state. |
 | `pane inspect [target]` | Snapshot of a pane's terminal core. Needs a live surface. |
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text. Text only, pipeline-friendly. |
-| `pane split [--direction right\|left\|down\|up\|auto] [--run CMD] [target]` | Split a pane; the new pane inherits the cwd. `auto` picks the longer axis. |
+| `pane split [--direction right\|left\|down\|up\|auto] [--run CMD] [--no-focus] [target]` | Split a pane; the new pane inherits the cwd. `auto` picks the longer axis. `--no-focus` keeps the current focus and zoom. |
 | `pane mirror [--direction …] [target]` | Show the same session in a second pane. Focusing a mirror makes it the leader; the other dims. |
 | `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
 | `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way. A no-op at the outermost edge, not an error. |
@@ -78,6 +78,19 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `tutor [project\|pinned]` | Print a short tutorial, with your own keybinds. Needs a running app. |
 | `ssh <ssh args…>` | Run ssh with Macterm's terminal integration. Needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false`, `--verbose`. |
 | `skills [name] [--list]` | Print [skills for coding agents](#skills-for-coding-agents): all of them after install instructions, or one `SKILL.md` verbatim. Needs no running app. |
+
+## Starting a background terminal
+
+`tab new --no-focus` starts a tab's shell without selecting it. `pane split --no-focus` starts a split without moving pane focus or clearing zoom. Both leave project/window selections and focus history alone, even when the target project or tab isn't visible. An explicitly unloaded project's row becomes loaded again when a background shell starts, without selecting the project; its other terminals remain unstarted until the project is selected. Without the flag, creation keeps its usual selection behavior.
+
+```sh
+macterm tab new --project api --no-focus --run "npm test"
+macterm pane split --session "$MACTERM_SESSION" --no-focus --run "npm run dev"
+```
+
+The shell starts without visiting the child, with or without `--run`. Creation returns before the shell is necessarily ready for subsequent input; callers using `pane run` should wait for its prompt. Use `--json` to get the new tab/pane identity, and `pane list --project P --tab T` to find a new tab's session. `tab new` defaults to the **active project**, not the caller's project; pass `--project` explicitly when those may differ.
+
+For automation, pin the app with `--socket`. Check the bundled CLI's `tab new --help` / `pane split --help` for `--no-focus` before relying on it; older versions don't support the flag. Use the CLI bundled with the app you target: a newer CLI's help cannot prove an older running app supports it, and an older app silently ignores the wire option.
 
 ## Targeting a pane
 

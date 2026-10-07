@@ -26,6 +26,24 @@ struct WorkspaceTests {
     }
 
     @Test
+    func createTab_without_focus_never_visits_or_records_the_new_tab() {
+        let ws = makeWorkspace()
+        let previous = ws.createTab(projectPath: "/tmp")
+        let current = ws.createTab(projectPath: "/tmp")
+        let recency = ws.recencyOrder()
+        var selections = 0
+        ws.onActiveTabChanged = { selections += 1 }
+
+        let background = ws.createTab(projectPath: "/tmp", focus: false)
+
+        #expect(ws.activeTabID == current.id)
+        #expect(selections == 0)
+        #expect(ws.recencyOrder() == recency + [background.id])
+        ws.closeTab(current.id)
+        #expect(ws.activeTabID == previous.id)
+    }
+
+    @Test
     func adoptTab_appends_existing_tab_and_selects_it() {
         let ws = makeWorkspace()
         let original = ws.tabs[0].id

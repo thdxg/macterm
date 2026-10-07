@@ -71,10 +71,11 @@ extension AgentSkills {
         - `macterm tab rename --project api 2 --reset` restores the automatic title, the running program's name.
         - `macterm tab move --project api 3 1` makes tab 3 the first tab.
 
-        A tab that has never been on screen has no terminals yet, and that includes a new tab in a project the
-        user isn't looking at: its `--run` commands wait and `pane run` answers `no_surface` until the tab is
-        shown. A project not opened since Macterm launched has no tabs to add to at all. Build in the project
-        on screen, or `macterm project select` the project first.
+        Add `--no-focus` to `tab new` or `pane split` to start the new terminal without changing selection,
+        focus history or zoom. Its shell starts even in a hidden tab or project; wait for its prompt before
+        using `pane run`. Without that flag, a never-viewed tab in another project may have no terminal yet:
+        its `--run` command waits and `pane run` answers `no_surface` until viewed. The target project must
+        already be loaded; a project not opened since launch has no workspace to add tabs to.
 
         ## 3. Save the layout, apply it later
 
