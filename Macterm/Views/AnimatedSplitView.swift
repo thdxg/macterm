@@ -76,9 +76,24 @@ struct SplitRootView: View {
 /// through, its own outer edge of the split: the right pane of a side-by-
 /// side split slides right, the left pane left; the bottom pane of a stacked
 /// split slides down, the top pane up.
+///
+/// A spring, deliberately, and one defined by when it SETTLES. SwiftUI
+/// drives a spring itself, frame by frame, so every frame reaches the
+/// surfaces as a resize and the text reflows along with the edge (and the
+/// fork's resize leftover slides it). A timing curve (`easeOut`, a cubic
+/// bezier) is bridged to Core Animation for a representable's frame
+/// instead: the view is sized once and its layer is animated, so the
+/// surface is stretched for the duration and resized at the end (measured:
+/// two SIGWINCHs per split, start and finish, nothing between). And a
+/// spring named by `.smooth(duration:)` has a *perceptual* duration — it
+/// kept settling for ~250 ms past it, a pixel or two per frame, each one a
+/// pty resize and a full redraw for the program for motion nobody could
+/// see. `settlingDuration` is the moment the spring is at rest.
 enum SplitAnimation {
     static let duration: TimeInterval = 0.3
-    static var curve: Animation { .smooth(duration: duration) }
+    static var curve: Animation {
+        .spring(Spring(settlingDuration: duration, dampingRatio: 1.0))
+    }
 }
 
 /// The split tree laid out flat: every pane is a child of one ZStack, keyed
