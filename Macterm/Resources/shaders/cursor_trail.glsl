@@ -1,13 +1,15 @@
-// Macterm — Cursor trail (Settings → Experimental → Cursor trail).
+// Macterm — Cursor trail (Settings → Animations → Cursor trail).
 //
 // A translucent streak in the cursor color from where the cursor was to
-// where it is, whose tail catches up with its head over DURATION. Macterm
-// lists this shader before cursor_glide.glsl, so with both on the streak is
-// drawn behind the gliding cursor, and the timing matches so the streak's
-// head tracks the glide rather than the cell the cursor will land in.
+// where it is, whose tail catches up with its head over DURATION. The
+// timing matches the renderer's smooth cursor (the fork's `smooth-cursor`
+// key, `CursorGlide.duration_s`), so with both on the streak's head tracks
+// the gliding cursor rather than the cell it will land in. The gliding
+// cursor is drawn by the cell shaders, under this shader's output, so the
+// streak is composited over it; it is translucent, so the cursor shows.
 
 // --- Tuning ---
-const float DURATION = 0.14;  // seconds; keep equal to cursor_glide.glsl
+const float DURATION = 0.14;  // seconds; keep equal to CursorGlide.duration_s
 const float TAIL_LAG = 0.5;   // fraction of the move the tail waits before following
 const float OPACITY = 0.6;    // peak streak opacity
 const float AA = 1.0;         // edge antialiasing in pixels

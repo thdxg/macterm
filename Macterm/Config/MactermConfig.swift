@@ -68,25 +68,27 @@ final class MactermConfig {
 
     /// The Settings → Animations toggles that are ghostty-side switches the
     /// overrides file flips. Smooth scrolling ships on; the two cursor
-    /// shaders are opt-in, so a user who never opens the pane gets the
+    /// effects are opt-in, so a user who never opens the pane gets the
     /// user-config cursor behavior.
     ///
     /// - Smooth scrolling is the fork's `smooth-scroll` key: libghostty
     ///   already accumulates precise trackpad deltas in pixels, and with the
     ///   key on it renders the sub-row remainder. Macterm forwards every
     ///   wheel event untouched (#393), so the gate must live on that side.
-    /// - Smooth cursor and cursor trail are bundled custom shaders
-    ///   (`Resources/shaders/`, installed by `AnimationShaders` with the
-    ///   framebuffer-encoding header) appended to the user's own
-    ///   `custom-shader` list — the key is repeatable, and the overrides load last, so the
-    ///   user's shaders stay and run first. The trail is listed before the
-    ///   glide so it renders beneath the drawn cursor. The smooth cursor also
-    ///   forces `cursor-opacity = 0`: the shader draws the focused cursor
-    ///   itself, and ghostty's would otherwise jump ahead of it. libghostty
-    ///   applies that key only while focused, so unfocused panes keep the
-    ///   native hollow cursor. It is the one user-visible ghostty key a
-    ///   Macterm setting overrides, which is why that toggle defaults to off
-    ///   while smooth scrolling does not.
+    /// - Smooth cursor is the fork's `smooth-cursor` key: the renderer's own
+    ///   cell shaders draw the focused cursor at an eased rectangle and
+    ///   color the text under it by coverage, so a glyph the cursor is
+    ///   halfway across is two-toned. It replaced a custom shader that
+    ///   could only move a block over an already-composited frame (the
+    ///   destination glyph was cursor-colored from the first frame, and a
+    ///   partly covered cell's own background was lost), and the
+    ///   `cursor-opacity = 0` override that shader needed.
+    /// - Cursor trail is a bundled custom shader (`Resources/shaders/`,
+    ///   installed by `AnimationShaders` with the framebuffer-encoding
+    ///   header) appended to the user's own `custom-shader` list — the key
+    ///   is repeatable, and the overrides load last, so the user's shaders
+    ///   stay and run first. It reads ghostty's cursor uniforms, which still
+    ///   name the cursor's cell under `smooth-cursor`.
     struct Animations: Equatable {
         var smoothScrolling = false
         var smoothCursor = false
@@ -104,13 +106,11 @@ final class MactermConfig {
             if smoothScrolling {
                 lines.append("smooth-scroll = true")
             }
-            guard let shaderDirectory else { return lines }
-            if trail {
-                lines.append("custom-shader = \(shaderDirectory)/cursor_trail.glsl")
-            }
             if smoothCursor {
-                lines.append("custom-shader = \(shaderDirectory)/cursor_glide.glsl")
-                lines.append("cursor-opacity = 0")
+                lines.append("smooth-cursor = true")
+            }
+            if trail, let shaderDirectory {
+                lines.append("custom-shader = \(shaderDirectory)/cursor_trail.glsl")
             }
             return lines
         }

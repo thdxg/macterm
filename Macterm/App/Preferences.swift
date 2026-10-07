@@ -294,10 +294,9 @@ final class Preferences {
         }
     }
 
-    /// The cursor glides between cells instead of jumping. Implemented as a
-    /// bundled ghostty custom shader (`Resources/shaders/cursor_glide.glsl`)
-    /// that Macterm appends to the config through the overrides file, along
-    /// with `cursor-opacity = 0` so the shader can be the focused cursor.
+    /// The cursor glides between cells instead of jumping, and the text it
+    /// covers on the way is cursor-colored exactly as far as it is covered.
+    /// The fork's `smooth-cursor` key, written through the overrides file.
     /// See `MactermConfig.Animations`.
     var smoothCursor: Bool {
         didSet {
@@ -307,7 +306,7 @@ final class Preferences {
     }
 
     /// A fading streak follows the cursor across larger moves. The bundled
-    /// `cursor_trail.glsl`, injected the same way as `smoothCursor`.
+    /// `cursor_trail.glsl`, appended to the config through the overrides file.
     var cursorTrail: Bool {
         didSet {
             Keys.cursorTrail.write(cursorTrail, to: defaults)

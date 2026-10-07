@@ -5,7 +5,9 @@ private let logger = Logger(subsystem: appBundleID, category: "AnimationShaders"
 
 /// The Settings → Animations cursor shaders as libghostty loads them: the
 /// bundled templates (`Resources/shaders/`) written to Application Support
-/// with a header saying how ghostty's framebuffer is encoded.
+/// with a header saying how ghostty's framebuffer is encoded. Only the
+/// trail is a shader now; the smooth cursor is the fork's `smooth-cursor`
+/// key (see `MactermConfig.Animations`).
 ///
 /// A custom shader writes straight into that framebuffer, and nothing in its
 /// uniforms says what the framebuffer holds: gamma-encoded Display P3 under
@@ -17,8 +19,8 @@ private let logger = Logger(subsystem: appBundleID, category: "AnimationShaders"
 /// two answers as `#define`s, read from the user's *stated* config on every
 /// regenerate, so a reload after editing either key re-renders the files.
 enum AnimationShaders {
-    /// Installed in this order in the overrides: trail beneath glide.
-    static let fileNames = ["cursor_trail.glsl", "cursor_glide.glsl"]
+    /// Every bundled template, each installed when any effect is on.
+    static let fileNames = ["cursor_trail.glsl"]
 
     /// How a config color must be written into the framebuffer.
     struct Encoding: Equatable {
@@ -75,8 +77,7 @@ enum AnimationShaders {
 
     /// Write every rendered template into `directory`, returning its path
     /// for the `custom-shader` lines, or nil when the templates are missing
-    /// or a write failed (logged: a half-installed pair would load one
-    /// effect and silently drop the other).
+    /// or a write failed (logged, so a missing effect has a cause).
     static func install(into directory: URL, encoding: Encoding) -> String? {
         guard let bundled = bundledDirectory() else { return nil }
         do {

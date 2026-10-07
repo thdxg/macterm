@@ -45,7 +45,7 @@ struct AnimationShadersTests {
     }
 
     @Test
-    func trail_is_installed_before_glide_so_it_renders_beneath() {
-        #expect(AnimationShaders.fileNames == ["cursor_trail.glsl", "cursor_glide.glsl"])
+    func only_the_trail_is_a_shader() {
+        #expect(AnimationShaders.fileNames == ["cursor_trail.glsl"])
     }
 }

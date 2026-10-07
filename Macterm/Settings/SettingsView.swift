@@ -1389,8 +1389,8 @@ private struct AppearanceSettings: View {
 // MARK: - Animations
 
 /// Motion: what moves, and how. Smooth scrolling and split animations are on
-/// by default; the two cursor effects are bundled ghostty shaders and stay
-/// opt-in, because the glide takes over drawing the focused cursor.
+/// by default; the two cursor effects stay opt-in, since they change how the
+/// focused cursor is drawn.
 private struct AnimationsSettings: View {
     @State
     private var smoothScrolling: Bool = Preferences.shared.smoothScrolling
