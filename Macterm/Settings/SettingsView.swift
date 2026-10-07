@@ -10,12 +10,20 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case projects = "Projects"
     case appearance = "Appearance"
     case animations = "Animations"
+    case keymaps = "Keymaps"
     case quickTerminal = "Quick Terminal"
     case widgets = "Widgets"
-    case keymaps = "Keymaps"
     case palettes = "Palettes"
     case passwords = "Password Manager"
     case updates = "Updates"
+
+    /// The sidebar's groups, separated by a gap: the app itself, then the
+    /// things it puts on screen beyond the terminal window, then updates.
+    static let groups: [[SettingsPane]] = [
+        [.general, .projects, .appearance, .animations, .keymaps],
+        [.quickTerminal, .widgets, .palettes, .passwords],
+        [.updates],
+    ]
 
     var id: String { rawValue }
     var title: String { rawValue }
@@ -56,9 +64,15 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
-            List(SettingsPane.allCases, selection: $selection) { pane in
-                NavigationLink(value: pane) {
-                    Label(pane.title, systemImage: pane.symbol)
+            List(selection: $selection) {
+                ForEach(Array(SettingsPane.groups.enumerated()), id: \.offset) { _, group in
+                    Section {
+                        ForEach(group) { pane in
+                            NavigationLink(value: pane) {
+                                Label(pane.title, systemImage: pane.symbol)
+                            }
+                        }
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(Self.sidebarWidth)
