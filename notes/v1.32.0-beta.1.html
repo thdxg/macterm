@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.32.0-beta.1 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li>The command palette's new Password Manager screen types any saved password into the focused pane, so prompts Macterm can't detect, such as <code class="notranslate">sudo</code> on a remote server, can still be filled, and passwords can now be added by hand. (#500, #502)</li>
+<li>A new Worktrees palette screen lists the active project's git worktrees and opens a tab in the one you pick. (#505)</li>
+<li>Searching the palette and Settings now ranks results the way fzf does and highlights the matched characters, and Settings → Keymaps can be searched by action, section or keybind. (#506, #508)</li>
+<li>⌘-clicking a path like <code class="notranslate">src/main.rs:42</code> in a pane opens the file, and Macterm can be a text file's default app, opening it in your <code class="notranslate">$VISUAL</code> or <code class="notranslate">$EDITOR</code> in a new split or tab. (#484, #485)</li>
+<li>Dragging a folder onto the sidebar opens it as a new project. (#489)</li>
+<li>Right-clicking the toolbar lets you hide it or arrange the tab switcher, and View → Hide Toolbar toggles it. (#482)</li>
+<li>Settings → Animations → Snap to whole row lets a trackpad scroll come to rest on a whole row instead of between rows. (#503)</li>
+<li>The smooth cursor now animates the text under it as it glides, and the cursor trail no longer keeps the pane redrawing while it sits idle. (#490, #493)</li>
+<li>Resizing a split from the keyboard now slides like a split does, and the split animation comes to rest without a tail of tiny resizes. (#494, #495)</li>
+<li>Force click and ⌃⌘D look up the word under the pointer, ⌃-click opens the context menu, which now offers Copy for a selection, and ghostty's <code class="notranslate">focus-follows-mouse</code> is honored. (#491)</li>
+<li>Settings sections now have a help button that opens their page in the docs. (#488)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li>Each window now reopens at the size and position it was left at instead of the default size. (#498)</li>
+<li>Clicking a link a program printed can no longer launch an app or executable: web and mail links open directly, other schemes ask first, and anything that could run code is blocked. (#483)</li>
+<li>Right click works again in Helix and other crossterm programs after Macterm relaunches. (#492)</li>
+<li>A new pane no longer sometimes shows a stray <code class="notranslate">session "…" created</code> line above its prompt. (#487)</li>
+<li>A hovered link's underline and pointing hand no longer stick after the pointer leaves the pane, and programs and links follow the pointer in a window that isn't key. (#491)</li>
+<li>Apply Layout's hints and errors now say "layout file", matching Save Layout. (#504)</li>
+<li>Settings → Appearance's Peek style option now sits under its toggle and dims when peeking is off. (#501)</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Settings → Passwords is now Settings → Password Manager. (#502)</li>
+<li>Smooth cursor no longer overrides <code class="notranslate">cursor-opacity</code>, so your own value for that key applies again. (#490)</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> for this release.</p>
+</body>
+</html>
