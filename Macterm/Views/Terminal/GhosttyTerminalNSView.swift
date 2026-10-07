@@ -1998,13 +1998,15 @@ extension GhosttyTerminalNSView {
     /// command-submission evidence: a password is never a command. The Return
     /// rides `sendKey`, so it does ping `onInteraction` and reports a bare
     /// `onCommandSubmitted(false)`, exactly as a Return the user presses.
+    /// `submit: false` leaves the Return to the user (an on-demand fill into
+    /// a line that echoes).
     @discardableResult
-    func sendSecret(_ secret: String) -> Bool {
+    func sendSecret(_ secret: String, submit: Bool = true) -> Bool {
         guard let surface, !secret.isEmpty else { return false }
         secret.withCString { ptr in
             _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
         }
-        return sendKey(keyCode: 36, mods: [])
+        return submit ? sendKey(keyCode: 36, mods: []) : true
     }
 
     /// The cursor cell, in this view's coordinates — where a popover about

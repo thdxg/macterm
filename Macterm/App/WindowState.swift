@@ -82,7 +82,13 @@ final class WindowState: Identifiable {
     var frame: String?
 
     var isCommandPaletteVisible = false
+    /// The palette screen showing (`PaletteScope`); nil is the root. Reset
+    /// whenever the palette closes.
+    var paletteScope: PaletteScopeID?
     var isNewRemoteProjectSheetPresented = false
+    /// The password editor sheet up in this window — the palette's Password
+    /// Manager adding an entry.
+    var passwordEditor: PasswordEditorRequest?
 
     init(activeProjectID: UUID? = nil, sidebarWidth: Double? = nil) {
         self.activeProjectID = activeProjectID

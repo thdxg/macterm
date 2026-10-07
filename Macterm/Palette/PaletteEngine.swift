@@ -27,6 +27,9 @@ struct PaletteItem: Identifiable {
     /// never executes — visible so the user learns *why* it's unavailable
     /// (the subtitle carries the reason) instead of wondering where it went.
     let isEnabled: Bool
+    /// Set on an item that is a way into a palette scope: running it shows
+    /// that scope instead of closing the palette, and `action` is not called.
+    let opensScope: PaletteScopeID?
     let action: () -> Void
 
     init(
@@ -38,6 +41,7 @@ struct PaletteItem: Identifiable {
         keybindSymbols: [String]? = nil,
         score: Int = 1,
         isEnabled: Bool = true,
+        opensScope: PaletteScopeID? = nil,
         action: @escaping () -> Void
     ) {
         self.id = id ?? "\(category ?? "")/\(title)"
@@ -48,6 +52,7 @@ struct PaletteItem: Identifiable {
         self.keybindSymbols = keybindSymbols
         self.score = score
         self.isEnabled = isEnabled
+        self.opensScope = opensScope
         self.action = action
     }
 
@@ -65,6 +70,7 @@ struct PaletteItem: Identifiable {
             keybindSymbols: keybindSymbols,
             score: score,
             isEnabled: isEnabled,
+            opensScope: opensScope,
             action: action
         )
     }

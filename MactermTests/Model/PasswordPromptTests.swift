@@ -404,3 +404,41 @@ struct PasswordVaultTests {
         #expect(vault.entries(matching: "nothing").isEmpty)
     }
 }
+
+/// Entries added for a command alone, and how a picked password is typed.
+struct OnDemandPasswordTests {
+    @Test
+    func an_entry_without_a_prompt_is_on_demand_only() {
+        let id = PasswordPromptIdentity.declaredEntryID(prompt: "", command: "sudo -i")
+        #expect(id == PasswordEntryID(command: "sudo", prompt: ""))
+        #expect(id.isOnDemandOnly)
+        #expect(id.title == "sudo")
+        #expect(!PasswordEntryID(command: "sudo", prompt: "Password:").isOnDemandOnly)
+    }
+
+    @Test
+    func an_on_demand_account_cannot_collide_with_a_prompt_only_one() {
+        let onDemand = PasswordEntryID(command: "deploy", prompt: "")
+        let promptOnly = PasswordEntryID(command: nil, prompt: "deploy")
+        #expect(onDemand.account != promptOnly.account)
+        #expect(onDemand.account != PasswordEntryID(command: "deploy", prompt: "x").account)
+    }
+
+    @Test
+    func the_line_mode_follows_canonical_and_echo() {
+        let canonical = tcflag_t(ICANON)
+        let echo = tcflag_t(ECHO)
+        #expect(TerminalLineMode(localModes: canonical) == .password)
+        #expect(TerminalLineMode(localModes: canonical | echo) == .echoing)
+        #expect(TerminalLineMode(localModes: echo) == .raw)
+        #expect(TerminalLineMode(localModes: 0) == .raw)
+    }
+
+    @Test
+    func only_a_verified_read_gets_its_return() {
+        #expect(OnDemandPasswordFill(mode: .password).isVerified)
+        #expect(!OnDemandPasswordFill(mode: .raw).isVerified, "ssh, tmux and a shell's editor are left for the user to submit")
+        #expect(!OnDemandPasswordFill(mode: .echoing).isVerified)
+        #expect(!OnDemandPasswordFill(mode: nil).isVerified, "an unreadable tty is not a password read")
+    }
+}

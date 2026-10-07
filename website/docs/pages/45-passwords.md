@@ -29,6 +29,24 @@ Autofill only ever happens when you press it — a program showing a prompt can'
 
 If a saved password stops working, the bubble says so. Type the new one, and Macterm offers to update the saved password once it works.
 
+## Typing a password on demand
+
+Some prompts Macterm can't see — `sudo` on a server you reached with `ssh`, or a prompt inside tmux — and a password you added yourself may not belong to any prompt at all. For those, open the command palette (<kbd>⌘P</kbd>) and choose **Password Manager**. The palette switches to your saved passwords; type to search them by command or prompt, and pick one to type it into the focused pane. <kbd>Esc</kbd>, or <kbd>Delete</kbd> with nothing typed, goes back to the full palette.
+
+After Touch ID, as for Autofill, Macterm types the password. Picking it is the go-ahead: nothing asks whether the pane is really at a password prompt. What Macterm decides is whether to press Return after it:
+
+- **At a password prompt it can see** (input by line, echo off), Return is pressed, as Autofill would.
+- **Anywhere else** — ssh or tmux relaying a server's prompt, your shell's own prompt, a line that shows what you type — the password is typed and left for you: press <kbd>Return</kbd> to send it. If it landed in the wrong place, delete it instead; nothing has run. For `sudo` on a server, that's one extra Return.
+
+## Adding a password yourself
+
+Click **+** next to **Saved Passwords** in Settings → Passwords, or choose **Add Password…** in the palette's Password Manager. While searching there, **Add Password for Command: …** starts one with what you typed as the command. Every password you add needs a command; the prompt is up to you:
+
+- **Command and prompt**: autofilled when that command shows that prompt, exactly like a saved one.
+- **Command only**: never offered at a prompt. It's typed only when you pick it from the palette — the way to keep, say, a server's `sudo` password.
+
+Key passphrases are the exception: they belong to the key, whichever command asks, so they're saved from the prompt itself. Type one at its prompt once and save it there.
+
 ## What a password is saved for
 
 Each password is filed under two things: **the command that asked** and **the prompt line it printed**. Both must match exactly for Autofill to be offered. Nothing else is part of the match — not the project, the tab, the window, or the working directory.
@@ -52,7 +70,7 @@ These two shared entries are only offered to a program your own account can't ha
 
 If Macterm can't tell which program is asking, it doesn't offer Autofill or a save for that prompt.
 
-**Details…** in Settings → Passwords shows the exact command and prompt an entry matches, and lets you edit them. Clearing the command makes the entry match that prompt from any command.
+**Details…** in Settings → Passwords shows the exact command and prompt an entry matches, and lets you edit them. Clearing the prompt makes it a palette-only entry. The command can't be cleared; an entry saved for a prompt from any command (a key passphrase) stays that way.
 
 ## Where passwords are stored
 
@@ -89,12 +107,12 @@ Macterm doesn't change any system authentication settings. Its authentication pr
 
 | Setting | What it does |
 | --- | --- |
-| **Enable password manager** | On (the default): offer to save, and autofill. Off: nothing is saved, captured or filled in, and the setting below is disabled. |
+| **Enable password manager** | On (the default): offer to save, and autofill. Off: nothing is saved, captured or filled in — the palette's **Password Manager** included — and the setting below is disabled. |
 | **Require authentication** | **Once per app launch** (the default; also asks again after the Mac locks or sleeps), or **Every time**. |
-| **Saved Passwords** | Search the list; a row's menu offers **Details…** (the full command and prompt, editable, and the password after you authenticate — shown, copied or changed), **Copy Password** and **Remove**. |
+| **Saved Passwords** | Search the list; **+** adds a password; a row's menu offers **Details…** (the full command and prompt, editable, and the password after you authenticate — shown, copied or changed), **Copy Password** and **Remove**. |
 
 To turn the feature off, switch off **Enable password manager**. Macterm then never keeps a copy of what you type at a prompt, never shows a bubble and never fills anything in. Passwords you already saved stay in your keychain until you remove them, and the list stays available for that. Macterm still notices password prompts, because that is also what turns on Secure Keyboard Entry.
 
 ## Limits
 
-Macterm detects a prompt by the terminal mode the program reads it in (input by line, echo off) — the same rule Ghostty and iTerm2 use for secure input. That covers local panes and a remote project's own ssh login, but not a prompt on a remote host inside an ssh session — for example `sudo` on a server — nor prompts that draw their own `*` characters.
+Macterm detects a prompt by the terminal mode the program reads it in (input by line, echo off) — the same rule Ghostty and iTerm2 use for secure input. That covers local panes and a remote project's own ssh login, but not a prompt on a remote host inside an ssh session — for example `sudo` on a server — nor prompts that draw their own `*` characters. For those, [type the password on demand](#typing-a-password-on-demand).

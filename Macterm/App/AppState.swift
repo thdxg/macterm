@@ -813,6 +813,21 @@ final class AppState {
         set { keyOrFirstWindow?.isCommandPaletteVisible = newValue }
     }
 
+    /// Show the palette on `scope` (nil: the root). A different screen
+    /// starts from an empty query — text typed for one search means nothing
+    /// to another.
+    func openCommandPalette(scope: PaletteScopeID?) {
+        guard let window = keyOrFirstWindow else { return }
+        if window.paletteScope != scope { commandPaletteQuery = "" }
+        window.paletteScope = scope
+        window.isCommandPaletteVisible = true
+    }
+
+    /// Presents the password editor sheet in the window the user is in.
+    func presentPasswordEditor(_ request: PasswordEditorRequest) {
+        keyOrFirstWindow?.passwordEditor = request
+    }
+
     /// Presents the "New Remote Project" sheet (#104) — set by the palette
     /// command, the sidebar's New Project menu and Settings → Projects,
     /// consumed by `MainWindow`.

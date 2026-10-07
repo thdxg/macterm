@@ -38,6 +38,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case resizeDown
     case copySessionID
     case autofillPassword
+    case passwordManager
     // Projects
     case openProject
     case newRemoteProject
@@ -92,6 +93,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .resizeDown: "Resize Pane Down"
         case .copySessionID: "Copy Session ID"
         case .autofillPassword: "Autofill Password"
+        case .passwordManager: "Password Manager"
         case .openProject: "Open Project"
         case .newRemoteProject: "New Remote Project"
         case .renameProject: "Rename Current Project"
@@ -143,7 +145,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .resizeUp,
              .resizeDown,
              .copySessionID,
-             .autofillPassword: .panes
+             .autofillPassword,
+             .passwordManager: .panes
         case .openProject,
              .newRemoteProject,
              .renameProject,
@@ -211,11 +214,22 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .applyLayout: .applyLayout
         case .saveLayout: .saveLayout
         case .newRemoteProject,
+             .passwordManager,
              .newDesktopWidget,
              .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,
              .checkForUpdate: nil
+        }
+    }
+
+    /// The palette screen this command is (`PaletteScope`), if it is one.
+    /// Its palette row enters the scope in place; anywhere else — the menu
+    /// bar, a keybind — its action opens the palette on it.
+    var paletteScope: PaletteScopeID? {
+        switch self {
+        case .passwordManager: .passwords
+        default: nil
         }
     }
 

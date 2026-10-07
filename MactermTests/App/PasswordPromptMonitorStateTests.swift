@@ -19,6 +19,10 @@ struct PasswordPromptMonitorStateTests {
         var enabled = true
         var authorized = true
         var now = Date(timeIntervalSinceReferenceDate: 1000)
+        /// The tty as an on-demand fill reads it; nil follows `atPrompt`.
+        var lineMode: TerminalLineMode?
+        var authorizations = 0
+        var typed: [(secret: String, plan: OnDemandPasswordFill)] = []
     }
 
     @MainActor
@@ -55,7 +59,12 @@ struct PasswordPromptMonitorStateTests {
             probes.makeBubble = { bubble }
             probes.autoSecureInput = { false }
             probes.isEnabled = { world.enabled }
-            probes.authorize = { _ in world.authorized }
+            probes.authorize = { _ in
+                world.authorizations += 1
+                return world.authorized
+            }
+            probes.lineMode = { _ in world.lineMode ?? (world.atPrompt ? .password : .raw) }
+            probes.typeSecret = { _, secret, plan in world.typed.append((secret, plan)) }
             probes.focusedView = { nil }
             probes.isAppActive = { false }
             monitor = PasswordPromptMonitor(vault: vault, now: { world.now }, probes: probes)
@@ -478,6 +487,65 @@ struct PasswordPromptMonitorStateTests {
         h.monitor.forget(h.view)
         #expect(h.state.phase == "idle")
         #expect(h.state.bubble == nil)
+    }
+}
+
+extension PasswordPromptMonitorStateTests {
+    private var sudo: PasswordEntryID { PasswordEntryID(command: "sudo", prompt: "") }
+
+    @Test
+    func an_on_demand_fill_at_a_password_read_types_and_is_judged() async {
+        let h = Harness()
+        h.vault.save("s3cret", for: sudo)
+        h.prompt("[sudo] password for ethan:")
+        #expect(await h.monitor.performOnDemandFill(sudo, in: h.view))
+        #expect(h.world.authorizations == 1)
+        #expect(h.world.typed.map(\.secret) == ["s3cret"])
+        #expect(h.world.typed.first?.plan.isVerified == true)
+        #expect(h.state.phase == "verifying")
+        h.respond("Sorry, try again.", promptAgain: "[sudo] password for ethan:")
+        h.advance(PasswordPromptMonitor.confirmDelay)
+        #expect(h.state.bubble != "save", "a typed-for-you password is never offered for saving")
+    }
+
+    @Test
+    func anywhere_but_a_password_read_it_types_without_return_and_asks_nothing() async {
+        let h = Harness()
+        h.vault.save("s3cret", for: sudo)
+        for mode in [TerminalLineMode.raw, .echoing] {
+            h.world.lineMode = mode
+            #expect(await h.monitor.performOnDemandFill(sudo, in: h.view))
+        }
+        #expect(h.world.typed.map(\.secret) == ["s3cret", "s3cret"])
+        #expect(h.world.typed.map(\.plan.isVerified) == [false, false])
+        #expect(h.state.phase == "idle", "there is no read to judge")
+    }
+
+    @Test
+    func a_password_read_gone_by_the_end_of_authentication_types_nothing() async {
+        let h = Harness()
+        h.vault.save("s3cret", for: sudo)
+        h.world.lineMode = .password
+        var probes = PasswordPromptMonitor.Probes()
+        probes.lineMode = { _ in h.world.lineMode }
+        probes.authorize = { _ in
+            h.world.lineMode = .raw
+            return true
+        }
+        probes.typeSecret = { _, secret, plan in h.world.typed.append((secret, plan)) }
+        let monitor = PasswordPromptMonitor(vault: h.vault, now: { h.world.now }, probes: probes)
+        #expect(await !monitor.performOnDemandFill(sudo, in: h.view))
+        #expect(h.world.typed.isEmpty)
+    }
+
+    @Test
+    func a_refused_authentication_types_nothing() async {
+        let h = Harness()
+        h.vault.save("s3cret", for: sudo)
+        h.world.lineMode = .password
+        h.world.authorized = false
+        #expect(await !h.monitor.performOnDemandFill(sudo, in: h.view))
+        #expect(h.world.typed.isEmpty)
     }
 }
 

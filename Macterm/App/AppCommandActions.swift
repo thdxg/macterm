@@ -266,6 +266,10 @@ extension AppCommand {
             // hides the palette row.
             guard PasswordPromptMonitor.shared.canAutofillFocused else { return nil }
             return { PasswordPromptMonitor.shared.autofillFocused() }
+        case .passwordManager:
+            // The master switch covers on-demand filling too.
+            guard Preferences.shared.passwordManagerEnabled else { return nil }
+            return { ctx.appState.openCommandPalette(scope: .passwords) }
         case .checkForUpdate:
             // Always present in the palette; the guard only no-ops when a check
             // is already in flight (canCheckForUpdates flips false during one).
@@ -284,6 +288,10 @@ extension AppCommand {
     /// keeps the plain disabled look either way.
     @MainActor
     func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
+        // Off by the master switch: say where it is rather than vanish.
+        if self == .passwordManager {
+            return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Passwords"
+        }
         guard self == .applyLayout,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })

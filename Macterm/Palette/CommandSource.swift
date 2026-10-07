@@ -66,6 +66,9 @@ struct CommandSource: PaletteSource {
             keybind: command.hotkeyAction.flatMap(keybindDisplay),
             keybindSymbols: command.hotkeyAction.flatMap(keybindSymbols),
             score: 0,
+            // A command that is a palette screen opens it in place rather
+            // than closing the palette to reopen it.
+            opensScope: command.paletteScope,
             action: action
         )
     }

@@ -88,6 +88,9 @@ struct CommandPalettePanel: View {
         )
     }
 
+    /// The palette screen showing, nil for the root (`PaletteScope`).
+    private var scope: (any PaletteScope)? { windowState.paletteScope?.makeScope() }
+
     private var flatItems: [PaletteItem] { sections.flatMap(\.items) }
 
     /// `PaletteItem.id → flat index`, built once per body build. Replaces the
@@ -98,6 +101,7 @@ struct CommandPalettePanel: View {
     }
 
     private var placeholderText: String {
+        if let scope { return scope.placeholder }
         let q = query.trimmingCharacters(in: .whitespaces)
         if q.hasPrefix("/") || q.hasPrefix("~") { return "Open directory as new project..." }
         return "Search projects or commands..."
@@ -110,9 +114,13 @@ struct CommandPalettePanel: View {
         return VStack(spacing: 0) {
             // Search field
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14))
-                    .foregroundStyle(MactermTheme.fgMuted)
+                if let pill = scope?.pill {
+                    PaletteScopePill(pill: pill)
+                } else {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14))
+                        .foregroundStyle(MactermTheme.fgMuted)
+                }
                 TextField(placeholderText, text: $appState.commandPaletteQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
@@ -215,6 +223,10 @@ struct CommandPalettePanel: View {
             selectedIndex = 0
             refresh()
         }
+        .onChange(of: windowState.paletteScope) {
+            selectedIndex = 0
+            refresh()
+        }
         .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { _ in
             moveSelection(-1)
             return .handled
@@ -236,14 +248,29 @@ struct CommandPalettePanel: View {
         .onKeyPress(.tab) {
             completeQuery()
         }
+        // Backspace with nothing left to delete steps out of a scope.
+        .onKeyPress(.delete) {
+            guard windowState.paletteScope != nil, query.isEmpty else { return .ignored }
+            leaveScope()
+            return .handled
+        }
         .onKeyPress(.escape) {
-            windowState.isCommandPaletteVisible = false
+            if windowState.paletteScope != nil {
+                leaveScope()
+            } else {
+                windowState.isCommandPaletteVisible = false
+            }
             return .handled
         }
     }
 
     private func refresh() {
-        sections = engine.search(query)
+        if let scope {
+            let context = PaletteContext(appState: appState, projectStore: projectStore)
+            sections = scope.sections(for: PaletteQuery(raw: query), context: context)
+        } else {
+            sections = engine.search(query)
+        }
         // Never rest the selection on a muted row (e.g. when it's the top
         // match after a query change).
         if flatItems.indices.contains(selectedIndex), !flatItems[selectedIndex].isEnabled,
@@ -283,7 +310,9 @@ struct CommandPalettePanel: View {
     /// input — letting the keypress fall through (`.ignored`) to default focus
     /// traversal in that case.
     private func completeQuery() -> KeyPress.Result {
-        guard !flatItems.isEmpty else { return .ignored }
+        // A scope's rows aren't completions of what is typed (its add rows
+        // quote the query back), so Tab keeps its focus meaning there.
+        guard scope == nil, !flatItems.isEmpty else { return .ignored }
         let top = flatItems[0]
         let completion: String = if let path = directoryPath(for: top) {
             // Re-expand a `~` query to keep the displayed prefix the user typed.
@@ -342,11 +371,61 @@ struct CommandPalettePanel: View {
         // keeps the palette open (selection normally can't land here — this
         // guards the mouse-hover path).
         guard item.isEnabled else { return }
+        if let next = item.opensScope {
+            enterScope(next)
+            return
+        }
         // Executing a command finishes the task, so the next open should start
         // fresh — only a dismissal (Escape / click-outside) preserves the query.
         query = ""
         windowState.isCommandPaletteVisible = false
         item.action()
+    }
+}
+
+private extension CommandPalettePanel {
+    /// Show `next` in place, starting from an empty query. The root's text
+    /// isn't kept: it was the search that found the way in.
+    func enterScope(_ next: PaletteScopeID) {
+        query = ""
+        windowState.paletteScope = next
+    }
+
+    func leaveScope() {
+        query = ""
+        windowState.paletteScope = nil
+    }
+}
+
+// MARK: - Scope pill
+
+/// The pill at the input's leading edge naming the palette screen showing:
+/// liquid glass on macOS 26 where the window draws glass, the theme's raised
+/// surface otherwise.
+private struct PaletteScopePill: View {
+    let pill: PalettePill
+
+    var body: some View {
+        Label(pill.title, systemImage: pill.systemImage)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(MactermTheme.fg)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .modifier(PillBackground())
+    }
+
+    private struct PillBackground: ViewModifier {
+        func body(content: Content) -> some View {
+            if #available(macOS 26.0, *), WindowAppearance.glassSupported {
+                content.glassEffect(.regular, in: .capsule)
+            } else {
+                content
+                    .background(MactermTheme.surface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(MactermTheme.border, lineWidth: 1))
+            }
+        }
     }
 }
 
