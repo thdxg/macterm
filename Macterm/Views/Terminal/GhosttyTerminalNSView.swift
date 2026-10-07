@@ -1378,10 +1378,13 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        // A force click's stages belong to the press it rode on.
+        prevPressureStage = 0
         guard let surface else { return }
         let pt = mousePoint(from: event)
         ghostty_surface_mouse_pos(surface, pt.x, pt.y, mods(event))
         _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods(event))
+        ghostty_surface_mouse_pressure(surface, 0, 0)
     }
 
     /// A drag belongs to the view the press went to wherever the pointer goes
@@ -1474,6 +1477,49 @@ final class GhosttyTerminalNSView: NSView {
             Self.mouseButton(fromNSEventButtonNumber: event.buttonNumber),
             mods(event)
         )
+    }
+
+    // MARK: - Force click
+
+    /// The force-click stage the current press has reached; reset on release.
+    private var prevPressureStage = 0
+
+    override func pressureChange(with event: NSEvent) {
+        guard let surface else { return }
+        // libghostty first: a deep press under a held left button selects the
+        // word there, and Look Up reads the state it sets.
+        ghostty_surface_mouse_pressure(surface, UInt32(event.stage), Double(event.pressure))
+        // Look Up once per press, on the move into stage 2 (the force click).
+        guard prevPressureStage < 2 else { return }
+        prevPressureStage = event.stage
+        guard event.stage == 2, Self.forceClickLooksUp else { return }
+        quickLook(with: event)
+    }
+
+    /// System Settings → Trackpad → "Force Click and haptic feedback". There
+    /// is no API for it; Ghostty.app reads the same global key.
+    private static var forceClickLooksUp: Bool {
+        CFPreferencesGetAppBooleanValue("com.apple.trackpad.forceClick" as CFString, kCFPreferencesAnyApplication, nil)
+    }
+
+    /// Look Up (force click, ⌃⌘D, a three-finger tap): the dictionary popover
+    /// for the word under the pointer, drawn in the terminal's font.
+    override func quickLook(with event: NSEvent) {
+        guard let surface else { return super.quickLook(with: event) }
+        var text = ghostty_text_s()
+        guard ghostty_surface_quicklook_word(surface, &text) else { return super.quickLook(with: event) }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard text.text_len > 0 else { return super.quickLook(with: event) }
+        var attributes: [NSAttributedString.Key: Any] = [:]
+        if let fontRaw = ghostty_surface_quicklook_font(surface) {
+            // A +1 copy: the dictionary keeps its own reference.
+            let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
+            attributes[.font] = font.takeUnretainedValue()
+            font.release()
+        }
+        // libghostty's origin is top-left, AppKit's bottom-left.
+        let origin = NSPoint(x: text.tl_px_x, y: bounds.height - text.tl_px_y)
+        showDefinition(for: NSAttributedString(string: String(cString: text.text), attributes: attributes), at: origin)
     }
 
     /// NSEvent.buttonNumber → libghostty button, mirroring the Ghostty mac
