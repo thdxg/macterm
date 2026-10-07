@@ -4,11 +4,11 @@ import SwiftUI
 // MARK: - Mount
 
 /// Puts the palette over a window while it is visible, with the system's
-/// own transitions: the scrim fades, and the panel fades while scaling in
-/// from just under full size at its top edge — the shape Spotlight's
-/// appearance has — in and out alike, on a short snappy curve. Reduce Motion
-/// lands both in one frame. One place owns this so every window's palette
-/// comes and goes the same way.
+/// own transitions: the scrim fades, and the panel comes in through
+/// SwiftUI's `blurReplace` — the blur-and-scale the system's own surfaces
+/// appear with — in and out alike, over about an eighth of a second.
+/// Reduce Motion lands both in one frame. One place owns this so every
+/// window's palette comes and goes the same way.
 struct CommandPaletteMount: View {
     let isVisible: Bool
 
@@ -22,7 +22,7 @@ struct CommandPaletteMount: View {
                     .transition(.opacity)
             }
         }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: isVisible)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isVisible)
     }
 }
 
@@ -73,9 +73,9 @@ struct CommandPaletteOverlay: View {
                 }
                 .frame(width: 500)
                 .padding(.top, max(0, geo.size.height * 0.15 - breadcrumb))
-                // With the mount's fade: the panel grows in from its top edge
-                // as it appears and shrinks back as it goes.
-                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+                // With the mount's fade: the panel resolves out of a blur as
+                // it appears and dissolves back into one as it goes.
+                .transition(.blurReplace)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: windowState.paletteStack.count)
