@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.32.0-beta.4 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li><code class="notranslate">macterm tab new</code> and <code class="notranslate">macterm pane split</code> take <code class="notranslate">--no-focus</code>, so scripts and coding agents can start a terminal in the background without switching your tab or moving focus. (#499)</li>
+<li>Custom palette commands now run the same for everyone: in <code class="notranslate">sh</code>, or in the interpreter a first-line <code class="notranslate">#!</code> names, whatever your login shell is, and a palette can list the programs it <code class="notranslate">requires:</code>. (#521)</li>
+<li>A palette's <code class="notranslate">run:</code> action no longer lands in your shell history: it runs before the new pane's shell starts, and your prompt follows when it ends. (#521)</li>
+<li>A custom palette screen can show fixed rows above a listing, and any row can have a second action run with ⌥↩ or ⌥-click. (#518)</li>
+<li>Every palette's description now shows under its row in the command palette, the built-in Password Manager, Worktrees and Files included. (#519, #520)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li>In a second window showing another window's tab, splits now animate and Split Automatically picks its direction from the pane you're looking at. (#524)</li>
+<li>A custom palette listing that times out, or whose screen you close, now stops right away, every command in a pipeline included, instead of sitting on "Listing…". (#522)</li>
+<li>Custom palette listings now run for csh and tcsh users. (#522)</li>
+<li>⌃Z in a pane started by a palette <code class="notranslate">run:</code> action no longer freezes it. (#522)</li>
+<li>A palette <code class="notranslate">run:</code> action now works while a pinned tab is active, and a relative <code class="notranslate">open:</code> path opens from the project's folder. (#522)</li>
+<li>A written palette item's <code class="notranslate">copy:</code> or <code class="notranslate">open:</code> now does what it says. (#518)</li>
+<li>The Files palette no longer leaves out whole top-level folders in large projects, and opens a symlinked folder as a folder rather than in your editor. (#522)</li>
+<li>Pressing ⌘P while recording a keybind in Settings → Keymaps now records it instead of opening the palette. (#522)</li>
+<li>Backspace in another window or in the quick terminal no longer steps back out of this window's palette screen. (#522)</li>
+<li>Search ranks equally good matches in the same order everywhere, and treats a word starting with <code class="notranslate">.</code> or <code class="notranslate">-</code> and accented letters the way fzf does. (#522)</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Custom palettes written in nushell or fish syntax stop working. Write them in <code class="notranslate">sh</code>, or start a command with <code class="notranslate">#!/usr/bin/env nu</code>.</li>
+<li>A palette file with an unknown or misspelled key, <code class="notranslate">in:</code> on a <code class="notranslate">copy:</code> or <code class="notranslate">open:</code> action, or an invalid export name now fails to read, with a message naming the node and key, where it used to be silently ignored.</li>
+<li>In a remote project, a <code class="notranslate">run:</code> action is still typed at the host's prompt, without the palette's exported variables.</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> and <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/timchesney/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/timchesney">@timchesney</a> for this release.</p>
+</body>
+</html>
