@@ -1,6 +1,6 @@
 # Extensions
 
-Extensions anyone can install from **Settings → Palettes** in Macterm. Each is a folder here, named by its id:
+Extensions anyone can install from **Settings → Extensions** in Macterm. Each is a folder here, named by its id:
 
 ```
 extensions/
@@ -8,7 +8,8 @@ extensions/
     extension.yaml    # who made it
     palette.yaml      # the palette
     README.md         # what it does, for the gallery and for people
-    screenshot.png    # optional
+    screenshots/      # optional: up to 6 PNGs, each exactly 1600×1000
+      screenshot-1.png
 ```
 
 Installing one copies its folder to `~/.config/macterm/extensions/<id>/`. Its commands can reach the other files in it through `$MACTERM_EXTENSION_DIR` — a script too long to sit in the YAML, say: `list: "$MACTERM_EXTENSION_DIR/list.sh"`.
@@ -31,7 +32,7 @@ You don't need the whole repository. Either:
 
 Then:
 
-1. Write the palette and use it for a while; the [file format](https://macterm.thdxg.dev/docs/custom-palettes) is documented. Start `palette.yaml` with the schema line so your editor checks it:
+1. Write the palette and use it for a while; the [file format](https://macterm.thdxg.dev/docs/extensions) is documented. Start `palette.yaml` with the schema line so your editor checks it:
 
    ```yaml
    # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
@@ -44,14 +45,26 @@ Then:
    ```
 
 3. Add a `README.md` saying what it does, what it needs, and anything to set up first. Its first paragraph is what Macterm shows before installing it.
-4. Open a pull request. CI reads every extension here through Macterm's validator.
+4. Optionally, add screenshots — see below.
+5. Open a pull request. CI reads every extension here through Macterm's validator.
 
 ## What an extension needs
 
 - **A folder name** that is its id: lowercase words joined by `-`, saying what it is about (`kubernetes`, not `k8s-tools-v2`).
 - **`extension.yaml`** with `authors:`, the GitHub usernames of the people who maintain it. A change to an extension someone else wrote needs their approval in the pull request.
 - **`README.md`**.
-- **Files under 500 KB each**, and images only as PNG, JPEG or WebP.
+- **Files under 500 KB each**, all of them text but the screenshots.
+- **Screenshots, if any, in `screenshots/`**: at most 6 PNGs, each exactly 1600×1000 pixels, so every extension's look the same in the gallery.
+
+## Screenshots
+
+Take them with Macterm, which frames the command palette the same way every time:
+
+1. Install your extension (or keep it as a file in `~/.config/macterm/palettes/`) and open the screen you want to show.
+2. Run **Capture Palette Screenshot** — bind it to a key in Settings → Keymaps and press it with the palette open; from the menu (View) or the palette itself it captures the palette's first screen.
+3. Save it in your extension's `screenshots/` folder. For an installed extension Macterm offers that folder.
+
+The first time, macOS asks to let Macterm record the screen: the palette's glass shows what's behind it, which only a screen capture gets. Your theme and background show through; the size and framing are the same for everyone.
 
 And its palette:
 

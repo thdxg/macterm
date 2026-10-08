@@ -563,14 +563,11 @@ struct CustomPaletteScopeTests {
     }
 
     @Test
-    func the_root_lists_custom_palettes_under_palettes_hidden_when_off_and_broken_files_muted() throws {
+    func the_root_lists_extensions_under_palettes_and_broken_files_muted() throws {
         let (context, store, _) = try makeContext(files: [
             "kubernetes.yaml": CustomPaletteFileTests.kubernetes,
             "broken.yml": "name: Broken\nnodes: { root: { list: ls } }",
         ])
-        let prior = Preferences.shared.disabledPaletteIDs
-        defer { Preferences.shared.disabledPaletteIDs = prior }
-
         let rows = { CommandSource().emptyItems(context: context) ?? [] }
         let palettes = rows().filter { $0.category == AppCommand.Category.palettes.rawValue }
         #expect(
@@ -586,9 +583,5 @@ struct CustomPaletteScopeTests {
         #expect(broken.warning == "root: needs enter: or action:")
         #expect(try broken.opensScope == .custom(#require(store.rootTarget(id: "broken"))))
         #expect(kubernetes.warning == nil)
-
-        Preferences.shared.setPalette(PaletteScopeID.customSettingsID(paletteID: "kubernetes"), enabled: false)
-        #expect(!rows().contains { $0.title == "Kubernetes" })
-        #expect(try !PaletteScopeID.custom(#require(store.rootTarget(id: "kubernetes"))).isEnabled)
     }
 }

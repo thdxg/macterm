@@ -96,7 +96,6 @@ enum Output {
         let rows = palettes.map { palette -> [String] in
             [
                 palette.id,
-                palette.enabled ? "on" : "off",
                 palette.keybind ?? "-",
                 palette.error.map { "error: \($0)" } ?? (palette.name ?? "-"),
             ]

@@ -303,25 +303,29 @@ final class PaletteRegistry {
     }
 }
 
-/// One card in Settings → Palettes: a built-in screen, an installed custom
-/// palette, or one from the repository that isn't installed.
-enum PaletteGalleryItem: Identifiable, Equatable {
-    case builtIn(PaletteScopeID)
+/// One card in Settings → Extensions: an installed extension — a folder in
+/// the extensions folder, or a palette file of the user's own — or one from
+/// the repository not installed yet. The built-in screens aren't
+/// extensions and have no card.
+enum ExtensionGalleryItem: Identifiable, Equatable {
     /// `registry` is the repository's entry of the same id, when there is one.
     case installed(CustomPaletteStore.Entry, registry: PaletteRegistry.Entry?)
     case available(PaletteRegistry.Entry)
 
     var id: String {
         switch self {
-        case let .builtIn(scope): "builtin:\(scope.settingsID)"
         case let .installed(entry, _): "installed:\(entry.id)"
         case let .available(entry): "available:\(entry.id)"
         }
     }
 
+    var isInstalled: Bool {
+        if case .installed = self { return true }
+        return false
+    }
+
     var title: String {
         switch self {
-        case let .builtIn(scope): scope.pill.title
         case let .installed(entry, _): entry.pill.title
         case let .available(entry): entry.name
         }
@@ -329,56 +333,46 @@ enum PaletteGalleryItem: Identifiable, Equatable {
 
     var summary: String {
         switch self {
-        case let .builtIn(scope): scope.summary
         case let .installed(entry, _): entry.failure?.localizedDescription ?? entry.description
             ?? (entry.extensionDirectory ?? entry.fileURL).lastPathComponent
-        case let .available(entry): entry.failure.map { "Can't be read by this version: \($0.localizedDescription)" } ?? entry
-            .description ?? entry.readme.flatMap(MactermExtension.summary(readme:)) ?? ""
+        case let .available(entry): entry.failure.map { "Can't be read by this version: \($0.localizedDescription)" }
+            ?? entry.description ?? entry.readme.flatMap(MactermExtension.summary(readme:)) ?? ""
         }
     }
 
     var icon: String {
         switch self {
-        case let .builtIn(scope): scope.pill.systemImage
         case let .installed(entry, _): entry.pill.systemImage
         case let .available(entry): entry.icon
         }
     }
 
-    /// Who maintains it: an extension's `authors:`; none for a built-in
-    /// screen or a palette file of the user's own.
+    /// Who maintains it: an extension's `authors:`; none for a palette file
+    /// of the user's own.
     var authors: [String] {
         switch self {
-        case .builtIn: []
         case let .installed(entry, _): entry.authors
         case let .available(entry): entry.authors
         }
     }
 
-    /// The gallery's sections, in order, each ranked by `query` (the app's
-    /// one search, as every Settings list): built-in screens, installed
-    /// palettes and extensions, then the repository's extensions not yet
-    /// installed. An extension already installed — or a palette file of the
-    /// same id — is listed once, as installed.
-    static func sections(
-        builtIn: [PaletteScopeID],
+    /// Every extension in one list — installed and not, the installed ones
+    /// once each — by name, or ranked by `query` (the app's one search, as
+    /// every Settings list).
+    static func items(
         installed: [CustomPaletteStore.Entry],
         registry: [PaletteRegistry.Entry],
         query: String
-    ) -> [(title: String, items: [PaletteGalleryItem])] {
+    ) -> [ExtensionGalleryItem] {
         let installedIDs = Set(installed.map(\.id))
         let byID = Dictionary(registry.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let groups: [(String, [PaletteGalleryItem])] = [
-            ("Built-in", builtIn.map { .builtIn($0) }),
-            ("Installed", installed.map { .installed($0, registry: byID[$0.id]) }),
-            ("Available", registry.filter { !installedIDs.contains($0.id) }.map { .available($0) }),
-        ]
-        return groups.map { title, items in
-            (title, Search.rank(items, by: query) { [$0.title, $0.summary] })
-        }
+        let all: [ExtensionGalleryItem] = installed.map { .installed($0, registry: byID[$0.id]) }
+            + registry.filter { !installedIDs.contains($0.id) }.map { .available($0) }
+        let sorted = all.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return Search.rank(sorted, by: query) { [$0.title, $0.summary] }
     }
 
-    static func == (lhs: PaletteGalleryItem, rhs: PaletteGalleryItem) -> Bool {
+    static func == (lhs: ExtensionGalleryItem, rhs: ExtensionGalleryItem) -> Bool {
         lhs.id == rhs.id && lhs.title == rhs.title && lhs.summary == rhs.summary
     }
 }

@@ -48,9 +48,6 @@ final class CustomPaletteStore {
         }
 
         var description: String? { palette?.description ?? header?.description }
-
-        /// The Settings switch's id (`Preferences.disabledPaletteIDs`).
-        var settingsID: String { PaletteScopeID.customSettingsID(paletteID: id) }
     }
 
     let directoryURL: URL
@@ -157,6 +154,20 @@ final class CustomPaletteStore {
     }
 
     /// The directory, created on demand — for Settings' "show in Finder".
+    /// Moves an installed palette to the Trash — an extension's whole
+    /// folder, or a palette file — and reloads, so it leaves the palette at
+    /// once. The Trash is the undo.
+    func uninstall(id: String) throws {
+        guard let entry = entry(id: id) else { return }
+        try FileManager.default.trashItem(at: entry.extensionDirectory ?? entry.fileURL, resultingItemURL: nil)
+        reload()
+    }
+
+    func revealExtensionsDirectory() {
+        try? FileManager.default.createDirectory(at: extensionsURL, withIntermediateDirectories: true)
+        NSWorkspace.shared.activateFileViewerSelecting([extensionsURL])
+    }
+
     func revealDirectory() {
         try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         NSWorkspace.shared.activateFileViewerSelecting([directoryURL])

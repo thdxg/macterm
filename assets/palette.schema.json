@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json",
-  "title": "Macterm custom palette",
+  "title": "Macterm extension palette",
   "description": "A custom command-palette screen, one file per palette in ~/.config/macterm/palettes/. A palette is a graph of named nodes, each with rows written out (`items`), a listing (`list`, a command whose output becomes rows), or both. Every row enters another node or performs an action, may name a second action for ⌥↩ (`alt`), and may export values that travel down the stack as environment variables into every command below it.",
   "type": "object",
   "additionalProperties": false,
@@ -18,7 +18,7 @@
     },
     "description": {
       "type": "string",
-      "description": "One line under the palette's row in the command palette and in Settings → Palettes."
+      "description": "One line under the palette's row in the command palette and on its card in Settings → Extensions."
     },
     "root": {
       "type": "string",

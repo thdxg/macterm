@@ -395,9 +395,7 @@ struct CommandPalettePanel: View {
     private func checkPaletteAvailability() {
         guard scope == nil else { return }
         let store = appState.customPalettes
-        let shown = store.entries
-            .filter { Preferences.shared.isPaletteEnabled($0.settingsID) }
-            .compactMap(\.palette)
+        let shown = store.entries.compactMap(\.palette)
         availability.check(shown, context: PaletteContext(appState: appState, projectStore: projectStore))
     }
 

@@ -312,11 +312,11 @@ struct PaletteRegistryTests {
         #expect(MactermExtension.nextScreenshotName(in: folder) == "screenshot-2.png")
     }
 
-    /// Built-in, then installed, then what the repository has that isn't
-    /// installed — a repository palette already installed listed once, as
-    /// installed — each section ranked by the search.
+    /// One list of extensions by name — installed and not, an installed
+    /// one listed once, the built-in screens not at all — ranked by the
+    /// search when there is one.
     @Test
-    func the_gallery_lists_built_in_installed_and_available_palettes_once_each() throws {
+    func the_gallery_is_one_list_of_extensions_installed_or_not() throws {
         let store = try makeStore()
         try FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
         try Self.kubernetes.write(to: store.directoryURL.appendingPathComponent("kubernetes.yaml"), atomically: true, encoding: .utf8)
@@ -328,25 +328,34 @@ struct PaletteRegistryTests {
             Self.entry("docker", palette: "name: Docker\ndescription: Containers\nnodes: { root: { list: ls, action: { copy: . } } }"),
         ]
 
-        let all = PaletteGalleryItem.sections(builtIn: PaletteScopeID.builtIn, installed: store.entries, registry: registry, query: "")
-        #expect(all.map(\.title) == ["Built-in", "Installed", "Available"])
-        #expect(all[0].items.map(\.title) == ["Password Manager", "Worktrees", "Files"])
-        #expect(all[1].items.map(\.title) == ["Kubernetes", "Notes"])
-        guard case let .installed(_, fromRegistry) = all[1].items[0] else {
+        let all = ExtensionGalleryItem.items(installed: store.entries, registry: registry, query: "")
+        #expect(all.map(\.title) == ["Docker", "Kubernetes", "Notes"], "by name, Kubernetes once, no built-in screens")
+        #expect(all.map(\.isInstalled) == [false, true, true])
+        guard case let .installed(_, fromRegistry) = all[1] else {
             Issue.record("Kubernetes isn't installed")
             return
         }
-        #expect(fromRegistry?.id == "kubernetes", "an installed palette knows its repository entry")
-        #expect(all[2].items.map(\.title) == ["Docker"], "installed palettes aren't offered again")
-        #expect(all[2].items.first?.authors == ["thdxg"])
+        #expect(fromRegistry?.id == "kubernetes", "an installed extension knows its repository entry")
+        #expect(all[0].authors == ["thdxg"])
 
-        let found = PaletteGalleryItem.sections(
-            builtIn: PaletteScopeID.builtIn,
-            installed: store.entries,
-            registry: registry,
-            query: "cont"
-        )
-        #expect(found.map(\.items.count) == [0, 0, 1])
-        #expect(found[2].items.first?.title == "Docker")
+        let found = ExtensionGalleryItem.items(installed: store.entries, registry: registry, query: "cont")
+        #expect(found.map(\.title) == ["Docker"])
+    }
+
+    @Test
+    func uninstalling_moves_an_extension_or_a_palette_file_to_the_trash() async throws {
+        let store = try makeStore()
+        let registry = PaletteRegistry(ref: "main", fetch: Server().fetch)
+        let folder = try await registry.install(Self.entry("kubernetes", palette: Self.kubernetes), into: store)
+        try FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
+        try Self.kubernetes.write(to: store.directoryURL.appendingPathComponent("mine.yaml"), atomically: true, encoding: .utf8)
+        store.reload()
+
+        try store.uninstall(id: "kubernetes")
+        #expect(store.entry(id: "kubernetes") == nil)
+        #expect(!FileManager.default.fileExists(atPath: folder.path), "the whole folder")
+        try store.uninstall(id: "mine")
+        #expect(store.entry(id: "mine") == nil)
+        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent("mine.yaml").path))
     }
 }

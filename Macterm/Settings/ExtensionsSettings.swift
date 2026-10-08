@@ -1,31 +1,27 @@
 import AppKit
 import SwiftUI
 
-/// Settings → Palettes: every palette as a card in a searchable grid —
-/// the built-in screens, the custom ones installed (files in
-/// `~/.config/macterm/palettes/`, extensions in `~/.config/macterm/extensions/`
-/// — `CustomPaletteStore`), and the extensions in Macterm's repository not
-/// installed yet (`PaletteRegistry`), each with an Install button that shows
-/// its files before copying it in.
-///
-/// A built-in or installed palette has a switch. Off, it leaves the command
-/// palette and its menu, and its chord says where it went; the chord itself
-/// stays bound in Settings → Keymaps for when it comes back. An installed
-/// file that failed to read keeps its switch, with a warning glyph whose
-/// tooltip is the error.
-struct PalettesSettings: View {
+/// Settings → Extensions: every extension as a card in one searchable grid —
+/// installed ones (folders in `~/.config/macterm/extensions/` and palette
+/// files in `~/.config/macterm/palettes/`, `CustomPaletteStore`) and the ones
+/// in Macterm's repository not installed yet (`PaletteRegistry`), by name.
+/// Each card's button says which: **Install** shows the extension's files
+/// before copying it in, **Installed** offers to move it to the Trash. The
+/// built-in screens aren't extensions and have no card.
+struct ExtensionsSettings: View {
     @Environment(AppState.self)
     private var appState
 
     @State private var query = ""
     @State private var installing: PaletteRegistry.Entry?
+    @State private var uninstalling: CustomPaletteStore.Entry?
+    @State private var problem: String?
 
     private let columns = [GridItem(.adaptive(minimum: 220, maximum: 360), spacing: 12, alignment: .top)]
 
     var body: some View {
         let registry = appState.paletteRegistry
-        let sections = PaletteGalleryItem.sections(
-            builtIn: PaletteScopeID.builtIn,
+        let items = ExtensionGalleryItem.items(
             installed: appState.customPalettes.entries,
             registry: registry.entries,
             query: query
@@ -33,7 +29,7 @@ struct PalettesSettings: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 8) {
-                    SettingsSearchField(text: $query, prompt: "Search palettes")
+                    SettingsSearchField(text: $query, prompt: "Search extensions")
                     Button {
                         registry.refresh(force: true)
                     } label: {
@@ -41,42 +37,39 @@ struct PalettesSettings: View {
                     }
                     .disabled(registry.state == .loading)
                     .help("Read the extensions in Macterm's repository again")
+                    DocsLink(.extensionsSettings)
                 }
                 RegistryStatus(state: registry.state, ref: registry.ref)
+                if let problem {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .settingsCaption()
+                }
 
-                ForEach(sections, id: \.title) { section in
-                    if !section.items.isEmpty || (section.title == "Installed" && query.isEmpty) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(section.title)
-                                .font(.headline)
-                            if section.items.isEmpty {
-                                Text("No custom palettes installed.")
-                                    .settingsCaption()
-                            }
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                                ForEach(section.items) { item in
-                                    PaletteCard(item: item) { installing = $0 }
-                                }
-                            }
-                        }
+                if items.isEmpty {
+                    Text(query.isEmpty ? "No extensions yet." : "No extensions match.")
+                        .settingsCaption()
+                }
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                    ForEach(items) { item in
+                        ExtensionCard(item: item, install: { installing = $0 }, uninstall: { uninstalling = $0 })
                     }
                 }
 
-                LabeledContent("Palettes folder") {
-                    Button(Self.folderPath(appState)) {
+                LabeledContent("Extensions folder") {
+                    FolderLink(url: appState.customPalettes.extensionsURL) {
+                        appState.customPalettes.revealExtensionsDirectory()
+                    }
+                }
+                LabeledContent("Your own palettes") {
+                    FolderLink(url: appState.customPalettes.directoryURL) {
                         appState.customPalettes.revealDirectory()
                     }
-                    .buttonStyle(.link)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
                 }
                 Text(
-                    "A palette is a YAML file in the folder: a command whose output becomes rows, "
+                    "An extension adds screens to the command palette: a command whose output becomes rows, "
                         + "each opening another screen or running a command. "
-                        + "Available ones are extensions from Macterm's repository, for this version, "
-                        + "installed as folders in ~/.config/macterm/extensions. "
-                        + "A palette turned off leaves the command palette and its menu; "
-                        + "its keybind, if any, says so instead of reaching the terminal."
+                        + "Install one from Macterm's repository — the ones written for this version — "
+                        + "or write your own as a YAML file in your palettes folder."
                 )
                 .settingsCaption()
             }
@@ -87,20 +80,49 @@ struct PalettesSettings: View {
             registry.refresh()
         }
         .sheet(item: $installing) { entry in
-            InstallPaletteSheet(entry: entry) { installing = nil }
+            InstallExtensionSheet(entry: entry) { installing = nil }
+        }
+        .confirmationDialog(
+            "Uninstall \(uninstalling?.pill.title ?? "")?",
+            isPresented: Binding(get: { uninstalling != nil }, set: { if !$0 { uninstalling = nil } }),
+            presenting: uninstalling
+        ) { entry in
+            Button("Move to Trash", role: .destructive) {
+                do {
+                    try appState.customPalettes.uninstall(id: entry.id)
+                    problem = nil
+                } catch {
+                    problem = "Couldn't uninstall \(entry.pill.title): \(error.localizedDescription)"
+                }
+            }
+        } message: { entry in
+            let name = (entry.extensionDirectory ?? entry.fileURL).lastPathComponent
+            Text("\(name) goes to the Trash, and its screens leave the command palette.")
         }
     }
+}
 
-    /// `~/.config/macterm/palettes`, home-contracted.
-    static func folderPath(_ appState: AppState) -> String {
-        let path = appState.customPalettes.directoryURL.path(percentEncoded: false)
+/// A folder, home-contracted, as a link that shows it in Finder.
+private struct FolderLink: View {
+    let url: URL
+    let reveal: () -> Void
+
+    var body: some View {
+        Button(Self.path(url), action: reveal)
+            .buttonStyle(.link)
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    static func path(_ url: URL) -> String {
+        let path = url.path(percentEncoded: false)
         let home = ProjectPath.currentHome
         let shown = path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
         return shown.hasSuffix("/") ? String(shown.dropLast()) : shown
     }
 }
 
-/// Where the repository's palettes stand: reading, read (and when), or why
+/// Where the repository's extensions stand: reading, read (and when), or why
 /// they couldn't be.
 private struct RegistryStatus: View {
     let state: PaletteRegistry.State
@@ -116,21 +138,21 @@ private struct RegistryStatus: View {
                 Text("Reading extensions from Macterm's repository…").settingsCaption()
             }
         case let .loaded(date):
-            Text("Available extensions for \(ref), read \(date.formatted(.relative(presentation: .named))).")
+            Text("Extensions for \(ref), read \(date.formatted(.relative(presentation: .named))).")
                 .settingsCaption()
         case let .failed(reason):
-            Label("Couldn't read the available extensions: \(reason)", systemImage: "exclamationmark.triangle.fill")
+            Label("Couldn't read Macterm's extensions: \(reason)", systemImage: "exclamationmark.triangle.fill")
                 .settingsCaption()
         }
     }
 }
 
-/// One palette: glyph, name, a line saying what it is for, and what can be
-/// done with it — a switch once it is built in or installed, Install while
-/// it isn't.
-private struct PaletteCard: View {
-    let item: PaletteGalleryItem
+/// One extension: glyph, name, a line saying what it is for, its authors,
+/// and a button saying whether it is installed.
+private struct ExtensionCard: View {
+    let item: ExtensionGalleryItem
     let install: (PaletteRegistry.Entry) -> Void
+    let uninstall: (CustomPaletteStore.Entry) -> Void
 
     var body: some View {
         GroupBox {
@@ -144,7 +166,7 @@ private struct PaletteCard: View {
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    control
+                    button
                 }
                 Text(item.summary)
                     .settingsCaption()
@@ -161,10 +183,8 @@ private struct PaletteCard: View {
         }
     }
 
-    @ViewBuilder private var control: some View {
+    @ViewBuilder private var button: some View {
         switch item {
-        case let .builtIn(scope):
-            PaletteSwitch(settingsID: scope.settingsID)
         case let .installed(entry, _):
             HStack(spacing: 6) {
                 if let failure = entry.failure {
@@ -172,43 +192,28 @@ private struct PaletteCard: View {
                         .foregroundStyle(MactermTheme.failure)
                         .help("\(entry.fileURL.lastPathComponent): \(failure.localizedDescription)")
                 }
-                PaletteSwitch(settingsID: entry.settingsID)
+                Button { uninstall(entry) } label: {
+                    Label("Installed", systemImage: "checkmark.circle.fill")
+                }
+                .controlSize(.small)
+                .help("Uninstall it")
             }
         case let .available(entry):
-            Button("Install") { install(entry) }
-                .controlSize(.small)
-                .disabled(entry.failure != nil)
-                .help(entry.failure
-                    .map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Show its files, then install it")
-        }
-    }
-}
-
-/// A palette's on/off switch (`Preferences.isPaletteEnabled`).
-private struct PaletteSwitch: View {
-    let settingsID: String
-    @State private var enabled: Bool
-
-    init(settingsID: String) {
-        self.settingsID = settingsID
-        _enabled = State(initialValue: Preferences.shared.isPaletteEnabled(settingsID))
-    }
-
-    var body: some View {
-        Toggle("On", isOn: $enabled)
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.small)
-            .onChange(of: enabled) { _, on in
-                Preferences.shared.setPalette(settingsID, enabled: on)
+            Button { install(entry) } label: {
+                Label("Install", systemImage: "arrow.down.circle")
             }
+            .controlSize(.small)
+            .disabled(entry.failure != nil)
+            .help(entry.failure
+                .map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Show its files, then install it")
+        }
     }
 }
 
 /// An extension from the repository, shown in full before anything is
 /// written: its README, then every text file in it — every command runs on
 /// this machine.
-private struct InstallPaletteSheet: View {
+private struct InstallExtensionSheet: View {
     @Environment(AppState.self)
     private var appState
 

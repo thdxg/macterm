@@ -464,30 +464,6 @@ final class Preferences {
         didSet { Keys.passwordManagerEnabled.write(passwordManagerEnabled, to: defaults) }
     }
 
-    // MARK: - Palettes (Settings → Palettes)
-
-    /// The palette screens the user has turned off, by id
-    /// (`PaletteScopeID.rawValue`; a custom palette's id later). A screen
-    /// turned off leaves the command palette's list and its menu, and its
-    /// chord says where it went instead of reaching the terminal. Stored as
-    /// the off set rather than the on set so a palette added later — a new
-    /// built-in, a new file — starts on.
-    var disabledPaletteIDs: [String] {
-        didSet { Keys.disabledPaletteIDs.write(disabledPaletteIDs, to: defaults) }
-    }
-
-    func isPaletteEnabled(_ id: String) -> Bool {
-        !disabledPaletteIDs.contains(id)
-    }
-
-    func setPalette(_ id: String, enabled: Bool) {
-        if enabled {
-            disabledPaletteIDs.removeAll { $0 == id }
-        } else if !disabledPaletteIDs.contains(id) {
-            disabledPaletteIDs.append(id)
-        }
-    }
-
     /// When Autofill asks for Touch ID or the login password.
     var passwordAutofillAuthentication: PasswordAutofillAuthentication {
         didSet { Keys.passwordAutofillAuthentication.write(passwordAutofillAuthentication, to: defaults) }
@@ -956,7 +932,6 @@ final class Preferences {
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
         textFilePlacement = Keys.textFilePlacement.read(defaults)
         passwordManagerEnabled = Keys.passwordManagerEnabled.read(defaults)
-        disabledPaletteIDs = Keys.disabledPaletteIDs.read(defaults)
         passwordAutofillAuthentication = Keys.passwordAutofillAuthentication.read(defaults)
         peekSidebarWhenHidden = Keys.peekSidebarWhenHidden.read(defaults)
         let storedSidebarWidth = Keys.sidebarWidth.read(defaults)
@@ -1131,7 +1106,6 @@ final class Preferences {
         /// The key of the "Offer to save passwords" toggle this replaced, so a
         /// user who switched that off finds the whole feature off, never on.
         static let passwordManagerEnabled = PreferenceStorageKey("macterm.passwords.offerToSave", default: true)
-        static let disabledPaletteIDs = PreferenceStorageKey("macterm.palettes.disabled", default: [String]())
         static let passwordAutofillAuthentication = PreferenceStorageKey(
             "macterm.passwords.autofillAuthentication", default: PasswordAutofillAuthentication.untilLocked
         )
