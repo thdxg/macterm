@@ -14,7 +14,7 @@ struct ControlProtocolTests {
         #expect(decoded.id == request.id)
         #expect(decoded.command == "pane.list")
         #expect(decoded.args == ControlArgs(project: "demo", tab: "tab:2"))
-        #expect(decoded.v == ControlProtocol.version)
+        #expect(decoded.v == ControlProtocol.minimumSupportedVersion)
     }
 
     @Test
@@ -66,11 +66,51 @@ struct ControlProtocolTests {
         #expect(decoded.args?.focus == focus)
     }
 
+    // MARK: - Version gating (#499)
+
+    /// `v` is the minimum server version a request needs, not the client's
+    /// version: a request with no v2-only field keeps v1 so an older app still
+    /// accepts it, while one carrying `focus` bumps to v2 so a server that
+    /// doesn't speak v2 refuses it instead of silently dropping the field.
+    @Test
+    func request_v_is_the_minimum_server_version_needed() {
+        let plain = ControlRequest(command: "tab.new", args: ControlArgs(project: "api"))
+        #expect(plain.v == ControlProtocol.minimumSupportedVersion)
+
+        let background = ControlRequest(command: "tab.new", args: ControlArgs(focus: false))
+        #expect(background.v == ControlProtocol.focusFieldVersion)
+
+        // The dangerous case is `false` (an older app would select what the
+        // caller asked not to select); `true` still needs v2 because the field
+        // itself is v2-only, but it is not reachable from the CLI today.
+        let explicit = ControlRequest(command: "tab.new", args: ControlArgs(focus: true))
+        #expect(explicit.v == ControlProtocol.focusFieldVersion)
+    }
+
+    /// A server must refuse a request whose minimum version exceeds its own,
+    /// and the wire shape of that refusal round-trips.
+    @Test
+    func unsupported_version_failure_roundtrips() throws {
+        let failure = ControlResponse.failure(
+            id: "v2",
+            error: ControlError(
+                code: .unsupportedVersion,
+                message: "the client needs control protocol v3, but Macterm speaks v2",
+                action: "upgrade Macterm"
+            )
+        )
+        let decoded = try ControlProtocol.decodeResponse(ControlProtocol.encode(failure))
+        #expect(!decoded.ok)
+        #expect(decoded.error?.code == .unsupportedVersion)
+        #expect(decoded.error?.action == "upgrade Macterm")
+    }
+
     @Test
     func error_codes_use_snake_case_raw_values() {
         #expect(ControlErrorCode.notFound.rawValue == "not_found")
         #expect(ControlErrorCode.unknownCommand.rawValue == "unknown_command")
         #expect(ControlErrorCode.noSurface.rawValue == "no_surface")
+        #expect(ControlErrorCode.unsupportedVersion.rawValue == "unsupported_version")
         #expect(ControlErrorCode.badRequest.rawValue == "bad_request")
         #expect(ControlErrorCode.internalError.rawValue == "internal")
     }

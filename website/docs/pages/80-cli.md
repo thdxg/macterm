@@ -91,7 +91,7 @@ macterm pane split --session "$MACTERM_SESSION" --no-focus --run "npm run dev"
 
 The shell starts without visiting the child, with or without `--run`. Creation returns before the shell is necessarily ready for subsequent input; callers using `pane run` should wait for its prompt. Use `--json` to get the new tab/pane identity, and `pane list --project P --tab T` to find a new tab's session. `tab new` defaults to the **active project**, not the caller's project; pass `--project` explicitly when those may differ.
 
-For automation, pin the app with `--socket`. Check the bundled CLI's `tab new --help` / `pane split --help` for `--no-focus` before relying on it; older versions don't support the flag. Use the CLI bundled with the app you target: a newer CLI's help cannot prove an older running app supports it, and an older app silently ignores the wire option.
+For automation, pin the app with `--socket`. `--no-focus` is refused before anything is created when the running app is too old to honor it: the CLI asks the app its protocol version up front and exits with an error instead of silently switching the user's view. Use the CLI bundled with the app you target — a newer CLI's `--help` proves the flag exists only in that CLI, not in an older running app.
 
 ## Targeting a pane
 
@@ -200,11 +200,13 @@ Any same-user process can speak it directly. One request per connection to `~/Li
 {"v":1,"id":"<any-string>","command":"pane.split","args":{"direction":"down","run":"btop"}}
 ```
 
+`v` is the **minimum protocol version the request needs**, not the client's version: ordinary commands use `1`; `--no-focus` sends `"v":2` with `"focus":false`. Servers from v2 onward reject unsupported request versions before dispatch. Already-shipped v1 apps ignore `v`, so direct clients must first probe `status` and check the **response** version before sending newer fields. The CLI does this automatically and pins the command to the verified socket.
+
 ```json title="response"
-{"v":1,"id":"<echoed>","ok":true,"data":{"panes":[{"id":"…","session":"macterm-api-1a2b3c4d5e6f","index":2}]}}
+{"v":2,"id":"<echoed>","ok":true,"data":{"panes":[{"id":"…","session":"macterm-api-1a2b3c4d5e6f","index":2}]}}
 ```
 
-Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}`. Codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `internal`. Unknown fields are ignored on both sides.
+Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}`. Codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `unsupported_version`, `internal`. Unknown fields are ignored on both sides; use the version checks above when a field must not be silently ignored.
 
 ```sh
 echo '{"v":1,"id":"x","command":"status"}' | nc -U ~/Library/Application\ Support/Macterm/control.sock

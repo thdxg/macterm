@@ -31,8 +31,10 @@ extension AgentSkills {
         ```
 
         Choose a loaded project whose `path` holds the work. `--no-focus` starts the terminal even if that
-        project isn't on screen; without it, a tab in another project may wait until viewed. `tab new`
-        defaults to the active project, not the caller's, so pass `--project` explicitly. Its reply gives the
+        project isn't on screen; without it, a tab in another project may wait until viewed. An app too old
+        to honor `--no-focus` fails the command up front (exit 1) before creating anything, rather than
+        silently stealing focus. `tab new` defaults to the active project, not the caller's, so pass
+        `--project` explicitly. Its reply gives the
         new tab's `index` and `id`, and `pane list --tab` with either gives its pane's `session`. To start the
         agent beside you instead, split your own pane without taking focus; the reply is the new pane itself:
 

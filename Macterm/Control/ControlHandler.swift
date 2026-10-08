@@ -40,6 +40,17 @@ final class ControlHandler {
 
     func handle(_ request: ControlRequest) async -> ControlResponse {
         logger.debug("control request: \(request.command, privacy: .public)")
+        // Version gate BEFORE dispatch: a client that needs a newer protocol
+        // hard-errors instead of having a field it relies on silently dropped
+        // (e.g. `--no-focus` against an older app would select what the caller
+        // asked not to select).
+        if request.v > ControlProtocol.version {
+            return .failure(id: request.id, error: ControlError(
+                code: .unsupportedVersion,
+                message: "the client needs control protocol v\(request.v), but Macterm speaks v\(ControlProtocol.version)",
+                action: "upgrade Macterm"
+            ))
+        }
         do {
             let data = try await dispatch(request)
             return .success(id: request.id, data: data)

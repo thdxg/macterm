@@ -12,9 +12,17 @@ import Foundation
 /// `ControlResponse` line and closes. Newline-delimited JSON keeps the
 /// protocol debuggable with `nc`/`socat` and leaves room for streaming later.
 enum ControlProtocol {
-    /// Bumped only for breaking changes; additive fields are always safe
-    /// (both sides decode with optional fields).
-    static let version = 1
+    /// The server's supported version. Optional fields remain decodable by
+    /// older apps, but require a bump when ignoring them changes the intent
+    /// of a request (such as silently selecting a no-focus terminal).
+    static let version = 2
+
+    /// The oldest protocol version a server still accepts.
+    static let minimumSupportedVersion = 1
+
+    /// The version that introduced the `focus` field — the `--no-focus` wire
+    /// option.
+    static let focusFieldVersion = 2
 
     /// Socket file inside the app-support directory (per build flavor:
     /// `Macterm/` vs `Macterm Debug/`).
@@ -35,6 +43,12 @@ enum ControlProtocol {
 // MARK: - Request
 
 struct ControlRequest: Codable {
+    /// The minimum server version that interprets this request correctly.
+    /// Requests using only v1 fields carry `minimumSupportedVersion`; one with
+    /// `focus` carries `focusFieldVersion`. A server that doesn't speak that
+    /// version refuses it before any side effect — and the CLI preflights, so
+    /// an already-shipped older app (which has no gate) hard-errors rather
+    /// than silently dropping the field.
     var v: Int
     /// Client-generated; echoed in the response.
     var id: String
@@ -43,7 +57,7 @@ struct ControlRequest: Codable {
     var args: ControlArgs?
 
     init(command: String, args: ControlArgs? = nil) {
-        v = ControlProtocol.version
+        v = args?.minimumProtocolVersion ?? ControlProtocol.minimumSupportedVersion
         id = UUID().uuidString
         self.command = command
         self.args = args
@@ -191,6 +205,15 @@ struct ControlArgs: Codable, Equatable {
         self.topic = topic
         self.styled = styled
     }
+
+    /// The oldest server version that honors every field these args may carry.
+    /// Only `focus` (the `--no-focus` wire field) is versioned; a future v3
+    /// field extends this.
+    var minimumProtocolVersion: Int {
+        focus == nil
+            ? ControlProtocol.minimumSupportedVersion
+            : ControlProtocol.focusFieldVersion
+    }
 }
 
 // MARK: - Response
@@ -230,6 +253,9 @@ enum ControlErrorCode: String, Codable {
     case busy
     /// The target pane exists but its terminal surface hasn't been created.
     case noSurface = "no_surface"
+    /// The client needs a newer protocol than this app speaks (its request's
+    /// `v` exceeds `ControlProtocol.version`). Refused before any side effect.
+    case unsupportedVersion = "unsupported_version"
     case internalError = "internal"
 }
 

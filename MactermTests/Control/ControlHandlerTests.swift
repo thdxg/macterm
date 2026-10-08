@@ -76,6 +76,28 @@ struct ControlHandlerTests {
         #expect(response.id == "custom-id-123")
     }
 
+    /// The version gate runs before dispatch: a client that needs a newer
+    /// protocol gets a hard error, and a command with a side effect never
+    /// executes (an older app would otherwise silently drop the field it
+    /// can't honor — e.g. `--no-focus` selecting what the caller asked not to
+    /// select).
+    @Test
+    func a_request_requiring_a_newer_protocol_fails_before_any_side_effect() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore, name: "target")
+        let workspace = try #require(appState.workspaces[project.id])
+        let tabsBefore = workspace.tabs.count
+
+        var req = request("tab.new", args: ControlArgs(project: project.name))
+        req.v = ControlProtocol.version + 1
+        let response = await handler.handle(req)
+
+        #expect(!response.ok)
+        #expect(response.error?.code == .unsupportedVersion)
+        #expect(response.error?.action?.contains("upgrade") == true)
+        #expect(workspace.tabs.count == tabsBefore, "the gate must run before dispatch")
+    }
+
     // MARK: - status
 
     @Test
