@@ -608,37 +608,64 @@ final class AppState {
     }
 
     /// The shadow of `tab` for `window`, rebuilt when the real tab's shape
-    /// changed (a split, a closed or moved pane). Rebuilding detaches the old
-    /// mirrors. Ratios are copied at build time and are the shadow's own
-    /// afterwards — the two windows differ in size anyway.
+    /// changed (a split, a closed or moved pane). Ratios are copied at build
+    /// time and are the shadow's own afterwards — the two windows differ in
+    /// size anyway.
+    ///
+    /// A rebuild keeps the shadow's id and every mirror whose session is still
+    /// in the tab, and makes new mirrors only for new sessions. The animated
+    /// split layout keys on the tab id and on pane ids, so a split made from
+    /// a mirror window then slides in exactly as it does in the owner, and
+    /// the panes that stayed keep their surfaces and leadership instead of
+    /// being torn down and attached again. Only the mirrors whose session
+    /// left are retired, after taking their closing ghost.
     private func shadow(of tab: TerminalTab, for window: WindowState) -> TerminalTab {
         let shape = tab.splitRoot.shapeSignature
-        if let existing = window.shadowTabs[tab.id], existing.mirrorShape == shape { return existing }
-        if let stale = window.shadowTabs[tab.id] { retireShadow(stale) }
+        let existing = window.shadowTabs[tab.id]
+        if let existing, existing.mirrorShape == shape { return existing }
+        // By session, in tree order: a tab can hold two panes on one session
+        // (`pane mirror`), and each needs a mirror of its own.
+        var reusable: [String: [Pane]] = [:]
+        for pane in existing?.splitRoot.allPanes() ?? [] {
+            reusable[pane.sessionName, default: []].append(pane)
+        }
+        let root = tab.splitRoot.mirrored { source in
+            guard var candidates = reusable[source.sessionName], !candidates.isEmpty else {
+                return Pane(mirroring: source)
+            }
+            let reused = candidates.removeFirst()
+            reusable[source.sessionName] = candidates
+            return reused
+        }
         let built = TerminalTab(
-            id: UUID(),
-            splitRoot: tab.splitRoot.mirrored(),
+            id: existing?.id ?? UUID(),
+            splitRoot: root,
             focusedPaneID: nil,
             customTitle: tab.customTitle
         )
         built.mirrorShape = shape
         window.shadowTabs[tab.id] = built
+        let departed = reusable.values.flatMap(\.self)
+        for pane in departed {
+            pane.captureClosingSnapshot()
+        }
+        retireMirrors(departed)
         return built
     }
 
     private func dropShadows(of window: WindowState, except keep: UUID?) {
         for (id, shadow) in window.shadowTabs where id != keep {
             window.shadowTabs.removeValue(forKey: id)
-            retireShadow(shadow)
+            retireMirrors(shadow.splitRoot.allPanes())
         }
     }
 
     /// Detach a shadow's mirrors. `destroySurface` ends the pane's zmx CLIENT
     /// only — a mirror never owns its session. Deferred because this can run
     /// from a view body (`viewTab` rebuilding a shadow mid-render).
-    private func retireShadow(_ shadow: TerminalTab) {
-        let panes = shadow.splitRoot.allPanes()
-        // Its leadership records die with it. Left in place they point at
+    private func retireMirrors(_ panes: [Pane]) {
+        guard !panes.isEmpty else { return }
+        // Their leadership records die with them. Left in place they point at
         // panes no longer attached, and `isLeader` then falls back to a guess
         // the daemon has just contradicted (see `surfaceDidGetSize`).
         let retired = Set(panes.map(\.id))
@@ -648,6 +675,31 @@ final class AppState {
                 pane.destroySurface()
             }
         }
+    }
+
+    /// The size `pane` is drawn at in the window the user is working in. A
+    /// pane of a tab another window owns is on screen here as a mirror
+    /// (#345), and its own view is sized by that other window — or by no
+    /// window at all while that one stands aside — so Split Automatically
+    /// read the wrong pane's shape and split along the wrong axis. Prefers
+    /// the view in the key window, then any visible one, then the pane's own.
+    func displayedSize(of pane: Pane) -> CGSize {
+        var candidates = [pane]
+        if let real = workspaces[pane.projectID]?.tabs.first(where: { $0.splitRoot.findPane(id: pane.id) != nil }) {
+            let shape = real.splitRoot.shapeSignature
+            for window in windows {
+                guard let shadow = window.shadowTabs[real.id], shadow.mirrorShape == shape,
+                      let mirrorID = counterpartPaneID(pane.id, from: real, to: shadow),
+                      let mirror = shadow.splitRoot.findPane(id: mirrorID)
+                else { continue }
+                candidates.append(mirror)
+            }
+        }
+        let views = candidates.compactMap(\.nsView)
+        let shown = views.first { $0.window?.isKeyWindow == true }
+            ?? views.first { $0.window?.isVisible == true }
+            ?? pane.nsView
+        return shown?.bounds.size ?? .zero
     }
 
     /// The pane in `to` at the same tree position as `paneID` in `from`. A
@@ -3310,7 +3362,8 @@ final class AppState {
     }
 
     /// Split the focused pane along its longer on-screen axis (Ghostty's
-    /// `new_split` / BSP behavior). Direction is decided by `TerminalTab.autoSplit`.
+    /// `new_split` / BSP behavior), measured where the user sees it
+    /// (`displayedSize`).
     func autoSplitPane(projectID: UUID, projects: [Project]) {
         guard let tab = workspaces[projectID]?.activeTab,
               let paneID = tab.focusedPaneID,
@@ -3321,7 +3374,11 @@ final class AppState {
             projectDirectory: projectDirectory,
             activePaneDirectory: pane.liveLocalWorkingDirectory()
         )
-        tab.autoSplit(paneID: paneID, newPaneWorkingDirectory: newPaneDirectory)
+        tab.split(
+            paneID: paneID,
+            direction: SplitDirection.auto(for: displayedSize(of: pane)),
+            newPaneWorkingDirectory: newPaneDirectory
+        )
         saveWorkspaces()
     }
 

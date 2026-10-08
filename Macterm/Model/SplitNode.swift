@@ -96,18 +96,18 @@ final class SplitBranch: Identifiable {
 extension SplitNode {
     /// The same tree with every pane replaced by a mirror of it — a second
     /// pane on the same zmx session (#345). Ratios and directions are copied;
-    /// the mirrors are new `Pane`s with fresh views, so the result can render
-    /// in a different window from the original.
-    func mirrored() -> SplitNode {
+    /// each pane comes from `mirror`, by default a new `Pane` with a fresh
+    /// view, so the result can render in a different window from the original.
+    func mirrored(_ mirror: (Pane) -> Pane = { Pane(mirroring: $0) }) -> SplitNode {
         switch self {
         case let .pane(pane):
-            .pane(Pane(mirroring: pane))
+            .pane(mirror(pane))
         case let .split(branch):
             .split(SplitBranch(
                 direction: branch.direction,
                 ratio: branch.ratio,
-                first: branch.first.mirrored(),
-                second: branch.second.mirrored()
+                first: branch.first.mirrored(mirror),
+                second: branch.second.mirrored(mirror)
             ))
         }
     }
