@@ -1,8 +1,8 @@
 /* eyesclosed web — components. Load after tokens.css. Every value is a token.
    One grid everywhere: a label column (width-label) and a text column (width-text),
-   width-gutter apart. Ubuntu for everything; Fira Code only inside code.
+   width-gutter apart. Open Sans for everything; Fira Code only inside code.
    Two weights only: 400 and 500. */
-@import url("https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,400;0,500;1,400;1,500&family=Fira+Code:wght@400..500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400..500;1,400..500&family=Fira+Code:wght@400..500&display=swap");
 
 /* ── base: put .ec on <body> ─────────────────────────────────────────── */
 .ec {
