@@ -106,6 +106,31 @@ struct MactermConfigTests {
     }
 
     @Test
+    func snap_to_whole_row_is_the_forks_rows_mode_of_smooth_scrolling() {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            animations: .init(smoothScrolling: true, smoothScrollRows: true)
+        )
+        #expect(body.contains("smooth-scroll = true\n"))
+        #expect(body.contains("smooth-scroll-rows = true\n"))
+        // Pixel smooth scrolling alone leaves the rows key to the user.
+        let pixels = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            animations: .init(smoothScrolling: true)
+        )
+        #expect(!pixels.contains("smooth-scroll-rows"))
+    }
+
+    @Test
+    func snap_to_whole_row_without_smooth_scrolling_writes_nothing() {
+        let body = MactermConfig.overridesBody(
+            windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil,
+            animations: .init(smoothScrolling: false, smoothScrollRows: true)
+        )
+        #expect(!body.contains("smooth-scroll"))
+    }
+
+    @Test
     func smooth_scrolling_off_writes_no_key_so_the_user_config_decides() {
         let body = MactermConfig.overridesBody(windowOpacity: 1.0, userConfigText: nil, shimDirectory: nil)
         #expect(!body.contains("smooth-scroll"))

@@ -43,9 +43,9 @@ struct ScrollAccumulator: Equatable {
     }
 
     /// The delta to send so the core ends up holding exactly `remainder`
-    /// (backing pixels), before the multiplier it will apply. Within one cell
-    /// of zero, sending it commits no row; aimed past a cell (`RowSnap`'s
-    /// landing), it commits the whole rows on the way and leaves the rest.
+    /// (backing pixels, within one cell of zero), before the multiplier it
+    /// will apply. Sending it commits no row: the sum lands on `remainder`,
+    /// which is under a cell by construction.
     func nudge(toward remainder: CGFloat, multiplier: Double) -> CGFloat {
         guard multiplier != 0 else { return 0 }
         return (remainder - pending) / CGFloat(multiplier)

@@ -52,6 +52,7 @@ final class MactermConfig {
             shimDirectory: Self.sshShimDirectory(),
             animations: .init(
                 smoothScrolling: Preferences.shared.smoothScrolling,
+                smoothScrollRows: Preferences.shared.snapScrollToRow,
                 smoothCursor: Preferences.shared.smoothCursor,
                 trail: Preferences.shared.cursorTrail
             )
@@ -68,6 +69,12 @@ final class MactermConfig {
     ///   precise trackpad deltas in pixels, and with the key on it renders
     ///   the sub-row remainder. Macterm forwards every wheel event untouched
     ///   (#393), so the gate must live on that side.
+    /// - Snap to whole row is `smooth-scroll-rows`, a mode of the same key:
+    ///   input commits whole rows as it does without smooth scrolling, and
+    ///   each row the viewport moves eases into place on the curve `less`'s
+    ///   region scrolls use, so the viewport never rests between rows. The
+    ///   renderer owns the motion; written only under `smooth-scroll`, which
+    ///   it modifies.
     /// - Smooth cursor is `smooth-cursor`: the renderer's own cell shaders
     ///   draw the focused cursor at an eased rectangle and color the text
     ///   under it by coverage, so a glyph the cursor is halfway across is
@@ -84,6 +91,7 @@ final class MactermConfig {
     ///   only read the cursor's cell, not where the glide had drawn it.
     struct Animations: Equatable {
         var smoothScrolling = false
+        var smoothScrollRows = false
         var smoothCursor = false
         var trail = false
 
@@ -93,6 +101,9 @@ final class MactermConfig {
             var lines: [String] = []
             if smoothScrolling {
                 lines.append("smooth-scroll = true")
+                if smoothScrollRows {
+                    lines.append("smooth-scroll-rows = true")
+                }
             }
             if smoothCursor {
                 lines.append("smooth-cursor = true")
