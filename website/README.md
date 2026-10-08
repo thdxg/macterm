@@ -39,7 +39,7 @@ Both pages are built from the **eyesclosed** design system, the one system
 for every site Ethan makes. There is no site stylesheet: every page loads
 `/tokens.css` and `/components/bundle.css`, puts `class="ec"` on `<body>`, and
 uses the system's `ec-*` classes as its component READMEs document them — plus
-`tok-*` for syntax highlighting. DM Sans (and Fira Code, inside code only) comes
+`tok-*` for syntax highlighting. Ubuntu (and Fira Code, inside code only) comes
 from Google Fonts through `bundle.css`'s `@import`.
 
 `design-system/` is a vendored copy of the system's `tokens.json` and

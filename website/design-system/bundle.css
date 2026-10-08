@@ -1,7 +1,8 @@
 /* eyesclosed web — components. Load after tokens.css. Every value is a token.
    One grid everywhere: a label column (width-label) and a text column (width-text),
-   width-gutter apart. DM Sans for everything; Fira Code only inside code. */
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..600;1,9..40,400..600&family=Fira+Code:wght@400..700&display=swap");
+   width-gutter apart. Ubuntu for everything; Fira Code only inside code.
+   Two weights only: 400 and 500. */
+@import url("https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,400;0,500;1,400;1,500&family=Fira+Code:wght@400..500&display=swap");
 
 /* ── base: put .ec on <body> ─────────────────────────────────────────── */
 .ec {
@@ -34,14 +35,14 @@
 .ec-section + .ec-section { padding-top: 0; }
 .ec-section-label { grid-column: 1; font-size: 14px; line-height: 26px; font-weight: 400; color: var(--ink-faint); }
 .ec-section-body { grid-column: 2; min-width: 0; display: flex; flex-direction: column; gap: var(--space-5); }
-.ec-section-body > h2, .ec-section-body > h3 { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-heading); }
+.ec-section-body > h2, .ec-section-body > h3 { font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink-heading); }
 .ec-section-body > p { color: var(--ink); text-wrap: pretty; }
 .ec-section-body > .ec-muted { color: var(--ink-muted); }
 .ec-span { grid-column: 1 / -1; }
 
 /* ── SiteHeader ──────────────────────────────────────────────────────── */
 .ec-header { align-items: center; padding-block: var(--space-8); }
-.ec-brand { grid-column: 1; display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; color: var(--ink-bright); text-decoration: none; font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.ec-brand { grid-column: 1; display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; color: var(--ink-bright); text-decoration: none; font-size: 15px; line-height: 20px; font-weight: 500; letter-spacing: -0.01em; }
 .ec-brand img, .ec-brand svg { width: 20px; height: 20px; display: block; }
 .ec-nav { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); font-size: 14px; line-height: 20px; }
 .ec-nav a { color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
@@ -51,7 +52,7 @@
 .ec-hero { padding-block: var(--space-24) var(--space-12); }
 @media (min-width: 720px) { .ec-hero { padding-top: var(--space-40); } }
 .ec-hero > * { grid-column: 2; }
-.ec-hero h1 { font-size: 40px; line-height: 44px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink-bright); }
+.ec-hero h1 { font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.03em; color: var(--ink-bright); }
 .ec-hero-lede { margin-top: var(--space-4) !important; font-size: 19px; line-height: 30px; letter-spacing: -0.01em; color: var(--ink-muted); text-wrap: pretty; }
 .ec-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-8); }
 .ec-hero .ec-code { margin-top: var(--space-6); }
@@ -123,7 +124,7 @@ a.ec-entry-title:hover { color: var(--link); }
 .ec-code .prompt { color: var(--ink-ghost); user-select: none; }
 
 /* syntax — the eyesclosed editor theme, one class per Helix scope */
-.tok-keyword { color: var(--keyword); font-weight: 700; }
+.tok-keyword { color: var(--keyword); font-weight: 500; }
 .tok-function { color: var(--function); }
 .tok-string { color: var(--string); }
 .tok-constant { color: var(--constant); }
@@ -150,16 +151,16 @@ a.ec-entry-title:hover { color: var(--link); }
 /* ── Prose ───────────────────────────────────────────────────────────── */
 .ec-prose { max-width: var(--width-text); color: var(--ink); font-size: 16px; line-height: 26px; }
 .ec-prose > * + * { margin-top: var(--space-5); }
-.ec-prose h1 { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink-heading); }
+.ec-prose h1 { font-size: 28px; line-height: 36px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink-heading); }
 .ec-prose h1 + p { margin-top: var(--space-3); font-size: 19px; line-height: 30px; letter-spacing: -0.01em; color: var(--ink-muted); }
-.ec-prose h2 { margin-top: var(--space-12); font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-heading); }
-.ec-prose h3 { margin-top: var(--space-8); font-size: 16px; line-height: 24px; font-weight: 600; color: var(--ink-heading); }
+.ec-prose h2 { margin-top: var(--space-12); font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink-heading); }
+.ec-prose h3 { margin-top: var(--space-8); font-size: 16px; line-height: 24px; font-weight: 500; color: var(--ink-heading); }
 .ec-prose h2 + *, .ec-prose h3 + * { margin-top: var(--space-2); }
 .ec-prose p { margin-bottom: 0; }
 .ec-prose ul, .ec-prose ol { margin-bottom: 0; padding-left: var(--space-5); }
 .ec-prose li + li { margin-top: var(--space-2); }
 .ec-prose li::marker { color: var(--ink-faint); }
-.ec-prose strong { color: var(--ink-bright); font-weight: 600; }
+.ec-prose strong { color: var(--ink-bright); font-weight: 500; }
 .ec-prose img { display: block; border-radius: var(--radius-md); }
 .ec-prose hr { border: 0; height: var(--space-6); margin: 0; }
 
