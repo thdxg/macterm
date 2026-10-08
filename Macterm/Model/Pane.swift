@@ -1039,12 +1039,20 @@ final class Pane: Identifiable {
     @ObservationIgnored
     private(set) var closingSnapshot: PanePreview?
 
-    /// Tear down the ghostty surface and null out callbacks. Call when the
-    /// pane is removed from the tree. Safe to call multiple times.
-    func destroySurface() {
+    /// Take `closingSnapshot` now, for a pane leaving the tree whose surface
+    /// is torn down later — a retired mirror, whose `destroySurface` is
+    /// deferred off the view body that retired it, after the layout has
+    /// already looked for its ghost. `destroySurface` calls it too.
+    func captureClosingSnapshot() {
         if Preferences.shared.animatedSplits, closingSnapshot == nil, _nsView != nil {
             closingSnapshot = PanePreviewCapture.capture(self, longEdge: nil, fillsBackground: false)
         }
+    }
+
+    /// Tear down the ghostty surface and null out callbacks. Call when the
+    /// pane is removed from the tree. Safe to call multiple times.
+    func destroySurface() {
+        captureClosingSnapshot()
         // A pane with no surface has nothing left to acknowledge — an unloaded
         // project's panes stay in the tree, and their bells must not keep the
         // Dock badged for shells that no longer exist (ghostty's window-close

@@ -60,7 +60,7 @@ extension AppState {
         {
             return splitPane(
                 pane.id,
-                direction: SplitDirection.auto(for: pane.nsView?.bounds.size ?? .zero),
+                direction: SplitDirection.auto(for: displayedSize(of: pane)),
                 projectID: projectID,
                 projectDirectory: projectDirectory,
                 command: TextFileEditor.typedCommand,

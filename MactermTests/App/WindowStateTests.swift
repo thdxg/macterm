@@ -400,6 +400,67 @@ struct WindowStateTests {
     }
 
     @Test
+    func a_mirror_view_keeps_its_identity_and_surviving_mirrors_across_a_split() throws {
+        // The animated split layout keys on the tab id and pane ids. A shadow
+        // rebuilt from scratch had a new id and all-new panes, so a split made
+        // in the mirror window remounted the whole view instead of sliding the
+        // new pane in, and every mirror was torn down and attached again.
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let before = try #require(state.viewTab(for: project.id, in: b)).tab
+        let mirror = try #require(before.splitRoot.allPanes().first)
+
+        let source = try #require(real.splitRoot.allPanes().first)
+        let added = try #require(state.splitPane(
+            source.id, direction: .horizontal, projectID: project.id, projectDirectory: "/tmp"
+        ))
+
+        let after = try #require(state.viewTab(for: project.id, in: b)).tab
+        #expect(after.id == before.id)
+        let panes = after.splitRoot.allPanes()
+        #expect(panes.count == 2)
+        #expect(panes[0] === mirror, "the existing mirror is reused in place")
+        let newSession = try #require(real.splitRoot.findPane(id: added)).sessionName
+        #expect(panes[1].sessionName == newSession)
+
+        // Closing the original pane keeps the new pane's mirror.
+        let newMirror = panes[1]
+        real.removePane(source.id)
+        let closed = try #require(state.viewTab(for: project.id, in: b)).tab
+        #expect(closed.id == before.id)
+        #expect(closed.splitRoot.allPanes().map(\.id) == [newMirror.id])
+    }
+
+    @Test
+    func a_tab_holding_one_session_twice_gets_a_mirror_for_each() throws {
+        let state = makeAppState()
+        let (project, ws) = try seedProject(state, tabs: 1)
+        let real = try #require(ws.activeTab)
+        let a = WindowState(activeProjectID: project.id)
+        let b = WindowState(activeProjectID: project.id)
+        state.registerWindow(a)
+        state.registerWindow(b)
+        state.noteKeyWindow(a)
+        let before = try #require(state.viewTab(for: project.id, in: b)).tab
+        let mirror = try #require(before.splitRoot.allPanes().first)
+
+        let source = try #require(real.splitRoot.allPanes().first)
+        _ = try #require(state.mirrorPane(source.id, direction: .horizontal, projectID: project.id))
+
+        let panes = try #require(state.viewTab(for: project.id, in: b)).tab.splitRoot.allPanes()
+        #expect(panes.count == 2)
+        #expect(panes[0] === mirror)
+        #expect(panes[1] !== mirror)
+        #expect(Set(panes.map(\.sessionName)) == [source.sessionName])
+    }
+
+    @Test
     func a_mirror_view_is_dropped_when_its_window_moves_on() throws {
         let state = makeAppState()
         let (project, ws) = try seedProject(state, tabs: 2)
