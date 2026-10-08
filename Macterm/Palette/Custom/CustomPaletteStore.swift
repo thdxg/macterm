@@ -59,8 +59,6 @@ final class CustomPaletteStore {
         self.init(directoryURL: configDirectoryURL.appendingPathComponent("palettes", isDirectory: true))
     }
 
-    var palettes: [CustomPalette] { entries.compactMap(\.palette) }
-
     func entry(id: String) -> Entry? {
         entries.first { $0.id == id }
     }
@@ -69,7 +67,6 @@ final class CustomPaletteStore {
         entry(id: id)?.palette
     }
 
-    /// The frame a palette opens on: its root node, nothing exported yet.
     /// The frame a palette opens on: its root node, nothing exported yet. A
     /// file that didn't read has one too — entering it shows the error.
     func rootTarget(id: String) -> CustomPaletteTarget? {
@@ -86,8 +83,17 @@ final class CustomPaletteStore {
     func reload() {
         let files = Self.paletteFiles(in: directoryURL)
         fingerprint = Self.fingerprint(of: directoryURL)
+        var seen = Set<String>()
         entries = files.map { url in
-            let id = url.deletingPathExtension().lastPathComponent
+            let stem = url.deletingPathExtension().lastPathComponent
+            // `git.yaml` and `git.yml` would be one id: bindings, the
+            // Settings switch and every lookup key on it. The first by name
+            // is the palette; the other says why it isn't.
+            guard seen.insert(stem).inserted else {
+                let error = CustomPaletteError.invalid("another file is already the palette \(stem); rename one")
+                return Entry(id: url.lastPathComponent, fileURL: url, result: .failure(error), header: nil)
+            }
+            let id = stem
             let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             let header = CustomPaletteFile.parseHeader(yaml: text)
             do {
@@ -121,10 +127,13 @@ final class CustomPaletteStore {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
+    /// Each file's modification date — the target's, for a symbolic link
+    /// (a dotfiles manager's), whose own date never changes when the file it
+    /// points at is saved.
     private static func fingerprint(of directory: URL) -> [String: Date] {
         var dates: [String: Date] = [:]
         for url in paletteFiles(in: directory) {
-            dates[url.lastPathComponent] = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+            dates[url.lastPathComponent] = (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate ?? .distantPast
         }
         return dates

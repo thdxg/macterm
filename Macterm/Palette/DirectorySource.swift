@@ -102,15 +102,19 @@ struct DirectorySource: PaletteSource {
     /// `ProjectPath.matches`) switches, with an add-another item below;
     /// otherwise a single item creates the remote project. The display name
     /// is the remote directory's basename, falling back to the host for
-    /// `host:~` / `host:/`.
+    /// `host:~` / `host:/` (with or without a trailing slash). Taken from the
+    /// parsed directory, never the spec: `lastPathComponent` of `devbox:/` is
+    /// `devbox:`.
     private func remoteItems(spec: String, context: PaletteContext) -> [PaletteItem] {
-        let base = (spec as NSString).lastPathComponent
-        let name: String = if base.isEmpty || base == "~" || base == "/" || base == spec {
-            ProjectPath.remote(from: spec).flatMap {
-                if case let .remote(_, host, _) = $0 { host } else { nil }
-            } ?? spec
+        let name: String = if case let .remote(_, host, directory)? = ProjectPath.remote(from: spec) {
+            switch (directory as NSString).lastPathComponent {
+            case "",
+                 "~",
+                 "/": host
+            case let base: base
+            }
         } else {
-            base
+            spec
         }
         if let existing = context.projectStore.projects.first(where: { ProjectPath.matches($0.path, spec) }) {
             let switchItem = PaletteItem(

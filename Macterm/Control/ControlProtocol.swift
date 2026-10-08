@@ -386,8 +386,6 @@ struct ControlPaneInfo: Codable, Equatable {
     var leader: Bool?
 }
 
-/// One open terminal window. `project` is what its titlebar and the macOS
-/// Window menu show — each window tracks its own.
 /// One custom palette file (`CustomPaletteStore.Entry`), as `palette list`
 /// reports it: the file's stem is its id, `error` is why it didn't read.
 struct ControlPaletteInfo: Codable, Equatable {
@@ -403,6 +401,8 @@ struct ControlPaletteInfo: Codable, Equatable {
     var error: String?
 }
 
+/// One open terminal window. `project` is what its titlebar and the macOS
+/// Window menu show — each window tracks its own.
 struct ControlWindowInfo: Codable, Equatable {
     /// 1-based position in creation order, rendered `window:N`.
     var index: Int

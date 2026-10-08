@@ -32,8 +32,8 @@ struct CommandPaletteMount: View {
 // MARK: - Overlay
 
 /// A SwiftUI overlay hosting the command palette. Mounts only when visible,
-/// dims the background with a click-to-dismiss scrim, and positions the palette
-/// ~15% from the top of the available area.
+/// lays a transparent click-to-dismiss scrim over the window, and positions
+/// the palette ~15% from the top of the available area.
 struct CommandPaletteOverlay: View {
     @Environment(AppState.self)
     private var appState
@@ -69,6 +69,10 @@ struct CommandPaletteOverlay: View {
 
                 VStack(alignment: .leading, spacing: PaletteBreadcrumb.gap) {
                     PaletteBreadcrumb(frames: windowState.paletteStack) { index in
+                        // Back to that screen with its search empty, as
+                        // Escape and Backspace leave one: text typed for one
+                        // listing means nothing to another.
+                        appState.commandPaletteQuery = ""
                         windowState.popPaletteFrames(above: index)
                     }
                     CommandPalettePanel()
@@ -78,7 +82,10 @@ struct CommandPaletteOverlay: View {
                 .padding(.top, max(0, geo.size.height * 0.15 - breadcrumb))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(reduceMotion ? nil : PaletteMotion.animation, value: windowState.paletteStack.count)
+            // Keyed on the frames, not their count: a screen's chord pressed
+            // over another screen swaps one frame for another, and that pill
+            // must blur in too.
+            .animation(reduceMotion ? nil : PaletteMotion.animation, value: windowState.paletteStack)
         }
     }
 }
@@ -164,8 +171,9 @@ struct CommandPalettePanel: View {
 
     private var placeholderText: String {
         if let scope { return scope.placeholder }
-        let q = query.trimmingCharacters(in: .whitespaces)
-        if q.hasPrefix("/") || q.hasPrefix("~") { return "Open directory as new project..." }
+        // Path mode's own test, so a remote spec (`devbox:~/api`) reads as
+        // the directory it opens too.
+        if PaletteQuery(raw: query).looksLikePath { return "Open directory as new project..." }
         return "Search projects or commands..."
     }
 
@@ -288,12 +296,17 @@ struct CommandPalettePanel: View {
             optionHeld = NSEvent.modifierFlags.contains(.option)
             eventMonitor = PaletteEventMonitor(
                 onFlags: { optionHeld = $0.contains(.option) },
-                onBackspace: { isRepeat in
+                onBackspace: { event in
                     // Backspace with nothing left to delete steps out of a
                     // screen — on a fresh press only: a Backspace held down
                     // to clear the input stops at the empty field instead of
-                    // running on out of the screen.
-                    guard windowState.paletteScope != nil, query.isEmpty, !isRepeat else { return false }
+                    // running on out of the screen. Only for this palette's
+                    // own window: the monitor sees every key in the app, and
+                    // a Delete typed into the quick terminal or another
+                    // window's palette is theirs.
+                    guard event.window === appState.nsWindow(for: windowState),
+                          windowState.paletteScope != nil, query.isEmpty, !event.isARepeat
+                    else { return false }
                     leaveScope()
                     return true
                 }
@@ -327,12 +340,12 @@ struct CommandPalettePanel: View {
             return .handled
         }
         .onKeyPress(characters: .init(charactersIn: "p"), phases: [.down, .repeat]) { press in
-            guard press.modifiers == .control else { return .ignored }
+            guard press.chordModifiers == .control else { return .ignored }
             moveSelection(-1)
             return .handled
         }
         .onKeyPress(characters: .init(charactersIn: "n"), phases: [.down, .repeat]) { press in
-            guard press.modifiers == .control else { return .ignored }
+            guard press.chordModifiers == .control else { return .ignored }
             moveSelection(1)
             return .handled
         }
@@ -353,7 +366,7 @@ struct CommandPalettePanel: View {
         // responder stands aside while the palette is up, and on the root
         // it stays ignored.
         .onKeyPress(characters: .init(charactersIn: "r")) { press in
-            guard press.modifiers == .command, let scope else { return .ignored }
+            guard press.chordModifiers == .command, let scope else { return .ignored }
             scope.retry()
             return .handled
         }
@@ -388,8 +401,10 @@ struct CommandPalettePanel: View {
             failure = nil
         }
         // Never rest the selection on a muted row (e.g. when it's the top
-        // match after a query change).
-        if flatItems.indices.contains(selectedIndex), !flatItems[selectedIndex].isEnabled,
+        // match after a query change), nor past the end of a list that just
+        // got shorter (a screen's redraw, a hover resolved against the old
+        // rows) — Return would have nothing to run.
+        if !flatItems.indices.contains(selectedIndex) || !flatItems[selectedIndex].isEnabled,
            let firstEnabled = flatItems.indices.first(where: { flatItems[$0].isEnabled })
         {
             selectedIndex = firstEnabled
@@ -400,7 +415,7 @@ struct CommandPalettePanel: View {
     /// Enter can never land on one. When only disabled rows remain in that
     /// direction, the selection stays put.
     private func moveSelection(_ delta: Int) {
-        var idx = selectedIndex + delta
+        var idx = min(selectedIndex, flatItems.count) + delta
         while idx >= 0, idx < flatItems.count, !flatItems[idx].isEnabled {
             idx += delta
         }
@@ -517,10 +532,10 @@ private final class PaletteEventMonitor {
     /// under Swift 6, hence the unchecked storage.
     nonisolated(unsafe) private var tokens: [Any] = []
 
-    /// `onBackspace` is handed whether the press is an auto-repeat and
-    /// returns whether it consumed the key.
+    /// `onBackspace` is handed the press and returns whether it consumed
+    /// the key.
     @MainActor
-    init(onFlags: @escaping @MainActor (NSEvent.ModifierFlags) -> Void, onBackspace: @escaping @MainActor (Bool) -> Bool) {
+    init(onFlags: @escaping @MainActor (NSEvent.ModifierFlags) -> Void, onBackspace: @escaping @MainActor (NSEvent) -> Bool) {
         if let flags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged, handler: { event in
             MainActor.assumeIsolated { onFlags(event.modifierFlags.intersection(.deviceIndependentFlagsMask)) }
             return event
@@ -529,7 +544,7 @@ private final class PaletteEventMonitor {
         }
         if let keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { event in
             guard event.keyCode == 51, event.modifierFlags.isDisjoint(with: [.command, .control, .option]) else { return event }
-            return MainActor.assumeIsolated { onBackspace(event.isARepeat) } ? nil : event
+            return MainActor.assumeIsolated { onBackspace(event) } ? nil : event
         }) {
             tokens.append(keys)
         }
@@ -851,5 +866,14 @@ private struct KeyCap: View {
                 RoundedRectangle(cornerRadius: 5)
                     .strokeBorder(MactermTheme.border, lineWidth: 1)
             )
+    }
+}
+
+private extension KeyPress {
+    /// The modifiers that make a chord: Caps Lock and the numeric-pad flag
+    /// ride along on a key press without being part of one, so comparing
+    /// the raw set with `==` fails while Caps Lock is on.
+    var chordModifiers: EventModifiers {
+        modifiers.subtracting([.capsLock, .numericPad])
     }
 }

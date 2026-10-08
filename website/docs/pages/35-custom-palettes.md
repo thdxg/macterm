@@ -125,7 +125,7 @@ Prefer a tool's JSON output to cutting up its text. JSON gives you named fields 
 
 ## Exports
 
-`export:` sets environment variables for every command below the row: the next screen's listing, and any action further down. Values carry down through every screen, and a lower screen can overwrite one.
+`export:` sets environment variables for every command below the row: the next screen's listing, and any action further down. Values carry down through every screen, and a lower screen can overwrite one. A name is one `sh` can read (letters, digits and `_`, not starting with a digit), and not one Macterm sets itself (`MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`).
 
 Read an exported value as a variable, like `"$BRANCH"`. **Nothing is ever pasted into a command's text**, so a branch, pod or file name with spaces or quotes can't break the command or run as code.
 
@@ -141,11 +141,13 @@ An action is exactly one of these:
 
 | Action | Does |
 | --- | --- |
-| `run: <command>` | Runs the command in a new tab of the active project, or with `in: split` in a split beside its focused pane. The exported variables are in its environment. |
+| `run: <command>` | Runs the command in a new tab of the active project, or with `in: split` in a split beside its focused pane. With a pinned tab active, always in a split beside it. The exported variables are in its environment. |
 | `copy: <text>` | Copies to the clipboard. In a listing, a path or literal text. |
 | `open: <url or file>` | Opens with the default app. In a listing, a path or literal text. |
 
-A `run:` command runs before the new terminal's shell starts, and when it ends your shell's prompt is there. **It is never typed at the prompt**, so it stays out of your shell's history. In a [remote project](/docs/remote-projects) it is typed at the host's prompt instead, for the host's shell.
+A `run:` command runs before the new terminal's shell starts, and when it ends your shell's prompt is there. **It is never typed at the prompt**, so it stays out of your shell's history.
+
+**In a [remote project](/docs/remote-projects), a `run:` command is typed at the host's prompt** as written, because ssh carries no environment to the host. The host's own shell runs it, not `sh` (and a shebang means nothing there), it enters that shell's history, and **the exported variables and `MACTERM_PROJECT_*` aren't set** — so a palette for remote projects can't pass a pick to `run:` through `"$VAR"`.
 
 ### Alt actions
 
@@ -161,7 +163,7 @@ A row can have a second action, `alt:`, run by <kbd>⌥↩</kbd> or <kbd>⌥</kb
 
 ## Commands and your shell
 
-**Commands are POSIX `sh`**, run as `sh -o errexit -c '<command>'`, whatever your own shell is, so a palette works the same for everyone it's shared with. With errexit, a command of several steps stops at the first one that fails. A listing runs in the active project's directory.
+**Commands are POSIX `sh`**, run by `sh -o errexit` exactly as written, whatever your own shell is, so a palette works the same for everyone it's shared with. The command reaches `sh` in an environment variable, never pasted into a shell line, so nothing in it needs escaping. With errexit, a command of several steps stops at the first one that fails. A listing runs in the active project's directory — for a remote project or a pinned tab, in your home folder on your Mac.
 
 **A command whose first line is a shebang runs as a script** with that interpreter instead, the way [mise](https://mise.jdx.dev/tasks/toml-tasks.html) runs a task. Write it as a YAML block:
 
@@ -171,11 +173,16 @@ list: |
   ls | where type == dir | get name | to json
 ```
 
-Commands still see **your shell's environment**. Each starts through your login shell, so the `PATH` your shell config sets up finds `kubectl`, `jq` or the shebang's interpreter. A `run:` command goes through your shell as an interactive one too, so what your `.zshrc` exports reaches it. Your shell's aliases and functions don't reach either: they aren't `sh`.
+Commands still see **your shell's environment**, started through your login shell so the `PATH` it sets up finds `kubectl`, `jq` or the shebang's interpreter:
+
+- **A listing** starts through a non-interactive login shell, which reads your login files (`.zprofile`, `.bash_profile`, nushell's `env.nu` and `config.nu`) but not `.zshrc` or `.bashrc`. Set the `PATH` a listing needs in a login file.
+- **A `run:` command** starts through an interactive login shell, so what your `.zshrc` exports reaches it too.
+
+Your shell's aliases and functions reach neither: they aren't `sh`.
 
 Every command also gets these variables:
 
-- `MACTERM_PROJECT_DIR`, the active project's directory.
+- `MACTERM_PROJECT_DIR`, the active project's directory (unset for a remote project or a pinned tab).
 - `MACTERM_PROJECT_NAME`, its name.
 - Every value exported above it.
 
@@ -183,9 +190,9 @@ Every command also gets these variables:
 
 ## Loading and errors
 
-- **While a listing runs**, the screen shows a spinner. One that takes over 30 seconds is stopped.
+- **While a listing runs**, the screen shows a spinner. One that takes over 30 seconds is stopped, along with everything it started. Leaving the screen stops it too.
 - **If a listing fails**, the screen says why, with the command's error output. A listing fails when the command isn't found, exits non-zero, or prints output that isn't the shape asked for. When a program the palette `requires` is missing, the screen names it instead: *This palette needs kubectl, which isn't on your PATH.* **Retry**, or <kbd>⌘R</kbd>, runs it again.
-- **A file that doesn't read** keeps its row, with a warning glyph before the chevron. Entering it shows the error, naming the node and key, like `pods: enter: no node named pod`. Fix the file and press <kbd>⌘R</kbd>. Settings → Palettes shows the same warning beside the palette's switch.
+- **A file that doesn't read** keeps its row, with a warning glyph before the chevron. Entering it shows the error, naming the node and key, like `pods: enter: no node named pod`. A key Macterm doesn't know is an error too (`pods: mathc: no such key`), so a misspelling can't silently do nothing. Fix the file and press <kbd>⌘R</kbd>. Settings → Palettes shows the same warning beside the palette's switch.
 
 To check every file from a terminal, run:
 

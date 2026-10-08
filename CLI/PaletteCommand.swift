@@ -65,9 +65,30 @@ struct PaletteCommand: ParsableCommand {
         private static func runToCompletion(_ argv: [String]) {
             signal(SIGINT, SIG_IGN)
             signal(SIGQUIT, SIG_IGN)
+            // ⌃Z would stop the command with no job control in front of it to
+            // resume it — under bash and sh, a grandchild this runner can't
+            // even see stop — freezing the pane until ⌃C. Off while the
+            // command runs, so ⌃Z reaches it as a key; the shell that
+            // follows gets the terminal's settings back.
+            var saved = termios()
+            let hasTerminal = isatty(STDIN_FILENO) != 0 && tcgetattr(STDIN_FILENO, &saved) == 0
+            if hasTerminal {
+                var noSuspend = saved
+                // `_POSIX_VDISABLE`, a macro Swift doesn't import: 0xFF here.
+                withUnsafeMutableBytes(of: &noSuspend.c_cc) { chars in
+                    chars[Int(VSUSP)] = 0xFF
+                    chars[Int(VDSUSP)] = 0xFF
+                }
+                tcsetattr(STDIN_FILENO, TCSANOW, &noSuspend)
+            }
             defer {
                 signal(SIGINT, SIG_DFL)
                 signal(SIGQUIT, SIG_DFL)
+                if hasTerminal {
+                    let previous = signal(SIGTTOU, SIG_IGN)
+                    tcsetattr(STDIN_FILENO, TCSANOW, &saved)
+                    signal(SIGTTOU, previous)
+                }
             }
 
             var attributes: posix_spawnattr_t?
@@ -89,7 +110,19 @@ struct PaletteCommand: ParsableCommand {
             let spawned = posix_spawn(&pid, argv[0], nil, &attributes, cargs, envp)
             if spawned == 0 {
                 var status: Int32 = 0
-                while waitpid(pid, &status, 0) == -1, errno == EINTR {}
+                while true {
+                    if waitpid(pid, &status, WUNTRACED) == -1 {
+                        if errno == EINTR { continue }
+                        break
+                    }
+                    // Stopped all the same (WIFSTOPPED) — a program that
+                    // suspends itself, as an editor does on its own ⌃Z:
+                    // nothing could resume it, so carry on, as bash does
+                    // with a ⌃Z it can't use.
+                    guard status & 0xFF == 0x7F else { break }
+                    let foreground = tcgetpgrp(STDIN_FILENO)
+                    kill(foreground > 0 ? -foreground : pid, SIGCONT)
+                }
             } else {
                 Output.printError("palette exec: couldn't start \(argv[0]): \(String(cString: strerror(spawned)))")
             }

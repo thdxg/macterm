@@ -22,12 +22,6 @@ enum HotkeyBinding: Hashable, Comparable {
         lhs.id < rhs.id
     }
 
-    /// Global by construction (the quick terminal); a palette never is.
-    var isAlwaysGlobal: Bool {
-        if case let .action(action) = self { return action.isAlwaysGlobal }
-        return false
-    }
-
     @MainActor
     var selectedShortcut: HotkeyShortcut? {
         switch self {

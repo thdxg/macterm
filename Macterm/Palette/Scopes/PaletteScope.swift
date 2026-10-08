@@ -13,7 +13,8 @@ import Foundation
 /// it by returning the case from `paletteScope`, which is what turns its
 /// palette row into a way in rather than a command. Built-in scopes are
 /// Swift because their listings are in-process reads (the keychain, git's
-/// files) that a shell command could only approximate slowly or not at all.
+/// files, the project's tree) that a shell command could only approximate
+/// slowly or not at all.
 /// A custom palette (`CustomPaletteFile`, a YAML file of nodes) is the one
 /// `.custom` case, its screens told apart by `CustomPaletteTarget`.
 enum PaletteScopeID: Hashable {
@@ -124,8 +125,9 @@ struct PaletteFailure: Error, Equatable {
 /// One screen's logic. A scope is a class so a frame can keep it for as
 /// long as it is on the stack: a scope whose listing takes time (a command's
 /// output) loads it once in `activate`, reports `loading` meanwhile, caches
-/// the rows and filters them per keystroke in `sections`. The built-in
-/// scopes read live, in-process state and need none of that.
+/// the rows and filters them per keystroke in `sections` — a custom
+/// palette's listing, and Files' index of the project. Passwords and
+/// Worktrees read live, in-process state and need none of that.
 @MainActor
 protocol PaletteScope: AnyObject {
     var placeholder: String { get }

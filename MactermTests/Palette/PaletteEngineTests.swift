@@ -108,6 +108,21 @@ struct PaletteEngineTests {
         #expect(result[0].items.map(\.title) == ["stat", "git status"])
     }
 
+    /// Equal scores go to the shorter title, then list order — never the
+    /// alphabet — as `SearchIndex.rank` breaks the same ties.
+    @Test
+    func equal_scores_go_to_the_shorter_title_then_list_order() {
+        let engine = PaletteEngine(
+            sources: [
+                FakeSource(titles: ["Zoom Pane", "Next Pane"], category: "a", emptyStateTitles: nil),
+                FakeSource(titles: ["Last Pane", "My Pane"], category: "b", emptyStateTitles: nil),
+            ],
+            context: makeContext(),
+            pathSource: nil
+        )
+        #expect(engine.search("pane")[0].items.map(\.title) == ["My Pane", "Zoom Pane", "Next Pane", "Last Pane"])
+    }
+
     @Test
     func path_query_uses_path_source_only() {
         let ctx = makeContext()

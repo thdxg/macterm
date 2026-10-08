@@ -162,11 +162,11 @@ final class ControlHandler {
         return ControlData(tabs: tabInfos(in: workspace))
     }
 
-    // MARK: - Windows (#345)
+    // MARK: - Palettes
 
-    /// `palette list`: every file in the palettes folder, read afresh, with
-    /// the error for one that didn't parse — the check an agent runs after
-    /// writing a palette.
+    /// `palette list`: every file in the palettes folder — re-read when any
+    /// was saved, added or removed since the last look — with the error for
+    /// one that didn't parse: the check an agent runs after writing a palette.
     private func paletteList() -> ControlData {
         appState.customPalettes.reloadIfChanged()
         let infos = appState.customPalettes.entries.map { entry in
@@ -183,6 +183,8 @@ final class ControlHandler {
         }
         return ControlData(palettes: infos)
     }
+
+    // MARK: - Windows (#345)
 
     private func windowList() -> ControlData {
         let infos = zip(1..., appState.windows).map { index, window in

@@ -173,8 +173,12 @@ struct DirectorySourceTests {
     @Test
     func bare_home_spec_names_the_project_after_the_host() throws {
         let (ctx, _, _) = makeContext()
-        let item = try #require(DirectorySource().items(query: "devbox:~", context: ctx).first)
-        #expect(item.title == "devbox")
+        for spec in ["devbox:~", "devbox:~/", "devbox:/", "me@devbox:/"] {
+            let item = try #require(DirectorySource().items(query: spec, context: ctx).first, "\(spec)")
+            #expect(item.title == "devbox", "\(spec)")
+        }
+        let trailing = try #require(DirectorySource().items(query: "devbox:/srv/api/", context: ctx).first)
+        #expect(trailing.title == "api")
     }
 
     // MARK: - Local directory listing

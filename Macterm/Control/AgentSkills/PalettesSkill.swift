@@ -31,6 +31,7 @@ extension AgentSkills {
         name: Kubernetes
         icon: shippingbox                      # an SF Symbol name; optional
         description: Namespaces, pods and their logs
+        requires: [kubectl]
         root: menu                             # the node to open on; defaults to a node called root
         nodes:
           menu:
@@ -46,7 +47,7 @@ extension AgentSkills {
           namespace-menu:
             items:
               - { title: Pods, enter: pods }
-              - { title: Set as current context, action: { run: kubectl config set-context --current --namespace "$NAMESPACE" } }
+              - { title: Set as current namespace, action: { run: kubectl config set-context --current --namespace "$NAMESPACE" } }
           pods:
             list: if [ -n "$NAMESPACE" ]; then set -- -n "$NAMESPACE"; else set -- -A; fi; kubectl get pods "$@" -o json
             rows: .items
@@ -67,7 +68,9 @@ extension AgentSkills {
           above, with and without `NAMESPACE`); the command handles the difference the way a shell does.
         - An **action** is exactly one of `run:` (run in a new tab, or a split with `in: split`, before its
           shell starts, with the exported variables in its environment; the shell's prompt follows when it
-          ends), `copy:` (to the clipboard) or `open:` (a URL or file).
+          ends), `copy:` (to the clipboard) or `open:` (a URL or file). In a **remote project** a `run:` is
+          typed at the host's prompt as written instead — the host's shell runs it and the exported variables
+          are not set there, so don't build a remote palette's `run:` on `"$VAR"`.
         - **`alt:`** is a row's second action, run by ⌥↩ or ⌥-click — on an item, or on a listing for every
           row: the same keys as an action plus an optional `title:`, which the row's subtitle shows while ⌥ is
           held (`alt: { title: Open in a Split, run: claude, in: split }`). Use it for the "same thing, other
@@ -104,8 +107,8 @@ extension AgentSkills {
         macterm palette list
         ```
 
-        Lists every palette file with its name, whether it is on, and — for a file that didn't read — the error
-        on the line, naming the node and field (`pods: enter: no node named pod`). Fix and run it again; the
+        Prints each palette file's id, whether it is on, its keybind (or `-`), and its name — or, for a file that
+        didn't read, `error:` and the reason, naming the node and field (`pods: enter: no node named pod`). Fix and run it again; the
         palette itself is opened with ⌘P (there is no CLI verb for that). Never run a listing's command yourself
         to "test" it if it has side effects; the user's shell runs it.
 

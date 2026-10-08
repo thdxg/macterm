@@ -6,7 +6,8 @@ import SwiftUI
 /// Keymaps for when it comes back. The built-in screens are Swift
 /// (`Palette/Scopes/`); the custom ones are the files in
 /// `~/.config/macterm/palettes/` (`CustomPaletteStore`), a file that failed
-/// to read shown with its error in place of a switch.
+/// to read keeping its switch, with a warning glyph beside it whose tooltip
+/// is the error.
 struct PalettesSettings: View {
     @Environment(AppState.self)
     private var appState

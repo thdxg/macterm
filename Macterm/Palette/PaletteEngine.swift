@@ -9,8 +9,8 @@ struct PaletteContext {
     let projectStore: ProjectStore
 }
 
-/// A selectable palette item. Same shape as the old `CommandPaletteItem`
-/// with an explicit `score` so the engine can rank-merge across sources.
+/// A selectable palette item, with an explicit `score` so the engine can
+/// rank-merge across sources.
 struct PaletteItem: Identifiable {
     let id: String
     let title: String
@@ -22,7 +22,7 @@ struct PaletteItem: Identifiable {
     /// keybind. Mirrors `keybind`, which keeps the joined form.
     let keybindSymbols: [String]?
     /// Lower is better: the negated `Search` score, so the engine's best
-    /// match sorts first; 0 for an empty query.
+    /// match sorts first. Sources pass 0 for an empty query's rows.
     let score: Int
     /// A disabled item renders muted, is skipped by keyboard selection, and
     /// never executes — visible so the user learns *why* it's unavailable
@@ -196,12 +196,10 @@ struct PaletteEngine {
         for source in sources {
             all += source.items(query: q.trimmed, context: context)
         }
-        // Total, deterministic order: score, then title, then id — Swift's
-        // `sort` isn't guaranteed stable, so equal scores need explicit
-        // tiebreakers rather than relying on incidental input order.
-        // Equal scores go to the shorter title, fzf's tiebreak.
-        all.sort { ($0.score, $0.title.count, $0.title, $0.id) < ($1.score, $1.title.count, $1.title, $1.id) }
-        return all.isEmpty ? [] : [PaletteSection(header: nil, items: all)]
+        // List order is the sources in order, each in its own order
+        // (`AppCommand.allCases` for commands).
+        let ranked = all.rankedByScore()
+        return ranked.isEmpty ? [] : [PaletteSection(header: nil, items: ranked)]
     }
 
     private func groupByCategory(_ items: [PaletteItem]) -> [PaletteSection] {
@@ -216,5 +214,17 @@ struct PaletteEngine {
         return order.map { cat in
             PaletteSection(header: cat.isEmpty ? nil : cat, items: grouped[cat] ?? [])
         }
+    }
+}
+
+extension [PaletteItem] {
+    /// Best match first; equal scores to the shorter title (fzf's tiebreak),
+    /// then list order — the order `SearchIndex.rank` and `Search.rank` give
+    /// the same ties, so every search in the app breaks them alike. The
+    /// position is an explicit key, so the order is total.
+    func rankedByScore() -> [PaletteItem] {
+        enumerated()
+            .sorted { ($0.element.score, $0.element.title.count, $0.offset) < ($1.element.score, $1.element.title.count, $1.offset) }
+            .map(\.element)
     }
 }
