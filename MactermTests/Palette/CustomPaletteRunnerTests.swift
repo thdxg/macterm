@@ -165,6 +165,19 @@ struct CustomPaletteRunnerTests {
         #expect(try Self.run("#!/bin/sh", loginShell: "/bin/zsh").status == 0, "a one-line script with no newline runs")
     }
 
+    /// A `when:` check passes on exit 0 and only then; each distinct
+    /// command runs once.
+    @Test
+    func a_check_passes_on_exit_zero_and_each_command_runs_once() async {
+        let verdicts = await CustomPaletteConditions.evaluate(
+            ["true", "false", "exit 3", "macterm-no-such-program"],
+            environment: [:],
+            currentDirectory: nil,
+            runner: CustomPaletteRunner.runner(timeout: .seconds(20))
+        )
+        #expect(verdicts == ["true": true, "false": false, "exit 3": false, "macterm-no-such-program": false])
+    }
+
     @Test
     func a_program_name_is_one_word_with_nothing_a_shell_expands() {
         for name in ["kubectl", "jq", "docker-compose", "python3.12", "g++", "/usr/local/bin/helm"] {

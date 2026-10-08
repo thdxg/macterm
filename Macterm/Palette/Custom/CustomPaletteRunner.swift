@@ -38,6 +38,11 @@ enum CustomPaletteRunner {
     /// every pane's).
     static let run: CustomPaletteCommandRunner = runner(timeout: timeout)
 
+    /// A `when:` check gives up sooner than a listing: the row it decides
+    /// is already on screen.
+    static let conditionTimeout: Duration = .seconds(10)
+    static let checkCondition: CustomPaletteCommandRunner = runner(timeout: conditionTimeout)
+
     /// The runner, giving up after `timeout` (a test's is short).
     ///
     /// The command runs in a process group of its own, and a timeout — or
@@ -266,5 +271,35 @@ enum CustomPaletteRequirements {
         }
         let verb = missing.count == 1 ? "isn't" : "aren't"
         return "This palette needs \(names), which \(verb) on your PATH."
+    }
+}
+
+/// Runs `when:` checks (`CustomPaletteCondition`): each distinct command
+/// once, concurrently, the way a listing runs — through the login shell into
+/// `sh` or a `#!` interpreter, in `environment` and `currentDirectory`.
+/// Exit 0 is available; anything else — a non-zero exit, a timeout, a
+/// command that won't start — is not.
+enum CustomPaletteConditions {
+    static func evaluate(
+        _ commands: Set<String>,
+        environment: [String: String],
+        currentDirectory: String?,
+        runner: @escaping CustomPaletteCommandRunner
+    ) async -> [String: Bool] {
+        await withTaskGroup(of: (String, Bool).self) { group in
+            for command in commands {
+                group.addTask {
+                    let invocation = CustomPaletteScript.invocation(of: command)
+                    let env = environment.merging(invocation.environment) { _, new in new }
+                    let status = try? await runner(invocation.line, env, currentDirectory).status
+                    return (command, status == 0)
+                }
+            }
+            var verdicts: [String: Bool] = [:]
+            for await (command, ok) in group {
+                verdicts[command] = ok
+            }
+            return verdicts
+        }
     }
 }

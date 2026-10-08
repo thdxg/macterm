@@ -33,6 +33,7 @@ struct CustomPaletteTarget: Hashable {
 final class CustomPaletteScope: PaletteScope {
     let target: CustomPaletteTarget
     private let runner: CustomPaletteCommandRunner
+    private let conditionRunner: CustomPaletteCommandRunner
 
     private(set) var loading: PaletteLoading?
     private(set) var failure: PaletteFailure?
@@ -48,9 +49,27 @@ final class CustomPaletteScope: PaletteScope {
     private var onChange: (@MainActor () -> Void)?
     private var context: PaletteContext?
 
-    init(target: CustomPaletteTarget, runner: @escaping CustomPaletteCommandRunner = CustomPaletteRunner.run) {
+    /// The `when:` checks running (`CustomPaletteCondition`): the palette's
+    /// own on its root, then its items'.
+    private var checks: Task<Void, Never>?
+    /// While the palette's own check runs on its root, nothing is shown: a
+    /// palette that can't be used now says why rather than listing.
+    private var gated = false
+    /// The items' checks, by command — each run once per screen, however
+    /// many items share it.
+    private var itemVerdicts: [String: Bool] = [:]
+    /// Whether this screen has started its checks and listing: once per
+    /// frame, so returning to it restarts nothing; ⌘R starts them again.
+    private var begun = false
+
+    init(
+        target: CustomPaletteTarget,
+        runner: @escaping CustomPaletteCommandRunner = CustomPaletteRunner.run,
+        conditionRunner: @escaping CustomPaletteCommandRunner = CustomPaletteRunner.checkCondition
+    ) {
         self.target = target
         self.runner = runner
+        self.conditionRunner = conditionRunner
     }
 
     private func palette(_ context: PaletteContext) -> CustomPalette? {
@@ -69,9 +88,64 @@ final class CustomPaletteScope: PaletteScope {
     func activate(context: PaletteContext, onChange: @escaping @MainActor () -> Void) {
         self.context = context
         self.onChange = onChange
-        guard fileReads(context) else { return }
-        guard node(context)?.listing != nil, rows == nil, task == nil, failure == nil else { return }
-        startListing()
+        guard fileReads(context), !begun else { return }
+        begun = true
+        begin()
+    }
+
+    /// On the palette's root, its own `when:` first; then the items' checks
+    /// and the listing, side by side.
+    private func begin() {
+        guard let context, let palette = palette(context) else { return }
+        guard target.node == palette.root, let condition = palette.condition else { return proceed() }
+        let (environment, cwd) = Self.commandContext(for: target, context: context)
+        let runner = conditionRunner
+        gated = true
+        loading = PaletteLoading(message: "Checking \(palette.name)…")
+        onChange?()
+        checks = Task { @MainActor [weak self] in
+            let verdicts = await CustomPaletteConditions.evaluate(
+                [condition.command], environment: environment, currentDirectory: cwd, runner: runner
+            )
+            guard let self, !Task.isCancelled else { return }
+            checks = nil
+            loading = nil
+            gated = false
+            if verdicts[condition.command] == true {
+                proceed()
+            } else {
+                failure = PaletteFailure(title: "\(palette.name) isn't available", detail: condition.reason)
+                onChange?()
+            }
+        }
+    }
+
+    private func proceed() {
+        startItemChecks()
+        if let context, node(context)?.listing != nil {
+            startListing()
+        } else {
+            onChange?()
+        }
+    }
+
+    /// The items' `when:` checks, each distinct command once. An item is
+    /// usable until its check says otherwise.
+    private func startItemChecks() {
+        guard let context, let node = node(context) else { return }
+        let commands = Set(node.items.compactMap(\.condition?.command))
+        guard !commands.isEmpty else { return }
+        let (environment, cwd) = Self.commandContext(for: target, context: context)
+        let runner = conditionRunner
+        checks = Task { @MainActor [weak self] in
+            let verdicts = await CustomPaletteConditions.evaluate(
+                commands, environment: environment, currentDirectory: cwd, runner: runner
+            )
+            guard let self, !Task.isCancelled else { return }
+            checks = nil
+            itemVerdicts = verdicts
+            onChange?()
+        }
     }
 
     /// Whether the palette's file read: a file that didn't is this screen's
@@ -92,35 +166,31 @@ final class CustomPaletteScope: PaletteScope {
     func deactivate() {
         task?.cancel()
         task = nil
+        checks?.cancel()
+        checks = nil
     }
 
     func retry() {
-        guard task == nil else { return }
+        guard task == nil, checks == nil else { return }
         failure = nil
+        itemVerdicts = [:]
         // The file may have been fixed since: read it again before deciding
-        // whether there is a listing to run.
-        if let context {
-            context.appState.customPalettes.reload()
-            guard fileReads(context) else {
-                onChange?()
-                return
-            }
-            guard node(context)?.listing != nil else {
-                onChange?()
-                return
-            }
+        // what there is to check and list.
+        guard let context else { return }
+        context.appState.customPalettes.reload()
+        guard fileReads(context) else {
+            onChange?()
+            return
         }
-        startListing()
+        begun = true
+        begin()
     }
 
     private func startListing() {
         guard let context, let palette = palette(context), let listing = palette.nodes[target.node]?.listing else { return }
-        let environment = Self.environment(for: target, context: context)
+        let (environment, cwd) = Self.commandContext(for: target, context: context)
         let invocation = CustomPaletteScript.invocation(of: listing.command)
         let requires = palette.requires
-        // A remote project's or the pinned tabs' listing still runs on this
-        // Mac: in the home folder, not the app's own `/`.
-        let cwd = Self.projectDirectory(context) ?? FileManager.default.homeDirectoryForCurrentUser.path
         let runner = runner
         let title = target.pill.title
         loading = PaletteLoading(message: "Listing \(title)…")
@@ -191,7 +261,7 @@ final class CustomPaletteScope: PaletteScope {
 
     func sections(for query: PaletteQuery, context: PaletteContext) -> [PaletteSection] {
         self.context = context
-        guard fileReads(context), let palette = palette(context) else { return [] }
+        guard fileReads(context), !gated, let palette = palette(context) else { return [] }
         guard let node = palette.nodes[target.node] else {
             return [PaletteSection(header: nil, items: [
                 PaletteItem(
@@ -217,7 +287,8 @@ final class CustomPaletteScope: PaletteScope {
                 outcome: entry.outcome,
                 operand: entry.outcome.literalOperand,
                 alt: entry.alt,
-                altOperand: entry.alt.flatMap { CustomPaletteOutcome.perform($0.action).literalOperand }
+                altOperand: entry.alt.flatMap { CustomPaletteOutcome.perform($0.action).literalOperand },
+                unavailable: entry.condition.flatMap { itemVerdicts[$0.command] == false ? $0.reason : nil }
             ), context: context).with(match)
         }
         let listed: [PaletteItem] = node.listing.map { listing in
@@ -262,9 +333,14 @@ final class CustomPaletteScope: PaletteScope {
         let operand: String?
         let alt: CustomPaletteAlt?
         let altOperand: String?
+        /// Why the row can't be used now (its `when:` failed): muted, with
+        /// this in place of its subtitle.
+        var unavailable: String?
     }
 
     private func item(_ row: Row, context: PaletteContext) -> PaletteItem {
+        let subtitle = row.unavailable ?? row.subtitle
+        let isEnabled = row.unavailable == nil
         let exports = target.exports.merging(row.exports) { _, new in new }
         let alt = row.alt.map { alt in
             PaletteAltAction(title: alt.title) { [
@@ -282,7 +358,8 @@ final class CustomPaletteScope: PaletteScope {
             return PaletteItem(
                 id: "\(target.node)/\(row.id)",
                 title: row.title,
-                subtitle: row.subtitle,
+                subtitle: subtitle,
+                isEnabled: isEnabled,
                 opensScope: .custom(next),
                 icon: row.icon,
                 alt: alt,
@@ -293,7 +370,8 @@ final class CustomPaletteScope: PaletteScope {
             return PaletteItem(
                 id: "\(target.node)/\(row.id)",
                 title: row.title,
-                subtitle: row.subtitle,
+                subtitle: subtitle,
+                isEnabled: isEnabled,
                 icon: row.icon,
                 alt: alt,
                 action: { [appState = context.appState, projects = context.projectStore.projects] in
@@ -313,12 +391,30 @@ final class CustomPaletteScope: PaletteScope {
         return project.path
     }
 
+    /// Where a listing or a check runs: the target's environment, in the
+    /// project's directory — a remote project's or the pinned tabs' on this
+    /// Mac, in the home folder rather than the app's own `/`.
+    static func commandContext(for target: CustomPaletteTarget, context: PaletteContext) -> ([String: String], String) {
+        commandContext(exports: target.exports, context: context)
+    }
+
+    static func commandContext(exports: [String: String], context: PaletteContext) -> ([String: String], String) {
+        (
+            environment(exports: exports, context: context),
+            projectDirectory(context) ?? FileManager.default.homeDirectoryForCurrentUser.path
+        )
+    }
+
     static func environment(for target: CustomPaletteTarget, context: PaletteContext) -> [String: String] {
+        environment(exports: target.exports, context: context)
+    }
+
+    static func environment(exports: [String: String], context: PaletteContext) -> [String: String] {
         let project = context.appState.activeProjectID.flatMap { id in context.projectStore.projects.first { $0.id == id } }
         return CustomPaletteEnvironment.make(
             projectName: project?.name,
             projectDirectory: projectDirectory(context),
-            exports: target.exports
+            exports: exports
         )
     }
 }

@@ -82,6 +82,12 @@ extension AgentSkills {
           write them in sh — not in nushell or fish syntax. A command whose first line is a `#!` runs as a
           script with that interpreter instead (a YAML `|` block). They still see the user's `PATH`. Name
           the programs they need in `requires:`, so a missing one is reported by name.
+        - **`when: { run: <check>, unavailable: <reason> }`** mutes the palette (top level) or a menu item
+          while the check exits non-zero — a cluster that doesn't answer, a tool that isn't set up. It runs in
+          the background each time the row is shown; keep it fast and quiet, with its own short timeout
+          (`--request-timeout=2s`). Items sharing a check run it once; reuse one with a YAML anchor
+          (`when: &cluster {…}`, then `when: *cluster`). Leave a way out unchecked: Contexts in a Kubernetes
+          palette, since switching context is how an unreachable cluster gets fixed.
         - A listing runs once when its screen opens, in the active project's directory, with
           `MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME` and the exported variables set. ⌘R runs it again.
           One that takes over 30 seconds fails.

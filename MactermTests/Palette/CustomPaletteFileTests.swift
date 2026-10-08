@@ -193,6 +193,36 @@ struct CustomPaletteFileTests {
         #expect(Self.invalidMessage("name: X\nroot: \"on\"\nnodes: { on: { list: ls, action: { copy: . } } }") == nil)
     }
 
+    /// `when:` on the palette and on an item: a command, and the reason a
+    /// muted row shows — "Unavailable" unless the file says.
+    @Test
+    func when_is_a_command_and_a_reason_on_the_palette_and_its_items() throws {
+        let palette = try Self.palette("""
+        name: K8s
+        when: { run: kubectl get --raw /readyz, unavailable: Cluster unreachable }
+        nodes:
+          root:
+            items:
+              - { title: Pods, enter: root, when: { run: kubectl version } }
+              - { title: Contexts, enter: root }
+        """)
+        #expect(palette.condition == CustomPaletteCondition(command: "kubectl get --raw /readyz", reason: "Cluster unreachable"))
+        let items = try #require(palette.nodes["root"]?.items)
+        #expect(items[0].condition == CustomPaletteCondition(command: "kubectl version", reason: "Unavailable"))
+        #expect(items[1].condition == nil)
+
+        #expect(Self.invalidMessage("name: X\nwhen: { run: \"  \" }\nnodes: { root: { items: [] } }") == "when: run: must not be empty")
+        #expect(Self.invalidMessage("name: X\nwhen: { run: x, unavailabel: y }\nnodes: { root: { items: [] } }")
+            == "when: unavailabel: no such key")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, enter: root, when: { run: y, cmd: x } }] } }")
+            == "root item 1 (A): when: cmd: no such key")
+        #expect(
+            Self.invalidMessage("name: X\nnodes: { root: { list: ls, when: { run: x }, action: { copy: . } } }")
+                == "root: when: no such key",
+            "a listing's rows aren't checked one by one"
+        )
+    }
+
     /// The keys each level takes are the schema's, so an editor validating
     /// against it and Macterm agree on what a file may say.
     @Test
@@ -209,6 +239,7 @@ struct CustomPaletteFileTests {
         #expect(CustomPaletteFile.nodeKeys == properties(defs["node"]))
         #expect(CustomPaletteFile.itemKeys == properties(defs["item"]))
         #expect(CustomPaletteFile.actionKeys == properties(defs["actionFields"]).union(properties(defs["alt"])))
+        #expect(CustomPaletteFile.conditionKeys == properties(defs["condition"]))
     }
 
     @Test

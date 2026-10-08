@@ -24,6 +24,10 @@
       "type": "string",
       "description": "The node the palette opens on. Defaults to the node named root."
     },
+    "when": {
+      "$ref": "#/$defs/condition",
+      "description": "Whether the palette can be used now. Checked each time the command palette opens, in the background: until the check fails the palette's row is usable; when it fails the row is muted with the reason, and opening the palette by its keybind shows the reason instead of a listing."
+    },
     "requires": {
       "type": "array",
       "description": "The programs the palette's commands need, by name — `[kubectl, jq]`. A listing that fails names whichever of them isn't on your PATH.",
@@ -37,6 +41,22 @@
     }
   },
   "$defs": {
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "A command that exits 0 when the palette or row can be used: POSIX sh, or a script with a first-line `#!`, with the same environment and directory as a listing. Given 10 seconds."
+        },
+        "unavailable": {
+          "type": "string",
+          "description": "What the muted row says when the check fails. Defaults to \"Unavailable\"."
+        }
+      }
+    },
     "exports": {
       "type": "object",
       "propertyNames": {
@@ -124,7 +144,11 @@
         },
         "enter": { "type": "string", "description": "The node this row opens." },
         "action": { "$ref": "#/$defs/action" },
-        "alt": { "$ref": "#/$defs/alt", "description": "What this row does on ⌥↩ or ⌥-click instead." }
+        "alt": { "$ref": "#/$defs/alt", "description": "What this row does on ⌥↩ or ⌥-click instead." },
+        "when": {
+          "$ref": "#/$defs/condition",
+          "description": "Whether this row can be picked now. Checked each time its screen opens, in the background: until the check fails the row is usable; when it fails the row is muted with the reason. Items sharing one command run it once."
+        }
       }
     },
     "alt": {
