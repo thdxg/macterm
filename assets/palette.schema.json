@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json",
   "title": "Macterm custom palette",
-  "description": "A custom command-palette screen, one file per palette in ~/.config/macterm/palettes/. A palette is a graph of named nodes: a menu (`items`) or a listing (`list`, a command whose output becomes rows). Every row enters another node or performs an action, and may export values that travel down the stack as environment variables into every command below it.",
+  "description": "A custom command-palette screen, one file per palette in ~/.config/macterm/palettes/. A palette is a graph of named nodes, each with rows written out (`items`), a listing (`list`, a command whose output becomes rows), or both. Every row enters another node or performs an action, may name a second action for ⌥↩ (`alt`), and may export values that travel down the stack as environment variables into every command below it.",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "nodes"],
@@ -17,7 +17,7 @@
     },
     "description": {
       "type": "string",
-      "description": "One line under the palette's row in Settings → Palettes."
+      "description": "One line under the palette's row in the command palette and in Settings → Palettes."
     },
     "root": {
       "type": "string",
@@ -25,7 +25,7 @@
     },
     "nodes": {
       "type": "object",
-      "description": "Every screen of the palette by name. A node is a menu (`items`) or a listing (`list`), never both.",
+      "description": "Every screen of the palette by name. A node has `items`, a `list`, or both — the items first, then the listing's rows.",
       "minProperties": 1,
       "additionalProperties": { "$ref": "#/$defs/node" }
     }
@@ -41,7 +41,7 @@
         },
         "items": {
           "type": "array",
-          "description": "A menu's rows, in order. Each enters a node or performs an action.",
+          "description": "Rows written out, in order, shown before any listing's rows. Each enters a node or performs an action.",
           "items": { "$ref": "#/$defs/item" }
         },
         "list": {
@@ -81,6 +81,10 @@
         "action": {
           "$ref": "#/$defs/action",
           "description": "For a listing: what every row does when picked, instead of `enter`."
+        },
+        "alt": {
+          "$ref": "#/$defs/alt",
+          "description": "For a listing: what every row does on ⌥↩ or ⌥-click instead."
         }
       }
     },
@@ -98,13 +102,23 @@
           "additionalProperties": { "type": "string" }
         },
         "enter": { "type": "string", "description": "The node this row opens." },
-        "action": { "$ref": "#/$defs/action" }
+        "action": { "$ref": "#/$defs/action" },
+        "alt": { "$ref": "#/$defs/alt", "description": "What this row does on ⌥↩ or ⌥-click instead." }
       }
     },
+    "alt": {
+      "description": "A row's second action, run by ⌥↩ or ⌥-click: exactly one of run, copy or open, plus an optional title the row's subtitle shows while ⌥ is down (by default, what it does: \"Run in a Split\", \"Copy\"…).",
+      "allOf": [{ "$ref": "#/$defs/actionFields" }],
+      "properties": { "title": { "type": "string" } },
+      "unevaluatedProperties": false
+    },
     "action": {
-      "type": "object",
-      "additionalProperties": false,
       "description": "Exactly one of run, copy or open.",
+      "allOf": [{ "$ref": "#/$defs/actionFields" }],
+      "unevaluatedProperties": false
+    },
+    "actionFields": {
+      "type": "object",
       "properties": {
         "run": {
           "type": "string",

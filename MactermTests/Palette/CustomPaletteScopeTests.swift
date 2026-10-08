@@ -104,6 +104,46 @@ struct CustomPaletteScopeTests {
         #expect(filtered.map(\.title) == ["Pods"])
     }
 
+    static let sessions = """
+    name: Sessions
+    nodes:
+      root:
+        items:
+          - { title: New Session, action: { run: claude }, alt: { title: New Session in a Split, run: claude, in: split } }
+          - { title: Copy Hello, action: { copy: hello }, alt: { open: "https://example.com" } }
+        list: printf '%s\\n' one two
+        export: { SESSION: . }
+        action: { run: claude --resume "$SESSION" }
+        alt: { run: claude --resume "$SESSION", in: split }
+    """
+
+    @Test
+    func a_node_with_items_and_a_listing_shows_the_items_first_and_at_once() async throws {
+        let (context, _, _) = try makeContext(files: ["sessions.yaml": Self.sessions])
+        let recorder = Recorder()
+        recorder.outputs["printf '%s\\n' one two"] = CustomPaletteCommandResult(stdout: "one\ntwo\n", stderr: "", status: 0)
+        let target = CustomPaletteTarget(
+            paletteID: "sessions",
+            node: "root",
+            exports: [:],
+            pill: PalettePill(title: "Sessions", systemImage: "x")
+        )
+        let scope = CustomPaletteScope(target: target, runner: recorder.runner)
+        scope.activate(context: context) {}
+        #expect(scope.loading != nil, "the listing runs")
+        #expect(
+            scope.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items).map(\.title) == ["New Session", "Copy Hello"],
+            "the written rows don't wait for the listing"
+        )
+        await settle()
+        let items = scope.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items)
+        #expect(items.map(\.title) == ["New Session", "Copy Hello", "one", "two"])
+        #expect(
+            items.map(\.alt?.title) == ["New Session in a Split", "Open", "Run in a Split", "Run in a Split"],
+            "an alt without a title is named after what it does"
+        )
+    }
+
     @Test
     func a_listing_runs_its_command_once_with_the_exports_in_the_environment_and_filters_the_cached_rows() async throws {
         let (context, _, _) = try makeContext(files: ["kubernetes.yaml": CustomPaletteFileTests.kubernetes])
@@ -226,11 +266,7 @@ struct CustomPaletteScopeTests {
 
     @Test
     func the_rows_of_a_result_name_each_kind_of_failure() throws {
-        let listing = try #require({ () -> CustomPalette.Listing? in
-            guard case let .listing(l)? = try CustomPaletteFileTests.palette(CustomPaletteFileTests.kubernetes).nodes["pods"]?.kind
-            else { return nil }
-            return l
-        }())
+        let listing = try #require(CustomPaletteFileTests.palette(CustomPaletteFileTests.kubernetes).nodes["pods"]?.listing)
         #expect(CustomPaletteScope.rows(from: .init(stdout: "", stderr: "", status: 127), listing: listing, title: "Pods")
             == .failure(PaletteFailure(title: "Couldn't list Pods", detail: "The command exited with status 127.")))
         #expect(CustomPaletteScope.rows(from: .init(stdout: "{\"items\": 3}", stderr: "", status: 0), listing: listing, title: "Pods")
@@ -260,7 +296,7 @@ struct CustomPaletteScopeTests {
         let kubernetes = try #require(palettes.first { $0.title == "Kubernetes" })
         #expect(try kubernetes.opensScope == .custom(#require(store.rootTarget(id: "kubernetes"))))
         #expect(kubernetes.icon == "shippingbox")
-        #expect(kubernetes.subtitle == nil, "a palette's description lives in Settings, not on its row")
+        #expect(kubernetes.subtitle == "Namespaces, pods and their logs", "a palette's description is its row's second line")
         let broken = try #require(palettes.first { $0.title == "Broken" })
         #expect(broken.isEnabled, "a broken file's row reads like any other")
         #expect(broken.warning == "root: needs enter: or action:")

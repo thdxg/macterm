@@ -62,7 +62,7 @@ final class CustomPaletteScope: PaletteScope {
         self.context = context
         self.onChange = onChange
         guard fileReads(context) else { return }
-        guard case .listing? = node(context)?.kind, rows == nil, task == nil, failure == nil else { return }
+        guard node(context)?.listing != nil, rows == nil, task == nil, failure == nil else { return }
         startListing()
     }
 
@@ -97,7 +97,7 @@ final class CustomPaletteScope: PaletteScope {
                 onChange?()
                 return
             }
-            guard case .listing? = node(context)?.kind else {
+            guard node(context)?.listing != nil else {
                 onChange?()
                 return
             }
@@ -106,7 +106,7 @@ final class CustomPaletteScope: PaletteScope {
     }
 
     private func startListing() {
-        guard let context, case let .listing(listing)? = node(context)?.kind else { return }
+        guard let context, let listing = node(context)?.listing else { return }
         let environment = Self.environment(for: target, context: context)
         let cwd = Self.projectDirectory(context)
         let runner = runner
@@ -181,21 +181,23 @@ final class CustomPaletteScope: PaletteScope {
             ])]
         }
         let search = SearchQuery(query.trimmed)
-        let items: [PaletteItem] = switch node.kind {
-        case let .menu(entries):
-            entries.enumerated().compactMap { index, entry in
-                guard let match = Search.match(search, fields: [entry.title, entry.subtitle].compactMap(\.self)) else { return nil }
-                return item(Row(
-                    id: "menu:\(index)",
-                    title: entry.title,
-                    subtitle: entry.subtitle,
-                    icon: entry.icon ?? node.icon,
-                    exports: entry.exports,
-                    outcome: entry.outcome,
-                    operand: nil
-                ), context: context).with(match)
-            }
-        case let .listing(listing):
+        let written: [PaletteItem] = node.items.enumerated().compactMap { index, entry in
+            guard let match = Search.match(search, fields: [entry.title, entry.subtitle].compactMap(\.self)) else { return nil }
+            // Every value in a written item is literal, so a `copy:` or
+            // `open:` operand is the action's own text.
+            return item(Row(
+                id: "menu:\(index)",
+                title: entry.title,
+                subtitle: entry.subtitle,
+                icon: entry.icon ?? node.icon,
+                exports: entry.exports,
+                outcome: entry.outcome,
+                operand: entry.outcome.literalOperand,
+                alt: entry.alt,
+                altOperand: entry.alt.flatMap { CustomPaletteOutcome.perform($0.action).literalOperand }
+            ), context: context).with(match)
+        }
+        let listed: [PaletteItem] = node.listing.map { listing in
             (rows ?? []).enumerated().compactMap { index, row in
                 guard let match = Search.match(search, fields: row.match) else { return nil }
                 return item(Row(
@@ -205,10 +207,13 @@ final class CustomPaletteScope: PaletteScope {
                     icon: row.icon ?? node.icon,
                     exports: row.exports,
                     outcome: listing.outcome,
-                    operand: row.operand
+                    operand: row.operand,
+                    alt: listing.alt,
+                    altOperand: row.altOperand
                 ), context: context).with(match)
             }
-        }
+        } ?? []
+        let items = written + listed
         // Empty, the listing's own order; searching, best match first with
         // that order breaking ties.
         let ranked = query.isEmpty ? items : items.enumerated()
@@ -227,9 +232,21 @@ final class CustomPaletteScope: PaletteScope {
         let exports: [String: String]
         let outcome: CustomPaletteOutcome
         let operand: String?
+        let alt: CustomPaletteAlt?
+        let altOperand: String?
     }
 
     private func item(_ row: Row, context: PaletteContext) -> PaletteItem {
+        let exports = target.exports.merging(row.exports) { _, new in new }
+        let alt = row.alt.map { alt in
+            PaletteAltAction(title: alt.title) { [
+                appState = context.appState,
+                projects = context.projectStore.projects,
+                altOperand = row.altOperand
+            ] in
+                CustomPaletteActions.perform(alt.action, operand: altOperand, exports: exports, appState: appState, projects: projects)
+            }
+        }
         switch row.outcome {
         case let .enter(node):
             let nextIcon = palette(context)?.nodes[node]?.icon ?? row.icon ?? target.pill.systemImage
@@ -240,16 +257,17 @@ final class CustomPaletteScope: PaletteScope {
                 subtitle: row.subtitle,
                 opensScope: .custom(next),
                 icon: row.icon,
+                alt: alt,
                 action: {}
             )
         case let .perform(action):
-            let exports = target.exports.merging(row.exports) { _, new in new }
             let operand = row.operand
             return PaletteItem(
                 id: "\(target.node)/\(row.id)",
                 title: row.title,
                 subtitle: row.subtitle,
                 icon: row.icon,
+                alt: alt,
                 action: { [appState = context.appState, projects = context.projectStore.projects] in
                     CustomPaletteActions.perform(action, operand: operand, exports: exports, appState: appState, projects: projects)
                 }
@@ -274,6 +292,18 @@ final class CustomPaletteScope: PaletteScope {
             projectDirectory: projectDirectory(context),
             exports: target.exports
         )
+    }
+}
+
+private extension CustomPaletteOutcome {
+    /// A written item's `copy:` or `open:` text, which is literal.
+    var literalOperand: String? {
+        switch self {
+        case let .perform(.copy(text)),
+             let .perform(.open(text)): text
+        case .perform(.run),
+             .enter: nil
+        }
     }
 }
 

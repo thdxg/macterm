@@ -40,7 +40,7 @@ Press <kbd>⌘P</kbd>, type `git`, and press <kbd>Return</kbd>. The screen lists
 | --- | --- |
 | `name` | Required. The palette's row, its pill, and its row in Settings. |
 | `icon` | An [SF Symbol](https://developer.apple.com/sf-symbols/) name. Defaults to `square.grid.2x2`. |
-| `description` | One line describing the palette in Settings → Palettes. |
+| `description` | One line under the palette's row in the command palette and in Settings → Palettes. |
 | `root` | The node the palette opens on. Defaults to a node named `root`. |
 | `nodes` | Required. Every screen of the palette, by name. |
 
@@ -48,7 +48,7 @@ The file's name without `.yaml` is the palette's id. Its switch in Settings and 
 
 ## Nodes
 
-A node is one screen, and it is one of two kinds.
+A node is one screen. Its rows are written out (`items:`), listed by a command (`list:`), or both.
 
 **A menu** has `items:`, rows you write out:
 
@@ -59,7 +59,7 @@ menu:
     - { title: Fetch, icon: arrow.down.circle, action: { run: git fetch --all --prune } }
 ```
 
-Each item takes `title` (required), `subtitle`, `icon`, `export`, and either `enter` or `action`. Every value in a menu item is literal.
+Each item takes `title` (required), `subtitle`, `icon`, `export`, either `enter` or `action`, and optionally `alt`. Every value in a menu item is literal.
 
 **A listing** has `list:`, a command whose output becomes the rows:
 
@@ -84,9 +84,24 @@ pods:
 | `match` | What the search looks in. Defaults to the title and subtitle. Add the fields people search by, such as an app label. |
 | `export` | Variables each row sets for the screens below it. |
 | `enter` / `action` | What every row does when picked: open that node, or perform the action. |
+| `alt` | What every row does on <kbd>⌥↩</kbd> or <kbd>⌥</kbd>-click instead. See [Alt actions](#alt-actions). |
 | `placeholder` | The search field's placeholder on this screen. Any node can have one. |
 
-A node is a menu or a listing, never both. Every row has exactly one of `enter:` or `action:`.
+Every row has exactly one of `enter:` or `action:`.
+
+**A node can have both.** Its written items come first and show at once; the listing's rows follow when its command finishes. This puts a few fixed rows above a list, such as **New Session** above the most recent sessions:
+
+```yaml
+root:
+  items:
+    - { title: New Session, action: { run: claude } }
+    - { title: All Sessions, enter: sessions }
+  list: ./recent-sessions --limit 3
+  export: { SESSION: . }
+  action: { run: claude --resume "$SESSION" }
+```
+
+In a node with both, `title`, `export`, `enter`, `action` and the other listing keys describe the listing's rows; each item has its own.
 
 ### Paths
 
@@ -130,6 +145,18 @@ An action is exactly one of these:
 | `open: <url or file>` | Opens with the default app. In a listing, a path or literal text. |
 
 A `run:` command is typed at the new terminal's prompt, the way a [layout's](/docs/declarative-layouts) `run:` is. When the command ends, the shell is still there.
+
+### Alt actions
+
+A row can have a second action, `alt:`, run by <kbd>⌥↩</kbd> or <kbd>⌥</kbd>-click. While <kbd>⌥</kbd> is held, the row's subtitle says what it will do: the alt's `title:`, or else what the action is (**Run in a Split**, **Run in a New Tab**, **Copy**, **Open**).
+
+```yaml
+- title: New Session
+  action: { run: claude }
+  alt: { title: New Session in a Split, run: claude, in: split }
+```
+
+`alt:` takes the same keys as `action:`, plus `title:`. It goes on a menu item, or on a listing for every row, and works on a row that enters a node too.
 
 ## Commands and your shell
 
