@@ -1,7 +1,7 @@
 /* eyesclosed web — components. Load after tokens.css. Every value is a token.
    One grid everywhere: a label column (width-label) and a text column (width-text),
-   width-gutter apart. Geist for everything; Geist Mono only inside code. */
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400..600&family=Geist+Mono:wght@400..700&display=swap");
+   width-gutter apart. DM Sans for everything; Fira Code only inside code. */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..600;1,9..40,400..600&family=Fira+Code:wght@400..700&display=swap");
 
 /* ── base: put .ec on <body> ─────────────────────────────────────────── */
 .ec {
