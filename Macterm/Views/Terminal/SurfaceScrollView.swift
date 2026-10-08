@@ -382,12 +382,15 @@ final class SurfaceScrollView: NSScrollView {
 
     /// The part of the drag that falls between two rows, handed to the
     /// surface so a scroller drag scrolls by pixels like the wheel does.
-    /// Skipped unless the user has smooth scrolling on (the core would keep
-    /// the remainder without drawing it) and unless there is scrollback to
-    /// drag through — with none, the scroller is inert and a synthetic
-    /// scroll would only reach a mouse-reporting program.
+    /// Skipped unless the user has smooth scrolling on by pixels (the core
+    /// would keep the remainder without drawing it, as it does by rows) and
+    /// unless there is scrollback to drag through — with none, the scroller
+    /// is inert and a synthetic scroll would only reach a mouse-reporting
+    /// program.
     private func sendSubRowOffset(top: CGFloat, row: Int, cellHeight: CGFloat) {
-        guard Preferences.shared.smoothScrolling, snapshot.total > snapshot.len else { return }
+        guard Preferences.shared.smoothScrolling, !Preferences.shared.snapScrollToRow,
+              snapshot.total > snapshot.len
+        else { return }
         let remainder = top - CGFloat(row) * cellHeight
         surfaceView.applySubRowScrollOffset(pointsBelowRow: remainder)
     }

@@ -1418,7 +1418,7 @@ private struct AnimationsSettings: View {
                     .onChange(of: snapScrollToRow) { _, v in
                         Preferences.shared.snapScrollToRow = v
                     }
-                    Text("When a scroll comes to rest, it settles onto the nearest row instead of stopping between rows.")
+                    Text("Scrolling moves a whole row at a time, each one sliding into place.")
                         .settingsCaption()
                 }
                 .disabled(!smoothScrolling)

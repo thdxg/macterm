@@ -294,14 +294,16 @@ final class Preferences {
         }
     }
 
-    /// When a smooth-scroll gesture ends, settle the viewport onto the
-    /// nearest whole row instead of leaving it between rows. Off by default
-    /// and meaningful only under `smoothScrolling`. Macterm-side, read live by
-    /// `GhosttyTerminalNSView` when a gesture ends — the fork has no such key,
-    /// and the settle rides the same synthetic precision scroll a scroller
-    /// drag uses (`RowSnap`).
+    /// Smooth scrolling by whole rows: scrolling moves the viewport a row at
+    /// a time and each move slides into place, so it never rests between
+    /// rows. Off by default and meaningful only under `smoothScrolling`. The
+    /// fork's `smooth-scroll-rows` key, written through the overrides file
+    /// (`MactermConfig.Animations`).
     var snapScrollToRow: Bool {
-        didSet { Keys.snapScrollToRow.write(snapScrollToRow, to: defaults) }
+        didSet {
+            Keys.snapScrollToRow.write(snapScrollToRow, to: defaults)
+            notifyConfigChanged()
+        }
     }
 
     /// The cursor glides between cells instead of jumping, and the text it
