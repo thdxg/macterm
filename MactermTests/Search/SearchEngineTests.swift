@@ -37,6 +37,39 @@ struct SearchEngineTests {
         #expect(ranked("cfg", ["src/cfg.swift", "configure"]).first == "src/cfg.swift", "a run beats scattered letters")
     }
 
+    /// fzf's `bonusFor`: anything but whitespace after a space or a
+    /// delimiter starts a word — the `.` of `.env`, the `-` of `-f`.
+    @Test
+    func punctuation_after_a_space_starts_a_word_as_in_fzf() {
+        #expect(ranked(".e", ["config.env", ".env.example"]).first == ".env.example")
+        #expect(ranked("-f", ["nix-fmt", "git commit --amend -f"]).first == "git commit --amend -f")
+    }
+
+    /// A combining accent (a decomposed `é`, as file names and command
+    /// output often arrive) folds away like a precomposed one's, and neither
+    /// breaks a run nor starts a word.
+    @Test
+    func a_decomposed_accent_folds_like_a_precomposed_one() {
+        #expect(ranked("cafe\u{301}", ["café"]) == ["café"])
+        #expect(ranked("café", ["cafe\u{301}"]) == ["cafe\u{301}"])
+        let scratch = SearchScratch()
+        let precomposed = SearchIndex.score(SearchQuery("resume"), fields: [SearchText("résumé.pdf")], scratch: scratch)
+        let decomposed = SearchIndex.score(SearchQuery("resume"), fields: [SearchText("re\u{301}sume\u{301}.pdf")], scratch: scratch)
+        #expect(precomposed != nil && precomposed == decomposed)
+        #expect(
+            SearchIndex.highlights(SearchQuery("sum"), in: SearchText("re\u{301}sume\u{301}")) == [3, 4, 5],
+            "offsets still count the accent's scalar"
+        )
+    }
+
+    /// `Search.rank` breaks ties as `SearchIndex.rank` does: the shorter
+    /// title, then list order.
+    @Test
+    func a_settings_list_breaks_ties_like_the_index() {
+        #expect(Search.rank(["Split Right Pane", "Split Right"], by: "split right") { [$0] } == ["Split Right", "Split Right Pane"])
+        #expect(Search.rank(["Zoom Pane", "Next Pane"], by: "pane") { [$0] } == ["Zoom Pane", "Next Pane"])
+    }
+
     @Test
     func case_and_diacritics_fold_and_an_empty_query_matches_everything() {
         #expect(ranked("CAFE", ["Café", "Cake"]) == ["Café"])
@@ -104,7 +137,8 @@ struct SearchEngineTests {
         }
         #expect(parallel.count == plain.count)
         #expect(Set(parallel.map(\.index)) == Set(plain.map(\.index)))
-        #expect(index.filter(query) == plain.map(\.index), "a filter keeps list order")
+        let byIndex = { (matches: [SearchMatch]) in matches.sorted { $0.index < $1.index }.map { [$0.index, Int($0.score)] } }
+        #expect(byIndex(parallel) == byIndex(plain), "and scores each the same")
     }
 
     @Test
@@ -132,6 +166,9 @@ struct SearchEngineTests {
         #expect(SearchQuery("pa v").narrows(SearchQuery("pa")))
         #expect(!SearchQuery("pa").narrows(SearchQuery("pal")))
         #expect(!SearchQuery("xpa").narrows(SearchQuery("pa")))
+        // Split into words, the letters may come in any order: `p a` finds
+        // `ap`, which `pa` didn't.
+        #expect(!SearchQuery("p a").narrows(SearchQuery("pa")))
     }
 
     // MARK: - Filters and completion

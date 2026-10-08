@@ -8,7 +8,10 @@ import Foundation
 /// nothing. Higher is better.
 ///
 /// The constants are fzf's, so the ranking is the one a terminal user's hands
-/// already know: `sr` finds **S**plit **R**ight before a word that merely
+/// already know. One deliberate difference: fzf clamps a running score at
+/// zero, so a match far past a long gap loses its first-character bonus;
+/// here the score stays a true maximum and the gap simply costs what it
+/// costs. Otherwise: `sr` finds **S**plit **R**ight before a word that merely
 /// contains an s and an r, and a run of matched characters beats the same
 /// characters scattered.
 enum SearchScoring {
@@ -24,9 +27,11 @@ enum SearchScoring {
     static let boundaryDelimiter: Int16 = 9
 
     /// What matching a character of class `current` is worth when the one
-    /// before it is `previous` — fzf's `bonusFor`.
+    /// before it is `previous` — fzf's `bonusFor`, whose boundary test is
+    /// any character but whitespace (`class >= charNonWord`), so the `-` of
+    /// `--amend` or the `.` of `.env` after a space starts a word too.
     static func bonus(previous: CharClass, current: CharClass) -> Int16 {
-        if current.isWord {
+        if current != .white {
             switch previous {
             case .white: return boundaryWhite
             case .delimiter: return boundaryDelimiter
@@ -172,7 +177,8 @@ enum SearchScoring {
     }
 
     /// Where `term` matched in `text` under its best score, as indices into
-    /// `text.scalars` — for highlighting, so only ever run on the rows shown.
+    /// `text.scalars` — for highlighting, so run only on what is shown (a
+    /// long list's top rows) or a short list's matches, never a whole index.
     /// The same DP as `score`, kept whole so it can be walked back.
     static func positions(_ term: SearchTerm, in text: SearchText) -> [Int]? {
         let q = term.scalars, t = text.scalars, b = text.bonus

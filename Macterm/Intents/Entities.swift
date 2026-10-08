@@ -55,7 +55,8 @@ struct MactermProjectQuery: EntityStringQuery, EnumerableEntityQuery {
 
     @MainActor
     func entities(matching string: String) async throws -> [MactermProjectEntity] {
-        try await all().filter { $0.name.localizedCaseInsensitiveContains(string) }
+        // The app's one search (`Macterm/Search/`), ranked, as the palette's.
+        try await Search.rank(all(), by: string) { [$0.name] }
     }
 
     @MainActor
@@ -120,7 +121,7 @@ struct MactermTabQuery: EntityStringQuery, EnumerableEntityQuery {
 
     @MainActor
     func entities(matching string: String) async throws -> [MactermTabEntity] {
-        try await all().filter { $0.title.localizedCaseInsensitiveContains(string) }
+        try await Search.rank(all(), by: string) { [$0.title] }
     }
 
     @MainActor
@@ -196,10 +197,7 @@ struct MactermPaneQuery: EntityStringQuery, EnumerableEntityQuery {
         // Both the visible title and the session name match: the title is what
         // the user reads in the sidebar, the session name is what a script
         // (or `$MACTERM_SESSION`) already has in hand.
-        try await all().filter {
-            $0.title.localizedCaseInsensitiveContains(string)
-                || $0.id.localizedCaseInsensitiveContains(string)
-        }
+        try await Search.rank(all(), by: string) { [$0.title, $0.id] }
     }
 
     @MainActor

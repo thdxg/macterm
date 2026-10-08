@@ -1671,15 +1671,16 @@ private struct KeymapSettings: View {
         return partners
     }
 
-    /// The custom palettes the search matches, listed under Palettes after
-    /// the built-in screens.
+    /// The custom palettes the search matches, best first (`Search.rank`,
+    /// as every Settings list), listed under Palettes after the built-in
+    /// screens.
     private var matchingCustomPalettes: [CustomPaletteStore.Entry] {
-        appState.customPalettes.entries.filter { entry in
+        Search.rank(appState.customPalettes.entries, by: query) { entry in
             let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
             let shortcut = values[rowID] ?? "disabled"
             var fields = [entry.pill.title, AppCommand.Category.palettes.rawValue, HotkeyRegistry.displayString(for: shortcut)]
             if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
-            return Search.matches(query, in: fields)
+            return fields
         }
     }
 
