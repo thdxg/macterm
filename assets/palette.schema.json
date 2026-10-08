@@ -23,6 +23,11 @@
       "type": "string",
       "description": "The node the palette opens on. Defaults to the node named root."
     },
+    "requires": {
+      "type": "array",
+      "description": "The programs the palette's commands need, by name — `[kubectl, jq]`. A listing that fails names whichever of them isn't on your PATH.",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9._+/][A-Za-z0-9._+/-]*$" }
+    },
     "nodes": {
       "type": "object",
       "description": "Every screen of the palette by name. A node has `items`, a `list`, or both — the items first, then the listing's rows.",
@@ -46,7 +51,7 @@
         },
         "list": {
           "type": "string",
-          "description": "A listing's command, run once when the screen opens in your login shell (`$SHELL -l -c`), in the active project's directory, with MACTERM_PROJECT_DIR, MACTERM_PROJECT_NAME and every value exported above this screen in its environment. Its output is JSON — an array, newline-delimited objects, or an object holding the array at `rows` — or plain lines, one row each. ⌘R runs it again."
+          "description": "A listing's command, run once when the screen opens: POSIX sh with errexit (`sh -o errexit -c`), or the interpreter a first-line `#!` names, started through your login shell so it sees your PATH. It runs in the active project's directory, with MACTERM_PROJECT_DIR, MACTERM_PROJECT_NAME and every value exported above this screen in its environment. Its output is JSON — an array, newline-delimited objects, or an object holding the array at `rows` — or plain lines, one row each. ⌘R runs it again."
         },
         "rows": {
           "type": "string",
@@ -122,7 +127,7 @@
       "properties": {
         "run": {
           "type": "string",
-          "description": "A command typed into a new terminal, as a layout's `run:` is, with the exported variables in its environment. Written in your shell's syntax."
+          "description": "A command run in a new terminal before its shell starts, never typed at the prompt, with the exported variables in its environment: POSIX sh with errexit, or the interpreter a first-line `#!` names. When it ends, the shell's prompt is there. In a remote project it is typed at the host's prompt instead."
         },
         "in": {
           "type": "string",

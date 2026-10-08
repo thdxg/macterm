@@ -42,6 +42,7 @@ Press <kbd>⌘P</kbd>, type `git`, and press <kbd>Return</kbd>. The screen lists
 | `icon` | An [SF Symbol](https://developer.apple.com/sf-symbols/) name. Defaults to `square.grid.2x2`. |
 | `description` | One line under the palette's row in the command palette and in Settings → Palettes. |
 | `root` | The node the palette opens on. Defaults to a node named `root`. |
+| `requires` | The programs its commands need, like `[kubectl, jq]`. A listing that fails names whichever of them isn't on your `PATH`. |
 | `nodes` | Required. Every screen of the palette, by name. |
 
 The file's name without `.yaml` is the palette's id. Its switch in Settings and its keybind are stored under that id, so renaming the file loses both.
@@ -140,11 +141,11 @@ An action is exactly one of these:
 
 | Action | Does |
 | --- | --- |
-| `run: <command>` | Types the command into a new tab of the active project, or with `in: split` into a split beside its focused pane. The exported variables are in that terminal's environment. |
+| `run: <command>` | Runs the command in a new tab of the active project, or with `in: split` in a split beside its focused pane. The exported variables are in its environment. |
 | `copy: <text>` | Copies to the clipboard. In a listing, a path or literal text. |
 | `open: <url or file>` | Opens with the default app. In a listing, a path or literal text. |
 
-A `run:` command is typed at the new terminal's prompt, the way a [layout's](/docs/declarative-layouts) `run:` is. When the command ends, the shell is still there.
+A `run:` command runs before the new terminal's shell starts, and when it ends your shell's prompt is there. **It is never typed at the prompt**, so it stays out of your shell's history. In a [remote project](/docs/remote-projects) it is typed at the host's prompt instead, for the host's shell.
 
 ### Alt actions
 
@@ -160,7 +161,17 @@ A row can have a second action, `alt:`, run by <kbd>⌥↩</kbd> or <kbd>⌥</kb
 
 ## Commands and your shell
 
-Commands run in **your login shell**, as `$SHELL -l -c '<command>'`. Write them in that shell's syntax, and they see the `PATH` your shell config sets up. A listing runs in the active project's directory.
+**Commands are POSIX `sh`**, run as `sh -o errexit -c '<command>'`, whatever your own shell is, so a palette works the same for everyone it's shared with. With errexit, a command of several steps stops at the first one that fails. A listing runs in the active project's directory.
+
+**A command whose first line is a shebang runs as a script** with that interpreter instead, the way [mise](https://mise.jdx.dev/tasks/toml-tasks.html) runs a task. Write it as a YAML block:
+
+```yaml
+list: |
+  #!/usr/bin/env nu
+  ls | where type == dir | get name | to json
+```
+
+Commands still see **your shell's environment**. Each starts through your login shell, so the `PATH` your shell config sets up finds `kubectl`, `jq` or the shebang's interpreter. A `run:` command goes through your shell as an interactive one too, so what your `.zshrc` exports reaches it. Your shell's aliases and functions don't reach either: they aren't `sh`.
 
 Every command also gets these variables:
 
@@ -168,18 +179,12 @@ Every command also gets these variables:
 - `MACTERM_PROJECT_NAME`, its name.
 - Every value exported above it.
 
-The examples on this page are POSIX shell, which zsh and bash also read. In nushell, read a variable as `$env.BRANCH`. A value that may be missing is `$env.NAMESPACE?`. The Pods listing above becomes:
-
-```yaml
-list: 'kubectl get pods ...(if ($env.NAMESPACE? | is-empty) { ["-A"] } else { ["-n", $env.NAMESPACE] }) -o json'
-```
-
 **A shell that prints at startup prints into the rows.** A greeting or notice from your shell config becomes the first row of every listing. Keep startup quiet for non-interactive shells.
 
 ## Loading and errors
 
 - **While a listing runs**, the screen shows a spinner. One that takes over 30 seconds is stopped.
-- **If a listing fails**, the screen says why, with the command's error output. A listing fails when the command isn't found, exits non-zero, or prints output that isn't the shape asked for. **Retry**, or <kbd>⌘R</kbd>, runs it again.
+- **If a listing fails**, the screen says why, with the command's error output. A listing fails when the command isn't found, exits non-zero, or prints output that isn't the shape asked for. When a program the palette `requires` is missing, the screen names it instead: *This palette needs kubectl, which isn't on your PATH.* **Retry**, or <kbd>⌘R</kbd>, runs it again.
 - **A file that doesn't read** keeps its row, with a warning glyph before the chevron. Entering it shows the error, naming the node and key, like `pods: enter: no node named pod`. Fix the file and press <kbd>⌘R</kbd>. Settings → Palettes shows the same warning beside the palette's switch.
 
 To check every file from a terminal, run:

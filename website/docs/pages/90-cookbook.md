@@ -18,15 +18,16 @@ Three to start with, and a complete palette below:
 
 ## Kubernetes palette
 
-A [custom palette](/docs/custom-palettes) for browsing a cluster from <kbd>⌘P</kbd>, without typing resource names. Save it as `~/.config/macterm/palettes/kubernetes.yaml`, then open the palette and pick **Kubernetes**. It needs `kubectl` on the `PATH` your login shell sets up.
+A [custom palette](/docs/custom-palettes) for browsing a cluster from <kbd>⌘P</kbd>, without typing resource names. Save it as `~/.config/macterm/palettes/kubernetes.yaml`, then open the palette and pick **Kubernetes**. It needs `kubectl` on the `PATH` your shell sets up, and works whatever your shell is.
 
 ```yaml title="~/.config/macterm/palettes/kubernetes.yaml"
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
-# Commands are POSIX sh, run in your login shell in the active project's
-# directory, with the values picked above as environment variables.
+# Commands are POSIX sh, run in the active project's directory with the
+# values picked above as environment variables.
 name: Kubernetes
 icon: shippingbox
 description: Browse namespaces, pods, deployments, services and contexts
+requires: [kubectl]
 root: menu
 nodes:
   menu:
@@ -153,14 +154,6 @@ What each screen does:
 - **Services** lists services with their type. A service's menu port-forwards its first port to the same local port in a split, or describes it, or lists its endpoints.
 
 **Pods, Deployments and Services are each one node reached from two places.** From the first screen there is no `NAMESPACE`, so the listing passes `-A`. From a namespace, it passes `-n "$NAMESPACE"`. The `if … set --` line builds the arguments for either case without pasting the namespace into the command.
-
-**If your login shell is nushell**, read variables as `$env.NAMESPACE` rather than `"$NAMESPACE"`, and build each listing's arguments with an `if`:
-
-```yaml
-list: 'kubectl get pods ...(if ($env.NAMESPACE? | is-empty) { ["-A"] } else { ["-n", $env.NAMESPACE] }) -o json'
-```
-
-Quote such a line in YAML, since nushell's syntax uses characters YAML reads too. Build `deployment/<name>` in nushell with string interpolation: `$"deployment/($env.DEPLOYMENT)"`.
 
 ## Post your own
 

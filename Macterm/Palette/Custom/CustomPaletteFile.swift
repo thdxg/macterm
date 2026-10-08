@@ -36,8 +36,12 @@ import Yams
 //         export: { POD: .metadata.name, NAMESPACE: .metadata.namespace }
 //         action: { run: kubectl logs -f -n "$NAMESPACE" "$POD", in: split }
 //
-// Commands run in the user's login shell (`$SHELL -l -c`), so they are
-// written in that shell's syntax and see its PATH. A listing's output is
+// Commands are POSIX sh with errexit, or any interpreter a command names on
+// a `#!` first line, the way mise runs a task — the same in every user's
+// hands, whatever their login shell. They are started from the login
+// shell all the same, so they see the PATH its rc files build
+// (`CustomPaletteScript`). `requires:` names the programs the commands need,
+// so a listing that fails for want of one says which. A listing's output is
 // JSON (an array, newline-delimited objects, or an object with the array at
 // `rows:`) or plain lines, one row each. In a listing node, a field whose
 // value starts with `.` is a path into the row (`.` is the row itself);
@@ -49,6 +53,8 @@ struct CustomPaletteFile: Codable, Equatable {
     var name: String
     var icon: String?
     var description: String?
+    /// Programs the commands need, by name.
+    var requires: [String]?
     var root: String?
     var nodes: [String: Node]
 
@@ -200,6 +206,7 @@ struct CustomPalette: Equatable, Identifiable {
     let name: String
     let icon: String
     let description: String?
+    let requires: [String]
     let root: String
     let nodes: [String: Node]
 
@@ -246,6 +253,10 @@ struct CustomPalette: Equatable, Identifiable {
         guard !name.isEmpty else { throw CustomPaletteError.invalid("name: must not be empty") }
         icon = file.icon ?? Self.defaultIcon
         description = file.description
+        requires = file.requires ?? []
+        for program in requires where !CustomPaletteRequirements.isProgramName(program) {
+            throw CustomPaletteError.invalid("requires: \(program) isn't a program name")
+        }
         guard !file.nodes.isEmpty else { throw CustomPaletteError.invalid("nodes: must name at least one node") }
         let root = file.root ?? (file.nodes["root"] != nil ? "root" : "")
         guard file.nodes[root] != nil else {

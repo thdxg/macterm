@@ -24,7 +24,8 @@ struct CustomPaletteTarget: Hashable {
 
 /// A custom palette's screen (`CustomPaletteFile`). A menu node lists its
 /// items at once; a listing node runs its command once on `activate`, in
-/// the user's login shell with the target's exports in the environment,
+/// bash or its `#!` interpreter (`CustomPaletteScript`) with the target's
+/// exports in the environment,
 /// reports `loading` meanwhile, keeps the rows and filters them per
 /// keystroke. A command that fails — not found, non-zero, output that isn't
 /// the shape asked for — becomes `failure`, retried with ⌘R.
@@ -106,18 +107,31 @@ final class CustomPaletteScope: PaletteScope {
     }
 
     private func startListing() {
-        guard let context, let listing = node(context)?.listing else { return }
+        guard let context, let palette = palette(context), let listing = palette.nodes[target.node]?.listing else { return }
         let environment = Self.environment(for: target, context: context)
+        let invocation = CustomPaletteScript.invocation(of: listing.command)
+        let requires = palette.requires
         let cwd = Self.projectDirectory(context)
         let runner = runner
         let title = target.pill.title
         loading = PaletteLoading(message: "Listing \(title)…")
         onChange?()
         task = Task { @MainActor [weak self] in
-            let outcome: Result<[CustomPaletteRow], PaletteFailure>
+            var outcome: Result<[CustomPaletteRow], PaletteFailure>
             do {
-                let result = try await runner(listing.command, environment, cwd)
+                let result = try await runner(invocation.line, environment.merging(invocation.environment) { _, new in new }, cwd)
                 outcome = Self.rows(from: result, listing: listing, title: title)
+                if result.status != 0 {
+                    let missing = await CustomPaletteRequirements.missing(
+                        requires, environment: environment, currentDirectory: cwd, runner: runner
+                    )
+                    if !missing.isEmpty {
+                        outcome = .failure(PaletteFailure(
+                            title: "Couldn't list \(title)",
+                            detail: CustomPaletteRequirements.message(missing: missing)
+                        ))
+                    }
+                }
             } catch is CustomPaletteRunner.TimedOut {
                 outcome = .failure(PaletteFailure(
                     title: "Couldn't list \(title)",
@@ -325,14 +339,19 @@ enum CustomPaletteActions {
                 appState.presentToast("No project to run in")
                 return
             }
-            let env = CustomPaletteEnvironment.make(
+            var env = CustomPaletteEnvironment.make(
                 projectName: project.name,
                 projectDirectory: project.isRemote ? nil : project.path,
                 exports: exports
             )
+            // A local pane runs it before its shell, untyped
+            // (`CustomPaletteLaunch`). A remote pane is ssh, whose environment
+            // stays on this Mac, so there it is typed for the host's shell.
+            let typed: String? = project.isRemote ? command : nil
+            if !project.isRemote { env[CustomPaletteScript.commandVariable] = CustomPaletteScript.script(command) }
             switch place {
             case .tab:
-                appState.createTab(projectID: projectID, projects: projects, command: command, env: env)
+                appState.createTab(projectID: projectID, projects: projects, command: typed, env: env)
             case .split:
                 if let pane = appState.focusedPane(for: projectID) {
                     appState.splitPane(
@@ -340,11 +359,11 @@ enum CustomPaletteActions {
                         direction: .auto(for: pane.nsView?.bounds.size ?? .zero),
                         projectID: projectID,
                         projectDirectory: project.path,
-                        command: command,
+                        command: typed,
                         env: env
                     )
                 } else {
-                    appState.createTab(projectID: projectID, projects: projects, command: command, env: env)
+                    appState.createTab(projectID: projectID, projects: projects, command: typed, env: env)
                 }
             }
         case .copy:

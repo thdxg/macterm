@@ -215,6 +215,7 @@ targets:
       - path: CLI
       - path: Macterm/Control/ControlProtocol.swift
       - path: Macterm/System/SSHWrapper.swift
+      - path: Macterm/Palette/Custom/CustomPaletteLaunch.swift
       - path: Macterm/Control/AgentSkills
     dependencies:
       - package: ArgumentParser
