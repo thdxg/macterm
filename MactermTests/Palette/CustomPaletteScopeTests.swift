@@ -547,6 +547,9 @@ struct CustomPaletteScopeTests {
         }
         #expect(row(availability.unavailable)?.isEnabled == false)
         #expect(row(availability.unavailable)?.subtitle == "Cluster unreachable")
+        #expect(row(availability.unavailable)?.opensScope == nil, "nowhere to go: no chevron")
+        #expect(row(availability.unavailable)?.icon == CustomPalette.defaultIcon, "its glyph, kept")
+        #expect(row([:])?.opensScope != nil)
         #expect(row([:])?.isEnabled == true)
         #expect(row([:])?.subtitle == "Cluster screens")
 

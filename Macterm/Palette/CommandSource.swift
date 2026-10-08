@@ -48,8 +48,9 @@ struct CommandSource: PaletteSource {
     /// far as its YAML parses, with a warning glyph before the chevron;
     /// entering it shows the error — so a typo in the YAML is found where
     /// the palette was expected rather than nowhere. One whose `when:`
-    /// failed is muted, with the reason in place of its description. A
-    /// palette turned off in Settings is hidden, as a built-in screen is.
+    /// failed is muted, with the reason in place of its description — its
+    /// glyph kept and its chevron dropped, as an unavailable built-in screen's
+    /// row. A palette turned off in Settings is hidden, as a built-in screen is.
     private func customPaletteItems(_ ctx: PaletteContext) -> [PaletteItem] {
         let store = ctx.appState.customPalettes
         return store.entries.compactMap { entry in
@@ -66,7 +67,8 @@ struct CommandSource: PaletteSource {
                 keybindSymbols: symbols.isEmpty ? nil : symbols,
                 score: 0,
                 isEnabled: unavailable == nil,
-                opensScope: .custom(target),
+                opensScope: unavailable == nil ? .custom(target) : nil,
+                icon: unavailable == nil ? nil : entry.pill.systemImage,
                 warning: entry.failure?.localizedDescription,
                 action: {}
             )
