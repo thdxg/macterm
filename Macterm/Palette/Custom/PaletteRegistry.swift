@@ -71,11 +71,20 @@ final class PaletteRegistry {
     @ObservationIgnored private var task: Task<Void, Never>?
 
     init(
-        ref: String = PaletteRegistry.ref(bundleID: appBundleID, version: PaletteRegistry.appVersion),
+        ref: String = PaletteRegistry.defaultRef,
         fetch: @escaping Fetch = PaletteRegistry.fetchFromNetwork
     ) {
         self.ref = ref
         self.fetch = fetch
+    }
+
+    /// This build's ref. A debug build can read another with
+    /// `MACTERM_PALETTE_REF` — a branch whose palettes aren't on `main` yet.
+    nonisolated static var defaultRef: String {
+        #if DEBUG
+        if let override = ProcessInfo.processInfo.environment["MACTERM_PALETTE_REF"], !override.isEmpty { return override }
+        #endif
+        return ref(bundleID: appBundleID, version: appVersion)
     }
 
     nonisolated static var appVersion: String {

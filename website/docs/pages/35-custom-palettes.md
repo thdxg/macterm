@@ -230,9 +230,13 @@ It prints each file's id, whether it is on, its keybind, and its name or the err
 
 ## Keybinds and Settings
 
-- **Settings → Palettes** lists every palette, built-in and custom, each with a switch. A palette turned off leaves the command palette, and its keybind says so instead of reaching the terminal. The **Palettes folder** row opens `~/.config/macterm/palettes/` in Finder.
+- **Settings → Palettes** lists every palette, built-in and custom, each with a switch, and the palettes you can install from Macterm's repository. A palette turned off leaves the command palette, and its keybind says so instead of reaching the terminal. The **Palettes folder** row opens `~/.config/macterm/palettes/` in Finder.
 - **Settings → Keymaps** has a **Palettes** group first, with <kbd>⌘P</kbd> and a row for every palette. None has a keybind by default. A palette's keybind opens the command palette straight on it. Pressed again on the palette's first screen, it closes the palette. Pressed deeper in, it goes back to that first screen.
 - **Any palette's keybind, built-in or custom, can be Global or Pass to TUI**, the two checkboxes on its row. A **Global** keybind works from any app: it brings Macterm's window forward with the palette open on it. **Pass to TUI** hands the keybind to the program in the focused pane when that program is one you list under Passthrough Programs.
+
+## Sharing a palette
+
+Palettes anyone can install from Settings → Palettes live in [`palettes/`](https://github.com/thdxg/macterm/tree/main/palettes) in Macterm's repository, one file each. To add yours, open a pull request with the file; [the folder's README](https://github.com/thdxg/macterm/blob/main/palettes/README.md) says what a palette there needs — POSIX commands, a `requires:`, a `when:` where it can't always work. Every file there is read through Macterm's validator before it merges.
 
 ## More examples
 

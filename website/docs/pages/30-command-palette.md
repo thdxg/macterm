@@ -32,4 +32,10 @@ See [custom palettes](/docs/custom-palettes) for the file format and examples, a
 
 ## Settings → Palettes
 
-Every screen the palette can open, built-in and custom, each with a switch, and the custom palettes' folder. A custom palette whose file doesn't read shows a warning beside its switch. A screen turned off leaves the palette's list and its menu; its keybind, if it has one, says so instead of reaching the terminal, and stays bound for when the screen comes back.
+Every palette as a card in a searchable grid, in three groups:
+
+- **Built-in** — Password Manager, Worktrees and Files.
+- **Installed** — your [custom palettes](/docs/custom-palettes), the files in `~/.config/macterm/palettes/`. One whose file doesn't read shows a warning beside its switch.
+- **Available** — palettes from [Macterm's repository](https://github.com/thdxg/macterm/tree/main/palettes) you haven't installed, for your version of Macterm. **Install** shows the whole file — its commands run on your Mac — and then copies it into your palettes folder, where it's installed like any other.
+
+Built-in and installed palettes have a switch. A screen turned off leaves the palette's list and its menu; its keybind, if it has one, says so instead of reaching the terminal, and stays bound for when the screen comes back. The available palettes are read when you open the pane, at most once an hour; **Refresh** reads them again.
