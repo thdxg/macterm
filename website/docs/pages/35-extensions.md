@@ -1,14 +1,14 @@
 <!-- page:
-slug: custom-palettes
-title: Custom palettes
-nav: Custom palettes
+slug: extensions
+title: Extensions
+nav: Extensions
 group: Everyday use
-description: Add your own screens to the command palette from YAML files — a command's output becomes searchable rows, and each row opens another screen or runs a command.
+description: Add screens to the command palette with extensions — install them from Macterm's repository or write your own in YAML. A command's output becomes searchable rows, and each row opens another screen or runs a command.
 -->
 
-# Custom palettes
+# Extensions
 
-A custom palette is your own screen in the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods — anything a command can list. Each palette is one YAML file in `~/.config/macterm/palettes/`. It shows up in the palette's **Palettes** section with a chevron, and picking it opens its screen in place.
+An extension adds screens to the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods — anything a command can list. Install one from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)), or write your own: a palette, one YAML file in `~/.config/macterm/palettes/`. Either way it shows up in the command palette's **Palettes** section with a chevron, and picking it opens its screen in place.
 
 Macterm reads the folder again every time the palette opens, so saving the file is all it takes. There is nothing to reload or restart.
 
@@ -40,13 +40,13 @@ Press <kbd>⌘P</kbd>, type `git`, and press <kbd>Return</kbd>. The screen lists
 | --- | --- |
 | `name` | Required. The palette's row, its pill, and its row in Settings. |
 | `icon` | An [SF Symbol](https://developer.apple.com/sf-symbols/) name. Defaults to `square.grid.2x2`. |
-| `description` | One line under the palette's row in the command palette and in Settings → Palettes. |
+| `description` | One line under the palette's row in the command palette and on its card in Settings → Extensions. |
 | `root` | The node the palette opens on. Defaults to a node named `root`. |
 | `requires` | The programs its commands need, like `[kubectl, jq]`. A listing that fails names whichever of them isn't on your `PATH`. |
 | `when` | Whether the palette can be used now: a check command and the reason to show when it fails. See [when a palette can't be used](#when-a-palette-cant-be-used). |
 | `nodes` | Required. Every screen of the palette, by name. |
 
-The file's name without `.yaml` is the palette's id. Its switch in Settings and its keybind are stored under that id, so renaming the file loses both.
+The file's name without `.yaml` is the palette's id. Its keybind is stored under that id, so renaming the file loses it.
 
 ## Nodes
 
@@ -126,7 +126,7 @@ Prefer a tool's JSON output to cutting up its text. JSON gives you named fields 
 
 ## Exports
 
-`export:` sets environment variables for every command below the row: the next screen's listing, and any action further down. Values carry down through every screen, and a lower screen can overwrite one. A name is one `sh` can read (letters, digits and `_`, not starting with a digit), and not one Macterm sets itself (`MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`).
+`export:` sets environment variables for every command below the row: the next screen's listing, and any action further down. Values carry down through every screen, and a lower screen can overwrite one. A name is one `sh` can read (letters, digits and `_`, not starting with a digit), and not one Macterm sets itself (`MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`, `MACTERM_EXTENSION_DIR`).
 
 Read an exported value as a variable, like `"$BRANCH"`. **Nothing is ever pasted into a command's text**, so a branch, pod or file name with spaces or quotes can't break the command or run as code.
 
@@ -185,6 +185,7 @@ Every command also gets these variables:
 
 - `MACTERM_PROJECT_DIR`, the active project's directory (unset for a remote project or a pinned tab).
 - `MACTERM_PROJECT_NAME`, its name.
+- `MACTERM_EXTENSION_DIR`, the extension's folder, when it was installed from Macterm's repository ([sharing an extension](#sharing-an-extension)).
 - Every value exported above it.
 
 **A shell that prints at startup prints into the rows.** A greeting or notice from your shell config becomes the first row of every listing. Keep startup quiet for non-interactive shells.
@@ -218,7 +219,7 @@ A listing's rows aren't checked one by one; put `when:` on the item that opens t
 
 - **While a listing runs**, the screen shows a spinner. One that takes over 30 seconds is stopped, along with everything it started. Leaving the screen stops it too.
 - **If a listing fails**, the screen says why, with the command's error output. A listing fails when the command isn't found, exits non-zero, or prints output that isn't the shape asked for. When a program the palette `requires` is missing, the screen names it instead: *This palette needs kubectl, which isn't on your PATH.* **Retry**, or <kbd>⌘R</kbd>, runs it again.
-- **A file that doesn't read** keeps its row, with a warning glyph before the chevron. Entering it shows the error, naming the node and key, like `pods: enter: no node named pod`. A key Macterm doesn't know is an error too (`pods: mathc: no such key`), so a misspelling can't silently do nothing. Fix the file and press <kbd>⌘R</kbd>. Settings → Palettes shows the same warning beside the palette's switch.
+- **A file that doesn't read** keeps its row, with a warning glyph before the chevron. Entering it shows the error, naming the node and key, like `pods: enter: no node named pod`. A key Macterm doesn't know is an error too (`pods: mathc: no such key`), so a misspelling can't silently do nothing. Fix the file and press <kbd>⌘R</kbd>. Settings → Extensions shows the same warning on the extension's card.
 
 To check every file from a terminal, run:
 
@@ -226,13 +227,19 @@ To check every file from a terminal, run:
 macterm palette list
 ```
 
-It prints each file's id, whether it is on, its keybind, and its name or the error that stopped it reading. See [the CLI](/docs/cli).
+It prints each file's id, its keybind, and its name or the error that stopped it reading. See [the CLI](/docs/cli).
 
 ## Keybinds and Settings
 
-- **Settings → Palettes** lists every palette, built-in and custom, each with a switch. A palette turned off leaves the command palette, and its keybind says so instead of reaching the terminal. The **Palettes folder** row opens `~/.config/macterm/palettes/` in Finder.
+- **Settings → Extensions** lists every extension, installed or not, in one grid. **Installed** on a card offers to move it to the Trash, which is how you remove one. The **Your own palettes** row opens `~/.config/macterm/palettes/` in Finder.
 - **Settings → Keymaps** has a **Palettes** group first, with <kbd>⌘P</kbd> and a row for every palette. None has a keybind by default. A palette's keybind opens the command palette straight on it. Pressed again on the palette's first screen, it closes the palette. Pressed deeper in, it goes back to that first screen.
-- **Any palette's keybind, built-in or custom, can be Global or Pass to TUI**, the two checkboxes on its row. A **Global** keybind works from any app: it brings Macterm's window forward with the palette open on it. **Pass to TUI** hands the keybind to the program in the focused pane when that program is one you list under Passthrough Programs.
+- **Any palette's keybind, built-in or an extension's, can be Global or Pass to TUI**, the two checkboxes on its row. A **Global** keybind works from any app: it brings Macterm's window forward with the palette open on it. **Pass to TUI** hands the keybind to the program in the focused pane when that program is one you list under Passthrough Programs.
+
+## Sharing an extension
+
+Extensions anyone can install from Settings → Extensions are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in Macterm's repository, each holding `extension.yaml` (its authors, by GitHub username), `palette.yaml` and a `README.md`. An installed one lives in `~/.config/macterm/extensions/<id>/`, and its commands find the folder's other files — a script too long for the YAML — through `$MACTERM_EXTENSION_DIR`. A palette file in your palettes folder with the same name wins over it.
+
+To add yours, open a pull request with the folder; you don't need to clone the whole repository, and [the folder's README](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how, and what an extension needs — POSIX commands, a `requires:`, a `when:` where it can't always work. Every extension there is read through Macterm's validator before it merges.
 
 ## More examples
 

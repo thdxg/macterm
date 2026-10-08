@@ -58,7 +58,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 | `widget edit <widget>` | Unlock a widget for typing, moving and resizing. Returns `busy` while another widget is being edited. |
 | `widget done` | Lock the widget being edited. |
 | `widget remove <widget> [--force]` | Remove a widget, ending its shell. Returns `busy` when a program runs in it, unless forced. |
-| `palette list` | [Custom palette](/docs/custom-palettes) files in `~/.config/macterm/palettes`, read afresh: id, on/off, keybind, and the palette's name or the error that stopped the file reading. |
+| `palette list` | Your own [extensions'](/docs/extensions) palette files in `~/.config/macterm/palettes`, read afresh: id, keybind, and the palette's name or the error that stopped the file reading. |
 | `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, and execution state. |
 | `pane inspect [target]` | Snapshot of a pane's terminal core. Needs a live surface. |
 | `pane dump [--scrollback] [target]` | Print a pane's terminal text. Text only, pipeline-friendly. |

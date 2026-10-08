@@ -273,6 +273,7 @@ enum CustomPaletteExports {
         CustomPaletteEnvironment.projectNameKey,
         CustomPaletteScript.commandVariable,
         CustomPaletteRequirements.variable,
+        MactermExtension.directoryVariable,
     ]
 
     static func validate(_ exports: [String: String]?, at place: String) throws {

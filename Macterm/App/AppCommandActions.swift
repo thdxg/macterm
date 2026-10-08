@@ -16,10 +16,6 @@ extension AppCommand {
     /// command palette and the menu bar so the two stay in sync.
     @MainActor
     func action(in ctx: AppCommandContext) -> (@MainActor () -> Void)? {
-        // A screen turned off in Settings → Palettes has no command: its row
-        // leaves the palette, its menu item disables, its chord says so.
-        if let scope = paletteScope, !scope.isEnabled { return nil }
-
         let projectID = ctx.appState.activeProjectID
         let current = projectID.flatMap { id in ctx.projectStore.projects.first(where: { $0.id == id }) }
 
@@ -298,9 +294,6 @@ extension AppCommand {
     /// keeps the plain disabled look either way.
     @MainActor
     func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
-        // Turned off as a palette: gone, not muted — that is what turning
-        // it off is for.
-        if let scope = paletteScope, !scope.isEnabled { return nil }
         // Off by the master switch: say where it is rather than vanish.
         if self == .passwordManager {
             return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Password Manager"
@@ -328,9 +321,6 @@ extension AppCommand {
     /// other inapplicable binding does.
     @MainActor
     func unavailableNotice(in ctx: AppCommandContext) -> String? {
-        if let scope = paletteScope, !scope.isEnabled {
-            return "\(title) is turned off in Settings → Palettes"
-        }
         guard self == .worktrees || self == .files,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })

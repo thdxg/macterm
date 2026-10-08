@@ -13,7 +13,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case keymaps = "Keymaps"
     case quickTerminal = "Quick Terminal"
     case widgets = "Widgets"
-    case palettes = "Palettes"
+    case extensions = "Extensions"
     case passwords = "Password Manager"
     case updates = "Updates"
 
@@ -21,7 +21,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     /// things it puts on screen beyond the terminal window, then updates.
     static let groups: [[SettingsPane]] = [
         [.general, .projects, .appearance, .animations, .keymaps],
-        [.quickTerminal, .widgets, .palettes, .passwords],
+        [.quickTerminal, .widgets, .extensions, .passwords],
         [.updates],
     ]
 
@@ -37,7 +37,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .quickTerminal: "rectangle.bottomthird.inset.filled"
         case .widgets: "widget.small"
         case .keymaps: "keyboard"
-        case .palettes: "command"
+        case .extensions: "puzzlepiece.extension"
         case .passwords: "key"
         case .updates: "arrow.triangle.2.circlepath"
         }
@@ -101,7 +101,7 @@ struct SettingsView: View {
         case .quickTerminal: QuickTerminalSettings()
         case .widgets: WidgetsSettings()
         case .keymaps: KeymapSettings()
-        case .palettes: PalettesSettings()
+        case .extensions: ExtensionsSettings()
         case .passwords: PasswordsSettings()
         case .updates: UpdatesSettings()
         }

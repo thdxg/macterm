@@ -18,23 +18,32 @@ final class CustomPaletteAvailability {
         self.runner = runner
     }
 
-    /// Checks the palettes the root list shows, once per open.
+    /// Checks the palettes the root list shows, once per open. Palettes
+    /// sharing a command and an environment run it once; an installed
+    /// extension's check sees its own folder (`MACTERM_EXTENSION_DIR`), so
+    /// extensions are checked in their own groups.
     func check(_ palettes: [CustomPalette], context: PaletteContext) {
         guard !checked else { return }
         checked = true
         let conditions = palettes.compactMap { palette in palette.condition.map { (id: palette.id, condition: $0) } }
         guard !conditions.isEmpty else { return }
-        let (environment, cwd) = CustomPaletteScope.commandContext(exports: [:], context: context)
+        let groups = Dictionary(grouping: conditions) { CustomPaletteScope.extensionExports(paletteID: $0.id, context: context) }
+            .map { exports, members in
+                (members: members, context: CustomPaletteScope.commandContext(exports: exports, context: context))
+            }
         let runner = runner
         task = Task { @MainActor [weak self] in
-            let verdicts = await CustomPaletteConditions.evaluate(
-                Set(conditions.map(\.condition.command)), environment: environment, currentDirectory: cwd, runner: runner
-            )
-            guard let self, !Task.isCancelled else { return }
             var unavailable: [String: String] = [:]
-            for (id, condition) in conditions where verdicts[condition.command] != true {
-                unavailable[id] = condition.reason
+            for group in groups {
+                let (environment, cwd) = group.context
+                let verdicts = await CustomPaletteConditions.evaluate(
+                    Set(group.members.map(\.condition.command)), environment: environment, currentDirectory: cwd, runner: runner
+                )
+                for (id, condition) in group.members where verdicts[condition.command] != true {
+                    unavailable[id] = condition.reason
+                }
             }
+            guard let self, !Task.isCancelled else { return }
             self.unavailable = unavailable
         }
     }

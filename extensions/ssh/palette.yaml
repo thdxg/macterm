@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+name: SSH Hosts
+icon: server.rack
+description: Connect to a host from ~/.ssh/config
+requires: [ssh]
+root: hosts
+nodes:
+  hosts:
+    placeholder: Search hosts...
+    list: awk 'tolower($1) == "host" { for (i = 2; i <= NF; i++) if ($i !~ /[*?!]/) print $i }' ~/.ssh/config
+    export: { HOST: . }
+    enter: host
+  host:
+    items:
+      - { title: Connect, action: { run: ssh "$HOST" }, alt: { run: ssh "$HOST", in: split } }

@@ -877,16 +877,10 @@ final class AppState {
         window.isCommandPaletteVisible = true
     }
 
-    /// A custom palette's chord (`PaletteHotkeys`): toggles the palette on
-    /// its root like a built-in screen's chord, says so for a palette turned
-    /// off in Settings → Palettes or whose file no longer reads.
+    /// An extension's chord (`PaletteHotkeys`): toggles the palette on its
+    /// root like a built-in screen's chord.
     func openCustomPalette(id: String) {
         customPalettes.reloadIfChanged()
-        guard let entry = customPalettes.entry(id: id) else { return }
-        guard Preferences.shared.isPaletteEnabled(entry.settingsID) else {
-            presentToast("\(entry.pill.title) is turned off in Settings → Palettes")
-            return
-        }
         guard let target = customPalettes.rootTarget(id: id) else { return }
         toggleCommandPalette(scope: .custom(target))
     }
@@ -1263,6 +1257,10 @@ final class AppState {
     /// The custom palettes (`~/.config/macterm/palettes/*.yaml`), re-read
     /// when the palette opens.
     let customPalettes: CustomPaletteStore
+    /// The palettes anyone can install, read from Macterm's repository for
+    /// Settings → Palettes (`PaletteRegistry`); here so its hourly cache
+    /// outlives the Settings window.
+    let paletteRegistry = PaletteRegistry()
 
     /// The exact text of our last `widgets.yaml` write — anything else on
     /// disk is an edit to absorb before the next write.

@@ -47,6 +47,8 @@
 	# they redirect to the docs index rather than 404ing.
 	redir /docs/ghostty /docs/ 301
 	redir /docs/tmux /docs/ 301
+	# Custom palettes became extensions.
+	redir /docs/custom-palettes /docs/extensions 301
 
 	# Liveness for the container runtime, matched before any file lookup.
 	respond /healthz 200 {

@@ -100,6 +100,10 @@ If any of these fail in CI, your PR will be blocked. Running them locally first 
 - `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md) — edit `AGENTS.md`.
 - User-facing docs live in [`website/docs/pages/`](website/docs/pages) as Markdown, one file per page. `cd website && bun install && bun run dev` builds and serves the site locally (needs [Bun](https://bun.sh) and [Caddy](https://caddyserver.com)).
 
+## Extensions
+
+Extensions anyone can install from Settings → Extensions live in [`extensions/`](extensions/), one folder each. You don't need to clone the whole repository to add one — [`extensions/README.md`](extensions/README.md) shows how to do it in the browser or with a sparse checkout, and what an extension needs. A pull request that only touches `extensions/` runs the unit tests, which read every extension through Macterm's validator, and skips the rest of CI.
+
 ## Reporting Issues
 
 File issues at https://github.com/thdxg/macterm/issues with steps to reproduce and your macOS version. `mise run logs --last 30m` is a good way to grab relevant log output.
