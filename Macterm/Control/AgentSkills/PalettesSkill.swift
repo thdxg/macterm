@@ -5,7 +5,7 @@ extension AgentSkills {
     static let palettes = AgentSkill(
         name: "macterm-palettes",
         description: """
-        Create or edit a custom Macterm command-palette screen as a YAML file in ~/.config/macterm/palettes — \
+        Create or edit a Macterm extension — a command-palette screen written as a YAML file in ~/.config/macterm/palettes — \
         a palette of named nodes where a command's JSON or plain-line output becomes searchable rows, each row \
         opens another node or runs a command in a new tab or split, and picked values travel down as environment \
         variables — then check with the macterm CLI that the file reads. Use when asked to add a palette, picker, \
@@ -15,7 +15,7 @@ extension AgentSkills {
         body: #"""
         # Writing a Macterm palette
 
-        A custom palette is one YAML file in `~/.config/macterm/palettes/`. It appears as a row in the command
+        An extension's palette is one YAML file in `~/.config/macterm/palettes/`. It appears as a row in the command
         palette's **Palettes** section (⌘P), opens a screen of its own, and can nest: a row can open another
         screen, and the pills above the palette show the trail. Macterm reads the folder again every time the
         palette opens, so saving the file is the whole deploy. A file that doesn't read keeps its row with a
@@ -113,7 +113,7 @@ extension AgentSkills {
         macterm palette list
         ```
 
-        Prints each palette file's id, whether it is on, its keybind (or `-`), and its name — or, for a file that
+        Prints each palette file's id, its keybind (or `-`), and its name — or, for a file that
         didn't read, `error:` and the reason, naming the node and field (`pods: enter: no node named pod`). Fix and run it again; the
         palette itself is opened with ⌘P (there is no CLI verb for that). Never run a listing's command yourself
         to "test" it if it has side effects; the user's shell runs it.
@@ -122,10 +122,10 @@ extension AgentSkills {
 
         - Pick the icon from SF Symbols; `square.grid.2x2` is the default.
         - Don't put secrets in the file: it is plain text in the user's config directory.
-        - Settings → Palettes turns a palette off without deleting it, and Settings → Keymaps gives it a
+        - Settings → Extensions removes it (Installed → Move to Trash), and Settings → Keymaps gives it a
           keybind. Mention both rather than doing either for the user.
         - The user-facing reference, with Git, Docker and SSH examples, is
-          https://macterm.thdxg.dev/docs/custom-palettes; a complete Kubernetes palette is in
+          https://macterm.thdxg.dev/docs/extensions; a complete Kubernetes palette is in
           https://macterm.thdxg.dev/docs/cookbook#kubernetes-palette.
 
         \#(currencyNote(for: "macterm-palettes"))

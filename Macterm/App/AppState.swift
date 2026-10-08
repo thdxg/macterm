@@ -877,16 +877,10 @@ final class AppState {
         window.isCommandPaletteVisible = true
     }
 
-    /// A custom palette's chord (`PaletteHotkeys`): toggles the palette on
-    /// its root like a built-in screen's chord, says so for a palette turned
-    /// off in Settings → Palettes or whose file no longer reads.
+    /// An extension's chord (`PaletteHotkeys`): toggles the palette on its
+    /// root like a built-in screen's chord.
     func openCustomPalette(id: String) {
         customPalettes.reloadIfChanged()
-        guard let entry = customPalettes.entry(id: id) else { return }
-        guard Preferences.shared.isPaletteEnabled(entry.settingsID) else {
-            presentToast("\(entry.pill.title) is turned off in Settings → Palettes")
-            return
-        }
         guard let target = customPalettes.rootTarget(id: id) else { return }
         toggleCommandPalette(scope: .custom(target))
     }

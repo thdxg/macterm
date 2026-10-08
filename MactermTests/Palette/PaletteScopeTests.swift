@@ -161,29 +161,6 @@ struct PaletteScopeTests {
     }
 
     @Test
-    func a_screen_turned_off_in_settings_leaves_the_palette_and_its_chord_says_so() {
-        let prior = Preferences.shared.disabledPaletteIDs
-        defer { Preferences.shared.disabledPaletteIDs = prior }
-        let context = makeContext()
-        let ctx = AppCommandContext(appState: context.appState, projectStore: context.projectStore)
-        let rows = { CommandSource().emptyItems(context: context)?.map(\.title) ?? [] }
-
-        #expect(rows().contains("Password Manager"))
-        #expect(AppCommand.passwordManager.action(in: ctx) != nil)
-
-        Preferences.shared.setPalette(PaletteScopeID.passwords.settingsID, enabled: false)
-        #expect(!PaletteScopeID.passwords.isEnabled)
-        #expect(!rows().contains("Password Manager"), "gone, not muted")
-        #expect(AppCommand.passwordManager.action(in: ctx) == nil, "its menu item disables")
-        #expect(AppCommand.passwordManager.paletteDisabledHint(in: ctx) == nil)
-        #expect(AppCommand.passwordManager.unavailableNotice(in: ctx) == "Password Manager is turned off in Settings → Palettes")
-        #expect(PaletteScopeID.worktrees.isEnabled, "the other screen is untouched")
-
-        Preferences.shared.setPalette(PaletteScopeID.passwords.settingsID, enabled: true)
-        #expect(rows().contains("Password Manager"))
-    }
-
-    @Test
     func an_alt_action_and_a_warning_survive_rescoring() {
         var ran = ""
         let item = PaletteItem(

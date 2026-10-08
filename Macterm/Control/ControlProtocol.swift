@@ -394,8 +394,6 @@ struct ControlPaletteInfo: Codable, Equatable {
     /// The palette's `name:`; absent when the file didn't read.
     var name: String?
     var description: String?
-    /// Settings → Palettes' switch.
-    var enabled: Bool
     /// Its keybind as the user wrote it, when bound.
     var keybind: String?
     var error: String?

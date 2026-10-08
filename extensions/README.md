@@ -1,6 +1,6 @@
 # Extensions
 
-Extensions anyone can install from **Settings → Palettes** in Macterm. Each is a folder here, named by its id:
+Extensions anyone can install from **Settings → Extensions** in Macterm. Each is a folder here, named by its id:
 
 ```
 extensions/
@@ -31,7 +31,7 @@ You don't need the whole repository. Either:
 
 Then:
 
-1. Write the palette and use it for a while; the [file format](https://macterm.thdxg.dev/docs/custom-palettes) is documented. Start `palette.yaml` with the schema line so your editor checks it:
+1. Write the palette and use it for a while; the [file format](https://macterm.thdxg.dev/docs/extensions) is documented. Start `palette.yaml` with the schema line so your editor checks it:
 
    ```yaml
    # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json

@@ -176,7 +176,6 @@ final class ControlHandler {
                 file: entry.fileURL.path(percentEncoded: false),
                 name: entry.palette?.name,
                 description: entry.palette?.description,
-                enabled: Preferences.shared.isPaletteEnabled(entry.settingsID),
                 keybind: HotkeyRegistry.parseShortcut(chord) == nil ? nil : chord,
                 error: entry.failure?.localizedDescription
             )

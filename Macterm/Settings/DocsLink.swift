@@ -22,8 +22,8 @@ enum DocsSection: String, CaseIterable {
     case desktopWidgets = "desktop-widgets"
     case passwords
     case savedPasswords = "passwords#settings-password-manager"
-    case palettes = "command-palette#settings-palettes"
-    case customPalettes = "custom-palettes"
+    case extensionsSettings = "command-palette#settings-extensions"
+    case extensions
 
     static let base = URL(string: "https://macterm.thdxg.dev/docs/")!
 

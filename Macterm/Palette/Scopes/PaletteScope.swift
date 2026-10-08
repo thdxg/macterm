@@ -63,28 +63,6 @@ enum PaletteScopeID: Hashable {
         }
     }
 
-    /// The id Settings → Palettes' switch stores
-    /// (`Preferences.disabledPaletteIDs`): a built-in by name, a custom
-    /// palette by its file — every node of it shares the one switch.
-    var settingsID: String {
-        switch self {
-        case .passwords: "passwords"
-        case .worktrees: "worktrees"
-        case .files: "files"
-        case let .custom(target): Self.customSettingsID(paletteID: target.paletteID)
-        }
-    }
-
-    static func customSettingsID(paletteID: String) -> String {
-        "custom:\(paletteID)"
-    }
-
-    /// Settings → Palettes. Off, the screen leaves the palette and its menu.
-    @MainActor
-    var isEnabled: Bool {
-        Preferences.shared.isPaletteEnabled(settingsID)
-    }
-
     @MainActor
     func makeScope() -> any PaletteScope {
         switch self {
