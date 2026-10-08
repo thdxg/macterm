@@ -26,7 +26,7 @@ A [custom palette](/docs/custom-palettes) for browsing a cluster from <kbd>⌘P<
 # values picked above as environment variables.
 name: Kubernetes
 icon: shippingbox
-description: Namespaces, pods, deployments, services and contexts
+description: Browse namespaces, pods, deployments, services and contexts
 requires: [kubectl]
 root: menu
 nodes:

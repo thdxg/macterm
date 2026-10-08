@@ -101,7 +101,9 @@ struct CommandSource: PaletteSource {
 
         return PaletteItem(
             title: command.title,
-            subtitle: command.paletteSubtitle(in: commandCtx),
+            // A palette screen says what it lists, as a custom palette's
+            // `description:` does.
+            subtitle: command.paletteSubtitle(in: commandCtx) ?? command.paletteScope?.summary,
             category: command.category.rawValue,
             keybind: command.hotkeyAction.flatMap(keybindDisplay),
             keybindSymbols: command.hotkeyAction.flatMap(keybindSymbols),
