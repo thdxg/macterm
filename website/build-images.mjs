@@ -47,7 +47,7 @@ const WEBP_QUALITY = 90;
 // to this 1.90:1 box would cut the sidebar or the shell out of frame, so the
 // image is letterboxed onto the site's own ground instead — the whole
 // screenshot stays visible and the bars read as intentional matting. The
-// colour tracks the landing page's --l-bg; a card on a different ground than
+// colour is the design system's `page` token; a card on a different ground than
 // the site reads as a rendering bug in every link preview.
 const OG = { width: 1200, height: 630, background: "#0B0D0E" };
 
@@ -73,14 +73,19 @@ async function buildHero() {
     console.warn("build-images: assets/hero.png missing — the landing page's hero will 404");
     return 0;
   }
-  for (const width of WIDTHS) {
+  // Never upscale: rungs wider than the original are skipped, and the
+  // original's own width becomes the top rung. index.html's srcset is
+  // hand-authored, so it lists exactly these widths.
+  const { width: srcWidth } = await sharp(src).metadata();
+  const widths = WIDTHS.filter((w) => w < srcWidth).concat(srcWidth);
+  for (const width of widths) {
     await sharp(src)
       .resize({ width })
       .webp({ quality: WEBP_QUALITY, smartSubsample: true })
       .toFile(join(OUT_DIR, `hero-${width}.webp`));
   }
   await sharp(src)
-    .resize({ width: FALLBACK_WIDTH })
+    .resize({ width: FALLBACK_WIDTH, withoutEnlargement: true })
     .png()
     .toFile(join(OUT_DIR, `hero-${FALLBACK_WIDTH}.png`));
   return 1;
