@@ -947,6 +947,8 @@ final class Pane: Identifiable {
         // not configuration.
         var mergedEnv = env ?? [:]
         mergedEnv[ControlProtocol.sessionEnvVar] = sessionName
+        // A palette action's command is first-spawn input like `command`.
+        if hasBuiltSurface { mergedEnv[CustomPaletteScript.commandVariable] = nil }
         let view = GhosttyTerminalNSView(
             paneID: id,
             workingDirectory: projectPath,
@@ -1198,7 +1200,9 @@ final class Pane: Identifiable {
         self.env = env
         self.activityQuietPollDelay = activityQuietPollDelay
         self.remoteTitleRetryDelay = remoteTitleRetryDelay
-        executionTracker = TerminalExecutionTracker(hasUserInteraction: command != nil)
+        executionTracker = TerminalExecutionTracker(
+            hasUserInteraction: command != nil || env?[CustomPaletteScript.commandVariable] != nil
+        )
         // Prime the first probe for a remote pane. Scheduled probes cover only
         // the frontmost project, so without this a restored pane in a
         // background project is never probed: its name stays nil and

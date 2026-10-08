@@ -22,10 +22,10 @@ enum CustomPaletteRunner {
 
     struct TimedOut: Error {}
 
-    /// The user's login shell (`getpwuid`), else `/bin/sh`. Commands run in
-    /// it with `-l -c`: it is what the user writes commands for, its rc files
-    /// are the only place its PATH lives, and `nu`, `fish`, `zsh` and `bash`
-    /// all take that spelling.
+    /// The user's login shell (`getpwuid`), else `/bin/sh`. Commands start in
+    /// it with `-l -c`, by way of `CustomPaletteScript.trampoline`: its rc
+    /// files are the only place its PATH lives, and `nu`, `fish`, `zsh` and
+    /// `bash` all take that spelling.
     nonisolated static var loginShell: String {
         if let shell = getpwuid(getuid())?.pointee.pw_shell.map({ String(cString: $0) }), !shell.isEmpty {
             return shell
@@ -97,5 +97,54 @@ enum CustomPaletteEnvironment {
         if let projectName { env[projectNameKey] = projectName }
         if let projectDirectory { env[projectDirectoryKey] = projectDirectory }
         return env
+    }
+}
+
+/// `requires:`, the programs a palette's commands need. Consulted only after
+/// a listing fails, so a palette that works pays nothing for declaring them,
+/// and one that doesn't says which program is missing instead of showing
+/// the shell's own "command not found".
+enum CustomPaletteRequirements {
+    static let variable = "MACTERM_PALETTE_REQUIRES"
+
+    /// Prints each required program that isn't on PATH, one per line. The
+    /// names are split unquoted, which `isProgramName` makes safe: no
+    /// whitespace, no glob characters.
+    static let probe = #"for c in $MACTERM_PALETTE_REQUIRES; do command -v "$c" >/dev/null 2>&1 || printf "%s\n" "$c"; done"#
+
+    static func isProgramName(_ name: String) -> Bool {
+        guard let first = name.unicodeScalars.first, first != "-" else { return false }
+        return name.unicodeScalars.allSatisfy { scalar in
+            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || "._+-/".unicodeScalars.contains(scalar))
+        }
+    }
+
+    /// Which of `required` aren't on the PATH the listing ran with, in the
+    /// order the file names them; empty when the probe can't tell.
+    static func missing(
+        _ required: [String],
+        environment: [String: String],
+        currentDirectory: String?,
+        runner: CustomPaletteCommandRunner
+    ) async -> [String] {
+        guard !required.isEmpty else { return [] }
+        let (line, extra) = CustomPaletteScript.invocation(of: probe)
+        var env = environment.merging(extra) { _, new in new }
+        env[variable] = required.joined(separator: " ")
+        guard let result = try? await runner(line, env, currentDirectory), result.status == 0 else { return [] }
+        let printed = Set(result.stdout.split(whereSeparator: \.isNewline).map(String.init))
+        return required.filter(printed.contains)
+    }
+
+    /// "This palette needs kubectl and jq, which aren't on your PATH."
+    static func message(missing: [String]) -> String {
+        let names = switch missing.count {
+        case 0,
+             1: missing.joined()
+        case 2: missing.joined(separator: " and ")
+        default: missing.dropLast().joined(separator: ", ") + " and " + (missing.last ?? "")
+        }
+        let verb = missing.count == 1 ? "isn't" : "aren't"
+        return "This palette needs \(names), which \(verb) on your PATH."
     }
 }

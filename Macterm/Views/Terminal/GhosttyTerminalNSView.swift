@@ -671,16 +671,33 @@ final class GhosttyTerminalNSView: NSView {
         // the socket-path budget) → no wrapper, a plain unpersisted shell.
         // The argv element buffers come from `cString` (freed in
         // destroySurface); the pointer array is bound around the spawn below.
-        let wrapperArgv: [UnsafePointer<CChar>?] = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
+        var wrapper = remoteSpec != nil ? [] : ZmxAttach.wrapperArgv(
             executablePath: ZmxClient.live.executableURL()?.path,
             sessionID: sessionName
-        ).map { cString($0) }
+        )
+
+        // A palette `run:` action's command, carried in the environment
+        // (`CustomPaletteLaunch`): run before the shell by the bundled CLI,
+        // inside the zmx session, so it is never typed and never reaches the
+        // shell's history. Without the CLI, the fixed line that runs it is
+        // typed instead — it reads the command from the same variable.
+        var typedInput = command
+        if remoteSpec == nil, env?[CustomPaletteScript.commandVariable] != nil {
+            if let cli = Bundle.main.resourceURL?.appendingPathComponent("bin/macterm").path,
+               FileManager.default.isExecutableFile(atPath: cli)
+            {
+                wrapper += CustomPaletteLaunch.wrapperArgv(cli: cli, shell: shell ?? CustomPaletteRunner.loginShell)
+            } else {
+                typedInput = CustomPaletteScript.trampoline
+            }
+        }
+        let wrapperArgv: [UnsafePointer<CChar>?] = wrapper.map { cString($0) }
 
         // Declared `run` is typed into the (wrapped) shell verbatim, as if the
         // user had entered it at the prompt. No shell-syntax handling: cwd is
         // set above, not via an injected `cd`.
-        if let command, !command.isEmpty {
-            config.initial_input = cString(command + "\n")
+        if let typedInput, !typedInput.isEmpty {
+            config.initial_input = cString(typedInput + "\n")
         }
 
         // Extra environment variables. The array of key/value structs points at

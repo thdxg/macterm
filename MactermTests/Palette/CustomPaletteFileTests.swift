@@ -134,7 +134,20 @@ struct CustomPaletteFileTests {
     }
 
     @Test
+    func requires_names_the_programs_and_defaults_to_none() throws {
+        #expect(try Self.palette(Self.kubernetes).requires.isEmpty)
+        let palette = try Self.palette("""
+        name: Pods
+        requires: [kubectl, jq]
+        nodes: { root: { list: kubectl get pods -o name, action: { copy: . } } }
+        """)
+        #expect(palette.requires == ["kubectl", "jq"])
+    }
+
+    @Test
     func every_mistake_is_named_with_its_node_and_field() {
+        #expect(Self.invalidMessage("name: X\nrequires: [kubectl jq]\nnodes: { root: { items: [] } }")
+            == "requires: kubectl jq isn't a program name")
         #expect(Self.invalidMessage("name: ''\nnodes: { root: { items: [] } }") == "name: must not be empty")
         #expect(Self.invalidMessage("name: X\nnodes: {}") == "nodes: must name at least one node")
         #expect(Self.invalidMessage("name: X\nnodes: { menu: { items: [] } }")

@@ -39,12 +39,15 @@ struct CustomPaletteScopeTests {
     """
 
     /// A runner that answers from `outputs` by command and records what it
-    /// was asked, including the environment.
+    /// was asked, including the environment. The login shell is always
+    /// handed the trampoline, so the command is the one it carries.
     private final class Recorder: @unchecked Sendable {
         var calls: [(command: String, environment: [String: String], cwd: String?)] = []
         var outputs: [String: CustomPaletteCommandResult] = [:]
         var runner: CustomPaletteCommandRunner {
-            { [self] command, environment, cwd in
+            { [self] line, environment, cwd in
+                #expect(line == CustomPaletteScript.trampoline)
+                let command = environment[CustomPaletteScript.commandVariable] ?? ""
                 calls.append((command, environment, cwd))
                 return outputs[command] ?? CustomPaletteCommandResult(stdout: "", stderr: "no canned output for \(command)", status: 1)
             }
@@ -231,6 +234,7 @@ struct CustomPaletteScopeTests {
             detail: "error: You must be logged in to the server (Unauthorized)"
         ))
         #expect(scope.sections(for: PaletteQuery(raw: ""), context: context).isEmpty)
+        #expect(recorder.calls.count == 1, "nothing is required, so nothing is probed")
 
         // Activation after a failure does not retry on its own; ⌘R does.
         scope.activate(context: context) {}
@@ -243,6 +247,39 @@ struct CustomPaletteScopeTests {
         #expect(recorder.calls.count == 2)
         #expect(scope.failure?.title == "Couldn't read Namespaces")
         #expect(scope.failure?.detail == "rows: .items names a path, but the output isn't JSON")
+    }
+
+    @Test
+    func a_failing_listing_names_the_required_programs_that_are_missing() async throws {
+        let (context, _, _) = try makeContext(files: ["pods.yaml": """
+        name: Pods
+        requires: [kubectl, jq]
+        nodes: { root: { list: kubectl get pods -o json | jq .items, action: { copy: . } } }
+        """])
+        let recorder = Recorder()
+        recorder.outputs["kubectl get pods -o json | jq .items"] = CustomPaletteCommandResult(
+            stdout: "", stderr: "bash: kubectl: command not found", status: 127
+        )
+        recorder.outputs[CustomPaletteRequirements.probe] = CustomPaletteCommandResult(stdout: "kubectl\n", stderr: "", status: 0)
+        let scope = CustomPaletteScope(
+            target: CustomPaletteTarget(paletteID: "pods", node: "root", exports: [:], pill: PalettePill(title: "Pods", systemImage: "x")),
+            runner: recorder.runner
+        )
+        scope.activate(context: context) {}
+        await settle()
+        #expect(scope.failure == PaletteFailure(
+            title: "Couldn't list Pods",
+            detail: "This palette needs kubectl, which isn't on your PATH."
+        ))
+        #expect(recorder.calls.map(\.command) == ["kubectl get pods -o json | jq .items", CustomPaletteRequirements.probe])
+        #expect(recorder.calls[1].environment[CustomPaletteRequirements.variable] == "kubectl jq")
+        #expect(recorder.calls[1].environment[CustomPaletteEnvironment.projectDirectoryKey] == "/tmp", "probed on the listing's PATH")
+
+        // Everything there: the listing's own error stands.
+        recorder.outputs[CustomPaletteRequirements.probe] = CustomPaletteCommandResult(stdout: "", stderr: "", status: 0)
+        scope.retry()
+        await settle()
+        #expect(scope.failure?.detail == "bash: kubectl: command not found")
     }
 
     @Test
@@ -276,6 +313,39 @@ struct CustomPaletteScopeTests {
                 .map(\.count) == .success(2),
             "stderr beside good output is not a failure"
         )
+    }
+
+    @Test
+    func a_run_action_hands_a_local_pane_its_command_in_the_environment_never_typed() throws {
+        let (context, _, _) = try makeContext(files: [:])
+        let state = context.appState
+        let project = try #require(context.projectStore.projects.first)
+        CustomPaletteActions.perform(
+            .run(command: "\n  kubectl logs -f \"$POD\"", in: .tab),
+            operand: nil,
+            exports: ["POD": "api-1"],
+            appState: state,
+            projects: context.projectStore.projects
+        )
+        let pane = try #require(state.focusedPane(for: project.id))
+        #expect(pane.command == nil, "nothing is typed at the prompt")
+        #expect(pane.env?[CustomPaletteScript.commandVariable] == "kubectl logs -f \"$POD\"")
+        #expect(pane.env?["POD"] == "api-1")
+        #expect(pane.env?[CustomPaletteEnvironment.projectDirectoryKey] == "/tmp")
+
+        let remote = Project(name: "box", path: "me@box:/srv", sortOrder: 1)
+        context.projectStore.add(remote)
+        state.selectProject(remote)
+        CustomPaletteActions.perform(
+            .run(command: "htop", in: .tab),
+            operand: nil,
+            exports: [:],
+            appState: state,
+            projects: context.projectStore.projects
+        )
+        let remotePane = try #require(state.focusedPane(for: remote.id))
+        #expect(remotePane.command == "htop", "ssh carries no environment, so a remote pane still types it")
+        #expect(remotePane.env?[CustomPaletteScript.commandVariable] == nil)
     }
 
     @Test

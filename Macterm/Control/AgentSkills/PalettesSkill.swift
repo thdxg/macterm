@@ -65,8 +65,9 @@ extension AgentSkills {
         - **`export`** sets environment variables for everything below the row: in a menu item the values are
           literal, in a listing they are paths into the row. A node can be reached from several places (`pods`
           above, with and without `NAMESPACE`); the command handles the difference the way a shell does.
-        - An **action** is exactly one of `run:` (typed into a new tab, or a split with `in: split`, with the
-          exported variables in its environment), `copy:` (to the clipboard) or `open:` (a URL or file).
+        - An **action** is exactly one of `run:` (run in a new tab, or a split with `in: split`, before its
+          shell starts, with the exported variables in its environment; the shell's prompt follows when it
+          ends), `copy:` (to the clipboard) or `open:` (a URL or file).
         - **`alt:`** is a row's second action, run by ⌥↩ or ⌥-click — on an item, or on a listing for every
           row: the same keys as an action plus an optional `title:`, which the row's subtitle shows while ⌥ is
           held (`alt: { title: Open in a Split, run: claude, in: split }`). Use it for the "same thing, other
@@ -74,10 +75,13 @@ extension AgentSkills {
 
         ## Commands and their output
 
-        - Commands run in the user's **login shell** with `-l -c`, so write them in that shell's syntax (ask
-          or check `$SHELL`; it may be nushell or fish) and rely on its `PATH`. A listing runs once when its
-          screen opens, in the active project's directory, with `MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`
-          and the exported variables set. ⌘R runs it again. One that takes over 30 seconds fails.
+        - Commands are **POSIX sh** with errexit (`sh -o errexit -c`) whatever the user's own shell is, so
+          write them in sh — not in nushell or fish syntax. A command whose first line is a `#!` runs as a
+          script with that interpreter instead (a YAML `|` block). They still see the user's `PATH`. Name
+          the programs they need in `requires:`, so a missing one is reported by name.
+        - A listing runs once when its screen opens, in the active project's directory, with
+          `MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME` and the exported variables set. ⌘R runs it again.
+          One that takes over 30 seconds fails.
         - **Read exported values as variables** (`"$NAMESPACE"`), never by pasting them into another command:
           Macterm never substitutes a row's text into a command, so a value with spaces or quotes can't break
           one. Keep that property in anything you write.
