@@ -808,7 +808,6 @@ final class GhosttyTerminalNSView: NSView {
 
     func destroySurface() {
         isDestroyed = true
-        cancelRowSnap()
         clearCommandSubmissionEvidence()
         // A composition in flight has nowhere left to commit — drop it before
         // the surface goes, so a reattached surface starts uncomposed rather
@@ -863,8 +862,6 @@ final class GhosttyTerminalNSView: NSView {
         windowObservers.removeAll()
 
         guard let window else {
-            // A settle's link would never fire again without a window.
-            cancelRowSnap()
             // Detached from its window (e.g. pulled out of the incubator before
             // re-attaching). Mark occluded so the renderer doesn't draw to an
             // off-screen layer.
@@ -1575,11 +1572,8 @@ final class GhosttyTerminalNSView: NSView {
             x *= 2
             y *= 2
         }
-        // Any scroll — a new touch included — takes over from a settle.
-        cancelRowSnap()
         noteScroll(y: y, precise: event.hasPreciseScrollingDeltas)
         ghostty_surface_mouse_scroll(surface, x, y, scrollMods(for: event))
-        scheduleRowSnapIfGestureEnded(event)
     }
 
     // MARK: - Sub-row scroll offset (smooth scrolling)
@@ -1622,107 +1616,19 @@ final class GhosttyTerminalNSView: NSView {
     /// the core keeps the remainder as an accumulator detail and draws
     /// nothing differently.
     func applySubRowScrollOffset(pointsBelowRow points: CGFloat) {
-        cancelRowSnap()
+        guard let surface else { return }
         let cell = cellHeightPixels
         guard cell > 0 else { return }
         let scale = window?.backingScaleFactor ?? 2.0
         // The core's sign: positive is content moved down (scrolled back), so
         // a viewport sitting below its row is a negative remainder.
-        aimScrollRemainder(at: max(-cell + 1, min(0, -points * scale)))
-    }
-
-    /// Hand the core the precision delta that lands its accumulator on
-    /// `remainder` (`ScrollAccumulator.nudge`). Within a cell of zero it
-    /// commits no row; aimed past one, it commits the rows on the way.
-    private func aimScrollRemainder(at remainder: CGFloat) {
-        guard let surface else { return }
-        let cell = cellHeightPixels
-        guard cell > 0 else { return }
+        let remainder = max(-cell + 1, min(0, -points * scale))
         let multiplier = GhosttyApp.shared.mouseScrollMultiplier.precision
         let delta = scrollAccumulator.nudge(toward: remainder, multiplier: multiplier)
         guard delta != 0 else { return }
         scrollAccumulator.advance(pixels: delta * CGFloat(multiplier), cellHeight: cell)
         // Precision, no momentum: mods bit 0 is `precision` (`scrollMods`).
         ghostty_surface_mouse_scroll(surface, 0, delta, 1)
-    }
-
-    // MARK: - Snap to whole row (smooth scrolling)
-
-    /// How long a lifted gesture waits for momentum before it settles.
-    /// AppKit's first momentum event follows the lift within a frame or two;
-    /// settling before it arrives would start a snap the flick then cancels.
-    private static let momentumGrace: Duration = .milliseconds(60)
-
-    private var rowSnapWait: Task<Void, Never>?
-    private var rowSnap: RowSnap?
-    private var rowSnapStart: CFTimeInterval = 0
-    private var rowSnapLink: CADisplayLink?
-
-    /// A precision gesture that has come to rest — its momentum ended, or the
-    /// fingers lifted with none to follow — settles onto the nearest row
-    /// (Settings → Animations → Snap to whole row). Wheels have no phases
-    /// and never leave a drawn remainder, so they never snap.
-    private func scheduleRowSnapIfGestureEnded(_ event: NSEvent) {
-        guard event.hasPreciseScrollingDeltas else { return }
-        let wait: Duration
-        if event.momentumPhase == .ended || event.momentumPhase == .cancelled {
-            wait = .zero
-        } else if event.phase == .ended || event.phase == .cancelled {
-            wait = Self.momentumGrace
-        } else {
-            return
-        }
-        rowSnapWait = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: wait)
-            guard !Task.isCancelled else { return }
-            self?.beginRowSnap()
-        }
-    }
-
-    /// Only where a precision scroll moves the scrollback viewport: with
-    /// mouse capture the core turns it into wheel reports, and on a screen
-    /// without scrollback (the alternate screen) into arrow keys — there a
-    /// row-committing nudge would reach the program as input.
-    private func beginRowSnap() {
-        rowSnapWait = nil
-        guard Preferences.shared.smoothScrolling, Preferences.shared.snapScrollToRow,
-              let surface, !ghostty_surface_mouse_captured(surface),
-              lastScrollbarSnapshot?.hasScrollback == true,
-              let snap = RowSnap(pending: scrollAccumulator.pending, cellHeight: cellHeightPixels)
-        else { return }
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            snap.targets(at: RowSnap.duration).forEach(aimScrollRemainder(at:))
-            return
-        }
-        rowSnap = snap
-        rowSnapStart = CACurrentMediaTime()
-        if rowSnapLink == nil {
-            let link = displayLink(target: self, selector: #selector(rowSnapFrame(_:)))
-            link.add(to: .main, forMode: .common)
-            rowSnapLink = link
-        }
-    }
-
-    @objc
-    private func rowSnapFrame(_: CADisplayLink) {
-        guard let snap = rowSnap, surface != nil else {
-            cancelRowSnap()
-            return
-        }
-        let elapsed = CACurrentMediaTime() - rowSnapStart
-        snap.targets(at: elapsed).forEach(aimScrollRemainder(at:))
-        if snap.isFinished(at: elapsed) { cancelRowSnap() }
-    }
-
-    /// Stop a settle where it is drawn — the next gesture continues from
-    /// there — and drop one still waiting out the momentum grace. The link
-    /// retains its target, so it is invalidated rather than paused.
-    private func cancelRowSnap() {
-        rowSnapWait?.cancel()
-        rowSnapWait = nil
-        rowSnap = nil
-        rowSnapLink?.invalidate()
-        rowSnapLink = nil
     }
 
     private func scrollMods(for event: NSEvent) -> ghostty_input_scroll_mods_t {
