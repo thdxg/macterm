@@ -38,15 +38,15 @@ enum PaletteScopeID: Hashable {
         }
     }
 
-    /// What the screen lists, never what picking a row does (a screen's
-    /// rows can do more than one thing), in a custom palette's
-    /// `description:` style: the subtitle of the palette row that opens
-    /// it, and its line in Settings → Palettes.
+    /// What the screen is for, starting with a verb, never what picking a
+    /// row does (a screen's rows can do more than one thing): the subtitle
+    /// of the palette row that opens it, and its line in Settings →
+    /// Palettes.
     var summary: String {
         switch self {
         case .passwords: "Manage passwords"
-        case .worktrees: "This project's git worktrees"
-        case .files: "Files and folders in this project"
+        case .worktrees: "Browse this project's git worktrees"
+        case .files: "Find files and folders in this project"
         case .custom: ""
         }
     }
