@@ -815,10 +815,11 @@ final class ControlHandler {
         case "up": return (.vertical, .first)
         case "auto":
             // The UI's auto-split picks the longer on-screen axis from the
-            // pane's live NSView bounds; a never-shown pane measures zero and
-            // falls back to horizontal — same as TerminalTab.autoSplit. `auto`
-            // has no side to infer, so the new pane trails the target.
-            return (SplitDirection.auto(for: pane.nsView?.bounds.size ?? .zero), .second)
+            // pane as the key window draws it (a mirror there, #345); a
+            // never-shown pane measures zero and falls back to horizontal —
+            // same as AppState.autoSplitPane. `auto` has no side to infer, so
+            // the new pane trails the target.
+            return (SplitDirection.auto(for: appState.displayedSize(of: pane)), .second)
         default:
             throw ControlError(code: .badRequest, message: "direction must be right, left, down, up, or auto")
         }
