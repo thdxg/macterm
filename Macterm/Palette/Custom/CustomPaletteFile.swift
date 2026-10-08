@@ -2,10 +2,11 @@ import Foundation
 import Yams
 
 // A custom palette: `~/.config/macterm/palettes/<name>.yaml`, one file per
-// palette, a graph of named NODES. A node is either a static menu (`items:`)
-// or a listing (`list:`, a command whose output becomes rows). Every row
-// either enters another node (`enter:`) or performs an action (`action:`),
-// and may `export:` values that ride down the stack as environment
+// palette, a graph of named NODES. A node has static rows (`items:`), a
+// listing (`list:`, a command whose output becomes rows), or both — the
+// items first, then the listing's rows. Every row either enters another node
+// (`enter:`) or performs an action (`action:`), may name a second action
+// for ⌥↩ (`alt:`), and may `export:` values that ride down the stack as environment
 // variables into every command below it — never substituted into shell
 // grammar, so nothing a command prints is ever quoted into another command.
 //
@@ -66,6 +67,7 @@ struct CustomPaletteFile: Codable, Equatable {
         var export: [String: String]?
         var enter: String?
         var action: Action?
+        var alt: Action?
     }
 
     struct Item: Codable, Equatable {
@@ -75,9 +77,12 @@ struct CustomPaletteFile: Codable, Equatable {
         var export: [String: String]?
         var enter: String?
         var action: Action?
+        var alt: Action?
     }
 
     struct Action: Codable, Equatable {
+        /// What the row's subtitle reads while ⌥ is down — `alt:` only.
+        var title: String?
         var run: String?
         /// Where `run` runs: `tab` (default) or `split`.
         var `in`: String?
@@ -165,8 +170,29 @@ enum CustomPaletteOutcome: Equatable {
     case perform(CustomPaletteAction)
 }
 
-/// A validated palette: every `enter:` names a node, every node is a menu
-/// or a listing, every row has an outcome.
+/// A row's ⌥ action: what ⌥↩ or ⌥-click does instead, and the line its
+/// row reads while ⌥ is down.
+struct CustomPaletteAlt: Equatable {
+    let title: String
+    let action: CustomPaletteAction
+
+    init(_ alt: CustomPaletteFile.Action, at place: String) throws {
+        action = try CustomPaletteAction(alt, at: "\(place): alt")
+        title = alt.title ?? Self.defaultTitle(action)
+    }
+
+    static func defaultTitle(_ action: CustomPaletteAction) -> String {
+        switch action {
+        case .run(_, .tab): "Run in a New Tab"
+        case .run(_, .split): "Run in a Split"
+        case .copy: "Copy"
+        case .open: "Open"
+        }
+    }
+}
+
+/// A validated palette: every `enter:` names a node, every node has items,
+/// a listing or both, every row has an outcome.
 struct CustomPalette: Equatable, Identifiable {
     /// The file's stem — stable for the user, so bindings and the Settings
     /// switch key on it.
@@ -181,14 +207,12 @@ struct CustomPalette: Equatable, Identifiable {
 
     struct Node: Equatable {
         let placeholder: String?
-        let kind: Kind
+        /// The rows written out, shown before the listing's.
+        let items: [Item]
+        /// The command whose output adds rows after the items, if any.
+        let listing: Listing?
         /// The glyph every row shows unless the row names its own.
         let icon: String?
-
-        enum Kind: Equatable {
-            case menu([Item])
-            case listing(Listing)
-        }
     }
 
     struct Item: Equatable {
@@ -197,6 +221,7 @@ struct CustomPalette: Equatable, Identifiable {
         let icon: String?
         let exports: [String: String]
         let outcome: CustomPaletteOutcome
+        var alt: CustomPaletteAlt?
     }
 
     /// A listing node's recipe: the command and how its rows become items.
@@ -212,6 +237,7 @@ struct CustomPalette: Equatable, Identifiable {
         let match: [String]
         let exports: [String: String]
         let outcome: CustomPaletteOutcome
+        var alt: CustomPaletteAlt?
     }
 
     init(file: CustomPaletteFile, id: String) throws {
@@ -251,43 +277,52 @@ struct CustomPalette: Equatable, Identifiable {
             }
         }
 
-        switch (node.items, node.list) {
-        case let (items?, nil):
-            for key in ["rows", "title", "subtitle", "match", "export"] where node.hasListingField(key) {
-                throw CustomPaletteError.invalid("\(name): \(key): belongs to a list: node, not a menu")
-            }
-            if node.enter != nil || node.action != nil {
-                throw CustomPaletteError.invalid("\(name): enter:/action: go on each item of a menu")
-            }
-            let built = try items.enumerated().map { index, item in
-                try Item(
-                    title: item.title,
-                    subtitle: item.subtitle,
-                    icon: item.icon,
-                    exports: item.export ?? [:],
-                    outcome: outcome(enter: item.enter, action: item.action, at: "\(name) item \(index + 1) (\(item.title))")
-                )
-            }
-            return Node(placeholder: node.placeholder, kind: .menu(built), icon: node.icon)
-        case let (nil, command?):
-            let title = node.title ?? "."
-            let match = node.match ?? [title, node.subtitle].compactMap(\.self)
-            let listing = try Listing(
-                command: command,
-                rowsPath: node.rows,
-                title: title,
-                subtitle: node.subtitle,
-                icon: node.icon,
-                match: match,
-                exports: node.export ?? [:],
-                outcome: outcome(enter: node.enter, action: node.action, at: name)
-            )
-            return Node(placeholder: node.placeholder, kind: .listing(listing), icon: node.icon)
-        case (nil, nil):
-            throw CustomPaletteError.invalid("\(name): needs items: (a menu) or list: (a command)")
-        case (.some, .some):
-            throw CustomPaletteError.invalid("\(name): has both items: and list:; a node is one or the other")
+        if node.items == nil, node.list == nil {
+            throw CustomPaletteError.invalid("\(name): needs items: (rows written out) or list: (a command)")
         }
+        func alt(_ alt: CustomPaletteFile.Action?, at place: String) throws -> CustomPaletteAlt? {
+            try alt.map { try CustomPaletteAlt($0, at: place) }
+        }
+        let items = try (node.items ?? []).enumerated().map { index, item in
+            let place = "\(name) item \(index + 1) (\(item.title))"
+            if let action = item.action, action.title != nil {
+                throw CustomPaletteError.invalid("\(place): title: goes on alt:, not action:")
+            }
+            return try Item(
+                title: item.title,
+                subtitle: item.subtitle,
+                icon: item.icon,
+                exports: item.export ?? [:],
+                outcome: outcome(enter: item.enter, action: item.action, at: place),
+                alt: alt(item.alt, at: place)
+            )
+        }
+        guard let command = node.list else {
+            for key in ["rows", "title", "subtitle", "match", "export"] where node.hasListingField(key) {
+                throw CustomPaletteError.invalid("\(name): \(key): belongs to a list: node")
+            }
+            if node.enter != nil || node.action != nil || node.alt != nil {
+                throw CustomPaletteError.invalid("\(name): enter:/action:/alt: go on each item, or with a list:")
+            }
+            return Node(placeholder: node.placeholder, items: items, listing: nil, icon: node.icon)
+        }
+        if let action = node.action, action.title != nil {
+            throw CustomPaletteError.invalid("\(name): title: goes on alt:, not action:")
+        }
+        let title = node.title ?? "."
+        let match = node.match ?? [title, node.subtitle].compactMap(\.self)
+        let listing = try Listing(
+            command: command,
+            rowsPath: node.rows,
+            title: title,
+            subtitle: node.subtitle,
+            icon: node.icon,
+            match: match,
+            exports: node.export ?? [:],
+            outcome: outcome(enter: node.enter, action: node.action, at: name),
+            alt: alt(node.alt, at: name)
+        )
+        return Node(placeholder: node.placeholder, items: items, listing: listing, icon: node.icon)
     }
 }
 

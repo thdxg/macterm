@@ -59,14 +59,18 @@ extension AgentSkills {
 
         - `name` and `nodes` are required. The file's stem (`kubernetes`) is the palette's id: Settings and
           keybinds key on it, so don't rename the file once the user has set those.
-        - A **node** is a menu (`items:`, rows you write) or a listing (`list:`, a command whose output becomes
-          rows), never both. Every row — each item of a menu, every row of a listing — has exactly one of
-          `enter:` (a node name) or `action:`.
+        - A **node** has `items:` (rows you write), a `list:` (a command whose output becomes rows), or both —
+          the items first, at once, then the listing's rows (fixed rows like "New" above a listing). Every
+          row — each item, every row of a listing — has exactly one of `enter:` (a node name) or `action:`.
         - **`export`** sets environment variables for everything below the row: in a menu item the values are
           literal, in a listing they are paths into the row. A node can be reached from several places (`pods`
           above, with and without `NAMESPACE`); the command handles the difference the way a shell does.
         - An **action** is exactly one of `run:` (typed into a new tab, or a split with `in: split`, with the
           exported variables in its environment), `copy:` (to the clipboard) or `open:` (a URL or file).
+        - **`alt:`** is a row's second action, run by ⌥↩ or ⌥-click — on an item, or on a listing for every
+          row: the same keys as an action plus an optional `title:`, which the row's subtitle shows while ⌥ is
+          held (`alt: { title: Open in a Split, run: claude, in: split }`). Use it for the "same thing, other
+          place" choice rather than a second row or a submenu.
 
         ## Commands and their output
 

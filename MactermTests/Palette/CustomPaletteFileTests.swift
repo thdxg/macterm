@@ -59,14 +59,14 @@ struct CustomPaletteFileTests {
         #expect(palette.root == "menu")
         #expect(Set(palette.nodes.keys) == ["menu", "namespaces", "namespace-menu", "pods"])
 
-        guard case let .menu(items)? = palette.nodes["menu"]?.kind else { Issue.record("menu is not a menu")
+        guard let items = palette.nodes["menu"]?.items, palette.nodes["menu"]?.listing == nil else { Issue.record("menu is not a menu")
             return
         }
         #expect(items.map(\.title) == ["Namespaces", "Pods"])
         #expect(items[0].outcome == .enter(node: "namespaces"))
         #expect(items[1].subtitle == "All namespaces")
 
-        guard case let .listing(namespaces)? = palette.nodes["namespaces"]?.kind else { Issue.record("namespaces is not a listing")
+        guard let namespaces = palette.nodes["namespaces"]?.listing else { Issue.record("namespaces is not a listing")
             return
         }
         #expect(namespaces.command == "kubectl get ns -o json")
@@ -76,13 +76,13 @@ struct CustomPaletteFileTests {
         #expect(namespaces.exports == ["NAMESPACE": ".metadata.name"])
         #expect(namespaces.outcome == .enter(node: "namespace-menu"))
 
-        guard case let .listing(pods)? = palette.nodes["pods"]?.kind else { Issue.record("pods is not a listing")
+        guard let pods = palette.nodes["pods"]?.listing else { Issue.record("pods is not a listing")
             return
         }
         #expect(pods.match == [".metadata.name", ".metadata.namespace", ".metadata.labels.app"])
         #expect(pods.outcome == .perform(.run(command: "kubectl logs -f -n \"$NAMESPACE\" \"$POD\"", in: .split)))
 
-        guard case let .menu(contextItems)? = palette.nodes["namespace-menu"]?.kind else { return }
+        guard let contextItems = palette.nodes["namespace-menu"]?.items, palette.nodes["namespace-menu"]?.listing == nil else { return }
         #expect(
             contextItems[1].outcome == .perform(.run(command: "kubectl config set-context --current --namespace \"$NAMESPACE\"", in: .tab)),
             "in: defaults to a new tab"
@@ -101,9 +101,36 @@ struct CustomPaletteFileTests {
         """)
         #expect(palette.root == "root")
         #expect(palette.icon == CustomPalette.defaultIcon)
-        guard case let .listing(listing)? = palette.nodes["root"]?.kind else { return }
+        guard let listing = palette.nodes["root"]?.listing else { return }
         #expect(listing.title == ".", "plain lines: the title is the line")
         #expect(listing.match == ["."])
+    }
+
+    @Test
+    func a_node_can_have_items_and_a_listing_and_any_row_an_alt_action() throws {
+        let palette = try Self.palette("""
+        name: Sessions
+        nodes:
+          root:
+            items:
+              - { title: New, action: { run: claude }, alt: { title: New in a Split, run: claude, in: split } }
+              - { title: All, enter: all }
+            list: ls
+            export: { SESSION: . }
+            action: { run: claude --resume "$SESSION" }
+            alt: { copy: . }
+          all:
+            list: ls
+            action: { run: claude }
+        """)
+        let root = try #require(palette.nodes["root"])
+        #expect(root.items.map(\.title) == ["New", "All"])
+        #expect(try root.items[0].alt == CustomPaletteAlt(.init(title: "New in a Split", run: "claude", in: "split"), at: "x"))
+        #expect(root.items[0].alt?.title == "New in a Split")
+        #expect(root.items[1].alt == nil)
+        #expect(root.listing?.alt?.action == .copy("."))
+        #expect(root.listing?.alt?.title == "Copy", "an untitled alt is named after what it does")
+        #expect(palette.nodes["all"]?.items.isEmpty == true)
     }
 
     @Test
@@ -114,9 +141,7 @@ struct CustomPaletteFileTests {
             == "root: names no node (add a node called root, or set root:)")
         #expect(Self.invalidMessage("name: X\nroot: nope\nnodes: { menu: { items: [] } }") == "root: no node named nope")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { placeholder: hi } }")
-            == "root: needs items: (a menu) or list: (a command)")
-        #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [], list: ls } }")
-            == "root: has both items: and list:; a node is one or the other")
+            == "root: needs items: (rows written out) or list: (a command)")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A }] } }")
             == "root item 1 (A): needs enter: or action:")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, enter: pods }] } }")
@@ -129,9 +154,15 @@ struct CustomPaletteFileTests {
             == "root: in: must be tab or split, not window")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls } }") == "root: needs enter: or action:")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, action: { copy: a } }], title: .x } }")
-            == "root: title: belongs to a list: node, not a menu")
+            == "root: title: belongs to a list: node")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, action: { copy: a } }], enter: root } }")
-            == "root: enter:/action: go on each item of a menu")
+            == "root: enter:/action:/alt: go on each item, or with a list:")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { run: x }, alt: { run: y, in: door } } }")
+            == "root: alt: in: must be tab or split, not door")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { title: T, run: x } } }")
+            == "root: title: goes on alt:, not action:")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, action: { copy: a }, alt: { copy: b, open: c } }] } }")
+            == "root item 1 (A): alt: action needs exactly one of run:, copy:, open:")
     }
 
     @Test
@@ -191,7 +222,7 @@ struct CustomPaletteFileTests {
     @Test
     func the_cookbook_kubernetes_palette_reads_a_port_by_index_and_a_namespace_from_above() throws {
         let palette = try Self.palette(#require(Self.docsExamples()["kubernetes"]), id: "kubernetes")
-        guard case let .listing(services)? = palette.nodes["services"]?.kind else {
+        guard let services = palette.nodes["services"]?.listing else {
             Issue.record("services is not a listing")
             return
         }
@@ -199,7 +230,7 @@ struct CustomPaletteFileTests {
         let rows = try CustomPaletteRows.parse(output: output, listing: services)
         #expect(rows.map(\.exports) == [["SERVICE": "api", "NAMESPACE": "prod", "PORT": "8080"]])
 
-        guard case let .listing(pods)? = palette.nodes["pods"]?.kind else {
+        guard let pods = palette.nodes["pods"]?.listing else {
             Issue.record("pods is not a listing")
             return
         }

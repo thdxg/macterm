@@ -14,6 +14,8 @@ struct CustomPaletteRow: Equatable {
     /// The action's operand resolved against the row (a `copy:` or `open:`
     /// path); nil for `run` and `enter`.
     let operand: String?
+    /// The same for the listing's `alt:` action.
+    var altOperand: String?
 }
 
 /// Turns a listing command's output into rows: pure, so every shape and
@@ -31,10 +33,8 @@ enum CustomPaletteRows {
         return values.compactMap { value in
             guard let title = resolve(listing.title, in: value), !title.isEmpty else { return nil }
             let operand: String? = switch listing.outcome {
-            case let .perform(.copy(path)): resolve(path, in: value)
-            case let .perform(.open(path)): resolve(path, in: value)
-            case .perform(.run),
-                 .enter: nil
+            case let .perform(action): actionOperand(action, in: value)
+            case .enter: nil
             }
             return CustomPaletteRow(
                 title: title,
@@ -42,8 +42,18 @@ enum CustomPaletteRows {
                 icon: listing.icon.flatMap { resolve($0, in: value) },
                 match: listing.match.compactMap { resolve($0, in: value) },
                 exports: listing.exports.compactMapValues { resolve($0, in: value) },
-                operand: operand
+                operand: operand,
+                altOperand: listing.alt.flatMap { actionOperand($0.action, in: value) }
             )
+        }
+    }
+
+    /// A `copy:` or `open:` action's text resolved against the row; nil for `run`.
+    static func actionOperand(_ action: CustomPaletteAction, in row: Any) -> String? {
+        switch action {
+        case let .copy(path),
+             let .open(path): resolve(path, in: row)
+        case .run: nil
         }
     }
 
