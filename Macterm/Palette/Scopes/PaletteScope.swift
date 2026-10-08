@@ -38,12 +38,15 @@ enum PaletteScopeID: Hashable {
         }
     }
 
-    /// One line for Settings → Palettes: what the screen lists.
+    /// What the screen is for, starting with a verb, never what picking a
+    /// row does (a screen's rows can do more than one thing): the subtitle
+    /// of the palette row that opens it, and its line in Settings →
+    /// Palettes.
     var summary: String {
         switch self {
-        case .passwords: "Your saved passwords, typed into the focused pane when picked."
-        case .worktrees: "The project's linked git worktrees, each opening a new tab there."
-        case .files: "The project's files and directories by partial path, opened in a split; ⌥ opens with the default app."
+        case .passwords: "Manage passwords"
+        case .worktrees: "Browse git worktrees in this project"
+        case .files: "Browse files and folders in this project"
         case .custom: ""
         }
     }
