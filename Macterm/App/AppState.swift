@@ -1263,6 +1263,10 @@ final class AppState {
     /// The custom palettes (`~/.config/macterm/palettes/*.yaml`), re-read
     /// when the palette opens.
     let customPalettes: CustomPaletteStore
+    /// The palettes anyone can install, read from Macterm's repository for
+    /// Settings → Palettes (`PaletteRegistry`); here so its hourly cache
+    /// outlives the Settings window.
+    let paletteRegistry = PaletteRegistry()
 
     /// The exact text of our last `widgets.yaml` write — anything else on
     /// disk is an edit to absorb before the next write.

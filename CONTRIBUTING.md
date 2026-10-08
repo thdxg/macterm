@@ -100,6 +100,10 @@ If any of these fail in CI, your PR will be blocked. Running them locally first 
 - `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md) — edit `AGENTS.md`.
 - User-facing docs live in [`website/docs/pages/`](website/docs/pages) as Markdown, one file per page. `cd website && bun install && bun run dev` builds and serves the site locally (needs [Bun](https://bun.sh) and [Caddy](https://caddyserver.com)).
 
+## Palettes
+
+Palettes anyone can install from Settings → Palettes live in [`palettes/`](palettes/), one YAML file each. A pull request that only adds or changes palettes runs the unit tests, which read every file there through Macterm's validator, and skips the rest of CI. See [`palettes/README.md`](palettes/README.md) for what a palette there needs.
+
 ## Reporting Issues
 
 File issues at https://github.com/thdxg/macterm/issues with steps to reproduce and your macOS version. `mise run logs --last 30m` is a good way to grab relevant log output.

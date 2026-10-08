@@ -1,0 +1,112 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+# Commands are POSIX sh, run in the active project's directory with the
+# values picked above as environment variables. ⌥↩ (or ⌥-click) opens a row
+# in a split instead of a new tab.
+name: Claude Code
+icon: sparkle
+description: Manage Claude Code sessions in this project
+requires: [claude, jq]
+root: menu
+nodes:
+  # New Session and All Sessions, then the three most recent sessions.
+  menu:
+    items:
+      - title: New Session
+        icon: plus
+        action: { run: claude }
+        alt: { title: New Session in a Split, run: claude, in: split }
+      - { title: All Sessions, subtitle: Every session in this project, icon: clock.arrow.circlepath, enter: sessions }
+    list: |
+      # "2 hours ago", as nushell's `date humanize` (chrono-humanize) says
+      # it: "a minute", "an hour", "a day"… just past each unit, then the
+      # whole count, rounded down and never below 2.
+      ago() {
+        s=$1 h=3600 d=86400
+        if [ "$s" -le 10 ]; then echo now; return
+        elif [ "$s" -le 45 ]; then echo "$s seconds ago"; return
+        elif [ "$s" -le 90 ]; then echo "a minute ago"; return
+        elif [ "$s" -le 2700 ]; then n=$((s / 60)) u=minute
+        elif [ "$s" -le 5400 ]; then echo "an hour ago"; return
+        elif [ "$s" -le $((22 * h)) ]; then n=$((s / h)) u=hour
+        elif [ "$s" -le $((36 * h)) ]; then echo "a day ago"; return
+        elif [ "$s" -le $((6 * d + 12 * h)) ]; then n=$((s / d)) u=day
+        elif [ "$s" -le $((10 * d + 12 * h)) ]; then echo "a week ago"; return
+        elif [ "$s" -le $((29 * d)) ]; then n=$((s / (7 * d))) u=week
+        elif [ "$s" -le $((45 * d)) ]; then echo "a month ago"; return
+        elif [ "$s" -le $((345 * d)) ]; then n=$((s / (30 * d))) u=month
+        elif [ "$s" -le $((547 * d)) ]; then echo "a year ago"; return
+        else n=$((s / (365 * d))) u=year
+        fi
+        [ "$n" -ge 2 ] || n=2
+        echo "$n ${u}s ago"
+      }
+      dir="$HOME/.claude/projects/$(printf %s "$PWD" | sed 's/[^A-Za-z0-9]/-/g')"
+      [ -d "$dir" ] || exit 0
+      now=$(date +%s)
+      ls -t "$dir" | grep '\.jsonl$' | head -n 3 | while IFS= read -r name; do
+        f="$dir/$name"
+        title=$(grep -h -e '"type":"custom-title"' -e '"type":"ai-title"' "$f" | jq -rs '
+          (map(select(.type == "custom-title")) | last | .customTitle)
+          // (map(select(.type == "ai-title")) | last | .aiTitle)
+          // "Untitled session"')
+        branch=$(grep -m 1 -o '"gitBranch":"[^"]*"' "$f" | sed 's/^"gitBranch":"\(.*\)"$/\1/')
+        when=$(ago $((now - $(stat -f %m "$f"))))
+        jq -nc --arg id "${name%.jsonl}" --arg title "$title" --arg subtitle "Resume · $when${branch:+ · $branch}" \
+          '{id: $id, title: $title, subtitle: $subtitle}'
+      done
+    title: .title
+    subtitle: .subtitle
+    icon: arrow.uturn.backward
+    match: [.title, .subtitle, .id]
+    export: { SESSION: .id }
+    action: { run: claude --resume "$SESSION" }
+    alt: { title: Resume in a Split, run: claude --resume "$SESSION", in: split }
+
+  # This project's sessions, newest first: ~/.claude/projects/<cwd with every
+  # non-alphanumeric character as "-">/<session id>.jsonl. The title is the
+  # one set with /rename, else the one Claude Code generated.
+  sessions:
+    list: |
+      # "2 hours ago", as nushell's `date humanize` (chrono-humanize) says
+      # it: "a minute", "an hour", "a day"… just past each unit, then the
+      # whole count, rounded down and never below 2.
+      ago() {
+        s=$1 h=3600 d=86400
+        if [ "$s" -le 10 ]; then echo now; return
+        elif [ "$s" -le 45 ]; then echo "$s seconds ago"; return
+        elif [ "$s" -le 90 ]; then echo "a minute ago"; return
+        elif [ "$s" -le 2700 ]; then n=$((s / 60)) u=minute
+        elif [ "$s" -le 5400 ]; then echo "an hour ago"; return
+        elif [ "$s" -le $((22 * h)) ]; then n=$((s / h)) u=hour
+        elif [ "$s" -le $((36 * h)) ]; then echo "a day ago"; return
+        elif [ "$s" -le $((6 * d + 12 * h)) ]; then n=$((s / d)) u=day
+        elif [ "$s" -le $((10 * d + 12 * h)) ]; then echo "a week ago"; return
+        elif [ "$s" -le $((29 * d)) ]; then n=$((s / (7 * d))) u=week
+        elif [ "$s" -le $((45 * d)) ]; then echo "a month ago"; return
+        elif [ "$s" -le $((345 * d)) ]; then n=$((s / (30 * d))) u=month
+        elif [ "$s" -le $((547 * d)) ]; then echo "a year ago"; return
+        else n=$((s / (365 * d))) u=year
+        fi
+        [ "$n" -ge 2 ] || n=2
+        echo "$n ${u}s ago"
+      }
+      dir="$HOME/.claude/projects/$(printf %s "$PWD" | sed 's/[^A-Za-z0-9]/-/g')"
+      [ -d "$dir" ] || exit 0
+      now=$(date +%s)
+      ls -t "$dir" | grep '\.jsonl$' | head -n 100 | while IFS= read -r name; do
+        f="$dir/$name"
+        title=$(grep -h -e '"type":"custom-title"' -e '"type":"ai-title"' "$f" | jq -rs '
+          (map(select(.type == "custom-title")) | last | .customTitle)
+          // (map(select(.type == "ai-title")) | last | .aiTitle)
+          // "Untitled session"')
+        branch=$(grep -m 1 -o '"gitBranch":"[^"]*"' "$f" | sed 's/^"gitBranch":"\(.*\)"$/\1/')
+        when=$(ago $((now - $(stat -f %m "$f"))))
+        jq -nc --arg id "${name%.jsonl}" --arg title "$title" --arg subtitle "$when${branch:+ · $branch}" \
+          '{id: $id, title: $title, subtitle: $subtitle}'
+      done
+    title: .title
+    subtitle: .subtitle
+    match: [.title, .subtitle, .id]
+    export: { SESSION: .id }
+    action: { run: claude --resume "$SESSION" }
+    alt: { title: Resume in a Split, run: claude --resume "$SESSION", in: split }

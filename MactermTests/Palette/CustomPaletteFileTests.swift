@@ -319,6 +319,36 @@ struct CustomPaletteFileTests {
         return examples
     }
 
+    /// The palettes anyone can install from Settings → Palettes
+    /// (`palettes/` at the repo root): each reads through the validator and
+    /// says what it is — a short id, a description, the programs it needs.
+    @Test
+    func every_palette_in_the_repo_reads_and_says_what_it_is() throws {
+        let directory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("palettes", isDirectory: true)
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "yaml" }
+        #expect(!files.isEmpty)
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path).allSatisfy { $0.hasSuffix(".yaml") || $0 == "README.md" },
+            "one .yaml per palette, and the README"
+        )
+        for file in files {
+            let id = file.deletingPathExtension().lastPathComponent
+            #expect(id.wholeMatch(of: /[a-z0-9]+(-[a-z0-9]+)*/) != nil, "\(id): an id is lowercase words joined by -")
+            let palette: CustomPalette
+            do {
+                palette = try Self.palette(String(contentsOf: file, encoding: .utf8), id: id)
+            } catch {
+                Issue.record("\(id).yaml doesn't read: \(error.localizedDescription)")
+                continue
+            }
+            #expect(palette.description?.isEmpty == false, "\(id): a description")
+            #expect(!palette.requires.isEmpty, "\(id): requires: names the programs it needs")
+        }
+    }
+
     @Test
     func every_palette_file_in_the_docs_reads() throws {
         let examples = try Self.docsExamples()

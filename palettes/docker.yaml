@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+name: Docker
+icon: cube.box
+description: Follow a running container's logs or open a shell in it
+requires: [docker]
+when: { run: docker info, unavailable: Docker isn't running }
+root: containers
+nodes:
+  containers:
+    placeholder: Search containers...
+    list: docker ps --format json
+    title: .Names
+    subtitle: .Image
+    match: [.Names, .Image, .Status]
+    export: { CONTAINER: .ID }
+    enter: container
+  container:
+    items:
+      - { title: Logs, subtitle: Follow in a split, action: { run: docker logs -f "$CONTAINER", in: split } }
+      - { title: Shell, action: { run: docker exec -it "$CONTAINER" sh, in: split } }
+      - { title: Stop, action: { run: docker stop "$CONTAINER" } }
