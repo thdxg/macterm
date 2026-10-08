@@ -36,6 +36,23 @@
   });
 })();
 
+// --- Docs menu: on phones the sidebar folds behind the header's menu button.
+// The sidebar hides only while it carries data-menu="closed", which this sets,
+// so without JavaScript the page links simply stay in view. From 720px up the
+// button is hidden and the attribute has no effect.
+(function docsMenu() {
+  document.querySelectorAll(".ec-menu-btn").forEach((btn) => {
+    const nav = document.getElementById(btn.getAttribute("aria-controls"));
+    if (!nav) return;
+    nav.dataset.menu = "closed";
+    btn.addEventListener("click", () => {
+      const open = nav.dataset.menu === "closed";
+      nav.dataset.menu = open ? "open" : "closed";
+      btn.setAttribute("aria-expanded", String(open));
+    });
+  });
+})();
+
 // --- Landing demo reel: each clip plays while it is on screen. ---
 //
 // The markup ships with a poster frame and preload="none", so the section is

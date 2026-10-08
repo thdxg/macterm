@@ -147,8 +147,8 @@ URL `/docs/install`, and `public/docs/index.html` at `/docs/` — the
 extensionless resolution the site used to get from Cloudflare's
 `auto-trailing-slash` html handling, and the reason a bare file server won't do.
 
-The docs pages carry a header (Docs, Releases, GitHub); the landing page has
-none. Both share one footer. Retired pages keep their
+The docs pages carry a header with just the brand, linking home; the landing
+page has none. Both share one footer. Retired pages keep their
 URLs alive as `redir` lines in the `Caddyfile`: `/docs/ghostty` and
 `/docs/tmux` were published pages and now 301 to the docs index. Add a line
 there whenever a page is dropped or renamed.

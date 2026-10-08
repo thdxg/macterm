@@ -189,13 +189,25 @@ a.ec-entry-title:hover { color: var(--link); }
 
 /* ── DocsLayout: the sidebar lives in the label column ───────────────── */
 .ec-docs { padding-block: var(--space-12) var(--space-24); align-items: start; }
-.ec-sidebar { grid-column: 1; position: sticky; top: var(--space-8); display: flex; flex-direction: column; gap: var(--space-6); max-height: calc(100vh - 64px); overflow-y: auto; scrollbar-width: none; font-size: 14px; line-height: 20px; }
+.ec-sidebar { grid-column: 1; position: sticky; top: var(--space-8); display: flex; flex-direction: column; gap: var(--space-6); max-height: calc(100vh - 64px); overflow-y: auto; scrollbar-width: none; font-size: 16px; line-height: 26px; }
 .ec-sidebar-group { display: flex; flex-direction: column; gap: var(--space-2); }
-.ec-sidebar-label { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.04em; color: var(--ink-faint); }
+/* Set like a code comment: italic in `comment` (3.8:1 on page, below 4.5 by choice). */
+.ec-sidebar-label { font-size: 12px; line-height: 16px; font-weight: 500; font-style: italic; letter-spacing: 0.04em; color: var(--comment); }
 .ec-sidebar a { color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
 .ec-sidebar a:hover { color: var(--ink-bright); }
 .ec-sidebar a[aria-current="page"] { color: var(--ink-bright); font-weight: 500; }
 .ec-docs-main { grid-column: 2; min-width: 0; }
+/* The menu button: the sidebar's toggle on phones, at the header's right end.
+   Hidden from 720px, where the sidebar always shows. */
+.ec-menu-btn {
+  display: none; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-muted); cursor: pointer; transition: color 0.15s;
+}
+.ec-menu-btn:hover, .ec-menu-btn[aria-expanded="true"] { color: var(--ink-bright); }
+.ec-menu-btn svg { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.ec-menu-btn .ec-menu-close, .ec-menu-btn[aria-expanded="true"] .ec-menu-open { display: none; }
+.ec-menu-btn[aria-expanded="true"] .ec-menu-close { display: block; }
 .ec-pagenav { display: flex; justify-content: space-between; gap: var(--space-6); margin-top: var(--space-16); font-size: 14px; line-height: 20px; }
 .ec-pagenav a { display: flex; flex-direction: column; gap: 2px; color: var(--ink-bright); text-decoration: none; font-weight: 500; transition: color 0.15s; }
 .ec-pagenav a:hover { color: var(--link); }
@@ -216,6 +228,9 @@ a.ec-entry-title:hover { color: var(--link); }
   .ec-header { row-gap: var(--space-4); }
   .ec-footer-links { justify-content: flex-start; }
   .ec-sidebar { position: static; max-height: none; flex-direction: row; flex-wrap: wrap; gap: var(--space-4) var(--space-8); padding-bottom: var(--space-8); }
+  .ec-header > .ec-brand { grid-row: 1; }
+  .ec-menu-btn { display: inline-flex; grid-column: 1; grid-row: 1; justify-self: end; margin-block: calc(-1 * var(--space-2)); }
+  .ec-sidebar[data-menu="closed"] { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) { .ec *, .ec { transition: none !important; } }
