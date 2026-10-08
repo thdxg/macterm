@@ -45,8 +45,8 @@ enum PaletteScopeID: Hashable {
     var summary: String {
         switch self {
         case .passwords: "Manage passwords"
-        case .worktrees: "Browse this project's git worktrees"
-        case .files: "Find files and folders in this project"
+        case .worktrees: "Browse git worktrees in this project"
+        case .files: "Browse files and folders in this project"
         case .custom: ""
         }
     }
