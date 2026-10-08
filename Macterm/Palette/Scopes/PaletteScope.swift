@@ -44,7 +44,7 @@ enum PaletteScopeID: Hashable {
     /// it, and its line in Settings → Palettes.
     var summary: String {
         switch self {
-        case .passwords: "Your saved passwords"
+        case .passwords: "Saved passwords"
         case .worktrees: "This project's git worktrees"
         case .files: "Files and folders in this project"
         case .custom: ""
