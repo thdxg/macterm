@@ -77,6 +77,9 @@ struct CommandSource: PaletteSource {
         guard let rawAction = command.action(in: commandCtx) else {
             // Most inapplicable commands hide; a few explain themselves as a
             // muted row instead (e.g. "Apply Layout" with no project file).
+            // A palette screen keeps its pill's glyph, so it reads as the
+            // same row it is when available; it gets no chevron, since
+            // there is nowhere to go.
             guard let hint = command.paletteDisabledHint(in: commandCtx) else { return nil }
             return PaletteItem(
                 title: command.title,
@@ -84,6 +87,7 @@ struct CommandSource: PaletteSource {
                 category: command.category.rawValue,
                 score: 0,
                 isEnabled: false,
+                icon: command.paletteScope?.pill.systemImage,
                 action: {}
             )
         }

@@ -213,6 +213,16 @@ struct CommandSourceTests {
     }
 
     @Test
+    func a_muted_palette_screen_keeps_its_glyph_but_no_way_in() throws {
+        // `/tmp` is no repository, so Worktrees is muted with a reason.
+        let (ctx, _) = makeContext()
+        let item = try #require(findItem(title: AppCommand.worktrees.title, in: ctx))
+        #expect(!item.isEnabled)
+        #expect(item.icon == PaletteScopeID.worktrees.pill.systemImage)
+        #expect(item.opensScope == nil, "a muted row draws no chevron")
+    }
+
+    @Test
     func applyLayout_is_hidden_without_active_project() {
         let (ctx, _) = makeContext(seedProject: false)
         #expect(findItem(title: AppCommand.applyLayout.title, in: ctx) == nil)
