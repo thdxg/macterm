@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.filter.outputs.swift }}
-      palettes: ${{ steps.filter.outputs.palettes }}
+      extensions: ${{ steps.filter.outputs.extensions }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -36,15 +36,15 @@ jobs:
               - ".github/actions/select-xcode/**"
               - "Macterm/Info.plist"
               - "Macterm/Macterm.entitlements"
-            # The palettes anyone can install: the unit tests read each
+            # The extensions anyone can install: the unit tests read each
             # through the validator; nothing else needs to run for them.
-            palettes:
-              - "palettes/**"
+            extensions:
+              - "extensions/**"
 
   unit:
     name: Unit
     needs: changes
-    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.palettes == 'true'
+    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.extensions == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout

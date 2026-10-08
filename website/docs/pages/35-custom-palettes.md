@@ -126,7 +126,7 @@ Prefer a tool's JSON output to cutting up its text. JSON gives you named fields 
 
 ## Exports
 
-`export:` sets environment variables for every command below the row: the next screen's listing, and any action further down. Values carry down through every screen, and a lower screen can overwrite one. A name is one `sh` can read (letters, digits and `_`, not starting with a digit), and not one Macterm sets itself (`MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`).
+`export:` sets environment variables for every command below the row: the next screen's listing, and any action further down. Values carry down through every screen, and a lower screen can overwrite one. A name is one `sh` can read (letters, digits and `_`, not starting with a digit), and not one Macterm sets itself (`MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`, `MACTERM_EXTENSION_DIR`).
 
 Read an exported value as a variable, like `"$BRANCH"`. **Nothing is ever pasted into a command's text**, so a branch, pod or file name with spaces or quotes can't break the command or run as code.
 
@@ -185,6 +185,7 @@ Every command also gets these variables:
 
 - `MACTERM_PROJECT_DIR`, the active project's directory (unset for a remote project or a pinned tab).
 - `MACTERM_PROJECT_NAME`, its name.
+- `MACTERM_EXTENSION_DIR`, the palette's folder, when it's an [installed extension](#sharing-a-palette).
 - Every value exported above it.
 
 **A shell that prints at startup prints into the rows.** A greeting or notice from your shell config becomes the first row of every listing. Keep startup quiet for non-interactive shells.
@@ -230,13 +231,15 @@ It prints each file's id, whether it is on, its keybind, and its name or the err
 
 ## Keybinds and Settings
 
-- **Settings → Palettes** lists every palette, built-in and custom, each with a switch, and the palettes you can install from Macterm's repository. A palette turned off leaves the command palette, and its keybind says so instead of reaching the terminal. The **Palettes folder** row opens `~/.config/macterm/palettes/` in Finder.
+- **Settings → Palettes** lists every palette, built-in and custom, each with a switch, and the extensions you can install from Macterm's repository. A palette turned off leaves the command palette, and its keybind says so instead of reaching the terminal. The **Palettes folder** row opens `~/.config/macterm/palettes/` in Finder.
 - **Settings → Keymaps** has a **Palettes** group first, with <kbd>⌘P</kbd> and a row for every palette. None has a keybind by default. A palette's keybind opens the command palette straight on it. Pressed again on the palette's first screen, it closes the palette. Pressed deeper in, it goes back to that first screen.
 - **Any palette's keybind, built-in or custom, can be Global or Pass to TUI**, the two checkboxes on its row. A **Global** keybind works from any app: it brings Macterm's window forward with the palette open on it. **Pass to TUI** hands the keybind to the program in the focused pane when that program is one you list under Passthrough Programs.
 
 ## Sharing a palette
 
-Palettes anyone can install from Settings → Palettes live in [`palettes/`](https://github.com/thdxg/macterm/tree/main/palettes) in Macterm's repository, one file each. To add yours, open a pull request with the file; [the folder's README](https://github.com/thdxg/macterm/blob/main/palettes/README.md) says what a palette there needs — POSIX commands, a `requires:`, a `when:` where it can't always work. Every file there is read through Macterm's validator before it merges.
+Palettes anyone can install from Settings → Palettes are extensions: folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in Macterm's repository, each holding `extension.yaml` (its authors, by GitHub username), `palette.yaml` and a `README.md`. An installed one lives in `~/.config/macterm/extensions/<id>/`, and its commands find the folder's other files — a script too long for the YAML — through `$MACTERM_EXTENSION_DIR`. A palette file in your palettes folder with the same name wins over it.
+
+To add yours, open a pull request with the folder; you don't need to clone the whole repository, and [the folder's README](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how, and what an extension needs — POSIX commands, a `requires:`, a `when:` where it can't always work. Every extension there is read through Macterm's validator before it merges.
 
 ## More examples
 

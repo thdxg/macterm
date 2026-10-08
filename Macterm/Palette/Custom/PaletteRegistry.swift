@@ -3,29 +3,73 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "PaletteRegistry")
 
-/// The palettes anyone can install (`palettes/` in Macterm's repository),
-/// read from GitHub for Settings → Palettes. Read at the version this build
-/// came from (`ref(bundleID:version:)`), so the gallery offers only palettes
-/// written for it, and each file is run through this build's validator: one
-/// it can't read is shown with why, and can't be installed.
+/// The extensions anyone can install (`extensions/` in Macterm's repository,
+/// one folder each — `MactermExtension`), read from GitHub for Settings →
+/// Palettes. Read at the version this build came from (`ref(bundleID:version:)`),
+/// so the gallery offers only extensions written for it, and each is run
+/// through this build's validator: one it can't read is shown with why, and
+/// can't be installed.
 ///
-/// Fetched when Settings → Palettes opens, at most once an hour
-/// (`refreshInterval`), or on Refresh — never in the background. Installing
-/// copies the file into `~/.config/macterm/palettes/`; nothing here runs a
-/// palette's commands.
+/// One request lists every extension's files (GitHub's Git Trees API, at
+/// `<ref>:extensions`); their text — manifest, palette, README, any script —
+/// comes from `raw.githubusercontent.com`, which the API's hourly limit
+/// doesn't count, so it can be shown in full before installing. Fetched when
+/// Settings → Palettes opens, at most once an hour (`refreshInterval`), or on
+/// Refresh — never in the background. Installing copies the folder into
+/// `~/.config/macterm/extensions/<id>/`; nothing here runs its commands.
 @MainActor @Observable
 final class PaletteRegistry {
+    /// A file in an extension's folder.
+    struct File: Equatable {
+        /// Relative to the folder.
+        let path: String
+        let size: Int
+        let executable: Bool
+    }
+
     struct Entry: Identifiable, Equatable {
-        /// The file's name without `.yaml`: the installed palette's id.
+        /// The folder's name: the installed palette's id.
         let id: String
-        /// The file, as installed.
-        let text: String
+        let files: [File]
+        /// Each text file's contents, by path — everything but images, so
+        /// what would run can be read before installing.
+        let texts: [String: String]
+        let manifest: Result<ExtensionManifest, CustomPaletteError>
         /// The palette as this build reads it, or why it can't.
         let result: Result<CustomPalette, CustomPaletteError>
         let header: CustomPaletteHeader?
 
+        init(id: String, files: [File], texts: [String: String]) {
+            self.id = id
+            self.files = files
+            self.texts = texts
+            let paletteText = texts[MactermExtension.paletteName] ?? ""
+            header = CustomPaletteFile.parseHeader(yaml: paletteText)
+            if let manifestText = texts[MactermExtension.manifestName] {
+                do {
+                    manifest = try .success(ExtensionManifest.parse(yaml: manifestText))
+                } catch let error as CustomPaletteError {
+                    manifest = .failure(error)
+                } catch {
+                    manifest = .failure(.parse(underlying: error))
+                }
+            } else {
+                manifest = .failure(.invalid("no \(MactermExtension.manifestName)"))
+            }
+            do {
+                result = try .success(CustomPalette(file: CustomPaletteFile.parse(yaml: paletteText), id: id))
+            } catch let error as CustomPaletteError {
+                result = .failure(error)
+            } catch {
+                result = .failure(.parse(underlying: error))
+            }
+        }
+
         var palette: CustomPalette? { try? result.get() }
+        /// Why it can't be installed: its manifest or its palette doesn't
+        /// read in this build.
         var failure: CustomPaletteError? {
+            if case let .failure(error) = manifest { return error }
             if case let .failure(error) = result { return error }
             return nil
         }
@@ -33,19 +77,8 @@ final class PaletteRegistry {
         var name: String { palette?.name ?? header?.name ?? id }
         var icon: String { palette?.icon ?? header?.icon ?? CustomPalette.defaultIcon }
         var description: String? { palette?.description ?? header?.description }
-
-        init(id: String, text: String) {
-            self.id = id
-            self.text = text
-            header = CustomPaletteFile.parseHeader(yaml: text)
-            do {
-                result = try .success(CustomPalette(file: CustomPaletteFile.parse(yaml: text), id: id))
-            } catch let error as CustomPaletteError {
-                result = .failure(error)
-            } catch {
-                result = .failure(.parse(underlying: error))
-            }
-        }
+        var authors: [String] { (try? manifest.get())?.authors ?? [] }
+        var readme: String? { texts[MactermExtension.readmeName] }
     }
 
     enum State: Equatable {
@@ -56,11 +89,12 @@ final class PaletteRegistry {
     }
 
     /// Fetches a URL: its body and HTTP status. Injected so tests serve the
-    /// listing and files from memory.
+    /// tree and files from memory.
     typealias Fetch = @Sendable (URL) async throws -> (Data, Int)
 
     nonisolated static let refreshInterval: TimeInterval = 3600
     nonisolated static let repository = "thdxg/macterm"
+    nonisolated static let folder = "extensions"
 
     /// The repository's ref this build reads: a debug build `main`, a tip
     /// build the rolling `tip` tag, a release or beta its own `v<version>`.
@@ -79,7 +113,7 @@ final class PaletteRegistry {
     }
 
     /// This build's ref. A debug build can read another with
-    /// `MACTERM_PALETTE_REF` — a branch whose palettes aren't on `main` yet.
+    /// `MACTERM_PALETTE_REF` — a branch whose extensions aren't on `main` yet.
     nonisolated static var defaultRef: String {
         #if DEBUG
         if let override = ProcessInfo.processInfo.environment["MACTERM_PALETTE_REF"], !override.isEmpty { return override }
@@ -97,31 +131,53 @@ final class PaletteRegistry {
         return "v\(version)"
     }
 
-    nonisolated static func listingURL(ref: String) -> URL {
+    /// Every file under `extensions/` at `ref`, in one request.
+    nonisolated static func treeURL(ref: String) -> URL {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "api.github.com"
-        components.path = "/repos/\(repository)/contents/palettes"
-        components.queryItems = [URLQueryItem(name: "ref", value: ref)]
-        // Every part is fixed but the ref, which `URLQueryItem` escapes.
+        components.path = "/repos/\(repository)/git/trees/\(ref):\(folder)"
+        components.queryItems = [URLQueryItem(name: "recursive", value: "1")]
+        // Every part is fixed but the ref, which `URLComponents` escapes.
         return components.url ?? URL(fileURLWithPath: "/")
     }
 
-    /// The `.yaml` files in a GitHub contents listing, by id, with where to
-    /// download each.
-    nonisolated static func parseListing(_ data: Data) throws -> [(id: String, url: URL)] {
-        struct Item: Decodable {
-            let name: String
-            let type: String
-            let download_url: URL?
+    /// A file of an extension, at `ref`, from GitHub's raw host.
+    nonisolated static func fileURL(ref: String, id: String, path: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "raw.githubusercontent.com"
+        components.path = "/\(repository)/\(ref)/\(folder)/\(id)/\(path)"
+        return components.url ?? URL(fileURLWithPath: "/")
+    }
+
+    /// A Git tree of `extensions/`, as the extensions it holds: each folder
+    /// with a `palette.yaml`, by id, with its files. Files at the top
+    /// (the folder's README) belong to no extension.
+    nonisolated static func parseTree(_ data: Data) throws -> [(id: String, files: [File])] {
+        struct Tree: Decodable {
+            struct Item: Decodable {
+                let path: String
+                let type: String
+                let mode: String
+                let size: Int?
+            }
+
+            let tree: [Item]
         }
-        return try JSONDecoder().decode([Item].self, from: data)
-            .filter { $0.type == "file" && $0.name.hasSuffix(".yaml") }
-            .compactMap { item in item.download_url.map { (String(item.name.dropLast(".yaml".count)), $0) } }
+        var byID: [String: [File]] = [:]
+        for item in try JSONDecoder().decode(Tree.self, from: data).tree where item.type == "blob" {
+            let parts = item.path.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2, !parts[1].split(separator: "/").contains("..") else { continue }
+            byID[parts[0], default: []].append(File(path: parts[1], size: item.size ?? 0, executable: item.mode == "100755"))
+        }
+        return byID
+            .filter { _, files in files.contains { $0.path == MactermExtension.paletteName } }
+            .map { (id: $0.key, files: $0.value.sorted { $0.path < $1.path }) }
             .sorted { $0.id < $1.id }
     }
 
-    /// Reads the repository's palettes unless they were read within the
+    /// Reads the repository's extensions unless they were read within the
     /// hour; `force` reads them regardless (Refresh).
     func refresh(force: Bool = false) {
         if state == .loading { return }
@@ -132,24 +188,26 @@ final class PaletteRegistry {
         task = Task { @MainActor [weak self] in
             let outcome: Result<[Entry], Error>
             do {
-                let (listing, status) = try await fetch(Self.listingURL(ref: ref))
+                let (tree, status) = try await fetch(Self.treeURL(ref: ref))
                 guard status == 200 else { throw RegistryError(status: status, ref: ref) }
-                let files = try Self.parseListing(listing)
-                let texts = try await withThrowingTaskGroup(of: (String, String).self) { group in
-                    for file in files {
-                        group.addTask {
-                            let (data, status) = try await fetch(file.url)
-                            guard status == 200 else { throw RegistryError(status: status, ref: ref) }
-                            return (file.id, String(decoding: data, as: UTF8.self))
+                let extensions = try Self.parseTree(tree)
+                let texts = try await withThrowingTaskGroup(of: (String, String, String).self) { group in
+                    for (id, files) in extensions {
+                        for file in files where !MactermExtension.isImage(file.path) {
+                            group.addTask {
+                                let (data, status) = try await fetch(Self.fileURL(ref: ref, id: id, path: file.path))
+                                guard status == 200 else { throw RegistryError(status: status, ref: ref) }
+                                return (id, file.path, String(decoding: data, as: UTF8.self))
+                            }
                         }
                     }
-                    var texts: [String: String] = [:]
-                    for try await (id, text) in group {
-                        texts[id] = text
+                    var texts: [String: [String: String]] = [:]
+                    for try await (id, path, text) in group {
+                        texts[id, default: [:]][path] = text
                     }
                     return texts
                 }
-                outcome = .success(texts.keys.sorted().map { Entry(id: $0, text: texts[$0] ?? "") })
+                outcome = .success(extensions.map { Entry(id: $0.id, files: $0.files, texts: texts[$0.id] ?? [:]) })
             } catch {
                 outcome = .failure(error)
             }
@@ -159,7 +217,7 @@ final class PaletteRegistry {
                 self.entries = entries
                 state = .loaded(Date())
             case let .failure(error):
-                logger.error("palette registry: \(error.localizedDescription, privacy: .public)")
+                logger.error("extension registry: \(error.localizedDescription, privacy: .public)")
                 state = .failed(error.localizedDescription)
             }
         }
@@ -169,7 +227,7 @@ final class PaletteRegistry {
         let status: Int
         let ref: String
         var errorDescription: String? {
-            status == 404 ? "No palettes for this version (\(ref))." : "GitHub answered \(status)."
+            status == 404 ? "No extensions for this version (\(ref))." : "GitHub answered \(status)."
         }
     }
 
@@ -178,28 +236,47 @@ final class PaletteRegistry {
         case unreadable(String)
         var errorDescription: String? {
             switch self {
-            case let .alreadyInstalled(file): "\(file) is already in your palettes folder."
+            case let .alreadyInstalled(id): "You already have a palette named \(id)."
             case let .unreadable(reason): "This version of Macterm can't read it: \(reason)"
             }
         }
     }
 
-    /// Copies `entry` into `store`'s folder as `<id>.yaml` and reloads the
-    /// store, so it is installed at once. Never overwrites: a file of that
-    /// name, `.yaml` or `.yml`, is the user's.
+    /// Copies `entry`'s folder into `store`'s extensions folder as `<id>/`
+    /// and reloads the store, so it is installed at once — the text already
+    /// read, images fetched now, executables kept executable. Written beside
+    /// the destination and moved into place, so a failed download leaves no
+    /// half an extension. Never replaces a palette the user has: one of
+    /// that id, a file or an installed extension, refuses.
     @discardableResult
-    func install(_ entry: Entry, into store: CustomPaletteStore) throws -> URL {
+    func install(_ entry: Entry, into store: CustomPaletteStore) async throws -> URL {
         if let failure = entry.failure { throw InstallError.unreadable(failure.localizedDescription) }
         let fm = FileManager.default
-        for ext in ["yaml", "yml"] {
-            let existing = store.directoryURL.appendingPathComponent("\(entry.id).\(ext)")
-            if fm.fileExists(atPath: existing.path) { throw InstallError.alreadyInstalled(existing.lastPathComponent) }
+        let destination = store.extensionsURL.appendingPathComponent(entry.id, isDirectory: true)
+        let personal = ["yaml", "yml"].map { store.directoryURL.appendingPathComponent("\(entry.id).\($0)") }
+        if store.entry(id: entry.id) != nil || fm.fileExists(atPath: destination.path) || personal
+            .contains(where: { fm.fileExists(atPath: $0.path) })
+        {
+            throw InstallError.alreadyInstalled(entry.id)
         }
-        try fm.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
-        let url = store.directoryURL.appendingPathComponent("\(entry.id).yaml")
-        try Data(entry.text.utf8).write(to: url, options: .withoutOverwriting)
+        var contents: [String: Data] = entry.texts.mapValues { Data($0.utf8) }
+        for file in entry.files where contents[file.path] == nil {
+            let (data, status) = try await fetch(Self.fileURL(ref: ref, id: entry.id, path: file.path))
+            guard status == 200 else { throw RegistryError(status: status, ref: ref) }
+            contents[file.path] = data
+        }
+        try fm.createDirectory(at: store.extensionsURL, withIntermediateDirectories: true)
+        let staging = store.extensionsURL.appendingPathComponent(".\(entry.id).installing-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: staging) }
+        for file in entry.files {
+            let url = staging.appendingPathComponent(file.path)
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try (contents[file.path] ?? Data()).write(to: url)
+            if file.executable { try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
+        }
+        try fm.moveItem(at: staging, to: destination)
         store.reload()
-        return url
+        return destination
     }
 
     nonisolated static let fetchFromNetwork: Fetch = { url in
@@ -239,8 +316,10 @@ enum PaletteGalleryItem: Identifiable, Equatable {
     var summary: String {
         switch self {
         case let .builtIn(scope): scope.summary
-        case let .installed(entry, _): entry.failure?.localizedDescription ?? entry.description ?? entry.fileURL.lastPathComponent
-        case let .available(entry): entry.failure.map { "Needs a newer Macterm: \($0.localizedDescription)" } ?? entry.description ?? ""
+        case let .installed(entry, _): entry.failure?.localizedDescription ?? entry.description
+            ?? (entry.extensionDirectory ?? entry.fileURL).lastPathComponent
+        case let .available(entry): entry.failure.map { "Can't be read by this version: \($0.localizedDescription)" } ?? entry
+            .description ?? entry.readme.flatMap(MactermExtension.summary(readme:)) ?? ""
         }
     }
 
@@ -252,10 +331,21 @@ enum PaletteGalleryItem: Identifiable, Equatable {
         }
     }
 
+    /// Who maintains it: an extension's `authors:`; none for a built-in
+    /// screen or a palette file of the user's own.
+    var authors: [String] {
+        switch self {
+        case .builtIn: []
+        case let .installed(entry, _): entry.authors
+        case let .available(entry): entry.authors
+        }
+    }
+
     /// The gallery's sections, in order, each ranked by `query` (the app's
     /// one search, as every Settings list): built-in screens, installed
-    /// palettes, then the repository's not yet installed. A repository
-    /// palette already installed — same id — is listed once, as installed.
+    /// palettes and extensions, then the repository's extensions not yet
+    /// installed. An extension already installed — or a palette file of the
+    /// same id — is listed once, as installed.
     static func sections(
         builtIn: [PaletteScopeID],
         installed: [CustomPaletteStore.Entry],

@@ -2,9 +2,9 @@ import Foundation
 @testable import Macterm
 import Testing
 
-/// The palettes anyone can install (`PaletteRegistry`) and Settings →
-/// Palettes' cards over them (`PaletteGalleryItem`), with GitHub served from
-/// memory.
+/// The extensions anyone can install (`PaletteRegistry`), the store reading
+/// them once installed, and Settings → Palettes' cards over both
+/// (`PaletteGalleryItem`), with GitHub served from memory.
 @MainActor
 struct PaletteRegistryTests {
     private static let kubernetes = """
@@ -21,33 +21,45 @@ struct PaletteRegistryTests {
     nodes: { root: { list: ls, action: { copy: . } } }
 
     """
+    private static let manifest = "authors: [thdxg]\n"
+    private static let readme = "# Kubernetes\n\nBrowse a cluster's pods.\n\nNeeds `kubectl`.\n"
 
-    /// GitHub's contents listing for `palettes/`, as the API returns it.
-    private static func listing(_ names: [String], ref: String) -> Data {
-        let items = names.map { name in
-            [
-                "name": name,
-                "type": name.hasSuffix("/") ? "dir" : "file",
-                "download_url": "https://raw.githubusercontent.com/thdxg/macterm/\(ref)/palettes/\(name)",
-            ]
+    /// GitHub's tree of `extensions/`, as the API returns it.
+    private static func tree(_ files: [(path: String, mode: String)]) -> Data {
+        var items: [[String: Any]] = []
+        var folders = Set<String>()
+        for file in files {
+            let parts = file.path.split(separator: "/")
+            if parts.count > 1, folders.insert(String(parts[0])).inserted {
+                items.append(["path": String(parts[0]), "mode": "040000", "type": "tree", "sha": "0"])
+            }
+            items.append(["path": file.path, "mode": file.mode, "type": "blob", "sha": "0", "size": 10])
         }
-        return (try? JSONSerialization.data(withJSONObject: items)) ?? Data()
+        return (try? JSONSerialization.data(withJSONObject: ["sha": "0", "tree": items, "truncated": false])) ?? Data()
     }
 
-    /// A fetch answering from `files` by URL, counting the listing reads.
+    /// A fetch answering from `responses` by URL, counting the tree reads.
     private final class Server: @unchecked Sendable {
         private let lock = NSLock()
         var responses: [String: (Data, Int)] = [:]
-        private var listings = 0
-        var listingReads: Int { lock.withLock { listings } }
+        private var trees = 0
+        var treeReads: Int { lock.withLock { trees } }
 
         var fetch: PaletteRegistry.Fetch {
             { [self] url in
                 lock.withLock {
-                    if url.host == "api.github.com" { listings += 1 }
+                    if url.host == "api.github.com" { trees += 1 }
                     return responses[url.absoluteString] ?? (Data(), 404)
                 }
             }
+        }
+
+        func serve(ref: String, id: String, _ path: String, _ text: String) {
+            serve(ref: ref, id: id, path, Data(text.utf8))
+        }
+
+        func serve(ref: String, id: String, _ path: String, _ data: Data) {
+            responses[PaletteRegistry.fileURL(ref: ref, id: id, path: path).absoluteString] = (data, 200)
         }
     }
 
@@ -62,39 +74,65 @@ struct PaletteRegistryTests {
         return CustomPaletteStore(directoryURL: dir.appendingPathComponent("palettes", isDirectory: true))
     }
 
+    private static func entry(_ id: String, palette: String, manifest: String = manifest) -> PaletteRegistry.Entry {
+        PaletteRegistry.Entry(
+            id: id,
+            files: [
+                .init(path: "README.md", size: 10, executable: false),
+                .init(path: "extension.yaml", size: 10, executable: false),
+                .init(path: "palette.yaml", size: 10, executable: false),
+            ],
+            texts: ["README.md": readme, "extension.yaml": manifest, "palette.yaml": palette]
+        )
+    }
+
     @Test
-    func a_build_reads_the_palettes_of_its_own_version() {
+    func a_build_reads_the_extensions_of_its_own_version() {
         #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm.debug", version: "0.0.0") == "main")
         #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm", version: "1.31.2-tip.44") == "tip")
         #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm", version: "1.32.0-beta.4") == "v1.32.0-beta.4")
         #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm", version: "1.32.0") == "v1.32.0")
-        #expect(PaletteRegistry.listingURL(ref: "v1.32.0").absoluteString
-            == "https://api.github.com/repos/thdxg/macterm/contents/palettes?ref=v1.32.0")
+        #expect(PaletteRegistry.treeURL(ref: "v1.32.0").absoluteString
+            == "https://api.github.com/repos/thdxg/macterm/git/trees/v1.32.0:extensions?recursive=1")
+        #expect(PaletteRegistry.fileURL(ref: "main", id: "git", path: "palette.yaml").absoluteString
+            == "https://raw.githubusercontent.com/thdxg/macterm/main/extensions/git/palette.yaml")
     }
 
     @Test
-    func a_listing_yields_its_yaml_files_by_id() throws {
-        let files = try PaletteRegistry.parseListing(Self.listing(["kubernetes.yaml", "README.md", "git.yaml", "old.yml"], ref: "main"))
-        #expect(files.map(\.id) == ["git", "kubernetes"], "palettes are .yaml; the README isn't one")
-        #expect(files.first?.url.absoluteString == "https://raw.githubusercontent.com/thdxg/macterm/main/palettes/git.yaml")
+    func a_tree_yields_each_folder_with_a_palette_and_its_files() throws {
+        let extensions = try PaletteRegistry.parseTree(Self.tree([
+            ("README.md", "100644"),
+            ("kubernetes/palette.yaml", "100644"),
+            ("kubernetes/extension.yaml", "100644"),
+            ("kubernetes/scripts/pods.sh", "100755"),
+            ("draft/notes.md", "100644"),
+        ]))
+        #expect(extensions.map(\.id) == ["kubernetes"], "the top README and a folder without a palette are no extension")
+        #expect(extensions.first?.files.map(\.path) == ["extension.yaml", "palette.yaml", "scripts/pods.sh"])
+        #expect(extensions.first?.files.map(\.executable) == [false, false, true])
     }
 
     @Test
-    func a_refresh_reads_every_palette_through_this_builds_validator_once_an_hour() async {
+    func a_refresh_reads_every_extension_through_this_builds_validator_once_an_hour() async {
         let server = Server()
         let ref = "v1.32.0"
-        server.responses[PaletteRegistry.listingURL(ref: ref).absoluteString] = (
-            Self.listing(["kubernetes.yaml", "future.yaml"], ref: ref),
-            200
-        )
-        server.responses["https://raw.githubusercontent.com/thdxg/macterm/\(ref)/palettes/kubernetes.yaml"] = (
-            Data(Self.kubernetes.utf8),
-            200
-        )
-        server.responses["https://raw.githubusercontent.com/thdxg/macterm/\(ref)/palettes/future.yaml"] = (
-            Data(Self.fromTheFuture.utf8),
-            200
-        )
+        server.responses[PaletteRegistry.treeURL(ref: ref).absoluteString] = (Self.tree([
+            ("kubernetes/README.md", "100644"),
+            ("kubernetes/extension.yaml", "100644"),
+            ("kubernetes/palette.yaml", "100644"),
+            ("kubernetes/shot.png", "100644"),
+            ("future/extension.yaml", "100644"),
+            ("future/palette.yaml", "100644"),
+            ("nobody/extension.yaml", "100644"),
+            ("nobody/palette.yaml", "100644"),
+        ]), 200)
+        server.serve(ref: ref, id: "kubernetes", "README.md", Self.readme)
+        server.serve(ref: ref, id: "kubernetes", "extension.yaml", Self.manifest)
+        server.serve(ref: ref, id: "kubernetes", "palette.yaml", Self.kubernetes)
+        server.serve(ref: ref, id: "future", "extension.yaml", Self.manifest)
+        server.serve(ref: ref, id: "future", "palette.yaml", Self.fromTheFuture)
+        server.serve(ref: ref, id: "nobody", "extension.yaml", "authors: []\n")
+        server.serve(ref: ref, id: "nobody", "palette.yaml", Self.kubernetes)
         let registry = PaletteRegistry(ref: ref, fetch: server.fetch)
 
         registry.refresh()
@@ -104,52 +142,122 @@ struct PaletteRegistryTests {
             Issue.record("not loaded: \(registry.state)")
             return
         }
-        #expect(registry.entries.map(\.id) == ["future", "kubernetes"])
-        #expect(registry.entries.last?.name == "Kubernetes")
-        #expect(registry.entries.last?.description == "Browse clusters")
-        #expect(registry.entries.first?.failure?.errorDescription == "someNewKey: no such key", "a newer palette says why it can't be read")
+        #expect(registry.entries.map(\.id) == ["future", "kubernetes", "nobody"])
+        let kubernetes = registry.entries[1]
+        #expect(kubernetes.name == "Kubernetes")
+        #expect(kubernetes.authors == ["thdxg"])
+        #expect(kubernetes.readme == Self.readme)
+        #expect(kubernetes.texts["shot.png"] == nil, "images wait for the install")
+        #expect(kubernetes.failure == nil)
+        #expect(registry.entries[0].failure?.errorDescription == "someNewKey: no such key", "a newer palette says why it can't be read")
+        #expect(registry.entries[2].failure != nil, "a manifest naming nobody can't be installed")
 
         registry.refresh()
         await settle()
-        #expect(server.listingReads == 1, "read once an hour")
+        #expect(server.treeReads == 1, "read once an hour")
         registry.refresh(force: true)
         await settle()
-        #expect(server.listingReads == 2, "Refresh reads again")
+        #expect(server.treeReads == 2, "Refresh reads again")
     }
 
     @Test
-    func a_version_without_palettes_says_so() async {
+    func a_version_without_extensions_says_so() async {
         let registry = PaletteRegistry(ref: "v1.0.0", fetch: Server().fetch)
         registry.refresh()
         await settle()
-        #expect(registry.state == .failed("No palettes for this version (v1.0.0)."))
+        #expect(registry.state == .failed("No extensions for this version (v1.0.0)."))
         #expect(registry.entries.isEmpty)
     }
 
     @Test
-    func installing_copies_the_file_in_and_never_overwrites() throws {
+    func installing_copies_the_folder_in_and_never_replaces_a_palette() async throws {
         let store = try makeStore()
-        let registry = PaletteRegistry(ref: "main", fetch: Server().fetch)
-        let entry = PaletteRegistry.Entry(id: "kubernetes", text: Self.kubernetes)
+        let server = Server()
+        let png = Data([0x89, 0x50, 0x4E, 0x47])
+        server.serve(ref: "main", id: "kubernetes", "shot.png", png)
+        let registry = PaletteRegistry(ref: "main", fetch: server.fetch)
+        let base = Self.entry("kubernetes", palette: Self.kubernetes)
+        let entry = PaletteRegistry.Entry(
+            id: "kubernetes",
+            files: base.files + [
+                .init(path: "scripts/pods.sh", size: 10, executable: true),
+                .init(path: "shot.png", size: 4, executable: false),
+            ],
+            texts: base.texts.merging(["scripts/pods.sh": "#!/bin/sh\nkubectl get pods\n"]) { _, new in new }
+        )
 
-        let url = try registry.install(entry, into: store)
-        #expect(url.lastPathComponent == "kubernetes.yaml")
-        #expect(try String(contentsOf: url, encoding: .utf8) == Self.kubernetes, "the file as it is in the repository")
-        #expect(store.palette(id: "kubernetes")?.name == "Kubernetes", "installed at once")
+        let folder = try await registry.install(entry, into: store)
+        #expect(folder == store.extensionsURL.appendingPathComponent("kubernetes", isDirectory: true))
+        #expect(try String(contentsOf: folder.appendingPathComponent("palette.yaml"), encoding: .utf8) == Self.kubernetes)
+        #expect(try Data(contentsOf: folder.appendingPathComponent("shot.png")) == png, "images are fetched at install")
+        let mode = try FileManager.default
+            .attributesOfItem(atPath: folder.appendingPathComponent("scripts/pods.sh").path)[.posixPermissions] as? Int
+        #expect(mode == 0o755, "a script stays executable")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: store.extensionsURL.path)
+        #expect(leftovers == ["kubernetes"], "nothing staged is left behind")
 
-        #expect(throws: PaletteRegistry.InstallError.alreadyInstalled("kubernetes.yaml")) {
-            try registry.install(entry, into: store)
+        let installed = store.entry(id: "kubernetes")
+        #expect(installed?.palette?.name == "Kubernetes", "installed at once")
+        #expect(installed?.authors == ["thdxg"])
+        #expect(installed?.extensionDirectory?.standardizedFileURL == folder.standardizedFileURL, "its commands get MACTERM_EXTENSION_DIR")
+
+        await #expect(throws: PaletteRegistry.InstallError.alreadyInstalled("kubernetes")) {
+            try await registry.install(entry, into: store)
         }
+        try FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
         try "name: Mine\nnodes: { root: { items: [] } }".write(
             to: store.directoryURL.appendingPathComponent("git.yml"), atomically: true, encoding: .utf8
         )
-        #expect(throws: PaletteRegistry.InstallError.alreadyInstalled("git.yml"), "a .yml of the same name is the user's too") {
-            try registry.install(PaletteRegistry.Entry(id: "git", text: Self.kubernetes), into: store)
+        store.reload()
+        await #expect(throws: PaletteRegistry.InstallError.alreadyInstalled("git"), "a palette file of that name is the user's") {
+            try await registry.install(Self.entry("git", palette: Self.kubernetes), into: store)
         }
-        #expect(throws: PaletteRegistry.InstallError.self, "a palette this build can't read isn't installed") {
-            try registry.install(PaletteRegistry.Entry(id: "future", text: Self.fromTheFuture), into: store)
+        await #expect(throws: PaletteRegistry.InstallError.self, "an extension this build can't read isn't installed") {
+            try await registry.install(Self.entry("future", palette: Self.fromTheFuture), into: store)
         }
-        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent("future.yaml").path))
+        #expect(!FileManager.default.fileExists(atPath: store.extensionsURL.appendingPathComponent("future").path))
+    }
+
+    @Test
+    func a_failed_download_installs_nothing() async throws {
+        let store = try makeStore()
+        let registry = PaletteRegistry(ref: "main", fetch: Server().fetch)
+        let base = Self.entry("kubernetes", palette: Self.kubernetes)
+        let entry = PaletteRegistry.Entry(
+            id: "kubernetes",
+            files: base.files + [.init(path: "shot.png", size: 4, executable: false)],
+            texts: base.texts
+        )
+        await #expect(throws: PaletteRegistry.RegistryError.self) {
+            try await registry.install(entry, into: store)
+        }
+        #expect(store.entry(id: "kubernetes") == nil)
+        #expect(!FileManager.default.fileExists(atPath: store.extensionsURL.appendingPathComponent("kubernetes").path))
+    }
+
+    @Test
+    func a_palette_file_wins_over_an_extension_of_the_same_id() throws {
+        let store = try makeStore()
+        let folder = store.extensionsURL.appendingPathComponent("git", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
+        try Self.kubernetes.write(to: folder.appendingPathComponent("palette.yaml"), atomically: true, encoding: .utf8)
+        try Self.manifest.write(to: folder.appendingPathComponent("extension.yaml"), atomically: true, encoding: .utf8)
+        try Self.kubernetes.write(to: store.directoryURL.appendingPathComponent("git.yaml"), atomically: true, encoding: .utf8)
+        store.reload()
+        #expect(store.entry(id: "git")?.extensionDirectory == nil, "the user's own file is the palette")
+        #expect(store.entry(id: "extensions/git")?.failure != nil, "the extension says why it isn't")
+    }
+
+    @Test
+    func a_manifest_names_its_authors_by_github_username() throws {
+        #expect(try ExtensionManifest.parse(yaml: "authors: [thdxg, some-one]").authors == ["thdxg", "some-one"])
+        #expect(throws: CustomPaletteError.self) { try ExtensionManifest.parse(yaml: "authors: []") }
+        #expect(throws: CustomPaletteError.self) { try ExtensionManifest.parse(yaml: "authors: [-bad]") }
+        #expect(throws: CustomPaletteError.self) { try ExtensionManifest.parse(yaml: "authors: [a]\nversion: 2") }
+        #expect(MactermExtension.summary(readme: Self.readme) == "Browse a cluster's pods.")
+        #expect(MactermExtension.isID("claude-code"))
+        #expect(!MactermExtension.isID("Claude_Code"))
     }
 
     /// Built-in, then installed, then what the repository has that isn't
@@ -164,11 +272,8 @@ struct PaletteRegistryTests {
             .write(to: store.directoryURL.appendingPathComponent("notes.yaml"), atomically: true, encoding: .utf8)
         store.reload()
         let registry = [
-            PaletteRegistry.Entry(id: "kubernetes", text: Self.kubernetes),
-            PaletteRegistry.Entry(
-                id: "docker",
-                text: "name: Docker\ndescription: Containers\nnodes: { root: { list: ls, action: { copy: . } } }"
-            ),
+            Self.entry("kubernetes", palette: Self.kubernetes),
+            Self.entry("docker", palette: "name: Docker\ndescription: Containers\nnodes: { root: { list: ls, action: { copy: . } } }"),
         ]
 
         let all = PaletteGalleryItem.sections(builtIn: PaletteScopeID.builtIn, installed: store.entries, registry: registry, query: "")
@@ -181,6 +286,7 @@ struct PaletteRegistryTests {
         }
         #expect(fromRegistry?.id == "kubernetes", "an installed palette knows its repository entry")
         #expect(all[2].items.map(\.title) == ["Docker"], "installed palettes aren't offered again")
+        #expect(all[2].items.first?.authors == ["thdxg"])
 
         let found = PaletteGalleryItem.sections(
             builtIn: PaletteScopeID.builtIn,

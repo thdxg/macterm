@@ -35,7 +35,7 @@ See [custom palettes](/docs/custom-palettes) for the file format and examples, a
 Every palette as a card in a searchable grid, in three groups:
 
 - **Built-in** — Password Manager, Worktrees and Files.
-- **Installed** — your [custom palettes](/docs/custom-palettes), the files in `~/.config/macterm/palettes/`. One whose file doesn't read shows a warning beside its switch.
-- **Available** — palettes from [Macterm's repository](https://github.com/thdxg/macterm/tree/main/palettes) you haven't installed, for your version of Macterm. **Install** shows the whole file — its commands run on your Mac — and then copies it into your palettes folder, where it's installed like any other.
+- **Installed** — your [custom palettes](/docs/custom-palettes): the files in `~/.config/macterm/palettes/` and the extensions you installed, in `~/.config/macterm/extensions/`. One that doesn't read shows a warning beside its switch.
+- **Available** — extensions from [Macterm's repository](https://github.com/thdxg/macterm/tree/main/extensions) you haven't installed, for your version of Macterm, each with its authors. **Install** shows its README and every file in it — its commands run on your Mac — and then copies the folder into `~/.config/macterm/extensions/`, where its palette is installed like any other.
 
-Built-in and installed palettes have a switch. A screen turned off leaves the palette's list and its menu; its keybind, if it has one, says so instead of reaching the terminal, and stays bound for when the screen comes back. The available palettes are read when you open the pane, at most once an hour; **Refresh** reads them again.
+Built-in and installed palettes have a switch. A screen turned off leaves the palette's list and its menu; its keybind, if it has one, says so instead of reaching the terminal, and stays bound for when the screen comes back. The available extensions are read when you open the pane, at most once an hour; **Refresh** reads them again.

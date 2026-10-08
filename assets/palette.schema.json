@@ -61,7 +61,7 @@
       "type": "object",
       "propertyNames": {
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-        "not": { "enum": ["MACTERM_PROJECT_DIR", "MACTERM_PROJECT_NAME", "MACTERM_PALETTE_COMMAND", "MACTERM_PALETTE_REQUIRES"] }
+        "not": { "enum": ["MACTERM_PROJECT_DIR", "MACTERM_PROJECT_NAME", "MACTERM_PALETTE_COMMAND", "MACTERM_PALETTE_REQUIRES", "MACTERM_EXTENSION_DIR"] }
       },
       "additionalProperties": { "type": "string" }
     },

@@ -342,6 +342,7 @@ final class CustomPaletteScope: PaletteScope {
         let subtitle = row.unavailable ?? row.subtitle
         let isEnabled = row.unavailable == nil
         let exports = target.exports.merging(row.exports) { _, new in new }
+            .merging(Self.extensionExports(paletteID: target.paletteID, context: context)) { _, new in new }
         let alt = row.alt.map { alt in
             PaletteAltAction(title: alt.title) { [
                 appState = context.appState,
@@ -395,7 +396,17 @@ final class CustomPaletteScope: PaletteScope {
     /// project's directory — a remote project's or the pinned tabs' on this
     /// Mac, in the home folder rather than the app's own `/`.
     static func commandContext(for target: CustomPaletteTarget, context: PaletteContext) -> ([String: String], String) {
-        commandContext(exports: target.exports, context: context)
+        commandContext(
+            exports: target.exports.merging(extensionExports(paletteID: target.paletteID, context: context)) { _, new in new },
+            context: context
+        )
+    }
+
+    /// An installed extension's folder, as `MACTERM_EXTENSION_DIR` — a
+    /// reserved export, so no palette's own can collide with it.
+    static func extensionExports(paletteID: String, context: PaletteContext) -> [String: String] {
+        guard let folder = context.appState.customPalettes.entry(id: paletteID)?.extensionDirectory else { return [:] }
+        return [MactermExtension.directoryVariable: folder.path(percentEncoded: false)]
     }
 
     static func commandContext(exports: [String: String], context: PaletteContext) -> ([String: String], String) {

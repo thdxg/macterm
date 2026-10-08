@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// Settings → Palettes: every palette as a card in a searchable grid —
-/// the built-in screens, the custom ones installed in
-/// `~/.config/macterm/palettes/` (`CustomPaletteStore`), and the ones in
-/// Macterm's repository not installed yet (`PaletteRegistry`), each with an
-/// Install button that shows the file before copying it in.
+/// the built-in screens, the custom ones installed (files in
+/// `~/.config/macterm/palettes/`, extensions in `~/.config/macterm/extensions/`
+/// — `CustomPaletteStore`), and the extensions in Macterm's repository not
+/// installed yet (`PaletteRegistry`), each with an Install button that shows
+/// its files before copying it in.
 ///
 /// A built-in or installed palette has a switch. Off, it leaves the command
 /// palette and its menu, and its chord says where it went; the chord itself
@@ -38,7 +39,7 @@ struct PalettesSettings: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .disabled(registry.state == .loading)
-                    .help("Read the palettes in Macterm's repository again")
+                    .help("Read the extensions in Macterm's repository again")
                 }
                 RegistryStatus(state: registry.state, ref: registry.ref)
 
@@ -71,7 +72,8 @@ struct PalettesSettings: View {
                 Text(
                     "A palette is a YAML file in the folder: a command whose output becomes rows, "
                         + "each opening another screen or running a command. "
-                        + "Available palettes come from Macterm's repository, for this version. "
+                        + "Available ones are extensions from Macterm's repository, for this version, "
+                        + "installed as folders in ~/.config/macterm/extensions. "
                         + "A palette turned off leaves the command palette and its menu; "
                         + "its keybind, if any, says so instead of reaching the terminal."
                 )
@@ -110,13 +112,13 @@ private struct RegistryStatus: View {
         case .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Reading palettes from Macterm's repository…").settingsCaption()
+                Text("Reading extensions from Macterm's repository…").settingsCaption()
             }
         case let .loaded(date):
-            Text("Available palettes for \(ref), read \(date.formatted(.relative(presentation: .named))).")
+            Text("Available extensions for \(ref), read \(date.formatted(.relative(presentation: .named))).")
                 .settingsCaption()
         case let .failed(reason):
-            Label("Couldn't read the available palettes: \(reason)", systemImage: "exclamationmark.triangle.fill")
+            Label("Couldn't read the available extensions: \(reason)", systemImage: "exclamationmark.triangle.fill")
                 .settingsCaption()
         }
     }
@@ -147,6 +149,12 @@ private struct PaletteCard: View {
                     .settingsCaption()
                     .lineLimit(2, reservesSpace: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if !item.authors.isEmpty {
+                    Text(item.authors.map { "@\($0)" }.formatted(.list(type: .and)))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             .padding(4)
         }
@@ -170,7 +178,7 @@ private struct PaletteCard: View {
                 .controlSize(.small)
                 .disabled(entry.failure != nil)
                 .help(entry.failure
-                    .map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Show the file, then install it")
+                    .map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Show its files, then install it")
         }
     }
 }
@@ -196,15 +204,24 @@ private struct PaletteSwitch: View {
     }
 }
 
-/// The file a palette from the repository would install, shown in full
-/// before anything is written: every command in it runs on this machine.
+/// An extension from the repository, shown in full before anything is
+/// written: its README, then every text file in it — every command runs on
+/// this machine.
 private struct InstallPaletteSheet: View {
     @Environment(AppState.self)
     private var appState
 
     let entry: PaletteRegistry.Entry
     let dismiss: () -> Void
+    @State private var shown = MactermExtension.readmeName
     @State private var problem: String?
+    @State private var working = false
+
+    private var paths: [String] {
+        let texts = entry.files.map(\.path).filter { entry.texts[$0] != nil }
+        let readme = texts.filter { $0 == MactermExtension.readmeName }
+        return readme + texts.filter { $0 != MactermExtension.readmeName }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -214,19 +231,30 @@ private struct InstallPaletteSheet: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Install \(entry.name)?").font(.headline)
-                    if let description = entry.description {
-                        Text(description).settingsCaption()
+                    if !entry.authors.isEmpty {
+                        Text("By \(entry.authors.map { "@\($0)" }.formatted(.list(type: .and)))").settingsCaption()
                     }
                 }
             }
-            Text("Its commands run on this Mac when you open it. This is the whole file:")
+            Text("Its commands run on this Mac when you open it. These are its files:")
                 .settingsCaption()
+            Picker("File", selection: $shown) {
+                ForEach(paths, id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
             ScrollView {
-                Text(entry.text)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
+                Group {
+                    if shown == MactermExtension.readmeName {
+                        Text(Self.markdown(entry.texts[shown] ?? ""))
+                    } else {
+                        Text(entry.texts[shown] ?? "")
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                }
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
             }
             .frame(minHeight: 220, maxHeight: 360)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
@@ -235,23 +263,37 @@ private struct InstallPaletteSheet: View {
                     .settingsCaption()
             }
             HStack {
-                Text("Saved as \(entry.id).yaml in your palettes folder.")
+                Text("Saved in your extensions folder as \(entry.id).")
                     .settingsCaption()
                 Spacer()
+                if working { ProgressView().controlSize(.small) }
                 Button("Cancel", role: .cancel, action: dismiss)
                     .keyboardShortcut(.cancelAction)
                 Button("Install") {
-                    do {
-                        try appState.paletteRegistry.install(entry, into: appState.customPalettes)
-                        dismiss()
-                    } catch {
-                        problem = error.localizedDescription
+                    working = true
+                    Task {
+                        do {
+                            try await appState.paletteRegistry.install(entry, into: appState.customPalettes)
+                            dismiss()
+                        } catch {
+                            problem = error.localizedDescription
+                        }
+                        working = false
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(working)
             }
         }
         .padding(20)
         .frame(width: 560)
+        .onAppear { if !paths.contains(shown) { shown = paths.first ?? "" } }
+    }
+
+    /// A README's text with its inline markdown — emphasis, code, links —
+    /// and its lines kept; headings and images stay as written.
+    static func markdown(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(text)
     }
 }
