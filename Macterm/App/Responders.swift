@@ -43,6 +43,12 @@ final class PaletteResponder: KeyResponder {
             }
             return .handled
         }
+        // Capture Palette Screenshot acts on the palette as it stands, so its
+        // chord is answered here, with the palette up, too.
+        if appState.isCommandPaletteVisible, HotkeyRegistry.matches(event, action: .capturePaletteScreenshot) {
+            PaletteScreenshot.capture(appState: appState)
+            return .handled
+        }
         // A custom palette's chord: the same two outcomes as a built-in
         // screen's, with `PaletteHotkeys` as the table — after the screens'
         // chords, so a chord bound to both resolves as `MainAppResponder`

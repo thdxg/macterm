@@ -79,6 +79,8 @@ final class PaletteRegistry {
         var description: String? { palette?.description ?? header?.description }
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
         var readme: String? { texts[MactermExtension.readmeName] }
+        /// Its screenshots' paths, in name order.
+        var screenshots: [String] { files.map(\.path).filter(MactermExtension.isScreenshot) }
     }
 
     enum State: Equatable {
@@ -103,6 +105,8 @@ final class PaletteRegistry {
     private(set) var state: State = .idle
     @ObservationIgnored private let fetch: Fetch
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// Screenshots fetched for the Install sheet, by URL, for the run.
+    @ObservationIgnored private var images: [URL: Data] = [:]
 
     init(
         ref: String = PaletteRegistry.defaultRef,
@@ -277,6 +281,16 @@ final class PaletteRegistry {
         try fm.moveItem(at: staging, to: destination)
         store.reload()
         return destination
+    }
+
+    /// One of `entry`'s screenshots, fetched the first time it is shown and
+    /// kept for the run; nil when it can't be.
+    func screenshot(_ path: String, of entry: Entry) async -> Data? {
+        let url = Self.fileURL(ref: ref, id: entry.id, path: path)
+        if let data = images[url] { return data }
+        guard let (data, status) = try? await fetch(url), status == 200 else { return nil }
+        images[url] = data
+        return data
     }
 
     nonisolated static let fetchFromNetwork: Fetch = { url in

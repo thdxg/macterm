@@ -239,6 +239,8 @@ It prints each file's id, its keybind, and its name or the error that stopped it
 
 Extensions anyone can install from Settings → Extensions are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in Macterm's repository, each holding `extension.yaml` (its authors, by GitHub username), `palette.yaml` and a `README.md`. An installed one lives in `~/.config/macterm/extensions/<id>/`, and its commands find the folder's other files — a script too long for the YAML — through `$MACTERM_EXTENSION_DIR`. A palette file in your palettes folder with the same name wins over it.
 
+An extension can show screenshots in the gallery — **Capture Palette Screenshot** takes them at the one size the repository accepts, with the command palette framed the same way every time. Bind it in Settings → Keymaps and press it with the palette open on the screen you want; run from the menu or the palette, it captures the palette's first screen. The first time, macOS asks to let Macterm record the screen.
+
 To add yours, open a pull request with the folder; you don't need to clone the whole repository, and [the folder's README](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how, and what an extension needs — POSIX commands, a `requires:`, a `when:` where it can't always work. Every extension there is read through Macterm's validator before it merges.
 
 ## More examples

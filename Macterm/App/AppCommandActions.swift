@@ -276,6 +276,8 @@ extension AppCommand {
         case .files:
             guard let current, Self.filesUnavailableReason(for: current) == nil else { return nil }
             return { ctx.appState.toggleCommandPalette(scope: .files) }
+        case .capturePaletteScreenshot:
+            return { PaletteScreenshot.capture(appState: ctx.appState) }
         case .checkForUpdate:
             // Always present in the palette; the guard only no-ops when a check
             // is already in flight (canCheckForUpdates flips false during one).

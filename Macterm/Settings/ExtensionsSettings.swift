@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Settings → Extensions: every extension as a card in one searchable grid —
@@ -221,11 +222,16 @@ private struct InstallExtensionSheet: View {
     @State private var shown = MactermExtension.readmeName
     @State private var problem: String?
     @State private var working = false
+    @State private var screenshots: [NSImage] = []
 
+    /// The sheet's tabs: the README, the screenshots when there are any,
+    /// then every text file.
+    private static let screenshotsTab = "Screenshots"
     private var paths: [String] {
         let texts = entry.files.map(\.path).filter { entry.texts[$0] != nil }
         let readme = texts.filter { $0 == MactermExtension.readmeName }
-        return readme + texts.filter { $0 != MactermExtension.readmeName }
+        let shots = entry.screenshots.isEmpty ? [] : [Self.screenshotsTab]
+        return readme + shots + texts.filter { $0 != MactermExtension.readmeName }
     }
 
     var body: some View {
@@ -250,7 +256,17 @@ private struct InstallExtensionSheet: View {
             .pickerStyle(.segmented)
             ScrollView {
                 Group {
-                    if shown == MactermExtension.readmeName {
+                    if shown == Self.screenshotsTab {
+                        VStack(spacing: 8) {
+                            if screenshots.isEmpty { ProgressView().controlSize(.small) }
+                            ForEach(screenshots.indices, id: \.self) { index in
+                                Image(nsImage: screenshots[index])
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                        }
+                    } else if shown == MactermExtension.readmeName {
                         Text(Self.markdown(entry.texts[shown] ?? ""))
                     } else {
                         Text(entry.texts[shown] ?? "")
@@ -293,6 +309,15 @@ private struct InstallExtensionSheet: View {
         .padding(20)
         .frame(width: 560)
         .onAppear { if !paths.contains(shown) { shown = paths.first ?? "" } }
+        .task(id: entry.id) {
+            var images: [NSImage] = []
+            for path in entry.screenshots {
+                if let data = await appState.paletteRegistry.screenshot(path, of: entry), let image = NSImage(data: data) {
+                    images.append(image)
+                }
+            }
+            screenshots = images
+        }
     }
 
     /// A README's text with its inline markdown — emphasis, code, links —

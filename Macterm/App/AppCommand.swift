@@ -64,6 +64,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case reloadGhosttyConfig
     case toggleQuickTerminal
     case checkForUpdate
+    case capturePaletteScreenshot
 
     var id: String { rawValue }
 
@@ -119,6 +120,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .reloadGhosttyConfig: "Reload Ghostty Config"
         case .toggleQuickTerminal: "Toggle Quick Terminal"
         case .checkForUpdate: "Check for Update"
+        case .capturePaletteScreenshot: "Capture Palette Screenshot"
         }
     }
 
@@ -173,7 +175,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .closeWindow: .window
         case .reloadGhosttyConfig,
              .toggleQuickTerminal,
-             .checkForUpdate: .other
+             .checkForUpdate,
+             .capturePaletteScreenshot: .other
         }
     }
 
@@ -223,6 +226,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .passwordManager: .passwordManager
         case .worktrees: .worktrees
         case .files: .files
+        case .capturePaletteScreenshot: .capturePaletteScreenshot
         case .applyLayout: .applyLayout
         case .saveLayout: .saveLayout
         case .newRemoteProject,

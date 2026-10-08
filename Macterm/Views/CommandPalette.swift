@@ -79,6 +79,7 @@ struct CommandPaletteOverlay: View {
                         .glassPanel(cornerRadius: Self.cornerRadius)
                 }
                 .frame(width: 500)
+                .background(PaletteScreenshotAnchor(windowState: windowState))
                 .padding(.top, max(0, geo.size.height * 0.15 - breadcrumb))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
