@@ -517,10 +517,12 @@ final class Workspace: Identifiable {
 
     /// Append without visiting when `focus` is false: a select-and-restore
     /// would publish a transient selection and pollute the recent-tab history.
+    /// With no active tab, adopt the new one; there is no selection to preserve.
     @discardableResult
     func createTab(
         projectPath: String,
         sessionSlug: String? = nil,
+        remoteZmxPath: String? = nil,
         command: String? = nil,
         env: [String: String]? = nil,
         focus: Bool = true
@@ -532,9 +534,18 @@ final class Workspace: Identifiable {
             command: command,
             env: env
         )
+        // Selection hooks may create window mirrors synchronously. Give them
+        // the host configuration too, before publishing the new tab.
+        for pane in tab.splitRoot.allPanes() {
+            pane.remoteZmxPath = remoteZmxPath
+        }
         tabs.append(tab)
         if focus {
             if let current = activeTabID { tabHistory.push(current) }
+            activeTabID = tab.id
+        } else if activeTabID == nil {
+            // No prior selection to preserve or record (normally the last
+            // tab was just closed). Keep the workspace selectable.
             activeTabID = tab.id
         }
         return tab

@@ -823,6 +823,7 @@ final class ControlHandler {
             position: placement.position,
             projectID: project.id,
             projectDirectory: project.path,
+            remoteZmxPath: project.zmxPath,
             command: args.run,
             focus: args.focus ?? true
         ), let newPane = target.tab.splitRoot.findPane(id: newID)

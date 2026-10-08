@@ -44,10 +44,13 @@ def test_background_tab_starts_without_selection(app, fresh_tab, live_pane, init
     assert _selection(app) == before
 
 
-@pytest.mark.parametrize("hidden_tab", [False, True])
-def test_no_focus_split_starts_even_in_a_hidden_tab(app, fresh_tab, live_pane, hidden_tab):
+@pytest.mark.parametrize("visibility", ["visible", "hidden_tab", "zoomed"])
+def test_no_focus_split_starts_even_when_hidden(app, fresh_tab, live_pane, visibility):
+    hidden_tab = visibility == "hidden_tab"
     if hidden_tab:
         app.cli("tab", "new")
+    elif visibility == "zoomed":
+        app.cli("pane", "zoom", "--session", live_pane["session"])
     before = _selection(app)
     nonce = uuid.uuid4().hex[:12]
     child = app.cli_json(
@@ -68,6 +71,31 @@ def test_no_focus_split_starts_even_in_a_hidden_tab(app, fresh_tab, live_pane, h
         # later explicit visit, the source must still be its remembered focus.
         app.cli("tab", "select", fresh_tab["id"])
         assert [p["id"] for p in app.panes(tab=fresh_tab["id"]) if p["focused"]] == [live_pane["id"]]
+
+
+def test_no_focus_split_starts_when_last_window_is_hidden(app, fresh_tab, live_pane):
+    windows = app.cli_json("window", "list")["windows"]
+    assert len(windows) == 1
+    window_id = windows[0]["id"]
+    app.cli("window", "close", "--window", window_id)
+    try:
+        # Closing the sole window orders it out, but leaves it registered as
+        # this tab's owner. Ownership must not strand the child's startup.
+        assert [w["id"] for w in app.cli_json("window", "list")["windows"]] == [window_id]
+        nonce = uuid.uuid4().hex[:12]
+        child = app.cli_json(
+            "pane", "split", "--session", live_pane["session"], "--no-focus",
+            "--run", f'/bin/sh -c "printf hidden-window-%s {nonce}; echo"',
+        )["panes"][0]
+        assert not child["focused"]
+        wait_for(
+            lambda: _has_output(app, child["session"], f"hidden-window-{nonce}"),
+            timeout=30,
+            message="the no-focus split to execute while its owner window is hidden",
+        )
+        assert [p["id"] for p in app.panes(tab=fresh_tab["id"]) if p["focused"]] == [live_pane["id"]]
+    finally:
+        app.cli("window", "focus", window_id)
 
 
 @pytest.mark.parametrize("split", [False, True])
@@ -94,6 +122,33 @@ def test_background_shell_exit_removes_the_never_viewed_child(app, fresh_tab, li
         return [p["id"] for p in app.panes(tab=tab["id"])] == [source["id"]]
 
     wait_for(child_closed_without_a_visit, timeout=60, message="the hidden shell exit to close its pane")
+
+
+def test_no_focus_first_tab_in_empty_project_is_visible(app, fresh_tab, tmp_path):
+    original_project = app.cli_json("status")["status"]["activeProjectID"]
+    project = app.cli_json(
+        "project", "create", str(tmp_path), "--name", f"empty-{uuid.uuid4().hex[:8]}", "--select",
+    )["projects"][0]
+    try:
+        for tab in app.cli_json("tab", "list", "--project", project["id"])["tabs"]:
+            app.cli("tab", "close", tab["id"], "--project", project["id"], "--force")
+        nonce = uuid.uuid4().hex[:12]
+        child = app.cli_json(
+            "tab", "new", "--project", project["id"], "--no-focus",
+            "--run", f'/bin/sh -c "printf adopted-%s {nonce}; echo"',
+        )["tabs"][0]
+        assert child["active"]
+        pane = app.panes(tab=child["id"])[0]
+
+        def adopted_and_running():
+            windows = app.cli_json("window", "list")["windows"]
+            assert any(w.get("projectID") == project["id"] and w.get("tabID") == child["id"] for w in windows)
+            return _has_output(app, pane["session"], f"adopted-{nonce}")
+
+        wait_for(adopted_and_running, timeout=60, message="the empty project's first tab to be visible and running")
+    finally:
+        app.cli("project", "select", original_project)
+        app.cli("project", "remove", project["id"], "--force", check=False)
 
 
 def test_background_creation_leaves_another_project_window_alone(app, fresh_tab, live_pane, tmp_path):

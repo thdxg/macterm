@@ -832,7 +832,7 @@ struct WindowStateTests {
         // reconcile and align all skip the pinned workspace.
         let state = makeAppState()
         state.zmx = .noop
-        state.warmPane = { _ in }
+        state.incubatePane = { _ in }
         _ = try seedProject(state, tabs: 1)
         state.ensurePinnedWorkspace()
         // Through AppState so the tabs get pinned records (selection is
@@ -865,7 +865,7 @@ struct WindowStateTests {
 
         let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
         writer.zmx = .noop
-        writer.warmPane = { _ in }
+        writer.incubatePane = { _ in }
         writer.restoreSelection(projects: [p])
         writer.selectProject(p)
         writer.ensurePinnedWorkspace()
@@ -879,7 +879,7 @@ struct WindowStateTests {
 
         let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
         reader.zmx = .noop
-        reader.warmPane = { _ in }
+        reader.incubatePane = { _ in }
         reader.restoreSelection(projects: [p])
         await reader.materializeRestoredPinnedTabs()
         let restored = WindowState()

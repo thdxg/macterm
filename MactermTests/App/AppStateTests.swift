@@ -107,7 +107,7 @@ struct AppStateTests {
         let source = try #require(originalTab.focusedPane)
         let environment = ["MACTERM_TEST_ENV": "literal $value with spaces"]
         var warmed: [Pane] = []
-        state.warmPane = { warmed.append($0) }
+        state.incubatePane = { warmed.append($0) }
 
         let created: Pane
         if kind == "tab" {

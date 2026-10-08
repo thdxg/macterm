@@ -82,7 +82,7 @@ The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`
 
 ## Starting a background terminal
 
-`tab new --no-focus` starts a tab's shell without selecting it. `pane split --no-focus` starts a split without moving pane focus or clearing zoom. Both leave project/window selections and focus history alone, even when the target project or tab isn't visible. An explicitly unloaded project's row becomes loaded again when a background shell starts, without selecting the project; its other terminals remain unstarted until the project is selected. Without the flag, creation keeps its usual selection behavior.
+`tab new --no-focus` starts a tab's shell without changing an existing tab selection. An empty workspace adopts its first tab without adding focus history. `pane split --no-focus` starts a split without moving pane focus or clearing zoom. Neither switches projects or windows, even when the target project or tab isn't visible. In an explicitly unloaded project, only the started tab becomes undimmed. A background split also starts that tab's existing panes, so the split's source is usable; other tabs remain stopped and dimmed until the project is selected. Without the flag, creation keeps its usual selection behavior.
 
 ```sh
 macterm tab new --project api --no-focus --run "npm test"

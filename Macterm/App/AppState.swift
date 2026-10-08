@@ -960,7 +960,7 @@ final class AppState {
     /// unit tests of the eager pinned-tab launch never create real ghostty
     /// surfaces (and thus never spawn shells) inside the test host.
     @ObservationIgnored
-    var warmPane: (Pane) -> Void = { SurfaceIncubator.shared.warm($0) }
+    var incubatePane: (Pane) -> Void = { SurfaceIncubator.shared.warm($0) }
     /// The one dialog awaiting the user — a staged confirmation or a notice.
     /// Set through `present`, cleared through `confirmPendingDialog` /
     /// `dismissPendingDialog` (see `AppState+Dialogs`); presented by the one
@@ -1742,15 +1742,11 @@ final class AppState {
         warmStaggered(Self.panesToWarm(in: ws))
     }
 
-    /// Start a newly requested background terminal and give it the same exit
-    /// handling as a rendered pane. The incubator only supplies a window and
-    /// title callback; without this, a never-viewed shell's exit is lost.
-    /// Read the pane's project at exit time, since a tab can move meanwhile.
-    /// Explicit creation also ends a project's unloaded state without selecting
-    /// it: the row must not claim its shells are stopped once one is running.
-    private func warmBackgroundPane(_ pane: Pane) {
-        unloadedProjectIDs.remove(pane.projectID)
-        warmPane(pane)
+    /// Every incubated pane gets the rendered pane's exit classifier, whether
+    /// warmed at project selection, pinned restore, or CLI creation. Read its
+    /// project at exit time: a tab may have moved since it was warmed.
+    private func warmPane(_ pane: Pane) {
+        incubatePane(pane)
         pane.nsView?.onProcessExit = { [weak self, weak pane] in
             guard let self, let pane else { return }
             self.handleProcessExit(pane.id, projectID: pane.projectID)
@@ -1763,20 +1759,29 @@ final class AppState {
     /// launch pressure with pane count (cmux hit a relaunch memory/PAM storm
     /// doing exactly this). The warm is idempotent, so a pane the user views
     /// before its slot just spawns early via SwiftUI and the delayed warm
-    /// no-ops. `afterEach` runs right after a pane's warm (the pinned
-    /// workspace wires its process-exit callback there).
-    func warmStaggered(_ panes: [Pane], afterEach: @escaping (Pane) -> Void = { _ in }) {
+    /// no-ops. All paths use `warmPane` so never-viewed shells still close
+    /// their panes (or unload pinned tabs) when they exit.
+    func warmStaggered(_ panes: [Pane]) {
         for (index, pane) in panes.enumerated() {
             if index == 0 {
                 warmPane(pane)
-                afterEach(pane)
                 continue
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.125 * Double(index)) { [weak self, weak pane] in
                 guard let self, let pane else { return }
                 self.warmPane(pane)
-                afterEach(pane)
             }
+        }
+    }
+
+    /// Let SwiftUI start visible children at their actual split size, not the
+    /// incubator's oversized grid. An ordered-out owner's SwiftUI tree still
+    /// mounts new children (covered by the hidden-window E2E). Zoom is different:
+    /// the recursive split view does not mount the hidden child at all.
+    private func warmIfUnrendered(_ pane: Pane, in tab: TerminalTab) {
+        let hiddenByZoom = tab.zoomedPaneID.map { $0 != pane.id } ?? false
+        if hiddenByZoom || ownerWindow(of: tab, in: pane.projectID) == nil {
+            warmPane(pane)
         }
     }
 
@@ -2397,10 +2402,20 @@ final class AppState {
         reconcileWindowViews()
     }
 
-    /// Whether the project sits in the unloaded state `unloadProject(_:)`
-    /// leaves behind — its tabs are a layout with no shells behind them.
+    /// Whether the project retains the unloaded layout from `unloadProject`.
+    /// Background creation may have started individual tabs since then; the
+    /// marker stays until selection loads the rest. Use `isTabUnloaded` for rows.
     func isProjectUnloaded(_ projectID: UUID) -> Bool {
         unloadedProjectIDs.contains(projectID)
+    }
+
+    /// Only dim tabs still waiting to start. Creating one background shell
+    /// does not revive the other tabs in an explicitly unloaded project.
+    /// Like `isProjectLoaded`, a pane's surface view marks it as started.
+    /// The view slot is unobserved: creation warms synchronously before the
+    /// structural redraw. Deferring that warm would need an observable signal.
+    func isTabUnloaded(_ tab: TerminalTab, projectID: UUID) -> Bool {
+        isProjectUnloaded(projectID) && tab.splitRoot.allPanes().allSatisfy { $0.nsView == nil }
     }
 
     /// The teardown half of `removeProject`, without the workspace save — so
@@ -2506,22 +2521,27 @@ final class AppState {
 
     /// A `command` spawns in the new tab's pane via `initial_input` (layout
     /// `run:` semantics). Returns the new tab's ID, nil when the project has
-    /// no live workspace. `focus: false` leaves selection/history untouched
-    /// and warms the pane off-screen so its shell starts without a visit.
+    /// no live workspace. `focus: false` preserves any existing selection and
+    /// history, and warms unrendered panes so their shells start without a visit.
+    /// Stamp the host's zmx path before either SwiftUI or the incubator spawns.
     @discardableResult
     func createTab(
         projectID: UUID,
         projectPath: String,
         sessionSlug: String? = nil,
+        remoteZmxPath: String? = nil,
         command: String? = nil,
         env: [String: String]? = nil,
         focus: Bool = true
     ) -> UUID? {
         guard let ws = workspaces[projectID] else { return nil }
-        let tab = ws.createTab(projectPath: projectPath, sessionSlug: sessionSlug, command: command, env: env, focus: focus)
+        let tab = ws.createTab(
+            projectPath: projectPath, sessionSlug: sessionSlug, remoteZmxPath: remoteZmxPath,
+            command: command, env: env, focus: focus
+        )
         if !focus {
             for pane in tab.splitRoot.allPanes() {
-                warmBackgroundPane(pane)
+                warmIfUnrendered(pane, in: tab)
             }
         }
         logger.debug("createTab: project=\(projectID, privacy: .public) tabs=\(ws.tabs.count, privacy: .public)")
@@ -2580,6 +2600,7 @@ final class AppState {
             projectID: projectID,
             projectPath: workingDirectory,
             sessionSlug: projectSessionSlug,
+            remoteZmxPath: projects.first(where: { $0.id == projectID })?.zmxPath,
             command: command,
             env: env,
             focus: focus
@@ -3136,7 +3157,8 @@ final class AppState {
             paneID,
             direction: direction,
             projectID: projectID,
-            projectDirectory: projectDirectory
+            projectDirectory: projectDirectory,
+            remoteZmxPath: projects.first(where: { $0.id == projectID })?.zmxPath
         )
     }
 
@@ -3148,6 +3170,7 @@ final class AppState {
         position: SplitPosition = .second,
         projectID: UUID,
         projectDirectory: String,
+        remoteZmxPath: String? = nil,
         command: String? = nil,
         env: [String: String]? = nil,
         focus: Bool = true
@@ -3156,6 +3179,14 @@ final class AppState {
               let tab = ws.tabs.first(where: { $0.splitRoot.findPane(id: paneID) != nil }),
               let pane = tab.splitRoot.findPane(id: paneID)
         else { return nil }
+        // The CLI can split a never-opened or unloaded remote tab. Stamp the
+        // whole tab before splitting: background creation may revive its other
+        // panes too, and the new sibling inherits the source's path.
+        if let remoteZmxPath {
+            for existing in tab.splitRoot.allPanes() {
+                existing.remoteZmxPath = remoteZmxPath
+            }
+        }
         // nil = inherit (the source pane's live cwd, else its own
         // `projectPath`) — never coerced to the project root, which would
         // turn a remote pane's split into a local shell.
@@ -3181,6 +3212,9 @@ final class AppState {
     /// `command` in the new pane. The control CLI's split path. Returns the
     /// new pane's ID. `focus: false` preserves focus/history/zoom and warms
     /// the new pane, including when its tab or project isn't being displayed.
+    /// In an explicitly unloaded project, start the whole target tab: its row
+    /// must not appear live while the split's source still has no shell. Other
+    /// tabs stay stopped, and neither selection nor the unloaded marker moves.
     @discardableResult
     func splitPane(
         _ paneID: UUID,
@@ -3204,7 +3238,12 @@ final class AppState {
             newPaneWorkingDirectory: newPaneWorkingDirectory,
             focus: focus
         )
-        if !focus, let newID, let pane = tab.splitRoot.findPane(id: newID) { warmBackgroundPane(pane) }
+        if !focus, let newID, let pane = tab.splitRoot.findPane(id: newID) {
+            let starting = isProjectUnloaded(projectID) ? tab.splitRoot.allPanes() : [pane]
+            for candidate in starting {
+                warmIfUnrendered(candidate, in: tab)
+            }
+        }
         saveWorkspaces()
         return newID
     }

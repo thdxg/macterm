@@ -29,7 +29,7 @@ struct PinnedTabsTests {
         state.zmx = .noop
         // Never let the eager pinned launch warm REAL surfaces in the test
         // host (that would spawn actual shells).
-        state.warmPane = { _ in }
+        state.incubatePane = { _ in }
         return Fixture(state: state, storeURL: storeURL, projectsDir: projectsDir)
     }
 
@@ -329,7 +329,7 @@ struct PinnedTabsTests {
         dead.isBundled = { true }
         dead.listSessionsWithClients = { [] }
         state2.zmx = dead
-        state2.warmPane = { _ in }
+        state2.incubatePane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
 
         await state2.materializeRestoredPinnedTabs()
@@ -355,7 +355,7 @@ struct PinnedTabsTests {
             originProjectID: nil
         )]
         var warmed: [UUID] = []
-        fx.state.warmPane = { warmed.append($0.id) }
+        fx.state.incubatePane = { warmed.append($0.id) }
 
         await fx.state.materializeRestoredPinnedTabs()
 
@@ -382,7 +382,7 @@ struct PinnedTabsTests {
         alive.isBundled = { true }
         alive.listSessionsWithClients = { [ZmxSessionListParser.Entry(name: sessionName, clients: 0)] }
         state2.zmx = alive
-        state2.warmPane = { _ in }
+        state2.incubatePane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
 
         await state2.materializeRestoredPinnedTabs()
@@ -409,7 +409,7 @@ struct PinnedTabsTests {
         unknown.isBundled = { true }
         unknown.listSessionsWithClients = { nil } // probe failed → unknown
         state2.zmx = unknown
-        state2.warmPane = { _ in }
+        state2.incubatePane = { _ in }
         state2.restorePinnedState(WorkspaceStore(fileURL: fx.storeURL).load().pinned)
 
         await state2.materializeRestoredPinnedTabs()
@@ -505,7 +505,7 @@ struct PinnedTabsTests {
         alive.isBundled = { true }
         alive.listSessionsWithClients = { sessionEntries }
         state2.zmx = alive
-        state2.warmPane = { _ in }
+        state2.incubatePane = { _ in }
         state2.restorePinnedState(loaded.pinned, activeTabID: loaded.pinnedActiveTabID)
         await state2.materializeRestoredPinnedTabs()
 
