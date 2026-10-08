@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -82,6 +83,11 @@ final class WindowState: Identifiable {
     var frame: String?
 
     var isCommandPaletteVisible = false
+    /// The view the palette and its breadcrumb row are drawn over while the
+    /// palette is up — what Capture Palette Screenshot frames
+    /// (`PaletteScreenshot`). Unobserved; the palette sets it as it mounts.
+    @ObservationIgnored
+    weak var paletteAnchor: NSView?
     /// The palette screens showing (`PaletteScope`), root first; empty is
     /// the root itself. Every push and pop goes through the methods below,
     /// which own a frame's end of life (`PaletteScope.deactivate`); the

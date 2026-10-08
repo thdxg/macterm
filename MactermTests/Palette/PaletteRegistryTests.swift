@@ -260,6 +260,58 @@ struct PaletteRegistryTests {
         #expect(!MactermExtension.isID("Claude_Code"))
     }
 
+    @Test
+    func screenshots_are_fetched_when_shown_and_kept() async {
+        let server = Server()
+        let png = Data([0x89, 0x50, 0x4E, 0x47])
+        server.serve(ref: "main", id: "kubernetes", "screenshots/pods.png", png)
+        let registry = PaletteRegistry(ref: "main", fetch: server.fetch)
+        let base = Self.entry("kubernetes", palette: Self.kubernetes)
+        let entry = PaletteRegistry.Entry(
+            id: "kubernetes",
+            files: base.files + [.init(path: "screenshots/pods.png", size: 4, executable: false)],
+            texts: base.texts
+        )
+        #expect(entry.screenshots == ["screenshots/pods.png"])
+        #expect(await registry.screenshot("screenshots/pods.png", of: entry) == png)
+        server.responses.removeAll()
+        #expect(await registry.screenshot("screenshots/pods.png", of: entry) == png, "kept for the run")
+        #expect(await registry.screenshot("screenshots/gone.png", of: entry) == nil)
+    }
+
+    @Test
+    func a_screenshot_frames_the_palette_the_same_way_and_stays_on_screen() {
+        let screen = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+        let palette = CGRect(x: 614, y: 500, width: 500, height: 420)
+        let rect = MactermExtension.screenshotRect(around: palette, in: screen)
+        #expect(rect.size == MactermExtension.screenshotPointSize)
+        #expect(rect.midX == palette.midX, "centred across")
+        #expect(rect.maxY == palette.maxY + MactermExtension.screenshotTopMargin, "the same room above every time")
+
+        let nearTheCorner = CGRect(x: 1200, y: 690, width: 500, height: 420)
+        let moved = MactermExtension.screenshotRect(around: nearTheCorner, in: screen)
+        #expect(moved.maxY == screen.maxY && moved.maxX == screen.maxX, "kept on the screen")
+    }
+
+    @Test
+    func a_screenshot_is_a_png_of_the_size_in_the_folder() throws {
+        var header: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13]
+        header += Array("IHDR".utf8) + [0, 0, 0x06, 0x40, 0, 0, 0x03, 0xE8]
+        let size = MactermExtension.pngSize(Data(header))
+        #expect(size?.width == 1600 && size?.height == 1000)
+        #expect(MactermExtension.pngSize(Data("not a png at all, not at all".utf8)) == nil)
+        #expect(MactermExtension.isScreenshot("screenshots/pods.png"))
+        #expect(!MactermExtension.isScreenshot("pods.png"), "only in the folder")
+        #expect(!MactermExtension.isScreenshot("screenshots/pods.jpg"), "only PNG")
+        #expect(!MactermExtension.isScreenshot("screenshots/old/pods.png"), "not nested")
+
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macterm-shots-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        #expect(MactermExtension.nextScreenshotName(in: folder) == "screenshot-1.png")
+        try Data().write(to: folder.appendingPathComponent("screenshot-1.png"))
+        #expect(MactermExtension.nextScreenshotName(in: folder) == "screenshot-2.png")
+    }
+
     /// Built-in, then installed, then what the repository has that isn't
     /// installed — a repository palette already installed listed once, as
     /// installed — each section ranked by the search.

@@ -158,6 +158,12 @@ struct MactermApp: App {
                     projectStore: projectStore,
                     titleOverride: "Reload Ghostty Config"
                 )
+                AppCommandMenuItem(
+                    command: .capturePaletteScreenshot,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Capture Palette Screenshot"
+                )
             }
             CommandGroup(after: .windowList) {
                 Divider()

@@ -24,6 +24,62 @@ enum MactermExtension {
         imageExtensions.contains((path as NSString).pathExtension.lowercased())
     }
 
+    /// Where an extension keeps its screenshots, and what they must be: PNGs
+    /// of exactly `screenshotPixelSize`, at most `maxScreenshots` of them, so
+    /// every extension's look the same size in the gallery whatever the theme
+    /// behind them. The size is the command palette framed with room around
+    /// it at 2x (`screenshotPointSize`) — what Capture Palette Screenshot
+    /// (`PaletteScreenshot`) writes, as Raycast's Window Capture writes its
+    /// store's 2000×1250.
+    static let screenshotsFolder = "screenshots"
+    static let screenshotPointSize = CGSize(width: 800, height: 500)
+    static let screenshotPixelSize = (width: 1600, height: 1000)
+    static let maxScreenshots = 6
+    /// The space above the palette (its breadcrumb row included) in a
+    /// screenshot; the rest of the height falls below it.
+    static let screenshotTopMargin: CGFloat = 36
+
+    static func isScreenshot(_ path: String) -> Bool {
+        path.hasPrefix(screenshotsFolder + "/") && (path as NSString).pathExtension.lowercased() == "png"
+            && !path.dropFirst(screenshotsFolder.count + 1).contains("/")
+    }
+
+    /// The part of the screen a screenshot of a palette at `palette` shows,
+    /// both in AppKit's screen coordinates: `screenshotPointSize`, centred on
+    /// the palette across, `screenshotTopMargin` above it, and moved onto
+    /// `screen` where it would run off an edge.
+    static func screenshotRect(around palette: CGRect, in screen: CGRect) -> CGRect {
+        let size = screenshotPointSize
+        var rect = CGRect(
+            x: palette.midX - size.width / 2,
+            y: palette.maxY + screenshotTopMargin - size.height,
+            width: size.width,
+            height: size.height
+        )
+        rect.origin.x = min(max(rect.minX, screen.minX), screen.maxX - size.width)
+        rect.origin.y = min(max(rect.minY, screen.minY), screen.maxY - size.height)
+        return rect
+    }
+
+    /// A PNG's width and height, read from its header; nil when `data` isn't
+    /// a PNG.
+    static func pngSize(_ data: Data) -> (width: Int, height: Int)? {
+        let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        let bytes = [UInt8](data.prefix(24))
+        guard bytes.count == 24, Array(bytes[0 ..< 8]) == signature, bytes[12 ..< 16].elementsEqual("IHDR".utf8) else { return nil }
+        let int = { (at: Int) in bytes[at ..< at + 4].reduce(0) { $0 << 8 | Int($1) } }
+        return (int(16), int(20))
+    }
+
+    /// The first `screenshot-<n>.png` not taken in `folder`.
+    static func nextScreenshotName(in folder: URL) -> String {
+        var index = 1
+        while FileManager.default.fileExists(atPath: folder.appendingPathComponent("screenshot-\(index).png").path) {
+            index += 1
+        }
+        return "screenshot-\(index).png"
+    }
+
     /// A README's first paragraph, for the gallery: the first block of text
     /// that isn't a heading, its lines joined.
     static func summary(readme: String) -> String? {

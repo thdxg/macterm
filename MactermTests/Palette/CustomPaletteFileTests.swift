@@ -323,7 +323,7 @@ struct CustomPaletteFileTests {
     /// (`extensions/` at the repo root, a folder each): each has a manifest
     /// naming its authors, a README, and a palette that reads through the
     /// validator and says what it is — a description, the programs it needs —
-    /// and holds nothing but text and small images.
+    /// and holds nothing but text and a few screenshots of one exact size.
     @Test
     func every_extension_in_the_repo_reads_and_says_what_it_is() throws {
         let fm = FileManager.default
@@ -356,18 +356,33 @@ struct CustomPaletteFileTests {
             } catch {
                 Issue.record("\(id)/\(MactermExtension.paletteName) doesn't read: \(error.localizedDescription)")
             }
+            var screenshots = 0
+            let root = folder.standardizedFileURL.path + "/"
             for case let file as URL in fm
                 .enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]) ?? .init()
             {
                 let values = try file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
                 guard values.isRegularFile == true else { continue }
-                let name = "\(id)/\(file.lastPathComponent)"
+                let path = String(file.standardizedFileURL.path.dropFirst(root.count))
+                let name = "\(id)/\(path)"
                 #expect((values.fileSize ?? 0) <= MactermExtension.maxFileSize, "\(name): under 500 KB")
-                if !MactermExtension.isImage(file.path) {
-                    let data = try Data(contentsOf: file)
-                    #expect(String(data: data, encoding: .utf8) != nil, "\(name): text, or a PNG, JPEG or WebP image")
+                let data = try Data(contentsOf: file)
+                if MactermExtension.isScreenshot(path) {
+                    screenshots += 1
+                    let size = MactermExtension.pngSize(data)
+                    let want = MactermExtension.screenshotPixelSize
+                    #expect(
+                        size?.width == want.width && size?.height == want.height,
+                        "\(name): a screenshot is a \(want.width)×\(want.height) PNG — take it with Capture Palette Screenshot"
+                    )
+                } else {
+                    #expect(
+                        String(data: data, encoding: .utf8) != nil,
+                        "\(name): text — the only images are PNG screenshots in \(MactermExtension.screenshotsFolder)/"
+                    )
                 }
             }
+            #expect(screenshots <= MactermExtension.maxScreenshots, "\(id): at most \(MactermExtension.maxScreenshots) screenshots")
         }
     }
 

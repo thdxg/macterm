@@ -54,6 +54,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case passwordManager = "password_manager"
     case worktrees
     case files
+    case capturePaletteScreenshot = "capture_palette_screenshot"
 
     var id: String { rawValue }
 
@@ -162,6 +163,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .passwordManager: "none"
         case .worktrees: "none"
         case .files: "none"
+        // Unbound by default: only someone making an extension's screenshots
+        // needs it, and it acts on the palette as it stands, so it's bound
+        // to be pressed with the palette up.
+        case .capturePaletteScreenshot: "none"
         }
     }
 }
