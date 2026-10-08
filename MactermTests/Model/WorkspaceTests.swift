@@ -26,6 +26,65 @@ struct WorkspaceTests {
     }
 
     @Test
+    func createTab_without_focus_never_visits_or_records_the_new_tab() {
+        let ws = makeWorkspace()
+        let previous = ws.createTab(projectPath: "/tmp")
+        let current = ws.createTab(projectPath: "/tmp")
+        let recency = ws.recencyOrder()
+        var selections = 0
+        ws.onActiveTabChanged = { selections += 1 }
+
+        let background = ws.createTab(projectPath: "/tmp", focus: false)
+
+        #expect(ws.activeTabID == current.id)
+        #expect(selections == 0)
+        #expect(ws.recencyOrder() == recency + [background.id])
+        ws.closeTab(current.id)
+        #expect(ws.activeTabID == previous.id)
+    }
+
+    @Test
+    func createTab_without_focus_adopts_first_tab_when_workspace_empty() {
+        let ws = makeWorkspace()
+        ws.closeTab(ws.tabs[0].id)
+        #expect(ws.tabs.isEmpty)
+        #expect(ws.activeTabID == nil)
+
+        let background = ws.createTab(projectPath: "/tmp", focus: false)
+
+        #expect(ws.tabs.count == 1)
+        #expect(ws.activeTabID == background.id)
+        // Adoption records no history entry: the new tab is active on its own.
+        #expect(ws.recencyOrder() == [background.id])
+    }
+
+    @Test
+    func createTab_without_focus_publishes_selection_when_adopting_into_empty_workspace() {
+        let ws = makeWorkspace()
+        ws.closeTab(ws.tabs[0].id)
+        var selections = 0
+        ws.onActiveTabChanged = { selections += 1 }
+
+        _ = ws.createTab(projectPath: "/tmp", focus: false)
+
+        #expect(selections == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func createTab_stamps_remote_configuration_before_publishing_selection(focus: Bool) {
+        let ws = Workspace(projectID: UUID(), tabs: [], activeTabID: nil)
+        let zmxPath = "/opt/custom/bin/zmx"
+        var reportedPaths: [String?] = []
+        ws.onActiveTabChanged = { reportedPaths.append(ws.activeTab?.focusedPane?.remoteZmxPath) }
+
+        let tab = ws.createTab(projectPath: "host:~/repo", remoteZmxPath: zmxPath, focus: focus)
+
+        #expect(tab.focusedPane?.remoteZmxPath == zmxPath)
+        #expect(reportedPaths == [zmxPath])
+        ws.onActiveTabChanged = nil
+    }
+
+    @Test
     func adoptTab_appends_existing_tab_and_selects_it() {
         let ws = makeWorkspace()
         let original = ws.tabs[0].id

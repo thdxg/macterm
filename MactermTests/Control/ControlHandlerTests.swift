@@ -76,6 +76,28 @@ struct ControlHandlerTests {
         #expect(response.id == "custom-id-123")
     }
 
+    /// The version gate runs before dispatch: a client that needs a newer
+    /// protocol gets a hard error, and a command with a side effect never
+    /// executes (an older app would otherwise silently drop the field it
+    /// can't honor — e.g. `--no-focus` selecting what the caller asked not to
+    /// select).
+    @Test
+    func a_request_requiring_a_newer_protocol_fails_before_any_side_effect() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore, name: "target")
+        let workspace = try #require(appState.workspaces[project.id])
+        let tabsBefore = workspace.tabs.count
+
+        var req = request("tab.new", args: ControlArgs(project: project.name))
+        req.v = ControlProtocol.version + 1
+        let response = await handler.handle(req)
+
+        #expect(!response.ok)
+        #expect(response.error?.code == .unsupportedVersion)
+        #expect(response.error?.action?.contains("upgrade") == true)
+        #expect(workspace.tabs.count == tabsBefore, "the gate must run before dispatch")
+    }
+
     // MARK: - status
 
     @Test
@@ -659,6 +681,269 @@ struct ControlHandlerTests {
         // The declared command reaches the new tab's pane (spawns via
         // initial_input when the surface is created).
         #expect(newPane.command == "btop")
+    }
+
+    @Test(arguments: ["tab.new", "pane.split"], [false, true])
+    func remote_creation_stamps_zmx_path_before_spawning_without_selecting_the_project(
+        command: String, focus: Bool
+    ) async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        _ = seedProject(appState, projectStore, name: "local")
+        let selected = appState.activeProjectID
+        let remote = Project(name: "remote", path: "host:~/repo", zmxPath: "/opt/custom/bin/zmx")
+        projectStore.add(remote)
+        // Restored but never opened: no selectProject stamp on any pane.
+        let workspace = Workspace(projectID: remote.id, projectPath: remote.path)
+        appState.workspaces[remote.id] = workspace
+        var warmed: [UUID] = []
+        appState.incubatePane = { pane in
+            #expect(pane.remoteZmxPath == remote.zmxPath)
+            warmed.append(pane.id)
+        }
+
+        let response = await handler.handle(request(command, args: ControlArgs(
+            project: remote.id.uuidString, focus: focus
+        )))
+
+        #expect(response.ok)
+        let child: Pane
+        if command == "tab.new" {
+            child = try #require(workspace.tabs.last?.focusedPane)
+        } else {
+            let childID = try #require(response.data?.panes?.first?.id)
+            child = try #require(workspace.activeTab?.splitRoot.allPanes().first { $0.id.uuidString == childID })
+        }
+        #expect(child.isRemote)
+        #expect(child.remoteZmxPath == remote.zmxPath)
+        #expect(warmed == (focus ? [] : [child.id]))
+        #expect(appState.activeProjectID == selected)
+    }
+
+    /// The caller's project may be visible in another window, while the key
+    /// window is on a different tab or project. Neither window may follow the
+    /// child, even transiently, and a hidden child still needs a live shell.
+    @Test(arguments: ["tab.new", "pane.split"], [false, true])
+    func background_creation_preserves_all_selections_and_warms_only_the_child(
+        command: String, otherProject: Bool
+    ) async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore, name: "caller")
+        let workspace = try #require(appState.workspaces[project.id])
+        let sourceTab = try #require(workspace.activeTab)
+        let source = try #require(sourceTab.focusedPane)
+        appState.splitPane(direction: .horizontal, projectID: project.id, projects: projectStore.projects)
+        let sourceFocus = sourceTab.focusedPaneID
+        let sourceHistory = sourceTab.paneFocusHistory.items
+        try sourceTab.toggleZoom(paneID: #require(sourceFocus))
+        let selectedTabID = try #require(appState.createTab(projectID: project.id, projectPath: project.path))
+        let keyProject = otherProject ? seedProject(appState, projectStore, name: "elsewhere") : project
+        let background = WindowState(activeProjectID: project.id)
+        let key = WindowState(activeProjectID: keyProject.id)
+        appState.registerWindow(background)
+        appState.registerWindow(key)
+        appState.noteKeyWindow(key)
+        appState.selectTab(sourceTab.id, projectID: project.id, in: background)
+        let backgroundSelections = background.activeTabIDs
+        let keySelections = key.activeTabIDs
+        let recency = workspace.recencyOrder()
+        let recentProjects = appState.recentProjects(from: projectStore.projects).map(\.id)
+        var selections = 0
+        let onSelection = workspace.onActiveTabChanged
+        workspace.onActiveTabChanged = {
+            selections += 1
+            onSelection?()
+        }
+        var warmed: [UUID] = []
+        appState.incubatePane = { warmed.append($0.id) }
+
+        let args = command == "tab.new"
+            ? ControlArgs(project: project.id.uuidString, run: "echo child", focus: false)
+            : ControlArgs(session: source.sessionName, run: "echo child", focus: false, direction: "down")
+        let response = await handler.handle(request(command, args: args))
+
+        #expect(response.ok)
+        let child: Pane
+        if command == "tab.new" {
+            let info = try #require(response.data?.tabs?.first)
+            #expect(!info.active)
+            let tab = try #require(workspace.tabs.first { $0.id.uuidString == info.id })
+            child = try #require(tab.focusedPane)
+            #expect(workspace.recencyOrder() == recency + [tab.id])
+        } else {
+            let info = try #require(response.data?.panes?.first)
+            #expect(!info.focused)
+            child = try #require(sourceTab.splitRoot.allPanes().first { $0.id.uuidString == info.id })
+            #expect(workspace.recencyOrder() == recency)
+        }
+        #expect(child.command == "echo child")
+        #expect(warmed == [child.id])
+        #expect(selections == 0)
+        #expect(workspace.activeTabID == selectedTabID)
+        #expect(sourceTab.focusedPaneID == sourceFocus)
+        #expect(sourceTab.paneFocusHistory.items == sourceHistory)
+        #expect(sourceTab.zoomedPaneID == sourceFocus)
+        #expect(background.activeTabIDs == backgroundSelections)
+        #expect(key.activeTabIDs == keySelections)
+        #expect(background.activeProjectID == project.id)
+        #expect(key.activeProjectID == keyProject.id)
+        #expect(appState.activeProjectID == keyProject.id)
+        #expect(appState.keyWindowID == key.id)
+        #expect(appState.recentProjects(from: projectStore.projects).map(\.id) == recentProjects)
+    }
+
+    @Test(arguments: ["tab.new", "pane.split"], [false, true])
+    func background_shell_exit_closes_the_child_without_a_visit(command: String, pinned: Bool) async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let activeProject = appState.activeProjectID
+        appState.incubatePane = { _ = $0.ensureNSView() }
+        if pinned { appState.ensurePinnedWorkspace() }
+        let projectID = pinned ? PinnedTabs.projectID : project.id
+        // A split needs a source; create it in the background too.
+        let created = await handler.handle(request("tab.new", args: ControlArgs(
+            project: projectID.uuidString, focus: false
+        )))
+        let info = try #require(created.data?.tabs?.first)
+        let tabID = try #require(UUID(uuidString: info.id))
+        let workspace = try #require(appState.workspaces[projectID])
+        let tab = try #require(workspace.tabs.first { $0.id == tabID })
+        let source = try #require(tab.focusedPane)
+        let selected = workspace.activeTabID
+        var child = source
+        if command == "pane.split" {
+            let split = await handler.handle(request("pane.split", args: ControlArgs(
+                session: source.sessionName, focus: false
+            )))
+            #expect(split.ok)
+            let childID = try #require(split.data?.panes?.first?.id)
+            child = try #require(tab.splitRoot.allPanes().first { $0.id.uuidString == childID })
+        }
+        let exit = try #require(child.nsView?.onProcessExit)
+
+        exit()
+        // The asynchronous libghostty callback may be delivered twice.
+        exit()
+
+        #expect(appState.activeProjectID == activeProject)
+        let expectedSelection = command == "tab.new" && selected == tabID ? nil : selected
+        #expect(workspace.activeTabID == expectedSelection)
+        if command == "pane.split" {
+            #expect(tab.splitRoot.allPanes().map(\.id) == [source.id])
+            #expect(tab.focusedPaneID == source.id)
+        } else {
+            #expect(!workspace.tabs.contains { $0.id == tabID })
+            if pinned {
+                #expect(appState.pinnedRecord(tabID) != nil)
+                #expect(!appState.isPinnedTabLoaded(tabID))
+            }
+        }
+    }
+
+    @Test(arguments: ["tab.new", "pane.split"])
+    func background_creation_only_undims_the_started_tab_in_an_unloaded_project(command: String) async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        appState.zmx = .noop
+        let project = seedProject(appState, projectStore)
+        for _ in 0 ..< 2 {
+            appState.createTab(projectID: project.id, projects: [project])
+        }
+        // The target tab has several stopped panes, not just the split source.
+        for _ in 0 ..< 2 {
+            appState.splitPane(direction: .horizontal, projectID: project.id, projects: [project])
+        }
+        appState.unloadProject(project.id)
+        let workspace = try #require(appState.workspaces[project.id])
+        let target = try #require(workspace.activeTab)
+        let focused = try #require(target.focusedPaneID)
+        target.toggleZoom(paneID: focused)
+        let history = target.paneFocusHistory.items
+        #expect(workspace.tabs.count == 3)
+        #expect(workspace.tabs.allSatisfy { appState.isTabUnloaded($0, projectID: project.id) })
+        _ = seedProject(appState, projectStore, name: "elsewhere")
+        let selected = appState.activeProjectID
+        var warmed: [UUID] = []
+        appState.incubatePane = {
+            warmed.append($0.id)
+            _ = $0.ensureNSView()
+        }
+
+        let response = await handler.handle(request(command, args: ControlArgs(
+            project: project.id.uuidString, focus: false
+        )))
+
+        #expect(response.ok)
+        #expect(appState.isProjectUnloaded(project.id))
+        #expect(appState.isProjectLoaded(project.id))
+        let started = workspace.tabs.filter { !appState.isTabUnloaded($0, projectID: project.id) }
+        #expect(started.count == 1)
+        // An undimmed tab must have shells behind ALL its panes, including
+        // the original source and its siblings when this was a split.
+        let livePanes = started.flatMap { $0.splitRoot.allPanes() }
+        #expect(livePanes.allSatisfy { $0.nsView != nil })
+        #expect(Set(warmed) == Set(livePanes.map(\.id)))
+        #expect(warmed.count == (command == "tab.new" ? 1 : 4))
+        #expect(workspace.activeTabID == target.id)
+        #expect(target.focusedPaneID == focused)
+        #expect(target.paneFocusHistory.items == history)
+        #expect(target.zoomedPaneID == focused)
+        let stopped = workspace.tabs.filter { appState.isTabUnloaded($0, projectID: project.id) }
+        #expect(stopped.count == (command == "tab.new" ? 3 : 2))
+        #expect(stopped.flatMap { $0.splitRoot.allPanes() }.allSatisfy { $0.nsView == nil })
+        #expect(appState.activeProjectID == selected)
+    }
+
+    @Test
+    func background_split_stamps_every_revived_remote_pane_before_incubation() async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        appState.zmx = .noop
+        let remote = Project(name: "remote", path: "host:~/repo", zmxPath: "/opt/custom/bin/zmx")
+        projectStore.add(remote)
+        let workspace = Workspace(projectID: remote.id, projectPath: remote.path)
+        appState.workspaces[remote.id] = workspace
+        let tab = try #require(workspace.activeTab)
+        let sourceID = try #require(tab.focusedPaneID)
+        _ = tab.split(paneID: sourceID, direction: .horizontal)
+        appState.unloadProject(remote.id)
+        let restored = try #require(appState.workspaces[remote.id]?.activeTab)
+        #expect(restored.splitRoot.allPanes().allSatisfy { $0.remoteZmxPath == nil })
+        var warmed: [UUID] = []
+        appState.incubatePane = {
+            #expect($0.remoteZmxPath == remote.zmxPath)
+            warmed.append($0.id)
+        }
+
+        let response = await handler.handle(request("pane.split", args: ControlArgs(
+            project: remote.id.uuidString, focus: false
+        )))
+
+        #expect(response.ok)
+        #expect(warmed.count == 3)
+        #expect(Set(warmed) == Set(restored.splitRoot.allPanes().map(\.id)))
+        #expect(appState.activeProjectID == nil)
+    }
+
+    @Test(arguments: ["tab.new", "pane.split"], [nil, true] as [Bool?])
+    func foreground_creation_still_selects_without_incubation(command: String, focus: Bool?) async throws {
+        let (handler, appState, projectStore) = makeHandler()
+        let project = seedProject(appState, projectStore)
+        let workspace = try #require(appState.workspaces[project.id])
+        let tab = try #require(workspace.activeTab)
+        let previous = tab.focusedPaneID
+        var warmed: [UUID] = []
+        appState.incubatePane = { warmed.append($0.id) }
+
+        let response = await handler.handle(request(command, args: ControlArgs(focus: focus)))
+
+        #expect(response.ok)
+        #expect(warmed.isEmpty)
+        if command == "tab.new" {
+            #expect(response.data?.tabs?.first?.active == true)
+            #expect(workspace.activeTabID != tab.id)
+        } else {
+            #expect(response.data?.panes?.first?.focused == true)
+            #expect(tab.focusedPaneID != previous)
+            #expect(tab.paneFocusHistory.items.first == previous)
+        }
     }
 
     @Test

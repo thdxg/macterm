@@ -572,10 +572,9 @@ struct SidebarContent: View {
             selectionItem: .tab(projectID: project.id, tabID: tab.id),
             presentation: presentation,
             isInteractive: isInteractive,
-            // An unloaded project keeps its tabs as a layout with no shells
-            // behind them — the same state a closed pinned tab is in, so it
-            // gets the same dimmed treatment.
-            isUnloaded: appState.isProjectUnloaded(project.id),
+            // Background creation can start one tab in an unloaded project;
+            // only that row revives, not the tabs still waiting for shells.
+            isUnloaded: appState.isTabUnloaded(tab, projectID: project.id),
             projectColor: project.color,
             onRename: { newName in
                 tab.customTitle = newName.isEmpty ? nil : newName

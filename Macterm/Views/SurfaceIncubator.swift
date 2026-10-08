@@ -48,9 +48,10 @@ final class SurfaceIncubator {
         scroll.layoutSubtreeIfNeeded()
         // Wire the title callback so an off-screen pane refreshes its
         // foreground-process name (the tab name) on each command boundary before
-        // the tab is ever viewed. The rest of the callbacks are UI-coupled and
-        // are wired by `TerminalSurface.configure` when SwiftUI adopts the view;
-        // `configure` re-sets `onTitleChange` to the same effect, so this isn't
+        // the tab is ever viewed. AppState's shared `warmPane` wires
+        // `onProcessExit` after every warm so never-viewed panes close too. UI
+        // callbacks are wired by `TerminalSurface.configure` when SwiftUI
+        // adopts the view; it re-sets `onTitleChange` to the same effect, so this isn't
         // clobbered in a way that matters. (`currentPwd` is set directly by the
         // callback dispatcher, so it already works off-screen.)
         pane.nsView?.onTitleChange = { [weak pane] title in pane?.receiveReportedTitle(title) }

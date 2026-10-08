@@ -141,6 +141,9 @@ extension SplitNode {
             let newPane = Pane(
                 projectPath: projectPath, projectID: projectID, sessionSlug: p.sessionSlug, command: command, env: env
             )
+            // Host configuration follows the source, just like the remote cwd.
+            // This must be set before the sibling's first surface is created.
+            newPane.remoteZmxPath = p.remoteZmxPath
             let first: SplitNode = position == .first ? .pane(newPane) : .pane(p)
             let second: SplitNode = position == .first ? .pane(p) : .pane(newPane)
             return (.split(SplitBranch(direction: direction, first: first, second: second)), newPane.id)

@@ -13,32 +13,39 @@ struct ControlClient {
         var isConnectionFailure: Bool
     }
 
-    /// Send one request and return the decoded response.
+    /// Send one request and return the decoded response. Requests requiring
+    /// newer fields first probe the server: shipped v1 apps ignore request
+    /// versions as well as unknown fields. Once verified, pin the mutation to
+    /// that socket so a failed send cannot fall through to an older instance.
     func send(command: String, args: ControlArgs? = nil) throws -> ControlResponse {
         let request = ControlRequest(command: command, args: args)
         let payload = try ControlProtocol.encode(request)
+        let needsPreflight = request.v > ControlProtocol.minimumSupportedVersion
 
         var attempts: [String] = []
         for path in candidatePaths() {
+            if needsPreflight {
+                let probe = ControlRequest(command: "status")
+                switch try tryPath(path, payload: ControlProtocol.encode(probe)) {
+                case let .success(raw):
+                    let response = try decode(raw, id: probe.id, path: path)
+                    try verifyVersion(response, minimum: request.v, path: path)
+                case let .failure(reason):
+                    attempts.append("  \(path): \(reason)")
+                    continue
+                }
+            }
             switch tryPath(path, payload: payload) {
             case let .success(raw):
-                let response: ControlResponse
-                do {
-                    response = try ControlProtocol.decodeResponse(raw)
-                } catch {
-                    throw ClientError(
-                        description: "undecodable response from \(path): \(error.localizedDescription)",
-                        isConnectionFailure: false
-                    )
-                }
-                guard response.id == request.id else {
-                    throw ClientError(
-                        description: "response id mismatch from \(path)",
-                        isConnectionFailure: false
-                    )
-                }
-                return response
+                return try decode(raw, id: request.id, path: path)
             case let .failure(reason):
+                if needsPreflight {
+                    throw ClientError(
+                        description: "the verified Macterm at \(path) stopped answering (\(reason)); "
+                            + "refusing to fall through to another instance",
+                        isConnectionFailure: true
+                    )
+                }
                 attempts.append("  \(path): \(reason)")
             }
         }
@@ -49,6 +56,44 @@ struct ControlClient {
             description: "could not reach Macterm's control socket:\n" + attempts.joined(separator: "\n") + hint,
             isConnectionFailure: true
         )
+    }
+
+    /// An answering app is the target, even when it refuses the probe or
+    /// predates the feature. Never skip it to mutate a different instance.
+    private func verifyVersion(_ response: ControlResponse, minimum: Int, path: String) throws {
+        guard response.ok else {
+            let error = response.error ?? ControlError(code: .internalError, message: "version probe failed")
+            let action = error.action.map { " (\($0))" } ?? ""
+            throw ClientError(
+                description: "Macterm at \(path) could not confirm this command: \(error.message)\(action)",
+                isConnectionFailure: false
+            )
+        }
+        guard response.v >= minimum else {
+            throw ClientError(
+                description: "Macterm speaks control protocol v\(response.v), but this command needs v\(minimum); upgrade Macterm",
+                isConnectionFailure: false
+            )
+        }
+    }
+
+    private func decode(_ raw: Data, id: String, path: String) throws -> ControlResponse {
+        let response: ControlResponse
+        do {
+            response = try ControlProtocol.decodeResponse(raw)
+        } catch {
+            throw ClientError(
+                description: "undecodable response from \(path): \(error.localizedDescription)",
+                isConnectionFailure: false
+            )
+        }
+        guard response.id == id else {
+            throw ClientError(
+                description: "response id mismatch from \(path)",
+                isConnectionFailure: false
+            )
+        }
+        return response
     }
 
     /// Discovery order: explicit `--socket` is a hard pin (tried alone);

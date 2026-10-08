@@ -22,22 +22,24 @@ extension AgentSkills {
 
         ## 1. Start it
 
-        In a new tab, which becomes the active tab, so the user's view switches to it:
+        In a background tab, leaving the user's view and focus alone:
 
         ```sh
         macterm project list --json
-        macterm tab new --project api --run "claude" --json
+        macterm tab new --project api --no-focus --run "claude" --json
         macterm pane list --project api --tab 4 --json
         ```
 
-        Choose the project whose `path` holds the work, and make sure it is the one on screen (`active` in that
-        list): a tab opened in another project gets no terminal until the user opens that project, so its agent
-        doesn't start until then. `tab new` reports the new tab's `index` and `id`, and `pane list --tab` with either one
-        gives its pane's `session`. To start the agent beside you instead, split your own pane; the reply is
-        the new pane itself:
+        Choose a loaded project whose `path` holds the work. `--no-focus` starts the terminal even if that
+        project isn't on screen; without it, a tab in another project may wait until viewed. An app too old
+        to honor `--no-focus` fails the command up front (exit 1) before creating anything, rather than
+        silently stealing focus. `tab new` defaults to the active project, not the caller's, so pass
+        `--project` explicitly. Its reply gives the
+        new tab's `index` and `id`, and `pane list --tab` with either gives its pane's `session`. To start the
+        agent beside you instead, split your own pane without taking focus; the reply is the new pane itself:
 
         ```sh
-        macterm pane split --direction right --run "codex" --json
+        macterm pane split --direction right --no-focus --run "codex" --json
         ```
 
         Outside Macterm, add `--session` naming the pane to split, or you split whichever pane the user has

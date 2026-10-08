@@ -177,7 +177,8 @@ final class TerminalTab: Identifiable {
     /// (the layout `run:` path — typed into the fresh shell verbatim).
     /// `newPaneWorkingDirectory` overrides cwd inheritance without changing
     /// the source pane's project-scoped session slug. `env` is extra
-    /// environment for the new pane's shell.
+    /// environment for the new pane's shell. With `focus: false`, preserve
+    /// focus, history and zoom; the caller must start a hidden pane.
     @discardableResult
     func split(
         paneID: UUID,
@@ -185,7 +186,8 @@ final class TerminalTab: Identifiable {
         position: SplitPosition = .second,
         command: String? = nil,
         env: [String: String]? = nil,
-        newPaneWorkingDirectory: String? = nil
+        newPaneWorkingDirectory: String? = nil,
+        focus: Bool = true
     ) -> UUID? {
         // Bail before any side effect if the pane isn't in this tab — otherwise
         // an unknown ID would clear the user's zoom and rebalance ratios for a
@@ -216,9 +218,11 @@ final class TerminalTab: Identifiable {
             env: env
         )
         splitRoot = newRoot
-        // Splitting reveals a new pane — exit zoom so it's visible.
-        zoomedPaneID = nil
-        if let newID { focusPane(newID) }
+        if focus {
+            // A foreground split reveals and focuses the new pane.
+            zoomedPaneID = nil
+            if let newID { focusPane(newID) }
+        }
         if Preferences.shared.autoTilingEnabled { splitRoot.rebalanced() }
         return newID
     }
@@ -511,12 +515,17 @@ final class Workspace: Identifiable {
         }
     }
 
+    /// Append without visiting when `focus` is false: a select-and-restore
+    /// would publish a transient selection and pollute the recent-tab history.
+    /// With no active tab, adopt the new one; there is no selection to preserve.
     @discardableResult
     func createTab(
         projectPath: String,
         sessionSlug: String? = nil,
+        remoteZmxPath: String? = nil,
         command: String? = nil,
-        env: [String: String]? = nil
+        env: [String: String]? = nil,
+        focus: Bool = true
     ) -> TerminalTab {
         let tab = TerminalTab(
             projectPath: projectPath,
@@ -525,9 +534,20 @@ final class Workspace: Identifiable {
             command: command,
             env: env
         )
+        // Selection hooks may create window mirrors synchronously. Give them
+        // the host configuration too, before publishing the new tab.
+        for pane in tab.splitRoot.allPanes() {
+            pane.remoteZmxPath = remoteZmxPath
+        }
         tabs.append(tab)
-        if let current = activeTabID { tabHistory.push(current) }
-        activeTabID = tab.id
+        if focus {
+            if let current = activeTabID { tabHistory.push(current) }
+            activeTabID = tab.id
+        } else if activeTabID == nil {
+            // No prior selection to preserve or record (normally the last
+            // tab was just closed). Keep the workspace selectable.
+            activeTabID = tab.id
+        }
         return tab
     }
 

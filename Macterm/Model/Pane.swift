@@ -45,8 +45,9 @@ final class Pane: Identifiable {
     let remoteSpec: ProjectPath?
     /// Optional explicit remote zmx path (#104), from the pane's `Project`.
     /// Not part of pane identity and not persisted — `AppState` stamps it from
-    /// the project each time the workspace is built (it's a host property,
-    /// re-derivable on every open). Read by `ensureNSView` (spawn) and
+    /// the project on open and before publishing new tabs; new splits inherit
+    /// it from their source (it's a host property, re-derivable on every open).
+    /// Read by `ensureNSView` (spawn) and
     /// `killPersistentSession` (teardown). nil = resolve `zmx` via PATH.
     @ObservationIgnored
     var remoteZmxPath: String?
