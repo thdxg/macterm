@@ -97,11 +97,59 @@ struct CustomPaletteFile: Codable, Equatable {
     }
 
     static func parse(yaml: String) throws -> CustomPaletteFile {
+        let file: CustomPaletteFile
         do {
-            return try YAMLDecoder().decode(CustomPaletteFile.self, from: yaml)
+            file = try YAMLDecoder().decode(CustomPaletteFile.self, from: yaml)
         } catch {
             throw CustomPaletteError.parse(underlying: error)
         }
+        if let unknown = unknownKey(yaml: yaml) { throw CustomPaletteError.invalid(unknown) }
+        return file
+    }
+
+    /// The keys each level of a file may have — the schema's `properties`,
+    /// which `CustomPaletteFileTests` holds these to.
+    static let fileKeys: Set<String> = ["name", "icon", "description", "requires", "root", "nodes"]
+    static let nodeKeys: Set<String> = [
+        "placeholder", "items", "list", "rows", "title", "subtitle", "icon", "match", "export", "enter", "action", "alt",
+    ]
+    static let itemKeys: Set<String> = ["title", "subtitle", "icon", "export", "enter", "action", "alt"]
+    static let actionKeys: Set<String> = ["title", "run", "in", "copy", "open"]
+
+    /// The first key the file has that no level takes, named where it is
+    /// (`pods: mathc: no such key`), as every other mistake is. The decoder
+    /// drops a key it doesn't know, so without this a misspelled optional
+    /// key (`subtitel:`) would silently do nothing.
+    static func unknownKey(yaml: String) -> String? {
+        // The decoder's own resolver (merge keys only), so a node named
+        // `404:` or `on:` stays a string key here as it does there, rather
+        // than turning the whole `nodes:` map into one this can't read.
+        guard let root = (try? Yams.load(yaml: yaml, Resolver.basic.appending(.merge))) as? [String: Any] else { return nil }
+        func stray(_ dict: [String: Any], _ allowed: Set<String>) -> String? {
+            dict.keys.filter { !allowed.contains($0) && $0 != "<<" }.min()
+        }
+        func action(_ value: Any?, at place: String) -> String? {
+            guard let dict = value as? [String: Any], let key = stray(dict, actionKeys) else { return nil }
+            return "\(place): \(key): no such key"
+        }
+        if let key = stray(root, fileKeys) { return "\(key): no such key" }
+        let nodes = root["nodes"] as? [String: Any] ?? [:]
+        for name in nodes.keys.sorted() {
+            guard let node = nodes[name] as? [String: Any] else { continue }
+            if let key = stray(node, nodeKeys) { return "\(name): \(key): no such key" }
+            if let problem = action(node["action"], at: "\(name): action") ?? action(node["alt"], at: "\(name): alt") {
+                return problem
+            }
+            for (index, value) in (node["items"] as? [Any] ?? []).enumerated() {
+                guard let item = value as? [String: Any] else { continue }
+                let place = "\(name) item \(index + 1) (\(item["title"].map { "\($0)" } ?? ""))"
+                if let key = stray(item, itemKeys) { return "\(place): \(key): no such key" }
+                if let problem = action(item["action"], at: "\(place): action") ?? action(item["alt"], at: "\(place): alt") {
+                    return problem
+                }
+            }
+        }
+        return nil
     }
 
     /// What a file says it is, read leniently — so a file that fails
@@ -162,10 +210,37 @@ enum CustomPaletteAction: Equatable {
                 target = parsed
             }
             self = .run(command: run, in: target)
-        } else if let copy = action.copy {
-            self = .copy(copy)
         } else {
-            self = .open(action.open ?? "")
+            // `in:` says where a command runs; a copy or an open has none.
+            if let raw = action.in {
+                throw CustomPaletteError.invalid("\(place): in: \(raw) goes with run:, not copy: or open:")
+            }
+            self = if let copy = action.copy { .copy(copy) } else { .open(action.open ?? "") }
+        }
+    }
+}
+
+/// An `export:`'s variable names: ones `sh` can read (`[A-Za-z_][A-Za-z0-9_]*`),
+/// and none Macterm sets itself — those would be silently overwritten.
+enum CustomPaletteExports {
+    static let reserved: Set<String> = [
+        CustomPaletteEnvironment.projectDirectoryKey,
+        CustomPaletteEnvironment.projectNameKey,
+        CustomPaletteScript.commandVariable,
+        CustomPaletteRequirements.variable,
+    ]
+
+    static func validate(_ exports: [String: String]?, at place: String) throws {
+        for name in (exports ?? [:]).keys.sorted() {
+            let scalars = Array(name.unicodeScalars)
+            let isName = scalars.first.map { $0 == "_" || ($0.isASCII && CharacterSet.letters.contains($0)) } == true
+                && scalars.allSatisfy { $0 == "_" || ($0.isASCII && CharacterSet.alphanumerics.contains($0)) }
+            guard isName else {
+                throw CustomPaletteError.invalid("\(place): export: \(name) isn't a variable name sh can read")
+            }
+            guard !reserved.contains(name) else {
+                throw CustomPaletteError.invalid("\(place): export: \(name) is set by Macterm; pick another name")
+            }
         }
     }
 }
@@ -299,6 +374,7 @@ struct CustomPalette: Equatable, Identifiable {
             if let action = item.action, action.title != nil {
                 throw CustomPaletteError.invalid("\(place): title: goes on alt:, not action:")
             }
+            try CustomPaletteExports.validate(item.export, at: place)
             return try Item(
                 title: item.title,
                 subtitle: item.subtitle,
@@ -321,7 +397,11 @@ struct CustomPalette: Equatable, Identifiable {
             throw CustomPaletteError.invalid("\(name): title: goes on alt:, not action:")
         }
         let title = node.title ?? "."
+        if node.match?.isEmpty == true {
+            throw CustomPaletteError.invalid("\(name): match: needs at least one field, or leave it out")
+        }
         let match = node.match ?? [title, node.subtitle].compactMap(\.self)
+        try CustomPaletteExports.validate(node.export, at: name)
         let listing = try Listing(
             command: command,
             rowsPath: node.rows,

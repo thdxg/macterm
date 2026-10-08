@@ -144,6 +144,73 @@ struct CustomPaletteFileTests {
         #expect(palette.requires == ["kubectl", "jq"])
     }
 
+    /// A key no level takes is a mistake like any other, named where it is —
+    /// the decoder alone drops it, and a misspelled `subtitel:` silently did
+    /// nothing.
+    @Test
+    func a_key_nothing_takes_is_named_where_it_is() {
+        #expect(Self.invalidMessage("name: X\ndescripton: y\nnodes: { root: { items: [] } }") == "descripton: no such key")
+        #expect(Self.invalidMessage("name: X\nnodes: { pods: { list: ls, mathc: [.], action: { copy: . } } }")
+            == "pods: mathc: no such key")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, subtitel: b, action: { copy: a } }] } }")
+            == "root item 1 (A): subtitel: no such key")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { run: x, inn: split } } }")
+            == "root: action: inn: no such key")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, action: { copy: a }, alt: { copy: b, titel: c } }] } }")
+            == "root item 1 (A): alt: titel: no such key")
+        #expect(
+            Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { title: T, run: x } } }")
+                == "root: title: goes on alt:, not action:",
+            "a key that exists elsewhere keeps its own message"
+        )
+    }
+
+    /// Rules the decoder can't see: where `in:` goes, a `match:` that
+    /// could match nothing, and export names `sh` can't read or Macterm
+    /// sets itself.
+    @Test
+    func in_match_and_export_names_are_checked() {
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { copy: ., in: split } } }")
+            == "root: in: split goes with run:, not copy: or open:")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, match: [], action: { copy: . } } }")
+            == "root: match: needs at least one field, or leave it out")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, export: { my-var: . }, action: { copy: . } } }")
+            == "root: export: my-var isn't a variable name sh can read")
+        #expect(Self
+            .invalidMessage(
+                "name: X\nnodes: { root: { items: [{ title: A, export: { MACTERM_PALETTE_COMMAND: x }, action: { copy: a } }] } }"
+            )
+            == "root item 1 (A): export: MACTERM_PALETTE_COMMAND is set by Macterm; pick another name")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, export: { _NS1: . }, action: { copy: . } } }") == nil)
+    }
+
+    /// A node named like a number or a boolean is still a name, and its keys
+    /// are still checked — read as the decoder reads them.
+    @Test
+    func a_node_named_like_a_number_still_has_its_keys_checked() {
+        #expect(Self.invalidMessage("name: X\nroot: \"404\"\nnodes: { 404: { list: ls, mathc: [.], action: { copy: . } } }")
+            == "404: mathc: no such key")
+        #expect(Self.invalidMessage("name: X\nroot: \"on\"\nnodes: { on: { list: ls, action: { copy: . } } }") == nil)
+    }
+
+    /// The keys each level takes are the schema's, so an editor validating
+    /// against it and Macterm agree on what a file may say.
+    @Test
+    func the_keys_each_level_takes_are_the_schemas() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("assets/palette.schema.json")
+        let schema = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        func properties(_ object: Any?) -> Set<String> {
+            Set(((object as? [String: Any])?["properties"] as? [String: Any] ?? [:]).keys)
+        }
+        let defs = try #require(schema["$defs"] as? [String: Any])
+        #expect(CustomPaletteFile.fileKeys == properties(schema))
+        #expect(CustomPaletteFile.nodeKeys == properties(defs["node"]))
+        #expect(CustomPaletteFile.itemKeys == properties(defs["item"]))
+        #expect(CustomPaletteFile.actionKeys == properties(defs["actionFields"]).union(properties(defs["alt"])))
+    }
+
     @Test
     func every_mistake_is_named_with_its_node_and_field() {
         #expect(Self.invalidMessage("name: X\nrequires: [kubectl jq]\nnodes: { root: { items: [] } }")

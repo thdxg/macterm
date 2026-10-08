@@ -35,6 +35,12 @@ struct SearchText {
         var previous = CharClass.white
         var offset: Int32 = 0
         for scalar in string.unicodeScalars {
+            // A combining mark folds away (`fold`) and belongs to the
+            // character before it: it neither matches nor starts a word.
+            if Self.isCombiningMark(scalar) {
+                offset += 1
+                continue
+            }
             let cls = CharClass(scalar)
             let here = SearchScoring.bonus(previous: previous, current: cls)
             var first = true
@@ -73,7 +79,11 @@ struct SearchText {
 
     /// Case- and diacritic-folds one scalar into `emit`. ASCII skips
     /// Foundation entirely; anything else goes through `folding(options:)`,
-    /// the same fold `localizedStandardContains`-style search uses.
+    /// the same fold `localizedStandardContains`-style search uses. Folding
+    /// goes a scalar at a time, so a combining mark — the accent of a
+    /// decomposed `é`, as file names and command output often arrive — is
+    /// dropped here: on its own it folds to itself, and `café` typed one way
+    /// wouldn't find it written the other.
     @inline(__always)
     static func fold(_ scalar: Unicode.Scalar, _ emit: (UInt32) -> Void) {
         let value = scalar.value
@@ -81,10 +91,16 @@ struct SearchText {
             emit(value >= 0x41 && value <= 0x5A ? value + 0x20 : value)
             return
         }
+        if isCombiningMark(scalar) { return }
         let folded = String(scalar).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         for out in folded.unicodeScalars {
             emit(out.value)
         }
+    }
+
+    @inline(__always)
+    static func isCombiningMark(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value >= 0x80 && scalar.properties.generalCategory == .nonspacingMark
     }
 
     /// One of 64 bits per folded scalar: letters and digits get their own,
@@ -117,10 +133,9 @@ enum CharClass: Int8 {
             case 0x61 ... 0x7A: self = .lower
             case 0x41 ... 0x5A: self = .upper
             case 0x30 ... 0x39: self = .number
+            // fzf's whitespace: space, \t \n \v \f \r.
             case 0x20,
-                 0x09,
-                 0x0A,
-                 0x0D: self = .white
+                 0x09 ... 0x0D: self = .white
             // `/` `,` `:` `;` `|` separate the parts of a path or a list.
             case 0x2F,
                  0x2C,
@@ -146,6 +161,4 @@ enum CharClass: Int8 {
             self = .nonWord
         }
     }
-
-    var isWord: Bool { rawValue > CharClass.delimiter.rawValue }
 }

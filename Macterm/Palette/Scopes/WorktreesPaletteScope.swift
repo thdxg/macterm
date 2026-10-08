@@ -40,9 +40,7 @@ final class WorktreesPaletteScope: PaletteScope {
             guard let match = Search.match(search, fields: [Self.title(for: worktree), worktree.displayPath]) else { return nil }
             return item(for: worktree, score: 0, in: project, context: context).with(match)
         }
-        .enumerated()
-        .sorted { ($0.element.score, $0.offset) < ($1.element.score, $1.offset) }
-        .map(\.element)
+        .rankedByScore()
         guard !ranked.isEmpty else { return [] }
         return [PaletteSection(header: nil, items: ranked)]
     }

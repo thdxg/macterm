@@ -90,7 +90,7 @@ struct CommandSource: PaletteSource {
 
         // Rename actions need to wait until the palette has dismissed so the
         // textfield in the sidebar can take first responder. Defer via
-        // postPaletteAction; CommandPaletteOverlay fires it on close.
+        // postPaletteAction; `MainWindow` fires it once the palette closes.
         let action: () -> Void = switch command {
         case .renameTab,
              .renameProject:

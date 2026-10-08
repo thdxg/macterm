@@ -60,6 +60,34 @@ struct CustomPaletteScopeTests {
         }
     }
 
+    /// A palette kept by a dotfiles manager is a link: saving the file it
+    /// points at changes the target's date, never the link's.
+    @Test
+    func an_edit_through_a_symlinked_file_is_seen() throws {
+        let (_, store, dir) = try makeContext(files: [:])
+        let target = dir.deletingLastPathComponent().appendingPathComponent("dotfiles-git.yaml")
+        try "name: Before\nnodes: { root: { list: ls, action: { copy: . } } }".write(to: target, atomically: false, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("git.yaml"), withDestinationURL: target)
+        store.reload()
+        #expect(store.palette(id: "git")?.name == "Before")
+
+        try "name: After\nnodes: { root: { list: ls, action: { copy: . } } }".write(to: target, atomically: false, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: target.path)
+        store.reloadIfChanged()
+        #expect(store.palette(id: "git")?.name == "After")
+    }
+
+    /// `git.yaml` and `git.yml` would share an id; the second says so
+    /// rather than shadowing the first unseen.
+    @Test
+    func two_files_with_one_name_keep_the_first_and_explain_the_second() throws {
+        let palette = "name: Git\nnodes: { root: { list: ls, action: { copy: . } } }"
+        let (_, store, _) = try makeContext(files: ["git.yaml": palette, "git.yml": palette])
+        #expect(store.entries.map(\.id) == ["git", "git.yml"])
+        #expect(store.palette(id: "git")?.name == "Git")
+        #expect(store.entry(id: "git.yml")?.failure?.errorDescription == "another file is already the palette git; rename one")
+    }
+
     @Test
     func the_store_reads_every_file_and_keeps_a_broken_one_with_its_error() throws {
         let (_, store, dir) = try makeContext(files: [
@@ -346,6 +374,45 @@ struct CustomPaletteScopeTests {
         let remotePane = try #require(state.focusedPane(for: remote.id))
         #expect(remotePane.command == "htop", "ssh carries no environment, so a remote pane still types it")
         #expect(remotePane.env?[CustomPaletteScript.commandVariable] == nil)
+    }
+
+    /// A pinned tab belongs to no project: the command splits beside it,
+    /// untyped, in the pinned tabs' home — never a tab, which would be
+    /// pinned itself.
+    @Test
+    func a_run_action_with_a_pinned_tab_active_splits_beside_it() throws {
+        let (context, _, _) = try makeContext(files: [:])
+        let state = context.appState
+        state.selectPinnedProject()
+        _ = try #require(state.createTab(projectID: PinnedTabs.projectID, projectPath: PinnedTabs.fallbackRoot))
+        let before = state.workspaces[PinnedTabs.projectID]?.tabs.count
+        CustomPaletteActions.perform(
+            .run(command: "htop", in: .tab),
+            operand: nil,
+            exports: ["HOST": "a"],
+            appState: state,
+            projects: context.projectStore.projects
+        )
+        #expect(state.workspaces[PinnedTabs.projectID]?.tabs.count == before, "no new pinned tab")
+        let panes = try #require(state.workspaces[PinnedTabs.projectID]?.activeTab?.splitRoot.allPanes())
+        #expect(panes.count == 2)
+        let pane = try #require(state.focusedPane(for: PinnedTabs.projectID))
+        #expect(pane.command == nil)
+        #expect(pane.env?[CustomPaletteScript.commandVariable] == "htop")
+        #expect(pane.env?["HOST"] == "a")
+    }
+
+    /// An `open:` path a listing printed relative to the project (`git
+    /// ls-files`) opens there, not under the app's `/`.
+    @Test
+    func a_relative_open_path_resolves_against_the_project() throws {
+        let (context, _, _) = try makeContext(files: [:])
+        let projects = context.projectStore.projects
+        #expect(CustomPaletteActions.fileURL("src/main.swift", appState: context.appState, projects: projects)
+            .path == "/tmp/src/main.swift")
+        #expect(CustomPaletteActions.fileURL("/etc/hosts", appState: context.appState, projects: projects).path == "/etc/hosts")
+        #expect(CustomPaletteActions.fileURL("~/x", appState: context.appState, projects: projects).path
+            == (NSHomeDirectory() as NSString).appendingPathComponent("x"))
     }
 
     @Test

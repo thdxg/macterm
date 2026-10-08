@@ -25,6 +25,17 @@ struct CustomPaletteLaunchTests {
         #expect(CustomPaletteLaunch.flags(forShell: "/usr/local/bin/pwsh") == ["-Login", "-Interactive", "-Command"])
     }
 
+    /// A listing's login shell: no interactive flag, and plain `-c` for the
+    /// shells that refuse `-l` beside it.
+    @Test
+    func a_listing_starts_its_shell_as_a_login_shell_where_it_can() {
+        #expect(CustomPaletteLaunch.loginFlags(forShell: "/bin/zsh") == ["-l", "-c"])
+        #expect(CustomPaletteLaunch.loginFlags(forShell: "/opt/homebrew/bin/nu") == ["-l", "-c"])
+        #expect(CustomPaletteLaunch.loginFlags(forShell: "/bin/tcsh") == ["-c"])
+        #expect(CustomPaletteLaunch.loginFlags(forShell: "/opt/homebrew/bin/elvish") == ["-c"])
+        #expect(CustomPaletteLaunch.loginFlags(forShell: "/usr/local/bin/pwsh") == ["-Login", "-Command"])
+    }
+
     @Test
     func the_runner_reads_back_the_shell_it_was_given_and_the_argv_ghostty_appended() throws {
         let wrapper = CustomPaletteLaunch.wrapperArgv(cli: "/App/bin/macterm", shell: "/opt/homebrew/bin/nu")

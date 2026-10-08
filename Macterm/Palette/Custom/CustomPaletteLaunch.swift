@@ -18,16 +18,20 @@ import Foundation
 /// zsh and bash: its only syntax is a single-quoted string with no `'` or `\`
 /// in it (`TextFileEditor`'s rule). Inside it `sh` reads the variable, unsets
 /// it so the command's own children don't inherit it, and either execs
-/// `sh -o errexit -c` on the command or writes it to a private temp file,
-/// runs it, and removes it — `trap : INT` keeps the trampoline alive through
-/// a ⌃C to the script so the file is still removed, while the script itself
-/// gets the signal as usual.
+/// `sh -o errexit -c --` on the command (`--`, or a command starting with `-`
+/// is read as `sh`'s options) or writes it to a private temp file — with a
+/// final newline, without which macOS won't honor a one-line `#!` — runs it,
+/// and removes it. `trap : INT` keeps the trampoline alive through a ⌃C to
+/// the script so the file is still removed, while the script itself gets the
+/// signal as usual; a SIGTERM to the whole group (a listing's timeout)
+/// removes it on the way out.
 enum CustomPaletteScript {
     static let commandVariable = "MACTERM_PALETTE_COMMAND"
 
     static let trampoline = #"/bin/sh -c 'c=$MACTERM_PALETTE_COMMAND; unset MACTERM_PALETTE_COMMAND; "#
-        + ##"case $c in "#!"*) f=$(mktemp -t macterm-palette) || exit 1; printf %s "$c" >"$f"; chmod 700 "$f"; "##
-        + #"trap : INT; "$f"; s=$?; rm -f "$f"; exit $s;; *) exec /bin/sh -o errexit -c "$c";; esac'"#
+        + ##"case $c in "#!"*) f=$(mktemp -t macterm-palette) || exit 1; gone() { rm -f -- "$f"; }; "##
+        + #"trap "gone; exit 143" TERM HUP; printf %s "$c" >"$f"; echo >>"$f"; chmod 700 "$f"; "#
+        + #"trap : INT; "$f"; s=$?; gone; exit $s;; *) exec /bin/sh -o errexit -c -- "$c";; esac'"#
 
     /// The line the login shell runs for `command`, and what it needs added
     /// to the environment.
@@ -88,6 +92,14 @@ enum CustomPaletteLaunch {
              "powershell": ["-Login", "-Interactive", "-Command"]
         default: ["-i", "-l", "-c"]
         }
+    }
+
+    /// What starts `shell` as a login shell running one command, for a
+    /// listing: `flags(forShell:)` without the interactive flag — a listing
+    /// has no terminal, and an interactive rc would print into its rows.
+    /// csh, tcsh and elvish reject `-l` beside `-c`, so they run it plain.
+    static func loginFlags(forShell shell: String) -> [String] {
+        flags(forShell: shell).filter { $0 != "-i" && $0 != "-Interactive" }
     }
 
     /// The arguments put in front of the resolved command: the bundled CLI's

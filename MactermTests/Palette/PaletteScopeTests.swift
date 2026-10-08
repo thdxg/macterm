@@ -72,16 +72,25 @@ struct PaletteScopeTests {
     }
 
     @Test
-    func built_in_scopes_neither_load_nor_fail() {
+    func built_in_scopes_start_neither_loading_nor_failed() {
         for id in PaletteScopeID.builtIn {
             let frame = PaletteFrame(id)
             #expect(frame.scope.loading == nil)
             #expect(frame.scope.failure == nil)
             #expect(frame.pill == id.pill)
-            frame.scope.retry()
+        }
+        // Passwords and Worktrees read live state, so activating them loads
+        // nothing; Files indexes, and with no local project says so.
+        for id in [PaletteScopeID.passwords, .worktrees] {
+            let frame = PaletteFrame(id)
             frame.scope.activate(context: makeContext()) {}
+            #expect(frame.scope.loading == nil && frame.scope.failure == nil, "\(id)")
             frame.scope.deactivate()
         }
+        let files = PaletteFrame(.files)
+        files.scope.activate(context: makeContext()) {}
+        #expect(files.scope.failure?.title == "No local project to search")
+        files.scope.deactivate()
     }
 
     @Test

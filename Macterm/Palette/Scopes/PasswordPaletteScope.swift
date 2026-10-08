@@ -36,7 +36,7 @@ final class PasswordPaletteScope: PaletteScope {
             guard let match = Search.match(search, fields: Self.fields(entry.id)) else { return nil }
             return item(for: entry, score: 0, canFill: canFill, context: context).with(match)
         }
-        .sorted { ($0.score, $0.title, $0.id) < ($1.score, $1.title, $1.id) }
+        .rankedByScore()
 
         var sections: [PaletteSection] = []
         if !matches.isEmpty {

@@ -4,9 +4,9 @@ import AppKit
 // MactermApp.swift. These responders own focused slices of that logic and get
 // ordered by the KeyRouter so disposition is explicit instead of implicit.
 
-/// Toggles the unified command palette on Cmd+P / Cmd+Shift+P. When the
-/// palette is visible, passes other keys through to SwiftUI's own key
-/// handlers (arrow navigation, escape, etc.).
+/// Toggles the unified command palette on its chord (`toggleCommandPalette`,
+/// ⌘P by default). When the palette is visible, passes other keys through to
+/// SwiftUI's own key handlers (arrow navigation, escape, etc.).
 @MainActor
 final class PaletteResponder: KeyResponder {
     private let appState: AppState
@@ -18,16 +18,11 @@ final class PaletteResponder: KeyResponder {
     }
 
     func handle(_ event: NSEvent) -> KeyDisposition {
+        // Settings → Keymaps is recording a chord: it is the chord being
+        // bound, not one to act on — the same guard `MainAppResponder` keeps.
+        if HotkeyCaptureState.shared.isCapturing { return .passThrough }
         if HotkeyRegistry.matches(event, action: .toggleCommandPalette) {
             appState.isCommandPaletteVisible.toggle()
-            return .handled
-        }
-        // A custom palette's chord: the same two outcomes as a built-in
-        // screen's, with `PaletteHotkeys` as the table.
-        if appState.isCommandPaletteVisible,
-           let paletteID = PaletteHotkeys.shared.matchingPaletteID(for: event)
-        {
-            appState.openCustomPalette(id: paletteID)
             return .handled
         }
         // A palette screen's chord with the palette already up: the app-level
@@ -46,6 +41,16 @@ final class PaletteResponder: KeyResponder {
             } else {
                 return .passThrough
             }
+            return .handled
+        }
+        // A custom palette's chord: the same two outcomes as a built-in
+        // screen's, with `PaletteHotkeys` as the table — after the screens'
+        // chords, so a chord bound to both resolves as `MainAppResponder`
+        // resolves it when the palette is down.
+        if appState.isCommandPaletteVisible,
+           let paletteID = PaletteHotkeys.shared.matchingPaletteID(for: event)
+        {
+            appState.openCustomPalette(id: paletteID)
             return .handled
         }
         // While the palette is visible, SwiftUI owns arrow / escape / etc.

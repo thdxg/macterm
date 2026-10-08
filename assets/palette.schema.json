@@ -9,6 +9,7 @@
   "properties": {
     "name": {
       "type": "string",
+      "pattern": "\\S",
       "description": "The palette's name: its row in the command palette, its pill, and its Settings row."
     },
     "icon": {
@@ -36,9 +37,24 @@
     }
   },
   "$defs": {
+    "exports": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+        "not": { "enum": ["MACTERM_PROJECT_DIR", "MACTERM_PROJECT_NAME", "MACTERM_PALETTE_COMMAND", "MACTERM_PALETTE_REQUIRES"] }
+      },
+      "additionalProperties": { "type": "string" }
+    },
     "node": {
       "type": "object",
       "additionalProperties": false,
+      "anyOf": [{ "required": ["items"] }, { "required": ["list"] }],
+      "if": { "required": ["list"] },
+      "then": { "oneOf": [{ "required": ["enter"] }, { "required": ["action"] }] },
+      "dependentRequired": {
+        "rows": ["list"], "title": ["list"], "subtitle": ["list"], "match": ["list"],
+        "export": ["list"], "enter": ["list"], "action": ["list"], "alt": ["list"]
+      },
       "properties": {
         "placeholder": {
           "type": "string",
@@ -51,7 +67,7 @@
         },
         "list": {
           "type": "string",
-          "description": "A listing's command, run once when the screen opens: POSIX sh with errexit (`sh -o errexit -c`), or the interpreter a first-line `#!` names, started through your login shell so it sees your PATH. It runs in the active project's directory, with MACTERM_PROJECT_DIR, MACTERM_PROJECT_NAME and every value exported above this screen in its environment. Its output is JSON — an array, newline-delimited objects, or an object holding the array at `rows` — or plain lines, one row each. ⌘R runs it again."
+          "description": "A listing's command, run once when the screen opens: POSIX sh with errexit (`sh -o errexit -c`), or the interpreter a first-line `#!` names, started through your login shell (non-interactive: its login files, not .zshrc) so it sees your PATH. It runs in the active project's directory, with MACTERM_PROJECT_DIR, MACTERM_PROJECT_NAME and every value exported above this screen in its environment. Its output is JSON — an array, newline-delimited objects, or an object holding the array at `rows` — or plain lines, one row each. ⌘R runs it again."
         },
         "rows": {
           "type": "string",
@@ -71,13 +87,13 @@
         },
         "match": {
           "type": "array",
+          "minItems": 1,
           "description": "The fields the search matches against, each a path or a literal. Defaults to the title and subtitle.",
           "items": { "type": "string" }
         },
         "export": {
-          "type": "object",
-          "description": "Environment variables a listing row sets for everything below it, each a path or a literal — `{ NAMESPACE: .metadata.name }`. Never substituted into another command's text: read them as variables.",
-          "additionalProperties": { "type": "string" }
+          "$ref": "#/$defs/exports",
+          "description": "Environment variables a listing row sets for everything below it, each a path or a literal — `{ NAMESPACE: .metadata.name }`. Never substituted into another command's text: read them as variables. Names are ones sh can read, and not one Macterm sets itself."
         },
         "enter": {
           "type": "string",
@@ -97,14 +113,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["title"],
+      "oneOf": [{ "required": ["enter"] }, { "required": ["action"] }],
       "properties": {
         "title": { "type": "string" },
         "subtitle": { "type": "string" },
         "icon": { "type": "string", "description": "An SF Symbol for this row." },
         "export": {
-          "type": "object",
-          "description": "Literal environment variables this row sets for everything below it.",
-          "additionalProperties": { "type": "string" }
+          "$ref": "#/$defs/exports",
+          "description": "Literal environment variables this row sets for everything below it."
         },
         "enter": { "type": "string", "description": "The node this row opens." },
         "action": { "$ref": "#/$defs/action" },
@@ -124,10 +140,12 @@
     },
     "actionFields": {
       "type": "object",
+      "oneOf": [{ "required": ["run"] }, { "required": ["copy"] }, { "required": ["open"] }],
+      "dependentRequired": { "in": ["run"] },
       "properties": {
         "run": {
           "type": "string",
-          "description": "A command run in a new terminal before its shell starts, never typed at the prompt, with the exported variables in its environment: POSIX sh with errexit, or the interpreter a first-line `#!` names. When it ends, the shell's prompt is there. In a remote project it is typed at the host's prompt instead."
+          "description": "A command run in a new terminal before its shell starts, never typed at the prompt, with the exported variables in its environment: POSIX sh with errexit, or the interpreter a first-line `#!` names. When it ends, the shell's prompt is there. In a remote project it is typed at the host's prompt as written instead, run by the host's shell, without the exported variables."
         },
         "in": {
           "type": "string",

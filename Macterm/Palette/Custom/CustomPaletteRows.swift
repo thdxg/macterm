@@ -59,13 +59,26 @@ enum CustomPaletteRows {
 
     /// The row values: a JSON array, newline-delimited JSON objects, an
     /// object holding the array at `rowsPath`, or — when the output doesn't
-    /// start like JSON — plain lines, one row each.
+    /// start like JSON — plain lines, one row each. Output that merely
+    /// starts with a bracket is plain lines too when no `rows:` asks for
+    /// JSON and the bracket is followed by what no JSON value starts with —
+    /// a log prefix like `[INFO]`; broken or truncated JSON stays "isn't
+    /// JSON".
     static func rowValues(output: String, rowsPath: String?) throws -> [Any] {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = trimmed.first else { return [] }
+        let plainLines = {
+            trimmed.split(whereSeparator: \.isNewline).map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
         guard first == "[" || first == "{" else {
             if let rowsPath { throw Failure.plainOutputWithRowsPath(path: rowsPath) }
-            return trimmed.split(whereSeparator: \.isNewline).map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return plainLines()
+        }
+        if rowsPath == nil, first == "[",
+           let next = trimmed.dropFirst().first(where: { !$0.isWhitespace }),
+           !"\"-0123456789[{]tfn".contains(next)
+        {
+            return plainLines()
         }
         let top: Any
         if let whole = try? JSONSerialization.jsonObject(with: Data(trimmed.utf8), options: [.fragmentsAllowed]) {

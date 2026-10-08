@@ -1455,25 +1455,18 @@ demo10() {  # save a password typed at an ssh login, autofill the next one
 # A Git palette over the macterm project's own history: open it from ⌘P, enter
 # its menu, then the commits listing; search, open a commit's menu, Delete back
 # a screen, search for another, and run the commit's Diff action in a split. The
-# file's commands are written in the login shell's syntax (they run in it, and
-# the run action is typed at its prompt): nushell, or a POSIX shell with jq.
+# file's commands are POSIX sh, as every palette's are whatever the login shell
+# (started through it for its PATH), and the listing needs jq.
 K_DELETE=51
 
 login_shell() { dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}'; }
 
-pal_write() {  # pal_write <nu|posix>
+pal_write() {
   local list diff stat branches log
-  if [ "$1" = nu ]; then
-    list="git log -40 --format='%h%x09%s%x09%ar' | lines | split column \"\\t\" hash subject when | to json"
-    diff='git show $env.COMMIT'
-    stat='git show --stat $env.COMMIT'
-    log='git log --oneline -20 $env.BRANCH'
-  else
-    list="git log -40 --format='%h%x09%s%x09%ar' | jq -cR 'split(\"\\t\") | {hash: .[0], subject: .[1], when: .[2]}'"
-    diff='git show "$COMMIT"'
-    stat='git show --stat "$COMMIT"'
-    log='git log --oneline -20 "$BRANCH"'
-  fi
+  list="git log -40 --format='%h%x09%s%x09%ar' | jq -cR 'split(\"\\t\") | {hash: .[0], subject: .[1], when: .[2]}'"
+  diff='git show "$COMMIT"'
+  stat='git show --stat "$COMMIT"'
+  log='git log --oneline -20 "$BRANCH"'
   branches="git branch --format='%(refname:short)'"
   mkdir -p "$PAL_DIR"
   cat > "$PAL_FILE" <<EOF
@@ -1481,6 +1474,7 @@ $PAL_MARK
 name: Git
 icon: arrow.triangle.branch
 description: The project's commits and branches
+requires: [git, jq]
 root: menu
 nodes:
   menu:
@@ -1532,17 +1526,22 @@ EOF
 
 # The palette has no CLI view — nothing reports which screen is up or whether
 # a listing has finished — so its steps take beats, like demo 4's panel. The
-# listing gets a long one, and pal_check has already run the same command in
-# the same shell off camera, so a slow or failing listing stops the take
-# before it starts rather than ruining it.
+# listing gets a long one, and pal_check has already run the same command the
+# way the palette runs it, off camera, so a slow or failing listing stops the
+# take before it starts rather than ruining it.
 PAL_LIST_BEAT=1.8
 
 pal_check() {  # the commits listing, run as the palette will run it
-  local shell repo out
+  local shell repo out cmd line
   shell="$(login_shell)"; repo="$(shown_repo)"
   [ -n "$repo" ] || die "no macterm project to list commits in"
-  out="$(cd "$repo" && "$shell" -l -c "$(awk '/^  commits:/ {f=1} f && /^    list:/ {getline; sub(/^ +/, ""); print; exit}' "$PAL_FILE")" 2>&1)" \
-    || die "the demo palette's listing failed in $shell: $out"
+  cmd="$(awk '/^  commits:/ {f=1} f && /^    list:/ {getline; sub(/^ +/, ""); print; exit}' "$PAL_FILE")"
+  # The palette's own route: the login shell (for its PATH) hands the command,
+  # from the environment, to sh with errexit. The line is one single-quoted
+  # string, so it reads the same in nu, fish, zsh and bash.
+  line="/bin/sh -c 'set -e; eval \"\$MACTERM_PALETTE_COMMAND\"'"
+  out="$(cd "$repo" && MACTERM_PALETTE_COMMAND="$cmd" "$shell" -l -c "$line" 2>&1)" \
+    || die "the demo palette's listing failed: $out"
   case "$out" in
     \[*|\{*) ;;
     *) die "the demo palette's listing printed something other than JSON in $shell (a startup message?): $(printf '%s' "$out" | head -n 2)" ;;
@@ -1577,13 +1576,8 @@ demo11() {  # a custom palette: nested screens, a search, a run action
     [ -f "$f" ] && [ "$f" != "$PAL_FILE" ] || continue
     grep -Eiq '^name: *["'\'']?git["'\'']? *$' "$f" && die "$f is also named Git; turn it off or rename it for the take"
   done
-  case "$(basename "$(login_shell)")" in
-    nu) pal_write nu ;;
-    sh|bash|zsh|dash)
-      command -v jq >/dev/null || die "demo 11's palette needs jq under a POSIX login shell"
-      pal_write posix ;;
-    *) die "demo 11 writes its palette for nushell or a POSIX shell, not $(login_shell)" ;;
-  esac
+  command -v jq >/dev/null || die "demo 11's palette needs jq"
+  pal_write
   pal_check
   reset_project
   record palettes drive11

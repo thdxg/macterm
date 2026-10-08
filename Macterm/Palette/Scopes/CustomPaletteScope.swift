@@ -24,9 +24,9 @@ struct CustomPaletteTarget: Hashable {
 
 /// A custom palette's screen (`CustomPaletteFile`). A menu node lists its
 /// items at once; a listing node runs its command once on `activate`, in
-/// bash or its `#!` interpreter (`CustomPaletteScript`) with the target's
-/// exports in the environment,
-/// reports `loading` meanwhile, keeps the rows and filters them per
+/// `sh -o errexit` or its `#!` interpreter (`CustomPaletteScript`) with the
+/// target's exports in the environment, reports `loading` meanwhile, keeps
+/// the rows and filters them per
 /// keystroke. A command that fails — not found, non-zero, output that isn't
 /// the shape asked for — becomes `failure`, retried with ⌘R.
 @MainActor
@@ -36,7 +36,14 @@ final class CustomPaletteScope: PaletteScope {
 
     private(set) var loading: PaletteLoading?
     private(set) var failure: PaletteFailure?
-    private var rows: [CustomPaletteRow]?
+    private var rows: [CustomPaletteRow]? {
+        didSet { rowSearch = rows.map { SearchSession(index: SearchIndex($0.map(\.match))) } }
+    }
+
+    /// The listing's rows prepared for search once, when they arrive: a
+    /// listing can be thousands of lines, and each keystroke then only
+    /// searches — only the last matches, when it narrows the query.
+    private var rowSearch: SearchSession?
     private var task: Task<Void, Never>?
     private var onChange: (@MainActor () -> Void)?
     private var context: PaletteContext?
@@ -111,7 +118,9 @@ final class CustomPaletteScope: PaletteScope {
         let environment = Self.environment(for: target, context: context)
         let invocation = CustomPaletteScript.invocation(of: listing.command)
         let requires = palette.requires
-        let cwd = Self.projectDirectory(context)
+        // A remote project's or the pinned tabs' listing still runs on this
+        // Mac: in the home folder, not the app's own `/`.
+        let cwd = Self.projectDirectory(context) ?? FileManager.default.homeDirectoryForCurrentUser.path
         let runner = runner
         let title = target.pill.title
         loading = PaletteLoading(message: "Listing \(title)…")
@@ -212,8 +221,16 @@ final class CustomPaletteScope: PaletteScope {
             ), context: context).with(match)
         }
         let listed: [PaletteItem] = node.listing.map { listing in
-            (rows ?? []).enumerated().compactMap { index, row in
-                guard let match = Search.match(search, fields: row.match) else { return nil }
+            guard let rows, let rowSearch else { return [] }
+            let found: [(index: Int, score: Int32)] = search.isEmpty
+                ? rows.indices.map { ($0, 0) }
+                : rowSearch.search(query.trimmed).map { ($0.index, $0.score) }
+            return found.map { index, score in
+                let row = rows[index]
+                // Highlights are offsets in the first field matched, which
+                // is the title unless the row's `match:` leads with another.
+                let highlights = !search.isEmpty && row.match.first == row.title
+                    ? rowSearch.index.highlights(search, at: index) : []
                 return item(Row(
                     id: "row:\(index)",
                     title: row.title,
@@ -224,15 +241,12 @@ final class CustomPaletteScope: PaletteScope {
                     operand: row.operand,
                     alt: listing.alt,
                     altOperand: row.altOperand
-                ), context: context).with(match)
+                ), context: context).with(score: -Int(score), highlights: highlights)
             }
         } ?? []
         let items = written + listed
-        // Empty, the listing's own order; searching, best match first with
-        // that order breaking ties.
-        let ranked = query.isEmpty ? items : items.enumerated()
-            .sorted { ($0.element.score, $0.offset) < ($1.element.score, $1.offset) }
-            .map(\.element)
+        // Empty, the listing's own order; searching, best match first.
+        let ranked = query.isEmpty ? items : items.rankedByScore()
         return ranked.isEmpty ? [] : [PaletteSection(header: nil, items: ranked)]
     }
 
@@ -333,9 +347,31 @@ enum CustomPaletteActions {
     ) {
         switch action {
         case let .run(command, place):
-            guard let projectID = appState.activeProjectID,
-                  let project = projects.first(where: { $0.id == projectID })
-            else {
+            guard let projectID = appState.activeProjectID else {
+                appState.presentToast("No project to run in")
+                return
+            }
+            // A pinned tab belongs to no project. A tab born in the pinned
+            // workspace would be pinned itself, so the command always splits
+            // beside the focused pane there, as a clicked text file does.
+            if projectID == PinnedTabs.projectID {
+                guard let pane = appState.focusedPane(for: projectID) else {
+                    appState.presentToast("No pane to run beside")
+                    return
+                }
+                var env = CustomPaletteEnvironment.make(projectName: nil, projectDirectory: nil, exports: exports)
+                env[CustomPaletteScript.commandVariable] = CustomPaletteScript.script(command)
+                appState.splitPane(
+                    pane.id,
+                    direction: .auto(for: pane.nsView?.bounds.size ?? .zero),
+                    projectID: projectID,
+                    projectDirectory: PinnedTabs.fallbackRoot,
+                    command: nil,
+                    env: env
+                )
+                return
+            }
+            guard let project = projects.first(where: { $0.id == projectID }) else {
                 appState.presentToast("No project to run in")
                 return
             }
@@ -375,8 +411,20 @@ enum CustomPaletteActions {
             if let url = URL(string: operand), url.scheme != nil {
                 NSWorkspace.shared.open(url)
             } else {
-                NSWorkspace.shared.open(URL(fileURLWithPath: (operand as NSString).expandingTildeInPath))
+                NSWorkspace.shared.open(fileURL(operand, appState: appState, projects: projects))
             }
         }
+    }
+
+    /// An `open:` path as a file URL: a relative one (`git ls-files`'s
+    /// `src/main.swift`) against the active local project, where the
+    /// listing that printed it ran, else the home folder — never the app's
+    /// own `/`.
+    static func fileURL(_ operand: String, appState: AppState, projects: [Project]) -> URL {
+        let path = (operand as NSString).expandingTildeInPath
+        guard !path.hasPrefix("/") else { return URL(fileURLWithPath: path) }
+        let project = appState.activeProjectID.flatMap { id in projects.first { $0.id == id } }
+        let base = project.flatMap { $0.isRemote ? nil : $0.path } ?? FileManager.default.homeDirectoryForCurrentUser.path
+        return URL(fileURLWithPath: base, isDirectory: true).appendingPathComponent(path).standardizedFileURL
     }
 }

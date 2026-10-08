@@ -18,10 +18,10 @@ struct FileIndexEntry: Equatable {
 enum FileIndex {
     /// Directories never descended into: dependency and build trees that
     /// would swamp the index and never hold what the user is looking for.
-    /// Hidden entries (`.git`, `.build`) are skipped by the enumerator.
+    /// Hidden entries (`.git`, `.build`, `.venv`) are skipped as hidden.
     static let excludedDirectories: Set<String> = [
         "node_modules", "build", "DerivedData", "target", "dist", "out",
-        "vendor", "Pods", "__pycache__", "venv", ".venv",
+        "vendor", "Pods", "__pycache__", "venv",
     ]
     /// Entries past this many are left out — a tree that large is not
     /// something a palette can show anyway, and the scan has to end.
@@ -29,37 +29,49 @@ enum FileIndex {
 
     /// Every entry under `root`, shallow first and alphabetical within a
     /// depth, so the top of the list is the project's own top level.
+    ///
+    /// Walked a level at a time, so `limit` cuts the tree at its deepest
+    /// level reached — never a top-level entry because a depth-first walk
+    /// happened to spend the budget in one directory first. A symbolic link
+    /// to a directory is listed as a directory and never entered (a link back
+    /// up the tree would loop); a package (`.app`) is listed as one entry. An
+    /// unreadable directory is skipped, and a cancelled task stops the walk.
     static func scan(root: URL, limit: Int = limit) -> [FileIndexEntry] {
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        )
-        else { return [] }
-        let rootPath = root.standardizedFileURL.path(percentEncoded: false)
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey]
         var entries: [FileIndexEntry] = []
-        for case let url as URL in enumerator {
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDirectory, excludedDirectories.contains(url.lastPathComponent) {
-                enumerator.skipDescendants()
-                continue
+        var level: [(url: URL, relative: String)] = [(root, "")]
+        walk: while !level.isEmpty {
+            var next: [(url: URL, relative: String)] = []
+            for (directory, prefix) in level {
+                if Task.isCancelled { break walk }
+                guard let children = try? FileManager.default.contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: Array(keys),
+                    options: [.skipsHiddenFiles]
+                )
+                else { continue }
+                for child in children.sorted(by: { $0.lastPathComponent.lowercased() < $1.lastPathComponent.lowercased() }) {
+                    let values = try? child.resourceValues(forKeys: keys)
+                    let isLink = values?.isSymbolicLink ?? false
+                    var isDirectory = values?.isDirectory ?? false
+                    if isLink {
+                        var target: ObjCBool = false
+                        isDirectory = FileManager.default.fileExists(atPath: child.path(percentEncoded: false), isDirectory: &target)
+                            && target.boolValue
+                    }
+                    let name = child.lastPathComponent
+                    if isDirectory, excludedDirectories.contains(name) { continue }
+                    let relative = prefix.isEmpty ? name : "\(prefix)/\(name)"
+                    entries.append(FileIndexEntry(relativePath: relative, isDirectory: isDirectory))
+                    if entries.count >= limit { break walk }
+                    if isDirectory, !isLink, values?.isPackage != true { next.append((child, relative)) }
+                }
             }
-            let path = url.standardizedFileURL.path(percentEncoded: false)
-            guard path.hasPrefix(rootPath) else { continue }
-            var relative = String(path.dropFirst(rootPath.count))
-            if relative.hasPrefix("/") { relative.removeFirst() }
-            if relative.hasSuffix("/") { relative.removeLast() }
-            guard !relative.isEmpty else { continue }
-            entries.append(FileIndexEntry(relativePath: relative, isDirectory: isDirectory))
-            if entries.count >= limit { break }
+            level = next
         }
         return entries.sorted { ($0.depth, $0.relativePath.lowercased()) < ($1.depth, $1.relativePath.lowercased()) }
     }
 
-    /// The entries `query` matches, best first, listing order breaking ties:
-    /// the relative path is the target (so `pal/eng` finds
-    /// `Palette/PaletteEngine.swift`), and a match on the name alone counts
-    /// as well so a file name's prefix ranks first wherever the file is.
     /// The search index over `entries` (`Macterm/Search/`, built for long
     /// lists): the name is the title field, the relative path the second, so
     /// `pal/eng` finds `Palette/PaletteEngine.swift` and a match on the name
@@ -78,12 +90,14 @@ enum FileIndex {
     }
 
     /// The best `limit` entries for `query`, the engine's order; the first
-    /// `limit` entries, in listing order, for an empty query.
-    static func matches(_ entries: [FileIndexEntry], index: SearchIndex, query: String, limit: Int) -> [Match] {
+    /// `limit` entries, in listing order, for an empty query. Searched
+    /// through `session`, so a keystroke that narrows the query searches
+    /// only the last one's matches.
+    static func matches(_ entries: [FileIndexEntry], session: SearchSession, query: String, limit: Int) -> [Match] {
         let search = SearchQuery(query)
         guard !search.isEmpty else { return entries.prefix(limit).map { Match(entry: $0, score: 0, highlights: []) } }
-        return index.search(search, limit: limit).map { match in
-            Match(entry: entries[match.index], score: match.score, highlights: index.highlights(search, at: match.index))
+        return session.search(query, limit: limit).map { match in
+            Match(entry: entries[match.index], score: match.score, highlights: session.index.highlights(search, at: match.index))
         }
     }
 }
@@ -91,9 +105,10 @@ enum FileIndex {
 /// The palette's Files: every file and directory of the active local
 /// project, indexed once when the screen opens (`FileIndex.scan`, off the
 /// main actor, with `loading` meanwhile) and searched by partial path.
-/// Enter opens the pick in a split beside the focused pane — a directory as
-/// a shell there, a file in the terminal editor (`TextFileEditor`, as a
-/// ⌘-clicked path opens); ⌥↩ opens it with its default app instead.
+/// Enter opens the pick in a split beside the focused pane (a new tab when
+/// the project has none) — a directory as a shell in it, a file in the
+/// terminal editor (`TextFileEditor`, as a ⌘-clicked path opens); ⌥↩ opens
+/// it with its default app instead.
 @MainActor
 final class FilesPaletteScope: PaletteScope {
     /// Rows shown at once: the palette draws every row it is given, and a
@@ -104,7 +119,7 @@ final class FilesPaletteScope: PaletteScope {
     private(set) var loading: PaletteLoading?
     private(set) var failure: PaletteFailure?
     private var entries: [FileIndexEntry]?
-    private var index: SearchIndex?
+    private var session: SearchSession?
     private var root: URL?
     private var task: Task<Void, Never>?
     private var onChange: (@MainActor () -> Void)?
@@ -139,7 +154,7 @@ final class FilesPaletteScope: PaletteScope {
         guard task == nil else { return }
         failure = nil
         entries = nil
-        index = nil
+        session = nil
         startScan()
     }
 
@@ -155,23 +170,30 @@ final class FilesPaletteScope: PaletteScope {
         onChange?()
         let scan = scan
         task = Task { @MainActor [weak self] in
-            let (found, index) = await Task.detached(priority: .userInitiated) { () -> ([FileIndexEntry], SearchIndex) in
+            // A detached task doesn't inherit cancellation: hand it on, so
+            // closing the palette mid-index stops the walk.
+            let indexing = Task.detached(priority: .userInitiated) { () -> ([FileIndexEntry], SearchIndex) in
                 let entries = scan(root)
                 return (entries, FileIndex.searchIndex(for: entries))
-            }.value
+            }
+            let (found, index) = await withTaskCancellationHandler {
+                await indexing.value
+            } onCancel: {
+                indexing.cancel()
+            }
             guard let self, !Task.isCancelled else { return }
             task = nil
             loading = nil
             entries = found
-            self.index = index
+            session = SearchSession(index: index)
             self.onChange?()
         }
     }
 
     func sections(for query: PaletteQuery, context: PaletteContext) -> [PaletteSection] {
         self.context = context
-        guard let entries, let index, let root, let (project, _) = Self.projectRoot(context) else { return [] }
-        let items = FileIndex.matches(entries, index: index, query: query.trimmed, limit: Self.shownLimit).map { match in
+        guard let entries, let session, let root, let (project, _) = Self.projectRoot(context) else { return [] }
+        let items = FileIndex.matches(entries, session: session, query: query.trimmed, limit: Self.shownLimit).map { match in
             item(for: match, root: root, project: project, context: context)
         }
         return items.isEmpty ? [] : [PaletteSection(header: nil, items: items)]
@@ -199,16 +221,23 @@ final class FilesPaletteScope: PaletteScope {
 }
 
 /// Opening a Files pick in Macterm: a split beside the project's focused
-/// pane, as a shell in the directory or the terminal editor on the file.
+/// pane — a new tab when it has none — as a shell in the directory or the
+/// terminal editor on the file.
 @MainActor
 enum FilesPaletteActions {
     static func openInSplit(_ url: URL, isDirectory: Bool, project: Project, appState: AppState, projects: [Project]) {
-        let path = url.path(percentEncoded: false)
+        // A directory URL's path ends in `/`; stored as every project path
+        // is, without it (a trailing slash in `$PWD` is fatal to nushell).
+        let path = ProjectPath.normalizedForStorage(url.path(percentEncoded: false))
         let command: String? = isDirectory ? nil : TextFileEditor.typedCommand
         let env: [String: String]? = isDirectory ? nil : TextFileEditor.environment(path: path, line: nil)
         let directory = isDirectory ? path : nil
         guard let pane = appState.focusedPane(for: project.id) else {
-            appState.createTab(projectID: project.id, projects: projects, command: command, env: env)
+            if let directory {
+                appState.createTab(projectID: project.id, projects: projects, workingDirectory: directory)
+            } else {
+                appState.createTab(projectID: project.id, projects: projects, command: command, env: env)
+            }
             return
         }
         appState.splitPane(

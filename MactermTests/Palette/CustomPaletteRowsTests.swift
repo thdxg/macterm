@@ -103,6 +103,38 @@ struct CustomPaletteRowsTests {
         #expect(CustomPaletteRows.scalarText(["a": 1]) == nil, "objects don't read as text")
     }
 
+    /// Output that only starts with a bracket — a log prefix — is lines,
+    /// unless `rows:` asks for JSON or it opens a pretty-printed document.
+    @Test
+    func bracketed_plain_text_is_lines_and_pretty_json_still_fails() throws {
+        let plain = try CustomPaletteRows.parse(output: "[INFO] main\n[WARN] dev\n", listing: listing())
+        #expect(plain.map(\.title) == ["[INFO] main", "[WARN] dev"])
+        #expect(throws: CustomPaletteRows.Failure.self) {
+            try CustomPaletteRows.parse(output: "{\n  \"a\": 1\n}\n{\n  \"a\": 2\n}", listing: listing(title: ".a"))
+        }
+        #expect(throws: CustomPaletteRows.Failure.self, "truncated JSON isn't lines") {
+            try CustomPaletteRows.parse(output: #"[{"a": 1}, {"a""#, listing: listing(title: ".a"))
+        }
+        #expect(throws: CustomPaletteRows.Failure.self) {
+            try CustomPaletteRows.parse(output: "[INFO] main", listing: listing(rows: ".items"))
+        }
+    }
+
+    /// Windows line ends, blank lines and non-string leaves.
+    @Test
+    func line_ends_blank_lines_and_scalar_leaves_read_as_text() throws {
+        let lines = try CustomPaletteRows.parse(output: "one\r\n\r\ntwo\r\n", listing: listing())
+        #expect(lines.map(\.title) == ["one", "two"])
+        let rows = try CustomPaletteRows.parse(
+            output: #"[{"n": 3, "ok": true, "f": 1.5, "none": null}]"#,
+            listing: listing(title: ".n", subtitle: ".ok", exports: ["F": ".f", "NONE": ".none"])
+        )
+        #expect(rows.first?.title == "3")
+        #expect(rows.first?.subtitle == "true")
+        #expect(rows.first?.exports["F"] == "1.5")
+        #expect(rows.first?.exports["NONE"] == nil, "a null leaves the variable unset")
+    }
+
     @Test
     func the_failures_name_what_went_wrong() {
         #expect(throws: CustomPaletteRows.Failure.rowsNotFound(path: ".items")) {

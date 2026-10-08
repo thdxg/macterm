@@ -92,6 +92,79 @@ struct CustomPaletteRunnerTests {
         #expect(try Self.run("macterm-no-such-program", loginShell: "/bin/zsh").status == 127)
     }
 
+    /// Whether a process whose command line contains `marker` is running.
+    private static func running(_ marker: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        process.arguments = ["-f", marker]
+        process.standardOutput = FileHandle.nullDevice
+        try? process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    }
+
+    /// `command` through the real runner the way a listing runs it: the
+    /// login shell handed the trampoline, the command in the environment.
+    private static func list(_ command: String, timeout: Duration) async throws -> CustomPaletteCommandResult {
+        let invocation = CustomPaletteScript.invocation(of: command)
+        return try await CustomPaletteRunner.runner(timeout: timeout)(invocation.line, invocation.environment, nil)
+    }
+
+    /// A unique `sleep` duration, so `pgrep` finds this test's process only.
+    private static func marker() -> String {
+        "3\(Int.random(in: 100 ... 999)).\(Int.random(in: 1000 ... 9999))"
+    }
+
+    /// A timeout ends the whole command — every stage of a pipeline, not
+    /// just the login shell — and returns at once rather than when the
+    /// pipeline's last process finally lets go of the output pipe.
+    @Test
+    func a_timeout_ends_the_command_and_everything_it_started() async throws {
+        let marker = Self.marker()
+        let started = ContinuousClock.now
+        await #expect(throws: CustomPaletteRunner.TimedOut.self) {
+            try await Self.list("sleep \(marker) | cat", timeout: .seconds(1))
+        }
+        #expect(ContinuousClock.now - started < .seconds(5))
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(!Self.running("sleep \(marker)"), "nothing it started is left running")
+    }
+
+    /// A listing ends when its command does: what it left running in the
+    /// background is ended rather than holding the output open.
+    @Test
+    func a_listing_ends_when_its_command_does() async throws {
+        let marker = Self.marker()
+        let started = ContinuousClock.now
+        let result = try await Self.list("(sleep \(marker) &); echo listed", timeout: .seconds(20))
+        #expect(result.stdout.contains("listed"))
+        #expect(ContinuousClock.now - started < .seconds(10))
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(!Self.running("sleep \(marker)"))
+    }
+
+    /// Closing the palette cancels the listing's task, and that ends the
+    /// command too.
+    @Test
+    func a_cancelled_listing_ends_its_command() async throws {
+        let marker = Self.marker()
+        let listing = Task { try await Self.list("sleep \(marker)", timeout: .seconds(60)) }
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(Self.running("sleep \(marker)"))
+        listing.cancel()
+        _ = try? await listing.value
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(!Self.running("sleep \(marker)"))
+    }
+
+    /// A command is never `sh`'s options, however it starts.
+    @Test
+    func a_command_starting_with_a_dash_is_a_command() throws {
+        let result = try Self.run("-x", loginShell: "/bin/zsh")
+        #expect(result.status == 127)
+        #expect(try Self.run("#!/bin/sh", loginShell: "/bin/zsh").status == 0, "a one-line script with no newline runs")
+    }
+
     @Test
     func a_program_name_is_one_word_with_nothing_a_shell_expands() {
         for name in ["kubectl", "jq", "docker-compose", "python3.12", "g++", "/usr/local/bin/helm"] {

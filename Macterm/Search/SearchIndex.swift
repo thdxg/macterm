@@ -119,12 +119,6 @@ final class SearchIndex: Sendable {
         rank(matchAll(query, among: among), limit: limit)
     }
 
-    /// The records `query` matches, in list order — a filter for a list that
-    /// keeps its own order (Settings).
-    func filter(_ query: SearchQuery) -> [Int] {
-        matchAll(query, among: nil).map(\.index)
-    }
-
     /// Every match, unordered, in parallel when the list is long.
     func matchAll(_ query: SearchQuery, among: [Int]?) -> [SearchMatch] {
         let total = among?.count ?? records.count
@@ -256,7 +250,9 @@ final class SearchSession {
 
 /// The engine for a short list built on the spot (the palette's commands,
 /// projects, saved passwords, worktrees; a Settings list), where preparing an
-/// index first buys nothing. Same scoring and folding as `SearchIndex`.
+/// index first buys nothing. A list that can run long — a custom palette's
+/// listing, the project's files — is a `SearchIndex` or `SearchSession`
+/// instead. Same scoring and folding as `SearchIndex`.
 enum Search {
     struct Match {
         /// Higher is better.
@@ -279,8 +275,9 @@ enum Search {
         match(SearchQuery(text), fields: fields)
     }
 
-    /// The `items` `text` matches, best first (ties keep list order) — a
-    /// Settings list while it's searched. Ranked, not just filtered, because
+    /// The `items` `text` matches, best first — ties to the shorter first
+    /// field, then list order, as `SearchIndex.rank` breaks them — a Settings
+    /// list while it's searched. Ranked, not just filtered, because
     /// fuzzy matching admits letters scattered across words: unranked, such a
     /// row would sit beside a strong match with nothing to tell them apart.
     /// An empty query returns `items` as they are.
@@ -289,10 +286,12 @@ enum Search {
         guard !query.isEmpty else { return items }
         let scratch = SearchScratch()
         return items.enumerated()
-            .compactMap { offset, item -> (score: Int32, offset: Int)? in
-                SearchIndex.score(query, fields: fields(item).map(SearchText.init), scratch: scratch).map { ($0, offset) }
+            .compactMap { offset, item -> RankedItem? in
+                let prepared = fields(item).map(SearchText.init)
+                return SearchIndex.score(query, fields: prepared, scratch: scratch)
+                    .map { RankedItem(score: $0, length: prepared.first?.length ?? 0, offset: offset) }
             }
-            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.offset < $1.offset }
+            .sorted { ($1.score, $0.length, $0.offset) < ($0.score, $1.length, $1.offset) }
             .map { items[$0.offset] }
     }
 
@@ -308,4 +307,12 @@ enum Search {
     static func hasPrefix(_ text: String, _ prefix: String) -> Bool {
         SearchText.foldedScalars(text).starts(with: SearchText.foldedScalars(prefix))
     }
+}
+
+/// One item `Search.rank` matched: its score, its first field's length (the
+/// tiebreak) and its place in the list.
+private struct RankedItem {
+    let score: Int32
+    let length: Int
+    let offset: Int
 }
