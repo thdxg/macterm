@@ -260,7 +260,7 @@ struct CustomPaletteScopeTests {
         let kubernetes = try #require(palettes.first { $0.title == "Kubernetes" })
         #expect(try kubernetes.opensScope == .custom(#require(store.rootTarget(id: "kubernetes"))))
         #expect(kubernetes.icon == "shippingbox")
-        #expect(kubernetes.subtitle == nil, "a palette's description lives in Settings, not on its row")
+        #expect(kubernetes.subtitle == "Namespaces, pods and their logs", "a palette's description is its row's second line")
         let broken = try #require(palettes.first { $0.title == "Broken" })
         #expect(broken.isEnabled, "a broken file's row reads like any other")
         #expect(broken.warning == "root: needs enter: or action:")

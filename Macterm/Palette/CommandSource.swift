@@ -53,9 +53,8 @@ struct CommandSource: PaletteSource {
             let symbols = HotkeyRegistry.displaySymbols(for: chord)
             return PaletteItem(
                 id: "palette:\(entry.id)",
-                // No description here: a palette's row is its name, like the
-                // built-in screens'; the description lives in Settings.
                 title: entry.pill.title,
+                subtitle: entry.description,
                 category: AppCommand.Category.palettes.rawValue,
                 keybind: symbols.isEmpty ? nil : HotkeyRegistry.displayString(for: chord),
                 keybindSymbols: symbols.isEmpty ? nil : symbols,
