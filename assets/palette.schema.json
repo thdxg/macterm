@@ -17,7 +17,7 @@
     },
     "description": {
       "type": "string",
-      "description": "One line under the palette's row in the command palette and in Settings → Palettes."
+      "description": "One line under the palette's row in Settings → Palettes."
     },
     "root": {
       "type": "string",

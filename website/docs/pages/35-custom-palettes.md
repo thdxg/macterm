@@ -40,7 +40,7 @@ Press <kbd>⌘P</kbd>, type `git`, and press <kbd>Return</kbd>. The screen lists
 | --- | --- |
 | `name` | Required. The palette's row, its pill, and its row in Settings. |
 | `icon` | An [SF Symbol](https://developer.apple.com/sf-symbols/) name. Defaults to `square.grid.2x2`. |
-| `description` | One line under the palette's row in the command palette and in Settings → Palettes. |
+| `description` | One line describing the palette in Settings → Palettes. |
 | `root` | The node the palette opens on. Defaults to a node named `root`. |
 | `nodes` | Required. Every screen of the palette, by name. |
 
