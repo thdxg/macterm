@@ -55,23 +55,23 @@ enum GlobalHotkeyPlan {
     }
 
     struct Diff: Equatable {
-        var unregister: [HotkeyAction] = []
-        var register: [HotkeyAction: HotkeyShortcut] = [:]
+        var unregister: [HotkeyBinding] = []
+        var register: [HotkeyBinding: HotkeyShortcut] = [:]
     }
 
     /// What has to change to move from `registered` (action → the shortcut id
     /// Carbon currently holds) to `desired`. An action whose chord is unchanged
     /// is left alone: re-registering a live hot key would release it for an
     /// instant, and another app watching for that chord could take the slot.
-    static func diff(registered: [HotkeyAction: String], desired: [HotkeyAction: HotkeyShortcut]) -> Diff {
+    static func diff(registered: [HotkeyBinding: String], desired: [HotkeyBinding: HotkeyShortcut]) -> Diff {
         var diff = Diff()
-        for (action, shortcutID) in registered where desired[action]?.id != shortcutID {
-            diff.unregister.append(action)
+        for (binding, shortcutID) in registered where desired[binding]?.id != shortcutID {
+            diff.unregister.append(binding)
         }
-        for (action, shortcut) in desired where registered[action] != shortcut.id {
-            diff.register[action] = shortcut
+        for (binding, shortcut) in desired where registered[binding] != shortcut.id {
+            diff.register[binding] = shortcut
         }
-        diff.unregister.sort { $0.rawValue < $1.rawValue }
+        diff.unregister.sort()
         return diff
     }
 
@@ -89,7 +89,13 @@ enum GlobalHotkeyPlan {
     /// background, or when Macterm is active with no terminal window on screen
     /// (the last window hidden by its close button, #241).
     static func frontsWindow(for action: HotkeyAction, appIsActive: Bool, hasVisibleTerminalWindow: Bool) -> Bool {
-        if action == .toggleQuickTerminal { return false }
+        frontsWindow(for: .action(action), appIsActive: appIsActive, hasVisibleTerminalWindow: hasVisibleTerminalWindow)
+    }
+
+    /// A custom palette's chord opens the palette in a window, so it fronts
+    /// one like every action but the quick terminal's.
+    static func frontsWindow(for binding: HotkeyBinding, appIsActive: Bool, hasVisibleTerminalWindow: Bool) -> Bool {
+        if binding == .action(.toggleQuickTerminal) { return false }
         return !appIsActive || !hasVisibleTerminalWindow
     }
 }
@@ -143,9 +149,9 @@ final class GlobalHotkeys {
     /// Keymaps rows can say so; every `sync` retries a refused chord, so the
     /// message clears as soon as the other app lets go and the user re-toggles
     /// or rebinds.
-    private(set) var refusals: [HotkeyAction: GlobalHotkeyRefusal] = [:]
+    private(set) var refusals: [HotkeyBinding: GlobalHotkeyRefusal] = [:]
 
-    @ObservationIgnored private var registrations: [HotkeyAction: Registration] = [:]
+    @ObservationIgnored private var registrations: [HotkeyBinding: Registration] = [:]
     @ObservationIgnored private var eventHandler: EventHandlerRef?
     @ObservationIgnored private var installed = false
     @ObservationIgnored private var context: AppCommandContext?
@@ -204,7 +210,11 @@ final class GlobalHotkeys {
 
     /// Whether Carbon currently holds `action`'s chord.
     func isRegistered(_ action: HotkeyAction) -> Bool {
-        registrations[action] != nil
+        isRegistered(.action(action))
+    }
+
+    func isRegistered(_ binding: HotkeyBinding) -> Bool {
+        registrations[binding] != nil
     }
 
     /// The single ownership rule: the local `NSEvent` monitor yields exactly
@@ -223,10 +233,10 @@ final class GlobalHotkeys {
     /// where nothing but the quick terminal is registered.
     func yieldsToCarbon(_ event: NSEvent) -> Bool {
         guard !registrations.isEmpty else { return false }
-        guard let action = registrations.keys.first(where: { HotkeyRegistry.matches(event, action: $0) }) else {
+        guard let binding = registrations.keys.first(where: { $0.matches(event) }) else {
             return false
         }
-        logger.debug("local monitor yielded \(action.rawValue, privacy: .public) to its Carbon registration")
+        logger.debug("local monitor yielded \(binding.id, privacy: .public) to its Carbon registration")
         return true
     }
 
@@ -236,57 +246,56 @@ final class GlobalHotkeys {
     /// binding unregisters and registers nothing.
     func sync() {
         guard installed else { return }
-        var desired: [HotkeyAction: HotkeyShortcut] = [:]
-        var refused: [HotkeyAction: GlobalHotkeyRefusal] = [:]
-        for action in HotkeyRegistry.globalActions() {
-            guard let shortcut = HotkeyRegistry.selectedShortcut(for: action) else { continue }
-            let passesThrough = HotkeyRegistry.passesThroughToPrograms(for: action)
-            if let refusal = GlobalHotkeyPlan.precheck(shortcut, passesThroughToPrograms: passesThrough) {
-                refused[action] = refusal
+        var desired: [HotkeyBinding: HotkeyShortcut] = [:]
+        var refused: [HotkeyBinding: GlobalHotkeyRefusal] = [:]
+        for binding in HotkeyBinding.globalBindings {
+            guard let shortcut = binding.selectedShortcut else { continue }
+            if let refusal = GlobalHotkeyPlan.precheck(shortcut, passesThroughToPrograms: binding.passesThroughToPrograms) {
+                refused[binding] = refusal
             } else {
-                desired[action] = shortcut
+                desired[binding] = shortcut
             }
         }
         let diff = GlobalHotkeyPlan.diff(registered: registrations.mapValues(\.shortcutID), desired: desired)
-        for action in diff.unregister {
-            unregister(action)
+        for binding in diff.unregister {
+            unregister(binding)
         }
         // A chord refused by the system is not in `registrations`, so the diff
         // asks for it again on the next sync — that retry is what lets the
         // refusal clear once the other app releases the chord.
-        for (action, shortcut) in diff.register {
-            if let refusal = register(shortcut, for: action) {
-                refused[action] = refusal
+        for (binding, shortcut) in diff.register {
+            if let refusal = register(shortcut, for: binding) {
+                refused[binding] = refusal
             }
         }
         if refused != refusals { refusals = refused }
     }
 
-    private func register(_ shortcut: HotkeyShortcut, for action: HotkeyAction) -> GlobalHotkeyRefusal? {
+    private func register(_ shortcut: HotkeyShortcut, for binding: HotkeyBinding) -> GlobalHotkeyRefusal? {
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(
             shortcut.carbonKeyCode,
             shortcut.carbonModifiers,
-            EventHotKeyID(signature: Self.signature, id: Self.hotKeyID(for: action)),
+            EventHotKeyID(signature: Self.signature, id: hotKeyID(for: binding)),
             GetApplicationEventTarget(),
             0,
             &ref
         )
         guard status == noErr, let ref else {
             logger.error(
-                "RegisterEventHotKey \(shortcut.id, privacy: .public) for \(action.rawValue, privacy: .public) failed: \(status, privacy: .public)"
+                "RegisterEventHotKey \(shortcut.id, privacy: .public) for \(binding.id, privacy: .public) failed: \(status, privacy: .public)"
             )
             return .from(status: status)
         }
-        registrations[action] = Registration(ref: ref, shortcutID: shortcut.id)
-        logger.info("registered \(shortcut.id, privacy: .public) for \(action.rawValue, privacy: .public)")
+        registrations[binding] = Registration(ref: ref, shortcutID: shortcut.id)
+        logger.info("registered \(shortcut.id, privacy: .public) for \(binding.id, privacy: .public)")
         return nil
     }
 
-    private func unregister(_ action: HotkeyAction) {
-        guard let registration = registrations.removeValue(forKey: action) else { return }
+    private func unregister(_ binding: HotkeyBinding) {
+        guard let registration = registrations.removeValue(forKey: binding) else { return }
         UnregisterEventHotKey(registration.ref)
-        logger.info("unregistered \(registration.shortcutID, privacy: .public) for \(action.rawValue, privacy: .public)")
+        logger.info("unregistered \(registration.shortcutID, privacy: .public) for \(binding.id, privacy: .public)")
     }
 
     /// Carbon identifies a hot key by a `UInt32` of our choosing; an action's
@@ -302,12 +311,27 @@ final class GlobalHotkeys {
         return HotkeyAction.allCases[index]
     }
 
+    /// A palette's id comes from `PaletteHotkeys`, above every action's.
+    func hotKeyID(for binding: HotkeyBinding) -> UInt32 {
+        switch binding {
+        case let .action(action): Self.hotKeyID(for: action)
+        case let .palette(paletteID): PaletteHotkeys.shared.carbonID(paletteID: paletteID)
+        }
+    }
+
+    func binding(forHotKeyID id: UInt32) -> HotkeyBinding? {
+        if id >= PaletteHotkeys.carbonIDBase {
+            return PaletteHotkeys.shared.paletteID(forCarbonID: id).map(HotkeyBinding.palette)
+        }
+        return Self.action(forHotKeyID: id).map(HotkeyBinding.action)
+    }
+
     private func fire(hotKeyID: UInt32) {
-        guard let action = Self.action(forHotKeyID: hotKeyID), isRegistered(action) else { return }
-        logger.info("global \(action.rawValue, privacy: .public) fired")
+        guard let binding = binding(forHotKeyID: hotKeyID), isRegistered(binding) else { return }
+        logger.info("global \(binding.id, privacy: .public) fired")
         let delegate = context?.appState.appDelegate
         if GlobalHotkeyPlan.frontsWindow(
-            for: action,
+            for: binding,
             appIsActive: NSApp.isActive,
             hasVisibleTerminalWindow: delegate?.terminalWindows.contains(where: \.isVisible) ?? false
         ) {
@@ -319,13 +343,19 @@ final class GlobalHotkeys {
             // Responders aren't installed yet, so no window has appeared. The
             // quick terminal needs neither; everything else has nothing to act
             // on until the workspace exists.
-            if action == .toggleQuickTerminal { QuickTerminalService.shared.toggle() }
+            if binding == .action(.toggleQuickTerminal) { QuickTerminalService.shared.toggle() }
             return
         }
-        guard let run = action.appCommand.action(in: context) else {
-            logger.info("global \(action.rawValue, privacy: .public) does not apply right now")
-            return
+        switch binding {
+        case let .action(action):
+            guard let run = action.appCommand.action(in: context) else {
+                logger.info("global \(action.rawValue, privacy: .public) does not apply right now")
+                return
+            }
+            run()
+        case let .palette(paletteID):
+            // The chord's own path, toast included for a palette turned off.
+            context.appState.openCustomPalette(id: paletteID)
         }
-        run()
     }
 }

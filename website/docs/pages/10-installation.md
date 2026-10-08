@@ -25,31 +25,3 @@ xattr -cr /Applications/Macterm.app
 ```
 
 Sparkle handles updates from there, so you won't need `xattr` again.
-
-## Open a folder as a project
-
-Any of these adds the folder as a new project and switches to it, launching Macterm first if needed:
-
-- Right-click a folder in Finder → **Services → New Macterm Project Here**.
-- Right-click a folder → **Open With → Macterm**.
-- Drop a folder onto Macterm's Dock icon.
-- Drop a folder onto Macterm's sidebar. Dropping it on a terminal pane still types its path, as before.
-- Run `open -a Macterm ~/code/myproject`.
-
-A file opened with **Open With**, dropped on the Dock icon, or passed to `open -a` goes to your terminal editor instead — see [Open files in your terminal editor](/docs/configuration#open-files-in-your-terminal-editor). If the Finder service is missing, enable it under System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
-
-## Dock menu
-
-Right-click Macterm's Dock icon for **New Window**, **New Tab**, **New Project…** and **Toggle Quick Terminal**. New Tab and New Project… bring a terminal window forward first, including one you had closed.
-
-## Update channels
-
-Set **Update channel** in Settings → Updates.
-
-| Channel | What you get |
-| --- | --- |
-| **Stable** | Tagged releases only. The default. |
-| **Beta** | Stable releases plus betas. |
-| **Tip** | Every commit on `main` that passes CI. Not release-tested — expect breakage. |
-
-Narrowing the channel never downgrades what you already have; the next release above your version replaces it. Homebrew always tracks stable, so `brew upgrade` never installs a beta or tip build.

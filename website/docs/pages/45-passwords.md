@@ -1,12 +1,12 @@
 <!-- page:
 slug: passwords
-title: Passwords
-nav: Passwords
+title: Password Manager
+nav: Password Manager
 group: Everyday use
 description: Save the passwords you type at terminal prompts and autofill them after Touch ID or your login password — where they're stored, what they're matched by, and who can read them.
 -->
 
-# Passwords
+# Password Manager
 
 When a program in a pane asks for a password — `ssh`, `sudo`, `psql`, a key passphrase — Macterm notices, and a bubble appears at the cursor. Nothing is ever saved without you saying so, and nothing is ever typed for you without you asking.
 
@@ -31,7 +31,7 @@ If a saved password stops working, the bubble says so. Type the new one, and Mac
 
 ## Typing a password on demand
 
-Some prompts Macterm can't see — `sudo` on a server you reached with `ssh`, or a prompt inside tmux — and a password you added yourself may not belong to any prompt at all. For those, open the command palette (<kbd>⌘P</kbd>) and choose **Password Manager**. The palette switches to your saved passwords; type to search them by command or prompt, and pick one to type it into the focused pane. <kbd>Esc</kbd>, or <kbd>Delete</kbd> with nothing typed, goes back to the full palette.
+Some prompts Macterm can't see — `sudo` on a server you reached with `ssh`, or a prompt inside tmux — and a password you added yourself may not belong to any prompt at all. For those, open the command palette (<kbd>⌘P</kbd>) and choose **Password Manager** — or go straight there from **View → Password Manager**, or a shortcut you give **Password Manager** in Settings → Keymaps (none by default; pressing it again closes the palette). The palette switches to your saved passwords; type to search them by command or prompt, and pick one to type it into the focused pane. <kbd>Esc</kbd>, or <kbd>Delete</kbd> with nothing typed, goes back to the full palette.
 
 After Touch ID, as for Autofill, Macterm types the password. Picking it is the go-ahead: nothing asks whether the pane is really at a password prompt. What Macterm decides is whether to press Return after it:
 
@@ -40,7 +40,7 @@ After Touch ID, as for Autofill, Macterm types the password. Picking it is the g
 
 ## Adding a password yourself
 
-Click **+** next to **Saved Passwords** in Settings → Passwords, or choose **Add Password…** in the palette's Password Manager. While searching there, **Add Password for Command: …** starts one with what you typed as the command. Every password you add needs a command; the prompt is up to you:
+Click **+** next to **Saved Passwords** in Settings → Password Manager, or choose **Add Password…** in the palette's Password Manager. While searching there, **Add Password for Command: …** starts one with what you typed as the command. Every password you add needs a command; the prompt is up to you:
 
 - **Command and prompt**: autofilled when that command shows that prompt, exactly like a saved one.
 - **Command only**: never offered at a prompt. It's typed only when you pick it from the palette — the way to keep, say, a server's `sudo` password.
@@ -70,7 +70,7 @@ These two shared entries are only offered to a program your own account can't ha
 
 If Macterm can't tell which program is asking, it doesn't offer Autofill or a save for that prompt.
 
-**Details…** in Settings → Passwords shows the exact command and prompt an entry matches, and lets you edit them. Clearing the prompt makes it a palette-only entry. The command can't be cleared; an entry saved for a prompt from any command (a key passphrase) stays that way.
+**Details…** in Settings → Password Manager shows the exact command and prompt an entry matches, and lets you edit them. Clearing the prompt makes it a palette-only entry. The command can't be cleared; an entry saved for a prompt from any command (a key passphrase) stays that way.
 
 ## Where passwords are stored
 
@@ -83,7 +83,7 @@ In your **login keychain** (`~/Library/Keychains/login.keychain-db`), the file-b
 | **Where** (service) | `com.thdxg.macterm.passwords` |
 | **Account** | the command and prompt it matches |
 
-You can see them in **Keychain Access** (login keychain → Passwords, search "Macterm"). They are **not** synced to iCloud Keychain or to your other Macs. Removing Macterm doesn't remove them; remove them in Settings → Passwords first, or delete them in Keychain Access.
+You can see them in **Keychain Access** (login keychain → Passwords, search "Macterm"). They are **not** synced to iCloud Keychain or to your other Macs. Removing Macterm doesn't remove them; remove them in Settings → Password Manager first, or delete them in Keychain Access.
 
 The login keychain is locked with your login password and unlocks when you log in. Each item's access list trusts only Macterm's code signature, so any other app — or the `security` command — asking to read one gets the system's "wants to use your confidential information" dialog, which needs your login password.
 
@@ -103,7 +103,7 @@ Macterm doesn't change any system authentication settings. Its authentication pr
 - **Touch ID for `sudo`** (`pam_tid` in `/etc/pam.d/sudo_local`) keeps working. sudo asks for your fingerprint first; Macterm only sees a prompt if sudo falls back to reading a password at the terminal — after you cancel the fingerprint dialog, for example.
 - **ssh agents and password managers** (1Password, Secretive, `ssh-add --apple-use-keychain`) keep working. They answer ssh without a terminal prompt, so Macterm never sees one.
 
-## Settings → Passwords
+## Settings → Password Manager
 
 | Setting | What it does |
 | --- | --- |

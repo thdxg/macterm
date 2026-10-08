@@ -1,0 +1,236 @@
+/* eyesclosed web — components. Load after tokens.css. Every value is a token.
+   One grid everywhere: a label column (width-label) and a text column (width-text),
+   width-gutter apart. Geist for everything; Geist Mono only inside code. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400..600&family=Geist+Mono:wght@400..700&display=swap");
+
+/* ── base: put .ec on <body> ─────────────────────────────────────────── */
+.ec {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  color-scheme: dark;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 26px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "tnum" 0;
+}
+.ec ::selection { background: var(--selection-bg); color: var(--selection-ink); }
+.ec :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: 2px; }
+.ec code { font-family: var(--font-mono); font-size: 0.875em; color: var(--code-ink); }
+.ec img, .ec video { max-width: 100%; height: auto; }
+/* Zero specificity, so a component's own spacing (Prose's `> * + *`) wins. */
+:where(.ec) :where(h1, h2, h3, p) { margin: 0; }
+
+/* ── Page + Section: the grid ────────────────────────────────────────── */
+.ec-page { box-sizing: border-box; width: 100%; max-width: calc(var(--width-page) + 2 * var(--space-5)); margin: 0 auto; padding-inline: var(--space-5); }
+.ec-grid, .ec-section, .ec-header, .ec-footer {
+  display: grid;
+  grid-template-columns: var(--width-label) minmax(0, var(--width-text));
+  column-gap: var(--width-gutter);
+}
+.ec-section { padding-block: var(--space-12); }
+.ec-section + .ec-section { padding-top: 0; }
+.ec-section-label { grid-column: 1; font-size: 14px; line-height: 26px; font-weight: 400; color: var(--ink-faint); }
+.ec-section-body { grid-column: 2; min-width: 0; display: flex; flex-direction: column; gap: var(--space-5); }
+.ec-section-body > h2, .ec-section-body > h3 { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-heading); }
+.ec-section-body > p { color: var(--ink); text-wrap: pretty; }
+.ec-section-body > .ec-muted { color: var(--ink-muted); }
+.ec-span { grid-column: 1 / -1; }
+
+/* ── SiteHeader ──────────────────────────────────────────────────────── */
+.ec-header { align-items: center; padding-block: var(--space-8); }
+.ec-brand { grid-column: 1; display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; color: var(--ink-bright); text-decoration: none; font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.ec-brand img, .ec-brand svg { width: 20px; height: 20px; display: block; }
+.ec-nav { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); font-size: 14px; line-height: 20px; }
+.ec-nav a { color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
+.ec-nav a:hover, .ec-nav a[aria-current="page"] { color: var(--ink-bright); }
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.ec-hero { padding-block: var(--space-24) var(--space-12); }
+@media (min-width: 720px) { .ec-hero { padding-top: var(--space-40); } }
+.ec-hero > * { grid-column: 2; }
+.ec-hero h1 { font-size: 40px; line-height: 44px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink-bright); }
+.ec-hero-lede { margin-top: var(--space-4) !important; font-size: 19px; line-height: 30px; letter-spacing: -0.01em; color: var(--ink-muted); text-wrap: pretty; }
+.ec-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-8); }
+.ec-hero .ec-code { margin-top: var(--space-6); }
+
+/* ── Link ────────────────────────────────────────────────────────────── */
+.ec-link, .ec-prose a, .ec-section-body p a {
+  color: var(--link);
+  text-decoration: underline; text-decoration-color: var(--link-line);
+  text-decoration-thickness: 1px; text-underline-offset: 3px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.ec-link:hover, .ec-prose a:hover, .ec-section-body p a:hover { color: var(--ink-bright); text-decoration-color: currentColor; }
+.ec-link--quiet { color: var(--ink-muted); text-decoration: none; }
+.ec-link--quiet:hover { color: var(--ink-bright); }
+
+/* ── Button ──────────────────────────────────────────────────────────── */
+.ec-btn {
+  box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-2);
+  height: 36px; padding: 0 var(--space-4);
+  border: 1px solid transparent; border-radius: var(--radius-pill);
+  background: transparent; color: var(--ink-muted);
+  font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 500;
+  text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: opacity 0.15s;
+}
+/* Hover fades the whole button; its color, fill and border never change. */
+.ec-btn:hover { opacity: 0.7; }
+.ec-btn--primary { background: var(--ink-bright); color: var(--on-bright); }
+.ec-btn--outline { border-color: var(--control-edge); color: var(--ink); }
+.ec-btn:disabled, .ec-btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+
+/* ── EntryList ───────────────────────────────────────────────────────── */
+.ec-entries { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.ec-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); }
+.ec-entry-title { color: var(--ink-bright); text-decoration: none; font-weight: 500; transition: color 0.15s; }
+a.ec-entry-title:hover { color: var(--link); }
+.ec-entry-meta { grid-column: 2; grid-row: 1; font-size: 14px; color: var(--ink-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ec-entry-desc { grid-column: 1 / -1; color: var(--ink-muted); text-wrap: pretty; }
+
+/* ── Figure ──────────────────────────────────────────────────────────── */
+.ec-figure { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.ec-figure > img, .ec-figure > video, .ec-figure > svg { display: block; width: 100%; height: auto; border-radius: var(--radius-md); background: var(--surface); }
+.ec-figure figcaption { font-size: 12px; line-height: 18px; color: var(--ink-faint); }
+
+/* ── CodeBlock (the only mono) ───────────────────────────────────────── */
+.ec-code {
+  position: relative; margin: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink);
+  font-family: var(--font-mono); font-size: 14px; line-height: 22px; font-weight: 400;
+}
+.ec-code pre { margin: 0; padding: var(--space-3) calc(var(--space-4) + 28px) var(--space-3) var(--space-4); overflow-x: auto; scrollbar-width: thin; }
+.ec-code code { font-size: inherit; color: inherit; }
+.ec-code-caption {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: 4px var(--space-2) 0 var(--space-4);
+  font-size: 12px; line-height: 28px; color: var(--ink-muted);
+}
+.ec-code-caption ~ pre { padding-top: var(--space-1); padding-right: var(--space-4); }
+.ec-copy {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-muted); cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.ec-copy:hover { color: var(--ink-bright); background: var(--surface-hover); }
+.ec-copy svg { width: 14px; height: 14px; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.ec-code > .ec-copy { position: absolute; top: 9px; right: var(--space-2); }
+.ec-code .prompt { color: var(--ink-ghost); user-select: none; }
+
+/* syntax — the eyesclosed editor theme, one class per Helix scope */
+.tok-keyword { color: var(--keyword); font-weight: 700; }
+.tok-function { color: var(--function); }
+.tok-string { color: var(--string); }
+.tok-constant { color: var(--constant); }
+.tok-type { color: var(--type); }
+.tok-builtin { color: var(--builtin); }
+.tok-variable { color: var(--variable); }
+.tok-parameter { color: var(--parameter); }
+.tok-property { color: var(--property); }
+.tok-namespace { color: var(--namespace); }
+.tok-operator { color: var(--operator); }
+.tok-attribute { color: var(--attribute); }
+.tok-doc { color: var(--doc); font-style: italic; }
+.tok-comment { color: var(--comment); font-style: italic; }
+.tok-punct { color: var(--punct); }
+
+/* ── Kbd ─────────────────────────────────────────────────────────────── */
+.ec-kbd, .ec-prose kbd {
+  display: inline-block; min-width: 1.4em; box-sizing: border-box; text-align: center;
+  font-family: var(--font-sans); font-size: 0.8125em; line-height: 1.5; font-weight: 500; color: var(--ink);
+  background: var(--surface); border-radius: var(--radius-sm); padding: 0 0.4em;
+  box-shadow: inset 0 -1px 0 var(--rule-strong);
+}
+
+/* ── Prose ───────────────────────────────────────────────────────────── */
+.ec-prose { max-width: var(--width-text); color: var(--ink); font-size: 16px; line-height: 26px; }
+.ec-prose > * + * { margin-top: var(--space-5); }
+.ec-prose h1 { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink-heading); }
+.ec-prose h1 + p { margin-top: var(--space-3); font-size: 19px; line-height: 30px; letter-spacing: -0.01em; color: var(--ink-muted); }
+.ec-prose h2 { margin-top: var(--space-12); font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-heading); }
+.ec-prose h3 { margin-top: var(--space-8); font-size: 16px; line-height: 24px; font-weight: 600; color: var(--ink-heading); }
+.ec-prose h2 + *, .ec-prose h3 + * { margin-top: var(--space-2); }
+.ec-prose p { margin-bottom: 0; }
+.ec-prose ul, .ec-prose ol { margin-bottom: 0; padding-left: var(--space-5); }
+.ec-prose li + li { margin-top: var(--space-2); }
+.ec-prose li::marker { color: var(--ink-faint); }
+.ec-prose strong { color: var(--ink-bright); font-weight: 600; }
+.ec-prose img { display: block; border-radius: var(--radius-md); }
+.ec-prose hr { border: 0; height: var(--space-6); margin: 0; }
+
+/* ── Note (also every blockquote in prose) ───────────────────────────── */
+:where(.ec-note, .ec-prose blockquote) { margin: 0; }
+.ec-note, .ec-prose blockquote {
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface); border-radius: var(--radius-sm);
+  font-size: 14px; line-height: 22px; color: var(--ink);
+}
+.ec-note::before, .ec-prose blockquote::before {
+  content: "Note"; display: block; margin-bottom: var(--space-1);
+  font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.04em; color: var(--accent);
+}
+.ec-note--warning::before { content: "Warning"; color: var(--warning); }
+.ec-note p + p, .ec-prose blockquote p + p { margin-top: var(--space-2); }
+
+/* ── Table ───────────────────────────────────────────────────────────── */
+.ec-table-wrap { overflow-x: auto; }
+.ec-table, .ec-prose table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 22px; }
+.ec-table th, .ec-prose th {
+  text-align: left; vertical-align: bottom; padding: 0 var(--space-4) var(--space-2) 0;
+  font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.04em; color: var(--ink-faint);
+}
+.ec-table td, .ec-prose td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-4) var(--space-2) 0; border-top: 1px solid var(--rule); color: var(--ink); }
+.ec-table .num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 0; }
+
+/* ── DocsLayout: the sidebar lives in the label column ───────────────── */
+.ec-docs { padding-block: var(--space-12) var(--space-24); align-items: start; }
+.ec-sidebar { grid-column: 1; position: sticky; top: var(--space-8); display: flex; flex-direction: column; gap: var(--space-6); max-height: calc(100vh - 64px); overflow-y: auto; scrollbar-width: none; font-size: 16px; line-height: 26px; }
+.ec-sidebar-group { display: flex; flex-direction: column; gap: var(--space-2); }
+/* Set like a code comment: italic in `comment` (3.8:1 on page, below 4.5 by choice). */
+.ec-sidebar-label { font-size: 12px; line-height: 16px; font-weight: 500; font-style: italic; letter-spacing: 0.04em; color: var(--comment); }
+.ec-sidebar a { color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
+.ec-sidebar a:hover { color: var(--ink-bright); }
+.ec-sidebar a[aria-current="page"] { color: var(--ink-bright); font-weight: 500; }
+.ec-docs-main { grid-column: 2; min-width: 0; }
+/* The menu button: the sidebar's toggle on phones, at the header's right end.
+   Hidden from 720px, where the sidebar always shows. */
+.ec-menu-btn {
+  display: none; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-muted); cursor: pointer; transition: color 0.15s;
+}
+.ec-menu-btn:hover, .ec-menu-btn[aria-expanded="true"] { color: var(--ink-bright); }
+.ec-menu-btn svg { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.ec-menu-btn .ec-menu-close, .ec-menu-btn[aria-expanded="true"] .ec-menu-open { display: none; }
+.ec-menu-btn[aria-expanded="true"] .ec-menu-close { display: block; }
+.ec-pagenav { display: flex; justify-content: space-between; gap: var(--space-6); margin-top: var(--space-16); font-size: 14px; line-height: 20px; }
+.ec-pagenav a { display: flex; flex-direction: column; gap: 2px; color: var(--ink-bright); text-decoration: none; font-weight: 500; transition: color 0.15s; }
+.ec-pagenav a:hover { color: var(--link); }
+.ec-pagenav a span { font-size: 12px; line-height: 16px; font-weight: 400; color: var(--ink-faint); }
+.ec-pagenav a[rel="next"] { margin-left: auto; text-align: right; }
+
+/* ── SiteFooter ──────────────────────────────────────────────────────── */
+.ec-footer { padding-block: var(--space-24) var(--space-12); font-size: 12px; line-height: 18px; color: var(--ink-faint); }
+.ec-footer > :first-child { grid-column: 1; }
+.ec-footer-links { grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2) var(--space-6); }
+.ec-footer a { color: var(--ink-faint); text-decoration: none; transition: color 0.15s; }
+.ec-footer a:hover { color: var(--ink-bright); }
+
+/* ── phones: one column, labels sit above their content ──────────────── */
+@media (max-width: 720px) {
+  .ec-grid, .ec-section, .ec-header, .ec-footer { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
+  .ec-section-label, .ec-section-body, .ec-brand, .ec-nav, .ec-hero > *, .ec-footer > *, .ec-footer-links, .ec-sidebar, .ec-docs-main { grid-column: 1; }
+  .ec-header { row-gap: var(--space-4); }
+  .ec-footer-links { justify-content: flex-start; }
+  .ec-sidebar { position: static; max-height: none; flex-direction: row; flex-wrap: wrap; gap: var(--space-4) var(--space-8); padding-bottom: var(--space-8); }
+  .ec-header > .ec-brand { grid-row: 1; }
+  .ec-menu-btn { display: inline-flex; grid-column: 1; grid-row: 1; justify-self: end; margin-block: calc(-1 * var(--space-2)); }
+  .ec-sidebar[data-menu="closed"] { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) { .ec *, .ec { transition: none !important; } }

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json",
+  "title": "Macterm custom palette",
+  "description": "A custom command-palette screen, one file per palette in ~/.config/macterm/palettes/. A palette is a graph of named nodes: a menu (`items`) or a listing (`list`, a command whose output becomes rows). Every row enters another node or performs an action, and may export values that travel down the stack as environment variables into every command below it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "nodes"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The palette's name: its row in the command palette, its pill, and its Settings row."
+    },
+    "icon": {
+      "type": "string",
+      "description": "An SF Symbol name for the palette's row and pill. Defaults to square.grid.2x2."
+    },
+    "description": {
+      "type": "string",
+      "description": "One line under the palette's row in Settings → Palettes."
+    },
+    "root": {
+      "type": "string",
+      "description": "The node the palette opens on. Defaults to the node named root."
+    },
+    "nodes": {
+      "type": "object",
+      "description": "Every screen of the palette by name. A node is a menu (`items`) or a listing (`list`), never both.",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "placeholder": {
+          "type": "string",
+          "description": "The search field's placeholder on this screen. Defaults to \"Search <pill>...\"."
+        },
+        "items": {
+          "type": "array",
+          "description": "A menu's rows, in order. Each enters a node or performs an action.",
+          "items": { "$ref": "#/$defs/item" }
+        },
+        "list": {
+          "type": "string",
+          "description": "A listing's command, run once when the screen opens in your login shell (`$SHELL -l -c`), in the active project's directory, with MACTERM_PROJECT_DIR, MACTERM_PROJECT_NAME and every value exported above this screen in its environment. Its output is JSON — an array, newline-delimited objects, or an object holding the array at `rows` — or plain lines, one row each. ⌘R runs it again."
+        },
+        "rows": {
+          "type": "string",
+          "description": "For a listing whose output is a JSON object: the path to the array of rows, e.g. `.items`."
+        },
+        "title": {
+          "type": "string",
+          "description": "A listing row's title. A value starting with `.` is a path into the row (`.` is the row itself, `.metadata.name` a field, `.items[0]` an index); anything else is literal. Defaults to `.`."
+        },
+        "subtitle": {
+          "type": "string",
+          "description": "A listing row's second line, path or literal."
+        },
+        "icon": {
+          "type": "string",
+          "description": "An SF Symbol for every row of this node unless the row names its own; in a listing, a path or a literal."
+        },
+        "match": {
+          "type": "array",
+          "description": "The fields the search matches against, each a path or a literal. Defaults to the title and subtitle.",
+          "items": { "type": "string" }
+        },
+        "export": {
+          "type": "object",
+          "description": "Environment variables a listing row sets for everything below it, each a path or a literal — `{ NAMESPACE: .metadata.name }`. Never substituted into another command's text: read them as variables.",
+          "additionalProperties": { "type": "string" }
+        },
+        "enter": {
+          "type": "string",
+          "description": "For a listing: the node every row opens, with the row's exports added. The row's title names the new screen's pill."
+        },
+        "action": {
+          "$ref": "#/$defs/action",
+          "description": "For a listing: what every row does when picked, instead of `enter`."
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "icon": { "type": "string", "description": "An SF Symbol for this row." },
+        "export": {
+          "type": "object",
+          "description": "Literal environment variables this row sets for everything below it.",
+          "additionalProperties": { "type": "string" }
+        },
+        "enter": { "type": "string", "description": "The node this row opens." },
+        "action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Exactly one of run, copy or open.",
+      "properties": {
+        "run": {
+          "type": "string",
+          "description": "A command typed into a new terminal, as a layout's `run:` is, with the exported variables in its environment. Written in your shell's syntax."
+        },
+        "in": {
+          "type": "string",
+          "enum": ["tab", "split"],
+          "description": "Where `run` runs: a new tab of the active project (the default) or a split beside its focused pane."
+        },
+        "copy": {
+          "type": "string",
+          "description": "Text to copy to the clipboard; in a listing, a path into the row or a literal."
+        },
+        "open": {
+          "type": "string",
+          "description": "A URL or file path to open with its default app; in a listing, a path into the row or a literal."
+        }
+      }
+    }
+  }
+}

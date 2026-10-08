@@ -139,26 +139,26 @@ struct GlobalHotkeysTests {
 
     @Test
     func a_newly_flagged_chord_is_registered() throws {
-        let diff = try GlobalHotkeyPlan.diff(registered: [:], desired: [.newTab: shortcut("cmd+ctrl+t")])
+        let diff = try GlobalHotkeyPlan.diff(registered: [:], desired: [.action(.newTab): shortcut("cmd+ctrl+t")])
         #expect(diff.unregister.isEmpty)
-        #expect(diff.register.keys.sorted { $0.rawValue < $1.rawValue } == [.newTab])
+        #expect(diff.register.keys.sorted() == [.action(.newTab)])
     }
 
     @Test
     func an_unflagged_action_is_unregistered_and_nothing_replaces_it() {
-        let diff = GlobalHotkeyPlan.diff(registered: [.newTab: "cmd+ctrl+t"], desired: [:])
-        #expect(diff.unregister == [.newTab])
+        let diff = GlobalHotkeyPlan.diff(registered: [.action(.newTab): "cmd+ctrl+t"], desired: [:])
+        #expect(diff.unregister == [.action(.newTab)])
         #expect(diff.register.isEmpty)
     }
 
     @Test
     func a_rebind_releases_the_old_chord_before_taking_the_new_one() throws {
         let diff = try GlobalHotkeyPlan.diff(
-            registered: [.newTab: "cmd+ctrl+t"],
-            desired: [.newTab: shortcut("cmd+ctrl+y")]
+            registered: [.action(.newTab): "cmd+ctrl+t"],
+            desired: [.action(.newTab): shortcut("cmd+ctrl+y")]
         )
-        #expect(diff.unregister == [.newTab])
-        #expect(diff.register[.newTab]?.id == "cmd+ctrl+y")
+        #expect(diff.unregister == [.action(.newTab)])
+        #expect(diff.register[.action(.newTab)]?.id == "cmd+ctrl+y")
     }
 
     /// Re-registering a live hot key would release it for an instant, and
@@ -167,8 +167,8 @@ struct GlobalHotkeysTests {
     @Test
     func an_unchanged_chord_is_left_alone() throws {
         let diff = try GlobalHotkeyPlan.diff(
-            registered: [.newTab: "cmd+ctrl+t"],
-            desired: [.newTab: shortcut("cmd+ctrl+t")]
+            registered: [.action(.newTab): "cmd+ctrl+t"],
+            desired: [.action(.newTab): shortcut("cmd+ctrl+t")]
         )
         #expect(diff == GlobalHotkeyPlan.Diff())
     }
@@ -178,7 +178,7 @@ struct GlobalHotkeysTests {
     /// releases it.
     @Test
     func a_refused_chord_is_retried_on_the_next_sync() throws {
-        let desired: [HotkeyAction: HotkeyShortcut] = try [.newTab: shortcut("cmd+ctrl+t")]
+        let desired: [HotkeyBinding: HotkeyShortcut] = try [.action(.newTab): shortcut("cmd+ctrl+t")]
         #expect(GlobalHotkeyPlan.diff(registered: [:], desired: desired).register.count == 1)
         #expect(GlobalHotkeyPlan.diff(registered: [:], desired: desired).register.count == 1)
     }
@@ -237,6 +237,25 @@ struct GlobalHotkeysTests {
     @Test
     func an_action_fires_a_window_open_when_the_last_one_is_hidden() {
         #expect(GlobalHotkeyPlan.frontsWindow(for: .newTab, appIsActive: true, hasVisibleTerminalWindow: false))
+    }
+
+    /// A custom palette's chord opens the palette in a window, so from another
+    /// app it fronts one like any action; its Carbon id comes from
+    /// `PaletteHotkeys`, above every action's and stable for the process.
+    @Test
+    func a_custom_palettes_chord_fronts_a_window_and_has_an_id_of_its_own() {
+        #expect(GlobalHotkeyPlan.frontsWindow(for: .palette("k8s"), appIsActive: false, hasVisibleTerminalWindow: true))
+        #expect(!GlobalHotkeyPlan.frontsWindow(for: .palette("k8s"), appIsActive: true, hasVisibleTerminalWindow: true))
+        let hotkeys = GlobalHotkeys.shared
+        let first = hotkeys.hotKeyID(for: .palette("k8s"))
+        let second = hotkeys.hotKeyID(for: .palette("docker"))
+        #expect(first >= PaletteHotkeys.carbonIDBase)
+        #expect(second == first + 1)
+        #expect(hotkeys.hotKeyID(for: .palette("k8s")) == first, "stable across asks")
+        #expect(hotkeys.binding(forHotKeyID: first) == .palette("k8s"))
+        #expect(hotkeys.binding(forHotKeyID: GlobalHotkeys.hotKeyID(for: .newTab)) == .action(.newTab))
+        #expect(HotkeyAction.allCases.allSatisfy { GlobalHotkeys.hotKeyID(for: $0) < PaletteHotkeys.carbonIDBase })
+        #expect(!hotkeys.isRegistered(.palette("k8s")), "nothing is registered in a hosted test run")
     }
 
     /// The quick terminal's panel is non-activating by design — it shows over

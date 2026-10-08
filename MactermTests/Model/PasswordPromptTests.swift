@@ -399,7 +399,9 @@ struct PasswordVaultTests {
         vault.save("c", for: PasswordEntryID(command: nil, prompt: "Enter passphrase for key '/k':"))
         #expect(vault.entries(matching: "").count == 3)
         #expect(vault.entries(matching: "PROD").map(\.id.command) == ["ssh prod"])
-        #expect(vault.entries(matching: "password app").map(\.id.command) == ["psql -h db1"])
+        // Ranked: the prompt that says both words beats the one that only
+        // holds the letters of "app" scattered (`a`than … `p`rod … `p`assword).
+        #expect(vault.entries(matching: "password app").first?.id.command == "psql -h db1")
         #expect(vault.entries(matching: "passphrase").map(\.id.command) == [nil])
         #expect(vault.entries(matching: "nothing").isEmpty)
     }

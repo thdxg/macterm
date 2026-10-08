@@ -87,7 +87,7 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 /// That is harmless because the comparison versions can't collide: a beta sorts
 /// below the stable release of the same `X.Y.Z` and a tip sorts above it (see
 /// `sparkle_comparison_version` in scripts/_lib.sh).
-/// When Autofill asks the user to authenticate (Settings → Passwords). The raw
+/// When Autofill asks the user to authenticate (Settings → Password Manager). The raw
 /// values are persisted; the case order is the picker's.
 enum PasswordAutofillAuthentication: String, CaseIterable, Identifiable {
     /// The default, "Once per app launch": the first Autofill asks, and the
@@ -456,12 +456,36 @@ final class Preferences {
         didSet { Keys.textFilePlacement.write(textFilePlacement, to: defaults) }
     }
 
-    /// The password manager (Settings → Passwords): offering to save a
+    /// The password manager (Settings → Password Manager): offering to save a
     /// password once it works, and autofilling a saved one. Off, the monitor
     /// captures, offers and fills nothing; prompt detection still drives
     /// `macos-auto-secure-input`. Saved passwords stay in the keychain.
     var passwordManagerEnabled: Bool {
         didSet { Keys.passwordManagerEnabled.write(passwordManagerEnabled, to: defaults) }
+    }
+
+    // MARK: - Palettes (Settings → Palettes)
+
+    /// The palette screens the user has turned off, by id
+    /// (`PaletteScopeID.rawValue`; a custom palette's id later). A screen
+    /// turned off leaves the command palette's list and its menu, and its
+    /// chord says where it went instead of reaching the terminal. Stored as
+    /// the off set rather than the on set so a palette added later — a new
+    /// built-in, a new file — starts on.
+    var disabledPaletteIDs: [String] {
+        didSet { Keys.disabledPaletteIDs.write(disabledPaletteIDs, to: defaults) }
+    }
+
+    func isPaletteEnabled(_ id: String) -> Bool {
+        !disabledPaletteIDs.contains(id)
+    }
+
+    func setPalette(_ id: String, enabled: Bool) {
+        if enabled {
+            disabledPaletteIDs.removeAll { $0 == id }
+        } else if !disabledPaletteIDs.contains(id) {
+            disabledPaletteIDs.append(id)
+        }
     }
 
     /// When Autofill asks for Touch ID or the login password.
@@ -932,6 +956,7 @@ final class Preferences {
         reconnectRemotePanes = Keys.reconnectRemotePanes.read(defaults)
         textFilePlacement = Keys.textFilePlacement.read(defaults)
         passwordManagerEnabled = Keys.passwordManagerEnabled.read(defaults)
+        disabledPaletteIDs = Keys.disabledPaletteIDs.read(defaults)
         passwordAutofillAuthentication = Keys.passwordAutofillAuthentication.read(defaults)
         peekSidebarWhenHidden = Keys.peekSidebarWhenHidden.read(defaults)
         let storedSidebarWidth = Keys.sidebarWidth.read(defaults)
@@ -1106,6 +1131,7 @@ final class Preferences {
         /// The key of the "Offer to save passwords" toggle this replaced, so a
         /// user who switched that off finds the whole feature off, never on.
         static let passwordManagerEnabled = PreferenceStorageKey("macterm.passwords.offerToSave", default: true)
+        static let disabledPaletteIDs = PreferenceStorageKey("macterm.palettes.disabled", default: [String]())
         static let passwordAutofillAuthentication = PreferenceStorageKey(
             "macterm.passwords.autofillAuthentication", default: PasswordAutofillAuthentication.untilLocked
         )

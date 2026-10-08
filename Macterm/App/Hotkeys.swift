@@ -51,12 +51,32 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case pinTab = "pin_tab"
     case unpinTab = "unpin_tab"
     case autofillPassword = "autofill_password"
+    case passwordManager = "password_manager"
+    case worktrees
+    case files
 
     var id: String { rawValue }
 
     /// User-facing name. Sourced from `AppCommand` so the palette and
     /// Settings don't drift apart.
     var title: String { appCommand.title }
+
+    /// What Settings → Keymaps' search looks in (`Search`): the title,
+    /// the section it sits in, and the chord both as shown (`⌘D`, `None` when
+    /// unbound) and as written (`cmd+d`).
+    /// Every bindable action in the order the command palette lists its
+    /// commands (`AppCommand.allCases`), so Settings → Keymaps sections run
+    /// in the palette's order — Palettes first — rather than in this enum's.
+    static var inCommandOrder: [HotkeyAction] {
+        AppCommand.allCases.compactMap(\.hotkeyAction)
+    }
+
+    func searchFields(shortcut: String) -> [String] {
+        let shown = HotkeyRegistry.displayString(for: shortcut)
+        var fields = [title, appCommand.category.rawValue, shown]
+        if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
+        return fields
+    }
 
     var defaultsKey: String { "macterm.hotkey.\(rawValue)" }
 
@@ -138,6 +158,10 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         // pane is at a prompt with a saved password; anywhere else it passes
         // through to the terminal.
         case .autofillPassword: "cmd+opt+f"
+        // Unbound by default: ⌥⌘F, the obvious chord, is Autofill Password's.
+        case .passwordManager: "none"
+        case .worktrees: "none"
+        case .files: "none"
         }
     }
 }

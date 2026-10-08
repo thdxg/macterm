@@ -245,14 +245,9 @@ final class PasswordVault {
         }
     }
 
-    /// Entries whose command or prompt contains every word of `query`,
-    /// case- and diacritic-insensitively — the Settings search field.
+    /// Entries `query` matches in their command or prompt, best first
+    /// (`Search.rank`) — the Settings search field.
     func entries(matching query: String) -> [SavedPassword] {
-        let words = query.split(whereSeparator: \.isWhitespace)
-        guard !words.isEmpty else { return entries }
-        return entries.filter { entry in
-            let haystack = "\(entry.id.command ?? "") \(entry.id.prompt)"
-            return words.allSatisfy { haystack.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
-        }
+        Search.rank(entries, by: query) { [$0.id.command ?? "", $0.id.prompt] }
     }
 }

@@ -6,7 +6,7 @@
   <title>{{TITLE}}</title>
   <meta name="description" content="{{DESCRIPTION}}" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#0B0D0E" />
   <link rel="canonical" href="{{CANONICAL}}" />
 
   <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
@@ -29,40 +29,53 @@
   <meta name="twitter:image" content="{{SITE_URL}}/img/og.png" />
   <meta name="twitter:image:alt" content="Macterm running on macOS — a vertical project sidebar beside an editor and a shell split." />
 
+  <!-- Geist and Geist Mono load through components/bundle.css's @import. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="/tailwind.css" />
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/components/bundle.css" />
 
   <script type="application/ld+json">{{JSONLD}}</script>
 </head>
-<body class="landing">
+<body class="ec">
+<div class="ec-page">
 
-  <header class="l-wrap l-header">
-    <a href="/" class="l-brand" aria-label="Macterm home">
-      <img src="/img/icon-180.png" width="26" height="26" alt="" />
-      <span>Macterm</span>
-    </a>
-    <nav class="l-nav">
-      <a href="https://github.com/thdxg/macterm">GitHub</a>
-    </nav>
+  <header class="ec-header">
+    <a class="ec-brand" href="/"><img src="/img/icon-180.png" width="20" height="20" alt="" />Macterm</a>
+    <!-- Phones only: folds the sidebar away (site.js's docsMenu). -->
+    <button type="button" class="ec-menu-btn" aria-controls="docs-nav" aria-expanded="false" aria-label="Pages">
+      <svg class="ec-menu-open" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/></svg>
+      <svg class="ec-menu-close" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+    </button>
   </header>
 
-  <div class="l-wrap docs-shell">
-    <!-- sidebar (generated: links to every page, current one active) -->
-    <aside class="docs-sidebar">
+  <div class="ec-grid ec-docs">
+    <!-- sidebar (generated: links to every page, current one marked) -->
+    <nav class="ec-sidebar" id="docs-nav" aria-label="Docs">
 <!-- SIDEBAR -->
-    </aside>
+    </nav>
 
-    <!-- content (rendered from this page's Markdown) -->
-    <article class="docs-main prose-docs">
-      <p class="docs-eyebrow">{{GROUP}}</p>
+    <main class="ec-docs-main">
+      <!-- content (rendered from this page's Markdown) -->
+      <article class="ec-prose">
 <!-- CONTENT -->
+      </article>
 <!-- PAGENAV -->
-    </article>
+    </main>
   </div>
 
+  <footer class="ec-footer">
+    <span>© 2026 Macterm</span>
+    <div class="ec-footer-links">
+      <a href="/">Home</a>
+      <a href="https://github.com/thdxg/macterm">GitHub ↗</a>
+      <a href="https://github.com/thdxg/macterm/releases">Releases ↗</a>
+      <a href="https://ghostty.org">Ghostty ↗</a>
+    </div>
+  </footer>
+
+</div>
   <script src="/site.js"></script>
 </body>
 </html>

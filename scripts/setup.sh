@@ -26,7 +26,17 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # nothing here yet; the tag renumbers OUTPUT_ACTIVITY. Re-cut onto
 # thdxg/ghostty#17: the partly revealed scrollback row at the top of a shifted
 # grid (the old prompt line after a clear) is selectable instead of clamping a
-# press to the row below it. Any
+# press to the row below it.
+# build-2026-10-07: upstream through #14576 + downstream patches 0001–0010.
+# 0008 (smooth cursor) and 0009 (cursor trail) moved both cursor effects into
+# the renderer (#493). Re-cut at 22:20Z onto thdxg/ghostty#21, patch 0010: the
+# IO thread applies a surface resize once a frame (16 ms) has passed since the
+# last one it applied, instead of parking every resize behind upstream's fixed
+# 25 ms timer, with the floor rising to the last reflow's own cost. That is
+# what lets the split animation's grid step once per frame (17–20 resizes per
+# split at 16–18 ms) instead of four or five jumps of 15–20 columns. The C
+# header is byte-identical to build-2026-10-05's; nothing in Macterm changes
+# for it. Any
 # same-day push to the fork's main — the nightly sync included — deletes and
 # recreates a daily tag with different bytes, the asset-swap-under-a-pin hazard
 # documented in AGENTS.md; the stamp below can't tell copies apart, so a

@@ -1011,6 +1011,9 @@ final class GhosttyTerminalNSView: NSView {
         if yieldsToProgram?(event) == true { return false }
         // Check all configurable hotkey actions
         if HotkeyAction.allCases.contains(where: { HotkeyRegistry.matches(event, action: $0) }) { return true }
+        // And the custom palettes' chords (`PaletteHotkeys`), the same
+        // answer `MainAppResponder` gives.
+        if PaletteHotkeys.shared.matchingPaletteID(for: event) != nil { return true }
         return false
     }
 

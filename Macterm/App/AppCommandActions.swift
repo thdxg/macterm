@@ -16,6 +16,10 @@ extension AppCommand {
     /// command palette and the menu bar so the two stay in sync.
     @MainActor
     func action(in ctx: AppCommandContext) -> (@MainActor () -> Void)? {
+        // A screen turned off in Settings → Palettes has no command: its row
+        // leaves the palette, its menu item disables, its chord says so.
+        if let scope = paletteScope, !scope.isEnabled { return nil }
+
         let projectID = ctx.appState.activeProjectID
         let current = projectID.flatMap { id in ctx.projectStore.projects.first(where: { $0.id == id }) }
 
@@ -269,7 +273,13 @@ extension AppCommand {
         case .passwordManager:
             // The master switch covers on-demand filling too.
             guard Preferences.shared.passwordManagerEnabled else { return nil }
-            return { ctx.appState.openCommandPalette(scope: .passwords) }
+            return { ctx.appState.toggleCommandPalette(scope: .passwords) }
+        case .worktrees:
+            guard let current, Self.worktreesUnavailableReason(for: current) == nil else { return nil }
+            return { ctx.appState.toggleCommandPalette(scope: .worktrees) }
+        case .files:
+            guard let current, Self.filesUnavailableReason(for: current) == nil else { return nil }
+            return { ctx.appState.toggleCommandPalette(scope: .files) }
         case .checkForUpdate:
             // Always present in the palette; the guard only no-ops when a check
             // is already in flight (canCheckForUpdates flips false during one).
@@ -288,23 +298,58 @@ extension AppCommand {
     /// keeps the plain disabled look either way.
     @MainActor
     func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
+        // Turned off as a palette: gone, not muted — that is what turning
+        // it off is for.
+        if let scope = paletteScope, !scope.isEnabled { return nil }
         // Off by the master switch: say where it is rather than vanish.
         if self == .passwordManager {
-            return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Passwords"
+            return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Password Manager"
         }
+        if self == .worktrees || self == .files { return unavailableNotice(in: ctx) }
         guard self == .applyLayout,
               let projectID = ctx.appState.activeProjectID,
               let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
         else { return nil }
         switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
         case .none:
-            return "No project file for this project — use “Save Layout” to create one"
+            return "No layout file for this project"
         case .emptyTabs:
-            return "The project file declares no tabs"
+            return "The layout file declares no tabs"
         case .applicable,
              .invalid:
             return nil
         }
+    }
+
+    /// What a keybind says, as a toast, when it fires while this command
+    /// doesn't apply — for a command whose being unavailable is news (the
+    /// project isn't a repository) rather than a context that plainly isn't
+    /// there. nil lets the chord fall through to the terminal, as every
+    /// other inapplicable binding does.
+    @MainActor
+    func unavailableNotice(in ctx: AppCommandContext) -> String? {
+        if let scope = paletteScope, !scope.isEnabled {
+            return "\(title) is turned off in Settings → Palettes"
+        }
+        guard self == .worktrees || self == .files,
+              let projectID = ctx.appState.activeProjectID,
+              let current = ctx.projectStore.projects.first(where: { $0.id == projectID })
+        else { return nil }
+        return self == .files ? Self.filesUnavailableReason(for: current) : Self.worktreesUnavailableReason(for: current)
+    }
+
+    /// Why `project` has no Files screen, or nil when it has one: the index
+    /// walks the local file system, which a remote project's files aren't on.
+    @MainActor
+    static func filesUnavailableReason(for project: Project) -> String? {
+        project.isRemote ? "Files aren’t available for remote projects" : nil
+    }
+
+    /// Why `project` has no Worktrees screen, or nil when it has one.
+    @MainActor
+    static func worktreesUnavailableReason(for project: Project) -> String? {
+        if project.isRemote { return "Worktrees aren’t available for remote projects" }
+        return GitWorktrees.isRepository(projectPath: project.path) ? nil : "Project is not a git repository"
     }
 
     /// Secondary line for an *enabled* palette row. Only "Apply Layout" uses

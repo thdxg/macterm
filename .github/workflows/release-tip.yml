@@ -29,15 +29,6 @@ on:
   # build job's "Check whether this version is already published").
   workflow_dispatch:
 
-# Single-flight, and deliberately NOT cancel-in-progress. Publishing is a
-# read-modify-write of appcast.xml on gh-pages plus a force-moved tag and an
-# asset swap; two runs interleaving there can leave the feed naming a DMG that
-# was pruned. Queuing costs runner minutes and gains correctness — the same
-# tradeoff ghostty makes, and for the same stated reason.
-concurrency:
-  group: release-tip
-  cancel-in-progress: false
-
 jobs:
   # Decide whether this commit gets a tip build, before spending ~20 minutes of
   # macOS runner on it. Ubuntu, seconds, no checkout of the tree beyond git.
@@ -166,6 +157,30 @@ jobs:
             fi
           fi
 
+          # Skip a commit CI has already moved past. Test runs aren't ordered,
+          # so this commit's Test can finish after a newer commit's — and with
+          # the build job cancelling in progress, an older run arriving last
+          # would kill the newer build and publish a stale tip. A newer commit
+          # with Test AND Checks green has a tip run of its own (or had one),
+          # which ships everything this commit does. Checks matters: a newer
+          # commit with red Checks never builds, so it must not starve this one.
+          # A manual dispatch builds main's HEAD and has nothing newer to defer to.
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            git fetch --quiet origin main
+            for OTHER in $(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?branch=main&event=push&status=success&per_page=30" \
+              --jq '.workflow_runs[].head_sha' | sort -u); do
+              [[ "$OTHER" != "$SHA" ]] || continue
+              git merge-base --is-ancestor "$SHA" "$OTHER" 2>/dev/null || continue
+              CHECKS=$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/checks.yml/runs?head_sha=$OTHER&event=push" \
+                --jq '.workflow_runs[0].conclusion // ""')
+              case "$CHECKS" in
+                success|skipped) skip "newer commit $OTHER has already passed CI; its tip run supersedes this one" ;;
+              esac
+            done
+          fi
+
           echo "build=true" >> "$GITHUB_OUTPUT"
           echo "Building tip for $SHA"
 
@@ -174,6 +189,25 @@ jobs:
     needs: gate
     if: needs.gate.outputs.build == 'true'
     runs-on: macos-26
+    # The newest commit replaces an older one still building: a tip build is
+    # ~20 minutes of macOS runner, and finishing one that a newer commit has
+    # already outdated only publishes it for a newer one to overwrite.
+    #
+    # On this job, not the workflow, so only a commit that has PASSED the gate
+    # can cancel a build — a workflow-level group let a red commit, or a
+    # docs-only one, kill a good build while its gate was still polling Checks,
+    # and then publish nothing itself. The gate also refuses an older commit
+    # whose Test happened to finish last (the gate's Decide step), which would
+    # otherwise cancel a newer build.
+    #
+    # One group still means one build at a time, so two publishes never
+    # interleave. A cancel that lands mid-publish leaves the feed, the release
+    # and the tag each at this build or the previous one, never naming a DMG
+    # that isn't attached (prune keeps $KEEP_ASSETS), and the tag moving LAST
+    # means the cancelling run simply publishes over it.
+    concurrency:
+      group: release-tip
+      cancel-in-progress: true
     permissions:
       contents: write
     env:
@@ -316,11 +350,12 @@ jobs:
       # and the run threw away a finished 20-minute universal build to report a
       # green no-op with no release. Any merge landing during a build did that.
       #
-      # Main moving does NOT make this build unpublishable — it just means a
-      # newer one is queued behind us, and publishing tip.2 now and tip.3 twenty
-      # minutes later is exactly the channel working. The only genuinely stale
-      # case is a tip that has ALREADY been published from a commit at or ahead
-      # of ours, which can only happen if two queued runs land out of order.
+      # Main moving does NOT make this build unpublishable. A newer commit that
+      # passes CI cancels this job through the concurrency group, so a build
+      # that got this far is the newest one CI has passed. The only genuinely
+      # stale case is a tip that has ALREADY been published from a commit at or
+      # ahead of ours, which the gate's out-of-order check narrows but can't
+      # close (it reads Test runs, not other tip runs).
       #
       # The `tip` tag records precisely that, because it moves LAST, after a
       # successful publish: if it is not an ancestor of the commit we built, a

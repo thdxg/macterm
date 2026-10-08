@@ -9,7 +9,7 @@ description: Macterm — a native macOS terminal with a vertical project sidebar
 
 # Macterm
 
-A native macOS terminal with a vertical project sidebar and persistent multiplexing, built on [libghostty](https://ghostty.org). Quit anytime — your projects, tabs, and split panes come back exactly as you left them.
+A native macOS terminal with a vertical project sidebar and persistent multiplexing, built on [libghostty](https://ghostty.org).
 
 Requires macOS 14 or later. MIT licensed.
 

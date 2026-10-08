@@ -98,19 +98,34 @@ struct RemoteForegroundResolverTests {
     func probes_once_per_host_within_the_interval() async {
         let calls = LockedBox<[String]>([])
         let resolver = RemoteForegroundResolver(minInterval: 3)
+        let panes = [remotePane(), remotePane()]
+        // The probe names both sessions: a listing that missed one would
+        // re-arm its request (the registration race), which bypasses the
+        // interval this test is about.
+        let listing = Dictionary(uniqueKeysWithValues: panes.map {
+            ($0.sessionName, RemoteForeground(comm: "bash", isIdle: true, command: nil))
+        })
         let probe: @Sendable (ProjectPath, String?) async -> RemoteProbeOutcome = { spec, _ in
             if case let .remote(_, host, _) = spec { calls.mutate { $0.append(host) } }
-            return .success([:])
+            return .success(listing)
         }
-        let panes = [remotePane(), remotePane()]
         let t0 = Date()
 
+        // Every wait below also waits for `isIdle`: the probe closure runs
+        // when the probe STARTS, but the host stays inflight until `finish`
+        // runs on the main actor, and a refresh landing in between is dropped
+        // by the inflight guard — never retried, so a wait on the next call
+        // would time out (a loaded CI runner hit exactly that).
         resolver.refresh(panes: panes, probe: probe, now: t0)
+        await waitUntil { calls.value == ["devbox"] && resolver.isIdle }
+
+        // Within the interval, with nothing inflight: the interval alone throttles.
         resolver.refresh(panes: panes, probe: probe, now: t0.addingTimeInterval(1))
-        await waitUntil { calls.value == ["devbox"] }
+        await waitUntil { resolver.isIdle }
+        #expect(calls.value == ["devbox"])
 
         resolver.refresh(panes: panes, probe: probe, now: t0.addingTimeInterval(4))
-        await waitUntil { calls.value == ["devbox", "devbox"] }
+        await waitUntil { calls.value == ["devbox", "devbox"] && resolver.isIdle }
     }
 
     @Test
@@ -128,8 +143,11 @@ struct RemoteForegroundResolverTests {
             return .success([session: RemoteForeground(comm: "bash", isIdle: true, command: nil)])
         }
         let t0 = Date()
+        // Wait for the probe to finish, not just start: a refresh while the
+        // host is still inflight is dropped by the inflight guard, which would
+        // pass the throttle checks below without exercising the interval.
         resolver.refresh(panes: [pane], probe: probe, now: t0)
-        await waitUntil { calls.value == ["devbox"] }
+        await waitUntil { calls.value == ["devbox"] && resolver.isIdle }
 
         // Within the interval with no boundary: throttled.
         resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(1))
@@ -139,7 +157,7 @@ struct RemoteForegroundResolverTests {
         // A command boundary (#210's remote mirror) bypasses the interval…
         pane.noteRemoteCommandBoundary()
         resolver.refresh(panes: [pane], probe: probe, now: t0.addingTimeInterval(2))
-        await waitUntil { calls.value == ["devbox", "devbox"] }
+        await waitUntil { calls.value == ["devbox", "devbox"] && resolver.isIdle }
 
         // …and the fired probe consumes the request, restoring the throttle.
         #expect(!pane.remoteProbePending)

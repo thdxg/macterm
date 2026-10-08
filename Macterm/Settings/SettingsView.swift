@@ -10,11 +10,20 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case projects = "Projects"
     case appearance = "Appearance"
     case animations = "Animations"
+    case keymaps = "Keymaps"
     case quickTerminal = "Quick Terminal"
     case widgets = "Widgets"
-    case keymaps = "Keymaps"
-    case passwords = "Passwords"
+    case palettes = "Palettes"
+    case passwords = "Password Manager"
     case updates = "Updates"
+
+    /// The sidebar's groups, separated by a gap: the app itself, then the
+    /// things it puts on screen beyond the terminal window, then updates.
+    static let groups: [[SettingsPane]] = [
+        [.general, .projects, .appearance, .animations, .keymaps],
+        [.quickTerminal, .widgets, .palettes, .passwords],
+        [.updates],
+    ]
 
     var id: String { rawValue }
     var title: String { rawValue }
@@ -28,6 +37,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .quickTerminal: "rectangle.bottomthird.inset.filled"
         case .widgets: "widget.small"
         case .keymaps: "keyboard"
+        case .palettes: "command"
         case .passwords: "key"
         case .updates: "arrow.triangle.2.circlepath"
         }
@@ -54,9 +64,15 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
-            List(SettingsPane.allCases, selection: $selection) { pane in
-                NavigationLink(value: pane) {
-                    Label(pane.title, systemImage: pane.symbol)
+            List(selection: $selection) {
+                ForEach(Array(SettingsPane.groups.enumerated()), id: \.offset) { _, group in
+                    Section {
+                        ForEach(group) { pane in
+                            NavigationLink(value: pane) {
+                                Label(pane.title, systemImage: pane.symbol)
+                            }
+                        }
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(Self.sidebarWidth)
@@ -85,6 +101,7 @@ struct SettingsView: View {
         case .quickTerminal: QuickTerminalSettings()
         case .widgets: WidgetsSettings()
         case .keymaps: KeymapSettings()
+        case .palettes: PalettesSettings()
         case .passwords: PasswordsSettings()
         case .updates: UpdatesSettings()
         }
@@ -1194,10 +1211,12 @@ private struct AppearanceSettings: View {
                     .settingsCaption()
 
                 Group {
-                    Picker("Peek style", selection: $sidebarPeekStyle) {
+                    Picker(selection: $sidebarPeekStyle) {
                         ForEach(SidebarPeekStyle.allCases) { style in
                             Text(style.displayName).tag(style)
                         }
+                    } label: {
+                        Text("Peek style").dimsWhenDisabled()
                     }
                     .onChange(of: sidebarPeekStyle) { _, style in
                         Preferences.shared.sidebarPeekStyle = style
@@ -1206,6 +1225,7 @@ private struct AppearanceSettings: View {
                         .settingsCaption()
                 }
                 .disabled(!peekSidebarWhenHidden)
+                .padding(.leading, 16)
 
                 Picker("Project icon", selection: $projectIconSymbol) {
                     ForEach(Preferences.projectIconChoices, id: \.self) { name in
@@ -1264,7 +1284,7 @@ private struct AppearanceSettings: View {
                 .disabled(!(showTabStatusIndicator && showAgentIcons))
                 .padding(.leading, 16)
 
-                Toggle("Show New Project button", isOn: $showNewProjectButton)
+                Toggle("Show new project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
                 Text("When hidden, create projects via the command palette or context menu.")
                     .settingsCaption()
@@ -1578,6 +1598,12 @@ private struct QuickTerminalSettings: View {
 // MARK: - Keymaps
 
 private struct KeymapSettings: View {
+    @Environment(AppState.self)
+    private var appState
+
+    /// Every binding's chord by row id: `HotkeyAction.id`s and the custom
+    /// palettes' `PaletteHotkeys.rowID`s together, so the conflict check
+    /// sees both tables.
     @State
     private var values: [String: String] = [:]
     @State
@@ -1586,6 +1612,8 @@ private struct KeymapSettings: View {
     private var global: [String: Bool] = [:]
     @State
     private var capturingActionID: String?
+    @State
+    private var query = ""
 
     /// Observed so a chord the system refuses to register shows its reason
     /// under the row the moment the toggle or the rebind lands.
@@ -1627,74 +1655,112 @@ private struct KeymapSettings: View {
     can see it, and it can no longer pass through to a program.
     """
 
-    /// Titles of the *other* actions that share `action`'s binding, for the
-    /// inline conflict message.
-    private func conflictPartners(for action: HotkeyAction) -> [String] {
-        guard let key = HotkeyRegistry.conflictKey(for: values[action.id] ?? "disabled") else {
+    /// Titles of the *other* bindings — actions and custom palettes — that
+    /// share the row `rowID`'s chord, for the inline conflict message.
+    private func conflictPartners(forRow rowID: String) -> [String] {
+        guard let key = HotkeyRegistry.conflictKey(for: values[rowID] ?? "disabled") else {
             return []
         }
-        return HotkeyAction.allCases
-            .filter { $0.id != action.id && HotkeyRegistry.conflictKey(for: values[$0.id] ?? "disabled") == key }
+        var partners = HotkeyAction.allCases
+            .filter { $0.id != rowID && HotkeyRegistry.conflictKey(for: values[$0.id] ?? "disabled") == key }
             .map(\.title)
+        partners += appState.customPalettes.entries
+            .filter { PaletteHotkeys.rowID(paletteID: $0.id) != rowID }
+            .filter { HotkeyRegistry.conflictKey(for: values[PaletteHotkeys.rowID(paletteID: $0.id)] ?? "disabled") == key }
+            .map(\.pill.title)
+        return partners
+    }
+
+    /// The custom palettes the search matches, listed under Palettes after
+    /// the built-in screens.
+    private var matchingCustomPalettes: [CustomPaletteStore.Entry] {
+        appState.customPalettes.entries.filter { entry in
+            let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
+            let shortcut = values[rowID] ?? "disabled"
+            var fields = [entry.pill.title, AppCommand.Category.palettes.rawValue, HotkeyRegistry.displayString(for: shortcut)]
+            if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
+            return Search.matches(query, in: fields)
+        }
     }
 
     /// Bindable actions grouped by the category of the `AppCommand` they back,
     /// so the keymaps list mirrors the command palette's sectioning instead of
-    /// being one long flat list. Categories appear in `AppCommand.allCases`
-    /// declaration order; actions keep their order within each.
+    /// being one long flat list. Categories and actions appear in
+    /// `AppCommand.allCases` declaration order (`HotkeyAction.inCommandOrder`),
+    /// the palette's own. While searching, only the matches (`Search.rank`
+    /// over `HotkeyAction.searchFields`), best first: a category comes in
+    /// where its best match ranks, and one left with none drops out.
     private var actionsByCategory: [(category: AppCommand.Category, actions: [HotkeyAction])] {
         var order: [AppCommand.Category] = []
         var grouped: [AppCommand.Category: [HotkeyAction]] = [:]
-        for action in HotkeyAction.allCases {
+        let matching = Search.rank(HotkeyAction.inCommandOrder, by: query) {
+            $0.searchFields(shortcut: values[$0.id] ?? $0.defaultShortcut)
+        }
+        for action in matching {
             let category = action.appCommand.category
             if grouped[category] == nil { order.append(category) }
             grouped[category, default: []].append(action)
         }
+        // A custom palette alone matching the search still needs its group.
+        if !matchingCustomPalettes.isEmpty, grouped[.palettes] == nil {
+            order.insert(.palettes, at: 0)
+            grouped[.palettes] = []
+        }
         return order.map { ($0, grouped[$0] ?? []) }
     }
 
+    private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
+
     var body: some View {
         Form {
-            Section {
-                TextField(
-                    "Programs",
-                    text: Binding(
-                        get: { Preferences.shared.passthroughPrograms },
-                        set: { Preferences.shared.passthroughPrograms = $0 }
-                    ),
-                    prompt: Text(verbatim: "nvim, hx")
-                )
-                Text(
-                    "Keybinds with Pass to TUI checked go to these programs instead of running their action. "
-                        + "Separate names with commas."
-                )
-                .settingsCaption()
-            } header: {
-                DocsSectionHeader("Passthrough Programs", docs: .keybinds)
-            }
+            passthroughSection
 
-            ForEach(actionsByCategory, id: \.category) { group in
-                Section(group.category.rawValue) {
+            // One block: the search at its top, then every category as a
+            // run of rows under its own column header, so the list reads as
+            // a single table divided rather than as separate tables.
+            Section {
+                SettingsSearchField(text: $query, prompt: "Search by action or keybind")
+                if isSearching, actionsByCategory.isEmpty {
+                    Text("No keybinds match “\(query.trimmingCharacters(in: .whitespaces))”.")
+                        .foregroundStyle(.secondary)
+                }
+                if !actionsByCategory.isEmpty {
                     columnHeader
+                }
+                ForEach(actionsByCategory, id: \.category) { group in
+                    sectionLabel(group.category.rawValue)
                     ForEach(group.actions) { action in
                         hotkeyRow(action)
                     }
+                    if group.category == .palettes {
+                        ForEach(matchingCustomPalettes) { entry in
+                            customPaletteRow(entry)
+                        }
+                    }
                 }
+            } header: {
+                Text("Keybinds")
             }
         }
         .formStyle(.grouped)
         .background(
-            HotkeyCaptureView(capturingActionID: $capturingActionID) { event, actionID in
-                guard let action = HotkeyAction(rawValue: actionID),
-                      let shortcut = HotkeyRegistry.shortcutString(from: event)
-                else { return }
-                values[action.id] = shortcut
-                HotkeyRegistry.setShortcutString(shortcut, for: action)
+            HotkeyCaptureView(capturingActionID: $capturingActionID) { event, rowID in
+                guard let shortcut = HotkeyRegistry.shortcutString(from: event) else { return }
+                if let action = HotkeyAction(rawValue: rowID) {
+                    values[action.id] = shortcut
+                    HotkeyRegistry.setShortcutString(shortcut, for: action)
+                } else if let paletteID = PaletteHotkeys.paletteID(fromRowID: rowID) {
+                    values[rowID] = shortcut
+                    PaletteHotkeys.shared.setShortcutString(shortcut, paletteID: paletteID)
+                } else {
+                    return
+                }
                 capturingActionID = nil
                 HotkeyCaptureState.shared.isCapturing = false
             }
         )
         .onAppear {
+            appState.customPalettes.reloadIfChanged()
             var map: [String: String] = [:]
             var flags: [String: Bool] = [:]
             var globals: [String: Bool] = [:]
@@ -1703,7 +1769,12 @@ private struct KeymapSettings: View {
                 flags[action.id] = HotkeyRegistry.passesThroughToPrograms(for: action)
                 globals[action.id] = HotkeyRegistry.isGlobal(action)
             }
-            values = map
+            for paletteID in PaletteHotkeys.shared.paletteIDs {
+                let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
+                flags[rowID] = PaletteHotkeys.shared.passesThrough(paletteID: paletteID)
+                globals[rowID] = PaletteHotkeys.shared.isGlobal(paletteID: paletteID)
+            }
+            values = map.merging(PaletteHotkeys.shared.shortcutStringsByRowID()) { _, palette in palette }
             passthrough = flags
             global = globals
         }
@@ -1713,9 +1784,37 @@ private struct KeymapSettings: View {
         }
     }
 
-    /// Names the three columns once per section. Repeated per section rather
-    /// than once per pane because each section scrolls independently in a long
-    /// list, and a header that has scrolled away explains nothing.
+    private var passthroughSection: some View {
+        Section {
+            TextField(
+                "Programs",
+                text: Binding(
+                    get: { Preferences.shared.passthroughPrograms },
+                    set: { Preferences.shared.passthroughPrograms = $0 }
+                ),
+                prompt: Text(verbatim: "nvim, hx")
+            )
+            Text(
+                "Keybinds with Pass to TUI checked go to these programs instead of running their action. "
+                    + "Separate names with commas."
+            )
+            .settingsCaption()
+        } header: {
+            DocsSectionHeader("Passthrough Programs", docs: .keybinds)
+        }
+    }
+
+    /// A category's divider inside the block: its name alone, small and
+    /// gray, where the rows' titles go.
+    private func sectionLabel(_ category: String) -> some View {
+        Text(category)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The one header row of the table, under the search: the three column
+    /// names over the boxes every row lines its controls up in.
     private var columnHeader: some View {
         HStack(spacing: Self.columnGap) {
             Text("Action")
@@ -1755,9 +1854,101 @@ private struct KeymapSettings: View {
         )
     }
 
+    private func palettePassthroughBinding(_ paletteID: String) -> Binding<Bool> {
+        let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
+        return Binding(
+            get: { passthrough[rowID] ?? false },
+            set: { enabled in
+                passthrough[rowID] = enabled
+                PaletteHotkeys.shared.setPassesThrough(enabled, paletteID: paletteID)
+            }
+        )
+    }
+
+    private func paletteGlobalBinding(_ paletteID: String) -> Binding<Bool> {
+        let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
+        return Binding(
+            get: { global[rowID] ?? false },
+            set: { enabled in
+                global[rowID] = enabled
+                PaletteHotkeys.shared.setGlobal(enabled, paletteID: paletteID)
+            }
+        )
+    }
+
+    /// A custom palette's row: the same five children as `hotkeyRow`, its
+    /// flags kept by `PaletteHotkeys`, so its columns line up with the header
+    /// and every action row.
+    @ViewBuilder
+    private func customPaletteRow(_ entry: CustomPaletteStore.Entry) -> some View {
+        let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
+        let partners = conflictPartners(forRow: rowID)
+        let isCapturing = capturingActionID == rowID
+        let isUnmapped = HotkeyRegistry.displaySymbols(for: values[rowID] ?? "disabled").isEmpty
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Self.columnGap) {
+                Text(entry.pill.title)
+                Spacer(minLength: 0)
+                Toggle("", isOn: paletteGlobalBinding(entry.id))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .frame(width: Self.globalColumn, alignment: .center)
+                    .help(Self.globalHelp)
+                Toggle("", isOn: palettePassthroughBinding(entry.id))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .frame(width: Self.passthroughColumn, alignment: .center)
+                    .help(Self.passthroughHelp)
+                Button {
+                    HotkeyCaptureState.shared.isCapturing = true
+                    capturingActionID = rowID
+                } label: {
+                    Text(isCapturing ? "Press keys..." : HotkeyRegistry.displayString(for: values[rowID] ?? "disabled"))
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .frame(width: Self.keybindColumn)
+                HStack(spacing: 0) {
+                    Button {
+                        values[rowID] = "disabled"
+                        PaletteHotkeys.shared.clearShortcut(paletteID: entry.id)
+                        if capturingActionID == rowID {
+                            capturingActionID = nil
+                            HotkeyCaptureState.shared.isCapturing = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .disabled(isUnmapped)
+                    .help("Clear this keybind")
+                    .frame(width: Self.clearColumn)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(MactermTheme.warning)
+                        .opacity(partners.isEmpty ? 0 : 1)
+                        .frame(width: Self.warningColumn)
+                }
+                .frame(width: Self.trailingColumn)
+            }
+            if !partners.isEmpty {
+                Text("Conflicts with \(partners.joined(separator: ", "))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(MactermTheme.warning)
+            }
+            if let refusal = globalHotkeys.refusals[.palette(entry.id)] {
+                Text(refusal.message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(MactermTheme.warning)
+            }
+        }
+    }
+
     @ViewBuilder
     private func hotkeyRow(_ action: HotkeyAction) -> some View {
-        let partners = conflictPartners(for: action)
+        let partners = conflictPartners(forRow: action.id)
         let isCapturing = capturingActionID == action.id
         let isUnmapped = HotkeyRegistry.displaySymbols(for: values[action.id] ?? "disabled").isEmpty
         VStack(alignment: .leading, spacing: 4) {
@@ -1842,7 +2033,7 @@ private struct KeymapSettings: View {
             // than left silent: the binding still works inside Macterm, so
             // nothing looks broken until the user tries it from another app —
             // where the keystroke never reaches us at all.
-            if let refusal = globalHotkeys.refusals[action] {
+            if let refusal = globalHotkeys.refusals[.action(action)] {
                 Text(refusal.message)
                     .font(.system(size: 11))
                     .foregroundStyle(MactermTheme.warning)
@@ -1964,7 +2155,7 @@ private struct UpdatesSettings: View {
                 Text("Tip builds come from every commit that passes CI and are not release-tested.")
                     .settingsCaption()
             } header: {
-                DocsSectionHeader("Channel", docs: .updateChannels)
+                Text("Channel")
             }
 
             Section("Version") {

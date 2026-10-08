@@ -26,6 +26,7 @@ enum Output {
         if let tutorial = data.tutorial { print(tutorial.text) }
         if let password = data.password { renderPassword(password) }
         if let widgets = data.widgets { renderWidgets(widgets) }
+        if let palettes = data.palettes { renderPalettes(palettes) }
     }
 
     private static func renderPassword(_ state: ControlPasswordState) {
@@ -82,6 +83,22 @@ enum Output {
                 tab.active ? "*" : " ",
                 tab.title,
                 "\(tab.paneCount) pane\(tab.paneCount == 1 ? "" : "s")",
+            ]
+        }
+        printColumns(rows)
+    }
+
+    private static func renderPalettes(_ palettes: [ControlPaletteInfo]) {
+        if palettes.isEmpty {
+            print("No palette files.")
+            return
+        }
+        let rows = palettes.map { palette -> [String] in
+            [
+                palette.id,
+                palette.enabled ? "on" : "off",
+                palette.keybind ?? "-",
+                palette.error.map { "error: \($0)" } ?? (palette.name ?? "-"),
             ]
         }
         printColumns(rows)

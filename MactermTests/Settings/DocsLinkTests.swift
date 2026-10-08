@@ -65,6 +65,6 @@ struct DocsLinkTests {
         #expect(DocsSection.passwords.url.absoluteString == "https://macterm.thdxg.dev/docs/passwords")
         #expect(DocsSection.passwords.anchor == nil)
         // An arrow in a heading drops out, as in the docs build.
-        #expect(Self.anchor(for: "Settings → Passwords") == "settings-passwords")
+        #expect(Self.anchor(for: "Settings → Password Manager") == "settings-password-manager")
     }
 }

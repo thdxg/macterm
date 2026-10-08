@@ -6,19 +6,16 @@
   "scripts": {
     "build:docs": "bun build-docs.mjs",
     "build:img": "bun build-images.mjs",
-    "build:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --minify",
+    "build:css": "bun build-tokens.mjs",
     "check:seo": "bun check-seo.mjs",
     "build": "bun run build:img && bun run build:docs && bun run build:css && bun run check:seo",
-    "watch:css": "tailwindcss -i src/tailwind.css -o public/tailwind.css --watch",
     "serve": "PORT=${PORT:-8765} SITE_ROOT=$PWD/public caddy run --config Caddyfile",
     "dev": "bun run build && bun run serve",
     "podman:build": "podman build --format docker --platform linux/arm64 -f Containerfile -t macterm-website ..",
     "podman:run": "podman run --rm -p 3000:3000 macterm-website"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.1.0",
     "marked": "^18.0.5",
-    "sharp": "^0.35.4",
-    "tailwindcss": "^4.1.0"
+    "sharp": "^0.35.4"
   }
 }
