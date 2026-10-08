@@ -48,7 +48,7 @@ extension AgentSkills {
               - { title: Pods, enter: pods }
               - { title: Set as current context, action: { run: kubectl config set-context --current --namespace "$NAMESPACE" } }
           pods:
-            list: kubectl get pods ${NAMESPACE:+-n "$NAMESPACE"} ${NAMESPACE:--A} -o json
+            list: if [ -n "$NAMESPACE" ]; then set -- -n "$NAMESPACE"; else set -- -A; fi; kubectl get pods "$@" -o json
             rows: .items
             title: .metadata.name
             subtitle: .status.phase
@@ -107,6 +107,9 @@ extension AgentSkills {
         - Don't put secrets in the file: it is plain text in the user's config directory.
         - Settings → Palettes turns a palette off without deleting it, and Settings → Keymaps gives it a
           keybind. Mention both rather than doing either for the user.
+        - The user-facing reference, with Git, Docker and SSH examples, is
+          https://macterm.thdxg.dev/docs/custom-palettes; a complete Kubernetes palette is in
+          https://macterm.thdxg.dev/docs/cookbook#kubernetes-palette.
 
         \#(currencyNote(for: "macterm-palettes"))
         """#

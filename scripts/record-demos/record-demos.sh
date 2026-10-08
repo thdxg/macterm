@@ -33,7 +33,8 @@
 #        4 quick terminal · 5 remote project (podman) · 6 tab switcher ·
 #        7 animations (Claude Code scrollback, a split, the cursor in Helix) ·
 #        8 a folder dropped on the Dock tile · 9 desktop widgets beside the
-#        system's · 10 saving and autofilling an ssh password (podman)
+#        system's · 10 saving and autofilling an ssh password (podman) ·
+#        11 a custom palette: a Git palette's nested screens and a run action
 set -euo pipefail
 
 # ---------------------------------------------------------------- constants --
@@ -73,6 +74,14 @@ RPASSWORD=tidepool42lantern      # demo 10 types it, key by key: lowercase and d
 CLAUDE_PORT=8765
 ANIM_KIT_SYMBOL=ghost_rows       # a shader uniform only the new kit has
 
+# Demo 11's palette. The installed app reads ~/.config/macterm/palettes/ afresh
+# every time the palette opens, so the take writes its own file there — under
+# a name of its own, carrying PAL_MARK as its first line — and the EXIT trap
+# below removes it (and only a file carrying the mark) however the run ends.
+PAL_DIR="$HOME/.config/macterm/palettes"
+PAL_FILE="$PAL_DIR/macterm-demo-git.yaml"
+PAL_MARK="# written by record-demos.sh for demo 11; removed when the take ends"
+
 MACTERM=/Applications/Macterm.app/Contents/Resources/bin/macterm
 # opencode offers its own update in a dialog over the TUI when one is out,
 # which is not what demos 2 and 6 are about (the prefix is nushell's syntax,
@@ -91,7 +100,7 @@ say() { printf '\033[1m==\033[0m %s\n' "$*"; }
 die() { printf '\033[31m!!\033[0m %s\n' "$*" >&2; exit 1; }
 trap 'printf "\033[31m!!\033[0m aborted at line %s\n" "$LINENO" >&2' ERR
 # however the run ends, a desktop demo 8 rearranged is put back
-trap '[ -f "$WORK/desktop-view.plist" ] && { desk_view restore; killall Finder 2>/dev/null; }; [ -f "$WORK/create-desktop.was" ] && desk_icons restore; true' EXIT
+trap '[ -f "$WORK/desktop-view.plist" ] && { desk_view restore; killall Finder 2>/dev/null; }; [ -f "$WORK/create-desktop.was" ] && desk_icons restore; [ "$(head -n 1 "$PAL_FILE" 2>/dev/null)" = "$PAL_MARK" ] && rm -f "$PAL_FILE"; true' EXIT
 
 # ------------------------------------------------------------------ helpers --
 osa() { osascript -e "$1"; }
@@ -680,7 +689,8 @@ web_assets() {
     "07-animations:07-animations" \
     "08-open-folder:08-open-folder" \
     "09-widgets:09-desktop-widgets" \
-    "10-passwords:10-passwords"
+    "10-passwords:10-passwords" \
+    "11-palettes:11-custom-palettes"
   do
     name="${pair%%:*}"; src="$OUT/${pair#*:}.mp4"
     [ -f "$src" ] || { printf '\033[33m..\033[0m no %s, skipping\n' "$src"; continue; }
@@ -1441,6 +1451,147 @@ demo10() {  # save a password typed at an ssh login, autofill the next one
   pw_cleanup
 }
 
+# ── custom palettes ─────────────────────────────────────────────────────────
+# A Git palette over the macterm project's own history: open it from ⌘P, enter
+# its menu, then the commits listing; search, open a commit's menu, Delete back
+# a screen, search for another, and run the commit's Diff action in a split. The
+# file's commands are written in the login shell's syntax (they run in it, and
+# the run action is typed at its prompt): nushell, or a POSIX shell with jq.
+K_DELETE=51
+
+login_shell() { dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}'; }
+
+pal_write() {  # pal_write <nu|posix>
+  local list diff stat branches log
+  if [ "$1" = nu ]; then
+    list="git log -40 --format='%h%x09%s%x09%ar' | lines | split column \"\\t\" hash subject when | to json"
+    diff='git show $env.COMMIT'
+    stat='git show --stat $env.COMMIT'
+    log='git log --oneline -20 $env.BRANCH'
+  else
+    list="git log -40 --format='%h%x09%s%x09%ar' | jq -cR 'split(\"\\t\") | {hash: .[0], subject: .[1], when: .[2]}'"
+    diff='git show "$COMMIT"'
+    stat='git show --stat "$COMMIT"'
+    log='git log --oneline -20 "$BRANCH"'
+  fi
+  branches="git branch --format='%(refname:short)'"
+  mkdir -p "$PAL_DIR"
+  cat > "$PAL_FILE" <<EOF
+$PAL_MARK
+name: Git
+icon: arrow.triangle.branch
+description: The project's commits and branches
+root: menu
+nodes:
+  menu:
+    items:
+      - title: Commits
+        subtitle: The last 40 on this branch
+        icon: clock.arrow.circlepath
+        enter: commits
+      - title: Branches
+        icon: arrow.triangle.branch
+        enter: branches
+  commits:
+    placeholder: Search commits...
+    list: |-
+      $list
+    title: .subject
+    subtitle: .when
+    icon: smallcircle.filled.circle
+    match: [.subject, .hash]
+    export: { COMMIT: .hash }
+    enter: commit
+  commit:
+    items:
+      - title: Diff
+        subtitle: git show, in a split
+        icon: plus.forwardslash.minus
+        action:
+          run: |-
+            $diff
+          in: split
+      - title: Files changed
+        icon: doc.on.doc
+        action:
+          run: |-
+            $stat
+          in: split
+  branches:
+    placeholder: Search branches...
+    list: |-
+      $branches
+    icon: arrow.triangle.branch
+    export: { BRANCH: . }
+    action:
+      run: |-
+        $log
+      in: split
+EOF
+}
+
+# The palette has no CLI view — nothing reports which screen is up or whether
+# a listing has finished — so its steps take beats, like demo 4's panel. The
+# listing gets a long one, and pal_check has already run the same command in
+# the same shell off camera, so a slow or failing listing stops the take
+# before it starts rather than ruining it.
+PAL_LIST_BEAT=1.8
+
+pal_check() {  # the commits listing, run as the palette will run it
+  local shell repo out
+  shell="$(login_shell)"; repo="$(shown_repo)"
+  [ -n "$repo" ] || die "no macterm project to list commits in"
+  out="$(cd "$repo" && "$shell" -l -c "$(awk '/^  commits:/ {f=1} f && /^    list:/ {getline; sub(/^ +/, ""); print; exit}' "$PAL_FILE")" 2>&1)" \
+    || die "the demo palette's listing failed in $shell: $out"
+  case "$out" in
+    \[*|\{*) ;;
+    *) die "the demo palette's listing printed something other than JSON in $shell (a startup message?): $(printf '%s' "$out" | head -n 2)" ;;
+  esac
+}
+
+drive11() {
+  sleep 0.8
+  kc $K_P "$CMD"; sleep 1.0                        # the command palette
+  ktype "git" 0.08; sleep 1.0                      # the palette's row, under Palettes
+  kc $K_RET; sleep 1.3                             # Git: a menu of its own
+  kc $K_RET; sleep "$PAL_LIST_BEAT"                # Commits: the listing runs
+  ktype "palette" 0.07; sleep 1.3                  # search the commits
+  kc $K_RET; sleep 1.6                             # a commit's menu; the pills read the trail
+  kc $K_DELETE; sleep 1.2                          # back one screen, search cleared
+  ktype "fzf" 0.08; sleep 1.2                      # a different commit this time
+  kc $K_RET; sleep 1.4                             # another commit
+  kc $K_RET                                        # Diff: a split runs git show
+  # a hunk header: what git's own pager and delta (or any other) both show
+  wait_text 15 '@@ ' --project macterm --pane 2 || return 0
+  sleep 2.6
+}
+
+demo11() {  # a custom palette: nested screens, a search, a run action
+  say "demo 11 — custom palettes"
+  if [ -e "$PAL_FILE" ] && [ "$(head -n 1 "$PAL_FILE")" != "$PAL_MARK" ]; then
+    die "$PAL_FILE exists and isn't this script's — move it aside first"
+  fi
+  # typing "git" must land on this palette, not one of yours with the same name
+  local f
+  for f in "$PAL_DIR"/*.yaml "$PAL_DIR"/*.yml; do
+    [ -f "$f" ] && [ "$f" != "$PAL_FILE" ] || continue
+    grep -Eiq '^name: *["'\'']?git["'\'']? *$' "$f" && die "$f is also named Git; turn it off or rename it for the take"
+  done
+  case "$(basename "$(login_shell)")" in
+    nu) pal_write nu ;;
+    sh|bash|zsh|dash)
+      command -v jq >/dev/null || die "demo 11's palette needs jq under a POSIX login shell"
+      pal_write posix ;;
+    *) die "demo 11 writes its palette for nushell or a POSIX shell, not $(login_shell)" ;;
+  esac
+  pal_check
+  reset_project
+  record palettes drive11
+  encode palettes 11-custom-palettes.mp4
+  reset_project                                    # quits the pager, drops the split
+  rm -f "$PAL_FILE"
+}
+
 anim_prefs() {
   local k; for k in smoothScrolling smoothCursor cursorTrail animatedSplits; do
     anim_pref $k > "$WORK/anim.$k.was"
@@ -1506,7 +1657,7 @@ case "${1:-all}" in
     defaults write com.thdxg.macterm macterm.quickTerminal.fixedX -float 0.5
     defaults delete com.thdxg.macterm macterm.quickTerminal.fixedY 2>/dev/null || true
     say "restored — relaunch Macterm to pick it up"; exit 0 ;;
-  all) preflight; demo1; demo2; demo3; demo4; demo5; demo6; demo7; demo8; demo9; demo10 ;;
+  all) preflight; demo1; demo2; demo3; demo4; demo5; demo6; demo7; demo8; demo9; demo10; demo11 ;;
   *) preflight; for n in "$@"; do "demo$n"; done ;;
 esac
 say "done — $OUT"
