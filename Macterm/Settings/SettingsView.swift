@@ -2155,7 +2155,7 @@ private struct UpdatesSettings: View {
                 Text("Tip builds come from every commit that passes CI and are not release-tested.")
                     .settingsCaption()
             } header: {
-                DocsSectionHeader("Channel", docs: .updateChannels)
+                Text("Channel")
             }
 
             Section("Version") {

@@ -18,7 +18,6 @@ enum DocsSection: String, CaseIterable {
     case quickTerminal = "quick-terminal"
     case quickTerminalGeometry = "quick-terminal#position-and-size"
     case keybinds = "configuration#keybinds"
-    case updateChannels = "install#update-channels"
     case layouts = "declarative-layouts"
     case desktopWidgets = "desktop-widgets"
     case passwords

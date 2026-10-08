@@ -1,12 +1,12 @@
 <!-- page:
 slug: passwords
-title: Passwords
-nav: Passwords
+title: Password Manager
+nav: Password Manager
 group: Everyday use
 description: Save the passwords you type at terminal prompts and autofill them after Touch ID or your login password — where they're stored, what they're matched by, and who can read them.
 -->
 
-# Passwords
+# Password Manager
 
 When a program in a pane asks for a password — `ssh`, `sudo`, `psql`, a key passphrase — Macterm notices, and a bubble appears at the cursor. Nothing is ever saved without you saying so, and nothing is ever typed for you without you asking.
 
