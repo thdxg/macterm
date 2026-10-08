@@ -42,17 +42,30 @@ struct CustomPaletteScopeTests {
     /// was asked, including the environment. The login shell is always
     /// handed the trampoline, so the command is the one it carries.
     private final class Recorder: @unchecked Sendable {
-        var calls: [(command: String, environment: [String: String], cwd: String?)] = []
-        var outputs: [String: CustomPaletteCommandResult] = [:]
+        // `when:` checks run concurrently.
+        private let lock = NSLock()
+        private var _calls: [(command: String, environment: [String: String], cwd: String?)] = []
+        private var _outputs: [String: CustomPaletteCommandResult] = [:]
+        var calls: [(command: String, environment: [String: String], cwd: String?)] { lock.withLock { _calls } }
+        var outputs: [String: CustomPaletteCommandResult] {
+            get { lock.withLock { _outputs } }
+            set { lock.withLock { _outputs = newValue } }
+        }
+
         var runner: CustomPaletteCommandRunner {
             { [self] line, environment, cwd in
                 #expect(line == CustomPaletteScript.trampoline)
                 let command = environment[CustomPaletteScript.commandVariable] ?? ""
-                calls.append((command, environment, cwd))
-                return outputs[command] ?? CustomPaletteCommandResult(stdout: "", stderr: "no canned output for \(command)", status: 1)
+                return lock.withLock {
+                    _calls.append((command, environment, cwd))
+                    return _outputs[command] ?? CustomPaletteCommandResult(stdout: "", stderr: "no canned output for \(command)", status: 1)
+                }
             }
         }
     }
+
+    private static let ok = CustomPaletteCommandResult(stdout: "", stderr: "", status: 0)
+    private static let down = CustomPaletteCommandResult(stdout: "", stderr: "unreachable", status: 1)
 
     private func settle() async {
         for _ in 0 ..< 50 {
@@ -413,6 +426,140 @@ struct CustomPaletteScopeTests {
         #expect(CustomPaletteActions.fileURL("/etc/hosts", appState: context.appState, projects: projects).path == "/etc/hosts")
         #expect(CustomPaletteActions.fileURL("~/x", appState: context.appState, projects: projects).path
             == (NSHomeDirectory() as NSString).appendingPathComponent("x"))
+    }
+
+    /// An item's `when:` mutes it, with its reason, once the check fails;
+    /// items sharing one command run it once; the rest stay as they are.
+    @Test
+    func a_failing_item_check_mutes_its_items_and_each_command_runs_once() async throws {
+        let (context, _, _) = try makeContext(files: ["ops.yaml": """
+        name: Ops
+        nodes:
+          root:
+            items:
+              - { title: Pods, enter: root, when: &up { run: api-check, unavailable: API down } }
+              - { title: Services, enter: root, when: *up }
+              - { title: Contexts, enter: root }
+              - { title: Logs, action: { copy: x }, when: { run: other-check } }
+        """])
+        let recorder = Recorder()
+        recorder.outputs = ["api-check": Self.down, "other-check": Self.ok]
+        let scope = CustomPaletteScope(
+            target: CustomPaletteTarget(paletteID: "ops", node: "root", exports: [:], pill: PalettePill(title: "Ops", systemImage: "x")),
+            runner: recorder.runner,
+            conditionRunner: recorder.runner
+        )
+        scope.activate(context: context) {}
+        let before = scope.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items)
+        let usableBefore = before.allSatisfy(\.isEnabled)
+        #expect(usableBefore, "usable until a check says otherwise")
+        await settle()
+
+        let rows = scope.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items)
+        #expect(rows.map(\.title) == ["Pods", "Services", "Contexts", "Logs"])
+        #expect(rows.map(\.isEnabled) == [false, false, true, true])
+        #expect(rows[0].subtitle == "API down")
+        #expect(recorder.calls.map(\.command).sorted() == ["api-check", "other-check"], "one run per command")
+        #expect(recorder.calls.first?.cwd == "/tmp", "where a listing would run")
+
+        // Told again when its frame returns to the top: nothing reruns. ⌘R does.
+        scope.activate(context: context) {}
+        #expect(recorder.calls.count == 2)
+        recorder.outputs["api-check"] = Self.ok
+        scope.retry()
+        await settle()
+        let usableAfter = scope.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items).allSatisfy(\.isEnabled)
+        #expect(usableAfter)
+    }
+
+    /// The palette's own `when:` gates its root: checked first, nothing
+    /// shown meanwhile, the reason instead of a listing when it fails — and
+    /// only on the root.
+    @Test
+    func a_palette_whose_check_fails_says_why_instead_of_listing() async throws {
+        let (context, _, _) = try makeContext(files: ["k8s.yaml": """
+        name: K8s
+        when: { run: cluster-check, unavailable: Cluster unreachable }
+        root: pods
+        nodes:
+          pods: { list: list-pods, action: { copy: . } }
+          more: { list: list-more, action: { copy: . } }
+        """])
+        let recorder = Recorder()
+        recorder.outputs = [
+            "cluster-check": Self.down,
+            "list-pods": CustomPaletteCommandResult(stdout: "api\nweb\n", stderr: "", status: 0),
+        ]
+        let root = CustomPaletteScope(
+            target: CustomPaletteTarget(paletteID: "k8s", node: "pods", exports: [:], pill: PalettePill(title: "K8s", systemImage: "x")),
+            runner: recorder.runner,
+            conditionRunner: recorder.runner
+        )
+        root.activate(context: context) {}
+        #expect(root.loading?.message == "Checking K8s…")
+        #expect(root.sections(for: PaletteQuery(raw: ""), context: context).isEmpty)
+        await settle()
+        #expect(root.failure == PaletteFailure(title: "K8s isn't available", detail: "Cluster unreachable"))
+        #expect(recorder.calls.map(\.command) == ["cluster-check"], "no listing behind a failed check")
+
+        recorder.outputs["cluster-check"] = Self.ok
+        root.retry()
+        await settle()
+        #expect(root.failure == nil)
+        #expect(root.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items).map(\.title) == ["api", "web"])
+
+        // A deeper screen isn't gated again.
+        recorder.outputs["list-more"] = CustomPaletteCommandResult(stdout: "x\n", stderr: "", status: 0)
+        let deeper = CustomPaletteScope(
+            target: CustomPaletteTarget(paletteID: "k8s", node: "more", exports: [:], pill: PalettePill(title: "More", systemImage: "x")),
+            runner: recorder.runner,
+            conditionRunner: recorder.runner
+        )
+        let checksSoFar = recorder.calls.count(where: { $0.command == "cluster-check" })
+        deeper.activate(context: context) {}
+        await settle()
+        #expect(recorder.calls.count(where: { $0.command == "cluster-check" }) == checksSoFar)
+        #expect(deeper.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items).map(\.title) == ["x"])
+    }
+
+    /// The root list's palette rows: checked once per open, muted with the
+    /// reason when the check fails, and forgotten when the palette closes.
+    @Test
+    func a_palette_row_is_muted_while_its_check_fails_and_checked_once_per_open() async throws {
+        let (context, store, _) = try makeContext(files: ["k8s.yaml": """
+        name: K8s
+        description: Cluster screens
+        when: { run: cluster-check, unavailable: Cluster unreachable }
+        nodes: { root: { list: ls, action: { copy: . } } }
+        """])
+        let recorder = Recorder()
+        recorder.outputs = ["cluster-check": Self.down]
+        let availability = CustomPaletteAvailability(runner: recorder.runner)
+        let palettes = store.entries.compactMap(\.palette)
+        availability.check(palettes, context: context)
+        availability.check(palettes, context: context)
+        await settle()
+        #expect(availability.unavailable == ["k8s": "Cluster unreachable"])
+        #expect(recorder.calls.count == 1, "once per open")
+
+        let row = { (unavailable: [String: String]) in
+            CommandSource(unavailablePalettes: unavailable).emptyItems(context: context)?.first { $0.title == "K8s" }
+        }
+        #expect(row(availability.unavailable)?.isEnabled == false)
+        #expect(row(availability.unavailable)?.subtitle == "Cluster unreachable")
+        #expect(row(availability.unavailable)?.opensScope == nil, "nowhere to go: no chevron")
+        #expect(row(availability.unavailable)?.icon == CustomPalette.defaultIcon, "its glyph, kept")
+        #expect(row([:])?.opensScope != nil)
+        #expect(row([:])?.isEnabled == true)
+        #expect(row([:])?.subtitle == "Cluster screens")
+
+        availability.reset()
+        #expect(availability.unavailable.isEmpty)
+        recorder.outputs["cluster-check"] = Self.ok
+        availability.check(palettes, context: context)
+        await settle()
+        #expect(recorder.calls.count == 2, "checked again on the next open")
+        #expect(availability.unavailable.isEmpty)
     }
 
     @Test

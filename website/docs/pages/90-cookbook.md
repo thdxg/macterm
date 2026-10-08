@@ -32,10 +32,15 @@ root: menu
 nodes:
   menu:
     items:
-      - { title: Namespaces, subtitle: Browse one namespace, enter: namespaces }
-      - { title: Pods, subtitle: All namespaces, enter: pods }
-      - { title: Deployments, subtitle: All namespaces, enter: deployments }
-      - { title: Services, subtitle: All namespaces, enter: services }
+      # Muted while the cluster doesn't answer; Contexts reads only your
+      # kubeconfig, so it stays — switching context is often the fix.
+      - title: Namespaces
+        subtitle: Browse one namespace
+        enter: namespaces
+        when: &cluster { run: kubectl get --raw /readyz --request-timeout=2s, unavailable: Cluster unreachable }
+      - { title: Pods, subtitle: All namespaces, enter: pods, when: *cluster }
+      - { title: Deployments, subtitle: All namespaces, enter: deployments, when: *cluster }
+      - { title: Services, subtitle: All namespaces, enter: services, when: *cluster }
       - { title: Contexts, subtitle: Switch the current context, enter: contexts }
 
   contexts:
@@ -145,7 +150,7 @@ nodes:
 
 What each screen does:
 
-- **Kubernetes**, the first screen, is a menu: browse one namespace, or go straight to pods, deployments or services across all of them, or switch contexts.
+- **Kubernetes**, the first screen, is a menu: browse one namespace, or go straight to pods, deployments or services across all of them, or switch contexts. While the cluster doesn't answer, everything but Contexts is muted and says *Cluster unreachable* ([`when:`](/docs/custom-palettes#when-a-palette-cant-be-used)).
 - **Contexts** lists `kubectl config get-contexts`. Picking one runs `kubectl config use-context` in a new tab.
 - **Namespaces** lists the cluster's namespaces with their phase. Picking one opens a menu for it, and every screen below is scoped to that namespace.
 - **The namespace's menu** opens its pods, deployments or services, or makes it the current context's namespace.

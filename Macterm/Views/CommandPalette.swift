@@ -115,6 +115,9 @@ struct CommandPalettePanel: View {
     /// auto-scroll-to-center (keyboard nav) can skip them.
     @State
     private var hoverTracker = HoverSelectionTracker()
+    /// This open's palette-level `when:` verdicts, for the root list.
+    @State
+    private var availability = CustomPaletteAvailability()
     /// Each row's vertical extent in the `rowSpace` coordinate space (relative
     /// to the scroll viewport), keyed by flat index. Drives hover-to-select and
     /// edge-only keyboard scrolling.
@@ -150,7 +153,7 @@ struct CommandPalettePanel: View {
     private var engine: PaletteEngine {
         let context = PaletteContext(appState: appState, projectStore: projectStore)
         return PaletteEngine(
-            sources: [ProjectSource(), CommandSource()],
+            sources: [ProjectSource(), CommandSource(unavailablePalettes: availability.unavailable)],
             context: context,
             pathSource: DirectorySource()
         )
@@ -313,6 +316,7 @@ struct CommandPalettePanel: View {
             )
             appState.customPalettes.reloadIfChanged()
             activateScope()
+            checkPaletteAvailability()
             refresh()
             // Defer focus to the next runloop so the TextField has been created.
             DispatchQueue.main.async {
@@ -329,6 +333,10 @@ struct CommandPalettePanel: View {
         .onChange(of: windowState.paletteStack) {
             selectedIndex = 0
             activateScope()
+            checkPaletteAvailability()
+            refresh()
+        }
+        .onChange(of: availability.unavailable) {
             refresh()
         }
         .onKeyPress(keys: [.upArrow], phases: [.down, .repeat]) { _ in
@@ -352,6 +360,7 @@ struct CommandPalettePanel: View {
         .onDisappear {
             eventMonitor = nil
             optionHeld = false
+            availability.reset()
         }
         // Return runs the selected row — with ⌥, its alt action. Read off
         // the press rather than `optionHeld`, which is display state.
@@ -378,6 +387,17 @@ struct CommandPalettePanel: View {
             }
             return .handled
         }
+    }
+
+    /// The custom palettes' own `when:` checks, once the root list shows —
+    /// on open, or on stepping back to it from a screen a chord opened.
+    private func checkPaletteAvailability() {
+        guard scope == nil else { return }
+        let store = appState.customPalettes
+        let shown = store.entries
+            .filter { Preferences.shared.isPaletteEnabled($0.settingsID) }
+            .compactMap(\.palette)
+        availability.check(shown, context: PaletteContext(appState: appState, projectStore: projectStore))
     }
 
     /// Tell the top screen it is showing (`PaletteScope.activate`); its

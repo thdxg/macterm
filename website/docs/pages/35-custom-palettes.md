@@ -43,6 +43,7 @@ Press <kbd>⌘P</kbd>, type `git`, and press <kbd>Return</kbd>. The screen lists
 | `description` | One line under the palette's row in the command palette and in Settings → Palettes. |
 | `root` | The node the palette opens on. Defaults to a node named `root`. |
 | `requires` | The programs its commands need, like `[kubectl, jq]`. A listing that fails names whichever of them isn't on your `PATH`. |
+| `when` | Whether the palette can be used now: a check command and the reason to show when it fails. See [when a palette can't be used](#when-a-palette-cant-be-used). |
 | `nodes` | Required. Every screen of the palette, by name. |
 
 The file's name without `.yaml` is the palette's id. Its switch in Settings and its keybind are stored under that id, so renaming the file loses both.
@@ -60,7 +61,7 @@ menu:
     - { title: Fetch, icon: arrow.down.circle, action: { run: git fetch --all --prune } }
 ```
 
-Each item takes `title` (required), `subtitle`, `icon`, `export`, either `enter` or `action`, and optionally `alt`. Every value in a menu item is literal.
+Each item takes `title` (required), `subtitle`, `icon`, `export`, either `enter` or `action`, and optionally `alt` and `when`. Every value in a menu item is literal.
 
 **A listing** has `list:`, a command whose output becomes the rows:
 
@@ -187,6 +188,31 @@ Every command also gets these variables:
 - Every value exported above it.
 
 **A shell that prints at startup prints into the rows.** A greeting or notice from your shell config becomes the first row of every listing. Keep startup quiet for non-interactive shells.
+
+## When a palette can't be used
+
+`when:` mutes a palette, or a row of a menu, when a check says it can't be used right now — a cluster that doesn't answer, a tool that isn't set up, a project that isn't the right kind:
+
+```yaml
+when: { run: kubectl get --raw /readyz --request-timeout=2s, unavailable: Cluster unreachable }
+```
+
+- **`run:`** is a command like any other in the palette (POSIX `sh`, or a script with a `#!` line), with the same environment and directory as a listing. It passes when it exits 0. It gets 10 seconds; one that runs out has failed.
+- **`unavailable:`** is what the muted row says in place of its subtitle. Without it, the row says *Unavailable*.
+
+**On the palette** (beside `name:`), the check runs each time you open the command palette. **On a menu item**, it runs each time the item's screen opens. Either way it runs in the background: the row is usable until the check fails, and then it's muted — you can't pick it, and it says why. Nothing is remembered: the next open checks again.
+
+**A palette opened by its keybind** checks first, showing a spinner, and says why instead of listing when the check fails. <kbd>⌘R</kbd> checks again.
+
+Items that share a check run it once per screen. Name it once with a YAML anchor and reuse it:
+
+```yaml
+- { title: Pods, enter: pods, when: &cluster { run: kubectl get --raw /readyz --request-timeout=2s, unavailable: Cluster unreachable } }
+- { title: Services, enter: services, when: *cluster }
+- { title: Contexts, enter: contexts }
+```
+
+A listing's rows aren't checked one by one; put `when:` on the item that opens the listing.
 
 ## Loading and errors
 

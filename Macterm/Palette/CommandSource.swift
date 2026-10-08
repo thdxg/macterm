@@ -6,6 +6,10 @@ import AppKit
 /// come from the associated `HotkeyAction` when the command is bindable.
 @MainActor
 struct CommandSource: PaletteSource {
+    /// Custom palettes whose `when:` failed in this open of the palette,
+    /// with why (`CustomPaletteAvailability`): their rows are muted.
+    var unavailablePalettes: [String: String] = [:]
+
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
         let query = SearchQuery(query)
         return allItems(context).compactMap { item in
@@ -43,23 +47,28 @@ struct CommandSource: PaletteSource {
     /// its root. A file that couldn't be read keeps a normal row, named as
     /// far as its YAML parses, with a warning glyph before the chevron;
     /// entering it shows the error — so a typo in the YAML is found where
-    /// the palette was expected rather than nowhere. A palette turned off in
-    /// Settings is hidden, as a built-in screen is.
+    /// the palette was expected rather than nowhere. One whose `when:`
+    /// failed is muted, with the reason in place of its description — its
+    /// glyph kept and its chevron dropped, as an unavailable built-in screen's
+    /// row. A palette turned off in Settings is hidden, as a built-in screen is.
     private func customPaletteItems(_ ctx: PaletteContext) -> [PaletteItem] {
         let store = ctx.appState.customPalettes
         return store.entries.compactMap { entry in
             guard Preferences.shared.isPaletteEnabled(entry.settingsID), let target = store.rootTarget(id: entry.id) else { return nil }
             let chord = PaletteHotkeys.shared.selectedShortcutString(paletteID: entry.id)
             let symbols = HotkeyRegistry.displaySymbols(for: chord)
+            let unavailable = unavailablePalettes[entry.id]
             return PaletteItem(
                 id: "palette:\(entry.id)",
                 title: entry.pill.title,
-                subtitle: entry.description,
+                subtitle: unavailable ?? entry.description,
                 category: AppCommand.Category.palettes.rawValue,
                 keybind: symbols.isEmpty ? nil : HotkeyRegistry.displayString(for: chord),
                 keybindSymbols: symbols.isEmpty ? nil : symbols,
                 score: 0,
-                opensScope: .custom(target),
+                isEnabled: unavailable == nil,
+                opensScope: unavailable == nil ? .custom(target) : nil,
+                icon: unavailable == nil ? nil : entry.pill.systemImage,
                 warning: entry.failure?.localizedDescription,
                 action: {}
             )

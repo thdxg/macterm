@@ -55,6 +55,8 @@ struct CustomPaletteFile: Codable, Equatable {
     var description: String?
     /// Programs the commands need, by name.
     var requires: [String]?
+    /// Whether the palette can be used now (`CustomPaletteCondition`).
+    var when: Condition?
     var root: String?
     var nodes: [String: Node]
 
@@ -84,6 +86,14 @@ struct CustomPaletteFile: Codable, Equatable {
         var enter: String?
         var action: Action?
         var alt: Action?
+        /// Whether the row can be picked now (`CustomPaletteCondition`).
+        var when: Condition?
+    }
+
+    /// `when: { run: <command>, unavailable: <reason> }`.
+    struct Condition: Codable, Equatable {
+        var run: String
+        var unavailable: String?
     }
 
     struct Action: Codable, Equatable {
@@ -109,11 +119,12 @@ struct CustomPaletteFile: Codable, Equatable {
 
     /// The keys each level of a file may have — the schema's `properties`,
     /// which `CustomPaletteFileTests` holds these to.
-    static let fileKeys: Set<String> = ["name", "icon", "description", "requires", "root", "nodes"]
+    static let fileKeys: Set<String> = ["name", "icon", "description", "requires", "when", "root", "nodes"]
     static let nodeKeys: Set<String> = [
         "placeholder", "items", "list", "rows", "title", "subtitle", "icon", "match", "export", "enter", "action", "alt",
     ]
-    static let itemKeys: Set<String> = ["title", "subtitle", "icon", "export", "enter", "action", "alt"]
+    static let itemKeys: Set<String> = ["title", "subtitle", "icon", "export", "enter", "action", "alt", "when"]
+    static let conditionKeys: Set<String> = ["run", "unavailable"]
     static let actionKeys: Set<String> = ["title", "run", "in", "copy", "open"]
 
     /// The first key the file has that no level takes, named where it is
@@ -132,7 +143,12 @@ struct CustomPaletteFile: Codable, Equatable {
             guard let dict = value as? [String: Any], let key = stray(dict, actionKeys) else { return nil }
             return "\(place): \(key): no such key"
         }
+        func condition(_ value: Any?, at place: String) -> String? {
+            guard let dict = value as? [String: Any], let key = stray(dict, conditionKeys) else { return nil }
+            return "\(place): \(key): no such key"
+        }
         if let key = stray(root, fileKeys) { return "\(key): no such key" }
+        if let problem = condition(root["when"], at: "when") { return problem }
         let nodes = root["nodes"] as? [String: Any] ?? [:]
         for name in nodes.keys.sorted() {
             guard let node = nodes[name] as? [String: Any] else { continue }
@@ -144,6 +160,7 @@ struct CustomPaletteFile: Codable, Equatable {
                 guard let item = value as? [String: Any] else { continue }
                 let place = "\(name) item \(index + 1) (\(item["title"].map { "\($0)" } ?? ""))"
                 if let key = stray(item, itemKeys) { return "\(place): \(key): no such key" }
+                if let problem = condition(item["when"], at: "\(place): when") { return problem }
                 if let problem = action(item["action"], at: "\(place): action") ?? action(item["alt"], at: "\(place): alt") {
                     return problem
                 }
@@ -220,6 +237,34 @@ enum CustomPaletteAction: Equatable {
     }
 }
 
+/// `when:` — whether a palette or one of its items can be used now: a
+/// command (POSIX sh, or a `#!` script, as every palette command is) that
+/// exits 0 when it can, and the reason shown on the muted row when it
+/// can't. Checked fresh each time the row is shown, in the background —
+/// the row is usable until the check says otherwise — and never
+/// remembered past that open (`CustomPaletteConditions`).
+struct CustomPaletteCondition: Equatable {
+    let command: String
+    let reason: String
+
+    static let defaultReason = "Unavailable"
+
+    init(command: String, reason: String) {
+        self.command = command
+        self.reason = reason
+    }
+
+    init?(_ condition: CustomPaletteFile.Condition?, at place: String) throws {
+        guard let condition else { return nil }
+        guard !condition.run.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CustomPaletteError.invalid("\(place): run: must not be empty")
+        }
+        command = condition.run
+        let reason = condition.unavailable?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.reason = reason.isEmpty ? Self.defaultReason : reason
+    }
+}
+
 /// An `export:`'s variable names: ones `sh` can read (`[A-Za-z_][A-Za-z0-9_]*`),
 /// and none Macterm sets itself — those would be silently overwritten.
 enum CustomPaletteExports {
@@ -282,6 +327,8 @@ struct CustomPalette: Equatable, Identifiable {
     let icon: String
     let description: String?
     let requires: [String]
+    /// Checked each time the palette's row is shown and when it opens.
+    let condition: CustomPaletteCondition?
     let root: String
     let nodes: [String: Node]
 
@@ -304,6 +351,8 @@ struct CustomPalette: Equatable, Identifiable {
         let exports: [String: String]
         let outcome: CustomPaletteOutcome
         var alt: CustomPaletteAlt?
+        /// Checked each time the item's screen opens.
+        var condition: CustomPaletteCondition?
     }
 
     /// A listing node's recipe: the command and how its rows become items.
@@ -332,6 +381,7 @@ struct CustomPalette: Equatable, Identifiable {
         for program in requires where !CustomPaletteRequirements.isProgramName(program) {
             throw CustomPaletteError.invalid("requires: \(program) isn't a program name")
         }
+        condition = try CustomPaletteCondition(file.when, at: "when")
         guard !file.nodes.isEmpty else { throw CustomPaletteError.invalid("nodes: must name at least one node") }
         let root = file.root ?? (file.nodes["root"] != nil ? "root" : "")
         guard file.nodes[root] != nil else {
@@ -381,7 +431,8 @@ struct CustomPalette: Equatable, Identifiable {
                 icon: item.icon,
                 exports: item.export ?? [:],
                 outcome: outcome(enter: item.enter, action: item.action, at: place),
-                alt: alt(item.alt, at: place)
+                alt: alt(item.alt, at: place),
+                condition: CustomPaletteCondition(item.when, at: "\(place): when")
             )
         }
         guard let command = node.list else {
