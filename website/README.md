@@ -10,18 +10,22 @@ public/            Served as static files
   index.html       Landing page (hand-authored)
   docs/            One HTML file per docs page ── generated, do not edit ──
   img/             Web-sized image derivatives ── generated, do not edit ──
-  tailwind.css     Compiled styles ── generated, do not edit ──
-  site.js          Shared behavior (sticky nav, copy buttons, GitHub stats)
+  tokens.css       Compiled design tokens ── generated, do not edit ──
+  components/      The design system's bundle.css ── copied, do not edit ──
+  site.js          Shared behavior (copy buttons, demo reel, GitHub stats)
   assets/          Symlink to the repo-root assets/ (icon, screenshots, schema)
 src/
-  tailwind.css     Tailwind v4 input + design tokens (@theme) + components
   docs-template.html  Shell each rendered docs page is injected into
+design-system/     Vendored copy of the eyesclosed design system: tokens.json
+                   and bundle.css, never edited here
 docs/
   pages/*.md       Docs content — one Markdown file per page
 build-images.mjs   Resizes assets/*.png → public/img/ (responsive WebP +
                    fallback PNG, the OG card, and favicon sizes)
 build-docs.mjs     Renders docs/pages/*.md → public/docs/<slug>.html;
                    also emits public/sitemap.xml and public/robots.txt
+build-tokens.mjs   Compiles design-system/tokens.json → public/tokens.css and
+                   copies bundle.css → public/components/bundle.css
 check-seo.mjs      Build-time guard: fails the build if the landing page's FAQ
                    markup and its FAQPage JSON-LD disagree, or if index.html's
                    canonical/og:url drift from SITE_URL
@@ -31,43 +35,48 @@ Containerfile      Multi-stage image — Bun builds it, Caddy serves it
 
 ### Design
 
-Both the landing page and the docs run one dark **"Classical"** system, ported
-from a Claude Design canvas: white ink on a pure-black ground,
-Cormorant Garamond display over Lora body text, JetBrains Mono for code. Only
-the fonts live in `@theme`; every colour is scoped under `.landing`, which both
-`public/index.html` and `src/docs-template.html` set on `<body>`, so the docs
-shell reuses the landing's tokens instead of defining a second palette.
+Both pages are built from the **eyesclosed** design system, the one system
+for every site Ethan makes. There is no site stylesheet: every page loads
+`/tokens.css` and `/components/bundle.css`, puts `class="ec"` on `<body>`, and
+uses the system's `ec-*` classes as its component READMEs document them — plus
+`tok-*` for syntax highlighting. Geist (and Geist Mono, inside code only) comes
+from Google Fonts through `bundle.css`'s `@import`.
 
-The canvas expresses a design as inline styles per element, which is what an
-artboard has to do. Those are reassembled into named `.l-*` classes in
-`src/tailwind.css` — hover and focus states have nowhere to live on an
-artboard, and the canvas is a fixed 1180px, so every responsive step below that
-is the implementation's own.
+`design-system/` is a vendored copy of the system's `tokens.json` and
+`components/bundle.css`. Never edit it here: change the system, copy the two
+files back, and rebuild. `build-tokens.mjs` compiles `tokens.json` the way the
+system does — colors under `:root, [data-theme="dark"]` with `{alias}` values as
+`var(--alias)`, spacing, radii and grid widths under `:root`, a `--font-<key>`
+per family, a class per type style — and copies `bundle.css` beside it. Don't
+add colors, sizes or components the system doesn't have; add them to the
+system first.
 
-The hero's one action is `.l-cta` — a solid white **Get started** button to
-`/docs/install`. The install command is not on the landing page at all; the
-button is the route to it.
+How the pages map onto it:
 
-**Every command surface is one component, `.cmd`** — every fenced block
-`build-docs.mjs` emits. The landing page has none of its own any more. They began as three
-near-identical rule sets and drifted into two font sizes, two copy-button
-sizes, two border colours, and two different vertical alignments for the same
-button. The component owns its type
-metrics so the `<pre>` and the `<code>` share one strut, and the floating copy
-button's offset is derived from those tokens in `calc()` — it aligns to the
-centre of the *first line*, which reads as centred on a one-line command and
-stays at the top of a long block. Change the padding or the type size and the
-button follows on its own.
+- **Landing** — no SiteHeader and no label column: a Hero set full width (no
+  `ec-grid`; name, one sentence, a primary **Get started** button to
+  `/docs/install` and a plain GitHub button); one unlabelled Section per
+  feature whose body spans both columns (`ec-span`) (an `h3`,
+  a muted sentence and its clip in a Figure), the features without a clip
+  closing the run as an EntryList; and SiteFooter. There is no screenshot and
+  no install command on the landing page; the button is the route to the docs.
+- **Docs** — SiteHeader, DocsLayout (the sidebar in the label column, the page
+  in an `ec-prose` article, Previous/Next pagenav), SiteFooter.
+- **Code** — every fenced block `build-docs.mjs` emits is a CodeBlock
+  (`ec-code`, with an `ec-code-caption` row when the fence has a `title=""`).
+  YAML is highlighted with `tok-*` spans; a `console` block's `$ ` prompts are
+  marked so the copy button drops them.
 
 ### Images
 
 `assets/` holds the originals the README and release notes use — 3132×1780
 screenshots at ~2MB each. The pages never reference those directly:
 `build-images.mjs` renders them into `public/img/` as a responsive WebP
-`srcset` (640/1000/1400/2200/3132w) plus a 1400w PNG fallback, and the landing page
-picks a rung with `<picture>`. The hero went from a 2.5MB PNG to 53KB at 1×
-and 142KB at 2×, which is the difference between failing and passing Largest
-Contentful Paint.
+`srcset` (640/1000/1400/2200/3132w) plus a 1400w PNG fallback. Nothing is
+upscaled: a rung wider than its original is skipped, and for the hero
+(`assets/hero.png`, 2000px wide) the original's own width is the top rung. The
+landing page no longer shows the hero; it is still what `og.png` is rendered
+from.
 
 It also emits `img/og.png` — the 1200×630 social card, letterboxed on the
 site's own ground rather than cropped — and `img/icon-{16,32,180}.png`, so the
@@ -107,11 +116,10 @@ has no business spinning up.
 failing silently, which is also what Reduce Motion gets. A click pauses a clip
 you want to read.
 
-Each clip sits beside its own `<h2>` and a line of copy, both written into
-`index.html` — they are the only place the reel says what it is showing. They
-name the ACTION, never the chord: every binding in the app is rebindable, so
-copy that spells one out is wrong for anyone who changed it. The pair is one
-grid row that collapses to a single column under 900px.
+Each clip sits under its own `<h3>` and a line of copy in its Section, both
+written into `index.html` — they are the only place the reel says what it is
+showing. They name the ACTION, never the chord: every binding in the app is
+rebindable, so copy that spells one out is wrong for anyone who changed it.
 
 > `index.html` is hand-authored and no build step rewrites it, so anything it
 > states twice can drift silently. `check-seo.mjs` guards the two that matter:
@@ -130,17 +138,17 @@ sync with `SITE_URL` if the domain ever changes.
 
 The docs are a **multi-page site**. Each `docs/pages/*.md` becomes one page;
 files are ordered by their numeric filename prefix (`10-installation.md`). The
-sidebar links across all pages and marks the current one with a rose rule in
-the gutter, and `build-docs.mjs` emits the group name as the page's eyebrow
-plus prev/next links from that same order. A Markdown blockquote renders as the
-design's bordered **Note** callout, its label supplied by CSS. The
+sidebar links across all pages and marks the current one with
+`aria-current="page"`, and `build-docs.mjs` emits Previous/Next links from that
+same order. A Markdown blockquote renders as the design system's **Note**, its
+label supplied by CSS. The
 `Caddyfile`'s `try_files` rule serves `public/docs/install.html` at the clean
 URL `/docs/install`, and `public/docs/index.html` at `/docs/` — the
 extensionless resolution the site used to get from Cloudflare's
 `auto-trailing-slash` html handling, and the reason a bare file server won't do.
 
-The docs header carries the brand and the GitHub link, nothing else — no Docs
-link (you are in the docs) and no Download button. Retired pages keep their
+The docs pages carry a header (Docs, Releases, GitHub); the landing page has
+none. Both share one footer. Retired pages keep their
 URLs alive as `redir` lines in the `Caddyfile`: `/docs/ghostty` and
 `/docs/tmux` were published pages and now 301 to the docs index. Add a line
 there whenever a page is dropped or renamed.
@@ -148,7 +156,7 @@ there whenever a page is dropped or renamed.
 > Bun's native HTML serving (`bun ./public/**/*.html`) does derive exactly the
 > right routes, but it is a bundler, not a file server: it tries to resolve
 > every root-absolute `src`/`href` as a build input (500s on `/site.js`,
-> `/tailwind.css`, `/assets/icons/glyph.png`), never serves files no page references
+> `/tokens.css`, `/img/icon-180.png`), never serves files no page references
 > (`sitemap.xml`, `robots.txt`), 404s `/docs/`, and injects an HMR client. It's
 > a dev server for bundled apps, which this site isn't.
 
@@ -199,10 +207,10 @@ because a notes page is now served as real HTML into a WebView.
 
 ### GitHub stats
 
-The star count beside the docs header's GitHub link comes from
-`api.github.com`, called **client-side and unauthenticated** by
-`public/site.js`. (The download-total and latest-`.dmg` fetches are still
-wired but render nowhere, so they never run.) There is no API token and no server-side
+`public/site.js` can fill a star count, a download total and the latest
+`.dmg` link from `api.github.com`, called **client-side and unauthenticated**.
+No page renders any of them today, so none of the fetches run; each runs only
+on a page that carries its `data-stat-*` / `data-download-latest` markup. There is no API token and no server-side
 proxy — the unauthenticated budget is 60 requests/hour per visitor IP, and the
 site spends at most three of them, each cached in `localStorage` for an hour and
 fetched only on a page that displays it. Everything degrades to a hidden stat
@@ -221,10 +229,10 @@ bun run dev         # builds, then serves on http://localhost:8765
 tree (`SITE_ROOT=$PWD/public`), so local preview and production resolve URLs
 identically. `PORT` overrides the port.
 
-`public/docs/`, `tailwind.css`, `sitemap.xml`, and `robots.txt` are build
+`public/docs/`, `tokens.css`, `components/`, `sitemap.xml`, and `robots.txt` are build
 artifacts (gitignored) — regenerated by `bun run build`, which runs
 automatically before `dev`. Edit the docs by changing `docs/pages/*.md`; edit
-styles/tokens in `src/tailwind.css`.
+styles in the design system, then copy its files into `design-system/`.
 
 > Use `bun run dev`, not a plain static file server, to preview: only the
 > `Caddyfile` resolves the extensionless `/docs/<slug>` URLs the sidebar links

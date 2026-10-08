@@ -30,7 +30,7 @@ COPY website/package.json website/bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
-# ---- build: render docs/pages/*.md and compile Tailwind --------------------
+# ---- build: render docs/pages/*.md and compile the design tokens ----------
 FROM docker.io/oven/bun:1.4-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules

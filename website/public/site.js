@@ -1,25 +1,25 @@
 // Shared behavior for the Macterm marketing site + docs.
 // Every feature is opt-in by DOM presence, so one script drives both pages.
 //
-// The sticky-nav, hamburger, and reveal-on-scroll modules were dropped with the
-// dark redesign: its header is a plain bordered bar with three links that wrap
-// on a phone, and nothing fades in on scroll. Reveal-on-scroll in particular is
-// worth not bringing back — it starts content at opacity 0, so a JS failure
-// leaves the page blank rather than merely unanimated.
+// There is no sticky nav, hamburger or reveal-on-scroll: the header is one row
+// of links that wraps on a phone, and nothing fades in. Reveal-on-scroll in
+// particular is worth not bringing back — it starts content at opacity 0, so a
+// JS failure leaves the page blank rather than merely unanimated.
 
-// --- Copy-to-clipboard for code chips/blocks. ---
-// A [data-copy] button copies the <code> inside its enclosing [data-block]
-// (or, on the landing hero, the chip it lives in), then swaps its glyph.
+// --- Copy-to-clipboard for CodeBlocks. ---
+// An .ec-copy button copies the <code> inside its enclosing [data-block],
+// minus any `$ ` prompts, then says so to a screen reader. The design system
+// draws no second glyph for "copied", so the button doesn't change on screen.
 (function copyButtons() {
-  const buttons = document.querySelectorAll("[data-copy]");
+  const buttons = document.querySelectorAll("[data-block] .ec-copy");
   if (!buttons.length) return;
   buttons.forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const scope = btn.closest("[data-block]") || btn.parentElement;
-      const code = scope && scope.querySelector("code");
+      const code = btn.closest("[data-block]").querySelector("code");
       if (!code) return;
+      const text = code.innerText.replace(/^\$ /gm, "").trim();
       try {
-        await navigator.clipboard.writeText(code.innerText.trim());
+        await navigator.clipboard.writeText(text);
       } catch {
         const range = document.createRange();
         range.selectNodeContents(code);
@@ -29,23 +29,14 @@
         document.execCommand("copy");
         sel.removeAllRanges();
       }
-      const copy = btn.querySelector('[data-i="copy"]');
-      const check = btn.querySelector('[data-i="check"]');
-      if (copy && check) {
-        copy.style.display = "none";
-        check.style.display = "block";
-        clearTimeout(btn._t);
-        btn._t = setTimeout(() => {
-          copy.style.display = "block";
-          check.style.display = "none";
-        }, 1500);
-      }
+      btn.setAttribute("aria-label", "Copied");
+      clearTimeout(btn._t);
+      btn._t = setTimeout(() => btn.setAttribute("aria-label", "Copy"), 1500);
     });
   });
 })();
 
-// --- Landing demo reel: each clip plays while it is on screen, and the
-//     hairline under it fills with its progress. ---
+// --- Landing demo reel: each clip plays while it is on screen. ---
 //
 // The markup ships with a poster frame and preload="none", so the section is
 // complete, indexable and free before this runs; without JS the clips are
@@ -64,11 +55,6 @@
   const videos = Array.from(document.querySelectorAll("[data-demo]"));
   if (!videos.length) return;
 
-  const fillFor = (v) => {
-    const wrap = v.closest("[data-demo-wrap]");
-    return wrap && wrap.querySelector("[data-demo-fill]");
-  };
-
   const showControls = (v) => {
     v.controls = true;
     if (v.preload === "none") v.preload = "metadata";
@@ -82,7 +68,6 @@
     return;
   }
 
-  const playing = new Set();
   // A rejected play() is only meaningful when the page is actually on screen.
   // A tab opened in the background rejects every one of them, and treating
   // that as "autoplay is blocked here" would pin controls on all six clips
@@ -101,23 +86,6 @@
       if (v.paused && !v.controls && onScreen.has(v)) start(v);
     });
   });
-
-  // One rAF loop for every clip on screen rather than a timeupdate listener
-  // per video: timeupdate fires about 4x a second, which reads as a progress
-  // bar that stutters. The loop stops itself when nothing is playing.
-  let frame = null;
-  const paint = () => {
-    playing.forEach((v) => {
-      const bar = fillFor(v);
-      if (!bar) return;
-      const pct = v.duration ? (v.currentTime / v.duration) * 100 : 0;
-      bar.style.width = pct.toFixed(2) + "%";
-    });
-    frame = playing.size ? requestAnimationFrame(paint) : null;
-  };
-  const wake = () => {
-    if (frame === null && playing.size) frame = requestAnimationFrame(paint);
-  };
 
   const onScreen = new Set();
   const io = new IntersectionObserver(
@@ -139,13 +107,6 @@
 
   videos.forEach((v) => {
     io.observe(v);
-    v.addEventListener("playing", () => {
-      playing.add(v);
-      wake();
-    });
-    ["pause", "ended", "emptied"].forEach((e) =>
-      v.addEventListener(e, () => playing.delete(v)),
-    );
     // The one control an autoplaying clip keeps: click to hold a frame you
     // want to read, click again to carry on.
     v.addEventListener("click", () => {

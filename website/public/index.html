@@ -30,13 +30,12 @@
   <meta name="twitter:image" content="https://macterm.thdxg.dev/img/og.png" />
   <meta name="twitter:image:alt" content="Macterm running on macOS — a vertical project sidebar beside an editor and a shell split." />
 
+  <!-- Geist and Geist Mono load through components/bundle.css's @import. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- DM Sans sets everything on the page; IBM Plex Mono is the command chip
-       and the docs' code. -->
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="/tailwind.css" />
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/components/bundle.css" />
 
   <script type="application/ld+json">
   {
@@ -87,226 +86,192 @@
   }
   </script>
 </head>
-<body class="landing">
+<body class="ec">
+<div class="ec-page">
 
   <main>
-    <section class="l-wrap l-hero">
-      <h1>
-        <img src="/assets/icons/glyph.png" width="44" height="44" alt="" />
-        <span>Macterm</span>
-      </h1>
-
-      <p class="l-lede">A lightweight macOS terminal with vertical tabs, session persistence, and native UI. Built on libghostty and open-source.</p>
-
-      <div class="l-actions">
-        <a class="l-cta" href="/docs/install">Get started<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9.5M8.8 4.3 12.5 8l-3.7 3.7"/></svg></a>
-        <!-- The count is filled by site.js's loadStats, which caches the
-             figure for an hour per visitor; the em dash is what stands there
-             until it lands (and if GitHub is unreachable, what stays). -->
-        <a class="l-gh" href="https://github.com/thdxg/macterm">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.07-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.15 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.995 7.995 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-          <span data-stat-stars title="GitHub stars"><span data-stat-stars-num>—</span><span class="sr-only"> stars on GitHub</span></span>
-        </a>
-      </div>
-
-      <!-- The LCP element: prioritized on the <img> itself rather than a
-           <link rel=preload> carrying a duplicate imagesrcset. It sits near the
-           top of <body>, so the preload scanner reaches it in the same pass it
-           would reach a preload link — the link would buy no head start while
-           giving the responsive srcset a second place to drift out of sync. -->
-      <picture>
-        <source type="image/webp" srcset="/img/hero-640.webp 640w, /img/hero-1000.webp 1000w, /img/hero-1400.webp 1400w, /img/hero-2200.webp 2200w, /img/hero-3132.webp 3132w" sizes="(max-width: 1440px) 100vw, 1328px" />
-        <img class="l-hero-shot" src="/img/hero-1400.png" width="3388" height="1928" fetchpriority="high" decoding="async"
-             alt="Macterm running on macOS — the project sidebar beside an editor pane and a shell pane" />
-      </picture>
-    </section>
-
-    <!-- One row per feature: the clip plays while it is on screen and pauses
-         when it leaves, and the hairline under it fills with its progress
-         (site.js). `muted` + `playsinline` is what makes that autoplay
-         permissible at all; the poster carries the first frame so the section
-         is complete before a video byte is fetched. -->
-    <section id="features" class="l-wrap l-features">
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Splits and navigation</h2>
-          <p>Split a pane in any direction and move between panes by keybind. Drag a pane onto another to join them, or pull one out into its own tab.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/01-splits.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Splitting a pane, moving between panes from the keyboard, zooming one, and closing it">
-            <source src="/assets/demo/01-splits.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Animations</h2>
-          <p>Motion where it helps you keep your place. Scrolling slides, in scrollback and inside full-screen programs like Claude Code and Neovim. Splits grow into place. The cursor glides between positions and leaves a short trail, so you can find it after a jump. All four are toggles in Settings → Animations.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/07-animations.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Scrolling smoothly back through a Claude Code transcript, splitting the pane with an animation, then typing and moving the cursor around a file in Helix with the cursor gliding and trailing">
-            <source src="/assets/demo/07-animations.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Desktop widgets</h2>
-          <p>Put a terminal on your desktop, sized and shaped like the system's widgets and snapping into line beside them. It stays below your windows, and its shell survives a quit like any other pane.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/09-widgets.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Desktop widgets running btop and fastfetch beside the system weather and calendar widgets, one dragged into line and snapping to the grid">
-            <source src="/assets/demo/09-widgets.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Sidebar and tabs</h2>
-          <p>Projects and their tabs live in a native macOS sidebar, stacked vertically where there's actually room to read them. The window picks up the background color the running program paints.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/02-sidebar.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Hiding and showing the project sidebar, including over a full-screen TUI">
-            <source src="/assets/demo/02-sidebar.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Tab switcher</h2>
-          <p>Switch tabs from a live preview of each one, so you pick the pane you meant by looking at it rather than by name.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/06-tab-switcher.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Holding the recent-tab binding to show live previews of every open tab, and cycling between them">
-            <source src="/assets/demo/06-tab-switcher.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Command palette and layouts</h2>
-          <p>Press <code>⌘P</code> to split panes, switch projects, or open a directory. Declare a project's tabs, splits, and per-pane commands in <code>~/.config/macterm/projects/</code> and the workspace builds itself.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/03-palette.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Opening a project, saving a layout, changing the panes, and applying the layout again from the command palette">
-            <source src="/assets/demo/03-palette.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Custom palettes</h2>
-          <p>Turn any command's output into a screen of the command palette. A YAML file in <code>~/.config/macterm/palettes/</code> lists your commits, containers or Kubernetes pods; search them, drill into one, and run a command against it in a split.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/11-palettes.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Opening a custom Git palette from the command palette, searching the project's commits, opening one commit's menu, going back, and showing another commit's diff in a split">
-            <source src="/assets/demo/11-palettes.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Open a folder from the Dock</h2>
-          <p>Drop a folder on Macterm's Dock icon, or use Open With in Finder, and it opens as a new project.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/08-open-folder.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Dragging a folder from Finder onto Macterm's Dock icon, which opens it as a new project">
-            <source src="/assets/demo/08-open-folder.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Quick terminal</h2>
-          <p>A global terminal that drops down from anywhere with a hotkey, then gets out of your way when you're done.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/04-quick-terminal.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Summoning the quick terminal over the desktop, splitting it, and dismissing it">
-            <source src="/assets/demo/04-quick-terminal.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Remote projects</h2>
-          <p>Open a directory on another machine over SSH. Panes persist <em>on the host</em>, surviving quits, dropped connections, even a local reboot.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/05-remote.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Opening a project on a remote host over ssh, splitting it, opening a second tab, and running vim there">
-            <source src="/assets/demo/05-remote.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-row">
-        <div class="l-row-text">
-          <h2>Passwords</h2>
-          <p>Type a password at an <code>ssh</code>, <code>sudo</code> or database prompt once, and Macterm offers to save it in your keychain. The next time that prompt appears, a bubble offers to fill it in after Touch ID.</p>
-        </div>
-        <div class="l-row-media" data-demo-wrap>
-          <video data-demo width="1400" height="792" poster="/assets/demo/10-passwords.webp"
-                 preload="none" muted loop playsinline disablepictureinpicture
-                 aria-label="Logging in to a remote project by password, saving the password when Macterm offers, then autofilling it for a second pane">
-            <source src="/assets/demo/10-passwords.mp4" type="video/mp4" />
-          </video>
-          <div class="l-progress"><div class="l-progress-fill" data-demo-fill></div></div>
-        </div>
-      </div>
-      <div class="l-note">
-        <h2>Session persistence</h2>
-        <p>Quitting detaches your shells instead of killing them. Relaunch; they come back — scrollback and running processes intact.</p>
-      </div>
-      <div class="l-note">
-        <h2>Control CLI</h2>
-        <p>A bundled <code>macterm</code> command drives the running app over a socket — so scripts and AI agents can spawn panes and run commands.</p>
-      </div>
-      <div class="l-note">
-        <h2>Pinned tabs</h2>
-        <p>Pin a tab above your projects to keep it running — it starts on every launch, and restores itself with its command if the session dies.</p>
-      </div>
-      <div class="l-note">
-        <h2>Ghostty compatibility</h2>
-        <p>Reads your existing <code>ghostty/config</code>. Theme, font, keybinds — all of it just works.</p>
+    <section class="ec-hero">
+      <h1>Macterm</h1>
+      <p class="ec-hero-lede">A lightweight macOS terminal with vertical tabs, session persistence, and native UI.<br />Built on libghostty and open-source.</p>
+      <div class="ec-hero-actions">
+        <a class="ec-btn ec-btn--primary" href="/docs/install">Get started</a>
+        <a class="ec-btn" href="https://github.com/thdxg/macterm">GitHub ↗</a>
       </div>
     </section>
+
+    <!-- One section per feature, spanning the page grid under the hero. Each
+         clip plays while it is on screen and pauses when it leaves (site.js).
+         `muted` + `playsinline` is what makes that autoplay permissible at
+         all; the poster carries the first frame so the section is complete
+         before a video byte is fetched. -->
+    <div id="features">
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Splits and navigation</h3>
+          <p class="ec-muted">Split a pane in any direction and move between panes by keybind. Drag a pane onto another to join them, or pull one out into its own tab.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/01-splits.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Splitting a pane, moving between panes from the keyboard, zooming one, and closing it">
+              <source src="/assets/demo/01-splits.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Animations</h3>
+          <p class="ec-muted">Motion where it helps you keep your place. Scrolling slides, in scrollback and inside full-screen programs like Claude Code and Neovim. Splits grow into place. The cursor glides between positions and leaves a short trail, so you can find it after a jump. All four are toggles in Settings → Animations.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/07-animations.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Scrolling smoothly back through a Claude Code transcript, splitting the pane with an animation, then typing and moving the cursor around a file in Helix with the cursor gliding and trailing">
+              <source src="/assets/demo/07-animations.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Desktop widgets</h3>
+          <p class="ec-muted">Put a terminal on your desktop, sized and shaped like the system's widgets and snapping into line beside them. It stays below your windows, and its shell survives a quit like any other pane.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/09-widgets.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="A terminal widget beside the system weather and calendar widgets, opened for editing from its right-click menu to start btop, then dragged away and snapping back into line">
+              <source src="/assets/demo/09-widgets.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Sidebar and tabs</h3>
+          <p class="ec-muted">Projects and their tabs live in a native macOS sidebar, stacked vertically where there's actually room to read them. The window picks up the background color the running program paints.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/02-sidebar.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Hiding and showing the project sidebar, including over a full-screen TUI">
+              <source src="/assets/demo/02-sidebar.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Tab switcher</h3>
+          <p class="ec-muted">Switch tabs from a live preview of each one, so you pick the pane you meant by looking at it rather than by name.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/06-tab-switcher.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Holding the recent-tab binding to show live previews of every open tab, and cycling between them">
+              <source src="/assets/demo/06-tab-switcher.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Command palette and layouts</h3>
+          <p class="ec-muted">Press <code>⌘P</code> to split panes, switch projects, or open a directory. Declare a project's tabs, splits, and per-pane commands in <code>~/.config/macterm/projects/</code> and the workspace builds itself.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/03-palette.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Opening a project, saving a layout, changing the panes, and applying the layout again from the command palette">
+              <source src="/assets/demo/03-palette.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Custom palettes</h3>
+          <p class="ec-muted">Turn any command's output into a screen of the command palette. A YAML file in <code>~/.config/macterm/palettes/</code> lists your commits, containers or Kubernetes pods; search them, drill into one, and run a command against it in a split.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/11-palettes.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Opening a custom Git palette from the command palette, searching the project's commits, opening one commit's menu, going back, and showing another commit's diff in a split">
+              <source src="/assets/demo/11-palettes.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Open a folder from the Dock</h3>
+          <p class="ec-muted">Drop a folder on Macterm's Dock icon, or use Open With in Finder, and it opens as a new project.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/08-open-folder.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Dragging a folder from Finder onto Macterm's Dock icon, which opens it as a new project">
+              <source src="/assets/demo/08-open-folder.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Quick terminal</h3>
+          <p class="ec-muted">A global terminal that drops down from anywhere with a hotkey, then gets out of your way when you're done.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/04-quick-terminal.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Summoning the quick terminal over the desktop, splitting it, and dismissing it">
+              <source src="/assets/demo/04-quick-terminal.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Remote projects</h3>
+          <p class="ec-muted">Open a directory on another machine over SSH. Panes persist <em>on the host</em>, surviving quits, dropped connections, even a local reboot.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/05-remote.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Opening a project on a remote host over ssh, splitting it, opening a second tab, and running vim there">
+              <source src="/assets/demo/05-remote.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <h3>Password Manager</h3>
+          <p class="ec-muted">Type a password at an <code>ssh</code>, <code>sudo</code> or database prompt once, and Macterm offers to save it in your keychain. The next time that prompt appears, a bubble offers to fill it in after Touch ID.</p>
+          <figure class="ec-figure">
+            <video data-demo width="1400" height="792" poster="/assets/demo/10-passwords.webp"
+                   preload="none" muted loop playsinline disablepictureinpicture
+                   aria-label="Logging in to a remote project by password, saving the password when Macterm offers, then autofilling it for a second pane">
+              <source src="/assets/demo/10-passwords.mp4" type="video/mp4" />
+            </video>
+          </figure>
+        </div>
+      </section>
+      <section class="ec-section">
+        <div class="ec-section-body ec-span">
+          <ul class="ec-entries">
+            <li class="ec-entry"><span class="ec-entry-title">Session persistence</span><p class="ec-entry-desc">Quitting detaches your shells instead of killing them. Relaunch; they come back — scrollback and running processes intact.</p></li>
+            <li class="ec-entry"><span class="ec-entry-title">Control CLI</span><p class="ec-entry-desc">A bundled <code>macterm</code> command drives the running app over a socket — so scripts and AI agents can spawn panes and run commands.</p></li>
+            <li class="ec-entry"><span class="ec-entry-title">Pinned tabs</span><p class="ec-entry-desc">Pin a tab above your projects to keep it running — it starts on every launch, and restores itself with its command if the session dies.</p></li>
+            <li class="ec-entry"><span class="ec-entry-title">Ghostty compatibility</span><p class="ec-entry-desc">Reads your existing <code>ghostty/config</code>. Theme, font, keybinds — all of it just works.</p></li>
+          </ul>
+        </div>
+      </section>
+    </div>
   </main>
 
-  <footer class="l-wrap l-footer">
-    <a href="/docs/">Docs</a>
-    <a href="https://github.com/thdxg/macterm">GitHub</a>
-    <a href="https://github.com/thdxg/macterm/releases">Releases</a>
-    <a href="https://ghostty.org">Ghostty</a>
+  <footer class="ec-footer">
+    <span>© 2026 Macterm</span>
+    <div class="ec-footer-links">
+      <a href="/docs/">Docs</a>
+      <a href="https://github.com/thdxg/macterm">GitHub ↗</a>
+      <a href="https://github.com/thdxg/macterm/releases">Releases ↗</a>
+      <a href="https://ghostty.org">Ghostty ↗</a>
+    </div>
   </footer>
 
+</div>
   <script src="/site.js"></script>
 </body>
 </html>
