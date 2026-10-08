@@ -1454,7 +1454,7 @@ demo10() {  # save a password typed at an ssh login, autofill the next one
 # ── custom palettes ─────────────────────────────────────────────────────────
 # A Git palette over the macterm project's own history: open it from ⌘P, enter
 # its menu, then the commits listing; search, open a commit's menu, Delete back
-# a screen, search again, and run the commit's Diff action in a split. The
+# a screen, search for another, and run the commit's Diff action in a split. The
 # file's commands are written in the login shell's syntax (they run in it, and
 # the run action is typed at its prompt): nushell, or a POSIX shell with jq.
 K_DELETE=51
@@ -1480,7 +1480,7 @@ pal_write() {  # pal_write <nu|posix>
 $PAL_MARK
 name: Git
 icon: arrow.triangle.branch
-description: The project's commits and branches (record-demos.sh)
+description: The project's commits and branches
 root: menu
 nodes:
   menu:
@@ -1558,10 +1558,11 @@ drive11() {
   ktype "palette" 0.07; sleep 1.3                  # search the commits
   kc $K_RET; sleep 1.6                             # a commit's menu; the pills read the trail
   kc $K_DELETE; sleep 1.2                          # back one screen, search cleared
-  ktype "search" 0.07; sleep 1.2
+  ktype "fzf" 0.08; sleep 1.2                      # a different commit this time
   kc $K_RET; sleep 1.4                             # another commit
   kc $K_RET                                        # Diff: a split runs git show
-  wait_text 15 'commit [0-9a-f]{7,}' --project macterm --pane 2 || return 0
+  # a hunk header: what git's own pager and delta (or any other) both show
+  wait_text 15 '@@ ' --project macterm --pane 2 || return 0
   sleep 2.6
 }
 
