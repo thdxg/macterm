@@ -67,7 +67,7 @@ comm -12 "$work/candidates.txt" "$work/ids_any.txt" > "$work/used.txt"
 
 used_count=$(wc -l < "$work/used.txt" | tr -d ' ')
 if [[ "$used_count" == "0" ]]; then
-  echo "error: no ghostty_* symbol from $ROOT/{Macterm,CLI} appears in either header — has the source layout or the header moved?" >&2
+  echo "error: no ghostty_* symbol from $ROOT/{Macterm,CLI} is in either header. Did the source layout or the header move?" >&2
   exit 1
 fi
 
@@ -163,7 +163,7 @@ val_of() { awk -F'\t' -v s="$2" '$3 == s { print $2; exit }' "$1"; }
 # ── Report ──────────────────────────────────────────────────────────────────
 echo "### GhosttyKit API review — \`${OLD_TAG}\` → \`${NEW_TAG}\`"
 echo
-echo "Filtered to the **${used_count}** \`ghostty_*\`/\`GHOSTTY_*\` symbols Macterm's own sources reference and the header defines."
+echo "This report has only the **${used_count}** \`ghostty_*\` and \`GHOSTTY_*\` symbols that the sources of Macterm use and that the header defines."
 echo
 
 # 1. Vanished symbols — a build error, named here so a red CI run isn't a mystery.
@@ -179,10 +179,10 @@ if [[ -s "$work/gone.txt" ]]; then
   echo
   sed 's/^/- `/; s/$/`/' "$work/gone.txt"
   echo
-  echo "This will fail the build. Either the API moved and our call sites need updating, or a fork patch stopped applying."
+  echo "This fails the build. Either the API moved and our call sites need a change, or a fork patch does not apply now."
   echo
 else
-  echo "#### ✅ No symbol we use was removed"
+  echo "#### ✅ The API still has every symbol that we use"
   echo
 fi
 
@@ -206,7 +206,7 @@ done < "$work/used.txt"
 
 if [[ -s "$work/renumbered.tsv" ]]; then
   n_renum=$(wc -l < "$work/renumbered.tsv" | tr -d ' ')
-  echo "#### ⚠️ ${n_renum} enum constant(s) we use changed numeric value"
+  echo "#### ⚠️ ${n_renum} enum constant(s) that we use have a new numeric value"
   echo
 
   # Show the cause before the effect. A renumber is nearly always somebody
@@ -242,19 +242,19 @@ if [[ -s "$work/renumbered.tsv" ]]; then
   echo
   echo "</details>"
   echo
-  echo "Harmless as long as the header and the archive stay paired — the xcframework ships them together, and \`setup.sh\` only ever installs both from one release. Never pair one with the other's, and treat any hardcoded raw value as suspect. A **removed** member is the one to look at closely."
+  echo "This is harmless while the header and the archive stay together. The xcframework ships them together, and \`setup.sh\` always installs both from one release. Never use a header with the archive of another release. Treat each hardcoded raw value as suspect. A **removed** member needs the closest look."
   echo
 fi
 
 if [[ -s "$work/unknown.txt" ]]; then
   n_unk=$(wc -l < "$work/unknown.txt" | tr -d ' ')
-  echo "#### ❓ ${n_unk} constant(s) we use have a value this script can't evaluate"
+  echo "#### ❓ ${n_unk} constant(s) that we use have a value that this script cannot evaluate"
   echo
   echo "| symbol | ${OLD_TAG} | ${NEW_TAG} |"
   echo "|---|---|---|"
   awk -F'\t' '{ printf "| `%s` | %s | %s |\n", $1, $2, $3 }' "$work/unknown.txt"
   echo
-  echo "Listed rather than assumed unchanged — check these by hand if the enum was touched."
+  echo "The list does not assume that they are the same. Check them by hand if the enum changed."
   echo
 fi
 
@@ -293,7 +293,7 @@ if [[ -s "$work/relevant.diff" ]]; then
   # Line-bounded, not byte-bounded: a byte cut lands mid-line and glues the
   # truncation marker onto a partial declaration inside the fence.
   head -n 400 "$work/relevant.diff"
-  [[ $(wc -l < "$work/relevant.diff") -gt 400 ]] && echo "… truncated; see the compare link"
+  [[ $(wc -l < "$work/relevant.diff") -gt 400 ]] && echo "… cut short. See the compare link"
   echo '```'
   echo
 else
@@ -306,4 +306,4 @@ fi
 # line and the footnote renders split in half.
 changed=$(grep -cE '^[+-]' "$work/full.diff" 2>/dev/null || true)
 hunks=$(grep -cE '^@@' "$work/relevant.diff" 2>/dev/null || true)
-echo "<sub>${changed} changed header lines total; ${hunks} hunk(s) touch symbols we use. A green CI run means it builds and the suites pass — not that no behaviour moved.</sub>"
+echo "<sub>${changed} changed header lines in total. ${hunks} hunk(s) touch symbols that we use. A green CI run means that the build works and the suites pass. It does not mean that no behavior changed.</sub>"

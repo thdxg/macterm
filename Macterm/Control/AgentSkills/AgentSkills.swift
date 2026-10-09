@@ -73,17 +73,18 @@ enum AgentSkills {
     static let header = """
     Macterm agent skills
 
-    Skills for AI coding agents that use Macterm through its `macterm` CLI, in
-    the Agent Skills format: one folder per skill, holding a SKILL.md. Install
-    each skill below into your skills directory as <name>/SKILL.md, exactly as
-    printed: its file is everything after its "==> <name>/SKILL.md <==" line, up
-    to the next such line or the end of this output. Each skill stands alone.
+    Skills for AI coding agents that use Macterm through its `macterm` CLI. They
+    use the Agent Skills format: one folder for each skill, with a SKILL.md file
+    in it. Install each skill below into your skills directory as
+    <name>/SKILL.md, exactly as printed. The file of a skill is everything after
+    its "==> <name>/SKILL.md <==" line. It ends at the next such line, or at the
+    end of this output. Each skill stands alone.
 
     `macterm skills <name>` prints one skill by itself, ready to redirect into
-    place, and `macterm skills --list` names them. The text comes from the CLI
-    that printed it, so print and install them again after updating Macterm.
-    They replace the single "macterm" skill from the Macterm Cookbook; remove
-    that one if you installed it.
+    place. `macterm skills --list` shows the names. The text comes from the CLI
+    that printed it. Print and install the skills again after you update
+    Macterm. They replace the single "macterm" skill from the Macterm Cookbook.
+    If you installed that skill, remove it.
 
     """
 
@@ -91,34 +92,35 @@ enum AgentSkills {
     static let groundRules = #"""
     ## Ground rules
 
-    - **Reaching the CLI.** Inside a Macterm pane, `macterm` is on `PATH` and `$MACTERM_SESSION` names that
-      pane, so a pane command with no target acts on the pane it runs in. Anywhere else, run
-      `/Applications/Macterm.app/Contents/Resources/bin/macterm`; Macterm itself must be running.
-    - **Targeting.** `--session <name>` is the stable address: session names come from `macterm pane list`,
-      survive quitting and relaunching Macterm, and are found in whichever project holds them. `--pane pane:2`
-      is the second pane of the active tab (add `--tab` for another tab) and shifts as splits change. An
-      explicit target always beats the fallback, which is your own pane inside Macterm and the user's
-      focused pane outside it.
-    - **Text after `--`.** In `pane run`, the text goes after `--`, where it is typed exactly as given:
+    - **Reaching the CLI.** Inside a Macterm pane, `macterm` is in `PATH`, and `$MACTERM_SESSION` names that
+      pane. A pane command with no target acts on the pane that it runs in. In any other place, run
+      `/Applications/Macterm.app/Contents/Resources/bin/macterm`. Macterm must be running.
+    - **Targeting.** `--session <name>` is the stable address. Session names come from `macterm pane list`.
+      They stay the same after the user quits and starts Macterm again. The CLI finds a session in the project
+      that holds it. `--pane pane:2` is the second pane of the active tab (add `--tab` for another tab). It
+      changes when splits change. An explicit target always wins over the fallback. Inside Macterm, the
+      fallback is your own pane. Outside Macterm, it is the focused pane of the user.
+    - **Text after `--`.** In `pane run`, put the text after `--`. Macterm types it exactly as you wrote it:
       `macterm pane run --session macterm-api-8f327ce4a3f8 -- "ls -la"`. Before `--`, `pane run` reads its own
-      flags wherever they are, and a word starting with `-` is refused with nothing typed.
-    - **One argument.** `pane run` joins its arguments with spaces after your shell has removed their quotes,
-      so pass the command line as one quoted string; quotes inside it then survive.
-    - **The user's shell.** Typed text runs in the user's login shell, which may be nushell or fish. Wrap
-      redirects, pipes, `&&`, variables and globs in `/bin/sh -c '…'`, or write a script file and type
-      `/bin/sh /path/to/script.sh`.
-    - **No terminal yet.** A pane in a tab that has never been on screen has no terminal: `pane run`, `key`,
-      `dump` and `inspect` answer `no_surface`, and its `--run` command has not started. `macterm tab select`
-      shows the tab (and switches what the user is looking at).
-    - **Wait for a sentinel, never a fixed sleep.** Have the command create a file when it ends, or print a
-      marker assembled at run time: `printf done-%s 4f1c` prints `done-4f1c`, which the echoed command line
-      never contains. Use a fresh random token each time and give every wait loop a deadline.
-    - **`busy` means ask.** Closing a pane, tab or project answers `busy` while a program runs there, and
-      `layout apply` answers it whenever it would close any pane. Nothing has changed at that point: ask the
-      user before retrying with `--force`, which closes them anyway and kills what they run.
-    - **Results.** Exit 0 is success, 1 means Macterm refused (stderr says why), 2 means no Macterm is
-      reachable, and 64 means the command line itself is malformed. stdout carries output only on success.
-      Every command except `macterm ssh` accepts `--json`.
+      flags at any place. It refuses a word that starts with `-` and types nothing.
+    - **One argument.** `pane run` joins its arguments with spaces after your shell removes their quotes.
+      Pass the command line as one quoted string. The quotes inside it then stay.
+    - **The user's shell.** Macterm types the text into the login shell of the user. This can be nushell or
+      fish. Put redirects, pipes, `&&`, variables and globs in `/bin/sh -c '…'`. Or write a script file and
+      type `/bin/sh /path/to/script.sh`.
+    - **No terminal yet.** A pane in a tab that was never on the screen has no terminal. `pane run`, `key`,
+      `dump` and `inspect` answer `no_surface`, and its `--run` command did not start. `macterm tab select`
+      shows the tab. It also changes what the user sees.
+    - **Wait for a sentinel, not for a fixed time.** Make the command create a file when it ends, or print a
+      marker that you assemble at run time: `printf done-%s 4f1c` prints `done-4f1c`. The echoed command line
+      never contains it. Use a new random token each time. Give each wait loop a deadline.
+    - **`busy` means ask.** Closing a pane, a tab or a project answers `busy` while a program runs there.
+      `layout apply` answers `busy` each time that it would close a pane. Nothing changed at that point. Ask
+      the user before you try again with `--force`. That flag closes them anyway and kills the programs that
+      run in them.
+    - **Results.** Exit 0 is success. Exit 1 means that Macterm refused the command (stderr says why). Exit 2
+      means that no Macterm is reachable. Exit 64 means that the command line is malformed. stdout has output
+      only on success. Every command except `macterm ssh` accepts `--json`.
     """#
 
     /// The closing section of every skill: how to notice it has gone stale.
@@ -126,8 +128,8 @@ enum AgentSkills {
         """
         ## Keeping this skill current
 
-        This file came from `macterm skills \(name)`. If Macterm rejects a command shown here, the CLI has
-        changed since: install the skill again from that command's output.
+        This file came from `macterm skills \(name)`. If Macterm rejects a command shown here, the CLI changed
+        after you installed the skill. Install the skill again from the output of that command.
         """
     }
 }

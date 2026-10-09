@@ -3,16 +3,16 @@ slug: index
 title: Introduction
 nav: Introduction
 group: Getting started
-description: Macterm — a native macOS terminal with a vertical project sidebar and persistent multiplexing, built on libghostty.
+description: A lightweight macOS terminal with vertical tabs, persistent sessions, and native experience.
 -->
 
 
 # Macterm
 
-A native macOS terminal with a vertical project sidebar and persistent multiplexing, built on [libghostty](https://ghostty.org).
+A lightweight macOS terminal with vertical tabs, persistent sessions, and native experience. It uses [libghostty](https://ghostty.org).
 
-Requires macOS 14 or later. MIT licensed.
+Macterm needs macOS 14 or later. It has an MIT license.
 
-1. [Install](/docs/install) it.
-2. Point it at your [Ghostty config](/docs/configuration).
-3. Automate it with the [CLI](/docs/cli) or [Shortcuts](/docs/shortcuts).
+1. [Install](/docs/install) Macterm.
+2. Use your [Ghostty config](/docs/configuration) with Macterm.
+3. Automate Macterm with the [CLI](/docs/cli) or [Shortcuts](/docs/shortcuts).

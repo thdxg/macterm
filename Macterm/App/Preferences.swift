@@ -130,8 +130,8 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .stable: "Stable releases only."
-        case .beta: "Betas of the next release, and stable releases."
-        case .tip: "A build of every commit that passes CI, and stable releases. Tip builds are not release-tested."
+        case .beta: "Betas of the next release and stable releases."
+        case .tip: "A build of every commit that passes CI, and stable releases. Tip builds get no release tests."
         }
     }
 
@@ -254,9 +254,9 @@ enum SidebarPeekStyle: String, CaseIterable, Identifiable {
     var explanation: String {
         switch self {
         case .resizeTerminal:
-            "Slides the native sidebar column out and temporarily resizes the terminal."
+            "Slides the native sidebar column out and resizes the terminal for a time."
         case .overlayTerminal:
-            "Shows a floating sidebar over the terminal without changing its size."
+            "Shows a floating sidebar over the terminal. The terminal keeps its size."
         }
     }
 }

@@ -3,14 +3,14 @@ slug: cli
 title: The macterm CLI
 nav: CLI
 group: Automation
-description: Drive the running app — projects, tabs, panes, sessions — from scripts and AI agents over a local socket.
+description: Control the running app (projects, tabs, panes and sessions) from scripts and AI agents over a local socket.
 -->
 
 # The `macterm` CLI
 
-Drives the **running app** — projects, tabs, panes, and their zmx sessions — over a local Unix socket.
+The `macterm` command controls the **running app**: projects, tabs, panes and their zmx sessions. It uses a local Unix socket.
 
-Shells Macterm spawns already have `macterm` on their `PATH`:
+Each shell that Macterm starts already has `macterm` in its `PATH`:
 
 ```console
 $ macterm status
@@ -22,101 +22,101 @@ tab:3  *  npm  1 pane
 $ macterm grid 2x2 --run "tail -f log/dev.log"
 ```
 
-From any other shell, use the bundle path or symlink it onto your `PATH`:
+In any other shell, use the bundle path, or make a symlink to it in a folder in your `PATH`:
 
 ```sh
 /Applications/Macterm.app/Contents/Resources/bin/macterm status
 ```
 
-Every command that talks to the app takes `--json` for a scriptable payload and `--socket <path>` to target a specific instance. `--help` works at every level.
+Every command that talks to the app accepts `--json` for a payload that a script can read. It also accepts `--socket <path>` to select one instance of the app. `--help` works at every level.
 
 ## Commands
 
-The grammar is `macterm <noun> <verb> [options]`. A bare noun defaults to `list`.
+The grammar is `macterm <noun> <verb> [options]`. A noun with no verb means `list`.
 
 | Command | Description |
 |---|---|
-| `status` | Version, pid, active project. Exits non-zero if no app is reachable. |
-| `project list` | All projects with refs (`project:1`), active/loaded markers, tab counts. |
-| `project create <path> [--name N] [--select]` | Add a project for a local directory or a [remote spec](/docs/remote-projects). **Not idempotent** — each run adds a distinct project. `--name` defaults to the directory's name and can't be empty. `Pinned` is reserved: `--name Pinned` is refused, and a directory named Pinned is added as `Pinned 2`. |
-| `project select <name\|uuid\|index> [--window W]` | Make a project active. `pinned` selects the pinned-tabs workspace. |
-| `project rename <project> <name>` | Rename a project. `Pinned` is reserved. |
-| `project remove <project> [--force]` | Remove a project, killing its sessions. Returns `busy` when a pane runs a program, unless forced. Deletes no files. |
-| `tab list [--project P]` | Tabs of a project (default: active). |
-| `tab new [--project P] [--run CMD] [--no-focus]` | New tab, becomes active unless `--no-focus`. `--run` types CMD into the fresh shell. |
-| `tab select <tab> [--window W]` | Activate a tab (`tab:3`, index, UUID, or exact title). |
-| `tab move <tab> <slot>` | Reorder a tab. `slot` is its **final** 1-based position. |
-| `tab rename <tab> [title] [--reset]` | Rename a tab, or restore the automatic title. |
-| `tab close <tab> [--force]` | Close a tab, killing its sessions. Returns `busy` when a pane runs a program. Closing a pinned tab unloads it. |
-| `window list` | Open windows in creation order (`window:1`). |
-| `window new` | Open another window on the current project. |
-| `window focus <window>` | Bring a window to the front. |
-| `window close [--window W]` | Close a window. The last visible one hides instead. |
-| `widget list` | [Desktop widgets](/docs/desktop-widgets) in creation order (`widget:1`), with name, size, locked/editing and session name. |
-| `widget new [--size S] [--name N] [--run CMD]` | Add a locked desktop widget running your login shell, in the middle of the desktop. `S` is a grid span, `COLUMNSxROWS` like `3x2`; the default is `3x3`. `--run` types CMD into the shell whenever the widget starts one. |
-| `widget set <widget> --size S` | Resize a widget. It snaps to the grid. |
-| `widget edit <widget>` | Unlock a widget for typing, moving and resizing. Returns `busy` while another widget is being edited. |
-| `widget done` | Lock the widget being edited. |
-| `widget remove <widget> [--force]` | Remove a widget, ending its shell. Returns `busy` when a program runs in it, unless forced. |
-| `palette list` | Your own [extensions'](/docs/extensions) palette files in `~/.config/macterm/palettes`, read afresh: id, keybind, and the palette's name or the error that stopped the file reading. |
-| `pane list [--project P] [--tab T]` | Panes with refs, session names, cwd, foreground process, and execution state. |
-| `pane inspect [target]` | Snapshot of a pane's terminal core. Needs a live surface. |
-| `pane dump [--scrollback] [target]` | Print a pane's terminal text. Text only, pipeline-friendly. |
-| `pane split [--direction right\|left\|down\|up\|auto] [--run CMD] [--no-focus] [target]` | Split a pane; the new pane inherits the cwd. `auto` picks the longer axis. `--no-focus` keeps the current focus and zoom. |
-| `pane mirror [--direction …] [target]` | Show the same session in a second pane. Focusing a mirror makes it the leader; the other dims. |
-| `pane focus <target>` | Focus a pane: selects its tab, fronts the window, restores keyboard focus. |
-| `pane focus --direction left\|down\|up\|right [target]` | Focus the nearest pane that way. A no-op at the outermost edge, not an error. |
-| `pane close (--pane P \| --session S) [--force]` | Close a pane. Always requires an explicit target. |
-| `pane run [--no-submit] [target] -- <command…>` | Type a command plus newline into a live pane. `--no-submit` leaves the text on the prompt. See [Typing into a pane](#typing-into-a-pane). |
-| `pane key <chord> [target]` | Send one key press (`a`, `ctrl+c`, `escape`, `up`). |
-| `pane zoom [target]` | Toggle zoom on a pane. |
-| `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Set the ratio (0.15–0.85) of the nearest split on that axis. |
-| `grid <RxC> [--run CMD] [target]` | Split a pane into an equal R×C grid (≤16 cells). `--run` spawns CMD in every new pane. |
-| `session list` / `session info <name>` | zmx sessions with attached-pane mapping. |
-| `session kill <name>` | Kill a session. An attached pane's shell exits. |
-| `layout apply [--project P] [--force]` | Reconcile to the project's [layout file](/docs/declarative-layouts). Returns `busy` instead of closing panes. |
-| `layout save [--project P]` | Write the live workspace to `~/.config/macterm/projects/<slug>.yaml`. |
-| `tutor [project\|pinned]` | Print a short tutorial, with your own keybinds. Needs a running app. |
-| `ssh <ssh args…>` | Run ssh with Macterm's terminal integration. Needs no running app. Flags mirror `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false`, `--verbose`. |
-| `skills [name] [--list]` | Print [skills for coding agents](#skills-for-coding-agents): all of them after install instructions, or one `SKILL.md` verbatim. Needs no running app. |
+| `status` | Shows the version, the pid and the active project. Exits with a non-zero code if no app is reachable. |
+| `project list` | Lists all projects with refs (`project:1`), active and loaded markers, and tab counts. |
+| `project create <path> [--name N] [--select]` | Adds a project for a local directory or a [remote spec](/docs/remote-projects). **It is not idempotent.** Each run adds a new project. `--name` defaults to the name of the directory and cannot be empty. `Pinned` is a reserved name. `--name Pinned` is refused, and a directory with the name Pinned is added as `Pinned 2`. |
+| `project select <name\|uuid\|index> [--window W]` | Makes a project active. `pinned` selects the pinned tabs. |
+| `project rename <project> <name>` | Renames a project. `Pinned` is a reserved name. |
+| `project remove <project> [--force]` | Removes a project and kills its sessions. Returns `busy` when a pane runs a program, unless you use `--force`. It does not touch your files. |
+| `tab list [--project P]` | Lists the tabs of a project (default: the active project). |
+| `tab new [--project P] [--run CMD] [--no-focus]` | Makes a new tab. The tab becomes active unless you use `--no-focus`. `--run` types CMD into the new shell. |
+| `tab select <tab> [--window W]` | Makes a tab active (`tab:3`, an index, a UUID, or an exact title). |
+| `tab move <tab> <slot>` | Changes the order of a tab. `slot` is the **final** position, counted from 1. |
+| `tab rename <tab> [title] [--reset]` | Renames a tab, or restores the automatic title. |
+| `tab close <tab> [--force]` | Closes a tab and kills its sessions. Returns `busy` when a pane runs a program. If you close a pinned tab, Macterm unloads it. |
+| `window list` | Lists the open windows in the order of their creation (`window:1`). |
+| `window new` | Opens another window on the current project. |
+| `window focus <window>` | Brings a window to the front. |
+| `window close [--window W]` | Closes a window. The last visible window hides instead. |
+| `widget list` | Lists the [desktop widgets](/docs/desktop-widgets) in the order of their creation (`widget:1`), with name, size, locked or editing state, and session name. |
+| `widget new [--size S] [--name N] [--run CMD]` | Adds a locked desktop widget that runs your login shell, in the middle of the desktop. `S` is a grid span, `COLUMNSxROWS`, for example `3x2`. The default is `3x3`. `--run` types CMD into the shell each time that the widget starts one. |
+| `widget set <widget> --size S` | Changes the size of a widget. It snaps to the grid. |
+| `widget edit <widget>` | Unlocks a widget for typing, moving and resizing. Returns `busy` while you edit another widget. |
+| `widget done` | Locks the widget that you edit. |
+| `widget remove <widget> [--force]` | Removes a widget and ends its shell. Returns `busy` when a program runs in it, unless you use `--force`. |
+| `palette list` | Lists the palette files in `~/.config/macterm/palettes` that are your own [extensions](/docs/extensions). It reads them again each time. It shows the id, the keybind, and the name of the palette or the error that stopped Macterm from reading the file. |
+| `pane list [--project P] [--tab T]` | Lists panes with refs, session names, cwd, foreground process and execution state. |
+| `pane inspect [target]` | Shows a snapshot of the terminal core of a pane. It needs a live surface. |
+| `pane dump [--scrollback] [target]` | Prints the terminal text of a pane. It prints text only, so you can use it in a pipeline. |
+| `pane split [--direction right\|left\|down\|up\|auto] [--run CMD] [--no-focus] [target]` | Splits a pane. The new pane gets the cwd of the pane. `auto` selects the longer axis. `--no-focus` keeps the current focus and zoom. |
+| `pane mirror [--direction …] [target]` | Shows the same session in a second pane. When you focus a mirror, it becomes the leader and the other pane dims. |
+| `pane focus <target>` | Focuses a pane. It selects the tab, brings the window forward and restores keyboard focus. |
+| `pane focus --direction left\|down\|up\|right [target]` | Focuses the nearest pane in that direction. At the outermost edge, it does nothing and gives no error. |
+| `pane close (--pane P \| --session S) [--force]` | Closes a pane. It always needs an explicit target. |
+| `pane run [--no-submit] [target] -- <command…>` | Types a command and a newline into a live pane. `--no-submit` leaves the text at the shell prompt. See [Typing into a pane](#typing-into-a-pane). |
+| `pane key <chord> [target]` | Sends one key press (`a`, `ctrl+c`, `escape`, `up`). |
+| `pane zoom [target]` | Turns zoom on or off for a pane. |
+| `pane resize-split --axis horizontal\|vertical --ratio R [target]` | Sets the ratio (0.15 to 0.85) of the nearest split on that axis. |
+| `grid <RxC> [--run CMD] [target]` | Splits a pane into an equal grid of R×C panes (16 cells at most). `--run` starts CMD in every new pane. |
+| `session list` / `session info <name>` | Lists zmx sessions and shows which pane is connected to each one. |
+| `session kill <name>` | Kills a session. The shell of a connected pane exits. |
+| `layout apply [--project P] [--force]` | Changes the workspace to match the [layout file](/docs/declarative-layouts) of the project. Returns `busy` instead of closing panes. |
+| `layout save [--project P]` | Writes the live workspace to `~/.config/macterm/projects/<slug>.yaml`. |
+| `tutor [project\|pinned]` | Prints a short tutorial with your own keybinds. It needs a running app. |
+| `ssh <ssh args…>` | Runs ssh with the terminal integration of Macterm. It needs no running app. The flags are the flags of `ghostty +ssh`: `--terminfo=false`, `--forward-env=false`, `--cache=false` and `--verbose`. |
+| `skills [name] [--list]` | Prints [skills for coding agents](#skills-for-coding-agents): all of them after the install instructions, or one `SKILL.md` as it is. It needs no running app. |
 
 ## Starting a background terminal
 
-`tab new --no-focus` starts a tab's shell without changing an existing tab selection. An empty workspace adopts its first tab without adding focus history. `pane split --no-focus` starts a split without moving pane focus or clearing zoom. Neither switches projects or windows, even when the target project or tab isn't visible. In an explicitly unloaded project, only the started tab becomes undimmed. A background split also starts that tab's existing panes, so the split's source is usable; other tabs remain stopped and dimmed until the project is selected. Without the flag, creation keeps its usual selection behavior.
+`tab new --no-focus` starts the shell of a tab and does not change the selected tab. An empty workspace takes its first tab with no focus history. `pane split --no-focus` starts a split and does not move the pane focus or clear the zoom. Neither command switches projects or windows. This is also true when the target project or tab is not visible. In a project that you unloaded, only the tab that started becomes undimmed. A background split also starts the existing panes of that tab, so the source of the split is usable. Other tabs stay stopped and dimmed until you select the project. Without the flag, creation selects the new tab or pane as usual.
 
 ```sh
 macterm tab new --project api --no-focus --run "npm test"
 macterm pane split --session "$MACTERM_SESSION" --no-focus --run "npm run dev"
 ```
 
-The shell starts without visiting the child, with or without `--run`. Creation returns before the shell is necessarily ready for subsequent input; callers using `pane run` should wait for its prompt. Use `--json` to get the new tab/pane identity, and `pane list --project P --tab T` to find a new tab's session. `tab new` defaults to the **active project**, not the caller's project; pass `--project` explicitly when those may differ.
+The shell starts with no visit to the child, with or without `--run`. Creation returns before the shell is ready for more input. If you use `pane run`, wait for the shell prompt. Use `--json` to get the identity of the new tab or pane. Use `pane list --project P --tab T` to find the session of a new tab. `tab new` uses the **active project** by default. It does not use the project of the caller. If the two can be different, pass `--project`.
 
-For automation, pin the app with `--socket`. `--no-focus` is refused before anything is created when the running app is too old to honor it: the CLI asks the app its protocol version up front and exits with an error instead of silently switching the user's view. Use the CLI bundled with the app you target — a newer CLI's `--help` proves the flag exists only in that CLI, not in an older running app.
+In an automation, select the app with `--socket`. When the running app is too old for `--no-focus`, the CLI refuses the command before it creates anything. The CLI asks the app for its protocol version first. It exits with an error and does not switch the view of the user in silence. Use the CLI that is in the app that you target. The `--help` of a newer CLI shows only that the flag exists in that CLI. It does not show that an older running app has it.
 
 ## Targeting a pane
 
-Projects and tabs accept a **name**, a **UUID**, or the **1-based index** from list output (`3` or `tab:3`). A duplicate name is an `ambiguous` error, never a silent first match.
+Projects and tabs accept a **name**, a **UUID** or the **index** from the list output, counted from 1 (`3` or `tab:3`). A name that two items have gives an `ambiguous` error. The CLI never selects the first match in silence.
 
-Pane verbs resolve their target in this order:
+Pane commands find their target in this order:
 
-1. `--session <name>` — the zmx session name. **Restart-stable**: pane UUIDs regenerate every launch, session names don't. Found in whichever project holds it, unless `--project` names one.
+1. `--session <name>`: the zmx session name. **It is stable across restarts.** Pane UUIDs change at every start, and session names do not. The CLI finds the session in the project that holds it, unless `--project` names a project.
 2. `--pane <uuid|index>`.
-3. `MACTERM_SESSION` — inside a pane, so a bare `macterm pane split` splits the pane you're in. An explicit `--tab` disables this.
-4. Otherwise, the focused pane of the active tab.
+3. `MACTERM_SESSION`: inside a pane. A bare `macterm pane split` therefore splits the pane that you are in. An explicit `--tab` turns this off.
+4. In all other cases, the focused pane of the active tab.
 
-A [desktop widget](/docs/desktop-widgets)'s pane belongs to no project, so `pane dump`, `pane inspect`, `pane run` and `pane key` reach it by `--session` alone, or by `MACTERM_SESSION` from inside the widget.
+The pane of a [desktop widget](/docs/desktop-widgets) belongs to no project. `pane dump`, `pane inspect`, `pane run` and `pane key` reach it with `--session` only. Inside the widget, they also reach it with `MACTERM_SESSION`.
 
-`pane close` never uses the `MACTERM_SESSION` fallback. `pane focus --direction` treats the resolved target as the **origin**, and reports the pane that ended up focused.
+`pane close` never uses `MACTERM_SESSION`. `pane focus --direction` treats the resolved target as the **origin**. It reports the pane that has the focus at the end.
 
 ## Typing into a pane
 
-`pane run` types everything after `--` exactly as given, dashes included:
+`pane run` types everything after `--` exactly as you wrote it, with the dashes:
 
 ```sh
 macterm pane run --session macterm-api-8f327ce4a3f8 -- ls -la
 ```
 
-Before `--`, its own flags (`--no-submit`, the target selectors, `--socket`, `--json`) are read wherever they appear, and words without a leading dash are typed, so `macterm pane run ls` and `macterm pane run clear --session macterm-api-8f327ce4a3f8` need no `--`. Any other word starting with `-` before `--` is an error and nothing is typed: `macterm pane run ls -la` fails and prints the same command with its text moved after `--`. `--help` before `--` prints help.
+Before `--`, its own flags are read at any place (`--no-submit`, the target selectors, `--socket` and `--json`). Words with no leading dash are typed. So `macterm pane run ls` and `macterm pane run clear --session macterm-api-8f327ce4a3f8` need no `--`. Any other word that starts with `-` before `--` is an error, and nothing is typed. For example, `macterm pane run ls -la` fails. It prints the same command with its text after `--`. `--help` before `--` prints help.
 
 ## Reading a pane
 
@@ -134,43 +134,49 @@ process exited      false
 needs confirm quit  false
 ```
 
-`pane dump` prints the viewport's text; `--scrollback` prepends the full scrollback. It reads the terminal's own cells, so it sees what a full-screen program is drawing.
+`pane dump` prints the text of the viewport. `--scrollback` adds the full scrollback before it. It reads the own cells of the terminal, so it sees what a full-screen program draws.
 
-Both need a **live surface** — a never-shown pane returns `no_surface`. Select its tab once.
+Both commands need a **live surface**. A pane that you never showed returns `no_surface`. Select its tab one time.
 
-> Cursor position and a direct alt-screen query aren't available over libghostty's C ABI. `alt-screen` here is a heuristic, and reads `-` until the surface emits its first scrollbar update.
+> The C ABI of libghostty does not give the cursor position, and it has no direct alt-screen query. `alt-screen` here is a guess. It shows `-` until the surface sends its first scrollbar update.
 
 ## Skills for coding agents
 
-`macterm skills` prints [Agent Skills](https://agentskills.io) — `SKILL.md` files that Claude Code, Codex, OpenCode, Gemini CLI, Cursor and other agents load from a skills directory — teaching an agent this CLI: running commands in panes and reading their output (`macterm-panes`), building a workspace that persists (`macterm-workspace`), and running sub-agents in panes of their own (`macterm-subagents`). There's no installer; the agent installs them. Give it this prompt:
+`macterm skills` prints [Agent Skills](https://agentskills.io). These are `SKILL.md` files that Claude Code, Codex, OpenCode, Gemini CLI, Cursor and other agents load from a skills directory. They teach an agent this CLI:
+
+- `macterm-panes`: run commands in panes and read their output.
+- `macterm-workspace`: build a workspace that persists.
+- `macterm-subagents`: run sub-agents in panes of their own.
+
+There is no installer. The agent installs the skills. Give it this prompt:
 
 ```text
 Run `macterm skills` and install each skill it prints into your skills directory as <name>/SKILL.md, exactly as printed. Then tell me what you installed and where.
 ```
 
-`macterm skills <name>` prints one skill verbatim, so `macterm skills macterm-panes > <skills dir>/macterm-panes/SKILL.md` installs it; `--list` names them. The text ships inside the CLI, so it always matches your version: install again after updating Macterm.
+`macterm skills <name>` prints one skill as it is. For example, `macterm skills macterm-panes > <skills dir>/macterm-panes/SKILL.md` installs it. `--list` shows the names. The text is inside the CLI, so it always matches your version. Install the skills again after you update Macterm.
 
 ## Environment
 
-Macterm exports into every spawned shell:
+Macterm exports these variables into every shell that it starts:
 
 | Variable | Meaning |
 | --- | --- |
-| `MACTERM_SOCKET` | Control socket path. A discovery *hint* — the CLI falls back to well-known locations. Only `--socket` pins hard. |
-| `MACTERM_SESSION` | The pane's own session name, for self-targeting. |
-| `PATH` | Prepended with the bundle's `Resources/bin`. |
+| `MACTERM_SOCKET` | The path of the control socket. This is a *hint* for discovery. The CLI falls back to well-known places. Only `--socket` pins the socket. |
+| `MACTERM_SESSION` | The own session name of the pane, for self-targeting. |
+| `PATH` | Macterm adds the `Resources/bin` of the bundle at the start. |
 
 ## Exit codes
 
-stdout carries output only on success; everything else goes to stderr.
+stdout has output only when a command succeeds. All other text goes to stderr.
 
 | Code | Meaning |
 | --- | --- |
 | `0` | Success. |
 | `1` | The app returned an error. |
-| `2` | No running Macterm could be reached (stderr lists every socket path tried). |
+| `2` | The CLI could not reach a running Macterm. stderr lists every socket path that it tried. |
 
-Gate a script on liveness:
+To make a script wait until the app is ready, use this loop:
 
 ```sh
 until macterm status >/dev/null 2>&1; do sleep 0.2; done
@@ -194,22 +200,22 @@ until "$mac" status >/dev/null 2>&1; do sleep 0.2; done
 
 ## Wire protocol
 
-Any same-user process can speak it directly. One request per connection to `~/Library/Application Support/Macterm/control.sock`: write one newline-terminated JSON line, half-close your write end, read one line back.
+Any process of the same user can use the protocol directly. Use one request for each connection to `~/Library/Application Support/Macterm/control.sock`. Write one JSON line that ends with a newline. Close the write end of your connection. Read one line back.
 
 ```json title="request"
 {"v":1,"id":"<any-string>","command":"pane.split","args":{"direction":"down","run":"btop"}}
 ```
 
-`v` is the **minimum protocol version the request needs**, not the client's version: ordinary commands use `1`; `--no-focus` sends `"v":2` with `"focus":false`. Servers from v2 onward reject unsupported request versions before dispatch. Already-shipped v1 apps ignore `v`, so direct clients must first probe `status` and check the **response** version before sending newer fields. The CLI does this automatically and pins the command to the verified socket.
+`v` is the **minimum protocol version that the request needs**. It is not the version of the client. Ordinary commands use `1`. `--no-focus` sends `"v":2` with `"focus":false`. From v2, servers reject a request version that they do not support. Before dispatch, they check it. The v1 apps that shipped earlier ignore `v`. A direct client must therefore probe `status` first. It checks the **response** version before it sends newer fields. The CLI does this by itself and pins the command to the verified socket.
 
 ```json title="response"
 {"v":2,"id":"<echoed>","ok":true,"data":{"panes":[{"id":"…","session":"macterm-api-1a2b3c4d5e6f","index":2}]}}
 ```
 
-Failures are `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}`. Codes: `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `unsupported_version`, `internal`. Unknown fields are ignored on both sides; use the version checks above when a field must not be silently ignored.
+A failure looks like `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}`. The codes are `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `unsupported_version` and `internal`. Both sides ignore unknown fields. When a field must not be ignored in silence, use the version checks above.
 
 ```sh
 echo '{"v":1,"id":"x","command":"status"}' | nc -U ~/Library/Application\ Support/Macterm/control.sock
 ```
 
-> The socket is mode `0600` in a `0700` directory and the CLI refuses sockets owned by another user. Same-user only, no token auth.
+> The socket has mode `0600` in a directory with mode `0700`. The CLI refuses sockets that another user owns. Only the same user can use it. There is no token authentication.

@@ -3,38 +3,44 @@ slug: command-palette
 title: Command palette
 nav: Command palette
 group: Everyday use
-description: Drive Macterm from the keyboard with the ⌘P command palette.
+description: Use Macterm from the keyboard with the ⌘P command palette.
 -->
 
 # Command palette
 
 Press <kbd>⌘P</kbd>. One list searches everything:
 
-- **Palettes** — the screens below, the first section after your recent projects: a row with an icon and a chevron opens one in place.
-- **Commands** — split, close, and focus panes; create, rename, pin, and switch tabs; toggle window chrome. Each row shows its current keybind.
-- **Projects** — jump to any project, your recent ones listed first with nothing typed. Rename, unload, or remove the current one with its commands.
+- **Palettes**: the screens below. This is the first section after your recent projects. A row with an icon and a chevron opens a screen in the same place.
+- **Commands**: split, close and focus panes. Create, rename, pin and switch tabs. Show or hide parts of the window. Each row shows its current keybind.
+- **Projects**: go to any project. With nothing typed, the recent projects are first. Rename, unload or remove the current project with its commands.
 
-**To open a directory as a project**, type a path starting with `/` or `~`. The palette switches to path mode and autocompletes directories.
+**To open a folder as a project**, type a path that starts with `/` or `~`. The palette changes to path mode and completes folder names.
 
-**To add a remote project**, type a spec like `devbox:~/dev/api`. See [remote projects](/docs/remote-projects).
+**To add a remote project**, type a spec such as `devbox:~/dev/api`. See [remote projects](/docs/remote-projects).
 
-**Some commands open a screen of their own** in the palette, named by a pill floating above the palette; in the list, such a row shows the screen's icon and a chevron. Screens can open screens, and the pills then read as a trail, root first — click one to go back to it. <kbd>Esc</kbd>, or a fresh press of <kbd>Delete</kbd> with nothing typed, goes back one screen (a Delete held down to clear the search stops at the empty field). A screen that has to wait for its list shows a spinner meanwhile; one whose list failed says why, with a Retry button (also <kbd>⌘R</kbd>). **Some rows have a second action** under <kbd>⌥</kbd>: hold it and the row's subtitle names what <kbd>⌥↩</kbd> (or an ⌥-click) does. Each can have a shortcut of its own in Settings → Keymaps, under **Palettes** beside <kbd>⌘P</kbd> itself (none by default), which opens the palette straight on that screen. Pressed again on that screen, it closes the palette; pressed on another screen, it goes to that one.
+Some commands open a screen of their own in the palette. A pill above the palette names the screen. In the list, a row for such a screen shows the icon of the screen and a chevron. A screen can open another screen. The pills then show a trail, with the root first. Click a pill to go back to it. Press <kbd>Esc</kbd> to go back one screen. You can also press <kbd>Delete</kbd> with nothing typed. A held <kbd>Delete</kbd> clears the search and stops at the empty field.
 
-- **Password Manager** lists your saved passwords to type into the focused pane (see [passwords](/docs/passwords#typing-a-password-on-demand)).
-- **Files** lists the current project's files and directories, searched by name or partial path (`pal/eng` finds `Palette/PaletteEngine.swift`). Pick one to open it in a split beside the focused pane, or a new tab when the project has none — a directory as a shell there, a file in your terminal editor (see [Text Files](/docs/configuration#open-files-in-your-terminal-editor)); hold <kbd>⌥</kbd> to open it with its default app instead. Dependency and build folders (`node_modules`, `build`, …) and hidden entries are left out. Unavailable for remote projects.
-- **Worktrees** lists the current project's linked git worktrees — those in the project's **Worktrees** menu in the sidebar, without the repository's main one — by branch, with each one's path relative to the project. Pick one to open a new tab there. It's also in the **Project** menu. It's unavailable when the project isn't a git repository (or is a remote project); its shortcut then says so instead.
+A screen that must wait for its list shows a spinner. If the list fails, the screen says why and shows a Retry button. <kbd>⌘R</kbd> also retries.
+
+**Some rows have a second action** under <kbd>⌥</kbd>. Hold the key. The subtitle of the row then names what <kbd>⌥↩</kbd> (or an ⌥-click) does.
+
+Each screen can have its own keybind in Settings → Keymaps, under **Palettes**, next to <kbd>⌘P</kbd>. No screen has a keybind by default. The keybind opens the palette on that screen. Press it again on that screen to close the palette. Press it on another screen to go to its screen.
+
+- **Password Manager** lists your saved passwords. Select one to type it into the focused pane (see [passwords](/docs/passwords#typing-a-password-on-demand)).
+- **Files** lists the files and directories of the current project. Search by name or by part of a path (`pal/eng` finds `Palette/PaletteEngine.swift`). Select one to open it in a split next to the focused pane. If the project has no pane, it opens in a new tab. A directory opens as a shell there. A file opens in your terminal editor (see [Text Files](/docs/configuration#open-files-in-your-terminal-editor)). Hold <kbd>⌥</kbd> to open it with its default app. The list leaves out dependency and build folders (`node_modules`, `build` and others) and hidden entries. Remote projects do not have this screen.
+- **Worktrees** lists the linked git worktrees of the current project, as in the **Worktrees** menu in the sidebar. The main worktree of the repository is not in the list. Each row shows the branch and the path relative to the project. Select a row to open a new tab there. The **Project** menu has the same command. It is not available when the project is not a git repository, or when it is a remote project. Its keybind then says why.
 
 ## Extensions
 
-Screens you add: extensions installed from Macterm's repository, or your own palettes, YAML files in `~/.config/macterm/palettes/`. A command's output becomes searchable rows, and each row opens another screen or runs a command in a new tab or split. A Kubernetes palette, for example, goes from namespaces to pods to a pod's logs. Each one sits in the **Palettes** section beside the built-in screens.
+Extensions add screens. You can install an extension from the Macterm repository, or write your own palettes. A palette is a YAML file in `~/.config/macterm/palettes/`. The output of a command becomes rows that you can search. Each row opens another screen, or runs a command in a new tab or split. For example, a Kubernetes palette goes from namespaces to pods to the logs of a pod. Each palette is in the **Palettes** section, next to the built-in screens.
 
-See [extensions](/docs/extensions) for the file format and examples, and the [cookbook](/docs/cookbook#kubernetes-palette) for a complete Kubernetes palette.
+See [extensions](/docs/extensions) for the file format and examples. The [cookbook](/docs/cookbook#kubernetes-palette) has a complete Kubernetes palette.
 
 ## Settings → Extensions
 
-Every [extension](/docs/extensions) as a card in one searchable grid, the installed ones first and each group by name, with a menu beside the search for **All**, **Installed** or **Not Installed**: the ones you've installed, in `~/.config/macterm/extensions/`, and the ones in [Macterm's repository](https://github.com/thdxg/macterm/tree/main/extensions) that you haven't. A card shows the extension's own name and description; each extension can bring several palettes. Your own palette files in `~/.config/macterm/palettes/` aren't extensions and aren't listed. Each card has one button:
+Settings shows every [extension](/docs/extensions) as a card in one grid that you can search by name. The grid has the extensions that you installed, in `~/.config/macterm/extensions/`. It also has the extensions in [the Macterm repository](https://github.com/thdxg/macterm/tree/main/extensions) that you did not install. The installed extensions come first, and each group is in order of name. To show only one group, use the menu next to the search field: **All**, **Installed** or **Not Installed**. A card shows the name and the description of the extension. An extension can bring several palettes. Your own palette files in `~/.config/macterm/palettes/` are not extensions and are not in the list. Each card has one button:
 
-- **Install** copies the extension's folder into `~/.config/macterm/extensions/` right away, where it's installed like any other. Its commands run on your Mac, so read it first: the book button beside **Install** opens the extension on GitHub, with every file it would install and its README.
-- **Installed** offers to move it to the Trash.
+- **Install** copies the folder of the extension into `~/.config/macterm/extensions/` at once. The extension is then installed like any other extension. Its commands run on your Mac, so read it first. The book button next to **Install** opens the extension on GitHub. You see every file that it installs, and its README.
+- **Installed** offers to move the extension to the Trash.
 
-An extension with a file that doesn't read shows a warning on its card. The repository's extensions are read when you open the pane, at most once an hour. They aren't tied to your version of Macterm: one that works keeps working after every update. One that needs a newer Macterm says so, and installs once you update. The built-in screens — Password Manager, Worktrees and Files — aren't extensions and aren't listed.
+If an extension has a file that Macterm cannot read, its card shows a warning. Macterm reads the extensions of the repository when you open the pane, at most one time each hour. They do not depend on your version of Macterm. An extension that works keeps working after every update. If an extension needs a newer Macterm, the card says so. You can install it after you update. The built-in screens (Password Manager, Worktrees and Files) are not extensions and are not in the list.

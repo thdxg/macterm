@@ -14,12 +14,12 @@ import Foundation
 struct SkillsCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "skills",
-        abstract: "Print skills that teach AI coding agents to use Macterm (works without the app).",
+        abstract: "Print skills that teach AI coding agents to use Macterm. It works with no running app.",
         discussion: """
         Prints Agent Skills: SKILL.md files that Claude Code, Codex, OpenCode, Gemini CLI, Cursor and other \
         agents load from a skills directory. They teach an agent to run commands in panes and read their \
         output, to build a workspace that persists, to run sub-agents in panes of their own, and to write \
-        custom command-palette files. There is no installer; the agent installs them itself. To set one up, \
+        custom command-palette files. There is no installer. The agent installs them itself. To set one up, \
         give it this prompt:
 
           Run `macterm skills` and install each skill it prints into your skills
@@ -27,19 +27,19 @@ struct SkillsCommand: ParsableCommand {
           installed and where. (Outside a Macterm pane, `macterm` is
           /Applications/Macterm.app/Contents/Resources/bin/macterm.)
 
-        With no arguments, prints every skill after a short header on installing them, each introduced by \
-        a line naming its path (==> <name>/SKILL.md <==). With a name, prints only that SKILL.md, verbatim, \
+        With no arguments, it prints every skill after a short header about the install. A line with its path introduces each skill \
+        (==> <name>/SKILL.md <==). With a name, it prints only that SKILL.md, exactly as it is, \
         ready to redirect into place.
         """
     )
 
-    @Argument(help: "Print only this skill's SKILL.md, verbatim.")
+    @Argument(help: "Print only the SKILL.md of this skill, exactly as it is.")
     var name: String?
 
-    @Flag(help: "List the skills' names and descriptions instead.")
+    @Flag(help: "List the names and descriptions of the skills instead.")
     var list = false
 
-    @Flag(help: "Print JSON: each skill's name, description, path and (without --list) text.")
+    @Flag(help: "Print JSON: the name, description, path and (without --list) text of each skill.")
     var json = false
 
     func run() throws {

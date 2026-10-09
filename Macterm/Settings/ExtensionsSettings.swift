@@ -84,11 +84,11 @@ struct ExtensionsSettings: View {
                     try appState.customPalettes.uninstall(extensionID: installed.id)
                     problem = nil
                 } catch {
-                    problem = "Couldn't uninstall \(installed.name): \(error.localizedDescription)"
+                    problem = "Cannot uninstall \(installed.name): \(error.localizedDescription)"
                 }
             }
         } message: { installed in
-            Text("Its folder, \(installed.id), goes to the Trash, and its palettes leave the command palette.")
+            Text("The folder \(installed.id) goes to the Trash. Its palettes leave the command palette.")
         }
     }
 
@@ -101,7 +101,7 @@ struct ExtensionsSettings: View {
                 try await appState.paletteRegistry.install(entry, into: appState.customPalettes)
                 problem = nil
             } catch {
-                problem = "Couldn't install \(entry.name): \(error.localizedDescription)"
+                problem = "Cannot install \(entry.name): \(error.localizedDescription)"
             }
             installingIDs.remove(entry.id)
         }
@@ -130,10 +130,10 @@ private struct RegistryStatus: View {
         case .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Reading extensions from Macterm's repository…").settingsCaption()
+                Text("Reading the extensions from the Macterm repository…").settingsCaption()
             }
         case let .failed(reason):
-            Label("Couldn't read Macterm's extensions: \(reason)", systemImage: "exclamationmark.triangle.fill")
+            Label("Cannot read the extensions of Macterm: \(reason)", systemImage: "exclamationmark.triangle.fill")
                 .settingsCaption()
         }
     }
@@ -166,8 +166,8 @@ private struct ExtensionCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 4)
-                    // A Button, not a `Link`: a bordered `Link` draws at its
-                    // own height, a little off the Install button beside it.
+                    // Use a Button, not a `Link`. A bordered `Link` has its
+                    // own height, which is not the height of the Install button.
                     if let link {
                         Button { openURL(link) } label: {
                             ButtonLabel(title: nil, systemImage: "book")
@@ -215,24 +215,26 @@ private struct ExtensionCard: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(entry.failure != nil || isInstalling)
-            .help(entry.failure.map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Install it")
+            .help(entry.failure.map { "This version of Macterm cannot read it: \($0.localizedDescription)" } ?? "Install it")
         }
     }
 }
 
-/// A card button's glyph and title, spaced as text — `Label` sets its icon
-/// in a fixed-width slot, which left a wide gap either side of the glyph —
-/// and drawn a little inside the bezel's own side padding, which is sized
-/// for a full-width push button and left these small ones mostly margin.
+/// The glyph and the title of a card button, with the space of text between
+/// them. `Label` puts its icon in a slot of fixed width, which put a wide gap
+/// on each side of the glyph. The label also goes a little into the side
+/// padding of the bezel. That padding is for a wide push button, and it made
+/// these small buttons mostly empty.
 private struct ButtonLabel: View {
     let title: String?
     let systemImage: String?
 
     var body: some View {
         HStack(spacing: 4) {
-            // Every glyph in a slot as tall as a line of text and a circled
-            // symbol: a bordered button takes its height from its label, and
-            // the book alone came out shorter than "Install" beside it.
+            // Put each glyph in a slot that is as tall as a line of text and a
+            // circled symbol. A bordered button gets its height from its
+            // label. Without the slot, the book button was shorter than the
+            // Install button next to it.
             ZStack {
                 Text(verbatim: "X").hidden()
                 Image(systemName: "circle").hidden()

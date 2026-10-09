@@ -7,7 +7,7 @@ import Foundation
 struct PaletteCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "palette",
-        abstract: "List custom command-palette files and whether each reads.",
+        abstract: "List the custom command-palette files and show if Macterm can read each one.",
         subcommands: [List.self, Exec.self],
         defaultSubcommand: List.self
     )
@@ -31,7 +31,7 @@ struct PaletteCommand: ParsableCommand {
     /// execs `<argv…>`, the pane's real launch, untouched.
     struct Exec: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Run a palette action's command, then the pane's shell. Used by Macterm.",
+            abstract: "Run the command of a palette action, then the shell of the pane. Macterm uses this command.",
             shouldDisplay: false
         )
 
@@ -53,7 +53,7 @@ struct PaletteCommand: ParsableCommand {
             var cargs: [UnsafeMutablePointer<CChar>?] = launch.exec.map { strdup($0) }
             cargs.append(nil)
             execvp(launch.exec[0], cargs)
-            Output.printError("palette exec: couldn't run \(launch.exec[0]): \(String(cString: strerror(errno)))")
+            Output.printError("palette exec: could not run \(launch.exec[0]): \(String(cString: strerror(errno)))")
             throw ExitCode(127)
         }
 
@@ -124,7 +124,7 @@ struct PaletteCommand: ParsableCommand {
                     kill(foreground > 0 ? -foreground : pid, SIGCONT)
                 }
             } else {
-                Output.printError("palette exec: couldn't start \(argv[0]): \(String(cString: strerror(spawned)))")
+                Output.printError("palette exec: could not start \(argv[0]): \(String(cString: strerror(spawned)))")
             }
             reclaimTerminal()
         }

@@ -6,7 +6,7 @@ body:
     id: description
     attributes:
       label: Description
-      description: What would you like to see?
+      description: What do you want Macterm to do?
     validations:
       required: true
   - type: textarea
@@ -20,6 +20,6 @@ body:
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: Have you considered any workarounds or alternatives?
+      description: Do you know of a workaround or an alternative?
     validations:
       required: false

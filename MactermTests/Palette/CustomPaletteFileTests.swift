@@ -175,12 +175,12 @@ struct CustomPaletteFileTests {
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, match: [], action: { copy: . } } }")
             == "root: match: needs at least one field, or leave it out")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, export: { my-var: . }, action: { copy: . } } }")
-            == "root: export: my-var isn't a variable name sh can read")
+            == "root: export: my-var is not a variable name that sh can read")
         #expect(Self
             .invalidMessage(
                 "name: X\nnodes: { root: { items: [{ title: A, export: { MACTERM_PALETTE_COMMAND: x }, action: { copy: a } }] } }"
             )
-            == "root item 1 (A): export: MACTERM_PALETTE_COMMAND is set by Macterm; pick another name")
+            == "root item 1 (A): export: MACTERM_PALETTE_COMMAND is set by Macterm. Use another name")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, export: { _NS1: . }, action: { copy: . } } }") == nil)
     }
 
@@ -245,7 +245,7 @@ struct CustomPaletteFileTests {
     @Test
     func every_mistake_is_named_with_its_node_and_field() {
         #expect(Self.invalidMessage("name: X\nrequires: [kubectl jq]\nnodes: { root: { items: [] } }")
-            == "requires: kubectl jq isn't a program name")
+            == "requires: kubectl jq is not a program name")
         #expect(Self.invalidMessage("name: ''\nnodes: { root: { items: [] } }") == "name: must not be empty")
         #expect(Self.invalidMessage("name: X\nnodes: {}") == "nodes: must name at least one node")
         #expect(Self.invalidMessage("name: X\nnodes: { menu: { items: [] } }")
@@ -258,7 +258,7 @@ struct CustomPaletteFileTests {
         #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, enter: pods }] } }")
             == "root item 1 (A): enter: no node named pods")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { items: [{ title: A, enter: root, action: { copy: x } }] } }")
-            == "root item 1 (A): has both enter: and action:; pick one")
+            == "root item 1 (A): has both enter: and action:. Use only one")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { copy: x, open: y } } }")
             == "root: action needs exactly one of run:, copy:, open:")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { run: x, in: window } } }")

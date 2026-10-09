@@ -245,7 +245,7 @@ final class PaletteRegistry {
         var errorDescription: String? {
             switch self {
             case let .alreadyInstalled(id): "You already have a palette named \(id)."
-            case let .unreadable(reason): "This version of Macterm can't read it: \(reason)"
+            case let .unreadable(reason): "This version of Macterm cannot read it: \(reason)"
             }
         }
     }
@@ -333,7 +333,7 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
     var summary: String {
         switch self {
         case let .installed(installed, _): installed.problem ?? installed.description ?? installed.id
-        case let .available(entry): entry.failure.map { "Can't be read by this version: \($0.localizedDescription)" }
+        case let .available(entry): entry.failure.map { "Cannot be read by this version: \($0.localizedDescription)" }
             ?? entry.description ?? entry.readme.flatMap(MactermExtension.summary(readme:)) ?? ""
         }
     }
@@ -352,8 +352,8 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
         }
     }
 
-    /// Which extensions the gallery shows: the segmented filter beside its
-    /// search.
+    /// The extensions that the gallery shows. The menu next to the search
+    /// field sets this value.
     enum Filter: String, CaseIterable, Identifiable {
         case all = "All"
         case installed = "Installed"
@@ -362,9 +362,10 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
         var id: String { rawValue }
     }
 
-    /// The extensions `filter` admits, the installed ones once each and
-    /// before the rest, each group by name — or ranked by `query` (the app's
-    /// one search, as every Settings list) when there is one.
+    /// The extensions that `filter` lets through. Each installed extension
+    /// is in the list one time, before the other extensions. Each group is
+    /// in order of name. If there is a `query`, each group is in order of
+    /// search rank instead (the search of the app, as in all Settings lists).
     static func items(
         installed: [CustomPaletteStore.InstalledExtension],
         registry: [PaletteRegistry.Entry],

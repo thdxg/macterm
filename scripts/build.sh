@@ -86,7 +86,7 @@ xcodebuild \
 # failure that motivated this). A direct copy has no version-sensitive tokens.
 ARCHIVED_APP="$ARCHIVE_PATH/Products/Applications/Macterm.app"
 if [[ ! -d "$ARCHIVED_APP" ]]; then
-  echo "ERROR: $ARCHIVED_APP not found in archive" >&2
+  echo "ERROR: $ARCHIVED_APP is not in the archive" >&2
   exit 1
 fi
 mkdir -p "$EXPORT_PATH"
@@ -95,7 +95,7 @@ ditto "$ARCHIVED_APP" "$EXPORT_PATH/Macterm.app"
 APP_BUNDLE="$EXPORT_PATH/Macterm.app"
 # Sanity-check the copy is a valid, signed bundle before building a DMG from it.
 if ! codesign --verify --deep --strict "$APP_BUNDLE" 2>/dev/null; then
-  echo "ERROR: exported $APP_BUNDLE failed code-signature verification" >&2
+  echo "ERROR: the exported $APP_BUNDLE failed the code-signature check" >&2
   exit 1
 fi
 # When a stable identity was requested, an ad-hoc signature slipping through
@@ -103,7 +103,7 @@ fi
 # what the identity exists to prevent — so fail rather than package it.
 if [[ -n "$CODESIGN_IDENTITY" ]] \
   && codesign --display --verbose "$APP_BUNDLE" 2>&1 | grep -q "Signature=adhoc"; then
-  echo "ERROR: $APP_BUNDLE is ad-hoc signed despite MACTERM_CODESIGN_IDENTITY being set" >&2
+  echo "ERROR: $APP_BUNDLE has an ad-hoc signature, but MACTERM_CODESIGN_IDENTITY is set" >&2
   exit 1
 fi
 # The bundled zmx is signed separately, as the app's own identity
@@ -113,11 +113,11 @@ fi
 ZMX_BINARY="$APP_BUNDLE/Contents/Resources/zmx/zmx"
 if [[ -n "$CODESIGN_IDENTITY" ]] \
   && codesign --display --verbose "$ZMX_BINARY" 2>&1 | grep -q "Signature=adhoc"; then
-  echo "ERROR: $ZMX_BINARY is ad-hoc signed despite MACTERM_CODESIGN_IDENTITY being set" >&2
+  echo "ERROR: $ZMX_BINARY has an ad-hoc signature, but MACTERM_CODESIGN_IDENTITY is set" >&2
   exit 1
 fi
 if ! codesign --display --verbose "$ZMX_BINARY" 2>&1 | grep -q "^Identifier=com.thdxg.macterm$"; then
-  echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm — pane programs would prompt as a second app" >&2
+  echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
   exit 1
 fi
 

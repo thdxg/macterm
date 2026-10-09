@@ -20,20 +20,20 @@ import Foundation
 struct SSHCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ssh",
-        abstract: "Run ssh with terminfo install and env forwarding (works without the app).",
+        abstract: "Run ssh with terminfo install and environment forwarding. It works with no running app.",
         discussion: """
-        Installs Macterm's bundled xterm-ghostty terminfo on the destination \
-        on first connect (cached afterwards), sets TERM to what the host can \
-        actually resolve, requests SendEnv forwarding for COLORTERM, \
-        TERM_PROGRAM, and TERM_PROGRAM_VERSION, then replaces itself with the \
-        real ssh. ssh's own flags and the destination pass through verbatim:
+        Installs the bundled xterm-ghostty terminfo of Macterm on the destination \
+        at the first connection (the result is cached). Sets TERM to a value that the host can \
+        resolve. Requests SendEnv forwarding for COLORTERM, \
+        TERM_PROGRAM and TERM_PROGRAM_VERSION. Then it replaces itself with the \
+        real ssh. The flags and the destination of ssh pass through exactly as you wrote them:
 
           macterm ssh user@example.com
           macterm ssh -p 2222 -i ~/.ssh/id_ed25519 user@example.com
           macterm ssh --terminfo=false user@example.com
 
-        This is the engine behind the shell-integration ssh wrapper (the \
-        ssh-env / ssh-terminfo features), and mirrors `ghostty +ssh`.
+        This is the engine behind the ssh wrapper of the shell integration (the \
+        ssh-env and ssh-terminfo features). It mirrors `ghostty +ssh`.
         """
     )
 
@@ -43,7 +43,7 @@ struct SSHCommand: ParsableCommand {
     )
     var forwardEnv: Bool = true
 
-    @Option(help: "Install the bundled xterm-ghostty terminfo on first connect.")
+    @Option(help: "Install the bundled xterm-ghostty terminfo at the first connection.")
     var terminfo: Bool = true
 
     @Option(help: "Use the terminfo install cache.")
@@ -51,7 +51,7 @@ struct SSHCommand: ParsableCommand {
 
     @Option(
         name: .customLong("ssh"),
-        help: "Path to the ssh binary. Default: first `ssh` on PATH."
+        help: "Path to the ssh binary. The default is the first `ssh` in PATH."
     )
     var sshPath: String = "ssh"
 
@@ -60,7 +60,7 @@ struct SSHCommand: ParsableCommand {
 
     @Argument(
         parsing: .captureForPassthrough,
-        help: "Arguments passed to ssh verbatim (flags, destination, command)."
+        help: "Arguments for ssh, exactly as you wrote them (flags, destination, command)."
     )
     var sshArgs: [String] = []
 
@@ -100,11 +100,11 @@ struct SSHCommand: ParsableCommand {
     /// falls back to `xterm-256color` — this must never block a connection.
     private func settleTerminfo() -> String {
         guard let dest = resolveDestination() else {
-            warn("could not resolve ssh destination; skipping terminfo install")
+            warn("could not resolve the ssh destination. Skipping the terminfo install")
             return SSHWrapper.fallbackTerm
         }
         guard let source = terminfoSource(), !source.isEmpty else {
-            warn("could not read the bundled \(SSHWrapper.entryName) terminfo; skipping install")
+            warn("could not read the bundled \(SSHWrapper.entryName) terminfo. Skipping the install")
             return SSHWrapper.fallbackTerm
         }
         let version = SSHWrapper.versionKey(source: source)
@@ -113,7 +113,7 @@ struct SSHCommand: ParsableCommand {
         if cache {
             let text = (try? String(contentsOfFile: cachePath, encoding: .utf8)) ?? ""
             if SSHWrapper.cacheContains(cacheText: text, destination: dest, version: version) {
-                verbosePrint("dest: \(dest) (cached, skipping install)")
+                verbosePrint("dest: \(dest) (cached, install skipped)")
                 return SSHWrapper.entryName
             }
             verbosePrint("dest: \(dest) (not cached, will install)")
@@ -123,7 +123,7 @@ struct SSHCommand: ParsableCommand {
 
         printToStderr("Setting up \(SSHWrapper.entryName) terminfo on \(dest)...")
         guard installTerminfo(source: source) else {
-            warn("failed to install terminfo; continuing with \(SSHWrapper.fallbackTerm)")
+            warn("failed to install terminfo. Continuing with \(SSHWrapper.fallbackTerm)")
             return SSHWrapper.fallbackTerm
         }
         if cache { writeCache(path: cachePath, destination: dest, version: version) }

@@ -3,25 +3,25 @@ slug: finder-and-dock
 title: Finder and the Dock
 nav: Finder and the Dock
 group: Everyday use
-description: Open a folder as a Macterm project from Finder, the Dock or the command line, and use Macterm's Dock menu.
+description: Open a folder as a Macterm project from Finder, the Dock or the command line. Use the Dock menu of Macterm.
 -->
 
 # Finder and the Dock
 
-Macterm opens folders from wherever you find them, and its Dock icon has a menu of its own.
+Macterm opens folders from many places. Its Dock icon has its own menu.
 
 ## Open a folder as a project
 
-Any of these adds the folder as a new project and switches to it, launching Macterm first if needed:
+Each of these actions adds the folder as a new project and selects the project. If Macterm is not running, the action starts it first:
 
-- Right-click a folder in Finder → **Services → New Macterm Project Here**.
-- Right-click a folder → **Open With → Macterm**.
-- Drop a folder onto Macterm's Dock icon.
-- Drop a folder onto Macterm's sidebar. Dropping it on a terminal pane still types its path, as before.
+- In Finder, right-click a folder and select **Services → New Macterm Project Here**.
+- Right-click a folder and select **Open With → Macterm**.
+- Drop a folder on the Macterm Dock icon.
+- Drop a folder on the Macterm sidebar. If you drop a folder on a terminal pane, Macterm types its path, as before.
 - Run `open -a Macterm ~/code/myproject`.
 
-A file opened with **Open With**, dropped on the Dock icon, or passed to `open -a` goes to your terminal editor instead — see [Open files in your terminal editor](/docs/configuration#open-files-in-your-terminal-editor). If the Finder service is missing, enable it under System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
+A file that you open with **Open With**, drop on the Dock icon, or pass to `open -a` goes to your terminal editor. See [Open files in your terminal editor](/docs/configuration#open-files-in-your-terminal-editor). If the Finder service is missing, turn it on in System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.
 
 ## Dock menu
 
-Right-click Macterm's Dock icon for **New Window**, **New Tab**, **New Project…** and **Toggle Quick Terminal**. New Tab and New Project… bring a terminal window forward first, including one you had closed.
+Right-click the Macterm Dock icon to see **New Window**, **New Tab**, **New Project…** and **Toggle Quick Terminal**. **New Tab** and **New Project…** first bring a terminal window forward. This includes a window that you closed.

@@ -120,15 +120,15 @@ struct PasswordEditorSheet: View {
         }
     }
 
-    private static let rule = "Autofill is offered when both the command and the prompt match. "
-        + "Without a prompt, the password is never offered at a prompt; pick it from Password Manager "
+    private static let rule = "Macterm offers Autofill when both the command and the prompt match. "
+        + "With no prompt, Macterm never offers the password at a prompt. Select it in Password Manager "
         + "in the command palette."
 
     private var caption: String {
         if isPromptOnly { return "Saved for this prompt from any command. " + Self.rule }
         // A key passphrase prompt files under the key, whatever command was typed.
         if !command.trimmingCharacters(in: .whitespaces).isEmpty, proposedID.command == nil {
-            return "A key passphrase is saved from its prompt: type it there once and save it."
+            return "Macterm saves a key passphrase from its prompt. Type it there one time and save it."
         }
         return Self.rule
     }
@@ -239,7 +239,7 @@ struct PasswordEditorSheet: View {
             if vault.save(password ?? "", for: newID) {
                 dismiss()
             } else {
-                problem = vault.lastError ?? "Couldn’t save the password."
+                problem = vault.lastError ?? "Macterm could not save the password."
             }
             return
         }
@@ -254,7 +254,7 @@ struct PasswordEditorSheet: View {
                     reason: "change the saved password entry for “\(entry.id.title)”"
                 )
                 guard authorized, let stored = vault.password(for: entry.id) else {
-                    problem = vault.lastError ?? "Couldn’t read the saved password."
+                    problem = vault.lastError ?? "Macterm could not read the saved password."
                     return
                 }
                 secret = stored
@@ -262,7 +262,7 @@ struct PasswordEditorSheet: View {
             if vault.update(entry.id, to: newID, password: secret) {
                 dismiss()
             } else {
-                problem = vault.lastError ?? "Couldn’t save the changes."
+                problem = vault.lastError ?? "Macterm could not save the changes."
             }
         }
     }

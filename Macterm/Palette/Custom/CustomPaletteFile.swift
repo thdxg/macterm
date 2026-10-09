@@ -282,10 +282,10 @@ enum CustomPaletteExports {
             let isName = scalars.first.map { $0 == "_" || ($0.isASCII && CharacterSet.letters.contains($0)) } == true
                 && scalars.allSatisfy { $0 == "_" || ($0.isASCII && CharacterSet.alphanumerics.contains($0)) }
             guard isName else {
-                throw CustomPaletteError.invalid("\(place): export: \(name) isn't a variable name sh can read")
+                throw CustomPaletteError.invalid("\(place): export: \(name) is not a variable name that sh can read")
             }
             guard !reserved.contains(name) else {
-                throw CustomPaletteError.invalid("\(place): export: \(name) is set by Macterm; pick another name")
+                throw CustomPaletteError.invalid("\(place): export: \(name) is set by Macterm. Use another name")
             }
         }
     }
@@ -380,7 +380,7 @@ struct CustomPalette: Equatable, Identifiable {
         description = file.description
         requires = file.requires ?? []
         for program in requires where !CustomPaletteRequirements.isProgramName(program) {
-            throw CustomPaletteError.invalid("requires: \(program) isn't a program name")
+            throw CustomPaletteError.invalid("requires: \(program) is not a program name")
         }
         condition = try CustomPaletteCondition(file.when, at: "when")
         guard !file.nodes.isEmpty else { throw CustomPaletteError.invalid("nodes: must name at least one node") }
@@ -410,7 +410,7 @@ struct CustomPalette: Equatable, Identifiable {
             case (nil, nil):
                 throw CustomPaletteError.invalid("\(place): needs enter: or action:")
             case (.some, .some):
-                throw CustomPaletteError.invalid("\(place): has both enter: and action:; pick one")
+                throw CustomPaletteError.invalid("\(place): has both enter: and action:. Use only one")
             }
         }
 

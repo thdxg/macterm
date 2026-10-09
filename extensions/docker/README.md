@@ -1,7 +1,7 @@
 # Docker
 
-Browse running containers by name, image or status, then follow a container's logs or open a shell in it, in a split, or stop it.
+Browse the running containers by name, image or status. Follow the logs of a container, open a shell in it, or stop it. The logs and the shell open in a split.
 
-Muted while Docker isn't running.
+The palette is muted while Docker is not running.
 
 Needs `docker`.

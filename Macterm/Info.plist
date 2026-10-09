@@ -158,31 +158,31 @@
 	<key>MDItemKeywords</key>
 	<string>Terminal</string>
 <key>NSAppleEventsUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to use AppleScript.</string>
+	<string>A program in a Macterm terminal wants to use AppleScript.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to use Bluetooth.</string>
+	<string>A program in a Macterm terminal wants to use Bluetooth.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to access your calendar.</string>
+	<string>A program in a Macterm terminal wants to access your calendar.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to use the camera.</string>
+	<string>A program in a Macterm terminal wants to use the camera.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to access your contacts.</string>
+	<string>A program in a Macterm terminal wants to access your contacts.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to access the local network.</string>
+	<string>A program in a Macterm terminal wants to access the local network.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to access your location information.</string>
+	<string>A program in a Macterm terminal wants to access your location information.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to use your microphone.</string>
+	<string>A program in a Macterm terminal wants to use your microphone.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to access motion data.</string>
+	<string>A program in a Macterm terminal wants to access motion data.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to access your photo library.</string>
+	<string>A program in a Macterm terminal wants to access your photo library.</string>
 	<key>NSRemindersUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to access your reminders.</string>
+	<string>A program in a Macterm terminal wants to access your reminders.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>A process running in Macterm's terminal would like to use speech recognition.</string>
+	<string>A program in a Macterm terminal wants to use speech recognition.</string>
 	<key>NSSystemAdministrationUsageDescription</key>
-	<string>A process running in Macterm's terminal requires elevated privileges.</string>
+	<string>A program in a Macterm terminal needs elevated privileges.</string>
 	<key>SUFeedURL</key>
 	<string>https://macterm.thdxg.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>

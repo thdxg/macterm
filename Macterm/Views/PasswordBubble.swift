@@ -183,8 +183,8 @@ private struct PasswordBubbleView: View {
             case let .rejected(id):
                 header(
                     symbol: "key.slash",
-                    title: "Saved Password Didn’t Work",
-                    detail: "Type the password. Once it works, Macterm offers to update the saved one."
+                    title: "Saved Password Did Not Work",
+                    detail: "Type the password. When it works, Macterm offers to update the saved password."
                 )
                 entry(id)
                 HStack {
@@ -197,7 +197,7 @@ private struct PasswordBubbleView: View {
                 header(
                     symbol: "key.fill",
                     title: isUpdate ? "Update Saved Password?" : "Save Password?",
-                    detail: "Macterm can fill it in the next time this prompt appears."
+                    detail: "Macterm can fill in the password the next time that this prompt appears."
                 )
                 entry(id, showsSecret: true)
                 if let problem {

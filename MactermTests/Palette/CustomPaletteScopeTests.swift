@@ -98,7 +98,7 @@ struct CustomPaletteScopeTests {
         let (_, store, _) = try makeContext(files: ["git.yaml": palette, "git.yml": palette])
         #expect(store.entries.map(\.id) == ["git", "git.yml"])
         #expect(store.palette(id: "git")?.name == "Git")
-        #expect(store.entry(id: "git.yml")?.failure?.errorDescription == "another file is already the palette git; rename one")
+        #expect(store.entry(id: "git.yml")?.failure?.errorDescription == "another file is already the palette git. Rename one")
     }
 
     @Test
@@ -271,7 +271,7 @@ struct CustomPaletteScopeTests {
         scope.activate(context: context) {}
         await settle()
         #expect(scope.failure == PaletteFailure(
-            title: "Couldn't list Namespaces",
+            title: "Cannot list Namespaces",
             detail: "error: You must be logged in to the server (Unauthorized)"
         ))
         #expect(scope.sections(for: PaletteQuery(raw: ""), context: context).isEmpty)
@@ -286,8 +286,8 @@ struct CustomPaletteScopeTests {
         #expect(scope.loading != nil)
         await settle()
         #expect(recorder.calls.count == 2)
-        #expect(scope.failure?.title == "Couldn't read Namespaces")
-        #expect(scope.failure?.detail == "rows: .items names a path, but the output isn't JSON")
+        #expect(scope.failure?.title == "Cannot read Namespaces")
+        #expect(scope.failure?.detail == "rows: .items names a path, but the output is not JSON")
     }
 
     @Test
@@ -309,8 +309,8 @@ struct CustomPaletteScopeTests {
         scope.activate(context: context) {}
         await settle()
         #expect(scope.failure == PaletteFailure(
-            title: "Couldn't list Pods",
-            detail: "This palette needs kubectl, which isn't on your PATH."
+            title: "Cannot list Pods",
+            detail: "This palette needs kubectl, which is not on your PATH."
         ))
         #expect(recorder.calls.map(\.command) == ["kubectl get pods -o json | jq .items", CustomPaletteRequirements.probe])
         #expect(recorder.calls[1].environment[CustomPaletteRequirements.variable] == "kubectl jq")
@@ -330,7 +330,7 @@ struct CustomPaletteScopeTests {
         let scope = CustomPaletteScope(target: target, runner: Recorder().runner)
         var redraws = 0
         scope.activate(context: context) { redraws += 1 }
-        #expect(scope.failure == PaletteFailure(title: "Couldn't read broken.yml", detail: "root: needs enter: or action:"))
+        #expect(scope.failure == PaletteFailure(title: "Cannot read broken.yml", detail: "root: needs enter: or action:"))
         #expect(scope.loading == nil)
         #expect(scope.sections(for: PaletteQuery(raw: ""), context: context).isEmpty)
 
@@ -346,9 +346,9 @@ struct CustomPaletteScopeTests {
     func the_rows_of_a_result_name_each_kind_of_failure() throws {
         let listing = try #require(CustomPaletteFileTests.palette(CustomPaletteFileTests.kubernetes).nodes["pods"]?.listing)
         #expect(CustomPaletteScope.rows(from: .init(stdout: "", stderr: "", status: 127), listing: listing, title: "Pods")
-            == .failure(PaletteFailure(title: "Couldn't list Pods", detail: "The command exited with status 127.")))
+            == .failure(PaletteFailure(title: "Cannot list Pods", detail: "The command exited with status 127.")))
         #expect(CustomPaletteScope.rows(from: .init(stdout: "{\"items\": 3}", stderr: "", status: 0), listing: listing, title: "Pods")
-            == .failure(PaletteFailure(title: "Couldn't read Pods", detail: "rows: .items isn't an array")))
+            == .failure(PaletteFailure(title: "Cannot read Pods", detail: "rows: .items is not an array")))
         #expect(
             CustomPaletteScope.rows(from: .init(stdout: Self.podsJSON, stderr: "warning", status: 0), listing: listing, title: "Pods")
                 .map(\.count) == .success(2),
@@ -499,7 +499,7 @@ struct CustomPaletteScopeTests {
         #expect(root.loading?.message == "Checking K8s…")
         #expect(root.sections(for: PaletteQuery(raw: ""), context: context).isEmpty)
         await settle()
-        #expect(root.failure == PaletteFailure(title: "K8s isn't available", detail: "Cluster unreachable"))
+        #expect(root.failure == PaletteFailure(title: "K8s is not available", detail: "Cluster unreachable"))
         #expect(recorder.calls.map(\.command) == ["cluster-check"], "no listing behind a failed check")
 
         recorder.outputs["cluster-check"] = Self.ok

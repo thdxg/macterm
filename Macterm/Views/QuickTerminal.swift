@@ -434,7 +434,7 @@ final class QuickTerminalSplitState {
         QuickTerminalService.shared.suppressAutoHide = true
         let alert = NSAlert()
         alert.messageText = "Close running process?"
-        alert.informativeText = "A process is still running in this pane. Close it anyway?"
+        alert.informativeText = "A process is still running in this pane. Close the pane anyway?"
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Close")
         alert.addButton(withTitle: "Cancel")

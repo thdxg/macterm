@@ -17,10 +17,10 @@ import Foundation
 struct TutorCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tutor",
-        abstract: "Print a short tutorial (uses your current keybindings).",
+        abstract: "Print a short tutorial. It uses your current keybinds.",
         discussion: """
-        Topics: project (projects, tabs, splits, the CLI) and pinned (what \
-        the pinned row above the projects is for). Defaults to project.
+        Topics: project (projects, tabs, splits and the CLI) and pinned (what \
+        the pinned row above the projects is for). The default is project.
         """
     )
 

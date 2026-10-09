@@ -12,7 +12,7 @@
 # (EnvironmentSetup prepends bin; libghostty appends the exe dir), and a bare
 # `ghostty` that only answers +ssh must never be reachable by name.
 if [ "$1" != "+ssh" ]; then
-  echo "this is Macterm's ghostty shim; only +ssh is supported (install Ghostty.app for the real CLI)" >&2
+  echo "this is the ghostty shim of Macterm. It supports only +ssh. Install Ghostty.app for the real CLI" >&2
   exit 1
 fi
 shift

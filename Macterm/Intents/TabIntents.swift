@@ -12,7 +12,7 @@ private let logger = Logger(subsystem: appBundleID, category: "TabIntents")
 /// they use.
 struct NewMactermTabIntent: AppIntent {
     static let title: LocalizedStringResource = "New Tab"
-    static let description = IntentDescription("Open a tab in a project, optionally running a command.")
+    static let description = IntentDescription("Open a tab in a project. You can run a command in it.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)
@@ -24,7 +24,7 @@ struct NewMactermTabIntent: AppIntent {
 
     @Parameter(
         title: "Command",
-        description: "Typed into the new tab's shell when it starts. Leave empty for a plain shell.",
+        description: "Macterm types this into the shell of the new tab when the shell starts. Leave it empty for a plain shell.",
         inputOptions: String.IntentInputOptions(
             capitalizationType: .none,
             autocorrect: false,
@@ -109,7 +109,7 @@ struct FocusMactermTabIntent: AppIntent {
 /// is the wrong place to pre-commit to it.)
 struct CloseMactermTabIntent: AppIntent {
     static let title: LocalizedStringResource = "Close Tab"
-    static let description = IntentDescription("Close a tab and end its sessions. Refuses if a program is running.")
+    static let description = IntentDescription("Close a tab and end its sessions. If a program is running, the action fails.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)

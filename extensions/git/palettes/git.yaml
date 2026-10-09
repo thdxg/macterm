@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
 name: Git
 icon: arrow.triangle.branch
-description: Switch to, log or diff the project's branches
+description: Switch to, log or diff the branches of the project
 requires: [git]
 when: { run: git rev-parse --git-dir, unavailable: Not a git repository }
 root: branches

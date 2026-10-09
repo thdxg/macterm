@@ -160,16 +160,16 @@ warn_if_ghosttykit_stale() {
   age_days=$(( (head_epoch - base_epoch) / 86400 ))
   if (( age_days > stale_days )); then
     echo "" >&2
-    echo "warning: bundled GhosttyKit ($ver) was built from an upstream base ~${age_days} days" >&2
-    echo "         behind ghostty-org/ghostty HEAD (threshold ${stale_days}d). It may be missing" >&2
-    echo "         upstream fixes (this is the class of staleness behind macterm#112)." >&2
+    echo "warning: the bundled GhosttyKit ($ver) is built from an upstream base that is" >&2
+    echo "         ~${age_days} days behind ghostty-org/ghostty HEAD (limit: ${stale_days} days). It can" >&2
+    echo "         miss upstream fixes. Macterm#112 is a problem of this kind." >&2
     # NOT `rm -rf && setup.sh` — the release is pinned, so that just re-downloads
     # the same tag. The pin itself has to move.
-    echo "         Fix: bump GHOSTTYKIT_TAG in scripts/setup.sh (currently" >&2
-    echo "         $GHOSTTY_TAG) to a newer $FORK_REPO release, then re-run setup." >&2
-    echo "         The weekly bump-ghosttykit.yml workflow normally opens that PR;" >&2
-    echo "         if this is firing, check whether those runs are failing." >&2
-    echo "         If the fork itself is stale, check thdxg/ghostty's Assert No Drift workflow." >&2
+    echo "         Fix: change GHOSTTYKIT_TAG in scripts/setup.sh (now" >&2
+    echo "         $GHOSTTY_TAG) to a newer $FORK_REPO release, then run setup again." >&2
+    echo "         The weekly bump-ghosttykit.yml workflow normally opens that PR." >&2
+    echo "         If you see this warning, check if those runs fail." >&2
+    echo "         If the fork itself is old, check the Assert No Drift workflow of thdxg/ghostty." >&2
     echo "" >&2
   fi
 }
@@ -188,7 +188,7 @@ to_epoch() {
 if [[ "$GHOSTTYKIT_TAG" == "latest" ]]; then
   GHOSTTY_TAG=$(gh release list --repo "$FORK_REPO" --limit 1 --json tagName -q ".[0].tagName")
   if [[ -z "$GHOSTTY_TAG" ]]; then
-    echo "Error: No releases found in $FORK_REPO" >&2
+    echo "Error: no releases found in $FORK_REPO" >&2
     exit 1
   fi
   echo "GHOSTTYKIT_TAG=latest resolved to $GHOSTTY_TAG"
@@ -209,11 +209,11 @@ warn_unstamped_artifacts() {
   [[ -z "${stamped_tag:-}" ]] || return 0
   [[ -d "$XCFRAMEWORK_DIR" || -d "$RESOURCES_MARKER" ]] || return 0
   echo "" >&2
-  echo "note: the GhosttyKit/resources on disk carry no tag stamp, so which release" >&2
-  echo "      they came from is unknown — possibly two different ones. Nothing will" >&2
-  echo "      refresh them: a bumped pin is detected by disagreeing with a stamp, so" >&2
-  echo "      an unstamped tree keeps building against the core it already has." >&2
-  echo "      To install $GHOSTTY_TAG for certain:" >&2
+  echo "note: the GhosttyKit and resources on disk have no tag stamp. The release that" >&2
+  echo "      they came from is unknown. They can come from two different releases." >&2
+  echo "      Nothing refreshes them. Setup finds a changed pin when it does not match" >&2
+  echo "      a stamp, so a tree with no stamp keeps the core that it already has." >&2
+  echo "      To install $GHOSTTY_TAG for certain, run:" >&2
   echo "        rm -rf $XCFRAMEWORK_DIR $RESOURCES_MARKER && ./scripts/setup.sh" >&2
   echo "" >&2
 }
@@ -224,7 +224,7 @@ stamped_tag=""
 tag_changed=false
 if [[ -n "$stamped_tag" && "$stamped_tag" != "$GHOSTTY_TAG" ]]; then
   tag_changed=true
-  echo "Pinned GhosttyKit release changed ($stamped_tag -> $GHOSTTY_TAG); refreshing"
+  echo "The pinned GhosttyKit release changed ($stamped_tag -> $GHOSTTY_TAG). Refreshing it"
 fi
 
 need_xcframework=true
@@ -238,7 +238,7 @@ if [[ -d "$XCFRAMEWORK_DIR" ]] && ! $tag_changed; then
     # in a scratch dir below and only swapped in once it's known good, so a
     # release that also lacks the ABI leaves this (older, but working) framework
     # alone instead of stranding the checkout with no framework at all.
-    echo "Existing GhosttyKit lacks GHOSTTY_ACTION_OUTPUT_ACTIVITY; refreshing it"
+    echo "The existing GhosttyKit has no GHOSTTY_ACTION_OUTPUT_ACTIVITY. Refreshing it"
   fi
 fi
 # Resources ship in the same release as the xcframework, so they move together —
@@ -256,16 +256,16 @@ if [[ -x "$ZMX_BIN" ]]; then
     # Unstamped: provenance unknown, and every checkout predating the pin looks
     # like this. Refresh once so it becomes knowable, rather than warning
     # forever about a binary nobody can identify.
-    echo "Bundled zmx is unstamped (provenance unknown); installing $ZMX_TAG"
+    echo "The bundled zmx has no stamp (its source is unknown). Installing $ZMX_TAG"
   elif [[ "$zmx_stamped_tag" != "$ZMX_TAG" ]]; then
-    echo "Pinned zmx release changed ($zmx_stamped_tag -> $ZMX_TAG); refreshing"
+    echo "The pinned zmx release changed ($zmx_stamped_tag -> $ZMX_TAG). Refreshing it"
   else
     need_zmx=false
   fi
 fi
 
 if ! $need_xcframework && ! $need_resources && ! $need_zmx; then
-  echo "GhosttyKit, resources, and zmx already present"
+  echo "GhosttyKit, resources and zmx are already present"
   # This is the path a settled checkout takes every time, so it is also where an
   # unstamped tree would otherwise sit unnoticed forever.
   warn_unstamped_artifacts
@@ -289,14 +289,14 @@ if $need_xcframework; then
   gh release download "$GHOSTTY_TAG" --pattern "GhosttyKit.xcframework.tar.gz" --repo "$FORK_REPO" --dir "$staging"
   tar xzf "$staging/GhosttyKit.xcframework.tar.gz" -C "$staging"
   if ! has_output_activity_action "$staging/$XCFRAMEWORK_DIR"; then
-    echo "Error: GhosttyKit from $GHOSTTY_TAG lacks GHOSTTY_ACTION_OUTPUT_ACTIVITY" >&2
-    echo "The thdxg/ghostty output-activity downstream patch must be released first." >&2
+    echo "Error: GhosttyKit from $GHOSTTY_TAG has no GHOSTTY_ACTION_OUTPUT_ACTIVITY" >&2
+    echo "The thdxg/ghostty output-activity downstream patch must have a release first." >&2
     echo "" >&2
-    echo "Note: Macterm has required this ABI since the reliable-activity-detection" >&2
-    echo "change (see the GhosttyKit note in AGENTS.md). A checkout from BEFORE that" >&2
-    echo "commit — e.g. while bisecting — does not need it: extract a GhosttyKit from" >&2
-    echo "a $FORK_REPO release contemporary with that commit instead of running setup." >&2
-    echo "Any existing $XCFRAMEWORK_DIR was left untouched." >&2
+    echo "Note: Macterm needs this ABI since the change for reliable activity detection" >&2
+    echo "(see the GhosttyKit note in AGENTS.md). A checkout from BEFORE that" >&2
+    echo "commit does not need it, for example while you bisect. In that case, extract" >&2
+    echo "a GhosttyKit from a $FORK_REPO release of the same time. Do not run setup." >&2
+    echo "Setup did not change any existing $XCFRAMEWORK_DIR." >&2
     exit 1
   fi
   rm -rf "$XCFRAMEWORK_DIR"
@@ -351,7 +351,7 @@ if $need_zmx; then
   if [[ "$ZMX_TAG" == "latest" ]]; then
     resolved_zmx_tag=$(gh release list --repo "$ZMX_REPO" --limit 1 --json tagName -q ".[0].tagName")
     if [[ -z "$resolved_zmx_tag" ]]; then
-      echo "Error: No zmx releases found in $ZMX_REPO" >&2
+      echo "Error: no zmx releases found in $ZMX_REPO" >&2
       exit 1
     fi
     echo "ZMX_TAG=latest resolved to $resolved_zmx_tag"

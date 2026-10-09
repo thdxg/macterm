@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json",
   "title": "Macterm extension palette",
-  "description": "A command-palette screen: one file per palette, in an extension's palettes/ folder or in ~/.config/macterm/palettes/. A palette is a graph of named nodes, each with rows written out (`items`), a listing (`list`, a command whose output becomes rows), or both. Every row enters another node or performs an action, may name a second action for ⌥↩ (`alt`), and may export values that travel down the stack as environment variables into every command below it.",
+  "description": "A command-palette screen: one file for each palette, in the palettes/ folder of an extension or in ~/.config/macterm/palettes/. A palette is a graph of named nodes. Each node has rows that you write (`items`), a listing (`list`, a command whose output becomes rows), or both. Every row enters another node or runs an action. A row can name a second action for ⌥↩ (`alt`). A row can export values. They travel down the stack as environment variables into every command below the row.",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "nodes"],
@@ -10,32 +10,32 @@
     "name": {
       "type": "string",
       "pattern": "\\S",
-      "description": "The palette's name: its row in the command palette, its pill, and its Settings row."
+      "description": "The name of the palette: its row in the command palette, its pill, and its row in Settings."
     },
     "icon": {
       "type": "string",
-      "description": "An SF Symbol name for the palette's row and pill. Defaults to square.grid.2x2."
+      "description": "An SF Symbol name for the row and the pill of the palette. The default is square.grid.2x2."
     },
     "description": {
       "type": "string",
-      "description": "One line under the palette's row in the command palette and on its card in Settings → Extensions."
+      "description": "One line under the row of the palette in the command palette, and on its card in Settings → Extensions."
     },
     "root": {
       "type": "string",
-      "description": "The node the palette opens on. Defaults to the node named root."
+      "description": "The node that the palette opens on. The default is the node with the name root."
     },
     "when": {
       "$ref": "#/$defs/condition",
-      "description": "Whether the palette can be used now. Checked each time the command palette opens, in the background: until the check fails the palette's row is usable; when it fails the row is muted with the reason, and opening the palette by its keybind shows the reason instead of a listing."
+      "description": "Whether the palette can be used now. Macterm runs the check each time that the command palette opens, in the background. The row of the palette is usable until the check fails. When the check fails, the row is muted and shows the reason. When you open the palette with its keybind, you see the reason and not a listing."
     },
     "requires": {
       "type": "array",
-      "description": "The programs the palette's commands need, by name — `[kubectl, jq]`. A listing that fails names whichever of them isn't on your PATH.",
+      "description": "The programs that the commands of the palette need, by name, for example `[kubectl, jq]`. When a listing fails, the error names each of these programs that is not in your PATH.",
       "items": { "type": "string", "pattern": "^[A-Za-z0-9._+/][A-Za-z0-9._+/-]*$" }
     },
     "nodes": {
       "type": "object",
-      "description": "Every screen of the palette by name. A node has `items`, a `list`, or both — the items first, then the listing's rows.",
+      "description": "Every screen of the palette, by name. A node has `items`, a `list`, or both. The items come first, then the rows of the listing.",
       "minProperties": 1,
       "additionalProperties": { "$ref": "#/$defs/node" }
     }
@@ -49,11 +49,11 @@
         "run": {
           "type": "string",
           "pattern": "\\S",
-          "description": "A command that exits 0 when the palette or row can be used: POSIX sh, or a script with a first-line `#!`, with the same environment and directory as a listing. Given 10 seconds."
+          "description": "A command that exits with 0 when the palette or row can be used. Use POSIX sh, or a script with a `#!` first line. It has the same environment and directory as a listing. It has 10 seconds."
         },
         "unavailable": {
           "type": "string",
-          "description": "What the muted row says when the check fails. Defaults to \"Unavailable\"."
+          "description": "The text that the muted row shows when the check fails. The default is \"Unavailable\"."
         }
       }
     },
@@ -78,50 +78,50 @@
       "properties": {
         "placeholder": {
           "type": "string",
-          "description": "The search field's placeholder on this screen. Defaults to \"Search <pill>...\"."
+          "description": "The placeholder of the search field on this screen. The default is \"Search <pill>...\"."
         },
         "items": {
           "type": "array",
-          "description": "Rows written out, in order, shown before any listing's rows. Each enters a node or performs an action.",
+          "description": "Rows that you write, in order. Macterm shows them before the rows of a listing. Each row enters a node or runs an action.",
           "items": { "$ref": "#/$defs/item" }
         },
         "list": {
           "type": "string",
-          "description": "A listing's command, run once when the screen opens: POSIX sh with errexit (`sh -o errexit -c`), or the interpreter a first-line `#!` names, started through your login shell (non-interactive: its login files, not .zshrc) so it sees your PATH. It runs in the active project's directory, with MACTERM_PROJECT_DIR, MACTERM_PROJECT_NAME and every value exported above this screen in its environment. Its output is JSON — an array, newline-delimited objects, or an object holding the array at `rows` — or plain lines, one row each. ⌘R runs it again."
+          "description": "The command of a listing. It runs one time when the screen opens. Use POSIX sh with errexit (`sh -o errexit -c`), or the interpreter that a `#!` first line names. Macterm starts it through your login shell (non-interactive: it reads the login files, not .zshrc), so the command sees your PATH. It runs in the directory of the active project. Its environment has MACTERM_PROJECT_DIR, MACTERM_PROJECT_NAME and every value that was exported above this screen. Its output is JSON (an array, newline-delimited objects, or an object that has the array at `rows`) or plain lines, one row each. ⌘R runs it again."
         },
         "rows": {
           "type": "string",
-          "description": "For a listing whose output is a JSON object: the path to the array of rows, e.g. `.items`."
+          "description": "For a listing whose output is a JSON object: the path to the array of rows, for example `.items`."
         },
         "title": {
           "type": "string",
-          "description": "A listing row's title. A value starting with `.` is a path into the row (`.` is the row itself, `.metadata.name` a field, `.items[0]` an index); anything else is literal. Defaults to `.`."
+          "description": "The title of a listing row. A value that starts with `.` is a path into the row (`.` is the row itself, `.metadata.name` is a field, `.items[0]` is an index). Any other value is literal. The default is `.`."
         },
         "subtitle": {
           "type": "string",
-          "description": "A listing row's second line, path or literal."
+          "description": "The second line of a listing row. It is a path or a literal."
         },
         "icon": {
           "type": "string",
-          "description": "An SF Symbol for every row of this node unless the row names its own; in a listing, a path or a literal."
+          "description": "An SF Symbol for every row of this node, unless the row names its own. In a listing, it is a path or a literal."
         },
         "match": {
           "type": "array",
           "minItems": 1,
-          "description": "The fields the search matches against, each a path or a literal. Defaults to the title and subtitle.",
+          "description": "The fields that the search looks in. Each one is a path or a literal. The default is the title and the subtitle.",
           "items": { "type": "string" }
         },
         "export": {
           "$ref": "#/$defs/exports",
-          "description": "Environment variables a listing row sets for everything below it, each a path or a literal — `{ NAMESPACE: .metadata.name }`. Never substituted into another command's text: read them as variables. Names are ones sh can read, and not one Macterm sets itself."
+          "description": "Environment variables that a listing row sets for everything below it. Each one is a path or a literal, for example `{ NAMESPACE: .metadata.name }`. Macterm never puts them into the text of another command. Read them as variables. A name must be a name that sh can read, and not a name that Macterm sets itself."
         },
         "enter": {
           "type": "string",
-          "description": "For a listing: the node every row opens, with the row's exports added. The row's title names the new screen's pill."
+          "description": "For a listing: the node that every row opens, with the exports of the row added. The title of the row names the pill of the new screen."
         },
         "action": {
           "$ref": "#/$defs/action",
-          "description": "For a listing: what every row does when picked, instead of `enter`."
+          "description": "For a listing: what every row does when you select it, instead of `enter`."
         },
         "alt": {
           "$ref": "#/$defs/alt",
@@ -147,12 +147,12 @@
         "alt": { "$ref": "#/$defs/alt", "description": "What this row does on ⌥↩ or ⌥-click instead." },
         "when": {
           "$ref": "#/$defs/condition",
-          "description": "Whether this row can be picked now. Checked each time its screen opens, in the background: until the check fails the row is usable; when it fails the row is muted with the reason. Items sharing one command run it once."
+          "description": "Whether you can select this row now. Macterm runs the check each time that its screen opens, in the background. The row is usable until the check fails. When the check fails, the row is muted and shows the reason. Items that share one command run it one time."
         }
       }
     },
     "alt": {
-      "description": "A row's second action, run by ⌥↩ or ⌥-click: exactly one of run, copy or open, plus an optional title the row's subtitle shows while ⌥ is down (by default, what it does: \"Run in a Split\", \"Copy\"…).",
+      "description": "The second action of a row. ⌥↩ or ⌥-click runs it. It has exactly one of run, copy or open, and an optional title. The subtitle of the row shows the title while ⌥ is down. By default, it shows what the action does: \"Run in a Split\", \"Copy\".",
       "allOf": [{ "$ref": "#/$defs/actionFields" }],
       "properties": { "title": { "type": "string" } },
       "unevaluatedProperties": false
@@ -169,20 +169,20 @@
       "properties": {
         "run": {
           "type": "string",
-          "description": "A command run in a new terminal before its shell starts, never typed at the prompt, with the exported variables in its environment: POSIX sh with errexit, or the interpreter a first-line `#!` names. When it ends, the shell's prompt is there. In a remote project it is typed at the host's prompt as written instead, run by the host's shell, without the exported variables."
+          "description": "A command that runs in a new terminal before its shell starts. Macterm never types it at the shell prompt. The exported variables are in its environment. Use POSIX sh with errexit, or the interpreter that a `#!` first line names. When the command ends, the shell prompt is there. In a remote project, Macterm types the command at the shell prompt of the host, as you wrote it. The shell of the host runs it, and the exported variables are not set."
         },
         "in": {
           "type": "string",
           "enum": ["tab", "split"],
-          "description": "Where `run` runs: a new tab of the active project (the default) or a split beside its focused pane."
+          "description": "Where `run` runs: a new tab of the active project (the default) or a split next to its focused pane."
         },
         "copy": {
           "type": "string",
-          "description": "Text to copy to the clipboard; in a listing, a path into the row or a literal."
+          "description": "Text to copy to the clipboard. In a listing, it is a path into the row or a literal."
         },
         "open": {
           "type": "string",
-          "description": "A URL or file path to open with its default app; in a listing, a path into the row or a literal."
+          "description": "A URL or file path to open with its default app. In a listing, it is a path into the row or a literal."
         }
       }
     }
