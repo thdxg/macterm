@@ -352,20 +352,37 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
         }
     }
 
-    /// Every extension in one list — installed and not, the installed ones
-    /// once each — by name, or ranked by `query` (the app's one search, as
-    /// every Settings list).
+    /// The extensions that the gallery shows. The menu next to the search
+    /// field sets this value.
+    enum Filter: String, CaseIterable, Identifiable {
+        case all = "All"
+        case installed = "Installed"
+        case notInstalled = "Not Installed"
+
+        var id: String { rawValue }
+    }
+
+    /// The extensions that `filter` lets through. Each installed extension
+    /// is in the list one time, before the other extensions. Each group is
+    /// in order of name. If there is a `query`, each group is in order of
+    /// search rank instead (the search of the app, as in all Settings lists).
     static func items(
         installed: [CustomPaletteStore.InstalledExtension],
         registry: [PaletteRegistry.Entry],
-        query: String
+        query: String,
+        filter: Filter = .all
     ) -> [ExtensionGalleryItem] {
         let installedIDs = Set(installed.map(\.id))
         let byID = Dictionary(registry.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let all: [ExtensionGalleryItem] = installed.map { .installed($0, registry: byID[$0.id]) }
-            + registry.filter { !installedIDs.contains($0.id) }.map { .available($0) }
-        let sorted = all.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-        return Search.rank(sorted, by: query) { [$0.title, $0.summary] }
+        let mine: [ExtensionGalleryItem] = filter == .notInstalled ? [] : installed.map { .installed($0, registry: byID[$0.id]) }
+        let others: [ExtensionGalleryItem] = filter == .installed ? [] : registry.filter { !installedIDs.contains($0.id) }
+            .map { .available($0) }
+        let ordered = { (items: [ExtensionGalleryItem]) in
+            Search.rank(items.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }, by: query) {
+                [$0.title, $0.summary]
+            }
+        }
+        return ordered(mine) + ordered(others)
     }
 
     static func == (lhs: ExtensionGalleryItem, rhs: ExtensionGalleryItem) -> Bool {

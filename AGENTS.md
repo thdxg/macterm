@@ -727,7 +727,8 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `ExtensionsSettings` (Settings → Extensions).
     - It is one grid of `ExtensionGalleryItem` cards that you can search by name. It has the installed extensions and the extensions of `PaletteRegistry` that are not installed yet. Each card shows the own name and description of the extension.
     - The own palette files of the user are not extensions. The grid does not list them.
-    - Each card has one button. **Install** installs at once, with no sheet. A folder button next to it opens the folder of the extension on GitHub (`PaletteRegistry.folderURL`). **Installed** moves the extension to the Trash (`CustomPaletteStore.uninstall`).
+    - Each card has one button. **Install** installs at once, with no sheet. A book button next to it opens the folder of the extension on GitHub (`PaletteRegistry.folderURL`). **Installed** moves the extension to the Trash (`CustomPaletteStore.uninstall`).
+    - Installed extensions come first, and each group is in order of name or of search rank. A menu next to the search field filters the grid to **All**, **Installed** or **Not Installed** (`ExtensionGalleryItem.Filter`).
     - The built-in screens are not extensions, and they have no card. There is no switch for on and off. To remove an extension, uninstall it.
   - `PasswordsSettings`.
 - `Macterm/Control/`: `ControlProtocol` (shared with the CLI), `ControlSocketServer`, `ControlHandler`, and `AgentSkills/` (the text of `macterm skills`, shared with the CLI).

@@ -359,17 +359,29 @@ struct PaletteRegistryTests {
         _ = try await PaletteRegistry(ref: "main", fetch: Server().fetch).install(registry[0], into: store)
 
         let all = ExtensionGalleryItem.items(installed: store.extensions, registry: registry, query: "")
-        #expect(all.map(\.title) == ["Docker", "Kubernetes"], "by name, Kubernetes once, no palette files or built-ins")
-        #expect(all.map(\.isInstalled) == [false, true])
-        guard case let .installed(_, fromRegistry) = all[1] else {
+        #expect(all.map(\.title) == ["Kubernetes", "Docker"], "Kubernetes once, no palette files or built-ins")
+        #expect(all.map(\.isInstalled) == [true, false])
+        guard case let .installed(_, fromRegistry) = all[0] else {
             Issue.record("Kubernetes isn't installed")
             return
         }
         #expect(fromRegistry?.id == "kubernetes", "an installed extension knows its repository entry")
-        #expect(all[1].summary == "Browse a cluster", "the extension's own description, not a palette's")
+        #expect(all[0].summary == "Browse a cluster", "the extension's own description, not a palette's")
 
         let found = ExtensionGalleryItem.items(installed: store.extensions, registry: registry, query: "cont")
         #expect(found.map(\.title) == ["Docker"])
+
+        let zebra = Self.entry("zebra", manifest: "name: Abacus\ndescription: Count\nauthors: [thdxg]\n")
+        let withAbacus = registry + [zebra]
+        #expect(
+            ExtensionGalleryItem.items(installed: store.extensions, registry: withAbacus, query: "").map(\.title)
+                == ["Kubernetes", "Abacus", "Docker"],
+            "installed first, then the rest, each by name"
+        )
+        #expect(ExtensionGalleryItem.items(installed: store.extensions, registry: withAbacus, query: "", filter: .installed).map(\.title)
+            == ["Kubernetes"])
+        #expect(ExtensionGalleryItem.items(installed: store.extensions, registry: withAbacus, query: "", filter: .notInstalled).map(\.title)
+            == ["Abacus", "Docker"])
     }
 
     @Test

@@ -13,6 +13,7 @@ struct ExtensionsSettings: View {
     private var appState
 
     @State private var query = ""
+    @State private var filter = ExtensionGalleryItem.Filter.all
     @State private var installingIDs: Set<String> = []
     @State private var uninstalling: CustomPaletteStore.InstalledExtension?
     @State private var problem: String?
@@ -24,11 +25,20 @@ struct ExtensionsSettings: View {
         let items = ExtensionGalleryItem.items(
             installed: appState.customPalettes.extensions,
             registry: registry.entries,
-            query: query
+            query: query,
+            filter: filter
         )
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsSearchField(text: $query, prompt: "Search extensions")
+                HStack(spacing: 10) {
+                    SettingsSearchField(text: $query, prompt: "Search extensions")
+                    Picker("Show", selection: $filter) {
+                        ForEach(ExtensionGalleryItem.Filter.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 RegistryStatus(state: registry.state)
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
@@ -36,7 +46,7 @@ struct ExtensionsSettings: View {
                 }
 
                 if items.isEmpty {
-                    Text(query.isEmpty ? "No extensions yet." : "No extensions match.")
+                    Text(query.isEmpty && filter == .all ? "No extensions yet." : "No extensions match.")
                         .settingsCaption()
                 }
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
@@ -134,6 +144,9 @@ private struct RegistryStatus: View {
 /// folder on GitHub when it comes from the repository; and a button saying whether it
 /// is installed.
 private struct ExtensionCard: View {
+    @Environment(\.openURL)
+    private var openURL
+
     let item: ExtensionGalleryItem
     let link: URL?
     let isInstalling: Bool
@@ -153,9 +166,11 @@ private struct ExtensionCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 4)
+                    // Use a Button, not a `Link`. A bordered `Link` has its
+                    // own height, which is not the height of the Install button.
                     if let link {
-                        Link(destination: link) {
-                            Image(systemName: "folder")
+                        Button { openURL(link) } label: {
+                            ButtonLabel(title: nil, systemImage: "book")
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -205,20 +220,32 @@ private struct ExtensionCard: View {
     }
 }
 
-/// A button's glyph and title, spaced as text: `Label` sets its icon in a
-/// fixed-width slot, which left a wide gap either side of the glyph.
+/// The glyph and the title of a card button, with the space of text between
+/// them. `Label` puts its icon in a slot of fixed width, which put a wide gap
+/// on each side of the glyph. The label also goes a little into the side
+/// padding of the bezel. That padding is for a wide push button, and it made
+/// these small buttons mostly empty.
 private struct ButtonLabel: View {
-    let title: String
+    let title: String?
     let systemImage: String?
 
     var body: some View {
         HStack(spacing: 4) {
-            if let systemImage {
-                Image(systemName: systemImage)
-            } else {
-                ProgressView().controlSize(.mini)
+            // Put each glyph in a slot that is as tall as a line of text and a
+            // circled symbol. A bordered button gets its height from its
+            // label. Without the slot, the book button was shorter than the
+            // Install button next to it.
+            ZStack {
+                Text(verbatim: "X").hidden()
+                Image(systemName: "circle").hidden()
+                if let systemImage {
+                    Image(systemName: systemImage)
+                } else {
+                    ProgressView().controlSize(.mini)
+                }
             }
-            Text(title)
+            if let title { Text(title) }
         }
+        .padding(.horizontal, -3)
     }
 }
