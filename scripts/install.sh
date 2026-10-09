@@ -5,7 +5,7 @@ set -euo pipefail
 # under build/export/Macterm.app.
 SRC="./build/export/Macterm.app"
 if [[ ! -d "$SRC" ]]; then
-  echo "ERROR: $SRC not found — run 'mise run build' first." >&2
+  echo "ERROR: $SRC is not there. Run 'mise run build' first." >&2
   exit 1
 fi
 

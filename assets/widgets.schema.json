@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/widgets.schema.json",
   "title": "Macterm desktop widgets",
-  "description": "The desktop widgets, in ~/.config/macterm/widgets.yaml. Macterm maintains this file automatically — rewriting it whenever a widget is added, moved, resized or removed, and on quit — and reads your edits at launch and before each of its own writes. An added entry becomes a widget; removing an entry removes its widget at the next launch.",
+  "description": "The desktop widgets, in ~/.config/macterm/widgets.yaml. Macterm keeps this file up to date by itself. It writes the file again each time that you add, move, resize or remove a widget, and when you quit. It reads your edits when it starts and before each of its own writes. An entry that you add becomes a widget. When you remove an entry, Macterm removes its widget the next time that it starts.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "widgets": {
       "type": "array",
-      "description": "The widgets, in creation order. Entries carry no id: Macterm matches them to its widgets by `name`, then by content, then by position.",
+      "description": "The widgets, in the order of their creation. Entries have no id. Macterm matches them to its widgets by `name`, then by content, then by position.",
       "items": { "$ref": "#/$defs/widget" }
     }
   },
@@ -19,34 +19,34 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Optional label, shown in Settings → Widgets. Naming an entry makes hand-edits unambiguous."
+          "description": "An optional label. Settings → Widgets shows it. When an entry has a name, Macterm can match it after you edit by hand."
         },
         "size": {
           "type": "string",
-          "description": "The grid span as COLUMNSxROWS, e.g. \"3x2\". A cell is 164pt with a 16pt gap, the system widgets' own module. Defaults to 3x3.",
+          "description": "The grid span as COLUMNSxROWS, for example \"3x2\". A cell is 164pt with a 16pt gap. This is the module of the system widgets. The default is 3x3.",
           "pattern": "^[1-9][0-9]*x[1-9][0-9]*$"
         },
         "column": {
           "type": "integer",
           "minimum": 0,
-          "description": "The grid column of the widget's top-left corner on the screen's grid, counted from its left edge (0 is the first). With `row`; omit both to place the widget in the middle of the screen. A widget next to another — including one of the system's — snaps into line with it, as macOS lines up its own widgets in groups."
+          "description": "The grid column of the top-left corner of the widget on the grid of the screen, counted from its left edge (0 is the first). Use it with `row`. Leave out both to put the widget in the middle of the screen. A widget next to another widget, including a system widget, snaps into line with it. macOS lines up its own widgets in groups in the same way."
         },
         "row": {
           "type": "integer",
           "minimum": 0,
-          "description": "The grid row of the widget's top-left corner, counted from the top of the screen (0 is the first, just under the menu bar)."
+          "description": "The grid row of the top-left corner of the widget, counted from the top of the screen (0 is the first, just under the menu bar)."
         },
         "display": {
           "type": "string",
-          "description": "The screen `column` and `row` are on, by its name as System Settings → Displays shows it. Macterm always writes it, since which display is primary changes with what is plugged in. Omit it for the primary display (the one with the menu bar). A display that isn't connected keeps the cell for when it is, if the widget has been on it; otherwise the cell is taken on the primary display."
+          "description": "The screen that `column` and `row` are on, by the name that System Settings → Displays shows. Macterm always writes it, because the primary display changes with the displays that you plug in. Leave it out for the primary display (the display with the menu bar). If a display is not connected and the widget was on it, the cell stays for the time when the display is connected. If the widget was not on it, Macterm takes the cell on the primary display."
         },
         "cwd": {
           "type": "string",
-          "description": "Where the widget's shell starts when it starts fresh (absolute or ~-prefixed). Omit for the home directory. Captured from the widget's live shell."
+          "description": "The directory where the shell of the widget starts when it starts fresh (absolute, or with ~ at the start). Leave it out for the home directory. Macterm records it from the live shell of the widget."
         },
         "run": {
           "type": "string",
-          "description": "A command typed into the widget's shell whenever it starts fresh — when the widget is created, when its shell exits, and at a launch that finds its session gone (e.g. after a reboot). Captured from what the widget is running, the way a pinned tab's is; a widget sitting at its prompt keeps the command it had."
+          "description": "A command that Macterm types into the shell of the widget each time that it starts fresh: when the widget is created, when its shell exits, and when Macterm starts and finds that the session is gone (for example after a restart of the Mac). Macterm records it from what the widget runs, in the same way as for a pinned tab. A widget at its shell prompt keeps the command that it had."
         }
       }
     }
