@@ -72,10 +72,10 @@ struct ExtensionsSettings: View {
                     }
                 }
                 Text(
-                    "An extension adds screens to the command palette: a command whose output becomes rows, "
-                        + "each opening another screen or running a command. "
-                        + "Install one from Macterm's repository — the ones written for this version — "
-                        + "or write your own as a YAML file in your palettes folder."
+                    "An extension adds to what Macterm can do — today, screens in the command palette: "
+                        + "a command whose output becomes rows, each opening another screen or running a command. "
+                        + "The ones listed are Macterm's own repository's, written for this version. "
+                        + "A palette of your own needs no extension: a YAML file in your palettes folder."
                 )
                 .settingsCaption()
             }
