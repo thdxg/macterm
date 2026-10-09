@@ -108,11 +108,13 @@ struct TerminalPaintRegion: Equatable {
     var color: CGColor
 
     /// This region, given in `view`'s coordinates, in its window's.
+    @MainActor
     func inWindow(of view: NSView) -> TerminalPaintRegion {
         TerminalPaintRegion(frame: view.convert(frame, to: nil), painted: view.convert(painted, to: nil), color: color)
     }
 
     /// This region, given in window coordinates, in `view`'s.
+    @MainActor
     func fromWindow(into view: NSView) -> TerminalPaintRegion {
         TerminalPaintRegion(frame: view.convert(frame, from: nil), painted: view.convert(painted, from: nil), color: color)
     }
