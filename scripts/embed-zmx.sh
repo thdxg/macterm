@@ -14,12 +14,12 @@ srcroot="${SRCROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 zmx_source="${srcroot}/Macterm/Resources/zmx/zmx"
 
 if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]]; then
-  echo "error: embed-zmx.sh must run inside an Xcode build phase (missing TARGET_BUILD_DIR)" >&2
+  echo "error: embed-zmx.sh must run in an Xcode build phase (TARGET_BUILD_DIR is not set)" >&2
   exit 1
 fi
 
 if [[ ! -x "${zmx_source}" ]]; then
-  echo "error: ${zmx_source} not found. Run 'mise run setup' to download it." >&2
+  echo "error: ${zmx_source} is not there. Run 'mise run setup' to download it." >&2
   exit 1
 fi
 

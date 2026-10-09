@@ -2,32 +2,32 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/project.schema.json",
   "title": "Macterm project",
-  "description": "A Macterm project declaration. One file per project in ~/.config/macterm/projects/; declares the project's path and, optionally, its tab/pane layout. Files are matched to projects by `path` (the filename is cosmetic). Written by \"Save Layout\"; freely hand-editable.",
+  "description": "A Macterm project declaration. One file for each project in ~/.config/macterm/projects/. It declares the path of the project and, if you want, its tab and pane layout. Macterm matches a file to a project by `path`. The file name does not matter. \"Save Layout\" writes the file. You can edit it by hand.",
   "type": "object",
   "additionalProperties": false,
   "required": ["path"],
   "properties": {
     "name": {
       "type": "string",
-      "description": "Display name recorded at save time. The app's project list keeps its own name at runtime, so drift is expected — this is informational."
+      "description": "The display name that Macterm recorded when it saved the file. The project list of the app keeps its own name while the app runs, so the two names can be different. This name is only information."
     },
     "path": {
       "type": "string",
-      "description": "Where the project lives, scp-style: an absolute or ~-prefixed path is a local directory (e.g. \"~/dev/api\"); the reserved literal \"<pinned>\" instead marks this file as the pinned-tabs layout (pinned.yaml), which Macterm maintains automatically; \"[user@]host:dir\" is a directory on a remote host (e.g. \"devbox:~/dev/api\" — host may be an ssh-config alias; port/identity come from ~/.ssh/config; ControlMaster there makes splits fast). This is the project's identity: files are matched to projects by this value. Matching expands ~ and normalizes ./.. segments, but resolves neither symlinks (including /tmp → /private/tmp) nor letter case — write the directory exactly as the filesystem reports it. Remote paths match structurally (same user/host/directory). A remote project's panes run persistent zmx sessions on the host over ssh; zmx must be installed there."
+      "description": "Where the project lives, in the scp style. An absolute path, or a path that starts with ~, is a local directory (for example \"~/dev/api\"). The reserved literal \"<pinned>\" marks this file as the pinned-tabs layout (pinned.yaml), which Macterm keeps up to date by itself. \"[user@]host:dir\" is a directory on a remote host (for example \"devbox:~/dev/api\"). The host can be an ssh-config alias. Port and identity come from ~/.ssh/config. ControlMaster there makes splits fast. This value is the identity of the project: Macterm matches files to projects by this value. The match expands ~ and normalizes ./.. segments. It does not resolve symlinks (including /tmp → /private/tmp), and it does not resolve letter case. Write the directory exactly as the file system reports it. Remote paths match by structure (same user, host and directory). The panes of a remote project run persistent zmx sessions on the host over ssh. zmx must be installed there."
     },
     "zmxPath": {
       "type": "string",
-      "description": "Absolute path to zmx on the remote host, used verbatim instead of resolving `zmx` through PATH. Only meaningful for a remote `path`. Set this when the pane shows \"zmx not found in PATH\" — non-interactive ssh gets a bare PATH, and hosts with a network-mounted home, an exotic /bin/sh, or PATH configured only in a non-POSIX shell won't resolve zmx automatically. Example: \"~/bin/zmx\" or \"/usr/local/bin/zmx\". Omit to auto-detect via PATH."
+      "description": "The absolute path to zmx on the remote host. Macterm uses it as written, in place of resolving `zmx` through PATH. It applies only to a remote `path`. Set it when the pane shows \"zmx not found in PATH\". Non-interactive ssh gets a bare PATH. On some hosts, Macterm cannot resolve zmx by itself: a host with a network-mounted home, a host with an unusual /bin/sh, and a host whose PATH is set only in a non-POSIX shell. Example: \"~/bin/zmx\" or \"/usr/local/bin/zmx\". Leave it out to find zmx in PATH."
     },
     "tabs": {
       "type": "array",
-      "description": "The tabs to create, in order. Omit for a bare declaration (nothing to apply).",
+      "description": "The tabs to create, in order. Leave it out for a bare declaration (nothing to apply).",
       "items": { "$ref": "#/$defs/tab" }
     }
   },
   "$defs": {
     "tab": {
-      "description": "A tab: a layout node (a leaf pane or a split) with an optional `name`. There's no `layout:` wrapper — the node's fields sit at the tab level.",
+      "description": "A tab: a layout node (a leaf pane or a split) with an optional `name`. There is no `layout:` wrapper. The fields of the node are at the tab level.",
       "type": "object",
       "oneOf": [
         { "$ref": "#/$defs/paneTab" },
@@ -35,7 +35,7 @@
       ]
     },
     "node": {
-      "description": "A node in the split tree. Either a leaf pane (cwd/run/shell) or a split (a `split` mapping). A bare {} is a plain-shell pane.",
+      "description": "A node in the split tree. It is a leaf pane (cwd, run and shell) or a split (a `split` mapping). A bare {} is a plain shell pane.",
       "type": "object",
       "oneOf": [
         { "$ref": "#/$defs/pane" },
@@ -44,25 +44,25 @@
     },
     "name": {
       "type": "string",
-      "description": "Tab title. On apply, matched against live tabs by this name."
+      "description": "The title of the tab. When you apply the layout, Macterm matches live tabs by this name."
     },
     "paneProperties": {
       "cwd": {
         "type": "string",
-        "description": "Working directory, project-relative (resolved against the project root). Omit for the project root itself. '~' is expanded; absolute paths pass through. Under a remote root, '~' and absolute paths are remote-side (never the local home). In the pinned-tabs layout (path: <pinned>) every cwd is self-contained instead: absolute, '~'-relative, or a full [user@]host:dir spec."
+        "description": "The working directory, relative to the project root. Leave it out for the project root itself. Macterm expands '~'. Absolute paths pass through unchanged. For a remote project, '~' and absolute paths are on the remote side (never the local home). In the pinned-tabs layout (path: <pinned>), each cwd is complete in itself: an absolute path, a path that is relative to '~', or a full [user@]host:dir spec."
       },
       "run": {
         "type": "string",
-        "description": "Command typed into the pane's shell on launch (e.g. \"npm run dev\"). Omit for a plain shell. The command runs inside the shell, so the prompt survives when it exits."
+        "description": "The command that Macterm types into the shell of the pane when the pane starts (for example \"npm run dev\"). Leave it out for a plain shell. The command runs inside the shell, so the shell prompt stays when the command exits."
       },
       "shell": {
         "type": "string",
-        "description": "Shell binary to launch for this pane (e.g. \"/bin/zsh\"). Omit to use the shell from your Ghostty config (else your login shell)."
+        "description": "The shell binary to start for this pane (for example \"/bin/zsh\"). Leave it out to use the shell from your Ghostty config (if none, your login shell)."
       }
     },
     "pane": {
       "title": "Pane (leaf)",
-      "description": "A terminal pane. With no fields ({}) it's a plain shell.",
+      "description": "A terminal pane. With no fields ({}), it is a plain shell.",
       "type": "object",
       "additionalProperties": false,
       "not": { "required": ["split"] },
@@ -74,7 +74,7 @@
     },
     "paneTab": {
       "title": "Pane tab (leaf)",
-      "description": "A single-pane tab. With no pane fields it's a plain shell.",
+      "description": "A single-pane tab. With no pane fields, it is a plain shell.",
       "type": "object",
       "additionalProperties": false,
       "not": { "required": ["split"] },
@@ -93,13 +93,13 @@
         "direction": {
           "type": "string",
           "enum": ["horizontal", "vertical"],
-          "description": "Split direction. 'horizontal' = side by side (first | second); 'vertical' = stacked (first / second)."
+          "description": "The direction of the split. 'horizontal' means side by side (first | second). 'vertical' means stacked (first / second)."
         },
         "ratio": {
           "type": "number",
           "minimum": 0,
           "maximum": 1,
-          "description": "Divider position, 0–1. Defaults to 0.5 (an even split)."
+          "description": "The position of the divider, from 0 to 1. The default is 0.5 (an even split)."
         },
         "first": {
           "$ref": "#/$defs/node",
@@ -113,7 +113,7 @@
     },
     "split": {
       "title": "Split",
-      "description": "Splits the area into two child nodes via a nested `split` mapping.",
+      "description": "Splits the area into two child nodes with a nested `split` mapping.",
       "type": "object",
       "additionalProperties": false,
       "required": ["split"],

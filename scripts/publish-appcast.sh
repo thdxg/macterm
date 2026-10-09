@@ -60,11 +60,11 @@ fi
 # release would silently cut off every user who hasn't opted into a channel.
 # Refuse rather than publish an item nobody can see.
 if [[ -n "$CHANNEL" && "$PRERELEASE" != "true" ]]; then
-  echo "error: CHANNEL='$CHANNEL' requires PRERELEASE=true; a stable release must carry no channel" >&2
+  echo "error: CHANNEL='$CHANNEL' requires PRERELEASE=true. A stable release must have no channel" >&2
   exit 1
 fi
 if [[ "$ROLLING" == "true" && -z "$CHANNEL" ]]; then
-  echo "error: ROLLING=true needs a CHANNEL to scope the replacement to" >&2
+  echo "error: ROLLING=true needs a CHANNEL for the replacement" >&2
   exit 1
 fi
 # MUST match the app's CFBundleVersion, which build.sh derives with the same
@@ -137,7 +137,7 @@ shopt -s nullglob
 dmgs=("$DMG_DIR"/*.dmg)
 shopt -u nullglob
 if [[ ${#dmgs[@]} -eq 0 ]]; then
-  echo "error: no .dmg files found in '$DMG_DIR'" >&2
+  echo "error: no .dmg files in '$DMG_DIR'" >&2
   exit 1
 fi
 
@@ -232,7 +232,7 @@ if [[ "$ROLLING" == "true" ]]; then
   if [[ -n "$PREVIOUS_VERSION" ]]; then
     NEWEST=$(printf '%s\n%s\n' "$PREVIOUS_VERSION" "$COMPARISON_VERSION" | LC_ALL=C sort -V | tail -1)
     if [[ "$COMPARISON_VERSION" == "$PREVIOUS_VERSION" || "$NEWEST" != "$COMPARISON_VERSION" ]]; then
-      echo "appcast's ${CHANNEL} channel is already at ${PREVIOUS_VERSION}; refusing to publish ${COMPARISON_VERSION} over it"
+      echo "The ${CHANNEL} channel of the appcast is already at ${PREVIOUS_VERSION}. Not publishing ${COMPARISON_VERSION} over it"
       exit 0
     fi
   fi
@@ -260,7 +260,7 @@ fi
 # Sparkle with two entries for one release. (Sparkle picks one of a duplicated
 # version arbitrarily, so the wrong pick reports an invalid signature.)
 if grep -q "<sparkle:version>${COMPARISON_VERSION}</sparkle:version>" appcast.xml; then
-  echo "appcast already has an entry for ${VERSION}; not inserting a duplicate"
+  echo "The appcast already has an entry for ${VERSION}. Not adding a duplicate"
 else
   awk -v items_file="$ITEMS_FILE" '
     /<\/channel>/ {
