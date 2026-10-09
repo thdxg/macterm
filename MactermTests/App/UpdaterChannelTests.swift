@@ -399,6 +399,13 @@ struct UpdaterChannelTests {
         try runLibHelper("sparkle_comparison_version", version)
     }
 
+    @Test
+    func each_channel_says_what_following_it_gets() {
+        let summaries = UpdateChannel.allCases.map(\.summary)
+        #expect(Set(summaries).count == UpdateChannel.allCases.count, "the caption changes with the picker")
+        #expect(UpdateChannel.tip.summary.contains("not release-tested"))
+    }
+
     /// Runs a function from the real scripts/_lib.sh, so a test can never pass
     /// against a Swift reimplementation while the shipped script drifts.
     private func runLibHelper(_ function: String, _ argument: String) throws -> String {
