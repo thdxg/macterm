@@ -114,12 +114,12 @@ struct IntentPermissionGateTests {
         let gate = IntentPermissionGate.shared
         defer { gate.resetForTesting() }
         gate.resetForTesting()
-        var current = ShortcutsAccess.deny
-        gate.access = { current }
+        let current = LockedBox(ShortcutsAccess.deny)
+        gate.access = { current.value }
         gate.presentAlert = { true }
 
         #expect(throws: MactermIntentError.self) { try gate.authorize() }
-        current = .allow
+        current.mutate { $0 = .allow }
         try gate.authorize()
     }
 }

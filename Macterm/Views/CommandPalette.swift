@@ -9,6 +9,7 @@ import SwiftUI
 /// view inside the window cannot get the window-level fade and backdrop
 /// blur a panel like the quick terminal's gets for free, and a transition
 /// drawn in its place read as a slower fade, so it has none.
+@MainActor
 enum PaletteMotion {
     static var animation: Animation { .easeOut(duration: 0.12) }
     static var transition: BlurReplaceTransition { .blurReplace }
