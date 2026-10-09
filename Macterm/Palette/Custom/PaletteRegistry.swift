@@ -28,55 +28,62 @@ final class PaletteRegistry {
     }
 
     struct Entry: Identifiable, Equatable {
-        /// The folder's name: the installed palette's id.
+        /// The folder's name: the installed extension's id.
         let id: String
         let files: [File]
-        /// Each text file's contents, by path — everything but images, so
-        /// what would run can be read before installing.
+        /// Each text file's contents, by path — everything but images —
+        /// read once, so what Install writes is exactly what was validated.
         let texts: [String: String]
         let manifest: Result<ExtensionManifest, CustomPaletteError>
-        /// The palette as this build reads it, or why it can't.
-        let result: Result<CustomPalette, CustomPaletteError>
-        let header: CustomPaletteHeader?
+        /// Each palette in `palettes/`, by path, as this build reads it or
+        /// why it can't.
+        let palettes: [(path: String, result: Result<CustomPalette, CustomPaletteError>)]
 
         init(id: String, files: [File], texts: [String: String]) {
             self.id = id
             self.files = files
             self.texts = texts
-            let paletteText = texts[MactermExtension.paletteName] ?? ""
-            header = CustomPaletteFile.parseHeader(yaml: paletteText)
             if let manifestText = texts[MactermExtension.manifestName] {
-                do {
-                    manifest = try .success(ExtensionManifest.parse(yaml: manifestText))
-                } catch let error as CustomPaletteError {
-                    manifest = .failure(error)
-                } catch {
-                    manifest = .failure(.parse(underlying: error))
-                }
+                manifest = Self.read { try ExtensionManifest.parse(yaml: manifestText) }
             } else {
                 manifest = .failure(.invalid("no \(MactermExtension.manifestName)"))
             }
-            do {
-                result = try .success(CustomPalette(file: CustomPaletteFile.parse(yaml: paletteText), id: id))
-            } catch let error as CustomPaletteError {
-                result = .failure(error)
-            } catch {
-                result = .failure(.parse(underlying: error))
+            palettes = files.map(\.path).filter(MactermExtension.isPalette).map { path in
+                let paletteID = MactermExtension.paletteID(extensionID: id, path: path)
+                return (path, Self.read { try CustomPalette(file: CustomPaletteFile.parse(yaml: texts[path] ?? ""), id: paletteID) })
             }
         }
 
-        var palette: CustomPalette? { try? result.get() }
-        /// Why it can't be installed: its manifest or its palette doesn't
-        /// read in this build.
+        private static func read<T>(_ body: () throws -> T) -> Result<T, CustomPaletteError> {
+            do {
+                return try .success(body())
+            } catch let error as CustomPaletteError {
+                return .failure(error)
+            } catch {
+                return .failure(.parse(underlying: error))
+            }
+        }
+
+        static func == (lhs: Entry, rhs: Entry) -> Bool {
+            lhs.id == rhs.id && lhs.files == rhs.files && lhs.texts == rhs.texts
+        }
+
+        /// Why it can't be installed: its manifest or one of its palettes
+        /// doesn't read in this build, or it has no palette at all.
         var failure: CustomPaletteError? {
             if case let .failure(error) = manifest { return error }
-            if case let .failure(error) = result { return error }
+            for palette in palettes {
+                if case let .failure(error) = palette.result {
+                    return .invalid("\(palette.path): \(error.localizedDescription)")
+                }
+            }
+            if palettes.isEmpty { return .invalid("no palettes in \(MactermExtension.palettesFolder)/") }
             return nil
         }
 
-        var name: String { palette?.name ?? header?.name ?? id }
-        var icon: String { palette?.icon ?? header?.icon ?? CustomPalette.defaultIcon }
-        var description: String? { palette?.description ?? header?.description }
+        var name: String { (try? manifest.get())?.name ?? id }
+        var icon: String { (try? manifest.get())?.icon ?? MactermExtension.defaultIcon }
+        var description: String? { try? manifest.get().description }
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
         var readme: String? { texts[MactermExtension.readmeName] }
         /// Its screenshots' paths, in name order.
@@ -166,7 +173,7 @@ final class PaletteRegistry {
     }
 
     /// A Git tree of `extensions/`, as the extensions it holds: each folder
-    /// with a `palette.yaml`, by id, with its files. Files at the top
+    /// with an `extension.yaml`, by id, with its files. Files at the top
     /// (the folder's README) belong to no extension.
     nonisolated static func parseTree(_ data: Data) throws -> [(id: String, files: [File])] {
         struct Tree: Decodable {
@@ -186,7 +193,7 @@ final class PaletteRegistry {
             byID[parts[0], default: []].append(File(path: parts[1], size: item.size ?? 0, executable: item.mode == "100755"))
         }
         return byID
-            .filter { _, files in files.contains { $0.path == MactermExtension.paletteName } }
+            .filter { _, files in files.contains { $0.path == MactermExtension.manifestName } }
             .map { (id: $0.key, files: $0.value.sorted { $0.path < $1.path }) }
             .sorted { $0.id < $1.id }
     }
@@ -267,10 +274,7 @@ final class PaletteRegistry {
         if let failure = entry.failure { throw InstallError.unreadable(failure.localizedDescription) }
         let fm = FileManager.default
         let destination = store.extensionsURL.appendingPathComponent(entry.id, isDirectory: true)
-        let personal = ["yaml", "yml"].map { store.directoryURL.appendingPathComponent("\(entry.id).\($0)") }
-        if store.entry(id: entry.id) != nil || fm.fileExists(atPath: destination.path) || personal
-            .contains(where: { fm.fileExists(atPath: $0.path) })
-        {
+        if store.installedExtension(id: entry.id) != nil || fm.fileExists(atPath: destination.path) {
             throw InstallError.alreadyInstalled(entry.id)
         }
         var contents: [String: Data] = entry.texts.mapValues { Data($0.utf8) }
@@ -319,12 +323,12 @@ final class PaletteRegistry {
 /// extensions and have no card.
 enum ExtensionGalleryItem: Identifiable, Equatable {
     /// `registry` is the repository's entry of the same id, when there is one.
-    case installed(CustomPaletteStore.Entry, registry: PaletteRegistry.Entry?)
+    case installed(CustomPaletteStore.InstalledExtension, registry: PaletteRegistry.Entry?)
     case available(PaletteRegistry.Entry)
 
     var id: String {
         switch self {
-        case let .installed(entry, _): "installed:\(entry.id)"
+        case let .installed(installed, _): "installed:\(installed.id)"
         case let .available(entry): "available:\(entry.id)"
         }
     }
@@ -332,7 +336,7 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
     /// The extension's id, installed or not.
     var extensionID: String {
         switch self {
-        case let .installed(entry, _): entry.id
+        case let .installed(installed, _): installed.id
         case let .available(entry): entry.id
         }
     }
@@ -344,15 +348,14 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
 
     var title: String {
         switch self {
-        case let .installed(entry, _): entry.pill.title
+        case let .installed(installed, _): installed.name
         case let .available(entry): entry.name
         }
     }
 
     var summary: String {
         switch self {
-        case let .installed(entry, _): entry.failure?.localizedDescription ?? entry.description
-            ?? (entry.extensionDirectory ?? entry.fileURL).lastPathComponent
+        case let .installed(installed, _): installed.problem ?? installed.description ?? installed.id
         case let .available(entry): entry.failure.map { "Can't be read by this version: \($0.localizedDescription)" }
             ?? entry.description ?? entry.readme.flatMap(MactermExtension.summary(readme:)) ?? ""
         }
@@ -360,16 +363,14 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
 
     var icon: String {
         switch self {
-        case let .installed(entry, _): entry.pill.systemImage
+        case let .installed(installed, _): installed.icon
         case let .available(entry): entry.icon
         }
     }
 
-    /// Who maintains it: an extension's `authors:`; none for a palette file
-    /// of the user's own.
     var authors: [String] {
         switch self {
-        case let .installed(entry, _): entry.authors
+        case let .installed(installed, _): installed.authors
         case let .available(entry): entry.authors
         }
     }
@@ -378,7 +379,7 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
     /// once each — by name, or ranked by `query` (the app's one search, as
     /// every Settings list).
     static func items(
-        installed: [CustomPaletteStore.Entry],
+        installed: [CustomPaletteStore.InstalledExtension],
         registry: [PaletteRegistry.Entry],
         query: String
     ) -> [ExtensionGalleryItem] {

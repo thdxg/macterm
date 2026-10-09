@@ -14,7 +14,7 @@ struct ExtensionsSettings: View {
 
     @State private var query = ""
     @State private var installingIDs: Set<String> = []
-    @State private var uninstalling: CustomPaletteStore.Entry?
+    @State private var uninstalling: CustomPaletteStore.InstalledExtension?
     @State private var problem: String?
 
     private let columns = [GridItem(.adaptive(minimum: 220, maximum: 360), spacing: 12, alignment: .top)]
@@ -22,7 +22,7 @@ struct ExtensionsSettings: View {
     var body: some View {
         let registry = appState.paletteRegistry
         let items = ExtensionGalleryItem.items(
-            installed: appState.customPalettes.entries,
+            installed: appState.customPalettes.extensions,
             registry: registry.entries,
             query: query
         )
@@ -86,21 +86,20 @@ struct ExtensionsSettings: View {
             registry.refresh()
         }
         .confirmationDialog(
-            "Uninstall \(uninstalling?.pill.title ?? "")?",
+            "Uninstall \(uninstalling?.name ?? "")?",
             isPresented: Binding(get: { uninstalling != nil }, set: { if !$0 { uninstalling = nil } }),
             presenting: uninstalling
-        ) { entry in
+        ) { installed in
             Button("Move to Trash", role: .destructive) {
                 do {
-                    try appState.customPalettes.uninstall(id: entry.id)
+                    try appState.customPalettes.uninstall(extensionID: installed.id)
                     problem = nil
                 } catch {
-                    problem = "Couldn't uninstall \(entry.pill.title): \(error.localizedDescription)"
+                    problem = "Couldn't uninstall \(installed.name): \(error.localizedDescription)"
                 }
             }
-        } message: { entry in
-            let name = (entry.extensionDirectory ?? entry.fileURL).lastPathComponent
-            Text("\(name) goes to the Trash, and its screens leave the command palette.")
+        } message: { installed in
+            Text("Its folder, \(installed.id), goes to the Trash, and its palettes leave the command palette.")
         }
     }
 
@@ -183,7 +182,7 @@ private struct ExtensionCard: View {
     let readme: URL?
     let isInstalling: Bool
     let install: (PaletteRegistry.Entry) -> Void
-    let uninstall: (CustomPaletteStore.Entry) -> Void
+    let uninstall: (CustomPaletteStore.InstalledExtension) -> Void
 
     var body: some View {
         GroupBox {
@@ -220,14 +219,14 @@ private struct ExtensionCard: View {
 
     @ViewBuilder private var button: some View {
         switch item {
-        case let .installed(entry, _):
+        case let .installed(installed, _):
             HStack(spacing: 6) {
-                if let failure = entry.failure {
+                if let problem = installed.problem {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(MactermTheme.failure)
-                        .help("\(entry.fileURL.lastPathComponent): \(failure.localizedDescription)")
+                        .help(problem)
                 }
-                Button { uninstall(entry) } label: {
+                Button { uninstall(installed) } label: {
                     ButtonLabel(title: "Installed", systemImage: "checkmark.circle.fill")
                 }
                 .buttonStyle(.bordered)
