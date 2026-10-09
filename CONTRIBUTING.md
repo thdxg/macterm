@@ -1,72 +1,76 @@
 # Contributing to Macterm
 
-Thanks for your interest in contributing! Macterm is a macOS terminal emulator built with SwiftUI and libghostty.
+Thank you for your interest in Macterm. Macterm is a macOS terminal emulator. It uses SwiftUI and libghostty.
 
-This guide is for working on the app. If you want to contribute an extension, see the [`extensions`](extensions/) folder.
+This guide is for work on the app. To contribute an extension, see the [`extensions`](extensions/) folder.
 
 ## Setup
 
-Building requires macOS 26+ and a full install of Xcode 26 (the Command Line Tools alone aren't enough — `xcodebuild` needs the Xcode app to build the macOS app target, and the code compiles against macOS 26 SDK APIs behind `#available` checks). The shipped app itself runs on macOS 14+.
+You need macOS 26 or later and a full installation of Xcode 26. The Command Line Tools are not enough. `xcodebuild` needs the Xcode app to build the macOS app target. The code uses macOS 26 SDK APIs behind `#available` checks. The shipped app runs on macOS 14 or later.
 
-CI compiles on one pinned Xcode (`.github/actions/select-xcode`), so a green run names a toolchain rather than whatever the runner image defaulted to that week. Any Xcode 26 is still fine locally — but note that CI therefore won't catch a failure specific to an older 26.x than the pin, which is how [#340](https://github.com/thdxg/macterm/pull/340) reached main.
+CI builds with one pinned Xcode version (`.github/actions/select-xcode`). A green CI run therefore names a known toolchain. Any Xcode 26 works on your Mac. CI does not catch a failure that only occurs with an Xcode 26.x older than the pin. That is how [#340](https://github.com/thdxg/macterm/pull/340) reached main.
+
+Install the tools:
 
 ```bash
 mise install
 ```
 
+Download the build files:
+
 ```bash
 mise run setup
 ```
 
-`mise install` installs the pinned toolchain (`gh`, `swiftformat`, `swiftlint`, `xcodegen`, `xcbeautify`). `mise run setup` downloads the pre-built `GhosttyKit.xcframework` and the bundled ghostty resources — they're gitignored build artifacts, so **every fresh checkout, including a git worktree, has to run it** before it can build.
+`mise install` installs the pinned tools: `gh`, `swiftformat`, `swiftlint`, `xcodegen` and `xcbeautify`. `mise run setup` downloads the pre-built `GhosttyKit.xcframework` and the bundled ghostty resources. Git ignores these build files. **Run `mise run setup` in every new checkout, including a git worktree.** The app does not build without it.
 
-See [CLAUDE.md](CLAUDE.md) for an in-depth tour of the codebase and architecture.
+For a tour of the code and the architecture, read [CLAUDE.md](CLAUDE.md).
 
-## Running the App
+## Running the app
 
 ```bash
 mise run run
 ```
 
-Builds and launches the Debug app (formats and lints first). Debug builds use their own bundle ID and Application Support directory, so they never touch your release install's data.
+This task formats and lints the code. Then it builds and starts the Debug app. Debug builds have their own bundle ID and their own Application Support folder. They never change the data of your release install.
 
 ```bash
 mise run logs
 ```
 
-Streams live logs from the Debug app. `--release` tails the release app instead; `--last 30m` shows past logs instead of streaming.
+This task streams live logs from the Debug app. Add `--release` to read the logs of the release app. Add `--last 30m` to read past logs instead of a live stream.
 
 ## Tasks
 
-Every task is a `mise run <name>`:
+Run each task with `mise run <name>`:
 
 | Task | What it does |
 | --- | --- |
-| `setup` | Download GhosttyKit + bundled ghostty resources |
-| `run` | Build and launch the Debug app |
-| `logs` | Stream live logs from the Debug app |
-| `format` | Auto-fix formatting with swiftformat (`--check` verifies only) |
-| `lint` | swiftlint |
-| `test` | Swift unit test suite |
-| `e2e` | Build the Debug app and run the end-to-end suite against it |
-| `build` | Release build + DMG |
-| `install` | Build the release app and install it to `/Applications` |
-| `bench` | Release build + window-state resource benchmark |
-| `clean` | Remove `build/` and the generated `Macterm.xcodeproj` |
+| `setup` | Downloads GhosttyKit and the bundled ghostty resources |
+| `run` | Builds and starts the Debug app |
+| `logs` | Streams live logs from the Debug app |
+| `format` | Fixes formatting with swiftformat (`--check` only checks) |
+| `lint` | Runs swiftlint |
+| `test` | Runs the Swift unit tests |
+| `e2e` | Builds the Debug app and runs the end-to-end tests against it |
+| `build` | Makes a release build and a DMG |
+| `install` | Builds the release app and installs it in `/Applications` |
+| `bench` | Makes a release build and measures the resources that each window state uses |
+| `clean` | Removes `build/` and the generated `Macterm.xcodeproj` |
 
 ### The `--verbose` flag
 
-Every task takes `-v` / `--verbose`. Without it, the task runs behind a spinner that hides output and prints it **only on failure** — fine when you expect a pass, useless when you're debugging. With it, the underlying script runs directly and everything streams inline:
+Every task accepts `-v` and `--verbose`. Without the flag, a task shows a spinner and hides its output. It prints the output only when the task fails. With the flag, the task streams all of its output as it runs:
 
 ```bash
 mise run test --verbose
 ```
 
-Reach for it whenever you want the actual `xcodebuild` / swiftlint / pytest output, or when a task fails and you want to watch the next attempt. CI always runs the verbose form.
+Use the flag when you want the `xcodebuild`, swiftlint or pytest output. Use it also after a failure, to watch the next attempt. CI always uses the verbose form.
 
-## Before You Commit
+## Before you commit
 
-Run the same checks CI runs:
+Run the checks that CI runs:
 
 ```bash
 mise run format
@@ -80,28 +84,29 @@ mise run lint
 mise run test
 ```
 
-If any of these fail in CI, your PR will be blocked. Running them locally first keeps the loop fast. (`mise run run` already runs format and lint; `mise run build` also runs the tests.)
+CI blocks your PR when one of these checks fails. Run them on your Mac first to keep the loop fast. `mise run run` already runs format and lint. `mise run build` also runs the tests.
 
 ## Tests
 
-- **Unit tests** (`MactermTests/`) — `mise run test`. One `XxxTests.swift` per production type, mirroring the source path. They run hosted inside the Debug app and cover the model, persistence, palette, and hotkey logic; SwiftUI views and libghostty bindings aren't unit-tested.
-- **End-to-end tests** (`e2e/`) — `mise run e2e`. A pytest suite that launches the real GUI app hermetically and drives it through the bundled `macterm` CLI. Needs `python3` (the script bootstraps its own venv under `build/`). Slower than the unit suite — the app takes ~15–30s to come up — so it's not part of the pre-commit loop, but run it when you touch panes, sessions, layouts, or the control socket.
+- **Unit tests** are in `MactermTests/`. Run them with `mise run test`. Each production type has one `XxxTests.swift` file, in the same path as the source. The tests run inside the Debug app. They cover the model, persistence, palette and hotkey logic. They do not cover SwiftUI views or the libghostty bindings.
+- **End-to-end tests** are in `e2e/`. Run them with `mise run e2e`. This pytest suite starts the real app in an isolated environment. It controls the app with the bundled `macterm` CLI. You need `python3`. The script makes its own virtual environment in `build/`. The app takes about 15 to 30 seconds to start, so these tests are slower than the unit tests. Do not run them before every commit. Run them when you change panes, sessions, layouts or the control socket.
 
-## Pull Requests
+## Pull requests
 
-- Keep changes focused. Split unrelated work into separate commits or PRs.
-- Commit subjects use the form `<type>: <description>` (e.g. `fix: option key reaches terminal programs as alt modifier`). Types: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`, `style`, `build`, `ci`, `revert`.
-- Don't add AI sign-off trailers (`Co-Authored-By: Claude`, etc.) to commits.
-- **PRs merge via squash**, so write the PR title as a good squash subject.
-- If your PR conflicts with `main`, **merge `main` into your branch** — don't rebase the branch onto `main`.
-- `area:*` labels are applied automatically from the files you touch. A maintainer adds the type label (`enhancement`, `bug`, `chore`, `documentation`) that decides which section of the release notes your PR lands in.
-- The Xcode project is generated by xcodegen from [`project.yml`](project.yml). Don't edit `Macterm.xcodeproj/` directly — it's gitignored and your changes will be wiped on the next regeneration.
+- Keep each change small and focused. Put unrelated work in separate commits or separate PRs.
+- Write each commit subject as `<type>: <description>`. For example: `fix: option key reaches terminal programs as alt modifier`. The types are `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`, `style`, `build`, `ci` and `revert`.
+- Do not add AI sign-off lines to commits, such as `Co-Authored-By: Claude`.
+- **PRs merge by squash.** Write the PR title as a good squash subject.
+- If your PR conflicts with `main`, **merge `main` into your branch**. Do not rebase the branch onto `main`.
+- A bot adds the `area:*` labels from the files that you change. A maintainer adds the type label: `enhancement`, `bug`, `chore` or `documentation`. The type label decides the section of the release notes for your PR.
+- xcodegen generates the Xcode project from [`project.yml`](project.yml). Do not edit `Macterm.xcodeproj/`. Git ignores it, and the next generation removes your changes.
 
 ## Docs
 
-- `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md) — edit `AGENTS.md`.
-- User-facing docs live in [`website/docs/pages/`](website/docs/pages) as Markdown, one file per page. `cd website && bun install && bun run dev` builds and serves the site locally (needs [Bun](https://bun.sh) and [Caddy](https://caddyserver.com)).
+- `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md). Edit `AGENTS.md`.
+- The user docs are in [`website/docs/pages/`](website/docs/pages). Each page is one Markdown file. To build and serve the site on your Mac, run `cd website && bun install && bun run dev`. You need [Bun](https://bun.sh) and [Caddy](https://caddyserver.com).
+- Write all text in ASD-STE100 style. Read [`WRITING.md`](WRITING.md) for the Macterm word list.
 
-## Reporting Issues
+## Reporting issues
 
-File issues at https://github.com/thdxg/macterm/issues with steps to reproduce and your macOS version. `mise run logs --last 30m` is a good way to grab relevant log output.
+Report issues at https://github.com/thdxg/macterm/issues. Include the steps to reproduce the problem and your macOS version. Run `mise run logs --last 30m` to get the related log output.
