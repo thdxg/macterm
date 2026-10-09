@@ -38,44 +38,43 @@
 
   <script type="application/ld+json">{{JSONLD}}</script>
 </head>
-<body class="ec">
-<div class="ec-page">
+<body class="ec ec-docs">
 
-  <header class="ec-header">
-    <a class="ec-brand" href="/"><img src="/img/icon-180.png" width="20" height="20" alt="" />Macterm</a>
-    <!-- Phones only: folds the sidebar away (site.js's docsMenu). -->
-    <button type="button" class="ec-menu-btn" aria-controls="docs-nav" aria-expanded="false" aria-label="Pages">
-      <svg class="ec-menu-open" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/></svg>
-      <svg class="ec-menu-close" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+  <!-- Phones only: the brand and the button that opens the index (site.js's docsMenu). -->
+  <div class="ec-docs-bar">
+    <a class="ec-docs-brand" href="/">Macterm</a>
+    <button type="button" class="ec-menu-btn" aria-controls="docs-index" aria-expanded="false" aria-label="Pages">
+      <svg class="ec-menu-open" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7h14M3 13h14"/></svg>
+      <svg class="ec-menu-close" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>
     </button>
-  </header>
-
-  <div class="ec-grid ec-docs">
-    <!-- sidebar (generated: links to every page, current one marked) -->
-    <nav class="ec-sidebar" id="docs-nav" aria-label="Docs">
-<!-- SIDEBAR -->
-    </nav>
-
-    <main class="ec-docs-main">
-      <!-- content (rendered from this page's Markdown) -->
-      <article class="ec-prose">
-<!-- CONTENT -->
-      </article>
-<!-- PAGENAV -->
-    </main>
   </div>
 
-  <footer class="ec-footer">
-    <span>© 2026 Macterm</span>
-    <div class="ec-footer-links">
+  <!-- The index, pinned to the left edge (generated: links to every page, current one marked) -->
+  <nav class="ec-docs-side" id="docs-index" aria-label="Docs">
+    <a class="ec-docs-brand" href="/">Macterm</a>
+    <div class="ec-docs-nav">
+<!-- SIDEBAR -->
+    </div>
+    <div class="ec-docs-side-foot">
       <a href="/">Home</a>
       <a href="https://github.com/thdxg/macterm">GitHub ↗</a>
       <a href="https://github.com/thdxg/macterm/releases">Releases ↗</a>
-      <a href="https://ghostty.org">Ghostty ↗</a>
     </div>
-  </footer>
+  </nav>
 
-</div>
+  <!-- The page, centered in the window on desktops -->
+  <main class="ec-docs-main">
+    <!-- content (rendered from this page's Markdown) -->
+    <article class="ec-prose">
+<!-- CONTENT -->
+    </article>
+<!-- PAGENAV -->
+  </main>
+
+  <!-- Desktops: the page fades out under these as it scrolls (site.js's docsFades) -->
+  <div class="ec-docs-fade ec-docs-fade--top" aria-hidden="true"></div>
+  <div class="ec-docs-fade ec-docs-fade--bottom" aria-hidden="true"></div>
+
   <script src="/site.js"></script>
 </body>
 </html>

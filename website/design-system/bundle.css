@@ -1,237 +1,408 @@
 /* eyesclosed web — components. Load after tokens.css. Every value is a token.
-   One grid everywhere: a label column (width-label) and a text column (width-text),
-   width-gutter apart. Open Sans for everything; Fira Code only inside code.
-   Two weights only: 400 and 500. */
+   One column of light, near-white text on a near-black page. Beside it on
+   desktops: a Stage showing the product itself, or a Split pane where the
+   content scrolls while the hero holds still. Open Sans; Fira Code only for
+   code. Two weights only: 400 and 500. */
 @import url("https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400..500;1,400..500&family=Fira+Code:wght@400..500&display=swap");
 
 /* ── base: put .ec on <body> ─────────────────────────────────────────── */
 .ec {
   margin: 0;
-  background: var(--page);
-  color: var(--ink);
+  background: var(--bg);
+  color: var(--fg);
   color-scheme: dark;
   font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 26px;
+  /* Fluid like the page: 16px on a phone, 18px at 1024, 20px at 1440 and up. */
+  font-size: clamp(16px, 0.48vw + 13px, 20px); line-height: 1.55; font-weight: 400; letter-spacing: -0.005em;
+  /* The stage's width on desktops: everything to the right of the text column. */
+  --ec-stage-w: max(30vw, calc(100vw - 2 * var(--space-16) - 2 * var(--inset-stage) - var(--width-text)));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "tnum" 0;
 }
-.ec ::selection { background: var(--selection-bg); color: var(--selection-ink); }
-.ec :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: 2px; }
-.ec code { font-family: var(--font-mono); font-size: 0.875em; color: var(--code-ink); }
+.ec ::selection { background: var(--shade); color: var(--fg); }
+.ec :focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; border-radius: 2px; }
+/* Zero specificity, so every component's own spacing and weights win. */
+:where(.ec) :where(h1, h2, h3, p, figure) { margin: 0; }
+:where(.ec) :where(h1, h2, h3) { font-size: inherit; line-height: inherit; font-weight: 500; }
+.ec code { font-family: var(--font-mono); font-size: 0.85em; letter-spacing: 0; color: var(--fg); }
 .ec img, .ec video { max-width: 100%; height: auto; }
-/* Zero specificity, so a component's own spacing (Prose's `> * + *`) wins. */
-:where(.ec) :where(h1, h2, h3, p) { margin: 0; }
+.ec strong { font-weight: 500; color: var(--fg); }
 
-/* ── Page + Section: the grid ────────────────────────────────────────── */
-.ec-page { box-sizing: border-box; width: 100%; max-width: calc(var(--width-page) + 2 * var(--space-5)); margin: 0 auto; padding-inline: var(--space-5); }
-.ec-grid, .ec-section, .ec-header, .ec-footer {
-  display: grid;
-  grid-template-columns: var(--width-label) minmax(0, var(--width-text));
-  column-gap: var(--width-gutter);
+/* ── Page: the whole window ─────────────────────────────────────────
+   Text runs in a left-aligned column; on desktops the Stage fills everything
+   to its right with the product itself. */
+.ec-page { box-sizing: border-box; width: 100%; padding: 0 var(--space-6); }
+@media (min-width: 640px) { .ec-page { padding-inline: var(--space-10); } }
+@media (min-width: 1024px) { .ec-page { padding-inline: var(--space-16); } }
+.ec-page > * { max-width: var(--width-text); }
+
+/* ── Stage: the product, pinned beside the text ──────────────────────
+   Each section may hold one .ec-scene. Inline by default (phones, tablets,
+   no JavaScript); once the script adds .ec-staged to the root, desktops pin
+   the active scene into a frame filling the window's right side. */
+.ec-scene {
+  box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  padding: var(--space-6); border-radius: var(--radius-md); background: var(--lid); overflow: hidden;
 }
-.ec-section { padding-block: var(--space-12); }
-.ec-section + .ec-section { padding-top: 0; }
-.ec-section-label { grid-column: 1; font-size: 14px; line-height: 26px; font-weight: 400; color: var(--ink-faint); }
-.ec-section-body { grid-column: 2; min-width: 0; display: flex; flex-direction: column; gap: var(--space-5); }
-.ec-section-body > h2, .ec-section-body > h3 { font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink-heading); }
-.ec-section-body > p { color: var(--ink); text-wrap: pretty; }
-.ec-section-body > .ec-muted { color: var(--ink-muted); }
-.ec-span { grid-column: 1 / -1; }
+.ec-stage { display: none; }
+.ec-hero .ec-scene { margin-top: var(--space-10); }
+@media (min-width: 1024px) {
+  .ec-staged .ec-page { padding-right: calc(var(--ec-stage-w) + var(--space-16)); }
+  .ec-staged .ec-stage {
+    display: block; position: fixed; top: var(--inset-stage); right: var(--inset-stage); bottom: var(--inset-stage);
+    width: var(--ec-stage-w); border-radius: var(--radius-md); background: var(--lid);
+  }
+  .ec-staged .ec-scene {
+    position: fixed; top: var(--inset-stage); right: var(--inset-stage); bottom: var(--inset-stage);
+    width: var(--ec-stage-w); max-width: none; margin: 0; padding: var(--space-10); background: transparent;
+    opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0s 0.3s;
+  }
+  .ec-staged .ec-scene.is-active { opacity: 1; visibility: visible; transition: opacity 0.3s; }
+}
 
 /* ── SiteHeader ──────────────────────────────────────────────────────── */
-.ec-header { align-items: center; padding-block: var(--space-8); }
-.ec-brand { grid-column: 1; display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; color: var(--ink-bright); text-decoration: none; font-size: 15px; line-height: 20px; font-weight: 500; letter-spacing: -0.01em; }
-.ec-brand img, .ec-brand svg { width: 20px; height: 20px; display: block; }
-.ec-nav { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); font-size: 14px; line-height: 20px; }
-.ec-nav a { color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
-.ec-nav a:hover, .ec-nav a[aria-current="page"] { color: var(--ink-bright); }
+.ec-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); padding-top: var(--space-10); }
+@media (min-width: 1024px) { .ec-header { padding-top: var(--space-14); } }
+.ec-brand { display: inline-flex; align-items: center; gap: var(--space-2); margin-right: var(--space-4); color: var(--fg); text-decoration: none; font-weight: 500; }
+.ec-brand img, .ec-brand svg { width: 22px; height: 22px; display: block; align-self: center; }
+.ec-nav { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-6); font-size: 14px; line-height: 20px; font-weight: 400; letter-spacing: 0; }
+.ec-nav a { color: var(--fg-muted); text-decoration: none; transition: color 0.2s; }
+.ec-nav a:hover, .ec-nav a[aria-current="page"] { color: var(--fg); }
 
-/* ── Hero ────────────────────────────────────────────────────────────── */
-.ec-hero { padding-block: var(--space-24) var(--space-12); }
-@media (min-width: 720px) { .ec-hero { padding-top: var(--space-40); } }
-.ec-hero > * { grid-column: 2; }
-.ec-hero h1 { font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.03em; color: var(--ink-bright); }
-.ec-hero-lede { margin-top: var(--space-4) !important; font-size: 19px; line-height: 30px; letter-spacing: -0.01em; color: var(--ink-muted); text-wrap: pretty; }
-.ec-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-8); }
+/* ── Hero: one statement ─────────────────────────────────────────────── */
+.ec-hero { margin: 160px 0 120px; }
+@media (min-width: 1024px) { .ec-hero { margin: var(--space-70) 0 var(--space-50); } }
+.ec-hero h1 { font-size: clamp(24px, 0.6vw + 21px, 30px); line-height: 1.2; font-weight: 500; letter-spacing: -0.02em; color: var(--fg); text-wrap: balance; }
+.ec-hero h1 .ec-quiet { color: var(--fg-muted); }
+.ec-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-top: var(--space-10); }
 .ec-hero .ec-code { margin-top: var(--space-6); }
 
+/* ── Section: a muted label, then text ───────────────────────────────── */
+.ec-section { margin: var(--space-14) 0; display: flex; flex-direction: column; gap: var(--space-6); }
+.ec-label { color: var(--fg-muted); font-weight: 400; }
+.ec-section > h2:not(.ec-label), .ec-section > h3 { font-weight: 500; color: var(--fg); }
+.ec-section > h2:not(.ec-label) + p, .ec-section > h3 + p { margin-top: calc(var(--space-2) - var(--space-6)); }
+.ec-section p { text-wrap: pretty; }
+
 /* ── Link ────────────────────────────────────────────────────────────── */
-.ec-link, .ec-prose a, .ec-section-body p a {
-  color: var(--link);
-  text-decoration: underline; text-decoration-color: var(--link-line);
-  text-decoration-thickness: 1px; text-underline-offset: 3px;
-  transition: color 0.15s, text-decoration-color 0.15s;
+.ec-link, .ec-section p a, .ec-prose a {
+  color: var(--fg);
+  text-decoration: underline; text-decoration-color: var(--fg-muted);
+  text-decoration-thickness: 1px; text-underline-offset: 4px;
+  transition: color 0.2s, text-decoration-color 0.2s;
 }
-.ec-link:hover, .ec-prose a:hover, .ec-section-body p a:hover { color: var(--ink-bright); text-decoration-color: currentColor; }
-.ec-link--quiet { color: var(--ink-muted); text-decoration: none; }
-.ec-link--quiet:hover { color: var(--ink-bright); }
+.ec-link:hover, .ec-section p a:hover, .ec-prose a:hover { color: var(--fg); text-decoration-color: var(--fg); }
+.ec-link--plain { text-decoration: none; }
+.ec-link--plain:hover { text-decoration: underline; }
 
 /* ── Button ──────────────────────────────────────────────────────────── */
 .ec-btn {
   box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-2);
-  height: 36px; padding: 0 var(--space-4);
-  border: 1px solid transparent; border-radius: var(--radius-pill);
-  background: transparent; color: var(--ink-muted);
-  font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 500;
+  height: 40px; padding: 0 var(--space-6);
+  border: 1px solid transparent; border-radius: var(--radius-lg);
+  background: transparent; color: var(--fg);
+  font: inherit; font-size: 16px; line-height: 24px; font-weight: 400; letter-spacing: 0;
   text-decoration: none; white-space: nowrap; cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity 0.2s;
 }
 /* Hover fades the whole button; its color, fill and border never change. */
 .ec-btn:hover { opacity: 0.7; }
-.ec-btn--primary { background: var(--ink-bright); color: var(--on-bright); }
-.ec-btn--outline { border-color: var(--control-edge); color: var(--ink); }
-.ec-btn:disabled, .ec-btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+.ec-btn--primary { background: var(--fg); color: var(--bg); }
+.ec-btn--outline { border-color: var(--lid); }
+.ec-btn:disabled, .ec-btn[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
+
+/* ── Callout: one rounded line that points somewhere ─────────────────── */
+.ec-callout {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4) var(--space-6) var(--space-4) var(--space-4);
+  border: 1px solid var(--lid); border-radius: var(--radius-lg);
+  color: var(--fg); text-decoration: none; transition: border-color 0.2s;
+}
+.ec-callout:hover { border-color: var(--shade); }
+.ec-callout img, .ec-callout svg { width: 56px; height: 56px; flex: none; border-radius: var(--radius-md); }
+.ec-callout-text { flex: 1 1 auto; min-width: 0; }
+.ec-callout-action { flex: none; color: var(--fg); font-weight: 500; }
+.ec-callout-text { color: var(--fg-muted); }
+@media (max-width: 560px) {
+  .ec-callout { flex-wrap: wrap; row-gap: var(--space-1); }
+  .ec-callout-text { flex-basis: calc(100% - 56px - var(--space-4)); }
+  .ec-callout-action { flex-basis: 100%; }
+  .ec-callout:has(> img, > svg) .ec-callout-action { padding-left: calc(56px + var(--space-4)); }
+}
+
+/* ── Steps: a short numbered list ────────────────────────────────────── */
+.ec-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); counter-reset: ec-step; }
+.ec-steps li { display: flex; gap: var(--space-4); counter-increment: ec-step; }
+.ec-steps li::before { content: counter(ec-step); min-width: 1ch; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 
 /* ── EntryList ───────────────────────────────────────────────────────── */
-.ec-entries { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
-.ec-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); }
-.ec-entry-title { color: var(--ink-bright); text-decoration: none; font-weight: 500; transition: color 0.15s; }
-a.ec-entry-title:hover { color: var(--link); }
-.ec-entry-meta { grid-column: 2; grid-row: 1; font-size: 14px; color: var(--ink-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ec-entry-desc { grid-column: 1 / -1; color: var(--ink-muted); text-wrap: pretty; }
+.ec-entries { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-6); }
+.ec-entry { display: flex; flex-direction: column; }
+.ec-entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4); }
+.ec-entry-title { font-weight: 500; color: var(--fg); text-decoration: none; text-underline-offset: 4px; }
+a.ec-entry-title:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+.ec-entry-meta { flex: none; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.ec-entry-desc { color: var(--fg); }
+.ec-entries--media { gap: var(--space-10); }
+.ec-entries--media .ec-entry { flex-direction: row; gap: var(--space-6); }
+.ec .ec-entry-media { flex: none; width: 128px; height: 128px; object-fit: cover; border-radius: var(--radius-sm); background: var(--lid); }
+.ec-entries--media .ec-entry-desc { font-size: 15px; line-height: 24px; letter-spacing: 0; margin-top: var(--space-1); }
+@media (max-width: 560px) { .ec-entries--media .ec-entry { flex-direction: column; gap: var(--space-4); } }
 
 /* ── Figure ──────────────────────────────────────────────────────────── */
-.ec-figure { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
-.ec-figure > img, .ec-figure > video, .ec-figure > svg { display: block; width: 100%; height: auto; border-radius: var(--radius-md); background: var(--surface); }
-.ec-figure figcaption { font-size: 12px; line-height: 18px; color: var(--ink-faint); }
+.ec-figure { display: flex; flex-direction: column; gap: var(--space-2); }
+.ec-figure > img, .ec-figure > video, .ec-figure > svg { display: block; width: 100%; height: auto; border-radius: var(--radius-md); background: var(--lid); }
+.ec-figure figcaption { font-size: 14px; line-height: 20px; font-weight: 400; letter-spacing: 0; color: var(--fg-muted); }
 
 /* ── CodeBlock (the only mono) ───────────────────────────────────────── */
 .ec-code {
-  position: relative; margin: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--ink);
-  font-family: var(--font-mono); font-size: 14px; line-height: 22px; font-weight: 400;
+  position: relative; border-radius: var(--radius-sm); background: var(--lid); color: var(--fg);
+  font-family: var(--font-mono); font-size: 14px; line-height: 22px; font-weight: 400; letter-spacing: 0;
 }
-.ec-code pre { margin: 0; padding: var(--space-3) calc(var(--space-4) + 28px) var(--space-3) var(--space-4); overflow-x: auto; scrollbar-width: thin; }
+.ec-code pre { margin: 0; padding: var(--space-4) calc(var(--space-4) + 28px) var(--space-4) var(--space-4); overflow-x: auto; scrollbar-width: thin; }
 .ec-code code { font-size: inherit; color: inherit; }
-.ec-code-caption {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  padding: 4px var(--space-2) 0 var(--space-4);
-  font-size: 12px; line-height: 28px; color: var(--ink-muted);
-}
+.ec-code-caption { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: 6px var(--space-2) 0 var(--space-4); font-size: 13px; line-height: 28px; color: var(--fg-muted); }
 .ec-code-caption ~ pre { padding-top: var(--space-1); padding-right: var(--space-4); }
-.ec-copy {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm);
-  background: transparent; color: var(--ink-muted); cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-.ec-copy:hover { color: var(--ink-bright); background: var(--surface-hover); }
+.ec-copy { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted); cursor: pointer; transition: color 0.2s, background 0.2s; }
+.ec-copy:hover { color: var(--fg); background: var(--shade); }
 .ec-copy svg { width: 14px; height: 14px; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; }
-.ec-code > .ec-copy { position: absolute; top: 9px; right: var(--space-2); }
-.ec-code .prompt { color: var(--ink-ghost); user-select: none; }
+/* After a copy the script marks the button (data-copied) for 1.5s: the copy
+   glyph gives way to a check in the same stroke. */
+.ec-copy .ec-copied-glyph { display: none; stroke-linecap: round; stroke-linejoin: round; }
+.ec-copy[data-copied] .ec-copy-glyph { display: none; }
+.ec-copy[data-copied] .ec-copied-glyph { display: block; }
+.ec-code > .ec-copy { position: absolute; top: 13px; right: var(--space-2); }
+.ec-code .prompt { color: var(--haze); user-select: none; }
 
-/* syntax — the eyesclosed editor theme, one class per Helix scope */
-.tok-keyword { color: var(--keyword); font-weight: 500; }
-.tok-function { color: var(--function); }
-.tok-string { color: var(--string); }
-.tok-constant { color: var(--constant); }
-.tok-type { color: var(--type); }
-.tok-builtin { color: var(--builtin); }
-.tok-variable { color: var(--variable); }
-.tok-parameter { color: var(--parameter); }
-.tok-property { color: var(--property); }
-.tok-namespace { color: var(--namespace); }
-.tok-operator { color: var(--operator); }
-.tok-attribute { color: var(--attribute); }
-.tok-doc { color: var(--doc); font-style: italic; }
-.tok-comment { color: var(--comment); font-style: italic; }
-.tok-punct { color: var(--punct); }
+/* syntax — eyesclosed by brightness alone: fg, ash, haze; weight and italic do the rest */
+.tok-keyword { color: var(--fg); font-weight: 500; }
+.tok-function, .tok-type, .tok-constant, .tok-variable { color: var(--fg); }
+.tok-escape { color: var(--fg); font-weight: 500; }
+.tok-macro, .tok-label, .tok-self { color: var(--fg); font-style: italic; }
+.tok-string, .tok-member, .tok-namespace, .tok-operator, .tok-builtin, .tok-attribute { color: var(--ash); }
+.tok-doc { color: var(--ash); font-style: italic; }
+.tok-comment { color: var(--haze); font-style: italic; }
+.tok-punct { color: var(--haze); }
 
 /* ── Kbd ─────────────────────────────────────────────────────────────── */
 .ec-kbd, .ec-prose kbd {
-  display: inline-block; min-width: 1.4em; box-sizing: border-box; text-align: center;
-  font-family: var(--font-sans); font-size: 0.8125em; line-height: 1.5; font-weight: 500; color: var(--ink);
-  background: var(--surface); border-radius: var(--radius-sm); padding: 0 0.4em;
-  box-shadow: inset 0 -1px 0 var(--rule-strong);
+  display: inline-block; min-width: 1.5em; box-sizing: border-box; text-align: center;
+  font-family: var(--font-sans); font-size: 0.8em; line-height: 1.6; font-weight: 400; letter-spacing: 0; color: var(--fg);
+  background: var(--lid); border-radius: var(--radius-sm); padding: 0 0.4em;
 }
 
 /* ── Prose ───────────────────────────────────────────────────────────── */
-.ec-prose { max-width: var(--width-text); color: var(--ink); font-size: 16px; line-height: 26px; }
-.ec-prose > * + * { margin-top: var(--space-5); }
-.ec-prose h1 { font-size: 28px; line-height: 36px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink-heading); }
-.ec-prose h1 + p { margin-top: var(--space-3); font-size: 19px; line-height: 30px; letter-spacing: -0.01em; color: var(--ink-muted); }
-.ec-prose h2 { margin-top: var(--space-12); font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink-heading); }
-.ec-prose h3 { margin-top: var(--space-8); font-size: 16px; line-height: 24px; font-weight: 500; color: var(--ink-heading); }
+.ec-prose { max-width: var(--width-text); }
+.ec-prose > * + * { margin-top: var(--space-6); }
+.ec-prose h1 { font-size: clamp(24px, 0.6vw + 21px, 30px); line-height: 1.2; font-weight: 500; letter-spacing: -0.02em; color: var(--fg); }
+.ec-prose h1 + p { color: var(--fg-muted); margin-top: var(--space-2); }
+.ec-prose h2 { margin-top: var(--space-14); color: var(--fg-muted); font-weight: 400; }
+.ec-prose h3 { margin-top: var(--space-10); color: var(--fg); font-weight: 500; }
 .ec-prose h2 + *, .ec-prose h3 + * { margin-top: var(--space-2); }
-.ec-prose p { margin-bottom: 0; }
-.ec-prose ul, .ec-prose ol { margin-bottom: 0; padding-left: var(--space-5); }
+.ec-prose h2 + h3 { margin-top: var(--space-6); }
+.ec-prose ul, .ec-prose ol { padding-left: 1.25em; }
 .ec-prose li + li { margin-top: var(--space-2); }
-.ec-prose li::marker { color: var(--ink-faint); }
-.ec-prose strong { color: var(--ink-bright); font-weight: 500; }
+.ec-prose li::marker { color: var(--fg-muted); }
 .ec-prose img { display: block; border-radius: var(--radius-md); }
 .ec-prose hr { border: 0; height: var(--space-6); margin: 0; }
 
 /* ── Note (also every blockquote in prose) ───────────────────────────── */
-:where(.ec-note, .ec-prose blockquote) { margin: 0; }
 .ec-note, .ec-prose blockquote {
-  padding: var(--space-4) var(--space-5);
-  background: var(--surface); border-radius: var(--radius-sm);
-  font-size: 14px; line-height: 22px; color: var(--ink);
+  margin: 0; padding: var(--space-4) var(--space-6);
+  background: var(--lid); border-radius: var(--radius-sm);
+  font-size: 15px; line-height: 24px; letter-spacing: 0; color: var(--fg);
 }
-.ec-note::before, .ec-prose blockquote::before {
-  content: "Note"; display: block; margin-bottom: var(--space-1);
-  font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.04em; color: var(--accent);
-}
-.ec-note--warning::before { content: "Warning"; color: var(--warning); }
+.ec-note::before, .ec-prose blockquote::before { content: "Note"; display: block; color: var(--fg); font-weight: 500; }
+.ec-note--warning::before { content: "Warning"; color: var(--fg); }
 .ec-note p + p, .ec-prose blockquote p + p { margin-top: var(--space-2); }
+/* The rule above zeroes a blockquote's margin with more weight than Prose's
+   block gap, so give a note in prose its 24px back. */
+.ec-prose > * + blockquote { margin-top: var(--space-6); }
 
 /* ── Table ───────────────────────────────────────────────────────────── */
 .ec-table-wrap { overflow-x: auto; }
-.ec-table, .ec-prose table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 22px; }
-.ec-table th, .ec-prose th {
-  text-align: left; vertical-align: bottom; padding: 0 var(--space-4) var(--space-2) 0;
-  font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.04em; color: var(--ink-faint);
-}
-.ec-table td, .ec-prose td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-4) var(--space-2) 0; border-top: 1px solid var(--rule); color: var(--ink); }
-.ec-table .num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 0; }
+.ec-table, .ec-prose table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 24px; letter-spacing: 0; }
+.ec-table th, .ec-prose th { text-align: left; font-weight: 400; color: var(--fg-muted); padding: 0 var(--space-6) var(--space-2) 0; }
+.ec-table td, .ec-prose td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-6) var(--space-2) 0; border-top: 1px solid var(--lid); }
+.ec-table .num { text-align: right; padding-right: 0; font-variant-numeric: tabular-nums; }
 
-/* ── DocsLayout: the sidebar lives in the label column ───────────────── */
-.ec-docs { padding-block: var(--space-12) var(--space-24); align-items: start; }
-.ec-sidebar { grid-column: 1; position: sticky; top: var(--space-8); display: flex; flex-direction: column; gap: var(--space-6); max-height: calc(100vh - 64px); overflow-y: auto; scrollbar-width: none; font-size: 16px; line-height: 26px; }
-.ec-sidebar-group { display: flex; flex-direction: column; gap: var(--space-2); }
-/* Set like a code comment: italic in `comment` (3.8:1 on page, below 4.5 by choice). */
-.ec-sidebar-label { font-size: 12px; line-height: 16px; font-weight: 500; font-style: italic; letter-spacing: 0.04em; color: var(--comment); }
-.ec-sidebar a { color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
-.ec-sidebar a:hover { color: var(--ink-bright); }
-.ec-sidebar a[aria-current="page"] { color: var(--ink-bright); font-weight: 500; }
-.ec-docs-main { grid-column: 2; min-width: 0; }
-/* The menu button: the sidebar's toggle on phones, at the header's right end.
-   Hidden from 720px, where the sidebar always shows. */
-.ec-menu-btn {
-  display: none; align-items: center; justify-content: center;
-  width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--radius-sm);
-  background: transparent; color: var(--ink-muted); cursor: pointer; transition: color 0.15s;
+/* ── DocsLayout: full screen ─────────────────────────────────────────
+   The index is pinned to the window's left edge at full height and the page
+   follows it, left-aligned. On phones the index becomes a full-screen menu. */
+.ec-docs { --ec-side-x: var(--space-16); }
+.ec-docs-side {
+  position: fixed; top: 0; bottom: 0; left: var(--ec-side-x); width: var(--width-sidebar);
+  box-sizing: border-box; padding: var(--space-14) 0 var(--space-10);
+  display: flex; flex-direction: column; gap: var(--space-10);
+  overflow-y: auto; scrollbar-width: none;
+  font-size: 15px; line-height: 24px; letter-spacing: 0;
 }
-.ec-menu-btn:hover, .ec-menu-btn[aria-expanded="true"] { color: var(--ink-bright); }
-.ec-menu-btn svg { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-.ec-menu-btn .ec-menu-close, .ec-menu-btn[aria-expanded="true"] .ec-menu-open { display: none; }
-.ec-menu-btn[aria-expanded="true"] .ec-menu-close { display: block; }
-.ec-pagenav { display: flex; justify-content: space-between; gap: var(--space-6); margin-top: var(--space-16); font-size: 14px; line-height: 20px; }
-.ec-pagenav a { display: flex; flex-direction: column; gap: 2px; color: var(--ink-bright); text-decoration: none; font-weight: 500; transition: color 0.15s; }
-.ec-pagenav a:hover { color: var(--link); }
-.ec-pagenav a span { font-size: 12px; line-height: 16px; font-weight: 400; color: var(--ink-faint); }
+.ec-docs-brand { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--fg); text-decoration: none; font-weight: 500; }
+.ec-docs-brand img, .ec-docs-brand svg { width: 40px; height: 40px; display: block; border-radius: var(--radius-sm); }
+.ec-docs-nav { display: flex; flex-direction: column; gap: var(--space-6); }
+.ec-sidebar-group { display: flex; flex-direction: column; gap: var(--space-1); }
+/* Group labels in haze (3.8:1, below 4.5 by choice; the links carry the meaning). */
+.ec-sidebar-label { color: var(--haze); margin-bottom: var(--space-2); }
+.ec-docs-nav a, .ec-docs-side-foot a { color: var(--fg-muted); text-decoration: none; transition: color 0.2s; }
+.ec-docs-nav a:hover, .ec-docs-side-foot a:hover, .ec-docs-nav a[aria-current="page"] { color: var(--fg); }
+.ec-docs-side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1); }
+/* The page sits in the middle of the window, or right after the index when
+   the window is too narrow for that. Reading text is body at its 18px, not
+   the fluid size that grows to 20px. */
+.ec-docs-main {
+  box-sizing: border-box; max-width: calc(var(--width-text) + 2 * var(--space-6));
+  margin-left: max(
+    calc(var(--ec-side-x) + var(--width-sidebar) + var(--space-16) - var(--space-6)),
+    calc((100vw - var(--width-text)) / 2 - var(--space-6))
+  );
+  padding: var(--space-28) var(--space-6);
+  font-size: 18px;
+}
+.ec-pagenav { display: flex; justify-content: space-between; gap: var(--space-6); margin-top: var(--space-28); }
+.ec-pagenav a { display: flex; flex-direction: column; color: var(--fg); text-decoration: none; }
+.ec-pagenav a span { color: var(--fg-muted); }
+.ec-pagenav a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
 .ec-pagenav a[rel="next"] { margin-left: auto; text-align: right; }
 
-/* ── SiteFooter ──────────────────────────────────────────────────────── */
-.ec-footer { padding-block: var(--space-24) var(--space-12); font-size: 12px; line-height: 18px; color: var(--ink-faint); }
-.ec-footer > :first-child { grid-column: 1; }
-.ec-footer-links { grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2) var(--space-6); }
-.ec-footer a { color: var(--ink-faint); text-decoration: none; transition: color 0.15s; }
-.ec-footer a:hover { color: var(--ink-bright); }
-
-/* ── phones: one column, labels sit above their content ──────────────── */
-@media (max-width: 720px) {
-  .ec-grid, .ec-section, .ec-header, .ec-footer { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
-  .ec-section-label, .ec-section-body, .ec-brand, .ec-nav, .ec-hero > *, .ec-footer > *, .ec-footer-links, .ec-sidebar, .ec-docs-main { grid-column: 1; }
-  .ec-header { row-gap: var(--space-4); }
-  .ec-footer-links { justify-content: flex-start; }
-  .ec-sidebar { position: static; max-height: none; flex-direction: row; flex-wrap: wrap; gap: var(--space-4) var(--space-8); padding-bottom: var(--space-8); }
-  .ec-header > .ec-brand { grid-row: 1; }
-  .ec-menu-btn { display: inline-flex; grid-column: 1; grid-row: 1; justify-self: end; margin-block: calc(-1 * var(--space-2)); }
-  .ec-sidebar[data-menu="closed"] { display: none; }
+/* The page fades out under two bands that hold still at the top and bottom
+   of the window, right of the index (which never fades). The top band shows
+   once the page leaves its top (data-scrolled on <html>), and the bottom
+   band goes away at the end (data-end); the docs script sets both. */
+.ec-docs-fade { display: none; }
+@media (min-width: 961px) {
+  :root:has(.ec-docs) { scroll-padding-top: var(--space-28); }
+  .ec-docs-fade {
+    display: block; position: fixed; z-index: 1; right: 0; height: var(--space-28);
+    left: calc(var(--ec-side-x) + var(--width-sidebar) + var(--space-6));
+    pointer-events: none; transition: opacity 0.3s;
+  }
+  .ec-docs-fade--top { top: 0; opacity: 0; background: linear-gradient(var(--bg), transparent); }
+  .ec-docs-fade--bottom { bottom: 0; background: linear-gradient(transparent, var(--bg)); }
+  :root[data-scrolled] .ec-docs-fade--top { opacity: 1; }
+  :root[data-end] .ec-docs-fade--bottom { opacity: 0; }
 }
 
-@media (prefers-reduced-motion: reduce) { .ec *, .ec { transition: none !important; } }
+/* The bar and menu button exist only on phones. */
+.ec-docs-bar { display: none; }
+.ec-menu-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; margin-right: calc(-1 * var(--space-2)); padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--fg); cursor: pointer;
+}
+.ec-menu-btn svg { width: 20px; height: 20px; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.ec-menu-btn .ec-menu-close, .ec-menu-btn[aria-expanded="true"] .ec-menu-open { display: none; }
+.ec-menu-btn[aria-expanded="true"] .ec-menu-close { display: block; }
+
+@media (max-width: 960px) {
+  .ec-docs-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    position: relative; z-index: 2; height: 96px; padding: 0 var(--space-6); box-sizing: border-box;
+  }
+  .ec-docs-side {
+    left: 0; right: 0; top: 96px; width: auto; z-index: 1;
+    padding: var(--space-4) var(--space-6) var(--space-10); background: var(--bg);
+    font-size: 22px; line-height: 30px; letter-spacing: -0.01em; gap: var(--space-10);
+  }
+  .ec-docs-side > .ec-docs-brand { display: none; }
+  .ec-docs-nav { gap: var(--space-10); }
+  .ec-sidebar-group { gap: var(--space-2); }
+  .ec-docs-side[data-menu="closed"] { display: none; }
+  .ec-docs:has(.ec-docs-side[data-menu="open"]) { overflow: hidden; height: 100vh; }
+  .ec-docs-main { margin-left: 0; max-width: none; padding-top: var(--space-4); padding-bottom: var(--space-28); font-size: inherit; }
+}
+
+/* ── Split: the page holds still, and a pane scrolls ──────────────────
+   On desktops (1024px and up) the hero holds still in a column at the left
+   and the content scrolls in a pane at the right, fading out at its top and
+   bottom edges. The footer sits under the hero. Below 1024px there is no
+   split: one column that scrolls. The Split script scrolls the pane
+   smoothly and marks where the reader is (data-scrolled, data-end). */
+@property --ec-fade-top { syntax: "<length-percentage>"; inherits: false; initial-value: 0%; }
+@property --ec-fade-bottom { syntax: "<length-percentage>"; inherits: false; initial-value: 0%; }
+.ec-split {
+  /* The left column: wide enough for the hero sentence, never wider than
+     the text column. The pane takes everything to its right. */
+  --ec-side-w: clamp(360px, 34vw, var(--width-text));
+}
+@media (min-width: 1024px) {
+  .ec-split { height: 100vh; overflow: hidden; }
+  .ec-split-side {
+    /* It ends above the footer, which is pinned below it. */
+    position: fixed; top: 0; bottom: calc(var(--space-14) + var(--space-10)); left: 0;
+    width: calc(var(--ec-side-w) + 2 * var(--space-16)); box-sizing: border-box;
+    padding: var(--space-14) var(--space-16) var(--space-10);
+    display: flex; flex-direction: column; justify-content: center;
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--space-10)), transparent);
+    mask-image: linear-gradient(to bottom, black calc(100% - var(--space-10)), transparent);
+  }
+  .ec-split-side::-webkit-scrollbar { display: none; }
+  .ec-split-side .ec-hero { margin: 0; }
+  .ec-split-foot { position: fixed; left: var(--space-16); bottom: 0; width: var(--ec-side-w); margin: 0; padding-inline: 0; }
+  /* The frame places the pane, and the pane scrolls inside it. The frame has
+     no ground, so the content fades straight into the page; a background on
+     the frame would not fade. */
+  .ec-split-frame {
+    position: fixed; top: var(--inset-stage); right: var(--inset-stage); bottom: var(--inset-stage);
+    left: calc(var(--ec-side-w) + 2 * var(--space-16)); border-radius: var(--radius-md);
+  }
+  .ec-split-frame:has(.ec-split-pane:focus-visible) { outline: 2px solid var(--fg); outline-offset: 3px; }
+  .ec-split-pane {
+    position: absolute; inset: 0;
+    width: auto; max-width: none; margin: 0; box-sizing: border-box; padding: var(--space-10);
+    border-radius: inherit; overflow-y: auto; overscroll-behavior: contain;
+    /* The script moves scrollTop itself; scroll anchoring would move it twice. */
+    overflow-anchor: none; scrollbar-width: none;
+    /* The content fades out over --ec-fade at the top and in over it at the
+       bottom. The top fade grows in once the pane leaves its start, and the
+       bottom fade goes away at its end. */
+    --ec-fade: var(--space-28);
+    --ec-fade-bottom: var(--ec-fade);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--ec-fade-top), black calc(100% - var(--ec-fade-bottom)), transparent);
+    mask-image: linear-gradient(to bottom, transparent, black var(--ec-fade-top), black calc(100% - var(--ec-fade-bottom)), transparent);
+    transition: --ec-fade-top 0.3s, --ec-fade-bottom 0.3s;
+  }
+  .ec-split-pane[data-scrolled] { --ec-fade-top: var(--ec-fade); }
+  .ec-split-pane[data-end] { --ec-fade-bottom: 0%; }
+  .ec-split-pane::-webkit-scrollbar { display: none; }
+  .ec-split-pane:focus-visible { outline: none; }
+  .ec-split-pane > * { max-width: var(--width-text); margin-inline: auto; }
+}
+
+/* ── Reel: features that scroll without end ───────────────────────────
+   A Split pane of unlabelled feature Sections. The Reel script adds laps of
+   the list (data-lap) above and below the reader, so it has no top or end.
+   Below 1024px the laps are hidden and the list reads once. */
+.ec-reel-list { display: flex; flex-direction: column; }
+/* A feature's line is secondary to its name and its clip. */
+.ec-reel .ec-section > p, .ec-reel .ec-entry-desc { color: var(--fg-muted); }
+.ec-reel .ec-section { margin: 0 0 var(--space-14); }
+.ec-reel .ec-section:last-child { margin-bottom: 0; }
+.ec-reel [data-lap] { display: none; }
+.ec-reel-end { height: 1px; }
+@media (min-width: 1024px) {
+  /* Only the middle fifth is at full strength. There are features above
+     from the start, so the top fade is always on. */
+  .ec-reel { --ec-fade: 40%; --ec-fade-top: var(--ec-fade); }
+  /* Every feature, the last of a lap too, so the laps join with no seam. */
+  .ec-reel .ec-section, .ec-reel .ec-section:last-child { margin-bottom: var(--space-28); }
+  .ec-reel [data-lap] { display: flex; }
+}
+
+/* ── SiteFooter ──────────────────────────────────────────────────────── */
+.ec-footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); margin-top: var(--space-28); padding-bottom: var(--space-14); font-size: 14px; line-height: 20px; font-weight: 400; letter-spacing: 0; color: var(--fg-muted); }
+.ec-footer-links { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin-left: auto; }
+@media (max-width: 560px) { .ec-footer-links { margin-left: 0; flex-basis: 100%; } }
+.ec-footer a { color: var(--fg-muted); text-decoration: none; transition: color 0.2s; }
+.ec-footer a:hover { color: var(--fg); }
+
+/* ── Reveal: text settles in on load (opt-in) ────────────────────────── */
+@keyframes ec-settle { from { opacity: 0; transform: translateY(12px); filter: blur(3px); } }
+.ec-reveal > * { animation: ec-settle 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.ec-reveal > :nth-child(2) { --i: 1; } .ec-reveal > :nth-child(3) { --i: 2; } .ec-reveal > :nth-child(4) { --i: 3; }
+.ec-reveal > :nth-child(5) { --i: 4; } .ec-reveal > :nth-child(6) { --i: 5; } .ec-reveal > :nth-child(n+7) { --i: 6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ec *, .ec { transition: none !important; }
+  .ec-reveal > * { animation: none; }
+}

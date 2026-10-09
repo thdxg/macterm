@@ -86,192 +86,174 @@
   }
   </script>
 </head>
-<body class="ec">
-<div class="ec-page">
-
+<body class="ec ec-split">
   <main>
-    <section class="ec-hero">
-      <h1>Macterm</h1>
-      <p class="ec-hero-lede">A lightweight macOS terminal with vertical tabs, persistent sessions, and native experience.<br />Built on libghostty. Open source.</p>
-      <div class="ec-hero-actions">
-        <a class="ec-btn ec-btn--primary" href="/docs/install">Get started</a>
-        <a class="ec-btn" href="https://github.com/thdxg/macterm">GitHub ↗</a>
-      </div>
-    </section>
+    <!-- The hero (Split). On desktops (1024px and up) it holds still on the
+         left and the page does not scroll. -->
+    <div class="ec-page ec-split-side">
+      <section class="ec-hero ec-reveal">
+        <h1>Macterm is a lightweight macOS terminal with vertical tabs, persistent sessions and a native experience. <span class="ec-quiet">Built on libghostty and open source.</span></h1>
+        <div class="ec-hero-actions">
+          <a class="ec-btn ec-btn--primary" href="/docs/install">Get started</a>
+          <a class="ec-btn" href="https://github.com/thdxg/macterm">GitHub ↗</a>
+        </div>
+      </section>
+    </div>
 
-    <!-- One section per feature, spanning the page grid under the hero. Each
-         clip plays while it is on screen and pauses when it leaves (site.js).
+    <!-- The features. On desktops this is the panel at the right, and it
+         scrolls without end: site.js appends another lap of the list before
+         the reader reaches the end. Below 1024px it is the list once, in the
+         page. A clip plays only while it shows and pauses when it goes away.
          `muted` + `playsinline` is what makes that autoplay permissible at
-         all; the poster carries the first frame so the section is complete
+         all; the poster carries the first frame, so a feature is complete
          before a video byte is fetched. -->
-    <div id="features">
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Splits and navigation</h3>
-          <p class="ec-muted">Split a pane in any direction. Move between panes with a keybind. Drag a pane onto another pane to join them, or pull a pane out into its own tab.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/01-splits.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video splits a pane, moves between panes from the keyboard, zooms one pane and closes it">
-              <source src="/assets/demo/01-splits.mp4" type="video/mp4" />
-            </video>
-          </figure>
+    <div class="ec-split-frame">
+      <section class="ec-page ec-split-pane ec-reel" tabindex="0" aria-label="Features">
+        <div class="ec-reel-list">
+          <section class="ec-section">
+            <h3>Splits and navigation</h3>
+            <p>Split panes and move between them from the keyboard.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/01-splits.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video splits a pane, moves between panes from the keyboard, zooms one pane and closes it">
+                <source src="/assets/demo/01-splits.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Animations</h3>
+            <p>Scrolling, splits and the cursor glide into place.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/07-animations.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video scrolls back through a Claude Code transcript with smooth scrolling, splits a pane with an animation, then types in a Helix file while the cursor glides and leaves a trail">
+                <source src="/assets/demo/07-animations.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Desktop widgets</h3>
+            <p>Put a terminal on your desktop as a widget.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/09-widgets.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="A terminal widget is next to the system weather and calendar widgets. The video opens it for editing from its right-click menu, starts btop, drags the widget away, and the widget snaps back into line">
+                <source src="/assets/demo/09-widgets.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Sidebar and tabs</h3>
+            <p>Your projects and their tabs are in a native sidebar.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/02-sidebar.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video hides and shows the project sidebar, also over a full-screen program">
+                <source src="/assets/demo/02-sidebar.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Tab switcher</h3>
+            <p>Select a tab from a live preview of each tab.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/06-tab-switcher.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video holds the recent-tab keybind to show live previews of every open tab, and cycles between them">
+                <source src="/assets/demo/06-tab-switcher.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Command palette and layouts</h3>
+            <p>Find any action in the palette, and save the tabs of a project as a layout.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/03-palette.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video opens a project, saves a layout, changes the panes, and applies the layout again from the command palette">
+                <source src="/assets/demo/03-palette.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Custom palettes</h3>
+            <p>Turn the output of any command into a list that you can search.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/11-palettes.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video opens a custom Git palette from the command palette, searches the commits of the project, opens the menu of one commit, goes back, and shows the diff of another commit in a split">
+                <source src="/assets/demo/11-palettes.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Open a folder from the Dock</h3>
+            <p>Drop a folder on the Dock icon to open it as a project.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/08-open-folder.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video drags a folder from Finder onto the Macterm Dock icon, and Macterm opens it as a new project">
+                <source src="/assets/demo/08-open-folder.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Quick terminal</h3>
+            <p>A terminal drops down over any app.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/04-quick-terminal.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video opens the quick terminal over the desktop, splits it, and closes it">
+                <source src="/assets/demo/04-quick-terminal.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Remote projects</h3>
+            <p>Panes on a remote host keep running when you quit.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/05-remote.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video opens a project on a remote host over SSH, splits it, opens a second tab, and runs vim there">
+                <source src="/assets/demo/05-remote.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <h3>Password Manager</h3>
+            <p>Macterm saves the passwords that you type at a prompt and fills them in again.</p>
+            <figure class="ec-figure">
+              <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/10-passwords.webp"
+                preload="none" muted loop playsinline disablepictureinpicture
+                aria-label="The video logs in to a remote project with a password, saves the password when Macterm offers, then fills it in for a second pane">
+                <source src="/assets/demo/10-passwords.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </section>
+          <section class="ec-section">
+            <ul class="ec-entries">
+              <li class="ec-entry"><span class="ec-entry-title">Session persistence</span><p class="ec-entry-desc">Your shells keep running after you quit.</p></li>
+              <li class="ec-entry"><span class="ec-entry-title">Control CLI</span><p class="ec-entry-desc">Scripts and agents control Macterm with the <code>macterm</code> command.</p></li>
+              <li class="ec-entry"><span class="ec-entry-title">Pinned tabs</span><p class="ec-entry-desc">Keep a tab above your projects. It starts with Macterm.</p></li>
+              <li class="ec-entry"><span class="ec-entry-title">Ghostty compatibility</span><p class="ec-entry-desc">Macterm reads your Ghostty config.</p></li>
+            </ul>
+          </section>
         </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Animations</h3>
-          <p class="ec-muted">Motion helps you keep your place. Scrolling slides, in scrollback and in full-screen programs such as Claude Code and Neovim. Splits grow into place. The cursor glides between positions and leaves a short trail, so you can find it after a jump. Each effect is a toggle in Settings → Animations.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/07-animations.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video scrolls back through a Claude Code transcript with smooth scrolling, splits a pane with an animation, then types in a Helix file while the cursor glides and leaves a trail">
-              <source src="/assets/demo/07-animations.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Desktop widgets</h3>
-          <p class="ec-muted">Put a terminal on your desktop. It has the size and shape of a system widget and snaps into line next to the system widgets. It stays below your windows. Its shell keeps running when you quit, as in any other pane.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/09-widgets.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="A terminal widget is next to the system weather and calendar widgets. The video opens it for editing from its right-click menu, starts btop, drags the widget away, and the widget snaps back into line">
-              <source src="/assets/demo/09-widgets.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Sidebar and tabs</h3>
-          <p class="ec-muted">Projects and their tabs are in a native macOS sidebar. The sidebar is vertical, so there is room to read long names. The window takes the background color that the running program paints.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/02-sidebar.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video hides and shows the project sidebar, also over a full-screen program">
-              <source src="/assets/demo/02-sidebar.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Tab switcher</h3>
-          <p class="ec-muted">Select a tab from a live preview of each tab. You choose the pane that you see, not a name.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/06-tab-switcher.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video holds the recent-tab keybind to show live previews of every open tab, and cycles between them">
-              <source src="/assets/demo/06-tab-switcher.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Command palette and layouts</h3>
-          <p class="ec-muted">Press <code>⌘P</code> to split panes, switch projects or open a folder. Declare the tabs, splits and commands of a project in <code>~/.config/macterm/projects/</code>. Apply the layout and Macterm builds the tabs.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/03-palette.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video opens a project, saves a layout, changes the panes, and applies the layout again from the command palette">
-              <source src="/assets/demo/03-palette.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Custom palettes</h3>
-          <p class="ec-muted">Turn the output of any command into a screen of the command palette. A YAML file in <code>~/.config/macterm/palettes/</code> can list your commits, containers or Kubernetes pods. Search the list, select one item, and run a command on it in a split.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/11-palettes.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video opens a custom Git palette from the command palette, searches the commits of the project, opens the menu of one commit, goes back, and shows the diff of another commit in a split">
-              <source src="/assets/demo/11-palettes.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Open a folder from the Dock</h3>
-          <p class="ec-muted">Drop a folder on the Macterm Dock icon, or use Open With in Finder. Macterm opens the folder as a new project.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/08-open-folder.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video drags a folder from Finder onto the Macterm Dock icon, and Macterm opens it as a new project">
-              <source src="/assets/demo/08-open-folder.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Quick terminal</h3>
-          <p class="ec-muted">A global terminal drops down from any app with a keybind. It goes away when you are done.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/04-quick-terminal.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video opens the quick terminal over the desktop, splits it, and closes it">
-              <source src="/assets/demo/04-quick-terminal.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Remote projects</h3>
-          <p class="ec-muted">Open a folder on another machine over SSH. The panes keep running <em>on the host</em>. They keep running when you quit, when the connection drops and when you restart your Mac.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/05-remote.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video opens a project on a remote host over SSH, splits it, opens a second tab, and runs vim there">
-              <source src="/assets/demo/05-remote.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <h3>Password Manager</h3>
-          <p class="ec-muted">Type a password one time at an <code>ssh</code>, <code>sudo</code> or database prompt. Macterm then offers to save it in your keychain. The next time that prompt appears, a bubble offers to fill the password in after Touch ID.</p>
-          <figure class="ec-figure">
-            <video data-demo style="pointer-events: none" width="1400" height="792" poster="/assets/demo/10-passwords.webp"
-                   preload="none" muted loop playsinline disablepictureinpicture
-                   aria-label="The video logs in to a remote project with a password, saves the password when Macterm offers, then fills it in for a second pane">
-              <source src="/assets/demo/10-passwords.mp4" type="video/mp4" />
-            </video>
-          </figure>
-        </div>
-      </section>
-      <section class="ec-section">
-        <div class="ec-section-body ec-span">
-          <ul class="ec-entries">
-            <li class="ec-entry"><span class="ec-entry-title">Session persistence</span><p class="ec-entry-desc">When you quit, your shells keep running. Start Macterm again. Every pane returns with its scrollback and its running programs.</p></li>
-            <li class="ec-entry"><span class="ec-entry-title">Control CLI</span><p class="ec-entry-desc">The bundled <code>macterm</code> command controls the running app over a socket. Scripts and AI agents can open panes and run commands.</p></li>
-            <li class="ec-entry"><span class="ec-entry-title">Pinned tabs</span><p class="ec-entry-desc">Pin a tab above your projects to keep it. It starts each time Macterm starts. If its session ends, Macterm starts it again with its command.</p></li>
-            <li class="ec-entry"><span class="ec-entry-title">Ghostty compatibility</span><p class="ec-entry-desc">Macterm reads your existing <code>ghostty/config</code>. Your theme, font and keybinds carry over.</p></li>
-          </ul>
-        </div>
+        <div class="ec-reel-end" aria-hidden="true"></div>
       </section>
     </div>
   </main>
 
-  <footer class="ec-footer">
+  <footer class="ec-page ec-footer ec-split-foot">
     <span>© 2026 Macterm</span>
     <div class="ec-footer-links">
       <a href="/docs/">Docs</a>
       <a href="https://github.com/thdxg/macterm">GitHub ↗</a>
       <a href="https://github.com/thdxg/macterm/releases">Releases ↗</a>
-      <a href="https://ghostty.org">Ghostty ↗</a>
     </div>
   </footer>
 
-</div>
   <script src="/site.js"></script>
 </body>
 </html>
