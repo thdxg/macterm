@@ -16,6 +16,14 @@ Use one word for one thing in every file. Do not use a synonym to make the text 
 - Do not join two ideas with a dash or a semicolon. Write two sentences.
 - Do not use a metaphor. Write "keeps running", not "survives". Write "stays", not "lives".
 
+## Product description
+
+Use this description, word for word, in the README, the landing page meta tags, the docs introduction and the GitHub repository description:
+
+> A lightweight macOS terminal with vertical tabs, persistent sessions, and native experience
+
+The title of the landing page is **Macterm**.
+
 ## Macterm terms
 
 Define a term only when it is Macterm-specific or when it is ambiguous. Do not define a term that a reader can look up, such as `ssh`, `OSC` or `libghostty`.
