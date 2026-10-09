@@ -319,7 +319,7 @@ struct CustomPaletteFileTests {
         return examples
     }
 
-    /// The extensions anyone can install from Settings → Palettes
+    /// The extensions anyone can install from Settings → Extensions
     /// (`extensions/` at the repo root, a folder each): each has a manifest
     /// with its name, description and authors, a README, and palettes in
     /// `palettes/` that read through the validator and say what they are — a

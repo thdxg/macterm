@@ -25,7 +25,7 @@ enum PaletteScopeID: Hashable {
     /// the values exported above it and the pill naming it.
     case custom(CustomPaletteTarget)
 
-    /// The screens Macterm ships, in Settings → Palettes order.
+    /// The screens Macterm ships.
     static let builtIn: [PaletteScopeID] = [.passwords, .worktrees, .files]
 
     /// What the scope's pill says and shows — also the icon of the row that

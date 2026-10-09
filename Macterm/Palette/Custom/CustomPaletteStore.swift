@@ -8,7 +8,7 @@ private let logger = Logger(subsystem: appBundleID, category: "CustomPaletteStor
 /// which a test's store keeps inside its own directory), each parsed and
 /// validated into a `CustomPalette` or kept as the error that stopped it —
 /// a broken file is shown where its palette would be, in the palette's
-/// Palettes section and in Settings → Palettes, not silently skipped.
+/// Palettes section and, for an extension, on its card in Settings → Extensions, not silently skipped.
 ///
 /// Installed extensions (`MactermExtension`) load beside them, from
 /// `~/.config/macterm/extensions/<id>/`: each is listed in `extensions`, and

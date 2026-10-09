@@ -87,8 +87,6 @@ final class PaletteRegistry {
         var description: String? { try? manifest.get().description }
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
         var readme: String? { texts[MactermExtension.readmeName] }
-        /// Its screenshots' paths, in name order.
-        var screenshots: [String] { files.map(\.path).filter(MactermExtension.isScreenshot) }
     }
 
     enum State: Equatable {
@@ -112,8 +110,6 @@ final class PaletteRegistry {
     private(set) var state: State = .idle
     @ObservationIgnored private let fetch: Fetch
     @ObservationIgnored private var task: Task<Void, Never>?
-    /// Screenshots fetched for the Install sheet, by URL, for the run.
-    @ObservationIgnored private var images: [URL: Data] = [:]
 
     init(
         ref: String = PaletteRegistry.defaultRef,
@@ -143,13 +139,14 @@ final class PaletteRegistry {
         return components.url ?? URL(fileURLWithPath: "/")
     }
 
-    /// An extension's README on GitHub, at `ref`, rendered — what a card's
-    /// link opens so it can be read before installing.
-    nonisolated static func readmeURL(ref: String, id: String) -> URL {
+    /// An extension's folder on GitHub, at `ref` — what a card's link opens:
+    /// every file it would install, with its README rendered below them, so
+    /// it can be read before installing.
+    nonisolated static func folderURL(ref: String, id: String) -> URL {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "github.com"
-        components.path = "/\(repository)/blob/\(ref)/\(folder)/\(id)/\(MactermExtension.readmeName)"
+        components.path = "/\(repository)/tree/\(ref)/\(folder)/\(id)"
         return components.url ?? URL(fileURLWithPath: "/")
     }
 
@@ -285,16 +282,6 @@ final class PaletteRegistry {
         try fm.moveItem(at: staging, to: destination)
         store.reload()
         return destination
-    }
-
-    /// One of `entry`'s screenshots, fetched the first time it is shown and
-    /// kept for the run; nil when it can't be.
-    func screenshot(_ path: String, of entry: Entry) async -> Data? {
-        let url = Self.fileURL(ref: ref, id: entry.id, path: path)
-        if let data = images[url] { return data }
-        guard let (data, status) = try? await fetch(url), status == 200 else { return nil }
-        images[url] = data
-        return data
     }
 
     nonisolated static let fetchFromNetwork: Fetch = { url in

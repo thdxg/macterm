@@ -53,7 +53,7 @@ Then:
    authors: [your-github-username]
    ```
 
-3. Add a `README.md` saying what it does, what it needs, and anything to set up first. Settings links to it from the extension's card.
+3. Add a `README.md` saying what it does, what it needs, and anything to set up first. GitHub shows it below the folder's files, which is where the extension's card in Settings links.
 4. Optionally, add screenshots — see below.
 5. Open a pull request. CI reads every extension here through Macterm's validator.
 

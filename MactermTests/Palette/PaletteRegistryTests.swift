@@ -109,8 +109,8 @@ struct PaletteRegistryTests {
             == "https://api.github.com/repos/thdxg/macterm/git/trees/main:extensions?recursive=1")
         #expect(PaletteRegistry.fileURL(ref: "main", id: "git", path: "palettes/git.yaml").absoluteString
             == "https://raw.githubusercontent.com/thdxg/macterm/main/extensions/git/palettes/git.yaml")
-        #expect(PaletteRegistry.readmeURL(ref: "v1.32.0", id: "git").absoluteString
-            == "https://github.com/thdxg/macterm/blob/v1.32.0/extensions/git/README.md")
+        #expect(PaletteRegistry.folderURL(ref: "main", id: "git").absoluteString
+            == "https://github.com/thdxg/macterm/tree/main/extensions/git")
     }
 
     @Test
@@ -309,25 +309,6 @@ struct PaletteRegistryTests {
         #expect(MactermExtension.isPalette("palettes/pods.yaml") && MactermExtension.isPalette("palettes/pods.yml"))
         #expect(!MactermExtension.isPalette("palettes/old/pods.yaml") && !MactermExtension.isPalette("pods.yaml"))
         #expect(MactermExtension.paletteID(extensionID: "kubernetes", path: "palettes/pods.yaml") == "kubernetes/pods")
-    }
-
-    @Test
-    func screenshots_are_fetched_when_shown_and_kept() async {
-        let server = Server()
-        let png = Data([0x89, 0x50, 0x4E, 0x47])
-        server.serve(ref: "main", id: "kubernetes", "screenshots/pods.png", png)
-        let registry = PaletteRegistry(ref: "main", fetch: server.fetch)
-        let base = Self.entry("kubernetes", palette: Self.kubernetes)
-        let entry = PaletteRegistry.Entry(
-            id: "kubernetes",
-            files: base.files + [.init(path: "screenshots/pods.png", size: 4, executable: false)],
-            texts: base.texts
-        )
-        #expect(entry.screenshots == ["screenshots/pods.png"])
-        #expect(await registry.screenshot("screenshots/pods.png", of: entry) == png)
-        server.responses.removeAll()
-        #expect(await registry.screenshot("screenshots/pods.png", of: entry) == png, "kept for the run")
-        #expect(await registry.screenshot("screenshots/gone.png", of: entry) == nil)
     }
 
     @Test

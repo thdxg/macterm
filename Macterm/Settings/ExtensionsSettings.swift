@@ -6,7 +6,7 @@ import SwiftUI
 /// files in `~/.config/macterm/palettes/`, `CustomPaletteStore`) and the ones
 /// in Macterm's repository not installed yet (`PaletteRegistry`), by name.
 /// Each card's button says which: **Install** copies it in at once (its
-/// README is a link beside the button), **Installed** offers to move it to
+/// folder on GitHub is a link beside the button), **Installed** offers to move it to
 /// the Trash. The built-in screens aren't extensions and have no card.
 struct ExtensionsSettings: View {
     @Environment(AppState.self)
@@ -43,7 +43,7 @@ struct ExtensionsSettings: View {
                     ForEach(items) { item in
                         ExtensionCard(
                             item: item,
-                            readme: readmeURL(item, ref: registry.ref),
+                            link: folderURL(item, ref: registry.ref),
                             isInstalling: installingIDs.contains(item.extensionID),
                             install: install,
                             uninstall: { uninstalling = $0 }
@@ -82,7 +82,7 @@ struct ExtensionsSettings: View {
         }
     }
 
-    /// Installs `entry` at once — its README, a click away on the card, is
+    /// Installs `entry` at once — its folder on GitHub, a click away on the card, is
     /// where to read it first.
     private func install(_ entry: PaletteRegistry.Entry) {
         installingIDs.insert(entry.id)
@@ -97,12 +97,12 @@ struct ExtensionsSettings: View {
         }
     }
 
-    /// The README of an extension the repository has; none for a palette
+    /// The folder of an extension the repository has; none for a palette
     /// file of the user's own.
-    private func readmeURL(_ item: ExtensionGalleryItem, ref: String) -> URL? {
+    private func folderURL(_ item: ExtensionGalleryItem, ref: String) -> URL? {
         switch item {
-        case let .installed(_, registry): registry.map { PaletteRegistry.readmeURL(ref: ref, id: $0.id) }
-        case let .available(entry): PaletteRegistry.readmeURL(ref: ref, id: entry.id)
+        case let .installed(_, registry): registry.map { PaletteRegistry.folderURL(ref: ref, id: $0.id) }
+        case let .available(entry): PaletteRegistry.folderURL(ref: ref, id: entry.id)
         }
     }
 }
@@ -131,11 +131,11 @@ private struct RegistryStatus: View {
 
 /// One extension: glyph, name and a line saying what it is for, each cut
 /// short with an ellipsis so every card is the same size; a link to its
-/// README when it comes from the repository; and a button saying whether it
+/// folder on GitHub when it comes from the repository; and a button saying whether it
 /// is installed.
 private struct ExtensionCard: View {
     let item: ExtensionGalleryItem
-    let readme: URL?
+    let link: URL?
     let isInstalling: Bool
     let install: (PaletteRegistry.Entry) -> Void
     let uninstall: (CustomPaletteStore.InstalledExtension) -> Void
@@ -153,13 +153,13 @@ private struct ExtensionCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 4)
-                    if let readme {
-                        Link(destination: readme) {
-                            Image(systemName: "book")
+                    if let link {
+                        Link(destination: link) {
+                            Image(systemName: "folder")
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .help("Read its README on GitHub")
+                        .help("See its files and README on GitHub")
                     }
                     button
                 }
