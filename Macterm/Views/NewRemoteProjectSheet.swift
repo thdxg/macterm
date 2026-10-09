@@ -49,7 +49,7 @@ struct NewRemoteProjectSheet: View {
                 TextField("Name", text: $name, prompt: Text(host.isEmpty ? "devbox" : host))
                 TextField("Host", text: $host, prompt: Text("[user@]host or ssh alias"))
                 TextField("Directory", text: $directory, prompt: Text("~/dev/api"))
-                TextField("zmx path (optional)", text: $zmxPath, prompt: Text("auto-detect via PATH"))
+                TextField("zmx path (optional)", text: $zmxPath, prompt: Text("find it in PATH"))
             }
             .textFieldStyle(.roundedBorder)
             if nameIsReserved {
