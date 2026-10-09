@@ -119,12 +119,15 @@ struct WorkspaceSerializerTests {
     }
 
     @Test
-    func restore_skips_workspaces_with_no_tabs() {
-        // Build a hand-rolled empty-tabs snapshot.
+    func restore_keeps_workspaces_with_no_tabs() {
+        // A project whose tabs the user all closed comes back empty, so
+        // selecting it after a relaunch does not create a default tab.
         let pid = UUID()
         let snap = WorkspaceSnapshot(projectID: pid, activeTabID: nil, tabs: [])
         let restored = WorkspaceSerializer.restore(from: [snap], validIDs: [pid])
-        #expect(restored.isEmpty)
+        #expect(restored.count == 1)
+        #expect(restored[0].tabs.isEmpty)
+        #expect(restored[0].activeTabID == nil)
     }
 
     @Test
