@@ -216,6 +216,9 @@ struct CommandPalettePanel: View {
                 let indexByID = flatIndexByID
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        // Where a new list starts: scrolled to on every
+                        // screen change and query (see below).
+                        Color.clear.frame(height: 0).id(Self.listTop)
                         // A screen's notices: centered in the results, and
                         // filling them when there are no rows — a compact
                         // strip above rows an earlier listing left.
@@ -291,6 +294,16 @@ struct CommandPalettePanel: View {
                     // Only follow keyboard navigation; hovering shouldn't scroll.
                     guard !hoverTracker.isHoverSelection(idx) else { return }
                     scrollSelectionIntoView(idx, proxy: proxy)
+                }
+                // A new screen or a new query is a new list, and it starts at
+                // its top. The scroll view keeps its offset when its content
+                // is replaced, so a screen entered from a scrolled root list
+                // opened partway down, its first rows hidden under the input.
+                .onChange(of: windowState.paletteStack) {
+                    proxy.scrollTo(Self.listTop, anchor: .top)
+                }
+                .onChange(of: query) {
+                    proxy.scrollTo(Self.listTop, anchor: .top)
                 }
             }
         }
@@ -489,6 +502,9 @@ struct CommandPalettePanel: View {
     private func abbreviateTilde(_ path: String) -> String {
         (path as NSString).abbreviatingWithTildeInPath
     }
+
+    /// The id of the zero-height view at the top of the results.
+    private static let listTop = "list-top"
 
     /// Leading/trailing breathing room kept between the selected row and the
     /// viewport edge when keyboard navigation scrolls it into view.
