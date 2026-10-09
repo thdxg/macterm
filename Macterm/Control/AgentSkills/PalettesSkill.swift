@@ -150,7 +150,7 @@ extension AgentSkills {
 
         - Select the icon from SF Symbols. The default is `square.grid.2x2`.
         - Do not put secrets in the file. It is plain text in the config folder of the user.
-        - Settings → Extensions removes an extension (Installed → Move to Trash). Settings → Keymaps gives it
+        - Settings → Extensions removes an extension (Installed → Uninstall). Settings → Keymaps gives it
           a keybind. Tell the user about both. Do not do either for the user.
         - The reference for users, with Git, Docker and SSH examples, is
           https://macterm.thdxg.dev/docs/extensions. A complete Kubernetes palette is in

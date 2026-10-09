@@ -79,7 +79,7 @@ struct ExtensionsSettings: View {
             isPresented: Binding(get: { uninstalling != nil }, set: { if !$0 { uninstalling = nil } }),
             presenting: uninstalling
         ) { installed in
-            Button("Move to Trash", role: .destructive) {
+            Button("Uninstall", role: .destructive) {
                 do {
                     try appState.customPalettes.uninstall(extensionID: installed.id)
                     problem = nil
@@ -88,7 +88,7 @@ struct ExtensionsSettings: View {
                 }
             }
         } message: { installed in
-            Text("The folder \(installed.id) goes to the Trash. Its palettes leave the command palette.")
+            Text(installed.uninstallMessage)
         }
     }
 
