@@ -41,8 +41,8 @@ struct ControlClient {
             case let .failure(reason):
                 if needsPreflight {
                     throw ClientError(
-                        description: "the verified Macterm at \(path) stopped answering (\(reason)); "
-                            + "refusing to fall through to another instance",
+                        description: "the verified Macterm at \(path) stopped answering (\(reason)). "
+                            + "The CLI does not fall back to another instance.",
                         isConnectionFailure: true
                     )
                 }
@@ -50,7 +50,7 @@ struct ControlClient {
             }
         }
         let hint = socketOverride == nil
-            ? "\nIs Macterm running? (launch it, or pass --socket for a non-default location)"
+            ? "\nIs Macterm running? Start it, or use --socket for a different location."
             : ""
         throw ClientError(
             description: "could not reach Macterm's control socket:\n" + attempts.joined(separator: "\n") + hint,
@@ -71,7 +71,7 @@ struct ControlClient {
         }
         guard response.v >= minimum else {
             throw ClientError(
-                description: "Macterm speaks control protocol v\(response.v), but this command needs v\(minimum); upgrade Macterm",
+                description: "Macterm speaks control protocol v\(response.v), but this command needs v\(minimum). Update Macterm.",
                 isConnectionFailure: false
             )
         }

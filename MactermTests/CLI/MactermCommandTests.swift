@@ -48,7 +48,7 @@ struct MactermCommandTests {
         let result = try socket.cli(command + ["--project", "api", "--no-focus", "--run", "npm test"])
         #expect(result.status == 1)
         #expect(result.stdout.isEmpty)
-        #expect(result.stderr.contains("upgrade Macterm"), "\(result.stderr)")
+        #expect(result.stderr.contains("Update Macterm"), "\(result.stderr)")
         // Only the `status` probe reached the app; the command was never sent.
         #expect(socket.requests.map(\.command) == ["status"])
     }
@@ -106,7 +106,7 @@ struct MactermCommandTests {
 
         #expect(result.status != 0)
         #expect(result.stdout.isEmpty)
-        #expect(result.stderr.contains("refusing to fall through"), "\(result.stderr)")
+        #expect(result.stderr.contains("does not fall back to another instance"), "\(result.stderr)")
         // The probe and the command both went to the verified socket; discovery
         // never re-ran to the (older) fallback.
         #expect(verified.requests.map(\.command) == ["status", "tab.new"])

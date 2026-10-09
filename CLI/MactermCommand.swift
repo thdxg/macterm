@@ -31,7 +31,7 @@ struct MactermCommand: ParsableCommand {
 
 /// Options every subcommand shares.
 struct ConnectionOptions: ParsableArguments {
-    @Option(help: "Control socket path (overrides discovery).")
+    @Option(help: "Control socket path. It overrides discovery.")
     var socket: String?
 
     @Flag(help: "Print the raw JSON payload instead of a table.")
@@ -86,7 +86,7 @@ func shellQuoted(_ word: String) -> String {
 /// Macterm pane, `MACTERM_SESSION` fills in when neither is given (nor a tab
 /// scope — an explicit tab means "that tab's focused pane", not self).
 struct PaneTarget: ParsableArguments {
-    @Option(help: "Project scope (name, UUID, or index). Defaults to the active project.")
+    @Option(help: "Project scope (name, UUID, or index). The default is the active project.")
     var project: String?
 
     @Option(help: "Tab scope (title, UUID, or index).")
@@ -144,16 +144,16 @@ struct ProjectCommand: ParsableCommand {
 
     struct Create: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Add a project for a local directory or remote spec (a new one on every run)."
+            abstract: "Add a project for a local directory or a remote spec. Each run adds a new project."
         )
 
         @Argument(help: "Project directory (absolute or ~-prefixed), or a remote [user@]host:dir.")
         var path: String
 
-        @Option(help: "Display name. Defaults to the directory name.")
+        @Option(help: "Display name. The default is the name of the directory.")
         var name: String?
 
-        @Flag(help: "Also select it.")
+        @Flag(help: "Select the project too.")
         var select = false
 
         @OptionGroup var options: ConnectionOptions
@@ -173,7 +173,7 @@ struct ProjectCommand: ParsableCommand {
         @Argument(help: "Project name, UUID, or index.")
         var project: String
 
-        @Option(help: "Window to select it in (index or id). Defaults to the focused window.")
+        @Option(help: "Window to select it in (index or id). The default is the focused window.")
         var window: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -212,7 +212,7 @@ struct ProjectCommand: ParsableCommand {
 
     struct Remove: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Remove a project (kills its panes' zmx sessions)."
+            abstract: "Remove a project. This kills the zmx sessions of its panes."
         )
 
         @Argument(help: "Project name, UUID, or index.")
@@ -245,7 +245,7 @@ struct WindowCommand: ParsableCommand {
 
     struct Focus: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Bring a window to the front and make it key."
+            abstract: "Bring a window to the front. It becomes the key window."
         )
 
         @Argument(help: "Window to focus (index or id).")
@@ -262,7 +262,7 @@ struct WindowCommand: ParsableCommand {
 
     struct List: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "List open windows and the project each is showing."
+            abstract: "List the open windows and the project that each window shows."
         )
 
         @OptionGroup var options: ConnectionOptions
@@ -284,10 +284,10 @@ struct WindowCommand: ParsableCommand {
 
     struct Close: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Close a window (the last visible one hides instead)."
+            abstract: "Close a window. The last visible window hides instead."
         )
 
-        @Option(help: "Window to close (index or id). Defaults to the focused window.")
+        @Option(help: "Window to close (index or id). The default is the focused window.")
         var window: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -323,7 +323,7 @@ struct TabCommand: ParsableCommand {
     /// merges can be reproduced and regression-tested without a mouse.
     struct Merge: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "[debug] Merge a tab into the active tab: beside a pane (--dest) or at the workspace edge."
+            abstract: "[debug] Merge a tab into the active tab, next to a pane (--dest) or at the edge of the workspace."
         )
 
         @Option(help: "Source tab (title, UUID, or index).")
@@ -332,10 +332,10 @@ struct TabCommand: ParsableCommand {
         @Option(help: "Side to land on: left, right, top, or bottom.")
         var zone: String
 
-        @Option(help: "Destination pane in the active tab (UUID or index). Omit for the workspace edge.")
+        @Option(help: "Destination pane in the active tab (UUID or index). Leave it out for the edge of the workspace.")
         var dest: String?
 
-        @Option(help: "Project (name, UUID, or index). Defaults to the active project.")
+        @Option(help: "Project (name, UUID, or index). The default is the active project.")
         var project: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -350,9 +350,9 @@ struct TabCommand: ParsableCommand {
     #endif
 
     struct List: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "List tabs (active project by default).")
+        static let configuration = CommandConfiguration(abstract: "List tabs. The default is the active project.")
 
-        @Option(help: "Project to list (name, UUID, or index). Defaults to the active project.")
+        @Option(help: "Project to list (name, UUID, or index). The default is the active project.")
         var project: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -363,15 +363,15 @@ struct TabCommand: ParsableCommand {
     }
 
     struct New: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Open a new tab (becomes active unless --no-focus).")
+        static let configuration = CommandConfiguration(abstract: "Open a new tab. It becomes active, unless you use --no-focus.")
 
-        @Option(help: "Project (name, UUID, or index). Defaults to the active project.")
+        @Option(help: "Project (name, UUID, or index). The default is the active project.")
         var project: String?
 
         @Option(name: .customLong("run"), help: "Command to run in the new tab's shell.")
         var runCommand: String?
 
-        @Flag(help: "Start the tab in the background without changing selection.")
+        @Flag(help: "Start the tab in the background. Do not change the selection.")
         var noFocus = false
 
         @OptionGroup var options: ConnectionOptions
@@ -386,15 +386,15 @@ struct TabCommand: ParsableCommand {
     }
 
     struct Select: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Activate a tab.")
+        static let configuration = CommandConfiguration(abstract: "Make a tab active.")
 
         @Argument(help: "Tab title, UUID, or index (tab:3).")
         var tab: String
 
-        @Option(help: "Project scope. Defaults to the active project.")
+        @Option(help: "Project scope. The default is the active project.")
         var project: String?
 
-        @Option(help: "Window to select it in (index or id). Defaults to the focused window.")
+        @Option(help: "Window to select it in (index or id). The default is the focused window.")
         var window: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -408,16 +408,16 @@ struct TabCommand: ParsableCommand {
 
     struct Move: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Move a tab to a slot — its final 1-based position in `tab list` order."
+            abstract: "Move a tab to a slot. The slot is the final position of the tab in the `tab list` order, counted from 1."
         )
 
         @Argument(help: "Tab title, UUID, or index (tab:3).")
         var tab: String
 
-        @Argument(help: "Destination slot: the 1-based position the tab ends up in.")
+        @Argument(help: "Destination slot: the position of the tab at the end, counted from 1.")
         var slot: Int
 
-        @Option(help: "Project scope. Defaults to the active project.")
+        @Option(help: "Project scope. The default is the active project.")
         var project: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -433,7 +433,7 @@ struct TabCommand: ParsableCommand {
 
     struct Rename: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Rename a tab, or reset it to the default automatic title with --reset."
+            abstract: "Rename a tab, or use --reset to restore its automatic title."
         )
 
         @Argument(help: "Tab title, UUID, or index (tab:3).")
@@ -442,10 +442,10 @@ struct TabCommand: ParsableCommand {
         @Argument(help: "New title for the tab.")
         var title: String?
 
-        @Flag(name: .customLong("reset"), help: "Reset to the default automatic title.")
+        @Flag(name: .customLong("reset"), help: "Restore the automatic title.")
         var reset = false
 
-        @Option(help: "Project scope. Defaults to the active project.")
+        @Option(help: "Project scope. The default is the active project.")
         var project: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -472,13 +472,13 @@ struct TabCommand: ParsableCommand {
 
     struct Close: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Close a tab (kills its panes' zmx sessions)."
+            abstract: "Close a tab. This kills the zmx sessions of its panes."
         )
 
         @Argument(help: "Tab title, UUID, or index (tab:3).")
         var tab: String
 
-        @Option(help: "Project scope. Defaults to the active project.")
+        @Option(help: "Project scope. The default is the active project.")
         var project: String?
 
         @Flag(help: "Close even if a pane has a running program.")
@@ -501,7 +501,7 @@ struct TabCommand: ParsableCommand {
 struct PaneCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "pane",
-        abstract: "List, inspect, split, focus, close panes, and run commands in them.",
+        abstract: "List, inspect, split, focus and close panes, and run commands in them.",
         subcommands: paneSubcommands,
         defaultSubcommand: List.self
     )
@@ -525,12 +525,12 @@ struct PaneCommand: ParsableCommand {
     }
 
     struct List: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "List panes (active project by default).")
+        static let configuration = CommandConfiguration(abstract: "List panes. The default is the active project.")
 
-        @Option(help: "Project to list (name, UUID, or index). Defaults to the active project.")
+        @Option(help: "Project to list (name, UUID, or index). The default is the active project.")
         var project: String?
 
-        @Option(help: "Restrict to one tab (title, UUID, or index).")
+        @Option(help: "Limit the list to one tab (title, UUID, or index).")
         var tab: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -546,7 +546,7 @@ struct PaneCommand: ParsableCommand {
 
     struct Split: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Split a pane. Defaults to the focused pane (or the pane you're in)."
+            abstract: "Split a pane. The default is the focused pane, or the pane that you are in."
         )
 
         @Option(help: "right, left, down, up, or auto (longer on-screen axis).")
@@ -555,7 +555,7 @@ struct PaneCommand: ParsableCommand {
         @Option(name: .customLong("run"), help: "Command to run in the new pane's shell.")
         var runCommand: String?
 
-        @Flag(help: "Start the new pane without changing focus or zoom.")
+        @Flag(help: "Start the new pane. Do not change the focus or the zoom.")
         var noFocus = false
 
         @OptionGroup var target: PaneTarget
@@ -572,7 +572,7 @@ struct PaneCommand: ParsableCommand {
 
     struct Mirror: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Mirror a pane — show the same session in a second pane."
+            abstract: "Mirror a pane. Show the same session in a second pane."
         )
 
         @Option(help: "right, left, down, up, or auto (longer on-screen axis).")
@@ -590,10 +590,10 @@ struct PaneCommand: ParsableCommand {
 
     struct Focus: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Focus a pane, or its neighbour in a direction (selects its tab and fronts the window)."
+            abstract: "Focus a pane, or its neighbor in a direction. This selects its tab and brings the window forward."
         )
 
-        @Option(help: "Move to the nearest pane this way from the target instead: left, down, up, or right.")
+        @Option(help: "Focus the nearest pane from the target in this direction instead: left, down, up or right.")
         var direction: String?
 
         @OptionGroup var target: PaneTarget
@@ -608,7 +608,7 @@ struct PaneCommand: ParsableCommand {
 
     struct Close: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Close a pane (kills its zmx session)."
+            abstract: "Close a pane. This kills its zmx session."
         )
 
         @OptionGroup var target: PaneTarget
@@ -642,7 +642,7 @@ struct PaneCommand: ParsableCommand {
 
     struct Run: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Type a command into a live pane's shell (adds a newline).",
+            abstract: "Type a command into the shell of a live pane. Add a newline.",
             // The generated line would end `[<command> ...]` and never show
             // the `--` the discussion asks for.
             usage: "macterm pane run [<options>] [--] <command> ...",
@@ -676,7 +676,7 @@ struct PaneCommand: ParsableCommand {
 
         @Flag(
             name: .customLong("no-submit"),
-            help: "Leave the text on the prompt instead of running it (omits the trailing newline)."
+            help: "Leave the text at the shell prompt. Do not run it. (This leaves out the newline at the end.)"
         )
         var noSubmit = false
 
@@ -688,7 +688,7 @@ struct PaneCommand: ParsableCommand {
         /// (past it every word is a value). Split by hand because a second
         /// array argument, `.postTerminator`, fails ArgumentParser's
         /// debug-build validation next to this one.
-        @Argument(parsing: .allUnrecognized, help: "The command line to type (after `--`, verbatim).")
+        @Argument(parsing: .allUnrecognized, help: "The command line to type, after `--`, exactly as you wrote it.")
         var command: [String] = []
 
         /// The words before `--`. Plain ones are typed; a dash-prefixed one
@@ -781,7 +781,7 @@ struct PaneCommand: ParsableCommand {
             """
         )
 
-        @Argument(help: "The key chord, e.g. a, space, ctrl+c, escape, up, ctrl+\\.")
+        @Argument(help: "The key combination, for example a, space, ctrl+c, escape, up or ctrl+\\.")
         var chord: String
 
         @OptionGroup var target: PaneTarget
@@ -796,7 +796,7 @@ struct PaneCommand: ParsableCommand {
 
     struct Inspect: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Report a pane's live terminal-core state (grid, scrollback, foreground process)."
+            abstract: "Show the live terminal state of a pane: grid, scrollback and foreground process."
         )
 
         @OptionGroup var target: PaneTarget
@@ -809,10 +809,10 @@ struct PaneCommand: ParsableCommand {
 
     struct Dump: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Print a pane's terminal text: the viewport, or the full scrollback with --scrollback."
+            abstract: "Print the terminal text of a pane: the viewport, or the full scrollback with --scrollback."
         )
 
-        @Flag(help: "Include the full scrollback, not just the visible viewport.")
+        @Flag(help: "Include the full scrollback, not only the visible viewport.")
         var scrollback = false
 
         @OptionGroup var target: PaneTarget
@@ -827,7 +827,7 @@ struct PaneCommand: ParsableCommand {
 
     struct Zoom: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Toggle zoom on a pane (the tab renders only that pane while zoomed)."
+            abstract: "Turn zoom on or off for a pane. While zoomed, the tab shows only that pane."
         )
 
         @OptionGroup var target: PaneTarget
@@ -841,13 +841,13 @@ struct PaneCommand: ParsableCommand {
     struct ResizeSplit: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "resize-split",
-            abstract: "Set the ratio of the nearest split around a pane (0.15–0.85)."
+            abstract: "Set the ratio of the nearest split around a pane, from 0.15 to 0.85."
         )
 
         @Option(help: "Split axis to resize: horizontal or vertical.")
         var axis: String
 
-        @Option(help: "Absolute ratio for the split's first child (0.15–0.85).")
+        @Option(help: "Exact ratio for the first child of the split, from 0.15 to 0.85.")
         var ratio: Double
 
         @OptionGroup var target: PaneTarget
@@ -866,7 +866,7 @@ struct PaneCommand: ParsableCommand {
     /// Absent from release CLIs; a release app also rejects `pane.resize`.
     struct Resize: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "[debug] Resize a pane's surface in place to COLS×ROWS, bypassing layout."
+            abstract: "[debug] Change the size of the surface of a pane to COLS×ROWS, with no layout."
         )
 
         @Option(help: "Target columns.")
@@ -911,13 +911,13 @@ struct PaneCommand: ParsableCommand {
     /// reorders can be reproduced and regression-tested without a mouse.
     struct Move: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "[debug] Move a pane: beside another pane (--dest) or to the workspace edge."
+            abstract: "[debug] Move a pane, next to another pane (--dest) or to the edge of the workspace."
         )
 
         @Option(help: "Side to land on: left, right, top, or bottom.")
         var zone: String
 
-        @Option(help: "Destination pane (UUID or index, same tab). Omit for the workspace edge.")
+        @Option(help: "Destination pane (UUID or index, same tab). Leave it out for the edge of the workspace.")
         var dest: String?
 
         @OptionGroup var target: PaneTarget
@@ -940,10 +940,10 @@ struct Grid: ParsableCommand {
         abstract: "Split a pane into an equal ROWSxCOLS grid."
     )
 
-    @Argument(help: "Grid shape, e.g. 2x2 or 3x1.")
+    @Argument(help: "Grid shape, for example 2x2 or 3x1.")
     var shape: String
 
-    @Option(name: .customLong("run"), help: "Command to run in each NEW pane (the source pane keeps its shell).")
+    @Option(name: .customLong("run"), help: "Command to run in each NEW pane. The source pane keeps its shell.")
     var runCommand: String?
 
     @OptionGroup var target: PaneTarget
@@ -968,7 +968,7 @@ struct Grid: ParsableCommand {
 struct SessionCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "session",
-        abstract: "Inspect and kill zmx-backed terminal sessions.",
+        abstract: "Inspect and kill terminal sessions that zmx runs.",
         subcommands: [List.self, Info.self, Kill.self],
         defaultSubcommand: List.self
     )
@@ -998,7 +998,7 @@ struct SessionCommand: ParsableCommand {
 
     struct Kill: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Kill a zmx session (its shell dies; an attached pane's shell exits)."
+            abstract: "Kill a zmx session. Its shell ends, and the shell of a connected pane exits."
         )
 
         @Argument(help: "Session name (macterm-<slug>-<hex>).")
@@ -1017,16 +1017,16 @@ struct SessionCommand: ParsableCommand {
 struct LayoutCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "layout",
-        abstract: "Apply or save a project's declarative layout file.",
+        abstract: "Apply or save the declarative layout file of a project.",
         subcommands: [Apply.self, Save.self]
     )
 
     struct Apply: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Reconcile the workspace to the project's central layout file."
+            abstract: "Change the workspace to match the layout file of the project."
         )
 
-        @Option(help: "Project (name, UUID, or index). Defaults to the active project.")
+        @Option(help: "Project (name, UUID, or index). The default is the active project.")
         var project: String?
 
         @Flag(help: "Apply even when it would close panes.")
@@ -1048,7 +1048,7 @@ struct LayoutCommand: ParsableCommand {
             abstract: "Save the live workspace as the project's layout file."
         )
 
-        @Option(help: "Project (name, UUID, or index). Defaults to the active project.")
+        @Option(help: "Project (name, UUID, or index). The default is the active project.")
         var project: String?
 
         @OptionGroup var options: ConnectionOptions

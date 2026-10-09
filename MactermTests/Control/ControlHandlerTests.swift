@@ -403,7 +403,7 @@ struct ControlHandlerTests {
                 "project.create", args: ControlArgs(path: dir.path, name: name)
             ))
             #expect(response.error?.code == .badRequest)
-            #expect(response.error?.message == "\"Pinned\" is reserved for the pinned-tabs workspace")
+            #expect(response.error?.message == "\"Pinned\" is a reserved name for the pinned tabs")
         }
         #expect(projectStore.projects.isEmpty)
     }
@@ -598,7 +598,7 @@ struct ControlHandlerTests {
         // name selector on the pinned workspace.
         let reserved = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: "Pinned")))
         #expect(reserved.error?.code == .badRequest)
-        #expect(reserved.error?.message == "\"Pinned\" is reserved for the pinned-tabs workspace")
+        #expect(reserved.error?.message == "\"Pinned\" is a reserved name for the pinned tabs")
         let reservedCase = await handler.handle(request("project.rename", args: ControlArgs(project: "alpha", name: " pInNeD ")))
         #expect(reservedCase.error?.code == .badRequest)
         #expect(projectStore.projects.first?.name == "alpha")

@@ -10,7 +10,7 @@ struct WidgetCommand: ParsableCommand {
     )
 
     /// The sizes, spelled as the socket takes them.
-    static let sizeHelp = "Size as a grid span, COLUMNSxROWS, like 3x2."
+    static let sizeHelp = "Size as a grid span, COLUMNSxROWS, for example 3x2."
 
     struct List: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "List desktop widgets.")
@@ -24,16 +24,16 @@ struct WidgetCommand: ParsableCommand {
 
     struct New: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Add a locked desktop widget running your login shell, centered on the desktop."
+            abstract: "Add a locked desktop widget that runs your login shell, in the middle of the desktop."
         )
 
-        @Option(help: ArgumentHelp(WidgetCommand.sizeHelp + " Defaults to 3x3."))
+        @Option(help: ArgumentHelp(WidgetCommand.sizeHelp + " The default is 3x3."))
         var size: String?
 
-        @Option(help: "A name for it (shown in Settings and widgets.yaml).")
+        @Option(help: "A name for the widget. Settings and widgets.yaml show it.")
         var name: String?
 
-        @Option(name: .customLong("run"), help: "Command to type into the widget's shell whenever it starts one.")
+        @Option(name: .customLong("run"), help: "Command to type into the shell of the widget each time that it starts a shell.")
         var runCommand: String?
 
         @OptionGroup var options: ConnectionOptions
@@ -69,7 +69,7 @@ struct WidgetCommand: ParsableCommand {
 
     struct Edit: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Unlock a widget so it takes input and can be moved and resized. One at a time."
+            abstract: "Unlock a widget, so it takes input and you can move it and change its size. You can edit one widget at a time."
         )
 
         @Argument(help: "Widget (index, widget:N, or id).")
@@ -96,7 +96,7 @@ struct WidgetCommand: ParsableCommand {
 
     struct Remove: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Remove a desktop widget, ending its shell and session."
+            abstract: "Remove a desktop widget and end its shell and session."
         )
 
         @Argument(help: "Widget (index, widget:N, or id).")
