@@ -5,15 +5,15 @@ import SwiftUI
 /// installed ones (folders in `~/.config/macterm/extensions/` and palette
 /// files in `~/.config/macterm/palettes/`, `CustomPaletteStore`) and the ones
 /// in Macterm's repository not installed yet (`PaletteRegistry`), by name.
-/// Each card's button says which: **Install** shows the extension's files
-/// before copying it in, **Installed** offers to move it to the Trash. The
-/// built-in screens aren't extensions and have no card.
+/// Each card's button says which: **Install** copies it in at once (its
+/// README is a link beside the button), **Installed** offers to move it to
+/// the Trash. The built-in screens aren't extensions and have no card.
 struct ExtensionsSettings: View {
     @Environment(AppState.self)
     private var appState
 
     @State private var query = ""
-    @State private var installing: PaletteRegistry.Entry?
+    @State private var installingIDs: Set<String> = []
     @State private var uninstalling: CustomPaletteStore.Entry?
     @State private var problem: String?
 
@@ -51,7 +51,13 @@ struct ExtensionsSettings: View {
                 }
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                     ForEach(items) { item in
-                        ExtensionCard(item: item, install: { installing = $0 }, uninstall: { uninstalling = $0 })
+                        ExtensionCard(
+                            item: item,
+                            readme: readmeURL(item, ref: registry.ref),
+                            isInstalling: installingIDs.contains(item.extensionID),
+                            install: install,
+                            uninstall: { uninstalling = $0 }
+                        )
                     }
                 }
 
@@ -79,9 +85,6 @@ struct ExtensionsSettings: View {
             appState.customPalettes.reloadIfChanged()
             registry.refresh()
         }
-        .sheet(item: $installing) { entry in
-            InstallExtensionSheet(entry: entry) { installing = nil }
-        }
         .confirmationDialog(
             "Uninstall \(uninstalling?.pill.title ?? "")?",
             isPresented: Binding(get: { uninstalling != nil }, set: { if !$0 { uninstalling = nil } }),
@@ -98,6 +101,30 @@ struct ExtensionsSettings: View {
         } message: { entry in
             let name = (entry.extensionDirectory ?? entry.fileURL).lastPathComponent
             Text("\(name) goes to the Trash, and its screens leave the command palette.")
+        }
+    }
+
+    /// Installs `entry` at once — its README, a click away on the card, is
+    /// where to read it first.
+    private func install(_ entry: PaletteRegistry.Entry) {
+        installingIDs.insert(entry.id)
+        Task {
+            do {
+                try await appState.paletteRegistry.install(entry, into: appState.customPalettes)
+                problem = nil
+            } catch {
+                problem = "Couldn't install \(entry.name): \(error.localizedDescription)"
+            }
+            installingIDs.remove(entry.id)
+        }
+    }
+
+    /// The README of an extension the repository has; none for a palette
+    /// file of the user's own.
+    private func readmeURL(_ item: ExtensionGalleryItem, ref: String) -> URL? {
+        switch item {
+        case let .installed(_, registry): registry.map { PaletteRegistry.readmeURL(ref: ref, id: $0.id) }
+        case let .available(entry): PaletteRegistry.readmeURL(ref: ref, id: entry.id)
         }
     }
 }
@@ -147,17 +174,21 @@ private struct RegistryStatus: View {
     }
 }
 
-/// One extension: glyph, name, a line saying what it is for, its authors,
-/// and a button saying whether it is installed.
+/// One extension: glyph, name and a line saying what it is for, each cut
+/// short with an ellipsis so every card is the same size; a link to its
+/// README when it comes from the repository; and a button saying whether it
+/// is installed.
 private struct ExtensionCard: View {
     let item: ExtensionGalleryItem
+    let readme: URL?
+    let isInstalling: Bool
     let install: (PaletteRegistry.Entry) -> Void
     let uninstall: (CustomPaletteStore.Entry) -> Void
 
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     Image(systemName: item.icon)
                         .font(.title3)
                         .foregroundStyle(.secondary)
@@ -165,19 +196,23 @@ private struct ExtensionCard: View {
                     Text(item.title)
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Spacer(minLength: 4)
+                    if let readme {
+                        Link(destination: readme) {
+                            Image(systemName: "book")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Read its README on GitHub")
+                    }
                     button
                 }
                 Text(item.summary)
                     .settingsCaption()
                     .lineLimit(2, reservesSpace: true)
+                    .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if !item.authors.isEmpty {
-                    Text(item.authors.map { "@\($0)" }.formatted(.list(type: .and)))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
             }
             .padding(4)
         }
@@ -193,137 +228,42 @@ private struct ExtensionCard: View {
                         .help("\(entry.fileURL.lastPathComponent): \(failure.localizedDescription)")
                 }
                 Button { uninstall(entry) } label: {
-                    Label("Installed", systemImage: "checkmark.circle.fill")
+                    ButtonLabel(title: "Installed", systemImage: "checkmark.circle.fill")
                 }
+                .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("Uninstall it")
             }
         case let .available(entry):
             Button { install(entry) } label: {
-                Label("Install", systemImage: "arrow.down.circle")
+                if isInstalling {
+                    ButtonLabel(title: "Installing", systemImage: nil)
+                } else {
+                    ButtonLabel(title: "Install", systemImage: "arrow.down.circle")
+                }
             }
+            .buttonStyle(.bordered)
             .controlSize(.small)
-            .disabled(entry.failure != nil)
-            .help(entry.failure
-                .map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Show its files, then install it")
+            .disabled(entry.failure != nil || isInstalling)
+            .help(entry.failure.map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Install it")
         }
     }
 }
 
-/// An extension from the repository, shown in full before anything is
-/// written: its README, then every text file in it — every command runs on
-/// this machine.
-private struct InstallExtensionSheet: View {
-    @Environment(AppState.self)
-    private var appState
-
-    let entry: PaletteRegistry.Entry
-    let dismiss: () -> Void
-    @State private var shown = MactermExtension.readmeName
-    @State private var problem: String?
-    @State private var working = false
-    @State private var screenshots: [NSImage] = []
-
-    /// The sheet's tabs: the README, the screenshots when there are any,
-    /// then every text file.
-    private static let screenshotsTab = "Screenshots"
-    private var paths: [String] {
-        let texts = entry.files.map(\.path).filter { entry.texts[$0] != nil }
-        let readme = texts.filter { $0 == MactermExtension.readmeName }
-        let shots = entry.screenshots.isEmpty ? [] : [Self.screenshotsTab]
-        return readme + shots + texts.filter { $0 != MactermExtension.readmeName }
-    }
+/// A button's glyph and title, spaced as text: `Label` sets its icon in a
+/// fixed-width slot, which left a wide gap either side of the glyph.
+private struct ButtonLabel: View {
+    let title: String
+    let systemImage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: entry.icon)
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Install \(entry.name)?").font(.headline)
-                    if !entry.authors.isEmpty {
-                        Text("By \(entry.authors.map { "@\($0)" }.formatted(.list(type: .and)))").settingsCaption()
-                    }
-                }
+        HStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage)
+            } else {
+                ProgressView().controlSize(.mini)
             }
-            Text("Its commands run on this Mac when you open it. These are its files:")
-                .settingsCaption()
-            Picker("File", selection: $shown) {
-                ForEach(paths, id: \.self) { Text($0).tag($0) }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            ScrollView {
-                Group {
-                    if shown == Self.screenshotsTab {
-                        VStack(spacing: 8) {
-                            if screenshots.isEmpty { ProgressView().controlSize(.small) }
-                            ForEach(screenshots.indices, id: \.self) { index in
-                                Image(nsImage: screenshots[index])
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                            }
-                        }
-                    } else if shown == MactermExtension.readmeName {
-                        Text(Self.markdown(entry.texts[shown] ?? ""))
-                    } else {
-                        Text(entry.texts[shown] ?? "")
-                            .font(.system(.caption, design: .monospaced))
-                    }
-                }
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-            }
-            .frame(minHeight: 220, maxHeight: 360)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
-            if let problem {
-                Label(problem, systemImage: "exclamationmark.triangle.fill")
-                    .settingsCaption()
-            }
-            HStack {
-                Text("Saved in your extensions folder as \(entry.id).")
-                    .settingsCaption()
-                Spacer()
-                if working { ProgressView().controlSize(.small) }
-                Button("Cancel", role: .cancel, action: dismiss)
-                    .keyboardShortcut(.cancelAction)
-                Button("Install") {
-                    working = true
-                    Task {
-                        do {
-                            try await appState.paletteRegistry.install(entry, into: appState.customPalettes)
-                            dismiss()
-                        } catch {
-                            problem = error.localizedDescription
-                        }
-                        working = false
-                    }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(working)
-            }
+            Text(title)
         }
-        .padding(20)
-        .frame(width: 560)
-        .onAppear { if !paths.contains(shown) { shown = paths.first ?? "" } }
-        .task(id: entry.id) {
-            var images: [NSImage] = []
-            for path in entry.screenshots {
-                if let data = await appState.paletteRegistry.screenshot(path, of: entry), let image = NSImage(data: data) {
-                    images.append(image)
-                }
-            }
-            screenshots = images
-        }
-    }
-
-    /// A README's text with its inline markdown — emphasis, code, links —
-    /// and its lines kept; headings and images stay as written.
-    static func markdown(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(text)
     }
 }

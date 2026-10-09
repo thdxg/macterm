@@ -146,6 +146,16 @@ final class PaletteRegistry {
         return components.url ?? URL(fileURLWithPath: "/")
     }
 
+    /// An extension's README on GitHub, at `ref`, rendered — what a card's
+    /// link opens so it can be read before installing.
+    nonisolated static func readmeURL(ref: String, id: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "github.com"
+        components.path = "/\(repository)/blob/\(ref)/\(folder)/\(id)/\(MactermExtension.readmeName)"
+        return components.url ?? URL(fileURLWithPath: "/")
+    }
+
     /// A file of an extension, at `ref`, from GitHub's raw host.
     nonisolated static func fileURL(ref: String, id: String, path: String) -> URL {
         var components = URLComponents()
@@ -316,6 +326,14 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
         switch self {
         case let .installed(entry, _): "installed:\(entry.id)"
         case let .available(entry): "available:\(entry.id)"
+        }
+    }
+
+    /// The extension's id, installed or not.
+    var extensionID: String {
+        switch self {
+        case let .installed(entry, _): entry.id
+        case let .available(entry): entry.id
         }
     }
 

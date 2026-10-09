@@ -32,9 +32,9 @@ See [extensions](/docs/extensions) for the file format and examples, and the [co
 
 ## Settings → Extensions
 
-Every [extension](/docs/extensions) as a card in one searchable grid, by name: the ones you have — installed from Macterm's repository into `~/.config/macterm/extensions/`, or your own palette files in `~/.config/macterm/palettes/` — and the ones in [Macterm's repository](https://github.com/thdxg/macterm/tree/main/extensions) written for your version that you haven't installed. Each card shows its authors and one button:
+Every [extension](/docs/extensions) as a card in one searchable grid, by name: the ones you have — installed from Macterm's repository into `~/.config/macterm/extensions/`, or your own palette files in `~/.config/macterm/palettes/` — and the ones in [Macterm's repository](https://github.com/thdxg/macterm/tree/main/extensions) written for your version that you haven't installed. Each card has one button:
 
-- **Install** shows the extension's README and every file in it — its commands run on your Mac — and then copies the folder into `~/.config/macterm/extensions/`, where it's installed like any other.
+- **Install** copies the extension's folder into `~/.config/macterm/extensions/` right away, where it's installed like any other. Its commands run on your Mac, so read it first: the book button beside **Install** opens its README on GitHub, next to the rest of its files.
 - **Installed** offers to move it to the Trash.
 
 An extension whose file doesn't read shows a warning on its card. The repository's extensions are read when you open the pane, at most once an hour; **Refresh** reads them again. The built-in screens — Password Manager, Worktrees and Files — aren't extensions and aren't listed.

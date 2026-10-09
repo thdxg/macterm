@@ -96,6 +96,8 @@ struct PaletteRegistryTests {
             == "https://api.github.com/repos/thdxg/macterm/git/trees/v1.32.0:extensions?recursive=1")
         #expect(PaletteRegistry.fileURL(ref: "main", id: "git", path: "palette.yaml").absoluteString
             == "https://raw.githubusercontent.com/thdxg/macterm/main/extensions/git/palette.yaml")
+        #expect(PaletteRegistry.readmeURL(ref: "v1.32.0", id: "git").absoluteString
+            == "https://github.com/thdxg/macterm/blob/v1.32.0/extensions/git/README.md")
     }
 
     @Test
