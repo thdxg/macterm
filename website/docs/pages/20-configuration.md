@@ -3,12 +3,12 @@ slug: configuration
 title: Configuration
 nav: Configuration
 group: Getting started
-description: Point Macterm at your Ghostty config and manage Macterm-specific settings.
+description: Point Macterm at your Ghostty config and manage the settings of Macterm.
 -->
 
 # Configuration
 
-Macterm reads your existing Ghostty config — same file, same locations, no conversion. Theme, font, palette, and keybinds all carry over. Every key is in the [Ghostty option reference](https://ghostty.org/docs/config/reference).
+Macterm reads your existing Ghostty config. It uses the same file in the same places, and you do not convert anything. Your theme, font, palette and keybinds carry over. Every key is in the [Ghostty option reference](https://ghostty.org/docs/config/reference).
 
 ```ini title="~/.config/ghostty/config"
 theme = catppuccin-mocha
@@ -16,11 +16,11 @@ font-family = JetBrains Mono
 font-size = 14
 ```
 
-With no existing config, Macterm uses `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`. If yours lives elsewhere, set the path in **Settings → General → Ghostty Config**. Run **Reload Ghostty Config** from the command palette to apply an edit without restarting.
+If you have no config, Macterm uses `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`. If your config is in another place, set the path in **Settings → General → Ghostty Config**. To apply an edit with no restart, run **Reload Ghostty Config** from the command palette.
 
 ## Defaults that differ from Ghostty
 
-Macterm ships its own defaults for a few keys. They load before your config, so setting any of them yourself wins.
+Macterm has its own defaults for a few keys. Macterm loads them before your config, so a key that you set always wins.
 
 | Key | Macterm default |
 | --- | --- |
@@ -28,80 +28,80 @@ Macterm ships its own defaults for a few keys. They load before your config, so 
 | `font-size` | `16` |
 | `macos-option-as-alt` | `true` |
 | `window-padding-x`, `window-padding-y` | `16` |
-| `tab-inherit-working-directory` | `false` — new tabs start at the project root |
+| `tab-inherit-working-directory` | `false`. New tabs start at the project root. |
 
-The source of truth is `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
+The full list is `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
 
 ## Keys Macterm overrides
 
-Window chrome Macterm draws itself, so these are ignored or forced:
+Macterm draws the window chrome itself. It ignores or forces these keys:
 
 | Key | Set it here instead |
 | --- | --- |
 | `background-opacity` | Settings → Appearance → Window opacity |
 | `background-blur` | Settings → Appearance → Blur |
-| titlebar, window-decoration, split-divider, quick-terminal keys | Settings |
-| `bell-features = title`, `border` | not implemented |
-| `macos-non-native-fullscreen` | not implemented — full screen is always native |
+| titlebar, window-decoration, split-divider and quick-terminal keys | Settings |
+| `bell-features = title`, `border` | Not implemented |
+| `macos-non-native-fullscreen` | Not implemented. Full screen is always native. |
 
-`background-opacity-cells` works as in Ghostty. Everything else — `bell-features = system`, `audio`, `attention` (which badges the Dock with the number of tabs waiting on you), `mouse-scroll-multiplier`, `custom-shader` — behaves as documented upstream.
+`background-opacity-cells` works as in Ghostty. All other keys work as the upstream docs describe them. This includes `bell-features = system`, `audio` and `attention` (`attention` puts a badge on the Dock icon with the number of tabs that wait for you), `mouse-scroll-multiplier` and `custom-shader`.
 
 ## Keys with no Settings equivalent
 
 | Key | Effect |
 | --- | --- |
-| `tab-inherit-working-directory` | `false` (Macterm's default) starts new tabs at the project root; `true` uses the focused pane's directory. |
-| `split-inherit-working-directory` | Same, for splits. |
-| `focus-follows-mouse` | `true` focuses the pane under the pointer in the active window, as clicking it would. Never takes focus from the command palette, the search bar or a rename field. |
-| `macos-shortcuts` | Gates [Shortcuts](/docs/shortcuts): `ask` (default), `allow`, `deny`. |
-| `macos-icon = custom` + `macos-custom-icon` | Replaces the Dock icon. Absolute path to a PNG, JPEG, or ICNS. Other `macos-icon` values are ignored. |
+| `tab-inherit-working-directory` | `false` (the Macterm default) starts new tabs at the project root. `true` uses the directory of the focused pane. |
+| `split-inherit-working-directory` | The same, for splits. |
+| `focus-follows-mouse` | `true` focuses the pane under the pointer in the active window, as a click on the pane does. It never takes focus from the command palette, the search bar or a rename field. |
+| `macos-shortcuts` | Controls access to [Shortcuts](/docs/shortcuts): `ask` (default), `allow` or `deny`. |
+| `macos-icon = custom` and `macos-custom-icon` | Replaces the Dock icon. The value is the absolute path to a PNG, JPEG or ICNS file. Macterm ignores other `macos-icon` values. |
 | `macos-hidden = always` | Runs Macterm with no Dock icon, no menu bar, and no <kbd>⌘</kbd><kbd>⇥</kbd> entry. See below. |
 
 ## Macterm settings
 
-**Macterm → Settings** owns window opacity, blur, sidebar behavior, quick-terminal geometry, keymaps, and animations.
+**Macterm → Settings** has the settings for window opacity, blur, sidebar behavior, quick terminal geometry, keymaps and animations.
 
 ## Keybinds
 
-**Settings → Keymaps**. Click a row's keybind, press the chord you want, or clear it with the ✕. Rows sharing a chord say so.
+Go to **Settings → Keymaps**. Click the keybind of a row. Press the keys that you want, or clear the keybind with the ✕. If rows have the same keys, each row says so.
 
-Two per-row checkboxes, mutually exclusive:
+Each row has two checkboxes. You cannot select both:
 
-- **Pass to TUI** — hands the chord to the program in the focused pane instead of running the action. List the programs under **Passthrough Programs** at the top of the tab, comma-separated, matching the name the tab shows.
-- **Global** — registers the chord system-wide, so the action runs while another app is frontmost. No Accessibility permission needed. If the chord is already taken, the row says so.
+- **Pass to TUI** gives the keys to the program in the focused pane. The action does not run. List the programs under **Passthrough Programs** at the top of the tab. Separate them with commas. Use the name that the tab shows.
+- **Global** registers the keys for the whole system, so the action runs when another app is in front. Macterm does not need the Accessibility permission. If another app already uses the keys, the row says so.
 
 ## Open files in your terminal editor
 
-Macterm can open text files in a terminal editor such as Helix or Neovim, which macOS can't make a default app on its own.
+Macterm can open text files in a terminal editor such as Helix or Neovim. macOS cannot make such an editor a default app on its own.
 
-1. In Finder, select a file, choose **File → Get Info**, pick **Macterm** under **Open with**, and click **Change All**. Repeat for each file type you want. If Macterm isn't in the list, it doesn't register for that file type; use **Open With → Other…** for a one-off.
-2. Set `$EDITOR` (or `$VISUAL`, which wins) in your shell config, e.g. `$env.EDITOR = "hx"` in nu or `export EDITOR=nvim` in zsh. Without either, files open in `vi`.
-3. In **Settings → General → Text Files**, choose **Open in**: **New split** (beside the current pane, along its longer side) or **New tab**.
+1. In Finder, select a file and choose **File → Get Info**. Under **Open with**, select **Macterm**. Click **Change All**. Do this for each file type that you want. If Macterm is not in the list, it does not register for that file type. For a single file, use **Open With → Other…**.
+2. Set `$EDITOR` in your shell config. Set `$VISUAL` if you want it to win over `$EDITOR`. For example, `$env.EDITOR = "hx"` in nu or `export EDITOR=nvim` in zsh. If you set neither, files open in `vi`.
+3. In **Settings → General → Text Files**, choose **Open in**: **New split** (next to the current pane, along its longer side) or **New tab**.
 
-Double-clicking such a file, opening it with **Open With → Macterm**, or `open -a Macterm file.rs` opens it in the project that contains it. If no project does, Macterm creates one for the file's folder.
+You can double-click such a file, open it with **Open With → Macterm**, or run `open -a Macterm file.rs`. In each case, the file opens in the project that contains it. If no project contains it, Macterm creates a project for the folder of the file.
 
-<kbd>⌘</kbd>-click a path in a pane to open it with its default app. Paths like `src/main.rs:42:7`, as printed by compilers and test runners, work too. When Macterm is the default app, the file opens at that line: the editor gets `+42` before the path, which vi, Vim, Neovim, Helix, Kakoune, Emacs, nano and micro all understand. Other apps can't be told a line, so they get just the file.
+<kbd>⌘</kbd>-click a path in a pane to open it with its default app. Paths such as `src/main.rs:42:7` work too. Compilers and test runners print paths in this form. When Macterm is the default app, the file opens at that line. The editor gets `+42` before the path. The editors vi, Vim, Neovim, Helix, Kakoune, Emacs, nano and micro all understand this. Other apps cannot receive a line, so they get only the file.
 
-Quitting the editor closes its split or tab. Paths printed in a [remote project](/docs/remote-projects) don't open in the editor, since the file is on the host.
+When you quit the editor, its split or tab closes. Paths that a [remote project](/docs/remote-projects) prints do not open in the editor, because the file is on the host.
 
 ## Project colors
 
-Set a color from a project's sidebar context menu (**Color**) or **Settings → Projects**. It tints the project's sidebar icon and its tabs' icons. **Settings → Appearance → Auto-assign project colors** (off by default) colors each new project automatically.
+Set a color from the sidebar context menu of a project (**Color**) or in **Settings → Projects**. The color tints the sidebar icon of the project and the icons of its tabs. **Settings → Appearance → Auto-assign project colors** (off by default) gives each new project a color by itself.
 
 ## Animations
 
-**Settings → Animations**. Smooth scrolling and split animations are on; the cursor effects are off.
+Go to **Settings → Animations**. Smooth scrolling and split animations are on. The cursor effects are off.
 
 | Toggle | Effect |
 | --- | --- |
-| **Smooth scrolling** | Trackpad scrolling and divider drags move by pixels instead of whole rows. Full-screen programs that scroll a region of the screen (`less`, for one) slide too; ones that redraw every row still move by rows. |
-| **Snap to whole row** | Under smooth scrolling, scrolling moves a whole row at a time and each row slides into place, the way `less` scrolls — it never stops between rows. Off by default. |
-| **Animate splits** | Panes slide in and out of the split layout. Off automatically under Reduce Motion. |
-| **Smooth cursor** | The cursor glides between positions, and the text it passes over is cursor-colored exactly as far as it's covered. Programs that draw their own cursor (a second one in Helix, say) still move it by cells. |
-| **Cursor trail** | A fading streak follows the cursor across larger moves, drawn under the text. Turn off any community trail shader, or you'll see two. |
+| **Smooth scrolling** | Trackpad scrolling and divider drags move by pixels, not by whole rows. Full-screen programs that scroll a region of the screen slide too (`less`, for example). Programs that redraw every row still move by rows. |
+| **Snap to whole row** | Works with smooth scrolling. Scrolling moves one whole row at a time, and each row slides into place, as `less` scrolls. It never stops between rows. Off by default. |
+| **Animate splits** | Panes slide in and out of the split layout. It turns off by itself when Reduce Motion is on. |
+| **Smooth cursor** | The cursor glides between positions. The text that the cursor passes over has the cursor color, only as far as the cursor covers it. Programs that draw their own cursor (a second cursor in Helix, for example) still move it by cells. |
+| **Cursor trail** | A fading streak follows the cursor on larger moves. It is under the text. If you use a community trail shader, turn it off. Otherwise you see two trails. |
 
 ## Running without a Dock icon
 
-Set `macos-hidden = always` to run Macterm as an accessory app — for working out of the [quick terminal](/docs/quick-terminal). The window, sidebar, sessions, and every keybinding keep working; `macterm window focus` still brings a window forward.
+Set `macos-hidden = always` to run Macterm as an accessory app. Use it to work from the [quick terminal](/docs/quick-terminal). The window, the sidebar, the sessions and every keybind keep working. `macterm window focus` still brings a window forward.
 
-> An accessory app has no menu bar, so **Settings, Quit, About and Check for Updates lose their keyboard route**. Set your Macterm preferences before switching it on. To get back, set `macos-hidden = never` and reload.
+> An accessory app has no menu bar. **Settings, Quit, About and Check for Updates lose their keyboard route.** Set your Macterm preferences before you turn this on. To go back, set `macos-hidden = never` and reload.

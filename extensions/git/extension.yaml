@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
 name: Git
-description: "Switch, log and diff the project's branches"
+description: "Switch, log and diff the branches of the project"
 icon: arrow.triangle.branch
 authors: [thdxg]

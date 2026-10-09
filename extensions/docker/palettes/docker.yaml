@@ -3,7 +3,7 @@ name: Docker
 icon: cube.box
 description: Follow a running container's logs or open a shell in it
 requires: [docker]
-when: { run: docker info, unavailable: Docker isn't running }
+when: { run: docker info, unavailable: Docker is not running }
 root: containers
 nodes:
   containers:

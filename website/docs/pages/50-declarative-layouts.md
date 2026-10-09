@@ -3,12 +3,12 @@ slug: declarative-layouts
 title: Declarative layouts
 nav: Declarative layouts
 group: Projects & sessions
-description: Describe a project's tabs, splits, and per-pane commands in YAML.
+description: Describe the tabs, splits and commands of a project in YAML.
 -->
 
 # Declarative layouts
 
-Describe a project's tabs, splits, and per-pane commands in YAML. Files live in `~/.config/macterm/projects/`, one per project, matched by `path` — the filename is cosmetic.
+Describe the tabs, splits and commands of a project in YAML. The files are in `~/.config/macterm/projects/`, one file for each project. Macterm matches a file to a project by `path`. The file name does not matter.
 
 ```yaml title="~/.config/macterm/projects/myapp.yaml"
 name: "MyApp"
@@ -23,20 +23,20 @@ tabs:
       second: {} # plain shell pane
 ```
 
-Each tab is either a leaf pane (`cwd` / `run` / `shell`) or a `split` with a `direction`, a `ratio`, and `first` / `second` children. A bare `{}` is a plain shell.
+Each tab is a leaf pane (`cwd`, `run` and `shell`) or a `split`. A `split` has a `direction`, a `ratio`, and the children `first` and `second`. A bare `{}` is a plain shell.
 
 ## Applying and saving
 
 | Command palette | Effect |
 | --- | --- |
 | **Save layout** | Writes your current workspace to the file. |
-| **Apply layout** | Reconciles the live workspace toward the file — matching panes are kept, drifted ones restart. |
+| **Apply layout** | Changes the live workspace to match the file. Macterm keeps the panes that match. It starts again the panes that are different. |
 
-Selecting a project or relaunching Macterm restores your last session, not the file. The file takes effect only when you run **Apply layout**.
+When you select a project or start Macterm again, Macterm restores your last session. It does not read the file. The file has an effect only when you run **Apply layout**.
 
 ## Remote projects
 
-Set `path` to a remote spec and the tabs spawn on that host. Add `zmxPath` only if auto-detection fails.
+Set `path` to a remote spec. The tabs then start on that host. Add `zmxPath` only if Macterm cannot find zmx by itself.
 
 ```yaml
 path: "devbox:~/dev/api"
