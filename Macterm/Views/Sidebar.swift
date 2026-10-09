@@ -493,7 +493,7 @@ struct SidebarContent: View {
                     Image(systemName: "pin")
                         .foregroundStyle(.tertiary)
                 }
-                .help("Not running — select to restore from its saved layout")
+                .help("Not running. Select it to restore it from its saved layout.")
             }
         }
         .padding(.trailing, rowTrailingInset)
@@ -1594,7 +1594,7 @@ private struct UnloadedRowStyle: ViewModifier {
         if isUnloaded {
             content
                 .foregroundStyle(.secondary)
-                .help("Not running — select to load the project again")
+                .help("Not running. Select it to load the project again.")
         } else {
             content
         }

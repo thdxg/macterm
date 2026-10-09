@@ -37,7 +37,7 @@ struct RunCommandInMactermPaneIntent: AppIntent {
 
     @Parameter(
         title: "Submit",
-        description: "Off leaves the text on the prompt without running it.",
+        description: "Off leaves the text at the shell prompt and does not run it.",
         default: true
     )
     var submit: Bool
@@ -81,7 +81,7 @@ struct RunCommandInMactermPaneIntent: AppIntent {
 /// apply — the two key-input paths share no gate.
 struct SendKeyToMactermPaneIntent: AppIntent {
     static let title: LocalizedStringResource = "Send Key"
-    static let description = IntentDescription("Send one key chord to a pane, like ctrl+c, escape, or up.")
+    static let description = IntentDescription("Send one key combination to a pane, such as ctrl+c, escape or up.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)
@@ -90,7 +90,7 @@ struct SendKeyToMactermPaneIntent: AppIntent {
 
     @Parameter(
         title: "Key",
-        description: "A chord like ctrl+c, escape, up, or a bare printable like j.",
+        description: "A key combination such as ctrl+c, escape or up, or a single printable key such as j.",
         inputOptions: String.IntentInputOptions(
             capitalizationType: .none,
             autocorrect: false,
@@ -111,7 +111,7 @@ struct SendKeyToMactermPaneIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard let shortcut = HotkeyRegistry.parseShortcut(key) else {
-            throw MactermIntentError.badInput("\"\(key)\" isn't a key chord. Try ctrl+c, escape, or up.")
+            throw MactermIntentError.badInput("\"\(key)\" is not a key combination. Try ctrl+c, escape or up.")
         }
         let target = try IntentTargets.pane(session: pane.id, in: ctx)
         guard let view = target.pane.nsView,
@@ -132,7 +132,7 @@ struct SendKeyToMactermPaneIntent: AppIntent {
 /// as well as ordinary output that could have been piped.
 struct GetMactermPaneContentsIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Pane Contents"
-    static let description = IntentDescription("Read the text a pane is showing.")
+    static let description = IntentDescription("Read the text that a pane shows.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)
@@ -144,7 +144,7 @@ struct GetMactermPaneContentsIntent: AppIntent {
 
     @Parameter(
         title: "Include Scrollback",
-        description: "Off reads only what is on screen.",
+        description: "Off reads only the text on the screen.",
         default: false
     )
     var scrollback: Bool
@@ -193,7 +193,7 @@ enum MactermPaneDetail: String, AppEnum {
 /// Read one fact about a pane.
 struct GetMactermPaneDetailsIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Pane Details"
-    static let description = IntentDescription("Read a pane's id, session, directory, process, or size.")
+    static let description = IntentDescription("Read the ID, session, directory, process or size of a pane.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)

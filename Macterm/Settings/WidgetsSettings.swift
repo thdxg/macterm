@@ -42,7 +42,7 @@ struct WidgetsSettings: View {
                     .help("Add a widget at the center of the desktop")
                 }
             } footer: {
-                Text("A widget is a terminal on your desktop. Edit one to move or resize it.")
+                Text("A widget is a terminal on your desktop. Edit a widget to move it or change its size.")
                     .settingsCaption()
             }
         }

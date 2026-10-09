@@ -27,7 +27,7 @@ enum PaletteScreenshot {
             CGRequestScreenCaptureAccess()
             appState.presentToast(
                 "Macterm needs Screen Recording to capture the palette",
-                subtitle: "Allow it in System Settings → Privacy & Security, then try again."
+                subtitle: "Allow it in System Settings → Privacy & Security. Then try again."
             )
             return
         }
@@ -57,7 +57,7 @@ enum PaletteScreenshot {
             save(png, suggestedFolder: folder, appState: appState)
         } catch {
             logger.error("palette screenshot: \(error.localizedDescription, privacy: .public)")
-            appState.presentToast("Couldn't capture the palette", subtitle: error.localizedDescription)
+            appState.presentToast("Cannot capture the palette", subtitle: error.localizedDescription)
         }
     }
 
@@ -126,7 +126,7 @@ enum PaletteScreenshot {
         try? FileManager.default.createDirectory(at: suggestedFolder, withIntermediateDirectories: true)
         let panel = NSSavePanel()
         panel.title = "Save Palette Screenshot"
-        panel.message = "Extensions keep their screenshots in a screenshots folder beside palette.yaml."
+        panel.message = "An extension keeps its screenshots in a screenshots folder next to extension.yaml."
         panel.allowedContentTypes = [.png]
         panel.directoryURL = suggestedFolder
         panel.nameFieldStringValue = MactermExtension.nextScreenshotName(in: suggestedFolder)
@@ -139,7 +139,7 @@ enum PaletteScreenshot {
                     try png.write(to: url, options: .atomic)
                     appState.presentToast("Screenshot saved", subtitle: url.lastPathComponent)
                 } catch {
-                    appState.presentToast("Couldn't save the screenshot", subtitle: error.localizedDescription)
+                    appState.presentToast("Cannot save the screenshot", subtitle: error.localizedDescription)
                 }
             }
         }
@@ -150,8 +150,8 @@ enum PaletteScreenshot {
         case encoding
         var errorDescription: String? {
             switch self {
-            case .noDisplay: "The palette's display can't be captured."
-            case .encoding: "The capture couldn't be written as a PNG."
+            case .noDisplay: "Macterm cannot capture the display of the palette."
+            case .encoding: "Macterm could not write the capture as a PNG."
             }
         }
     }

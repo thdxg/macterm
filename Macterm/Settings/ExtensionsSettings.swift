@@ -74,11 +74,11 @@ struct ExtensionsSettings: View {
                     try appState.customPalettes.uninstall(extensionID: installed.id)
                     problem = nil
                 } catch {
-                    problem = "Couldn't uninstall \(installed.name): \(error.localizedDescription)"
+                    problem = "Cannot uninstall \(installed.name): \(error.localizedDescription)"
                 }
             }
         } message: { installed in
-            Text("Its folder, \(installed.id), goes to the Trash, and its palettes leave the command palette.")
+            Text("The folder \(installed.id) goes to the Trash. Its palettes leave the command palette.")
         }
     }
 
@@ -91,7 +91,7 @@ struct ExtensionsSettings: View {
                 try await appState.paletteRegistry.install(entry, into: appState.customPalettes)
                 problem = nil
             } catch {
-                problem = "Couldn't install \(entry.name): \(error.localizedDescription)"
+                problem = "Cannot install \(entry.name): \(error.localizedDescription)"
             }
             installingIDs.remove(entry.id)
         }
@@ -120,10 +120,10 @@ private struct RegistryStatus: View {
         case .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Reading extensions from Macterm's repository…").settingsCaption()
+                Text("Reading the extensions from the Macterm repository…").settingsCaption()
             }
         case let .failed(reason):
-            Label("Couldn't read Macterm's extensions: \(reason)", systemImage: "exclamationmark.triangle.fill")
+            Label("Cannot read the extensions of Macterm: \(reason)", systemImage: "exclamationmark.triangle.fill")
                 .settingsCaption()
         }
     }
@@ -200,7 +200,7 @@ private struct ExtensionCard: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(entry.failure != nil || isInstalling)
-            .help(entry.failure.map { "This version of Macterm can't read it: \($0.localizedDescription)" } ?? "Install it")
+            .help(entry.failure.map { "This version of Macterm cannot read it: \($0.localizedDescription)" } ?? "Install it")
         }
     }
 }

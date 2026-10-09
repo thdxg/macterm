@@ -245,7 +245,7 @@ final class PaletteRegistry {
         var errorDescription: String? {
             switch self {
             case let .alreadyInstalled(id): "You already have a palette named \(id)."
-            case let .unreadable(reason): "This version of Macterm can't read it: \(reason)"
+            case let .unreadable(reason): "This version of Macterm cannot read it: \(reason)"
             }
         }
     }
@@ -333,7 +333,7 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
     var summary: String {
         switch self {
         case let .installed(installed, _): installed.problem ?? installed.description ?? installed.id
-        case let .available(entry): entry.failure.map { "Can't be read by this version: \($0.localizedDescription)" }
+        case let .available(entry): entry.failure.map { "Cannot be read by this version: \($0.localizedDescription)" }
             ?? entry.description ?? entry.readme.flatMap(MactermExtension.summary(readme:)) ?? ""
         }
     }

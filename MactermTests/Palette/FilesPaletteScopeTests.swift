@@ -211,8 +211,8 @@ struct FilesPaletteScopeTests {
         let remote = makeContext(path: "", remote: true)
         let remoteCtx = AppCommandContext(appState: remote.appState, projectStore: remote.projectStore)
         #expect(AppCommand.files.action(in: remoteCtx) == nil)
-        #expect(AppCommand.files.unavailableNotice(in: remoteCtx) == "Files aren’t available for remote projects")
-        #expect(AppCommand.files.paletteDisabledHint(in: remoteCtx) == "Files aren’t available for remote projects")
+        #expect(AppCommand.files.unavailableNotice(in: remoteCtx) == "The Files screen is not available for remote projects")
+        #expect(AppCommand.files.paletteDisabledHint(in: remoteCtx) == "The Files screen is not available for remote projects")
         #expect(PaletteScopeID.files.pill.title == "Files")
         #expect(CommandSource().emptyItems(context: local)?.first { $0.title == "Files" }?.opensScope == .files)
     }

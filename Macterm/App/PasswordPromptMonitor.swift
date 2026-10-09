@@ -404,7 +404,7 @@ final class PasswordPromptMonitor {
             if vault.save(offer.secret, for: offer.id) {
                 tracker.offers.removeFirst()
             } else {
-                offer.problem = vault.lastError ?? "Couldn’t save to the keychain."
+                offer.problem = vault.lastError ?? "Cannot save to the keychain."
                 tracker.offers[0] = offer
             }
             return true

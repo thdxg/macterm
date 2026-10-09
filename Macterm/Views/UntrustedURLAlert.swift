@@ -15,8 +15,8 @@ enum UntrustedURLAlert {
         alert.alertStyle = .warning
         alert.icon = NSImage(named: NSImage.cautionName)
         alert.messageText = "Open Link from Terminal Output?"
-        alert.informativeText = "This link will open in \(handler). "
-            + "Only continue if you recognize and trust the destination."
+        alert.informativeText = "This link opens in \(handler). "
+            + "Continue only if you know and trust the destination."
         alert.accessoryView = targetView(displayString)
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Open Link")

@@ -114,7 +114,7 @@ final class CustomPaletteScope: PaletteScope {
             if verdicts[condition.command] == true {
                 proceed()
             } else {
-                failure = PaletteFailure(title: "\(palette.name) isn't available", detail: condition.reason)
+                failure = PaletteFailure(title: "\(palette.name) is not available", detail: condition.reason)
                 onChange?()
             }
         }
@@ -157,7 +157,7 @@ final class CustomPaletteScope: PaletteScope {
             return false
         }
         if let error = entry.failure {
-            failure = PaletteFailure(title: "Couldn't read \(entry.fileURL.lastPathComponent)", detail: error.localizedDescription)
+            failure = PaletteFailure(title: "Cannot read \(entry.fileURL.lastPathComponent)", detail: error.localizedDescription)
             return false
         }
         return true
@@ -206,18 +206,18 @@ final class CustomPaletteScope: PaletteScope {
                     )
                     if !missing.isEmpty {
                         outcome = .failure(PaletteFailure(
-                            title: "Couldn't list \(title)",
+                            title: "Cannot list \(title)",
                             detail: CustomPaletteRequirements.message(missing: missing)
                         ))
                     }
                 }
             } catch is CustomPaletteRunner.TimedOut {
                 outcome = .failure(PaletteFailure(
-                    title: "Couldn't list \(title)",
-                    detail: "The command didn't finish within \(CustomPaletteRunner.timeout.components.seconds) seconds."
+                    title: "Cannot list \(title)",
+                    detail: "The command did not finish within \(CustomPaletteRunner.timeout.components.seconds) seconds."
                 ))
             } catch {
-                outcome = .failure(PaletteFailure(title: "Couldn't list \(title)", detail: error.localizedDescription))
+                outcome = .failure(PaletteFailure(title: "Cannot list \(title)", detail: error.localizedDescription))
             }
             guard let self, !Task.isCancelled else { return }
             self.task = nil
@@ -240,7 +240,7 @@ final class CustomPaletteScope: PaletteScope {
         let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         guard result.status == 0 else {
             return .failure(PaletteFailure(
-                title: "Couldn't list \(title)",
+                title: "Cannot list \(title)",
                 detail: stderr.isEmpty ? "The command exited with status \(result.status)." : stderr
             ))
         }
@@ -248,14 +248,14 @@ final class CustomPaletteScope: PaletteScope {
             return try .success(CustomPaletteRows.parse(output: result.stdout, listing: listing))
         } catch let failure as CustomPaletteRows.Failure {
             let detail = switch failure {
-            case let .notJSON(reason): "Output isn't JSON: \(reason)"
+            case let .notJSON(reason): "Output is not JSON: \(reason)"
             case let .rowsNotFound(path): "Nothing at rows: \(path) in the output"
-            case let .rowsNotAnArray(path): "rows: \(path) isn't an array"
-            case let .plainOutputWithRowsPath(path): "rows: \(path) names a path, but the output isn't JSON"
+            case let .rowsNotAnArray(path): "rows: \(path) is not an array"
+            case let .plainOutputWithRowsPath(path): "rows: \(path) names a path, but the output is not JSON"
             }
-            return .failure(PaletteFailure(title: "Couldn't read \(title)", detail: stderr.isEmpty ? detail : "\(detail)\n\(stderr)"))
+            return .failure(PaletteFailure(title: "Cannot read \(title)", detail: stderr.isEmpty ? detail : "\(detail)\n\(stderr)"))
         } catch {
-            return .failure(PaletteFailure(title: "Couldn't read \(title)", detail: error.localizedDescription))
+            return .failure(PaletteFailure(title: "Cannot read \(title)", detail: error.localizedDescription))
         }
     }
 

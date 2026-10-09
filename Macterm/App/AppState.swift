@@ -2365,7 +2365,7 @@ final class AppState {
         guard !PinnedTabs.reservesName(name) else {
             present(.notice(
                 .reservedProjectName,
-                title: "Couldn't rename project",
+                title: "Cannot rename project",
                 message: PinnedTabs.reservedNameMessage,
                 host: .mainWindow
             ))
@@ -2517,7 +2517,7 @@ final class AppState {
         present(PendingDialog(
             kind: .unloadProject(projectID),
             title: "Unload project with running processes?",
-            message: "A process is still running in this project. Unloading stops every process in its tabs; the layout is kept.",
+            message: "A process is still running in this project. Unloading ends every process in its tabs. Macterm keeps the layout.",
             confirmTitle: "Unload",
             host: host
         ) { [weak self] in self?.unloadProject(projectID) })
@@ -3509,7 +3509,7 @@ final class AppState {
         present(PendingDialog(
             kind: .closePane(paneID: paneID, projectID: projectID),
             title: "Close running process?",
-            message: "A process is still running in this pane. Close it anyway?",
+            message: "A process is still running in this pane. Close the pane anyway?",
             confirmTitle: "Close",
             host: .mainWindow
         ) { [weak self] in self?.closePane(paneID, projectID: projectID) })
@@ -3558,7 +3558,7 @@ final class AppState {
             present(PendingDialog(
                 kind: .applyLayout(projectID: projectID),
                 title: "Apply layout?",
-                message: "Applying this layout will close some panes and end the processes running in them.",
+                message: "If you apply this layout, Macterm closes some panes and ends the processes in them.",
                 confirmTitle: "Apply",
                 host: host
             ) { [weak self] in
@@ -3693,9 +3693,9 @@ final class AppState {
         let names = strays.map { "“\($0.url.lastPathComponent)”" }.joined(separator: ", ")
         presentLayoutError(
             verb: "save",
-            message: "The layout was saved to “\(target.lastPathComponent)”, but these other files also "
-                + "declare this project’s path and are ignored: \(names). "
-                + "Remove or merge them in the projects directory.",
+            message: "Macterm saved the layout to “\(target.lastPathComponent)”. These other files also "
+                + "declare the path of this project, and Macterm ignores them: \(names). "
+                + "Remove them or merge them in the projects folder.",
             title: "Layout saved with a conflict",
             host: host
         )
@@ -3725,9 +3725,9 @@ final class AppState {
         let names = colliding.map { "“\($0.name)”" }.joined(separator: ", ")
         presentLayoutError(
             verb: "save",
-            message: "\(names) share this directory and layout file "
-                + "“\(target.lastPathComponent)” with this project. Saving here overwrote their "
-                + "layout, and each save wins over the last. Give the projects distinct names to "
+            message: "\(names) share this folder and the layout file "
+                + "“\(target.lastPathComponent)” with this project. Your save replaced their "
+                + "layout. Each save replaces the one before. Give the projects different names to "
                 + "keep separate layout files.",
             title: "Layout file shared with another project",
             host: host

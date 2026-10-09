@@ -35,7 +35,7 @@ enum GlobalHotkeyRefusal: Equatable {
     var message: String {
         switch self {
         case .noModifier: "Not global: a system-wide keybind needs a modifier key."
-        case .passesThrough: "Not global: this keybind passes through to programs instead."
+        case .passesThrough: "Not global: this keybind goes to programs instead."
         case .taken: "Not global: this keybind is already taken."
         case let .failed(status): "Not global: the system refused it (error \(status))."
         }

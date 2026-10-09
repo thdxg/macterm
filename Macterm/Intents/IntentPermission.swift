@@ -149,7 +149,7 @@ final class IntentPermissionGate {
         let alert = NSAlert()
         alert.messageText = "Allow Shortcuts to control \(appDisplayName)?"
         alert.informativeText = "A shortcut wants to run an action in \(appDisplayName). "
-            + "It can create projects and tabs, and type into your terminals."
+            + "It can create projects and tabs. It can also type into your terminals."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Don't Allow")
