@@ -118,7 +118,7 @@ final class CustomPaletteStore {
             // every lookup key on it. The first by name
             // is the palette; the other says why it isn't.
             guard seen.insert(stem).inserted else {
-                let error = CustomPaletteError.invalid("another file is already the palette \(stem); rename one")
+                let error = CustomPaletteError.invalid("another file is already the palette \(stem). Rename one")
                 return Entry(id: url.lastPathComponent, fileURL: url, result: .failure(error), header: nil)
             }
             return Self.entry(id: stem, url: url)

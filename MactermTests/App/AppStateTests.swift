@@ -1920,7 +1920,7 @@ struct AppStateTests {
         let notice = try #require(state.pendingDialog)
         #expect(notice.title == "Layout saved with a conflict")
         #expect(notice.message.contains("zzz.yaml"))
-        #expect(notice.message.contains("ignored"))
+        #expect(notice.message.contains("ignores"))
     }
 
     @Test

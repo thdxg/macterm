@@ -51,7 +51,7 @@ struct ProjectsSettings: View {
                         )
                     }
                 }
-                Text("Reorder from a row's menu — the order matches the sidebar.")
+                Text("Change the order in the menu of a row. The order is the same as in the sidebar.")
                     .settingsCaption()
             } header: {
                 HStack {
@@ -95,7 +95,7 @@ struct ProjectsSettings: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 }
-                Text("Removing a layout deletes its file. The project is kept.")
+                Text("Removing a layout deletes its file. The project stays.")
                     .settingsCaption()
             } header: {
                 DocsSectionHeader("Layouts", docs: .layouts)
@@ -118,10 +118,13 @@ struct ProjectsSettings: View {
             Button("Remove", role: .destructive) { confirmDeletion() }
                 .keyboardShortcut(.defaultAction)
         } message: {
-            Text("“\(layoutPendingDeletion?.filename ?? "")” will be deleted. Projects using it are kept, but lose their saved layout.")
+            Text(
+                "Macterm deletes “\(layoutPendingDeletion?.filename ?? "")”. "
+                    + "The projects that use it stay, but they lose their saved layout."
+            )
         }
         .alert(
-            "Couldn’t remove layout file",
+            "Cannot remove the layout file",
             isPresented: Binding(
                 get: { deleteFailure != nil },
                 set: { if !$0 { deleteFailure = nil } }
@@ -377,7 +380,7 @@ private struct LayoutRow: View {
 
     private var subtitle: String {
         if layout.isInvalid {
-            return "Invalid file — fix it in an editor to use it."
+            return "Invalid file. Fix it in an editor to use it."
         }
         guard let path = layout.declaredPath else {
             return "No path declared."

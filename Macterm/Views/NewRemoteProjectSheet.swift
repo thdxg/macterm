@@ -59,9 +59,9 @@ struct NewRemoteProjectSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(
-                "Panes run persistent zmx sessions on the host over ssh — zmx must be installed there. "
-                    + "If it isn't found automatically, set an absolute path (e.g. ~/bin/zmx or /usr/local/bin/zmx). "
-                    + "Port, identity, and ControlMaster come from ~/.ssh/config."
+                "Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there. "
+                    + "If Macterm cannot find it, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. "
+                    + "Port, identity and ControlMaster come from ~/.ssh/config."
             )
             .font(.caption)
             .foregroundStyle(.secondary)

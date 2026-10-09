@@ -177,7 +177,7 @@ struct CommandPalettePanel: View {
         if let scope { return scope.placeholder }
         // Path mode's own test, so a remote spec (`devbox:~/api`) reads as
         // the directory it opens too.
-        if PaletteQuery(raw: query).looksLikePath { return "Open directory as new project..." }
+        if PaletteQuery(raw: query).looksLikePath { return "Open folder as new project..." }
         return "Search projects or commands..."
     }
 

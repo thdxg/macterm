@@ -142,7 +142,7 @@ struct ExtensionManifest: Codable, Equatable {
             throw CustomPaletteError.invalid("\(file): authors: name at least one GitHub username")
         }
         for author in manifest.authors where !isGitHubUsername(author) {
-            throw CustomPaletteError.invalid("\(file): authors: \(author) isn't a GitHub username")
+            throw CustomPaletteError.invalid("\(file): authors: \(author) is not a GitHub username")
         }
         return manifest
     }

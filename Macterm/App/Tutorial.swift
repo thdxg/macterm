@@ -83,9 +83,9 @@ enum Tutorial {
             "  " + s.bold("Macterm — the basics"),
             "",
             s.dim("""
-              You're in a project tab. Projects are the folders in the sidebar; each
-              keeps its own tabs and splits, and its shells stay alive in the
-              background — still running when you come back, even after a restart.
+              You are in a project tab. A project is a folder in the sidebar.
+              Each project has its own tabs and splits. Its shells keep running
+              in the background, also after you quit Macterm.
             """),
             "",
         ]
@@ -96,16 +96,16 @@ enum Tutorial {
             lines.append("")
         }
         lines += [
-            s.dim("  Every pane can also drive the app it lives in:"),
+            s.dim("  Every pane can also control the app that it runs in:"),
             "",
             "    " + s.accent("macterm pane split") + s.dim("   split this pane"),
             "    " + s.accent("macterm grid 2x2") + s.dim("     four panes, one command"),
-            "    " + s.accent("macterm --help") + s.dim("       everything else"),
+            "    " + s.accent("macterm --help") + s.dim("       all other commands"),
             "",
-            s.dim("  Above the projects is a pinned tab — open ") + s.bold("Welcome")
+            s.dim("  Above the projects is a pinned tab. Open ") + s.bold("Welcome")
                 + s.dim(" for the rest"),
-            s.dim("  of the tour. This is just terminal output: type ") + s.accent("clear")
-                + s.dim(" to dismiss it."),
+            s.dim("  of the tour. This is only terminal output. Type ") + s.accent("clear")
+                + s.dim(" to remove it."),
             "",
         ]
         return lines.joined(separator: "\n")
@@ -117,19 +117,19 @@ enum Tutorial {
             "  " + s.bold("Pinned tabs"),
             "",
             s.dim("""
-              This tab belongs to no project. It sits above them in the sidebar and
-              stays put while you switch projects — good for a scratch shell, a log
-              tail, or an agent you want to keep running.
+              This tab belongs to no project. It is above the projects in the
+              sidebar and stays in place when you switch projects. Use it for a
+              scratch shell, a log tail, or an agent that you want to keep running.
             """),
             "",
             s.dim("  · Pin any tab: right-click its sidebar row → ") + s.bold("Pin Tab")
                 + s.dim(", or drag it"),
             s.dim("    onto the strip above the projects."),
-            s.dim("  · Closing a pinned tab keeps the row. It reloads — re-running"),
-            s.dim("    whatever command it was running — the next time you select it."),
-            s.dim("  · The set is a file you can edit:"),
+            s.dim("  · When you close a pinned tab, its row stays. The next time that you"),
+            s.dim("    select it, it loads again and runs its command again."),
+            s.dim("  · The set is a file that you can edit:"),
             "    " + s.accent("~/.config/macterm/pinned.yaml"),
-            s.dim("  · Done with this one? Right-click the row → ") + s.bold("Unpin Tab")
+            s.dim("  · To remove this tab, right-click its row → ") + s.bold("Unpin Tab")
                 + s.dim("."),
             "",
         ]
@@ -144,7 +144,7 @@ enum Tutorial {
             lines.append("")
         }
         lines += [
-            s.dim("  Settings (") + s.accent("⌘,") + s.dim(") → Keymaps rebinds every shortcut."),
+            s.dim("  Settings (") + s.accent("⌘,") + s.dim(") → Keymaps changes every keybind."),
             s.dim("  Docs: ") + s.accent("https://macterm.thdxg.dev/docs/"),
             "",
         ]

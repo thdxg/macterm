@@ -28,13 +28,13 @@ enum MactermIntentError: Error, CustomLocalizedStringResourceConvertible {
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .accessDenied:
-            "\(appDisplayName) doesn't allow Shortcuts. Set macos-shortcuts = allow in your Ghostty config."
+            "\(appDisplayName) does not allow Shortcuts. Set macos-shortcuts = allow in your Ghostty config."
         case .appUnavailable:
-            "\(appDisplayName) isn't ready yet."
+            "\(appDisplayName) is not ready yet."
         case .notFound:
-            "That no longer exists in \(appDisplayName)."
+            "\(appDisplayName) cannot find that item now."
         case .noSurface:
-            "That pane's terminal isn't live yet. Select its tab once, then try again."
+            "The terminal of that pane is not live yet. Select its tab one time, then try again."
         case .busy:
             "A pane there has a running program. Close it in \(appDisplayName) instead."
         case let .badInput(detail):

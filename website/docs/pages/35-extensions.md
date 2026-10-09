@@ -218,7 +218,7 @@ Macterm does not check the rows of a listing one by one. Put `when:` on the item
 ## Loading and errors
 
 - **While a listing runs**, the screen shows a spinner. If a listing takes more than 30 seconds, Macterm stops it, and it stops everything that the listing started. If you leave the screen, Macterm also stops the listing.
-- **If a listing fails**, the screen says why. It shows the error output of the command. A listing fails in three cases. The command is not found. The command exits with a non-zero code. The output has the wrong shape. If a program that the palette `requires` is missing, the screen names that program. For example: *This palette needs kubectl, which isn't on your PATH.* To run the listing again, select **Retry** or press <kbd>⌘R</kbd>.
+- **If a listing fails**, the screen says why. It shows the error output of the command. A listing fails in three cases. The command is not found. The command exits with a non-zero code. The output has the wrong shape. If a program that the palette `requires` is missing, the screen names that program. For example: *This palette needs kubectl, which is not on your PATH.* To run the listing again, select **Retry** or press <kbd>⌘R</kbd>.
 - **A file that Macterm cannot read** keeps its row, with a warning glyph before the chevron. When you enter the row, it shows the error and names the node and the key, for example `pods: enter: no node named pod`. A key that Macterm does not know is also an error (`pods: mathc: no such key`). A misspelling therefore cannot do nothing in silence. Fix the file and press <kbd>⌘R</kbd>. Settings → Extensions shows the same warning on the card of the extension.
 
 To check every file from a terminal, run:

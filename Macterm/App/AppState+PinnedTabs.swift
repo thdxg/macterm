@@ -88,7 +88,7 @@ extension AppState {
         }
         let dest = projects.first { $0.id == record.originProjectID } ?? projects.first
         guard let dest else {
-            presentToast("Can’t unpin", subtitle: "Add a project to move the tab into first")
+            presentToast("Cannot unpin", subtitle: "Add a project to move the tab into first")
             return
         }
         // moveTab removes the record (its unpin hook) and rewrites the file.
@@ -680,8 +680,8 @@ extension AppState {
         logger.error("pinned.yaml auto-save suspended: \(reason, privacy: .public)")
         presentLayoutError(
             verb: "save",
-            message: "\(reason)\n\nPinned-tab auto-save is paused so your edits aren’t overwritten. "
-                + "Fix the file (or delete it) to resume.",
+            message: "\(reason)\n\nPinned-tab auto-save is paused so your edits are not overwritten. "
+                + "Fix the file, or delete it, to start auto-save again.",
             title: "Pinned layout file problem"
         )
     }

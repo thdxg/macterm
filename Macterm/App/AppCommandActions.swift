@@ -334,13 +334,13 @@ extension AppCommand {
     /// walks the local file system, which a remote project's files aren't on.
     @MainActor
     static func filesUnavailableReason(for project: Project) -> String? {
-        project.isRemote ? "Files aren’t available for remote projects" : nil
+        project.isRemote ? "The Files screen is not available for remote projects" : nil
     }
 
     /// Why `project` has no Worktrees screen, or nil when it has one.
     @MainActor
     static func worktreesUnavailableReason(for project: Project) -> String? {
-        if project.isRemote { return "Worktrees aren’t available for remote projects" }
+        if project.isRemote { return "The Worktrees screen is not available for remote projects" }
         return GitWorktrees.isRepository(projectPath: project.path) ? nil : "Project is not a git repository"
     }
 
@@ -361,6 +361,6 @@ extension AppCommand {
             .filter { ProjectSlug.owns(filename: $0.url.lastPathComponent, slug: slug) }
         guard mine.count > 1 else { return nil }
         let ignored = mine.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
-        return "Using \(mine[0].url.lastPathComponent) — ignoring duplicate \(ignored)"
+        return "Using \(mine[0].url.lastPathComponent) and ignoring the duplicate \(ignored)"
     }
 }

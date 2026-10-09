@@ -27,7 +27,7 @@ struct NewMactermProjectIntent: AppIntent {
     @Parameter(title: "Folder", supportedTypeIdentifiers: ["public.folder"])
     var folder: IntentFile
 
-    @Parameter(title: "Name", description: "Defaults to the folder's own name.")
+    @Parameter(title: "Name", description: "The default is the name of the folder.")
     var name: String?
 
     static var parameterSummary: some ParameterSummary {
@@ -38,7 +38,7 @@ struct NewMactermProjectIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<MactermProjectEntity> {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard let url = folder.fileURL else {
-            throw MactermIntentError.badInput("That isn't a folder on disk.")
+            throw MactermIntentError.badInput("That is not a folder on the disk.")
         }
         let path = ProjectPath.canonicalLocal(url.path(percentEncoded: false))
         var isDirectory: ObjCBool = false

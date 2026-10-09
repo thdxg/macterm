@@ -96,7 +96,7 @@ extension AppState {
     func presentLayoutError(verb: String, message: String, title: String? = nil, host: DialogHost = .mainWindow) {
         present(.notice(
             .layoutError(verb: verb),
-            title: title ?? "Couldn't \(verb) layout",
+            title: title ?? "Cannot \(verb) layout",
             message: message,
             host: host
         ))

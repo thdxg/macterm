@@ -296,7 +296,7 @@ enum DesktopWidgetRemoval {
         if appState.desktopWidgetNeedsConfirmRemove(id: id) {
             let alert = NSAlert()
             alert.messageText = "Remove widget?"
-            alert.informativeText = "A process is still running in this widget. Remove it anyway?"
+            alert.informativeText = "A process is still running in this widget. Remove the widget anyway?"
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Remove")
             alert.addButton(withTitle: "Cancel")

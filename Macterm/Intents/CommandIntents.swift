@@ -132,7 +132,7 @@ enum MactermKeybind: String, AppEnum {
 /// it instead of failing.
 struct InvokeMactermKeybindIntent: AppIntent {
     static let title: LocalizedStringResource = "Invoke Keybind"
-    static let description = IntentDescription("Run one of the app's keybind actions.")
+    static let description = IntentDescription("Run one of the keybind actions of Macterm.")
 
     #if compiler(>=6.2)
     @available(macOS 26.0, *)
@@ -150,7 +150,7 @@ struct InvokeMactermKeybindIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard let action = keybind.hotkeyAction else {
-            throw MactermIntentError.badInput("\"\(keybind.rawValue)\" is no longer an action in \(appDisplayName).")
+            throw MactermIntentError.badInput("\"\(keybind.rawValue)\" is not an action in \(appDisplayName) now.")
         }
         guard let delegate = ctx.appState.appDelegate else {
             throw MactermIntentError.appUnavailable

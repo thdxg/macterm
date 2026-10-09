@@ -96,7 +96,7 @@ struct WorktreesPaletteScopeTests {
         let context = makeContext(path: "devbox:~/repo")
         let ctx = AppCommandContext(appState: context.appState, projectStore: context.projectStore)
         #expect(AppCommand.worktrees.action(in: ctx) == nil)
-        #expect(AppCommand.worktrees.unavailableNotice(in: ctx) == "Worktrees aren’t available for remote projects")
+        #expect(AppCommand.worktrees.unavailableNotice(in: ctx) == "The Worktrees screen is not available for remote projects")
     }
 
     @Test

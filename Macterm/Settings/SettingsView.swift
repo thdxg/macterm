@@ -528,9 +528,9 @@ private struct GeneralSettings: View {
     /// (very long home/TMPDIR paths push past sun_path).
     private var zmxUnavailableReason: String {
         if !ZmxClient.live.isBundled() {
-            return "Session persistence is inactive: the zmx binary isn't bundled. Run `mise run setup` and rebuild."
+            return "Session persistence is off. The zmx binary is not in the app. Run `mise run setup` and build again."
         }
-        return "Session persistence is inactive: this system's zmx socket path is too long. Terminals run without persistence."
+        return "Session persistence is off. The zmx socket path of this system is too long. Terminals run with no persistence."
     }
 
     /// Ghostty's default locations form an optional base layer. Custom files
@@ -592,13 +592,13 @@ private struct GeneralSettings: View {
                 ghosttyConfigFileRows
 
                 HStack {
-                    Text("Files load from top to bottom; later files override earlier ones.")
+                    Text("Macterm loads the files from top to bottom. A later file overrides an earlier file.")
                         .settingsCaption()
                     Spacer()
                     Button("Reload") {
                         commitGhosttyConfig()
                     }
-                    .help("Re-read your Ghostty config. Click after saving external edits.")
+                    .help("Read your Ghostty config again. Click after you save an edit in another app.")
                 }
             } header: {
                 DocsSectionHeader("Ghostty Config", docs: .ghosttyConfig) {
@@ -623,7 +623,7 @@ private struct GeneralSettings: View {
                     .onChange(of: autoTilingEnabled) { _, v in
                         Preferences.shared.autoTilingEnabled = v
                     }
-                Text("Distributes pane sizes evenly on split and close.")
+                Text("Gives all panes the same size when you split or close a pane.")
                     .settingsCaption()
             }
 
@@ -636,7 +636,7 @@ private struct GeneralSettings: View {
                 .onChange(of: textFilePlacement) { _, v in
                     Preferences.shared.textFilePlacement = v
                 }
-                Text("Opens files in your shell's $VISUAL or $EDITOR.")
+                Text("Opens files in the editor that $VISUAL or $EDITOR names in your shell.")
                     .settingsCaption()
             } header: {
                 DocsSectionHeader("Text Files", docs: .textFiles)
@@ -648,8 +648,8 @@ private struct GeneralSettings: View {
                         Preferences.shared.backgroundSSHConnections = v
                     }
                 Text(
-                    "Probes remote hosts for live tab names and close warnings. "
-                        + "Turn off if each connection prompts for Touch ID."
+                    "Asks remote hosts for live tab names and close warnings. "
+                        + "Turn it off if each connection asks for Touch ID."
                 )
                 .settingsCaption()
                 Toggle("Reconnect panes after a dropped connection", isOn: $reconnectRemotePanes)
@@ -657,7 +657,7 @@ private struct GeneralSettings: View {
                         Preferences.shared.reconnectRemotePanes = v
                     }
                 Text(
-                    "Reattaches a disconnected pane's session when you wake "
+                    "Connects a disconnected pane to its session again when you wake "
                         + "the Mac or return to the app."
                 )
                 .settingsCaption()
@@ -1044,9 +1044,9 @@ private struct FullDiskAccessBanner: View {
                     Text("Full Disk Access is off")
                         .font(.system(size: 13, weight: .semibold))
                     Text(
-                        "macOS will ask folder by folder as terminal commands touch "
-                            + "Documents, Downloads, and other protected locations. "
-                            + "One Full Disk Access grant covers them all."
+                        "macOS asks for each folder when a terminal command reads "
+                            + "Documents, Downloads or other protected places. "
+                            + "One Full Disk Access grant covers all of them."
                     )
                     .settingsCaption()
                     if let url = FullDiskAccess.settingsURL {
@@ -1076,9 +1076,9 @@ private struct NotificationPermissionBanner: View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Macterm doesn't have notification permission")
+                    Text("Macterm has no notification permission")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("Your Ghostty config is set to deliver notifications.")
+                    Text("Your Ghostty config asks for notifications.")
                         .settingsCaption()
                     if let url = NotificationHandler.settingsURL {
                         Button("Open System Settings…") {
@@ -1188,14 +1188,17 @@ private struct AppearanceSettings: View {
                     .onChange(of: adaptiveTerminalChrome) { _, enabled in
                         Preferences.shared.adaptiveTerminalChromeEnabled = enabled
                     }
-                Text("Matches the whole window for a single pane; in a split, only each full-screen app's pane changes color.")
-                    .settingsCaption()
+                Text(
+                    "The whole window takes the color for a single pane. "
+                        + "In a split, only the pane of each full-screen program changes color."
+                )
+                .settingsCaption()
             }
 
             Section("Sidebar") {
                 Toggle("Peek sidebar when hidden", isOn: $peekSidebarWhenHidden)
                     .onChange(of: peekSidebarWhenHidden) { _, v in Preferences.shared.peekSidebarWhenHidden = v }
-                Text("Shows the hidden sidebar while the pointer rests at the window's left edge.")
+                Text("Shows the hidden sidebar while the pointer is at the left edge of the window.")
                     .settingsCaption()
 
                 Group {
@@ -1242,21 +1245,21 @@ private struct AppearanceSettings: View {
                     .onChange(of: autoAssignProjectColors) { _, v in
                         Preferences.shared.autoAssignProjectColors = v
                     }
-                Text("Gives each new project the least-used color. Existing projects keep whatever they have.")
+                Text("Gives each new project the color that projects use least. Existing projects keep their color.")
                     .settingsCaption()
 
                 Toggle("Show AI agent icons", isOn: $showAgentIcons)
                     .onChange(of: showAgentIcons) { _, v in
                         Preferences.shared.showAgentIcons = v
                     }
-                Text("Uses the logo of the AI agent running in a tab as its icon.")
+                Text("Uses the logo of the AI agent that runs in a tab as the icon of the tab.")
                     .settingsCaption()
 
                 Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
                     .onChange(of: showTabStatusIndicator) { _, v in
                         Preferences.shared.showTabStatusIndicator = v
                     }
-                Text("Shows a spinner while a command runs, and a dot when it finishes.")
+                Text("Shows a spinner while a command runs. Shows a dot when the command ends.")
                     .settingsCaption()
 
                 Group {
@@ -1266,7 +1269,7 @@ private struct AppearanceSettings: View {
                     .onChange(of: showSpinnerOverAgentIcons) { _, v in
                         Preferences.shared.showSpinnerOverAgentIcons = v
                     }
-                    Text("When off, a tab running an AI agent keeps its logo while busy. The completion dot still appears.")
+                    Text("When off, a tab with an AI agent keeps its logo while the agent works. The completion dot still appears.")
                         .settingsCaption()
                 }
                 .disabled(!(showTabStatusIndicator && showAgentIcons))
@@ -1274,14 +1277,14 @@ private struct AppearanceSettings: View {
 
                 Toggle("Show new project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
-                Text("When hidden, create projects via the command palette or context menu.")
+                Text("When hidden, create projects with the command palette or the context menu.")
                     .settingsCaption()
 
                 Toggle("Show new tab button on projects", isOn: $showProjectNewTabButton)
                     .onChange(of: showProjectNewTabButton) { _, v in
                         Preferences.shared.showProjectNewTabButton = v
                     }
-                Text("Shows the button while the pointer rests on a project row.")
+                Text("Shows the button while the pointer is on a project row.")
                     .settingsCaption()
             }
 
@@ -1291,8 +1294,8 @@ private struct AppearanceSettings: View {
                         Preferences.shared.showTabSwitcherOverlay = v
                     }
                 Text(
-                    "Holding the Recent Tab shortcut shows the project's tabs with a preview of each pane, "
-                        + "and moves the selection without switching until you let go."
+                    "While you hold the Recent Tab keybind, Macterm shows the tabs of the project with a preview of each pane. "
+                        + "The selection moves, but Macterm does not switch tabs until you release the keys."
                 )
                 .settingsCaption()
 
@@ -1305,14 +1308,17 @@ private struct AppearanceSettings: View {
                 .onChange(of: recentTabCandidates) { _, v in
                     Preferences.shared.recentTabCandidates = v
                 }
-                Text("How many of the most recent tabs the Recent Tab shortcut reaches, with or without previews.")
+                Text("The number of recent tabs that the Recent Tab keybind goes through, with or without previews.")
                     .settingsCaption()
             }
 
             Section("Toolbar") {
                 Toggle("Show toolbar", isOn: showToolbar)
-                Text("Hiding it removes the title bar, window buttons, and drag area; switch tabs via the sidebar or ⌘ and the tab number.")
-                    .settingsCaption()
+                Text(
+                    "Hiding it removes the title bar, the window buttons and the drag area. "
+                        + "Switch tabs with the sidebar, or with ⌘ and the tab number."
+                )
+                .settingsCaption()
 
                 Group {
                     Picker(selection: $preferences.tabSwitcherVisibility) {
@@ -1322,7 +1328,7 @@ private struct AppearanceSettings: View {
                     } label: {
                         Text("Tab switcher").dimsWhenDisabled()
                     }
-                    Text("Numbered control in the title bar for switching tabs by index.")
+                    Text("A numbered control in the title bar. Use it to switch tabs by number.")
                         .settingsCaption()
 
                     Picker(selection: $preferences.tabSwitcherPosition) {
@@ -1332,7 +1338,7 @@ private struct AppearanceSettings: View {
                     } label: {
                         Text("Tab switcher position").dimsWhenDisabled()
                     }
-                    Text("Left places the switcher before the window title, next to the sidebar.")
+                    Text("Left puts the switcher before the window title, next to the sidebar.")
                         .settingsCaption()
                 }
                 .disabled(preferences.hideTitleBar)
@@ -1364,13 +1370,14 @@ private struct AppearanceSettings: View {
     private var blurFootnote: String {
         if backgroundOpacity >= 0.999 {
             return WindowAppearance.glassSupported
-                ? "Blur and Liquid Glass only take effect when opacity is below 100%."
-                : "Blur only takes effect when opacity is below 100%."
+                ? "Blur and Liquid Glass work only when opacity is below 100%."
+                : "Blur works only when opacity is below 100%."
         }
         if liquidGlass {
-            return "Liquid Glass uses the macOS material (blur slider ignored). Regular is frostier; Clear is more transparent."
+            return "Liquid Glass uses the macOS material. The blur slider has no effect. "
+                + "Regular is more frosted. Clear is more transparent."
         }
-        return "Set blur to 0 to disable."
+        return "Set blur to 0 to turn it off."
     }
 
     @ViewBuilder
@@ -1426,7 +1433,7 @@ private struct AnimationsSettings: View {
                     .onChange(of: snapScrollToRow) { _, v in
                         Preferences.shared.snapScrollToRow = v
                     }
-                    Text("Scrolling moves a whole row at a time, each one sliding into place.")
+                    Text("Scrolling moves one whole row at a time. Each row slides into place.")
                         .settingsCaption()
                 }
                 .disabled(!smoothScrolling)
@@ -1440,14 +1447,14 @@ private struct AnimationsSettings: View {
                     .onChange(of: smoothCursor) { _, v in
                         Preferences.shared.smoothCursor = v
                     }
-                Text("The cursor glides between positions instead of jumping.")
+                Text("The cursor glides between positions. It does not jump.")
                     .settingsCaption()
 
                 Toggle("Cursor trail", isOn: $cursorTrail)
                     .onChange(of: cursorTrail) { _, v in
                         Preferences.shared.cursorTrail = v
                     }
-                Text("A fading streak follows the cursor across larger moves.")
+                Text("A fading streak follows the cursor on larger moves.")
                     .settingsCaption()
             } header: {
                 DocsSectionHeader("Cursor", docs: .animations)
@@ -1458,7 +1465,7 @@ private struct AnimationsSettings: View {
                     .onChange(of: animatedSplits) { _, v in
                         Preferences.shared.animatedSplits = v
                     }
-                Text("Panes slide in and out as the layout changes.")
+                Text("Panes slide in and out when the layout changes.")
                     .settingsCaption()
             } header: {
                 DocsSectionHeader("Splits", docs: .animations)
@@ -1495,7 +1502,7 @@ private struct QuickTerminalSettings: View {
                         for: HotkeyRegistry.selectedShortcutString(for: .toggleQuickTerminal)
                     )
                 )
-                Text("Works even when Macterm isn't active.")
+                Text("Works when Macterm is not the active app.")
                     .settingsCaption()
             } header: {
                 DocsSectionHeader("Quick Terminal", docs: .quickTerminal)
@@ -1510,8 +1517,11 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: positionMode) { _, v in
                     Preferences.shared.quickTerminalPositionMode = v
                 }
-                Text("Fixed anchors the panel with the sliders. Dynamic adds a grab handle and remembers where you drag it.")
-                    .settingsCaption()
+                Text(
+                    "Fixed sets the position of the panel with the sliders. "
+                        + "Dynamic adds a grab handle and remembers where you drag the panel."
+                )
+                .settingsCaption()
 
                 SettingsSlider(
                     label: "X",
@@ -1549,8 +1559,11 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: sizeMode) { _, v in
                     Preferences.shared.quickTerminalSizeMode = v
                 }
-                Text("Fixed sizes the panel with the sliders. Dynamic lets you resize it from its edges and reopens it at that size.")
-                    .settingsCaption()
+                Text(
+                    "Fixed sets the size of the panel with the sliders. "
+                        + "Dynamic lets you resize the panel from its edges. The panel opens again at that size."
+                )
+                .settingsCaption()
 
                 SettingsSlider(
                     label: "Width",
@@ -1784,8 +1797,8 @@ private struct KeymapSettings: View {
                 prompt: Text(verbatim: "nvim, hx")
             )
             Text(
-                "Keybinds with Pass to TUI checked go to these programs instead of running their action. "
-                    + "Separate names with commas."
+                "A keybind with Pass to TUI selected goes to these programs. The action does not run. "
+                    + "Separate the names with commas."
             )
             .settingsCaption()
         } header: {
@@ -2124,7 +2137,7 @@ private struct UpdatesSettings: View {
                     .disabled(!updater.canCheckForUpdates)
                 }
 
-                Text("Updates are verified with an EdDSA signature. No analytics are collected.")
+                Text("Macterm checks an EdDSA signature on each update. Macterm collects no analytics.")
                     .settingsCaption()
             }
 

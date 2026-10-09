@@ -269,7 +269,7 @@ enum CustomPaletteRequirements {
         case 2: missing.joined(separator: " and ")
         default: missing.dropLast().joined(separator: ", ") + " and " + (missing.last ?? "")
         }
-        let verb = missing.count == 1 ? "isn't" : "aren't"
+        let verb = missing.count == 1 ? "is not" : "are not"
         return "This palette needs \(names), which \(verb) on your PATH."
     }
 }

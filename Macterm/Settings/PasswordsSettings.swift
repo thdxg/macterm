@@ -98,14 +98,14 @@ struct PasswordsSettings: View {
             }
             .keyboardShortcut(.defaultAction)
         } message: {
-            Text("The password for “\(pendingRemoval?.id.title ?? "")” will be removed from your keychain.")
+            Text("Macterm removes the password for “\(pendingRemoval?.id.title ?? "")” from your keychain.")
         }
     }
 
-    private static let enabledCaption = "Offers to save a password you type at a prompt once it works, "
-        + "and fills it in the next time that prompt appears."
-    private static let authenticationCaption = "Asks for Touch ID, or your login password, before autofilling "
-        + "or showing a saved password. Passwords are stored in your login keychain."
+    private static let enabledCaption = "Offers to save a password that you type at a password prompt after it works, "
+        + "and fills it in the next time that the prompt appears."
+    private static let authenticationCaption = "Asks for Touch ID, or your login password, before it fills in "
+        + "or shows a saved password. Macterm stores passwords in your login keychain."
 
     private var filtered: [SavedPassword] {
         vault.entries(matching: query)
