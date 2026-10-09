@@ -49,7 +49,7 @@ const WEBP_QUALITY = 90;
 // screenshot stays visible and the bars read as intentional matting. The
 // colour is the design system's `page` token; a card on a different ground than
 // the site reads as a rendering bug in every link preview.
-const OG = { width: 1200, height: 630, background: "#0B0D0E" };
+const OG = { width: 1200, height: 630, background: "#111214" };
 
 // The landing page now shows recordings rather than a screenshot gallery, so
 // only screenshot-1 is still displayed (the "Built on libghostty" figure, and
