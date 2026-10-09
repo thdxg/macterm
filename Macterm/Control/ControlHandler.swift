@@ -306,8 +306,8 @@ final class ControlHandler {
 
     private static let widgetNotLive = ControlError(
         code: .noSurface,
-        message: "the widget's terminal isn't live yet",
-        action: "retry once its window has opened"
+        message: "the widget's terminal is not live yet",
+        action: "try again after its window opens"
     )
 
     private func parseWidgetSpan(_ raw: String?) throws -> DesktopWidgetSpan? {
@@ -315,7 +315,7 @@ final class ControlHandler {
         guard let span = DesktopWidgetSpan(parsing: raw) else {
             throw ControlError(
                 code: .badRequest,
-                message: "unknown widget size \"\(raw)\" (expected a COLUMNSxROWS grid span like 3x2)"
+                message: "unknown widget size \"\(raw)\" (expected a grid span COLUMNSxROWS, for example 3x2)"
             )
         }
         return span
@@ -409,8 +409,8 @@ final class ControlHandler {
         guard let view = pane.nsView, let size = view.surfaceSize else {
             throw ControlError(
                 code: .noSurface,
-                message: "the pane's terminal isn't live yet",
-                action: "select its tab once so the surface spawns, then retry"
+                message: "the pane's terminal is not live yet",
+                action: "select its tab one time to start its terminal, then try again"
             )
         }
         let snap = view.scrollbarSnapshot
@@ -454,8 +454,8 @@ final class ControlHandler {
         guard let view = pane.nsView, let text = view.readText(scrollback: scrollback) else {
             throw ControlError(
                 code: .noSurface,
-                message: "the pane's terminal isn't live yet",
-                action: "select its tab once so the surface spawns, then retry"
+                message: "the pane's terminal is not live yet",
+                action: "select its tab one time to start its terminal, then try again"
             )
         }
         return ControlData(dump: ControlPaneDump(
@@ -634,8 +634,8 @@ final class ControlHandler {
     /// (`PinnedTabs.reservedNameMessage`), in the CLI's quoting.
     private static let reservedNameError = ControlError(
         code: .badRequest,
-        message: "\"\(PinnedTabs.displayName)\" is reserved for the pinned-tabs workspace",
-        action: "pick another name"
+        message: "\"\(PinnedTabs.displayName)\" is a reserved name for the pinned tabs",
+        action: "select another name"
     )
 
     /// Drop a project's workspace and its `ProjectStore` entry — the same pair
@@ -952,8 +952,8 @@ final class ControlHandler {
         guard let view = target.pane.nsView, view.sendText(text) else {
             throw ControlError(
                 code: .noSurface,
-                message: "the pane's terminal isn't live yet",
-                action: "select its tab once so the surface spawns, then retry"
+                message: "the pane's terminal is not live yet",
+                action: "select its tab one time to start its terminal, then try again"
             )
         }
         // Injected input makes zmx hand this client leadership (its
@@ -972,13 +972,13 @@ final class ControlHandler {
     /// `no_surface` contract.
     private func paneKey(_ args: ControlArgs) throws -> ControlData {
         guard let chord = args.key, !chord.isEmpty else {
-            throw ControlError(code: .badRequest, message: "pane.key requires a key chord")
+            throw ControlError(code: .badRequest, message: "pane.key requires a key combination")
         }
         guard let shortcut = HotkeyRegistry.parseShortcut(chord) else {
             throw ControlError(
                 code: .badRequest,
-                message: "unrecognized key chord '\(chord)'",
-                action: "use tokens like ctrl+c, escape, up, or ctrl+\\ (see `macterm pane key --help`)"
+                message: "unrecognized key combination '\(chord)'",
+                action: "use a name such as ctrl+c, escape, up or ctrl+\\ (see `macterm pane key --help`)"
             )
         }
         if let target = widgetTarget(args) {
@@ -994,8 +994,8 @@ final class ControlHandler {
         else {
             throw ControlError(
                 code: .noSurface,
-                message: "the pane's terminal isn't live yet",
-                action: "select its tab once so the surface spawns, then retry"
+                message: "the pane's terminal is not live yet",
+                action: "select its tab one time to start its terminal, then try again"
             )
         }
         // As in paneSendText: a keypress is what zmx switches leader on.
@@ -1042,7 +1042,7 @@ final class ControlHandler {
             throw ControlError(
                 code: .notFound,
                 message: "no \(axis.rawValue) split around that pane to resize",
-                action: "the pane must sit inside a matching-axis split"
+                action: "the pane must be inside a split on that axis"
             )
         }
         appState.saveWorkspaces()
@@ -1064,8 +1064,8 @@ final class ControlHandler {
         guard let view = target.pane.nsView, view.debugResizeSurface(cols: cols, rows: rows) else {
             throw ControlError(
                 code: .noSurface,
-                message: "the pane's terminal isn't live yet (or its cell size is unknown)",
-                action: "select its tab once so the surface spawns, then retry"
+                message: "the pane's terminal is not live yet (or its cell size is unknown)",
+                action: "select its tab one time to start its terminal, then try again"
             )
         }
         return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
@@ -1123,7 +1123,7 @@ final class ControlHandler {
         guard source.tab.movePane(source.pane.id, to: target) else {
             throw ControlError(
                 code: .badRequest,
-                message: "move failed: self-target, or the pane is the tab's only one"
+                message: "move failed: the target is the pane itself, or the pane is the only pane of the tab"
             )
         }
         appState.saveWorkspaces()
@@ -1261,7 +1261,7 @@ final class ControlHandler {
         guard project.id == PinnedTabs.projectID else { return }
         throw ControlError(
             code: .badRequest,
-            message: "\(verb) doesn't apply to the pinned workspace — its layout is managed automatically",
+            message: "\(verb) does not apply to the pinned workspace. Macterm manages its layout by itself",
             action: "edit ~/.config/macterm/pinned.yaml instead"
         )
     }
