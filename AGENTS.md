@@ -335,6 +335,7 @@ Auto-updates via Sparkle (`SUFeedURL` = `https://macterm.thdxg.dev/appcast.xml`,
 - **Write all text you generate in ASD-STE100 style** (Simplified Technical English). This includes documentation, the website, README and CONTRIBUTING, Settings text, CLI output, error messages, code comments, commit messages and PR descriptions.
 - Use the `asd-ste100` skill (https://github.com/danyuchn/asd-ste100-skill, MIT, kept in `.claude/skills/asd-ste100/`). Run its linter on Markdown you write: `python3 .claude/skills/asd-ste100/scripts/ste-lint.py <file>`.
 - Use **Strict** mode for procedures, error messages, CLI output, Settings captions and agent skills. Use **STE-flavored** mode for README, docs prose and PR text.
+- Follow `WRITING.md` for Macterm terms and the words to use. It is the project glossary.
 - The skill has no copy of ASD's official dictionary. It checks sentence structure, not approved words. Do not claim dictionary compliance.
 - Keep every fact, condition and hedge. Do not change a product term, a command, a key name, a file path or a code identifier to make a sentence simpler.
 
