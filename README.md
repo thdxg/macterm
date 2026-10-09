@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  A lightweight macOS terminal with vertical tabs, session persistence, and native UI. Built on libghostty.
+  A lightweight macOS terminal with vertical tabs, persistent sessions and a native interface. Built on libghostty.
 </p>
 
 <p align="center">
@@ -34,36 +34,36 @@
 </p>
 
 > [!NOTE]
-> This project is unrelated to [MacTerm](https://github.com/kmgrant/macterm), a pre-existing macOS terminal emulator that shares the name.
+> This project has no relation to [MacTerm](https://github.com/kmgrant/macterm), an earlier macOS terminal emulator with the same name.
 
 ## Features
 
 - **Session persistence** \
-  Quitting detaches your shells instead of killing them; relaunching brings them back with scrollback and running processes intact.
+  When you quit, your shells keep running. When you start Macterm again, every pane returns with its scrollback and its running programs.
 - **Multiplexing** \
-  Drag a pane onto another to join them, or separate one into its own tab — by drag or by keybind. Projects, tabs, and split layouts are saved and restored on relaunch.
+  Drag a pane onto another pane to join them. Move a pane to its own tab with a drag or a keybind. Macterm saves your projects, tabs and splits and restores them when you start it again.
 - **Remote projects** \
-  Open a directory on another machine over SSH. Your shells keep running there, surviving quits, dropped connections, and even a local reboot.
+  Open a folder on another machine over SSH. Your shells keep running on that machine. They keep running when you quit Macterm, when the connection drops and when you restart your Mac.
 - **Vertical project sidebar** \
-  Organize projects and their tabs in a native macOS sidebar, stacked vertically where there's room to read them. Right-click any folder in Finder → Services → **New Macterm Project Here** to add one without leaving Finder.
+  Projects and their tabs are in a native macOS sidebar. The sidebar is vertical, so there is room to read long names. To add a project from Finder, right-click a folder and select **Services → New Macterm Project Here**.
 - **Pinned tabs** \
-  Pin a tab above your projects to keep it running: it starts on every launch, and restores itself with its command if the session dies.
+  Pin a tab above your projects to keep it. It starts each time Macterm starts. If its session ends, Macterm starts it again with its command.
 - **Command palette** \
-  Press <kbd>⌘P</kbd> to split panes, switch projects, or open a directory. Every action is a keystroke away, and each row shows its keybind.
+  Press <kbd>⌘P</kbd> to split panes, switch projects or open a folder. Each command is in the palette, and each row shows its keybind.
 - **Declarative layouts** \
-  Describe a project's tabs, splits, and per-pane commands in YAML; Macterm builds the workspace from it on open.
+  Write the tabs, splits and commands of a project in YAML. Macterm builds the tabs from the file when you apply the layout.
 - **Control CLI** \
-  A bundled `macterm` command drives the running app, so scripts and AI agents can spawn panes, run commands, and script layouts. `macterm skills` prints skills that teach a coding agent to use it.
+  The bundled `macterm` command controls the running app. Scripts and AI agents can open panes, run commands, and apply and save layouts. `macterm skills` prints skills that teach a coding agent to use the CLI.
 - **Quick terminal** \
-  A global drop-down terminal on a hotkey (<kbd>⌃`</kbd>), for scratch work from anywhere.
+  A drop-down terminal with a global keybind (<kbd>⌃`</kbd>). Use it for short tasks from any app.
 - **Desktop widgets** \
-  Put a terminal on your desktop beside the system's own widgets, on the same grid and in the same shape. Its shell keeps running through quits, and the widget comes back where you left it.
+  Put a terminal on your desktop next to the macOS widgets. It has the same grid and the same shape. Its shell keeps running when you quit. The widget returns to the same place.
 - **Password autofill** \
-  When `ssh`, `sudo`, or any other program asks for a password, Macterm offers to save it to your keychain once it works, then fills it in after Touch ID or your login password the next time the same prompt appears.
+  When `ssh`, `sudo` or another program asks for a password, Macterm offers to save the password in your keychain after the password works. The next time the same prompt appears, Macterm fills it in after Touch ID or your login password.
 - **Adaptive background** \
-  The window picks up the background color the running program paints. A full-screen TUI tints the whole window to match; in a split, each pane takes its own.
+  The window takes the background color that the running program paints. A full-screen program colors the whole window. In a split, each pane takes its own color.
 - **Ghostty compatibility** \
-  Reads your existing Ghostty config. Theme, font, keybinds: all of it just works.
+  Macterm reads your existing Ghostty config. Your theme, font and keybinds carry over.
 
 ## Install
 
@@ -73,21 +73,21 @@
 brew install --cask thdxg/tap/macterm
 ```
 
-The cask strips the Gatekeeper quarantine attribute on install, so the app launches without extra prompts.
+The cask removes the Gatekeeper quarantine attribute when it installs. The app then starts with no extra prompts.
 
 ### From Releases
 
-Download the latest `.dmg` from [Releases](https://github.com/thdxg/macterm/releases), open it, and drag Macterm to Applications. Since the app isn't signed with an Apple Developer certificate, clear the quarantine flag once:
+Download the latest `.dmg` from [Releases](https://github.com/thdxg/macterm/releases). Open it and drag Macterm to Applications. The app has no Apple Developer certificate signature, so clear the quarantine flag one time:
 
 ```bash
 xattr -cr /Applications/Macterm.app
 ```
 
-Sparkle handles updates from there, verifying an EdDSA signature on each one — so you won't need `xattr` again.
+After that, Sparkle installs updates. It checks an EdDSA signature on each update. You do not need `xattr` again.
 
 ## Configuration
 
-Macterm reads your Ghostty config from the same locations Ghostty does (`~/.config/ghostty/config` or `~/Library/Application Support/com.mitchellh.ghostty/config`), so an existing setup carries over unchanged. Every key is documented in the [Ghostty option reference](https://ghostty.org/docs/config/reference). A minimal config looks like this:
+Macterm reads your Ghostty config from the same places as Ghostty: `~/.config/ghostty/config` or `~/Library/Application Support/com.mitchellh.ghostty/config`. An existing setup carries over with no change. The [Ghostty option reference](https://ghostty.org/docs/config/reference) documents every key. A minimal config looks like this:
 
 ```ini
 theme = catppuccin-mocha
@@ -95,23 +95,23 @@ font-family = JetBrains Mono
 font-size = 14
 ```
 
-Macterm's defaults differ from Ghostty's for a few keys (theme, font size, padding, `macos-option-as-alt`, and `tab-inherit-working-directory = false` so new tabs open at the project root). They are loaded before your config, so any key you set wins. The full list is `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
+A few Macterm defaults are different from the Ghostty defaults: theme, font size, padding and `macos-option-as-alt`. Macterm also sets `tab-inherit-working-directory = false`, so new tabs open at the project root. Macterm loads these defaults before your config. A key that you set always wins. `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift) has the full list.
 
-Macterm's own settings — window opacity, sidebar behavior, quick-terminal size, keymaps — live in **Macterm → Settings**. See the [configuration docs](https://macterm.thdxg.dev/docs/configuration) for the full precedence order and the few chrome keys Macterm overrides.
+Macterm has its own settings for window opacity, sidebar behavior, quick terminal size and keymaps. Open them with **Macterm → Settings**. The [configuration docs](https://macterm.thdxg.dev/docs/configuration) give the full order of precedence and the few window keys that Macterm overrides.
 
 ## Cookbook
 
-Workflows and recipes from the community — the layouts, keybinds, and scripts people actually run to get more out of Macterm. For example: 
-- [one <kbd>⌃hjkl</kbd> chord that moves between nvim's splits *and* Macterm's panes](https://github.com/thdxg/macterm/discussions/217)
-- [driving an interactive program from a script](https://github.com/thdxg/macterm/discussions/218)
-- [giving a coding agent control of Macterm](https://github.com/thdxg/macterm/discussions/219)
-- [Neovim plugin for moving focus between Neovim splits and MacTerm panes with the same directional keybindings](https://github.com/thdxg/macterm/discussions/459)
+The community shares workflows and recipes: layouts, keybinds and scripts that people run with Macterm. For example:
+- [Use one set of <kbd>⌃hjkl</kbd> keybinds to move between Neovim splits and Macterm panes](https://github.com/thdxg/macterm/discussions/217)
+- [Drive an interactive program from a script](https://github.com/thdxg/macterm/discussions/218)
+- [Give a coding agent control of Macterm](https://github.com/thdxg/macterm/discussions/219)
+- [A Neovim plugin that moves focus between Neovim splits and Macterm panes with the same directional keybinds](https://github.com/thdxg/macterm/discussions/459)
 
-Got a recipe of your own? [Start a Cookbook topic](https://github.com/thdxg/macterm/discussions/new?category=cookbook) — anyone can post, and anyone can borrow.
+Do you have a recipe? [Start a Cookbook topic](https://github.com/thdxg/macterm/discussions/new?category=cookbook). Anyone can post a recipe, and anyone can use one.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build, and PR guidelines.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build and pull request rules.
 
 ## License
 
