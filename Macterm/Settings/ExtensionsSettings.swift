@@ -30,16 +30,9 @@ struct ExtensionsSettings: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 8) {
                     SettingsSearchField(text: $query, prompt: "Search extensions")
-                    Button {
-                        registry.refresh(force: true)
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(registry.state == .loading)
-                    .help("Read the extensions in Macterm's repository again")
                     DocsLink(.extensionsSettings)
                 }
-                RegistryStatus(state: registry.state, ref: registry.ref)
+                RegistryStatus(state: registry.state)
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
                         .settingsCaption()
@@ -74,7 +67,7 @@ struct ExtensionsSettings: View {
                 Text(
                     "An extension adds to what Macterm can do — today, screens in the command palette: "
                         + "a command whose output becomes rows, each opening another screen or running a command. "
-                        + "The ones listed are Macterm's own repository's, written for this version. "
+                        + "The ones listed come from Macterm's repository. "
                         + "A palette of your own needs no extension: a YAML file in your palettes folder."
                 )
                 .settingsCaption()
@@ -148,24 +141,21 @@ private struct FolderLink: View {
     }
 }
 
-/// Where the repository's extensions stand: reading, read (and when), or why
-/// they couldn't be.
+/// The repository's extensions while they're being read, or why they
+/// couldn't be; nothing once they're in.
 private struct RegistryStatus: View {
     let state: PaletteRegistry.State
-    let ref: String
 
     var body: some View {
         switch state {
-        case .idle:
+        case .idle,
+             .loaded:
             EmptyView()
         case .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text("Reading extensions from Macterm's repository…").settingsCaption()
             }
-        case let .loaded(date):
-            Text("Extensions for \(ref), read \(date.formatted(.relative(presentation: .named))).")
-                .settingsCaption()
         case let .failed(reason):
             Label("Couldn't read Macterm's extensions: \(reason)", systemImage: "exclamationmark.triangle.fill")
                 .settingsCaption()

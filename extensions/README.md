@@ -18,7 +18,7 @@ An extension is what someone installs; what it can do comes from its capabilitie
 
 Installing one copies its folder to `~/.config/macterm/extensions/<id>/`. Its commands can reach the other files in it through `$MACTERM_EXTENSION_DIR` — a script too long to sit in the YAML, say: `list: "$MACTERM_EXTENSION_DIR/list.sh"`.
 
-Macterm reads this folder at the version it was built from — a release reads its own tag, a tip build the `tip` tag — so an extension here only appears in builds that can read it.
+Every Macterm reads this folder on `main`, whatever its version, so a merged extension is offered to everyone at once. Macterm only ever adds to what an extension can say, never changes or removes it, so an extension that works keeps working after every update. One that uses something newer than someone's Macterm is shown to them as needing an update.
 
 ## Adding one
 

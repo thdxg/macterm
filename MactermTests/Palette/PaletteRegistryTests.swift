@@ -103,13 +103,10 @@ struct PaletteRegistryTests {
     }
 
     @Test
-    func a_build_reads_the_extensions_of_its_own_version() {
-        #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm.debug", version: "0.0.0") == "main")
-        #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm", version: "1.31.2-tip.44") == "tip")
-        #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm", version: "1.32.0-beta.4") == "v1.32.0-beta.4")
-        #expect(PaletteRegistry.ref(bundleID: "com.thdxg.macterm", version: "1.32.0") == "v1.32.0")
-        #expect(PaletteRegistry.treeURL(ref: "v1.32.0").absoluteString
-            == "https://api.github.com/repos/thdxg/macterm/git/trees/v1.32.0:extensions?recursive=1")
+    func every_build_reads_the_extensions_on_main() {
+        #expect(PaletteRegistry().ref == "main", "not tied to the app's version")
+        #expect(PaletteRegistry.treeURL(ref: "main").absoluteString
+            == "https://api.github.com/repos/thdxg/macterm/git/trees/main:extensions?recursive=1")
         #expect(PaletteRegistry.fileURL(ref: "main", id: "git", path: "palettes/git.yaml").absoluteString
             == "https://raw.githubusercontent.com/thdxg/macterm/main/extensions/git/palettes/git.yaml")
         #expect(PaletteRegistry.readmeURL(ref: "v1.32.0", id: "git").absoluteString
@@ -189,19 +186,20 @@ struct PaletteRegistryTests {
 
         registry.refresh()
         await settle()
-        #expect(server.treeReads == 1, "read once an hour")
-        registry.refresh(force: true)
-        await settle()
-        #expect(server.treeReads == 2, "Refresh reads again")
+        #expect(server.treeReads == 1, "read once an hour, however often the pane opens")
     }
 
     @Test
-    func a_version_without_extensions_says_so() async {
-        let registry = PaletteRegistry(ref: "v1.0.0", fetch: Server().fetch)
+    func a_failed_read_says_why_and_is_tried_again() async {
+        let server = Server()
+        let registry = PaletteRegistry(ref: "main", fetch: server.fetch)
         registry.refresh()
         await settle()
-        #expect(registry.state == .failed("No extensions for this version (v1.0.0)."))
+        #expect(registry.state == .failed("Macterm's repository has no extensions at main."))
         #expect(registry.entries.isEmpty)
+        registry.refresh()
+        await settle()
+        #expect(server.treeReads == 2, "a failure isn't kept for the hour")
     }
 
     @Test

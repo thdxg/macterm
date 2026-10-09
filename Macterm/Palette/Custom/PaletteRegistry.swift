@@ -5,18 +5,19 @@ private let logger = Logger(subsystem: appBundleID, category: "PaletteRegistry")
 
 /// The extensions anyone can install (`extensions/` in Macterm's repository,
 /// one folder each — `MactermExtension`), read from GitHub for Settings →
-/// Palettes. Read at the version this build came from (`ref(bundleID:version:)`),
-/// so the gallery offers only extensions written for it, and each is run
-/// through this build's validator: one it can't read is shown with why, and
-/// can't be installed.
+/// Extensions. Every build reads `main`: extensions aren't tied to a
+/// version, because the format only ever grows — an extension that works
+/// keeps working in every later Macterm. Each is still run through this
+/// build's validator, so one using something newer than this build is shown
+/// with why, and can't be installed until Macterm is updated.
 ///
 /// One request lists every extension's files (GitHub's Git Trees API, at
-/// `<ref>:extensions`); their text — manifest, palette, README, any script —
+/// `<ref>:extensions`); their text — manifest, palettes, README, any script —
 /// comes from `raw.githubusercontent.com`, which the API's hourly limit
-/// doesn't count, so it can be shown in full before installing. Fetched when
-/// Settings → Palettes opens, at most once an hour (`refreshInterval`), or on
-/// Refresh — never in the background. Installing copies the folder into
-/// `~/.config/macterm/extensions/<id>/`; nothing here runs its commands.
+/// doesn't count. Read each time Settings → Extensions opens, at most once an
+/// hour (`refreshInterval`), never in the background. Installing copies the
+/// folder into `~/.config/macterm/extensions/<id>/`; nothing here runs its
+/// commands.
 @MainActor @Observable
 final class PaletteRegistry {
     /// A file in an extension's folder.
@@ -105,8 +106,7 @@ final class PaletteRegistry {
     nonisolated static let repository = "thdxg/macterm"
     nonisolated static let folder = "extensions"
 
-    /// The repository's ref this build reads: a debug build `main`, a tip
-    /// build the rolling `tip` tag, a release or beta its own `v<version>`.
+    /// The repository's ref the extensions are read at: `main`.
     let ref: String
     private(set) var entries: [Entry] = []
     private(set) var state: State = .idle
@@ -123,23 +123,13 @@ final class PaletteRegistry {
         self.fetch = fetch
     }
 
-    /// This build's ref. A debug build can read another with
-    /// `MACTERM_PALETTE_REF` — a branch whose extensions aren't on `main` yet.
+    /// `main`. A debug build can read another branch with
+    /// `MACTERM_PALETTE_REF` — one whose extensions aren't merged yet.
     nonisolated static var defaultRef: String {
         #if DEBUG
         if let override = ProcessInfo.processInfo.environment["MACTERM_PALETTE_REF"], !override.isEmpty { return override }
         #endif
-        return ref(bundleID: appBundleID, version: appVersion)
-    }
-
-    nonisolated static var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
-    }
-
-    nonisolated static func ref(bundleID: String, version: String) -> String {
-        if bundleID.hasSuffix(".debug") { return "main" }
-        if version.contains("-tip") { return "tip" }
-        return "v\(version)"
+        return "main"
     }
 
     /// Every file under `extensions/` at `ref`, in one request.
@@ -198,11 +188,11 @@ final class PaletteRegistry {
             .sorted { $0.id < $1.id }
     }
 
-    /// Reads the repository's extensions unless they were read within the
-    /// hour; `force` reads them regardless (Refresh).
-    func refresh(force: Bool = false) {
+    /// Reads the repository's extensions, unless they were read in the last
+    /// hour; a read that failed is tried again.
+    func refresh() {
         if state == .loading { return }
-        if !force, case let .loaded(date) = state, Date().timeIntervalSince(date) < Self.refreshInterval { return }
+        if case let .loaded(date) = state, Date().timeIntervalSince(date) < Self.refreshInterval { return }
         state = .loading
         let fetch = fetch
         let ref = ref
@@ -248,7 +238,7 @@ final class PaletteRegistry {
         let status: Int
         let ref: String
         var errorDescription: String? {
-            status == 404 ? "No extensions for this version (\(ref))." : "GitHub answered \(status)."
+            status == 404 ? "Macterm's repository has no extensions at \(ref)." : "GitHub answered \(status)."
         }
     }
 
