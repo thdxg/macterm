@@ -436,8 +436,9 @@ enum WorkspaceSerializer {
     static func restore(from snapshots: [WorkspaceSnapshot], validIDs: Set<UUID>) -> [Workspace] {
         snapshots.compactMap { snap in
             guard validIDs.contains(snap.projectID) else { return nil }
+            // An empty workspace restores empty: the user closed every tab.
+            // Dropping it would make the next selection create a default tab.
             let tabs = snap.tabs.map { restoreTab($0, projectID: snap.projectID) }
-            guard !tabs.isEmpty else { return nil }
             return Workspace(projectID: snap.projectID, tabs: tabs, activeTabID: snap.activeTabID)
         }
     }

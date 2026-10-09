@@ -2088,6 +2088,32 @@ struct AppStateTests {
     }
 
     @Test
+    func a_project_with_every_tab_closed_stays_empty_after_a_relaunch() throws {
+        // Closing the last tab leaves the project empty. A relaunch must keep
+        // it empty: selecting it does not create a default tab.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-emptyproject-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let project = Project(name: "empty", path: dir.path, sortOrder: 0)
+        let store = WorkspaceStore(fileURL: dir.appendingPathComponent("workspaces.json"))
+
+        let first = makeAppState(store: store)
+        first.selectProject(project)
+        let tabID = try #require(first.workspaces[project.id]?.tabs.first?.id)
+        first.closeTab(tabID, projectID: project.id)
+        #expect(first.workspaces[project.id]?.tabs.isEmpty == true)
+
+        let relaunched = makeAppState(store: store)
+        relaunched.restoreSelection(projects: [project])
+        relaunched.selectProject(project)
+
+        let ws = try #require(relaunched.workspaces[project.id])
+        #expect(ws.tabs.isEmpty)
+        #expect(ws.activeTabID == nil)
+    }
+
+    @Test
     func applyLayout_malformed_file_returns_error_and_does_not_apply() throws {
         let files = makeProjectFileStore()
         let state = makeAppState(projectFiles: files)
