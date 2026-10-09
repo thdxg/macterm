@@ -94,8 +94,8 @@ enum MactermExtension {
     }
 
     /// The id a palette of extension `id` goes by — in bindings, the CLI and
-    /// every lookup: `<extension>/<file stem>`, so no two extensions' palettes,
-    /// nor a palette file of the user's own, can share one.
+    /// every lookup: `<extension>/<file stem>`, so the palettes of two
+    /// extensions never share an id.
     static func paletteID(extensionID id: String, path: String) -> String {
         "\(id)/\(((path as NSString).lastPathComponent as NSString).deletingPathExtension)"
     }
@@ -117,7 +117,25 @@ struct ExtensionManifest: Codable, Equatable {
     var name: String
     var description: String
     var icon: String?
+    /// The GitHub usernames of the maintainers. Optional for an extension
+    /// that you write for yourself. `CustomPaletteFileTests` requires it for
+    /// each extension in the repository.
     var authors: [String]
+
+    init(name: String, description: String, icon: String? = nil, authors: [String] = []) {
+        self.name = name
+        self.description = description
+        self.icon = icon
+        self.authors = authors
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
+        authors = try container.decodeIfPresent([String].self, forKey: .authors) ?? []
+    }
 
     static let keys: Set<String> = ["name", "description", "icon", "authors"]
 
@@ -137,9 +155,6 @@ struct ExtensionManifest: Codable, Equatable {
         if manifest.name.trimmingCharacters(in: .whitespaces).isEmpty { throw CustomPaletteError.invalid("\(file): name: is empty") }
         if manifest.description.trimmingCharacters(in: .whitespaces).isEmpty {
             throw CustomPaletteError.invalid("\(file): description: is empty")
-        }
-        guard !manifest.authors.isEmpty else {
-            throw CustomPaletteError.invalid("\(file): authors: name at least one GitHub username")
         }
         for author in manifest.authors where !isGitHubUsername(author) {
             throw CustomPaletteError.invalid("\(file): authors: \(author) is not a GitHub username")

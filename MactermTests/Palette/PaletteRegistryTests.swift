@@ -78,7 +78,7 @@ struct PaletteRegistryTests {
 
     private func makeStore() throws -> CustomPaletteStore {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("macterm-registry-\(UUID().uuidString)", isDirectory: true)
-        return CustomPaletteStore(directoryURL: dir.appendingPathComponent("palettes", isDirectory: true))
+        return CustomPaletteStore(configDirectoryURL: dir)
     }
 
     /// An extension of `palettes` (file name → YAML) with a README and
@@ -141,7 +141,7 @@ struct PaletteRegistryTests {
             broken.failure?.errorDescription?.hasPrefix("palettes/future.yaml: ") == true,
             "one palette that can't be read names itself"
         )
-        #expect(Self.entry("nobody", manifest: "name: X\ndescription: Y\nauthors: []\n").failure != nil)
+        #expect(Self.entry("nameless", manifest: "description: Y\n").failure != nil)
     }
 
     @Test
@@ -261,17 +261,23 @@ struct PaletteRegistryTests {
     }
 
     @Test
-    func an_extensions_palettes_never_share_an_id_with_a_palette_file() throws {
+    func palettes_come_only_from_extensions() throws {
         let store = try makeStore()
+        let config = store.extensionsURL.deletingLastPathComponent()
         let folder = store.extensionsURL.appendingPathComponent("git", isDirectory: true)
+        let oldFolder = config.appendingPathComponent("palettes", isDirectory: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("palettes"), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
-        try Self.manifest.write(to: folder.appendingPathComponent("extension.yaml"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: oldFolder, withIntermediateDirectories: true)
+        try "name: Git\ndescription: Branches\n".write(
+            to: folder.appendingPathComponent("extension.yaml"),
+            atomically: true,
+            encoding: .utf8
+        )
         try Self.pods.write(to: folder.appendingPathComponent("palettes/git.yaml"), atomically: true, encoding: .utf8)
-        try Self.pods.write(to: store.directoryURL.appendingPathComponent("git.yaml"), atomically: true, encoding: .utf8)
+        try Self.pods.write(to: oldFolder.appendingPathComponent("notes.yaml"), atomically: true, encoding: .utf8)
         store.reload()
-        #expect(store.entry(id: "git")?.extensionID == nil, "the user's own file")
-        #expect(store.entry(id: "git/git")?.extensionID == "git", "the extension's, beside it")
+        #expect(store.entries.map(\.id) == ["git/git"], "a file in the old palettes folder is not read")
+        #expect(store.installedExtension(id: "git")?.problem == nil, "an extension of your own needs no authors")
     }
 
     @Test
@@ -294,10 +300,10 @@ struct PaletteRegistryTests {
     func a_manifest_names_the_extension_and_its_authors() throws {
         let manifest = try ExtensionManifest.parse(yaml: "name: K\ndescription: D\nauthors: [thdxg, some-one]")
         #expect(manifest.authors == ["thdxg", "some-one"] && manifest.icon == nil)
+        #expect(try ExtensionManifest.parse(yaml: "name: K\ndescription: D").authors.isEmpty, "authors are optional")
         for bad in [
             "description: D\nauthors: [a]",
             "name: K\nauthors: [a]",
-            "name: K\ndescription: D\nauthors: []",
             "name: K\ndescription: D\nauthors: [-bad]",
             "name: K\ndescription: D\nauthors: [a]\nversion: 2",
         ] {
@@ -345,13 +351,11 @@ struct PaletteRegistryTests {
     }
 
     /// One list of extensions by name — installed and not, an installed
-    /// one listed once, palette files and the built-in screens not at all —
+    /// one listed once, the built-in screens not at all —
     /// ranked by the search when there is one.
     @Test
     func the_gallery_is_one_list_of_extensions_installed_or_not() async throws {
         let store = try makeStore()
-        try FileManager.default.createDirectory(at: store.directoryURL, withIntermediateDirectories: true)
-        try Self.pods.write(to: store.directoryURL.appendingPathComponent("notes.yaml"), atomically: true, encoding: .utf8)
         let registry = [
             Self.entry("kubernetes"),
             Self.entry("docker", manifest: "name: Docker\ndescription: Containers\nauthors: [thdxg]\n"),
@@ -359,7 +363,7 @@ struct PaletteRegistryTests {
         _ = try await PaletteRegistry(ref: "main", fetch: Server().fetch).install(registry[0], into: store)
 
         let all = ExtensionGalleryItem.items(installed: store.extensions, registry: registry, query: "")
-        #expect(all.map(\.title) == ["Kubernetes", "Docker"], "Kubernetes once, no palette files or built-ins")
+        #expect(all.map(\.title) == ["Kubernetes", "Docker"], "Kubernetes once, no built-ins")
         #expect(all.map(\.isInstalled) == [true, false])
         guard case let .installed(_, fromRegistry) = all[0] else {
             Issue.record("Kubernetes isn't installed")

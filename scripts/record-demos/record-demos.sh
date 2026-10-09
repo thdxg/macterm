@@ -74,12 +74,15 @@ RPASSWORD=tidepool42lantern      # demo 10 types it, key by key: lowercase and d
 CLAUDE_PORT=8765
 ANIM_KIT_SYMBOL=ghost_rows       # a shader uniform only the new kit has
 
-# Demo 11's palette. The installed app reads ~/.config/macterm/palettes/ afresh
-# every time the palette opens, so the take writes its own file there — under
-# a name of its own, carrying PAL_MARK as its first line — and the EXIT trap
-# below removes it (and only a file carrying the mark) however the run ends.
-PAL_DIR="$HOME/.config/macterm/palettes"
-PAL_FILE="$PAL_DIR/macterm-demo-git.yaml"
+# Demo 11's palette. The installed app reads the extensions in
+# ~/.config/macterm/extensions/ again each time that the palette opens. The
+# take therefore writes its own extension there, with a name of its own. Its
+# extension.yaml has PAL_MARK as its first line. The EXIT trap below removes
+# the extension (and only a folder with the mark), however the run ends.
+EXT_ROOT="$HOME/.config/macterm/extensions"
+PAL_EXT="$EXT_ROOT/macterm-demo-git"
+PAL_MANIFEST="$PAL_EXT/extension.yaml"
+PAL_FILE="$PAL_EXT/palettes/git.yaml"
 PAL_MARK="# written by record-demos.sh for demo 11; removed when the take ends"
 
 MACTERM=/Applications/Macterm.app/Contents/Resources/bin/macterm
@@ -100,7 +103,7 @@ say() { printf '\033[1m==\033[0m %s\n' "$*"; }
 die() { printf '\033[31m!!\033[0m %s\n' "$*" >&2; exit 1; }
 trap 'printf "\033[31m!!\033[0m aborted at line %s\n" "$LINENO" >&2' ERR
 # however the run ends, a desktop demo 8 rearranged is put back
-trap '[ -f "$WORK/desktop-view.plist" ] && { desk_view restore; killall Finder 2>/dev/null; }; [ -f "$WORK/create-desktop.was" ] && desk_icons restore; [ "$(head -n 1 "$PAL_FILE" 2>/dev/null)" = "$PAL_MARK" ] && rm -f "$PAL_FILE"; true' EXIT
+trap '[ -f "$WORK/desktop-view.plist" ] && { desk_view restore; killall Finder 2>/dev/null; }; [ -f "$WORK/create-desktop.was" ] && desk_icons restore; [ "$(head -n 1 "$PAL_MANIFEST" 2>/dev/null)" = "$PAL_MARK" ] && rm -rf "$PAL_EXT"; true' EXIT
 
 # ------------------------------------------------------------------ helpers --
 osa() { osascript -e "$1"; }
@@ -1468,9 +1471,9 @@ pal_write() {
   stat='git show --stat "$COMMIT"'
   log='git log --oneline -20 "$BRANCH"'
   branches="git branch --format='%(refname:short)'"
-  mkdir -p "$PAL_DIR"
+  mkdir -p "$PAL_EXT/palettes"
+  printf '%s\nname: Git (demo)\ndescription: The commits and branches of the project\n' "$PAL_MARK" > "$PAL_MANIFEST"
   cat > "$PAL_FILE" <<EOF
-$PAL_MARK
 name: Git
 icon: arrow.triangle.branch
 description: The project's commits and branches
@@ -1567,14 +1570,14 @@ drive11() {
 
 demo11() {  # a custom palette: nested screens, a search, a run action
   say "demo 11 — custom palettes"
-  if [ -e "$PAL_FILE" ] && [ "$(head -n 1 "$PAL_FILE")" != "$PAL_MARK" ]; then
-    die "$PAL_FILE exists and isn't this script's — move it aside first"
+  if [ -e "$PAL_EXT" ] && [ "$(head -n 1 "$PAL_MANIFEST" 2>/dev/null)" != "$PAL_MARK" ]; then
+    die "$PAL_EXT exists and isn't this script's — move it aside first"
   fi
   # typing "git" must land on this palette, not one of yours with the same name
   local f
-  for f in "$PAL_DIR"/*.yaml "$PAL_DIR"/*.yml; do
+  for f in "$EXT_ROOT"/*/palettes/*.yaml "$EXT_ROOT"/*/palettes/*.yml; do
     [ -f "$f" ] && [ "$f" != "$PAL_FILE" ] || continue
-    grep -Eiq '^name: *["'\'']?git["'\'']? *$' "$f" && die "$f is also named Git; turn it off or rename it for the take"
+    grep -Eiq '^name: *["'\'']?git["'\'']? *$' "$f" && die "$f is also named Git; uninstall its extension for the take"
   done
   command -v jq >/dev/null || die "demo 11's palette needs jq"
   pal_write
@@ -1583,7 +1586,7 @@ demo11() {  # a custom palette: nested screens, a search, a run action
   record palettes drive11
   encode palettes 11-custom-palettes.mp4
   reset_project                                    # quits the pager, drops the split
-  rm -f "$PAL_FILE"
+  rm -rf "$PAL_EXT"
 }
 
 anim_prefs() {

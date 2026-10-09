@@ -3,17 +3,18 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "CustomPaletteStore")
 
-/// The custom palettes on disk: every `*.yaml`/`*.yml` in
-/// `~/.config/macterm/palettes/` (`ProjectFileStore.configDirectoryURL`,
-/// which a test's store keeps inside its own directory), each parsed and
-/// validated into a `CustomPalette` or kept as the error that stopped it —
-/// a broken file is shown where its palette would be, in the palette's
-/// Palettes section and, for an extension, on its card in Settings → Extensions, not silently skipped.
+/// The installed extensions (`MactermExtension`) on disk, one folder each in
+/// `~/.config/macterm/extensions/` (in `ProjectFileStore.configDirectoryURL`,
+/// which a test's store keeps inside its own directory). Each extension is
+/// in `extensions`. Each of its palettes (`palettes/*.yaml`) is an entry,
+/// with the id `<extension>/<stem>`. Macterm parses and validates each
+/// palette into a `CustomPalette`, or keeps the error that stopped it. A
+/// broken file shows where its palette would be, in the Palettes section of
+/// the command palette and on the card of its extension in Settings →
+/// Extensions. Macterm does not skip it silently.
 ///
-/// Installed extensions (`MactermExtension`) load beside them, from
-/// `~/.config/macterm/extensions/<id>/`: each is listed in `extensions`, and
-/// each of its palettes (`palettes/*.yaml`) is an entry like a file's, under
-/// the id `<extension>/<stem>`.
+/// Macterm reads palettes only from extensions. A palette file in
+/// `~/.config/macterm/palettes/`, which earlier versions read, is not read.
 ///
 /// Read-only: the user's editor is the only writer. `reloadIfChanged` is
 /// cheap (a directory listing and the files' modification dates), so the
@@ -21,16 +22,15 @@ private let logger = Logger(subsystem: appBundleID, category: "CustomPaletteStor
 @MainActor @Observable
 final class CustomPaletteStore {
     struct Entry: Identifiable, Equatable {
-        /// The file's stem: what bindings and the Settings switch key on.
+        /// `<extension>/<file stem>`: the key of bindings and of every lookup.
         let id: String
         let fileURL: URL
         let result: Result<CustomPalette, CustomPaletteError>
         /// The file's own name, glyph and description as far as its YAML
         /// parses, for a file that failed validation.
         let header: CustomPaletteHeader?
-        /// The installed extension it belongs to, and that extension's
-        /// folder, which its commands reach as `MACTERM_EXTENSION_DIR`; nil
-        /// for a palette file of the user's own.
+        /// The installed extension that it belongs to, and the folder of that
+        /// extension. Its commands get the folder as `MACTERM_EXTENSION_DIR`.
         var extensionID: String?
         var extensionDirectory: URL?
 
@@ -68,23 +68,20 @@ final class CustomPaletteStore {
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
     }
 
-    let directoryURL: URL
-    /// Installed extensions (`MactermExtension`), one folder each, beside
-    /// the palettes folder: `~/.config/macterm/extensions/`.
+    /// The folder of installed extensions, `~/.config/macterm/extensions/`.
     let extensionsURL: URL
     private(set) var entries: [Entry] = []
     private(set) var extensions: [InstalledExtension] = []
     /// What the last load saw, to skip a reload that would find the same.
     private var fingerprint: [String: Date] = [:]
 
-    init(directoryURL: URL) {
-        self.directoryURL = directoryURL
-        extensionsURL = directoryURL.deletingLastPathComponent().appendingPathComponent("extensions", isDirectory: true)
+    init(extensionsURL: URL) {
+        self.extensionsURL = extensionsURL
         reload()
     }
 
     convenience init(configDirectoryURL: URL) {
-        self.init(directoryURL: configDirectoryURL.appendingPathComponent("palettes", isDirectory: true))
+        self.init(extensionsURL: configDirectoryURL.appendingPathComponent("extensions", isDirectory: true))
     }
 
     func entry(id: String) -> Entry? {
@@ -109,23 +106,9 @@ final class CustomPaletteStore {
     }
 
     func reload() {
-        let files = Self.paletteFiles(in: directoryURL)
         fingerprint = currentFingerprint()
-        var seen = Set<String>()
-        let palettes = files.map { url in
-            let stem = url.deletingPathExtension().lastPathComponent
-            // `git.yaml` and `git.yml` would be one id: bindings, the
-            // every lookup key on it. The first by name
-            // is the palette; the other says why it isn't.
-            guard seen.insert(stem).inserted else {
-                let error = CustomPaletteError.invalid("another file is already the palette \(stem). Rename one")
-                return Entry(id: url.lastPathComponent, fileURL: url, result: .failure(error), header: nil)
-            }
-            return Self.entry(id: stem, url: url)
-        }
-        // Installed extensions after the palette files. Their palettes'
-        // ids carry the extension's (`<extension>/<stem>`), so they never meet
-        // a file's or another extension's.
+        // The id of a palette includes the id of its extension
+        // (`<extension>/<stem>`), so two extensions never share a palette id.
         var extensionEntries: [Entry] = []
         extensions = Self.extensionFolders(in: extensionsURL).map { folder in
             let id = folder.lastPathComponent
@@ -143,7 +126,7 @@ final class CustomPaletteStore {
             }
             return InstalledExtension(id: id, folder: folder, manifest: manifest, paletteIDs: palettes.map(\.id), problem: problem)
         }
-        entries = palettes + extensionEntries
+        entries = extensionEntries
         PaletteHotkeys.shared.paletteIDs = entries.map(\.id)
     }
 
@@ -180,10 +163,18 @@ final class CustomPaletteStore {
     private static func extensionEntries(id extensionID: String, folder: URL) -> [Entry] {
         let palettesFolder = folder.appendingPathComponent(MactermExtension.palettesFolder, isDirectory: true)
         var seen = Set<String>()
-        return paletteFiles(in: palettesFolder).compactMap { url in
+        return paletteFiles(in: palettesFolder).map { url in
             let id = MactermExtension.paletteID(extensionID: extensionID, path: url.lastPathComponent)
-            guard seen.insert(id).inserted else { return nil }
-            var entry = entry(id: id, url: url)
+            // `git.yaml` and `git.yml` would have one id. The first by name is
+            // the palette. The other one says why it is not.
+            var entry: Entry
+            if seen.insert(id).inserted {
+                entry = Self.entry(id: id, url: url)
+            } else {
+                let stem = url.deletingPathExtension().lastPathComponent
+                let error = CustomPaletteError.invalid("another file is already the palette \(stem). Rename one")
+                entry = Entry(id: "\(extensionID)/\(url.lastPathComponent)", fileURL: url, result: .failure(error), header: nil)
+            }
             entry.extensionID = extensionID
             entry.extensionDirectory = folder
             return entry
@@ -225,17 +216,15 @@ final class CustomPaletteStore {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
-    /// Each palette file's and installed extension palette's modification
-    /// date — the target's, for a symbolic link (a dotfiles manager's), whose
-    /// own date never changes when the file it points at is saved.
+    /// The modification date of each manifest and palette of the installed
+    /// extensions. For a symbolic link (from a dotfiles manager), this is the
+    /// date of the target, because the date of the link does not change when
+    /// you save the file that it points at.
     private func currentFingerprint() -> [String: Date] {
         var dates: [String: Date] = [:]
         func record(_ url: URL, as key: String) {
             dates[key] = (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate ?? .distantPast
-        }
-        for url in Self.paletteFiles(in: directoryURL) {
-            record(url, as: url.lastPathComponent)
         }
         for folder in Self.extensionFolders(in: extensionsURL) {
             let id = folder.lastPathComponent

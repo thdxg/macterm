@@ -90,7 +90,7 @@ enum Output {
 
     private static func renderPalettes(_ palettes: [ControlPaletteInfo]) {
         if palettes.isEmpty {
-            print("No palette files.")
+            print("No palettes. Install an extension in Settings → Extensions.")
             return
         }
         let rows = palettes.map { palette -> [String] in

@@ -1,8 +1,8 @@
 import Foundation
 import Yams
 
-// A custom palette: `~/.config/macterm/palettes/<name>.yaml`, one file per
-// palette, a graph of named NODES. A node has static rows (`items:`), a
+// A palette of an extension: `~/.config/macterm/extensions/<id>/palettes/<name>.yaml`,
+// one file for each palette, a graph of named NODES. A node has static rows (`items:`), a
 // listing (`list:`, a command whose output becomes rows), or both — the
 // items first, then the listing's rows. Every row either enters another node
 // (`enter:`) or performs an action (`action:`), may name a second action

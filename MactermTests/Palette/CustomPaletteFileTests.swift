@@ -289,10 +289,20 @@ struct CustomPaletteFileTests {
     // MARK: - The docs' examples
 
     /// Every complete palette file the docs show: a fenced `yaml` block
-    /// captioned with a path in `~/.config/macterm/palettes/`, keyed by the
-    /// file's stem. Read from the source tree, like `DocsLinkTests`, so a
-    /// copy-pasted example that no longer reads fails here first.
+    /// captioned with a path in the `palettes/` folder of an extension in
+    /// `~/.config/macterm/extensions/`, keyed by the file's stem. Read from
+    /// the source tree, like `DocsLinkTests`, so a copy-pasted example that
+    /// no longer reads fails here first.
     static func docsExamples() throws -> [String: String] {
+        try captionedBlocks(#/^```yaml title="~/\.config/macterm/extensions/[a-z0-9-]+/palettes/([a-z0-9-]+)\.yaml"$/#)
+    }
+
+    /// Every `extension.yaml` the docs show, keyed by its extension's folder.
+    static func docsManifests() throws -> [String: String] {
+        try captionedBlocks(#/^```yaml title="~/\.config/macterm/extensions/([a-z0-9-]+)/extension\.yaml"$/#)
+    }
+
+    private static func captionedBlocks(_ caption: Regex<(Substring, Substring)>) throws -> [String: String] {
         let pages = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // Palette
             .deletingLastPathComponent() // MactermTests
@@ -311,7 +321,7 @@ struct CustomPaletteFileTests {
                     } else {
                         current?.lines.append(line)
                     }
-                } else if let match = line.firstMatch(of: #/^```yaml title="~/\.config/macterm/palettes/([a-z0-9-]+)\.yaml"$/#) {
+                } else if let match = line.firstMatch(of: caption) {
                     current = (String(match.output.1), [])
                 }
             }
@@ -345,7 +355,8 @@ struct CustomPaletteFileTests {
             #expect(MactermExtension.isID(id), "\(id): an id is lowercase words joined by -")
             let text = { (name: String) in (try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8)) ?? "" }
             do {
-                _ = try ExtensionManifest.parse(yaml: text(MactermExtension.manifestName))
+                let manifest = try ExtensionManifest.parse(yaml: text(MactermExtension.manifestName))
+                #expect(!manifest.authors.isEmpty, "\(id): authors: names at least one GitHub username")
             } catch {
                 Issue.record("\(id)/\(MactermExtension.manifestName) doesn't read: \(error.localizedDescription)")
             }
@@ -394,6 +405,17 @@ struct CustomPaletteFileTests {
                 }
             }
             #expect(screenshots <= MactermExtension.maxScreenshots, "\(id): at most \(MactermExtension.maxScreenshots) screenshots")
+        }
+    }
+
+    @Test
+    func every_extension_manifest_in_the_docs_reads() throws {
+        let manifests = try Self.docsManifests()
+        #expect(!manifests.isEmpty)
+        for (id, yaml) in manifests {
+            #expect(throws: Never.self, "the docs' \(id)/extension.yaml doesn't read") {
+                try ExtensionManifest.parse(yaml: yaml)
+            }
         }
     }
 

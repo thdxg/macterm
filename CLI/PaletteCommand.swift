@@ -2,19 +2,19 @@ import ArgumentParser
 import Darwin
 import Foundation
 
-/// `macterm palette` — the custom command-palette files
-/// (`~/.config/macterm/palettes/*.yaml`).
+/// `macterm palette` — the palettes of the installed extensions
+/// (`~/.config/macterm/extensions/<id>/palettes/*.yaml`).
 struct PaletteCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "palette",
-        abstract: "List the custom command-palette files and show if Macterm can read each one.",
+        abstract: "List the palettes of the installed extensions and show if Macterm can read each one.",
         subcommands: [List.self, Exec.self],
         defaultSubcommand: List.self
     )
 
     struct List: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "List the palette files in ~/.config/macterm/palettes with their name, state and any error."
+            abstract: "List the palettes of the extensions in ~/.config/macterm/extensions with their name, state and any error."
         )
 
         @OptionGroup var options: ConnectionOptions

@@ -18,9 +18,9 @@ Here are three recipes to start with. A complete palette follows them.
 
 ## Kubernetes palette
 
-An [extension](/docs/extensions) to browse a cluster from <kbd>⌘P</kbd>, with no need to type resource names. Save it as `~/.config/macterm/palettes/kubernetes.yaml`. Then open the palette and select **Kubernetes**. It needs `kubectl` in the `PATH` that your shell sets up. It works with any shell.
+An [extension](/docs/extensions) to browse a cluster from <kbd>⌘P</kbd>, with no need to type resource names. Save it as `~/.config/macterm/extensions/kubernetes/palettes/kubernetes.yaml`, with an `extension.yaml` next to `palettes/` that has a `name` and a `description` (see [a first extension](/docs/extensions#a-first-extension)). Then open the palette and select **Kubernetes**. It needs `kubectl` in the `PATH` that your shell sets up. It works with any shell.
 
-```yaml title="~/.config/macterm/palettes/kubernetes.yaml"
+```yaml title="~/.config/macterm/extensions/kubernetes/palettes/kubernetes.yaml"
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
 # Commands are POSIX sh, run in the active project's directory with the
 # values picked above as environment variables.

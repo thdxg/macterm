@@ -1,13 +1,15 @@
 extension AgentSkills {
-    /// Writing a custom command-palette screen: the YAML file, its nodes,
+    /// Writing an extension: its folder and manifest, the YAML file of a
+    /// palette, its nodes,
     /// how a command's output becomes rows, how selections travel down as
     /// environment variables, and how to check the file reads.
     static let palettes = AgentSkill(
         name: "macterm-palettes",
         description: """
-        Create or edit a Macterm extension, which is a command-palette screen written as a YAML file in \
-        ~/.config/macterm/palettes. A palette has named nodes. The JSON or plain-line output of a command \
-        becomes rows that you can search. Each row opens another node or runs a command in a new tab or split. \
+        Create or edit a Macterm extension, which is a folder in ~/.config/macterm/extensions with an \
+        extension.yaml and command-palette screens written as YAML files in its palettes folder. A palette has \
+        named nodes. The JSON or plain-line output of a command becomes rows that you can search. Each row \
+        opens another node or runs a command in a new tab or split. \
         The values that you select travel down as environment variables. Then check with the macterm CLI that \
         the file reads. Use when asked to add a palette, picker, launcher or quick-switcher to Macterm for \
         things like Kubernetes namespaces and pods, Docker containers, git branches, SSH hosts, cloud \
@@ -16,19 +18,35 @@ extension AgentSkills {
         body: #"""
         # Writing a Macterm palette
 
-        The palette of an extension is one YAML file in `~/.config/macterm/palettes/`. It appears as a row in the
-        **Palettes** section of the command palette (⌘P). It opens a screen of its own, and it can nest. A row
-        can open another screen, and the pills above the palette show the trail. Macterm reads the folder
+        An extension is a folder in `~/.config/macterm/extensions/`, for example `kubernetes/`. It has an
+        `extension.yaml` file and a `palettes/` folder. Each palette is one YAML file in `palettes/`. Macterm
+        reads palettes only from extensions. It does not read `~/.config/macterm/palettes/`, which earlier
+        versions read. A palette appears as a row in the **Palettes** section of the command palette (⌘P).
+        It opens a screen of its own, and it can nest. A row can open another screen, and the pills above
+        the palette show the trail. Macterm reads the folder
         again each time that the palette opens, so you deploy a palette when you save the file. If Macterm
         cannot read a file, the file keeps its row, with a warning glyph. When you enter the row, it shows the
         error. ⌘R reads the file again.
 
         \#(groundRules)
 
-        ## The file
+        ## The extension
 
         ```yaml
-        # ~/.config/macterm/palettes/kubernetes.yaml
+        # ~/.config/macterm/extensions/kubernetes/extension.yaml
+        # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+        name: Kubernetes
+        description: Browse the namespaces and pods of a cluster
+        ```
+
+        `name` and `description` are required. They show on the card of the extension in Settings →
+        Extensions. `icon` (an SF Symbol name) is optional. `authors:` (GitHub usernames) is optional for an
+        extension that the user keeps for themselves.
+
+        ## The palette file
+
+        ```yaml
+        # ~/.config/macterm/extensions/kubernetes/palettes/kubernetes.yaml
         # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
         name: Kubernetes
         icon: shippingbox                      # an SF Symbol name; optional
@@ -60,8 +78,9 @@ extension AgentSkills {
             action: { run: kubectl logs -f -n "$NAMESPACE" "$POD", in: split }
         ```
 
-        - `name` and `nodes` are required. The stem of the file name (`kubernetes`) is the id of the palette.
-          Settings and keybinds use it as a key. Do not rename the file after the user sets them.
+        - `name` and `nodes` are required. The id of the palette is the folder of the extension and the stem
+          of the file name (`kubernetes/kubernetes`). Settings and keybinds use it as a key. Do not rename the
+          file or the folder after the user sets them.
         - A **node** has `items:` (rows that you write), a `list:` (a command whose output becomes rows), or
           both. The items come first and show at once. The rows of the listing follow. Use this for fixed rows,
           such as "New" above a listing. Every row, each item and each row of a listing, has exactly one of
@@ -121,7 +140,7 @@ extension AgentSkills {
         macterm palette list
         ```
 
-        This prints the id of each palette file, its keybind (or `-`), and its name. For a file that Macterm
+        This prints the id of each palette, its keybind (or `-`), and its name. For a file that Macterm
         could not read, it prints `error:` and the reason. The reason names the node and the field, for
         example `pods: enter: no node named pod`. Fix the file and run the command again. The palette itself
         opens with ⌘P. There is no CLI verb for that. If a listing has side effects, never run its command yourself to test

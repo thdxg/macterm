@@ -7,8 +7,7 @@
   "additionalProperties": false,
   "required": [
     "name",
-    "description",
-    "authors"
+    "description"
   ],
   "properties": {
     "name": {
@@ -27,13 +26,12 @@
     },
     "authors": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "string",
         "pattern": "^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$",
         "maxLength": 39
       },
-      "description": "The GitHub usernames of the people who maintain it."
+      "description": "The GitHub usernames of the people who maintain it. Optional for an extension that you write for yourself. Required for an extension in the Macterm repository."
     }
   }
 }

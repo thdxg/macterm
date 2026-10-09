@@ -19,7 +19,7 @@ struct SkillsCommand: ParsableCommand {
         Prints Agent Skills: SKILL.md files that Claude Code, Codex, OpenCode, Gemini CLI, Cursor and other \
         agents load from a skills directory. They teach an agent to run commands in panes and read their \
         output, to build a workspace that persists, to run sub-agents in panes of their own, and to write \
-        custom command-palette files. There is no installer. The agent installs them itself. To set one up, \
+        extensions that add screens to the command palette. There is no installer. The agent installs them itself. To set one up, \
         give it this prompt:
 
           Run `macterm skills` and install each skill it prints into your skills
