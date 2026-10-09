@@ -3,14 +3,14 @@ slug: extensions
 title: Extensions
 nav: Extensions
 group: Everyday use
-description: Add screens to the command palette with extensions — install them from Macterm's repository or write your own in YAML. A command's output becomes searchable rows, and each row opens another screen or runs a command.
+description: Add screens to the command palette with extensions. Install them from the Macterm repository or write your own in YAML. The output of a command becomes rows that you can search. Each row opens another screen or runs a command.
 -->
 
 # Extensions
 
-An extension adds to Macterm what it can do — today, screens in the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods, anything a command can list. Install one from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)); each brings one or more palettes. Or write a palette of your own: one YAML file in `~/.config/macterm/palettes/`. Either way each palette shows up in the command palette's **Palettes** section with a chevron, and picking it opens its screen in place.
+An extension adds to what Macterm can do. Today, an extension adds screens to the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods, and anything that a command can list. Install an extension from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)). Each extension brings one or more palettes. Or write your own palette: one YAML file in `~/.config/macterm/palettes/`. In both cases, each palette appears in the **Palettes** section of the command palette, with a chevron. When you select it, its screen opens in the same place.
 
-Macterm reads the folder again every time the palette opens, so saving the file is all it takes. There is nothing to reload or restart.
+Macterm reads the folder again each time that the palette opens. When you save the file, that is all that you do. You do not reload or restart anything.
 
 ## A first palette
 
@@ -32,27 +32,27 @@ nodes:
       - { title: Diff against HEAD, action: { run: git diff HEAD..."$BRANCH", in: split } }
 ```
 
-Press <kbd>⌘P</kbd>, type `git`, and press <kbd>Return</kbd>. The screen lists the active project's branches. Pick one and a second screen offers what to do with it. The pills above the palette read **Git › main**. Pick **Log** and `git log` runs in a split beside the focused pane.
+Press <kbd>⌘P</kbd>, type `git` and press <kbd>Return</kbd>. The screen lists the branches of the active project. Select a branch. A second screen shows what you can do with it. The pills above the palette read **Git › main**. Select **Log**. `git log` runs in a split next to the focused pane.
 
 ## The file
 
 | Key | |
 | --- | --- |
-| `name` | Required. The palette's row, its pill, and its row in Settings. |
-| `icon` | An [SF Symbol](https://developer.apple.com/sf-symbols/) name. Defaults to `square.grid.2x2`. |
-| `description` | One line under the palette's row in the command palette and on its card in Settings → Extensions. |
-| `root` | The node the palette opens on. Defaults to a node named `root`. |
-| `requires` | The programs its commands need, like `[kubectl, jq]`. A listing that fails names whichever of them isn't on your `PATH`. |
-| `when` | Whether the palette can be used now: a check command and the reason to show when it fails. See [when a palette can't be used](#when-a-palette-cant-be-used). |
+| `name` | Required. The row of the palette, its pill, and its row in Settings. |
+| `icon` | The name of an [SF Symbol](https://developer.apple.com/sf-symbols/). The default is `square.grid.2x2`. |
+| `description` | One line under the row of the palette in the command palette, and on its card in Settings → Extensions. |
+| `root` | The node that the palette opens on. The default is a node with the name `root`. |
+| `requires` | The programs that its commands need, for example `[kubectl, jq]`. When a listing fails, the error names each of these programs that is not in your `PATH`. |
+| `when` | Whether the palette can be used now: a check command and the reason to show when the check fails. See [when a palette can't be used](#when-a-palette-cant-be-used). |
 | `nodes` | Required. Every screen of the palette, by name. |
 
-The file's name without `.yaml` is the palette's id. Its keybind is stored under that id, so renaming the file loses it.
+The file name without `.yaml` is the id of the palette. Macterm stores its keybind under that id. If you rename the file, you lose the keybind.
 
 ## Nodes
 
 A node is one screen. Its rows are written out (`items:`), listed by a command (`list:`), or both.
 
-**A menu** has `items:`, rows you write out:
+**A menu** has `items:`. These are rows that you write out:
 
 ```yaml
 menu:
@@ -61,9 +61,9 @@ menu:
     - { title: Fetch, icon: arrow.down.circle, action: { run: git fetch --all --prune } }
 ```
 
-Each item takes `title` (required), `subtitle`, `icon`, `export`, either `enter` or `action`, and optionally `alt` and `when`. Every value in a menu item is literal.
+Each item takes `title` (required), `subtitle`, `icon`, `export`, `enter` or `action`, and optionally `alt` and `when`. Every value in a menu item is literal.
 
-**A listing** has `list:`, a command whose output becomes the rows:
+**A listing** has `list:`. This is a command whose output becomes the rows:
 
 ```yaml
 pods:
@@ -78,20 +78,20 @@ pods:
 
 | Key | |
 | --- | --- |
-| `list` | The command. It runs once when the screen opens. |
+| `list` | The command. It runs one time when the screen opens. |
 | `rows` | When the output is one JSON object, the path to its array of rows. |
-| `title` | Each row's title. Defaults to `.`, the whole row. A row whose title comes out empty is left out. |
-| `subtitle` | Each row's second line. |
+| `title` | The title of each row. The default is `.`, the whole row. Macterm leaves out a row with an empty title. |
+| `subtitle` | The second line of each row. |
 | `icon` | An SF Symbol for every row, or a path to one. |
-| `match` | What the search looks in. Defaults to the title and subtitle. Add the fields people search by, such as an app label. |
-| `export` | Variables each row sets for the screens below it. |
-| `enter` / `action` | What every row does when picked: open that node, or perform the action. |
+| `match` | What the search looks in. The default is the title and the subtitle. Add the fields that people search by, for example an app label. |
+| `export` | Variables that each row sets for the screens below it. |
+| `enter` / `action` | What every row does when you select it: open that node, or run the action. |
 | `alt` | What every row does on <kbd>⌥↩</kbd> or <kbd>⌥</kbd>-click instead. See [Alt actions](#alt-actions). |
-| `placeholder` | The search field's placeholder on this screen. Any node can have one. |
+| `placeholder` | The placeholder of the search field on this screen. Any node can have one. |
 
 Every row has exactly one of `enter:` or `action:`.
 
-**A node can have both.** Its written items come first and show at once; the listing's rows follow when its command finishes. This puts a few fixed rows above a list, such as **New Session** above the most recent sessions:
+**A node can have both.** Its written items come first and show at once. The rows of the listing follow when its command finishes. Use this to put a few fixed rows above a list. An example is **New Session** above the most recent sessions:
 
 ```yaml
 root:
@@ -103,34 +103,34 @@ root:
   action: { run: claude --resume "$SESSION" }
 ```
 
-In a node with both, `title`, `export`, `enter`, `action` and the other listing keys describe the listing's rows; each item has its own.
+In a node that has both, `title`, `export`, `enter`, `action` and the other listing keys describe the rows of the listing. Each item has its own keys.
 
 ### Paths
 
-In a listing, a value that starts with `.` is a path into the row. Anything else is literal text.
+In a listing, a value that starts with `.` is a path into the row. Any other value is literal text.
 
-- `.` is the row itself. For plain-line output, that is the whole line.
-- `.metadata.name` is a field, and `.items[0].name` an element of an array.
-- Inside a `{ }` mapping, quote a path with an index, as in `PORT: '.spec.ports[0].port'`. Otherwise YAML reads the brackets as a list. The same goes for a value containing `: ` or ` #`.
+- `.` is the row itself. For plain-line output, it is the whole line.
+- `.metadata.name` is a field. `.items[0].name` is an element of an array.
+- Inside a `{ }` mapping, put quotes around a path with an index, as in `PORT: '.spec.ports[0].port'`. Without quotes, YAML reads the brackets as a list. The same is true for a value that contains `: ` or ` #`.
 
 ### Command output
 
-A listing's output can be any of these:
+The output of a listing can be one of these:
 
 - A JSON array of rows.
-- Newline-delimited JSON objects, one row per line, like `docker ps --format json` or `jq -c '.items[]'`.
-- One JSON object with the rows inside it, found by `rows:`.
-- Plain lines, one row each, when the output doesn't start with `[` or `{`.
+- Newline-delimited JSON objects, one row on each line, such as `docker ps --format json` or `jq -c '.items[]'`.
+- One JSON object with the rows inside it. `rows:` finds them.
+- Plain lines, one row each. This applies when the output does not start with `[` or `{`.
 
-Prefer a tool's JSON output to cutting up its text. JSON gives you named fields for `title`, `subtitle` and `match`.
+Use the JSON output of a tool when you can. Do not cut up its text. JSON gives you named fields for `title`, `subtitle` and `match`.
 
 ## Exports
 
-`export:` sets environment variables for every command below the row: the next screen's listing, and any action further down. Values carry down through every screen, and a lower screen can overwrite one. A name is one `sh` can read (letters, digits and `_`, not starting with a digit), and not one Macterm sets itself (`MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`, `MACTERM_EXTENSION_DIR`).
+`export:` sets environment variables for every command below the row. These are the listing of the next screen, and each action further down. The values pass down through every screen. A lower screen can overwrite a value. A name must be a name that `sh` can read (letters, digits and `_`, and it does not start with a digit). It must not be a name that Macterm sets itself (`MACTERM_PROJECT_DIR`, `MACTERM_PROJECT_NAME`, `MACTERM_EXTENSION_DIR`).
 
-Read an exported value as a variable, like `"$BRANCH"`. **Nothing is ever pasted into a command's text**, so a branch, pod or file name with spaces or quotes can't break the command or run as code.
+Read an exported value as a variable, such as `"$BRANCH"`. **Macterm never pastes a value into the text of a command**. The name of a branch, a pod or a file can have spaces or quotes. These characters cannot break the command. They cannot run as code.
 
-One node can be reached from several places. In the [Kubernetes palette](/docs/cookbook#kubernetes-palette), **Pods** opens from the root with no namespace and from a namespace with one. The command handles both cases, as a shell script would:
+You can reach one node from several places. In the [Kubernetes palette](/docs/cookbook#kubernetes-palette), **Pods** opens from the root with no namespace. It also opens from a namespace with one. The command handles both cases, as a shell script does:
 
 ```yaml
 list: if [ -n "$NAMESPACE" ]; then set -- -n "$NAMESPACE"; else set -- -A; fi; kubectl get pods "$@" -o json
@@ -140,19 +140,19 @@ list: if [ -n "$NAMESPACE" ]; then set -- -n "$NAMESPACE"; else set -- -A; fi; k
 
 An action is exactly one of these:
 
-| Action | Does |
+| Action | What it does |
 | --- | --- |
-| `run: <command>` | Runs the command in a new tab of the active project, or with `in: split` in a split beside its focused pane. With a pinned tab active, always in a split beside it. The exported variables are in its environment. |
-| `copy: <text>` | Copies to the clipboard. In a listing, a path or literal text. |
-| `open: <url or file>` | Opens with the default app. In a listing, a path or literal text. |
+| `run: <command>` | Runs the command in a new tab of the active project. With `in: split`, it runs in a split next to the focused pane. If a pinned tab is active, it always runs in a split next to that tab. The exported variables are in its environment. |
+| `copy: <text>` | Copies the text to the clipboard. In a listing, the value is a path or literal text. |
+| `open: <url or file>` | Opens the URL or file with the default app. In a listing, the value is a path or literal text. |
 
-A `run:` command runs before the new terminal's shell starts, and when it ends your shell's prompt is there. **It is never typed at the prompt**, so it stays out of your shell's history.
+A `run:` command runs before the shell of the new terminal starts. When the command ends, you see the shell prompt of your shell. **Macterm never types the command at the shell prompt.** The command stays out of the history of your shell.
 
-**In a [remote project](/docs/remote-projects), a `run:` command is typed at the host's prompt** as written, because ssh carries no environment to the host. The host's own shell runs it, not `sh` (and a shebang means nothing there), it enters that shell's history, and **the exported variables and `MACTERM_PROJECT_*` aren't set** — so a palette for remote projects can't pass a pick to `run:` through `"$VAR"`.
+**In a [remote project](/docs/remote-projects), Macterm types a `run:` command at the shell prompt of the host**, as you wrote it. ssh does not carry an environment to the host. The own shell of the host runs the command. It does not run in `sh`, and a shebang has no meaning there. The command enters the history of that shell. **The exported variables and `MACTERM_PROJECT_*` are not set.** A palette for remote projects therefore cannot pass a selection to `run:` through `"$VAR"`.
 
 ### Alt actions
 
-A row can have a second action, `alt:`, run by <kbd>⌥↩</kbd> or <kbd>⌥</kbd>-click. While <kbd>⌥</kbd> is held, the row's subtitle says what it will do: the alt's `title:`, or else what the action is (**Run in a Split**, **Run in a New Tab**, **Copy**, **Open**).
+A row can have a second action, `alt:`. <kbd>⌥↩</kbd> or <kbd>⌥</kbd>-click runs it. While you hold <kbd>⌥</kbd>, the subtitle of the row says what the alt action does. It shows the `title:` of the alt action. If there is no title, it shows the kind of action (**Run in a Split**, **Run in a New Tab**, **Copy**, **Open**).
 
 ```yaml
 - title: New Session
@@ -160,13 +160,13 @@ A row can have a second action, `alt:`, run by <kbd>⌥↩</kbd> or <kbd>⌥</kb
   alt: { title: New Session in a Split, run: claude, in: split }
 ```
 
-`alt:` takes the same keys as `action:`, plus `title:`. It goes on a menu item, or on a listing for every row, and works on a row that enters a node too.
+`alt:` takes the same keys as `action:`, and also `title:`. Put it on a menu item, or on a listing for every row. It also works on a row that enters a node.
 
 ## Commands and your shell
 
-**Commands are POSIX `sh`**, run by `sh -o errexit` exactly as written, whatever your own shell is, so a palette works the same for everyone it's shared with. The command reaches `sh` in an environment variable, never pasted into a shell line, so nothing in it needs escaping. With errexit, a command of several steps stops at the first one that fails. A listing runs in the active project's directory — for a remote project or a pinned tab, in your home folder on your Mac.
+**Commands are POSIX `sh`.** `sh -o errexit` runs them exactly as you wrote them, for any shell that you use. A palette therefore works in the same way for everyone who gets it. The command reaches `sh` in an environment variable. Macterm never pastes it into a shell line, so nothing in it needs escaping. With errexit, a command with several steps stops at the first step that fails. A listing runs in the directory of the active project. For a remote project or a pinned tab, it runs in your home folder on your Mac.
 
-**A command whose first line is a shebang runs as a script** with that interpreter instead, the way [mise](https://mise.jdx.dev/tasks/toml-tasks.html) runs a task. Write it as a YAML block:
+**A command that starts with a shebang runs as a script** with that interpreter. This is how [mise](https://mise.jdx.dev/tasks/toml-tasks.html) runs a task. Write it as a YAML block:
 
 ```yaml
 list: |
@@ -174,38 +174,38 @@ list: |
   ls | where type == dir | get name | to json
 ```
 
-Commands still see **your shell's environment**, started through your login shell so the `PATH` it sets up finds `kubectl`, `jq` or the shebang's interpreter:
+Commands still see **the environment of your shell**. Macterm starts them through your login shell, so the `PATH` that it sets finds `kubectl`, `jq` or the interpreter of the shebang:
 
-- **A listing** starts through a non-interactive login shell, which reads your login files (`.zprofile`, `.bash_profile`, nushell's `env.nu` and `config.nu`) but not `.zshrc` or `.bashrc`. Set the `PATH` a listing needs in a login file.
-- **A `run:` command** starts through an interactive login shell, so what your `.zshrc` exports reaches it too.
+- **A listing** starts through a non-interactive login shell. This shell reads your login files (`.zprofile`, `.bash_profile`, `env.nu` and `config.nu` of nushell). It does not read `.zshrc` or `.bashrc`. Set the `PATH` that a listing needs in a login file.
+- **A `run:` command** starts through an interactive login shell. What your `.zshrc` exports reaches the command too.
 
-Your shell's aliases and functions reach neither: they aren't `sh`.
+The aliases and functions of your shell reach neither one. They are not `sh`.
 
 Every command also gets these variables:
 
-- `MACTERM_PROJECT_DIR`, the active project's directory (unset for a remote project or a pinned tab).
-- `MACTERM_PROJECT_NAME`, its name.
-- `MACTERM_EXTENSION_DIR`, the extension's folder, when it was installed from Macterm's repository ([sharing an extension](#sharing-an-extension)).
-- Every value exported above it.
+- `MACTERM_PROJECT_DIR`: the directory of the active project. It is not set for a remote project or a pinned tab.
+- `MACTERM_PROJECT_NAME`: the name of the project.
+- `MACTERM_EXTENSION_DIR`: the folder of the extension, when you installed it from the Macterm repository ([sharing an extension](#sharing-an-extension)).
+- Every value that is exported above it.
 
-**A shell that prints at startup prints into the rows.** A greeting or notice from your shell config becomes the first row of every listing. Keep startup quiet for non-interactive shells.
+**Text that your shell prints at startup goes into the rows**. A greeting or a notice from your shell config becomes the first row of each listing. Keep the startup of non-interactive shells quiet.
 
 ## When a palette can't be used
 
-`when:` mutes a palette, or a row of a menu, when a check says it can't be used right now — a cluster that doesn't answer, a tool that isn't set up, a project that isn't the right kind:
+`when:` mutes a palette, or a row of a menu, when a check says that it cannot be used now. Examples: a cluster that does not answer, a tool that is not set up, a project that is not the right kind:
 
 ```yaml
 when: { run: kubectl get --raw /readyz --request-timeout=2s, unavailable: Cluster unreachable }
 ```
 
-- **`run:`** is a command like any other in the palette (POSIX `sh`, or a script with a `#!` line), with the same environment and directory as a listing. It passes when it exits 0. It gets 10 seconds; one that runs out has failed.
-- **`unavailable:`** is what the muted row says in place of its subtitle. Without it, the row says *Unavailable*.
+- **`run:`** is a command like any other command in the palette (POSIX `sh`, or a script with a `#!` line). It has the same environment and directory as a listing. The check passes when the command exits with 0. The command has 10 seconds. If it takes longer, the check fails.
+- **`unavailable:`** is the text that the muted row shows in place of its subtitle. Without it, the row says *Unavailable*.
 
-**On the palette** (beside `name:`), the check runs each time you open the command palette. **On a menu item**, it runs each time the item's screen opens. Either way it runs in the background: the row is usable until the check fails, and then it's muted — you can't pick it, and it says why. Nothing is remembered: the next open checks again.
+**On the palette** (next to `name:`), the check runs each time that you open the command palette. **On a menu item**, it runs each time that the screen of the item opens. In both cases it runs in the background. The row is usable until the check fails. Then the row is muted. You cannot select it, and it says why. Macterm remembers nothing. The next time that the palette opens, it checks again.
 
-**A palette opened by its keybind** checks first, showing a spinner, and says why instead of listing when the check fails. <kbd>⌘R</kbd> checks again.
+**When you open a palette with its keybind**, Macterm checks first and shows a spinner. If the check fails, it says why and does not show the list. <kbd>⌘R</kbd> checks again.
 
-Items that share a check run it once per screen. Name it once with a YAML anchor and reuse it:
+Items that share a check run it one time for each screen. Name the check one time with a YAML anchor and use it again:
 
 ```yaml
 - { title: Pods, enter: pods, when: &cluster { run: kubectl get --raw /readyz --request-timeout=2s, unavailable: Cluster unreachable } }
@@ -213,13 +213,13 @@ Items that share a check run it once per screen. Name it once with a YAML anchor
 - { title: Contexts, enter: contexts }
 ```
 
-A listing's rows aren't checked one by one; put `when:` on the item that opens the listing.
+Macterm does not check the rows of a listing one by one. Put `when:` on the item that opens the listing.
 
 ## Loading and errors
 
-- **While a listing runs**, the screen shows a spinner. One that takes over 30 seconds is stopped, along with everything it started. Leaving the screen stops it too.
-- **If a listing fails**, the screen says why, with the command's error output. A listing fails when the command isn't found, exits non-zero, or prints output that isn't the shape asked for. When a program the palette `requires` is missing, the screen names it instead: *This palette needs kubectl, which isn't on your PATH.* **Retry**, or <kbd>⌘R</kbd>, runs it again.
-- **A file that doesn't read** keeps its row, with a warning glyph before the chevron. Entering it shows the error, naming the node and key, like `pods: enter: no node named pod`. A key Macterm doesn't know is an error too (`pods: mathc: no such key`), so a misspelling can't silently do nothing. Fix the file and press <kbd>⌘R</kbd>. Settings → Extensions shows the same warning on the extension's card.
+- **While a listing runs**, the screen shows a spinner. If a listing takes more than 30 seconds, Macterm stops it, and it stops everything that the listing started. If you leave the screen, Macterm also stops the listing.
+- **If a listing fails**, the screen says why. It shows the error output of the command. A listing fails in three cases. The command is not found. The command exits with a non-zero code. The output has the wrong shape. If a program that the palette `requires` is missing, the screen names that program. For example: *This palette needs kubectl, which isn't on your PATH.* To run the listing again, select **Retry** or press <kbd>⌘R</kbd>.
+- **A file that Macterm cannot read** keeps its row, with a warning glyph before the chevron. When you enter the row, it shows the error and names the node and the key, for example `pods: enter: no node named pod`. A key that Macterm does not know is also an error (`pods: mathc: no such key`). A misspelling therefore cannot do nothing in silence. Fix the file and press <kbd>⌘R</kbd>. Settings → Extensions shows the same warning on the card of the extension.
 
 To check every file from a terminal, run:
 
@@ -227,21 +227,21 @@ To check every file from a terminal, run:
 macterm palette list
 ```
 
-It prints each file's id, its keybind, and its name or the error that stopped it reading. See [the CLI](/docs/cli).
+The command prints the id of each file, its keybind, and its name or the error that stopped Macterm from reading it. See [the CLI](/docs/cli).
 
 ## Keybinds and Settings
 
-- **Settings → Extensions** lists every extension, installed or not, in one grid. **Installed** on a card offers to move it to the Trash, which is how you remove one.
-- **Settings → Keymaps** has a **Palettes** group first, with <kbd>⌘P</kbd> and a row for every palette. None has a keybind by default. A palette's keybind opens the command palette straight on it. Pressed again on the palette's first screen, it closes the palette. Pressed deeper in, it goes back to that first screen.
-- **Any palette's keybind, built-in or an extension's, can be Global or Pass to TUI**, the two checkboxes on its row. A **Global** keybind works from any app: it brings Macterm's window forward with the palette open on it. **Pass to TUI** hands the keybind to the program in the focused pane when that program is one you list under Passthrough Programs.
+- **Settings → Extensions** lists every extension in one grid, installed or not. On a card, **Installed** offers to move the extension to the Trash. This is how you remove an extension.
+- **Settings → Keymaps** has a **Palettes** group at the top. It has <kbd>⌘P</kbd> and a row for every palette. No palette has a keybind by default. The keybind of a palette opens the command palette on that palette. Press it again on the first screen of the palette to close the command palette. Press it on a deeper screen to go back to that first screen.
+- **Any palette keybind can be Global or Pass to TUI.** This applies to built-in palettes and to the palettes of extensions. These are the two checkboxes on its row. A **Global** keybind works from any app. It brings the window of Macterm forward with the palette open on it. **Pass to TUI** gives the keybind to the program in the focused pane when that program is in your list under Passthrough Programs.
 
 ## Sharing an extension
 
-Extensions anyone can install from Settings → Extensions are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in Macterm's repository, each holding `extension.yaml` (its name, description and authors), a `README.md`, and its palettes in `palettes/` — as many as it needs, each with its own name and description. An installed one lives in `~/.config/macterm/extensions/<id>/`, and its commands find the folder's other files — a script too long for the YAML — through `$MACTERM_EXTENSION_DIR`. Its palettes go by `<extension>/<file>` in the CLI, so they never clash with a palette file of your own.
+Anyone can install the extensions in **Settings → Extensions**. They are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in the Macterm repository. Each folder has `extension.yaml` (its name, description and authors), a `README.md`, and its palettes in `palettes/`. An extension can have as many palettes as it needs. Each palette has its own name and description. An installed extension is in `~/.config/macterm/extensions/<id>/`. Its commands find the other files of the folder through `$MACTERM_EXTENSION_DIR`. An example is a script that is too long for the YAML. In the CLI, its palettes have the names `<extension>/<file>`. They never clash with a palette file of your own.
 
-An extension can include screenshots for its README — **Capture Palette Screenshot** takes them at the one size the repository accepts, with the command palette framed the same way every time. Bind it in Settings → Keymaps and press it with the palette open on the screen you want; run from the menu or the palette, it captures the palette's first screen. The first time, macOS asks to let Macterm record the screen.
+An extension can include screenshots for its README. **Capture Palette Screenshot** takes them at the one size that the repository accepts. It frames the command palette in the same way each time. Bind it in Settings → Keymaps and press it while the palette is open on the screen that you want. If you run it from the menu or from the palette, it captures the first screen of the palette. The first time, macOS asks if Macterm can record the screen.
 
-To add yours, open a pull request with the folder; you don't need to clone the whole repository, and [the folder's README](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how, and what an extension needs — POSIX commands, a `requires:`, a `when:` where it can't always work. Every extension there is read through Macterm's validator before it merges.
+To add your extension, open a pull request with the folder. You do not need to clone the whole repository. [The README of the folder](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how to do it. It also says what an extension needs: POSIX commands, a `requires:`, and a `when:` where the extension cannot always work. Macterm reads every extension there with its validator before the extension merges.
 
 ## More examples
 
@@ -269,7 +269,7 @@ nodes:
 
 ### SSH hosts
 
-The hosts named in `~/.ssh/config`, leaving out wildcard patterns. Hosts in an `Include`d file aren't listed.
+This palette lists the hosts that are named in `~/.ssh/config`. It leaves out wildcard patterns. It does not list hosts in an `Include`d file.
 
 ```yaml title="~/.config/macterm/palettes/ssh.yaml"
 name: SSH Hosts
@@ -289,14 +289,14 @@ nodes:
 
 ### Kubernetes
 
-Namespaces, pods, deployments, services and contexts, five screens deep. It's in the cookbook: [Kubernetes palette](/docs/cookbook#kubernetes-palette).
+This palette has namespaces, pods, deployments, services and contexts, on five screens. It is in the cookbook: [Kubernetes palette](/docs/cookbook#kubernetes-palette).
 
 ## Writing one with a coding agent
 
-Macterm ships a skill that teaches coding agents this format. Print it with:
+Macterm has a skill that teaches coding agents this format. Print it with this command:
 
 ```sh
 macterm skills macterm-palettes
 ```
 
-See [skills for coding agents](/docs/cli#skills-for-coding-agents). For editors that understand `yaml-language-server`, the schema is at [`assets/palette.schema.json`](https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json). The comment at the top of the first example points an editor at it.
+See [skills for coding agents](/docs/cli#skills-for-coding-agents). The schema is at [`assets/palette.schema.json`](https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json) for editors that understand `yaml-language-server`. The comment at the top of the first example points an editor to it.

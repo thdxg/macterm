@@ -3,25 +3,25 @@ slug: session-persistence
 title: Session persistence
 nav: Session persistence
 group: Projects & sessions
-description: Terminal sessions survive quitting Macterm via a bundled zmx session.
+description: Terminal sessions keep running when you quit Macterm, because each pane uses a bundled zmx session.
 -->
 
 # Session persistence
 
-Each pane's shell runs under a bundled `zmx` session. Quitting Macterm detaches — no confirmation — and relaunching reattaches every pane with its scrollback and running processes intact.
+The shell of each pane runs in a bundled `zmx` session. When you quit Macterm, it disconnects the panes and asks no confirmation. When you start Macterm again, it connects every pane to its session. Each pane keeps its scrollback and its running programs.
 
-**Closing** a pane, tab, or project is what ends its shell. You're asked first if something is running.
+When you **close** a pane, a tab or a project, its shell ends. If a program is running, Macterm asks you first.
 
-List live sessions from any pane:
+To list the live sessions, run this command in any pane:
 
 ```sh
 zmx ls
 ```
 
-> Local sessions don't survive a reboot; panes respawn in their last working directory. Sessions in [remote projects](/docs/remote-projects) live on the host, so they do.
+> Local sessions do not keep running after you restart your Mac. The panes start again in their last working directory. Sessions in [remote projects](/docs/remote-projects) run on the host, so they keep running.
 
 ## Privacy prompts
 
-Programs running in a pane belong to their session, not to the Macterm process: on macOS the session daemon is their *responsible process*, and it is signed as Macterm itself. So a Local Network prompt (or a Files and Folders or Full Disk Access one) triggered by something you run in a pane names **Macterm**, and one grant covers every pane and keeps covering it after you quit and relaunch, or update.
+A program that runs in a pane belongs to its session. It does not belong to the Macterm process. On macOS, the background process of the session is the *responsible process* of the program. The code signature of that process is the identity of Macterm itself. A Local Network request names **Macterm** when a program in a pane causes it. The same is true for a Files and Folders request and a Full Disk Access request. One grant covers every pane. The grant still applies after you quit and start Macterm again, and after an update.
 
-> A session started by an older version keeps its old attribution until you close and reopen its tab.
+> A session that an older version of Macterm started keeps its old attribution. Close its tab and open it again to change this.

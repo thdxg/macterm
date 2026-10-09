@@ -1,5 +1,5 @@
 # SSH Hosts
 
-Connect to any host in `~/.ssh/config`. ⌥↩ connects in a split.
+Connect to any host in `~/.ssh/config`. Press ⌥↩ to connect in a split.
 
 Needs `ssh`.

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
 name: Docker
-description: "Follow running containers' logs and open shells in them"
+description: "Follow the logs of running containers and open shells in them"
 icon: cube.box
 authors: [thdxg]

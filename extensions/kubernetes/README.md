@@ -1,7 +1,7 @@
 # Kubernetes
 
-Browse a cluster from ⌘P: namespaces, pods, deployments and services, each with its own actions — follow logs, open a shell, watch a rollout, port-forward — and switch contexts.
+Browse a cluster from ⌘P: namespaces, pods, deployments and services. Each one has its own actions: follow logs, open a shell, watch a rollout and forward a port. You can also switch contexts.
 
-While the cluster doesn't answer, everything but Contexts is muted and says *Cluster unreachable*.
+While the cluster does not answer, every row except Contexts is muted and says *Cluster unreachable*.
 
 Needs `kubectl`.

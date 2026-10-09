@@ -1,7 +1,7 @@
 # Claude Code
 
-Start a Claude Code session, or resume one of this project's: the three most recent first, every session one level down. Each session is named by its `/rename` title, else the one Claude Code generated, with when it was last used and its git branch.
+Start a Claude Code session, or resume one of the sessions of this project. The three most recent sessions are first. All other sessions are one level down. Each session has the name that you set with `/rename`. If you did not set a name, it has the title that Claude Code made. Each row shows when you last used the session, and its git branch.
 
-⌥↩ (or ⌥-click) opens a session in a split instead of a new tab.
+Press ⌥↩ (or ⌥-click) to open a session in a split. Without it, a session opens in a new tab.
 
-Needs `claude`, `jq`.
+Needs `claude` and `jq`.

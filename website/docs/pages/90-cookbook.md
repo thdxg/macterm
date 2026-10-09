@@ -3,22 +3,22 @@ slug: cookbook
 title: Cookbook
 nav: Cookbook
 group: Community
-description: Community-shared Macterm workflows and recipes — read what others run, and post your own.
+description: Workflows and recipes that the community shares. Read what others run, and post your own.
 -->
 
 # Cookbook
 
-The [**Cookbook**](https://github.com/thdxg/macterm/discussions/categories/cookbook) is a discussion category for workflows and recipes. Anyone can post, anyone can borrow.
+The [**Cookbook**](https://github.com/thdxg/macterm/discussions/categories/cookbook) is a discussion category for workflows and recipes. Anyone can post a recipe, and anyone can use one.
 
-Three to start with, and a complete palette below:
+Here are three recipes to start with. A complete palette follows them.
 
-- [**Navigating `nvim` and Macterm with the same keybinds**](https://github.com/thdxg/macterm/discussions/217) — one <kbd>ctrl</kbd>+<kbd>h/j/k/l</kbd> chord moves between nvim's splits and Macterm's panes.
-- [**Driving an interactive program from a script**](https://github.com/thdxg/macterm/discussions/218) — `pane run`, `pane key`, and `pane dump` against a REPL or a pager.
-- [**Giving a coding agent control of Macterm**](https://github.com/thdxg/macterm/discussions/219) — the original drop-in skill file. [`macterm skills`](/docs/cli#skills-for-coding-agents) now prints a fuller set.
+- [**Navigating `nvim` and Macterm with the same keybinds**](https://github.com/thdxg/macterm/discussions/217) One <kbd>ctrl</kbd>+<kbd>h/j/k/l</kbd> keybind moves between the splits of nvim and the panes of Macterm.
+- [**Driving an interactive program from a script**](https://github.com/thdxg/macterm/discussions/218) Use `pane run`, `pane key` and `pane dump` with a REPL or a pager.
+- [**Giving a coding agent control of Macterm**](https://github.com/thdxg/macterm/discussions/219) This is the original skill file that you can drop in. [`macterm skills`](/docs/cli#skills-for-coding-agents) now prints a fuller set.
 
 ## Kubernetes palette
 
-An [extension](/docs/extensions) for browsing a cluster from <kbd>⌘P</kbd>, without typing resource names. Save it as `~/.config/macterm/palettes/kubernetes.yaml`, then open the palette and pick **Kubernetes**. It needs `kubectl` on the `PATH` your shell sets up, and works whatever your shell is.
+An [extension](/docs/extensions) to browse a cluster from <kbd>⌘P</kbd>, with no need to type resource names. Save it as `~/.config/macterm/palettes/kubernetes.yaml`. Then open the palette and select **Kubernetes**. It needs `kubectl` in the `PATH` that your shell sets up. It works with any shell.
 
 ```yaml title="~/.config/macterm/palettes/kubernetes.yaml"
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
@@ -150,22 +150,22 @@ nodes:
 
 What each screen does:
 
-- **Kubernetes**, the first screen, is a menu: browse one namespace, or go straight to pods, deployments or services across all of them, or switch contexts. While the cluster doesn't answer, everything but Contexts is muted and says *Cluster unreachable* ([`when:`](/docs/custom-palettes#when-a-palette-cant-be-used)).
-- **Contexts** lists `kubectl config get-contexts`. Picking one runs `kubectl config use-context` in a new tab.
-- **Namespaces** lists the cluster's namespaces with their phase. Picking one opens a menu for it, and every screen below is scoped to that namespace.
-- **The namespace's menu** opens its pods, deployments or services, or makes it the current context's namespace.
-- **Pods** lists pods with their phase, searchable by name, namespace, `app` label or node. A pod's menu follows its logs or opens a shell in a split, or describes it or lists its events in a new tab.
-- **Deployments** lists deployments with their namespace. A deployment's menu follows its logs, watches its rollout, restarts it, or describes it.
-- **Services** lists services with their type. A service's menu port-forwards its first port to the same local port in a split, or describes it, or lists its endpoints.
+- **Kubernetes**, the first screen, is a menu. You can browse one namespace. You can go straight to pods, deployments or services in all namespaces. You can also switch contexts. While the cluster does not answer, every row except Contexts is muted and says *Cluster unreachable* ([`when:`](/docs/extensions#when-a-palette-cant-be-used)).
+- **Contexts** lists `kubectl config get-contexts`. When you select a context, `kubectl config use-context` runs in a new tab.
+- **Namespaces** lists the namespaces of the cluster with their phase. When you select one, a menu for it opens. Every screen below it uses that namespace.
+- **The menu of a namespace** opens its pods, deployments or services. It can also make the namespace the namespace of the current context.
+- **Pods** lists pods with their phase, searchable by name, namespace, `app` label or node. The menu of a pod follows its logs or opens a shell in a split. It can also describe the pod, or list its events, in a new tab.
+- **Deployments** lists deployments with their namespace. The menu of a deployment follows its logs, watches its rollout, restarts it, or describes it.
+- **Services** lists services with their type. The menu of a service forwards its first port to the same local port in a split. It can also describe the service or list its endpoints.
 
-**Pods, Deployments and Services are each one node reached from two places.** From the first screen there is no `NAMESPACE`, so the listing passes `-A`. From a namespace, it passes `-n "$NAMESPACE"`. The `if … set --` line builds the arguments for either case without pasting the namespace into the command.
+**Pods, Deployments and Services each have two entry points.** From the first screen, there is no `NAMESPACE`, so the listing passes `-A`. From a namespace, it passes `-n "$NAMESPACE"`. The `if … set --` line builds the arguments for both cases. It does not paste the namespace into the command.
 
 ## Post your own
 
-[Start a Cookbook topic](https://github.com/thdxg/macterm/discussions/new?category=cookbook). What makes a recipe easy to adopt:
+[Start a Cookbook topic](https://github.com/thdxg/macterm/discussions/new?category=cookbook). These points make a recipe easy to use:
 
-- **Lead with what it gets you** — the annoyance it removes, before the config.
-- **Include the whole thing** — the full [layout YAML](/docs/declarative-layouts), keybind, or script.
-- **Name the minimum version** if it leans on something recent, and list any other tools needed.
+- **Start with the benefit.** Say what problem it removes, before you show the config.
+- **Include everything.** Add the full [layout YAML](/docs/declarative-layouts), keybind or script.
+- **Name the minimum version** if the recipe needs a recent feature. List any other tools that it needs.
 
-> Bugs belong in [Issues](https://github.com/thdxg/macterm/issues), questions in [Q&A](https://github.com/thdxg/macterm/discussions/categories/q-a), feature requests in [Ideas](https://github.com/thdxg/macterm/discussions/categories/ideas).
+> Report bugs in [Issues](https://github.com/thdxg/macterm/issues). Ask questions in [Q&A](https://github.com/thdxg/macterm/discussions/categories/q-a). Request features in [Ideas](https://github.com/thdxg/macterm/discussions/categories/ideas).
