@@ -45,7 +45,7 @@ Goal: 0 hard violations in every Markdown file. Advisory findings (passive voice
 Highest level. Every later document borrows its wording.
 
 1. `README.md`: tagline, feature list, install, links.
-2. `website/public/index.html`: hero, feature copy, FAQ. The FAQ exists twice (markup and JSON-LD). `website/check-seo.mjs` fails if they differ. Edit both, then run the check.
+2. `website/public/index.html`: hero, feature copy, FAQ. The page has no FAQ now. `website/check-seo.mjs` still fails if FAQ markup and its JSON-LD ever differ, so run `bun run check:seo` after an edit.
 3. `website/docs/pages/00-introduction.md` and `10-installation.md`.
 4. Page `description:` front matter in all docs pages (used for SEO and link cards). Do these after the pages they describe, in Phase 3.
 
@@ -110,7 +110,7 @@ Constraint: e2e tests assert on some CLI output text. Search `e2e/` for each cha
 | String | Where it is pinned |
 |---|---|
 | Docs heading text | `DocsLink.swift`, `DocsLinkTests`, cross-links between docs pages |
-| FAQ question and answer text | `website/check-seo.mjs` (markup and JSON-LD) |
+| FAQ text, if the page gets one again | `website/check-seo.mjs` (markup and JSON-LD) |
 | Keybind labels | `MactermKeybind` against `AppCommand.title` (`MactermIntentsTests`) |
 | Palette scope titles | `PaletteScopeTests` |
 | `macterm …` lines in agent skills | `AgentSkillsTests` against the CLI help tree |
