@@ -459,10 +459,9 @@ struct MactermIntentsTests {
     }
 
     @Test
-    func every_keybind_label_is_its_own_command_title() {
+    func every_keybind_label_is_its_own_command_title() throws {
         for keybind in MactermKeybind.allCases {
-            let action = try? #require(keybind.hotkeyAction)
-            guard let action else { continue }
+            let action = try #require(keybind.hotkeyAction)
             let label = MactermKeybind.caseDisplayRepresentations[keybind]?.title.key
             #expect(label == action.appCommand.title, "label for \(keybind.rawValue)")
         }
