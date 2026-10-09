@@ -220,10 +220,17 @@ private struct ButtonLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if let systemImage {
-                Image(systemName: systemImage)
-            } else {
-                ProgressView().controlSize(.mini)
+            // Every glyph in a slot as tall as a line of text and a circled
+            // symbol: a bordered button takes its height from its label, and
+            // the book alone came out shorter than "Install" beside it.
+            ZStack {
+                Text(verbatim: "X").hidden()
+                Image(systemName: "circle").hidden()
+                if let systemImage {
+                    Image(systemName: systemImage)
+                } else {
+                    ProgressView().controlSize(.mini)
+                }
             }
             if let title { Text(title) }
         }
