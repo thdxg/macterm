@@ -231,7 +231,7 @@ It prints each file's id, its keybind, and its name or the error that stopped it
 
 ## Keybinds and Settings
 
-- **Settings → Extensions** lists every extension, installed or not, in one grid. **Installed** on a card offers to move it to the Trash, which is how you remove one. The **Your own palettes** row opens `~/.config/macterm/palettes/` in Finder.
+- **Settings → Extensions** lists every extension, installed or not, in one grid. **Installed** on a card offers to move it to the Trash, which is how you remove one.
 - **Settings → Keymaps** has a **Palettes** group first, with <kbd>⌘P</kbd> and a row for every palette. None has a keybind by default. A palette's keybind opens the command palette straight on it. Pressed again on the palette's first screen, it closes the palette. Pressed deeper in, it goes back to that first screen.
 - **Any palette's keybind, built-in or an extension's, can be Global or Pass to TUI**, the two checkboxes on its row. A **Global** keybind works from any app: it brings Macterm's window forward with the palette open on it. **Pass to TUI** hands the keybind to the program in the focused pane when that program is one you list under Passthrough Programs.
 

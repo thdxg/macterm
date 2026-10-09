@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import os
 
@@ -201,16 +200,6 @@ final class CustomPaletteStore {
         guard let installed = installedExtension(id: id) else { return }
         try FileManager.default.trashItem(at: installed.folder, resultingItemURL: nil)
         reload()
-    }
-
-    func revealExtensionsDirectory() {
-        try? FileManager.default.createDirectory(at: extensionsURL, withIntermediateDirectories: true)
-        NSWorkspace.shared.activateFileViewerSelecting([extensionsURL])
-    }
-
-    func revealDirectory() {
-        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        NSWorkspace.shared.activateFileViewerSelecting([directoryURL])
     }
 
     /// The installed extensions: folders holding an `extension.yaml`.

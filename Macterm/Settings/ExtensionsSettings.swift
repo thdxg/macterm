@@ -28,10 +28,7 @@ struct ExtensionsSettings: View {
         )
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 8) {
-                    SettingsSearchField(text: $query, prompt: "Search extensions")
-                    DocsLink(.extensionsSettings)
-                }
+                SettingsSearchField(text: $query, prompt: "Search extensions")
                 RegistryStatus(state: registry.state)
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
@@ -54,23 +51,12 @@ struct ExtensionsSettings: View {
                     }
                 }
 
-                LabeledContent("Extensions folder") {
-                    FolderLink(url: appState.customPalettes.extensionsURL) {
-                        appState.customPalettes.revealExtensionsDirectory()
-                    }
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Extensions add screens to the command palette.")
+                        .settingsCaption()
+                    Spacer()
+                    DocsLink(.extensionsSettings)
                 }
-                LabeledContent("Your own palettes") {
-                    FolderLink(url: appState.customPalettes.directoryURL) {
-                        appState.customPalettes.revealDirectory()
-                    }
-                }
-                Text(
-                    "An extension adds to what Macterm can do — today, screens in the command palette: "
-                        + "a command whose output becomes rows, each opening another screen or running a command. "
-                        + "The ones listed come from Macterm's repository. "
-                        + "A palette of your own needs no extension: a YAML file in your palettes folder."
-                )
-                .settingsCaption()
             }
             .padding(20)
         }
@@ -118,26 +104,6 @@ struct ExtensionsSettings: View {
         case let .installed(_, registry): registry.map { PaletteRegistry.readmeURL(ref: ref, id: $0.id) }
         case let .available(entry): PaletteRegistry.readmeURL(ref: ref, id: entry.id)
         }
-    }
-}
-
-/// A folder, home-contracted, as a link that shows it in Finder.
-private struct FolderLink: View {
-    let url: URL
-    let reveal: () -> Void
-
-    var body: some View {
-        Button(Self.path(url), action: reveal)
-            .buttonStyle(.link)
-            .lineLimit(1)
-            .truncationMode(.middle)
-    }
-
-    static func path(_ url: URL) -> String {
-        let path = url.path(percentEncoded: false)
-        let home = ProjectPath.currentHome
-        let shown = path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
-        return shown.hasSuffix("/") ? String(shown.dropLast()) : shown
     }
 }
 
