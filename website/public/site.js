@@ -55,56 +55,42 @@
 
 // --- Landing demo reel: each clip plays while it is on screen. ---
 //
-// The markup ships with a poster frame and preload="none", so the section is
-// complete, indexable and free before this runs; without JS the clips are
-// still there and simply wait to be asked (the fallbacks below turn their
-// controls on).
+// The clips are illustrations, not media: no controls, no click to pause. The
+// markup ships with a poster frame and preload="none", so the section is
+// complete, indexable and free before this runs; without JS, or when a
+// browser refuses autoplay (Low Power Mode, Reduce Motion), the poster stays.
 //
 // `muted` and `playsinline` in the markup are what make autoplay permissible
 // at all — Safari and Chrome both refuse a play() that would make noise. A
-// refused play() is still not fatal: the catch shows the controls so a
-// visitor can start it by hand.
+// refused play() is ignored: a pause() during a fast scroll rejects the
+// pending play() too, so a rejection says nothing about whether autoplay works.
 //
-// Pausing off-screen matters as much as playing on-screen. Five looping
+// Pausing off-screen matters as much as playing on-screen. Several looping
 // videos decoding at once on a laptop is a fan the page has no business
 // spinning up, and the whole reel is taller than any viewport.
 (function demoReel() {
   const videos = Array.from(document.querySelectorAll("[data-demo]"));
   if (!videos.length) return;
 
-  const showControls = (v) => {
-    v.controls = true;
-    if (v.preload === "none") v.preload = "metadata";
-  };
-
-  // Reduce Motion means "do not move on your own" — the clips stay, but they
-  // wait for a click. Same fallback covers a browser without the observer.
+  // Reduce Motion means "do not move on your own", so the poster stays.
   const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-  if (still.matches || !("IntersectionObserver" in window)) {
-    videos.forEach(showControls);
-    return;
-  }
+  if (still.matches || !("IntersectionObserver" in window)) return;
 
-  // A rejected play() is only meaningful when the page is actually on screen.
-  // A tab opened in the background rejects every one of them, and treating
-  // that as "autoplay is blocked here" would pin controls on all six clips
-  // for a visitor who has not even looked at the page yet.
   const start = (v) => {
     const started = v.play();
-    if (started && started.catch) {
-      started.catch(() => {
-        if (document.visibilityState === "visible") showControls(v);
-      });
-    }
+    if (started && started.catch) started.catch(() => {});
   };
+
+  // A tab opened in the background rejects every play(); start the visible
+  // clips when the visitor comes to it.
+  const onScreen = new Set();
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
-    videos.forEach((v) => {
-      if (v.paused && !v.controls && onScreen.has(v)) start(v);
+    onScreen.forEach((v) => {
+      if (v.paused) start(v);
     });
   });
 
-  const onScreen = new Set();
   const io = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -122,15 +108,7 @@
     { threshold: 0.35, rootMargin: "120px 0px" },
   );
 
-  videos.forEach((v) => {
-    io.observe(v);
-    // The one control an autoplaying clip keeps: click to hold a frame you
-    // want to read, click again to carry on.
-    v.addEventListener("click", () => {
-      if (v.paused) start(v);
-      else v.pause();
-    });
-  });
+  videos.forEach((v) => io.observe(v));
 })();
 
 // --- Live GitHub stats: fill star + download counts, reveal their containers,
