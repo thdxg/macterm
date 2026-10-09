@@ -234,6 +234,8 @@ struct PaletteRegistryTests {
         #expect(installed?.authors == ["thdxg"])
         #expect(installed?.problem == nil)
         #expect(installed?.paletteIDs == ["kubernetes/contexts", "kubernetes/pods"], "every palette, under the extension's id")
+        #expect(installed?.features == ["Contexts palette", "Pods palette"], "each palette is a feature of the extension")
+        #expect(installed?.uninstallMessage == "Contexts palette and Pods palette will be deleted.", "the prompt names each feature")
         let pods = store.entry(id: "kubernetes/pods")
         #expect(pods?.palette?.name == "Pods", "installed at once")
         #expect(pods?.extensionID == "kubernetes")
@@ -394,6 +396,10 @@ struct PaletteRegistryTests {
         let registry = PaletteRegistry(ref: "main", fetch: Server().fetch)
         let folder = try await registry.install(Self.entry("kubernetes"), into: store)
 
+        #expect(store.installedExtension(id: "kubernetes")?.uninstallMessage == "Pods palette will be deleted.")
+        let deletes = CustomPaletteStore.InstalledExtension.deletionMessage
+        #expect(deletes(["A palette", "B palette", "C palette"]) == "A palette, B palette, and 1 more feature will be deleted.")
+        #expect(deletes(["A", "B", "C", "D"]) == "A, B, and 2 more features will be deleted.")
         try store.uninstall(extensionID: "kubernetes")
         #expect(store.installedExtension(id: "kubernetes") == nil)
         #expect(store.entry(id: "kubernetes/pods") == nil, "its palettes go with it")

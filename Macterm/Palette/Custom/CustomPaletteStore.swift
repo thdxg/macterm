@@ -61,6 +61,29 @@ final class CustomPaletteStore {
         /// What's wrong with it, if anything: its manifest, the first of its
         /// palettes that doesn't read, or no palette at all.
         let problem: String?
+        /// What the extension adds to Macterm, one name for each feature, for
+        /// example "Kubernetes palette". Today the features are its palettes.
+        /// A later capability adds its own names here, so that each message
+        /// about the extension (`uninstallMessage`) names all of them.
+        let features: [String]
+
+        /// What the uninstall prompt says: the features that go with the
+        /// extension (`deletionMessage`).
+        var uninstallMessage: String {
+            Self.deletionMessage(features.isEmpty ? [name] : features)
+        }
+
+        /// "A will be deleted.", "A and B will be deleted.", and for more
+        /// than two, "A, B, and 3 more features will be deleted."
+        static func deletionMessage(_ names: [String]) -> String {
+            let subject = switch names.count {
+            case 0,
+                 1: names.first ?? ""
+            case 2: "\(names[0]) and \(names[1])"
+            default: "\(names[0]), \(names[1]), and \(names.count - 2) more feature\(names.count == 3 ? "" : "s")"
+            }
+            return "\(subject) will be deleted."
+        }
 
         var name: String { (try? manifest.get())?.name ?? id }
         var description: String? { try? manifest.get().description }
@@ -124,7 +147,14 @@ final class CustomPaletteStore {
             } else {
                 nil
             }
-            return InstalledExtension(id: id, folder: folder, manifest: manifest, paletteIDs: palettes.map(\.id), problem: problem)
+            return InstalledExtension(
+                id: id,
+                folder: folder,
+                manifest: manifest,
+                paletteIDs: palettes.map(\.id),
+                problem: problem,
+                features: palettes.map { "\($0.pill.title) palette" }
+            )
         }
         entries = extensionEntries
         PaletteHotkeys.shared.paletteIDs = entries.map(\.id)
