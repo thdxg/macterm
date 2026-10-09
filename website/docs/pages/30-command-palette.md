@@ -32,7 +32,7 @@ See [extensions](/docs/extensions) for the file format and examples, and the [co
 
 ## Settings → Extensions
 
-Every [extension](/docs/extensions) as a card in one searchable grid, the installed ones first and each group by name, with a filter beside the search for **All**, **Installed** or **Not Installed**: the ones you've installed, in `~/.config/macterm/extensions/`, and the ones in [Macterm's repository](https://github.com/thdxg/macterm/tree/main/extensions) that you haven't. A card shows the extension's own name and description; each extension can bring several palettes. Your own palette files in `~/.config/macterm/palettes/` aren't extensions and aren't listed. Each card has one button:
+Every [extension](/docs/extensions) as a card in one searchable grid, the installed ones first and each group by name, with a filter below the search for **All**, **Installed** or **Not Installed**: the ones you've installed, in `~/.config/macterm/extensions/`, and the ones in [Macterm's repository](https://github.com/thdxg/macterm/tree/main/extensions) that you haven't. A card shows the extension's own name and description; each extension can bring several palettes. Your own palette files in `~/.config/macterm/palettes/` aren't extensions and aren't listed. Each card has one button:
 
 - **Install** copies the extension's folder into `~/.config/macterm/extensions/` right away, where it's installed like any other. Its commands run on your Mac, so read it first: the book button beside **Install** opens the extension on GitHub, with every file it would install and its README.
 - **Installed** offers to move it to the Trash.
