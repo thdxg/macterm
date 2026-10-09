@@ -216,59 +216,62 @@ struct CommandPalettePanel: View {
                 let indexByID = flatIndexByID
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        // Where a new list starts: scrolled to on every
-                        // screen change and query (see below).
+                        // The point that each new list scrolls to (see below). It
+                        // is above the top padding of the rows, so the padding
+                        // shows. Inside the padding, it hid the padding.
                         Color.clear.frame(height: 0).id(Self.listTop)
-                        // A screen's notices: centered in the results, and
-                        // filling them when there are no rows — a compact
-                        // strip above rows an earlier listing left.
-                        if let failure {
-                            PaletteFailureNotice(failure: failure) { scope?.retry() }
-                                .frame(maxWidth: .infinity, minHeight: sections.isEmpty ? viewportHeight : 0)
-                        }
-                        if sections.isEmpty, failure == nil, let loading {
-                            PaletteLoadingNotice(loading: loading)
-                                .frame(maxWidth: .infinity, minHeight: viewportHeight)
-                        }
-                        ForEach(Array(sections.enumerated()), id: \.offset) { sectionIndex, section in
-                            if let header = section.header {
-                                Text(header)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(MactermTheme.fgDim)
-                                    .padding(.horizontal, 14)
-                                    .padding(.top, sectionIndex == 0 ? 8 : 12)
-                                    .padding(.bottom, 4)
+                        VStack(alignment: .leading, spacing: 0) {
+                            // A screen's notices: centered in the results, and
+                            // filling them when there are no rows — a compact
+                            // strip above rows an earlier listing left.
+                            if let failure {
+                                PaletteFailureNotice(failure: failure) { scope?.retry() }
+                                    .frame(maxWidth: .infinity, minHeight: sections.isEmpty ? viewportHeight : 0)
                             }
-                            ForEach(section.items) { item in
-                                let idx = indexByID[item.id] ?? 0
-                                Button {
-                                    selectedIndex = idx
-                                    execute(alt: NSEvent.modifierFlags.contains(.option))
-                                } label: {
-                                    CommandPaletteRow(item: item, isSelected: idx == selectedIndex, optionHeld: optionHeld)
+                            if sections.isEmpty, failure == nil, let loading {
+                                PaletteLoadingNotice(loading: loading)
+                                    .frame(maxWidth: .infinity, minHeight: viewportHeight)
+                            }
+                            ForEach(Array(sections.enumerated()), id: \.offset) { sectionIndex, section in
+                                if let header = section.header {
+                                    Text(header)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(MactermTheme.fgDim)
+                                        .padding(.horizontal, 14)
+                                        .padding(.top, sectionIndex == 0 ? 8 : 12)
+                                        .padding(.bottom, 4)
                                 }
-                                .buttonStyle(.plain)
-                                .id(idx)
-                                // Publish each row's Y-extent so a single hover
-                                // region on the ScrollView can map the pointer to
-                                // a row. Per-row tracking areas (`.onHover` /
-                                // `.onContinuousHover`) lag on fast pointer motion;
-                                // one region with geometry mapping does not.
-                                .background(
-                                    GeometryReader { geo in
-                                        let frame = geo.frame(in: .named(rowSpace))
-                                        Color.clear.preference(
-                                            key: RowFramesKey.self,
-                                            value: [idx: frame.minY ... frame.maxY]
-                                        )
+                                ForEach(section.items) { item in
+                                    let idx = indexByID[item.id] ?? 0
+                                    Button {
+                                        selectedIndex = idx
+                                        execute(alt: NSEvent.modifierFlags.contains(.option))
+                                    } label: {
+                                        CommandPaletteRow(item: item, isSelected: idx == selectedIndex, optionHeld: optionHeld)
                                     }
-                                )
+                                    .buttonStyle(.plain)
+                                    .id(idx)
+                                    // Publish each row's Y-extent so a single hover
+                                    // region on the ScrollView can map the pointer to
+                                    // a row. Per-row tracking areas (`.onHover` /
+                                    // `.onContinuousHover`) lag on fast pointer motion;
+                                    // one region with geometry mapping does not.
+                                    .background(
+                                        GeometryReader { geo in
+                                            let frame = geo.frame(in: .named(rowSpace))
+                                            Color.clear.preference(
+                                                key: RowFramesKey.self,
+                                                value: [idx: frame.minY ... frame.maxY]
+                                            )
+                                        }
+                                    )
+                                }
                             }
                         }
+                        // Match the rows' 6pt horizontal inset so the gap above
+                        // the first row and below the last equals the side spacing.
+                        .padding(.vertical, 6)
                     }
-                    // Match the rows' 6pt horizontal inset so the gap above
-                    // the first row and below the last equals the side spacing.
-                    .padding(.vertical, 6)
                 }
                 .frame(maxHeight: 340)
                 .coordinateSpace(name: rowSpace)
