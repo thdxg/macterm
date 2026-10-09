@@ -30,13 +30,15 @@ struct ExtensionsSettings: View {
         )
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsSearchField(text: $query, prompt: "Search extensions")
-                Picker("Show", selection: $filter) {
-                    ForEach(ExtensionGalleryItem.Filter.allCases) { Text($0.rawValue).tag($0) }
+                HStack(spacing: 10) {
+                    SettingsSearchField(text: $query, prompt: "Search extensions")
+                    Picker("Show", selection: $filter) {
+                        ForEach(ExtensionGalleryItem.Filter.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
                 RegistryStatus(state: registry.state)
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
