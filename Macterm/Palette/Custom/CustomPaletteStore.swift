@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import os
 
@@ -9,10 +8,12 @@ private let logger = Logger(subsystem: appBundleID, category: "CustomPaletteStor
 /// which a test's store keeps inside its own directory), each parsed and
 /// validated into a `CustomPalette` or kept as the error that stopped it —
 /// a broken file is shown where its palette would be, in the palette's
-/// Palettes section and in Settings → Palettes, not silently skipped.
+/// Palettes section and, for an extension, on its card in Settings → Extensions, not silently skipped.
 ///
-/// Installed extensions (`MactermExtension`) load beside the palette files,
-/// from `~/.config/macterm/extensions/<id>/palette.yaml`.
+/// Installed extensions (`MactermExtension`) load beside them, from
+/// `~/.config/macterm/extensions/<id>/`: each is listed in `extensions`, and
+/// each of its palettes (`palettes/*.yaml`) is an entry like a file's, under
+/// the id `<extension>/<stem>`.
 ///
 /// Read-only: the user's editor is the only writer. `reloadIfChanged` is
 /// cheap (a directory listing and the files' modification dates), so the
@@ -27,11 +28,11 @@ final class CustomPaletteStore {
         /// The file's own name, glyph and description as far as its YAML
         /// parses, for a file that failed validation.
         let header: CustomPaletteHeader?
-        /// An installed extension's folder (`MactermExtension`), which its
-        /// commands reach as `MACTERM_EXTENSION_DIR`; nil for a palette file.
+        /// The installed extension it belongs to, and that extension's
+        /// folder, which its commands reach as `MACTERM_EXTENSION_DIR`; nil
+        /// for a palette file of the user's own.
+        var extensionID: String?
         var extensionDirectory: URL?
-        /// Who maintains it, from its `extension.yaml`.
-        var authors: [String] = []
 
         var palette: CustomPalette? { try? result.get() }
         var failure: CustomPaletteError? {
@@ -50,11 +51,29 @@ final class CustomPaletteStore {
         var description: String? { palette?.description ?? header?.description }
     }
 
+    /// An installed extension (`MactermExtension`): its folder, its
+    /// `extension.yaml` as read, and the ids of its palettes in `entries`.
+    struct InstalledExtension: Identifiable, Equatable {
+        let id: String
+        let folder: URL
+        let manifest: Result<ExtensionManifest, CustomPaletteError>
+        let paletteIDs: [String]
+        /// What's wrong with it, if anything: its manifest, the first of its
+        /// palettes that doesn't read, or no palette at all.
+        let problem: String?
+
+        var name: String { (try? manifest.get())?.name ?? id }
+        var description: String? { try? manifest.get().description }
+        var icon: String { (try? manifest.get())?.icon ?? MactermExtension.defaultIcon }
+        var authors: [String] { (try? manifest.get())?.authors ?? [] }
+    }
+
     let directoryURL: URL
     /// Installed extensions (`MactermExtension`), one folder each, beside
     /// the palettes folder: `~/.config/macterm/extensions/`.
     let extensionsURL: URL
     private(set) var entries: [Entry] = []
+    private(set) var extensions: [InstalledExtension] = []
     /// What the last load saw, to skip a reload that would find the same.
     private var fingerprint: [String: Date] = [:]
 
@@ -96,84 +115,94 @@ final class CustomPaletteStore {
         let palettes = files.map { url in
             let stem = url.deletingPathExtension().lastPathComponent
             // `git.yaml` and `git.yml` would be one id: bindings, the
-            // Settings switch and every lookup key on it. The first by name
+            // every lookup key on it. The first by name
             // is the palette; the other says why it isn't.
             guard seen.insert(stem).inserted else {
                 let error = CustomPaletteError.invalid("another file is already the palette \(stem); rename one")
                 return Entry(id: url.lastPathComponent, fileURL: url, result: .failure(error), header: nil)
             }
-            let id = stem
-            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-            let header = CustomPaletteFile.parseHeader(yaml: text)
-            do {
-                let file = try CustomPaletteFile.parse(yaml: text)
-                return try Entry(id: id, fileURL: url, result: .success(CustomPalette(file: file, id: id)), header: header)
-            } catch let error as CustomPaletteError {
-                logger.error("palette \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                return Entry(id: id, fileURL: url, result: .failure(error), header: header)
-            } catch {
-                logger.error("palette \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                return Entry(id: id, fileURL: url, result: .failure(.parse(underlying: error)), header: header)
-            }
+            return Self.entry(id: stem, url: url)
         }
-        // Installed extensions after the palette files, in one namespace: an
-        // extension whose id a palette file already has says so rather than
-        // shadowing it, as two files of one name do.
-        let extensions = Self.extensionFolders(in: extensionsURL).map { folder in
+        // Installed extensions after the palette files. Their palettes'
+        // ids carry the extension's (`<extension>/<stem>`), so they never meet
+        // a file's or another extension's.
+        var extensionEntries: [Entry] = []
+        extensions = Self.extensionFolders(in: extensionsURL).map { folder in
             let id = folder.lastPathComponent
-            guard seen.insert(id).inserted else {
-                let error = CustomPaletteError.invalid("a palette file is already the palette \(id); rename or remove one")
-                return Entry(id: "extensions/\(id)", fileURL: folder, result: .failure(error), header: nil)
+            let palettes = Self.extensionEntries(id: id, folder: folder)
+            extensionEntries += palettes
+            let manifest = Self.manifest(in: folder)
+            let problem: String? = if case let .failure(error) = manifest {
+                error.localizedDescription
+            } else if let broken = palettes.first(where: { $0.failure != nil }), let failure = broken.failure {
+                "\(MactermExtension.palettesFolder)/\(broken.fileURL.lastPathComponent): \(failure.localizedDescription)"
+            } else if palettes.isEmpty {
+                "no palettes in \(MactermExtension.palettesFolder)/"
+            } else {
+                nil
             }
-            return Self.extensionEntry(id: id, folder: folder)
+            return InstalledExtension(id: id, folder: folder, manifest: manifest, paletteIDs: palettes.map(\.id), problem: problem)
         }
-        entries = palettes + extensions
+        entries = palettes + extensionEntries
         PaletteHotkeys.shared.paletteIDs = entries.map(\.id)
     }
 
-    /// An installed extension's palette, with who maintains it.
-    private static func extensionEntry(id: String, folder: URL) -> Entry {
-        let paletteURL = folder.appendingPathComponent(MactermExtension.paletteName)
-        let text = (try? String(contentsOf: paletteURL, encoding: .utf8)) ?? ""
+    /// A palette file read and validated, or kept with the error that
+    /// stopped it.
+    private static func entry(id: String, url: URL) -> Entry {
+        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         let header = CustomPaletteFile.parseHeader(yaml: text)
-        let manifestText = (try? String(contentsOf: folder.appendingPathComponent(MactermExtension.manifestName), encoding: .utf8)) ?? ""
-        let manifest = try? ExtensionManifest.parse(yaml: manifestText)
-        let result: Result<CustomPalette, CustomPaletteError>
         do {
-            result = try .success(CustomPalette(file: CustomPaletteFile.parse(yaml: text), id: id))
+            let file = try CustomPaletteFile.parse(yaml: text)
+            return try Entry(id: id, fileURL: url, result: .success(CustomPalette(file: file, id: id)), header: header)
         } catch let error as CustomPaletteError {
-            logger.error("extension \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            result = .failure(error)
+            logger.error("palette \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return Entry(id: id, fileURL: url, result: .failure(error), header: header)
         } catch {
-            result = .failure(.parse(underlying: error))
+            logger.error("palette \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return Entry(id: id, fileURL: url, result: .failure(.parse(underlying: error)), header: header)
         }
-        var entry = Entry(id: id, fileURL: paletteURL, result: result, header: header)
-        entry.extensionDirectory = folder
-        entry.authors = manifest?.authors ?? []
-        return entry
     }
 
-    /// The directory, created on demand — for Settings' "show in Finder".
-    /// Moves an installed palette to the Trash — an extension's whole
-    /// folder, or a palette file — and reloads, so it leaves the palette at
-    /// once. The Trash is the undo.
-    func uninstall(id: String) throws {
-        guard let entry = entry(id: id) else { return }
-        try FileManager.default.trashItem(at: entry.extensionDirectory ?? entry.fileURL, resultingItemURL: nil)
+    /// An installed extension's `extension.yaml`, or why it didn't read.
+    private static func manifest(in folder: URL) -> Result<ExtensionManifest, CustomPaletteError> {
+        let text = (try? String(contentsOf: folder.appendingPathComponent(MactermExtension.manifestName), encoding: .utf8)) ?? ""
+        do {
+            return try .success(ExtensionManifest.parse(yaml: text))
+        } catch let error as CustomPaletteError {
+            return .failure(error)
+        } catch {
+            return .failure(.parse(underlying: error))
+        }
+    }
+
+    /// An installed extension's palettes, each read like a palette file.
+    private static func extensionEntries(id extensionID: String, folder: URL) -> [Entry] {
+        let palettesFolder = folder.appendingPathComponent(MactermExtension.palettesFolder, isDirectory: true)
+        var seen = Set<String>()
+        return paletteFiles(in: palettesFolder).compactMap { url in
+            let id = MactermExtension.paletteID(extensionID: extensionID, path: url.lastPathComponent)
+            guard seen.insert(id).inserted else { return nil }
+            var entry = entry(id: id, url: url)
+            entry.extensionID = extensionID
+            entry.extensionDirectory = folder
+            return entry
+        }
+    }
+
+    func installedExtension(id: String) -> InstalledExtension? {
+        extensions.first { $0.id == id }
+    }
+
+    /// Moves an installed extension's folder to the Trash and reloads, so
+    /// its palettes leave the command palette at once. The Trash is the undo.
+    func uninstall(extensionID id: String) throws {
+        guard let installed = installedExtension(id: id) else { return }
+        try FileManager.default.trashItem(at: installed.folder, resultingItemURL: nil)
         reload()
     }
 
-    func revealExtensionsDirectory() {
-        try? FileManager.default.createDirectory(at: extensionsURL, withIntermediateDirectories: true)
-        NSWorkspace.shared.activateFileViewerSelecting([extensionsURL])
-    }
-
-    func revealDirectory() {
-        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        NSWorkspace.shared.activateFileViewerSelecting([directoryURL])
-    }
-
-    /// The installed extensions: folders holding a `palette.yaml`.
+    /// The installed extensions: folders holding an `extension.yaml`.
     private static func extensionFolders(in directory: URL) -> [URL] {
         let contents = (try? FileManager.default.contentsOfDirectory(
             at: directory,
@@ -181,7 +210,7 @@ final class CustomPaletteStore {
             options: [.skipsHiddenFiles]
         )) ?? []
         return contents
-            .filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent(MactermExtension.paletteName).path) }
+            .filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent(MactermExtension.manifestName).path) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
@@ -209,7 +238,12 @@ final class CustomPaletteStore {
             record(url, as: url.lastPathComponent)
         }
         for folder in Self.extensionFolders(in: extensionsURL) {
-            record(folder.appendingPathComponent(MactermExtension.paletteName), as: "extensions/\(folder.lastPathComponent)")
+            let id = folder.lastPathComponent
+            record(folder.appendingPathComponent(MactermExtension.manifestName), as: "extensions/\(id)")
+            let palettes = folder.appendingPathComponent(MactermExtension.palettesFolder, isDirectory: true)
+            for url in Self.paletteFiles(in: palettes) {
+                record(url, as: "extensions/\(id)/\(url.lastPathComponent)")
+            }
         }
         return dates
     }

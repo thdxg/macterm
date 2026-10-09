@@ -8,7 +8,7 @@ description: Add screens to the command palette with extensions — install them
 
 # Extensions
 
-An extension adds screens to the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods — anything a command can list. Install one from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)), or write your own: a palette, one YAML file in `~/.config/macterm/palettes/`. Either way it shows up in the command palette's **Palettes** section with a chevron, and picking it opens its screen in place.
+An extension adds to Macterm what it can do — today, screens in the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods, anything a command can list. Install one from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)); each brings one or more palettes. Or write a palette of your own: one YAML file in `~/.config/macterm/palettes/`. Either way each palette shows up in the command palette's **Palettes** section with a chevron, and picking it opens its screen in place.
 
 Macterm reads the folder again every time the palette opens, so saving the file is all it takes. There is nothing to reload or restart.
 
@@ -231,15 +231,15 @@ It prints each file's id, its keybind, and its name or the error that stopped it
 
 ## Keybinds and Settings
 
-- **Settings → Extensions** lists every extension, installed or not, in one grid. **Installed** on a card offers to move it to the Trash, which is how you remove one. The **Your own palettes** row opens `~/.config/macterm/palettes/` in Finder.
+- **Settings → Extensions** lists every extension, installed or not, in one grid. **Installed** on a card offers to move it to the Trash, which is how you remove one.
 - **Settings → Keymaps** has a **Palettes** group first, with <kbd>⌘P</kbd> and a row for every palette. None has a keybind by default. A palette's keybind opens the command palette straight on it. Pressed again on the palette's first screen, it closes the palette. Pressed deeper in, it goes back to that first screen.
 - **Any palette's keybind, built-in or an extension's, can be Global or Pass to TUI**, the two checkboxes on its row. A **Global** keybind works from any app: it brings Macterm's window forward with the palette open on it. **Pass to TUI** hands the keybind to the program in the focused pane when that program is one you list under Passthrough Programs.
 
 ## Sharing an extension
 
-Extensions anyone can install from Settings → Extensions are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in Macterm's repository, each holding `extension.yaml` (its authors, by GitHub username), `palette.yaml` and a `README.md`. An installed one lives in `~/.config/macterm/extensions/<id>/`, and its commands find the folder's other files — a script too long for the YAML — through `$MACTERM_EXTENSION_DIR`. A palette file in your palettes folder with the same name wins over it.
+Extensions anyone can install from Settings → Extensions are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in Macterm's repository, each holding `extension.yaml` (its name, description and authors), a `README.md`, and its palettes in `palettes/` — as many as it needs, each with its own name and description. An installed one lives in `~/.config/macterm/extensions/<id>/`, and its commands find the folder's other files — a script too long for the YAML — through `$MACTERM_EXTENSION_DIR`. Its palettes go by `<extension>/<file>` in the CLI, so they never clash with a palette file of your own.
 
-An extension can show screenshots in the gallery — **Capture Palette Screenshot** takes them at the one size the repository accepts, with the command palette framed the same way every time. Bind it in Settings → Keymaps and press it with the palette open on the screen you want; run from the menu or the palette, it captures the palette's first screen. The first time, macOS asks to let Macterm record the screen.
+An extension can include screenshots for its README — **Capture Palette Screenshot** takes them at the one size the repository accepts, with the command palette framed the same way every time. Bind it in Settings → Keymaps and press it with the palette open on the screen you want; run from the menu or the palette, it captures the palette's first screen. The first time, macOS asks to let Macterm record the screen.
 
 To add yours, open a pull request with the folder; you don't need to clone the whole repository, and [the folder's README](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how, and what an extension needs — POSIX commands, a `requires:`, a `when:` where it can't always work. Every extension there is read through Macterm's validator before it merges.
 

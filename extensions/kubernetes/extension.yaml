@@ -1,1 +1,5 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+name: Kubernetes
+description: "Browse a cluster's namespaces, pods, deployments and services"
+icon: shippingbox
 authors: [thdxg]

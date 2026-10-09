@@ -1,19 +1,23 @@
 import Foundation
 import Yams
 
-/// An extension: a folder of `extensions/` in Macterm's repository, named by
-/// its id, holding `extension.yaml` (who maintains it), `palette.yaml` (the
-/// palette) and `README.md`, and installed whole into
-/// `~/.config/macterm/extensions/<id>/` (`PaletteRegistry`). The palette's
-/// commands reach the folder's other files through `MACTERM_EXTENSION_DIR`.
+/// An extension: what a user installs. A folder named by its id, holding
+/// `extension.yaml` (its name, description and authors — `ExtensionManifest`),
+/// a `README.md`, and its capabilities — for now palettes, any number of
+/// them, each a YAML file in `palettes/` with its own name and description.
+/// Installed whole into `~/.config/macterm/extensions/<id>/`
+/// (`PaletteRegistry`); its commands reach the folder's other files through
+/// `MACTERM_EXTENSION_DIR`. A later capability is another folder beside
+/// `palettes/`.
 enum MactermExtension {
     static let manifestName = "extension.yaml"
-    static let paletteName = "palette.yaml"
+    static let palettesFolder = "palettes"
     static let readmeName = "README.md"
     /// Where an installed extension's commands find its folder.
     static let directoryVariable = "MACTERM_EXTENSION_DIR"
     static let maxFileSize = 500_000
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "webp"]
+    static let defaultIcon = "puzzlepiece.extension"
 
     /// An id: lowercase words joined by `-`.
     static func isID(_ id: String) -> Bool {
@@ -80,6 +84,22 @@ enum MactermExtension {
         return "screenshot-\(index).png"
     }
 
+    /// Whether `path` (relative to the extension's folder) is one of its
+    /// palettes: a `.yaml` or `.yml` directly in `palettes/`.
+    static func isPalette(_ path: String) -> Bool {
+        let prefix = palettesFolder + "/"
+        guard path.hasPrefix(prefix) else { return false }
+        let name = path.dropFirst(prefix.count)
+        return !name.contains("/") && ["yaml", "yml"].contains((String(name) as NSString).pathExtension.lowercased())
+    }
+
+    /// The id a palette of extension `id` goes by — in bindings, the CLI and
+    /// every lookup: `<extension>/<file stem>`, so no two extensions' palettes,
+    /// nor a palette file of the user's own, can share one.
+    static func paletteID(extensionID id: String, path: String) -> String {
+        "\(id)/\(((path as NSString).lastPathComponent as NSString).deletingPathExtension)"
+    }
+
     /// A README's first paragraph, for the gallery: the first block of text
     /// that isn't a heading, its lines joined.
     static func summary(readme: String) -> String? {
@@ -90,13 +110,16 @@ enum MactermExtension {
     }
 }
 
-/// `extension.yaml`: the extension as a whole, as opposed to its palette —
-/// for now who maintains it, by GitHub username; later its version and the
-/// Macterm versions it supports.
+/// `extension.yaml`: the extension as a whole, as opposed to its
+/// capabilities — what the gallery shows (name, description, icon) and who
+/// maintains it, by GitHub username.
 struct ExtensionManifest: Codable, Equatable {
+    var name: String
+    var description: String
+    var icon: String?
     var authors: [String]
 
-    static let keys: Set<String> = ["authors"]
+    static let keys: Set<String> = ["name", "description", "icon", "authors"]
 
     static func parse(yaml: String) throws -> ExtensionManifest {
         let manifest: ExtensionManifest
@@ -110,11 +133,16 @@ struct ExtensionManifest: Codable, Equatable {
         {
             throw CustomPaletteError.invalid("\(MactermExtension.manifestName): \(stray): no such key")
         }
+        let file = MactermExtension.manifestName
+        if manifest.name.trimmingCharacters(in: .whitespaces).isEmpty { throw CustomPaletteError.invalid("\(file): name: is empty") }
+        if manifest.description.trimmingCharacters(in: .whitespaces).isEmpty {
+            throw CustomPaletteError.invalid("\(file): description: is empty")
+        }
         guard !manifest.authors.isEmpty else {
-            throw CustomPaletteError.invalid("\(MactermExtension.manifestName): authors: name at least one GitHub username")
+            throw CustomPaletteError.invalid("\(file): authors: name at least one GitHub username")
         }
         for author in manifest.authors where !isGitHubUsername(author) {
-            throw CustomPaletteError.invalid("\(MactermExtension.manifestName): authors: \(author) isn't a GitHub username")
+            throw CustomPaletteError.invalid("\(file): authors: \(author) isn't a GitHub username")
         }
         return manifest
     }
