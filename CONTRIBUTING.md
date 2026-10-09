@@ -2,6 +2,8 @@
 
 Thanks for your interest in contributing! Macterm is a macOS terminal emulator built with SwiftUI and libghostty.
 
+This guide is for working on the app. If you want to contribute an extension, see the [`extensions`](extensions/) folder.
+
 ## Setup
 
 Building requires macOS 26+ and a full install of Xcode 26 (the Command Line Tools alone aren't enough — `xcodebuild` needs the Xcode app to build the macOS app target, and the code compiles against macOS 26 SDK APIs behind `#available` checks). The shipped app itself runs on macOS 14+.
@@ -99,10 +101,6 @@ If any of these fail in CI, your PR will be blocked. Running them locally first 
 
 - `CLAUDE.md` is a symlink to [`AGENTS.md`](AGENTS.md) — edit `AGENTS.md`.
 - User-facing docs live in [`website/docs/pages/`](website/docs/pages) as Markdown, one file per page. `cd website && bun install && bun run dev` builds and serves the site locally (needs [Bun](https://bun.sh) and [Caddy](https://caddyserver.com)).
-
-## Extensions
-
-Extensions anyone can install from Settings → Extensions live in [`extensions/`](extensions/), one folder each. You don't need to clone the whole repository to add one — [`extensions/README.md`](extensions/README.md) shows how to do it in the browser or with a sparse checkout, and what an extension needs. A pull request that only touches `extensions/` runs the unit tests, which read every extension through Macterm's validator, and skips the rest of CI.
 
 ## Reporting Issues
 
