@@ -39,23 +39,23 @@ Both kinds of page use the **eyesclosed** design system. Ethan uses this one sys
 `design-system/` is a vendored copy of `tokens.json` and `components/bundle.css` from the system. Never edit it here. Change the system, copy the two files back, and build again. `build-tokens.mjs` compiles `tokens.json` in the same way as the system:
 
 - Colors go under `:root, [data-theme="dark"]`. A `{alias}` value becomes `var(--alias)`.
-- Spacing, radii and grid widths go under `:root`.
+- Spacing, radii and sizes (`width-text`, `width-sidebar`, `inset-stage`) go under `:root`.
 - Each font family gets a `--font-<key>` variable.
 - Each type style gets a class.
 
-It also copies `bundle.css` next to `tokens.css`. Do not add a color, a size or a component that the system does not have. Add it to the system first.
+It also copies `bundle.css` next to `tokens.css`. Do not add a color, a size or a component that the system does not have. Add it to the system first. The scripts that the components need are in `public/site.js`, as the component READMEs give them.
 
 How the pages use the system:
 
-- **Landing page.** It has no SiteHeader and no label column. It has these parts, in this order:
-  1. A Hero at full width, with no `ec-grid`. The Hero has the name, one sentence, a primary **Get started** button to `/docs/install` and a plain GitHub button.
-  2. One Section with no label for each feature. The body of the Section spans both columns (`ec-span`). It has an `h3`, one muted sentence and the clip in a Figure.
-  3. An EntryList for the features that have no clip.
-  4. SiteFooter.
+- **Landing page.** Split and Reel. On desktops (1024 pixels and up), the page is one screen that does not scroll.
+  1. The hero holds still in the left column (`ec-split-side`). It has one sentence that starts with the name, a primary **Get started** button to `/docs/install` and a plain GitHub button. The page has no SiteHeader. The SiteFooter is under the hero (`ec-split-foot`).
+  2. The features scroll in the pane at the right (`ec-split-pane ec-reel`). The pane has no background. Each feature is an unlabelled Section: an `h3`, a muted line and the clip in a Figure. An EntryList ends the list for the features that have no clip. The features fade out over the top 40% of the pane and in over the bottom 40%.
+  3. The pane scrolls smoothly (`smoothPane` in `site.js`). Every wheel and scrolling key on the page sets a target, and the pane eases to it on each frame. Reduce Motion goes to the target at once.
+  4. The pane has no end, in either direction (`reel` in `site.js`). The script keeps three pane heights of features above and below the reader. It adds another lap of the list where the reader runs short. A lap is a copy of the list from before any clip loaded. Assistive tech does not read it (`aria-hidden`, `inert`). A lap added above moves the content down, so the script moves `scrollTop` down by the same distance. That stops native momentum in Safari, but `smoothPane` drives every scroll on desktops, so no native momentum runs. On load, and on Home, the script centers the first feature in the pane.
 
-  The landing page has no screenshot and no install command. The button leads to the docs.
-- **Docs.** SiteHeader, DocsLayout and SiteFooter. DocsLayout has the sidebar in the label column. It has the page in an `ec-prose` article. It has Previous and Next links.
-- **Code.** `build-docs.mjs` writes every fenced block as a CodeBlock (`ec-code`). When the fence has a `title=""`, the CodeBlock has an `ec-code-caption` row. YAML gets `tok-*` spans for highlighting. In a `console` block, the build marks each `$ ` prompt, so the copy button does not copy it.
+  Below 1024 pixels there is no split and no reel: the hero, the features one time, then the footer, in one column that scrolls. The landing page has no install command. The button leads to the docs, because the docs explain the Gatekeeper step.
+- **Docs.** DocsLayout, with no SiteHeader and no SiteFooter. DocsLayout pins the index at the left. It holds the name and the generated page groups. Home, GitHub and Releases are at its bottom. The page is an `ec-prose` article with Previous and Next links. On desktops, the page is in the middle of the window. The window scrolls natively. The page fades out under two bands at the top and bottom of the window (`ec-docs-fade`). The `docsFades` function in `site.js` marks where the reader is (`data-scrolled` and `data-end` on `<html>`). Below 960 pixels, a bar holds the name and a menu button, and the index becomes a full-screen menu (`docsMenu` in `site.js`).
+- **Code.** `build-docs.mjs` writes every fenced block as a CodeBlock (`ec-code`). When the fence has a `title=""`, the CodeBlock has an `ec-code-caption` row. YAML gets `tok-*` spans for highlighting: keys are `tok-member`, numbers and booleans are `tok-constant`, and other values are `tok-string`. Code has no hue. The grays of the system shade it. In a `console` block, the build marks each `$ ` prompt, so the copy button does not copy it. After a copy, the button shows a check for 1.5 seconds.
 
 ### Images
 
@@ -65,15 +65,15 @@ The build also writes `img/og.png`, the social card at 1200×630 pixels. The car
 
 To replace a screenshot, put the new file in `assets/`. The next build regenerates every copy, so the copies cannot become old. Git ignores `public/img/`.
 
-The landing page uses only `screenshot-1`, in the figure "Built on libghostty". It also uses `og.png`, which the build renders from the same image. The other screenshots stay in `assets/` for the repo README and the release notes. The `Caddyfile` gives `/img/*` the same TTL as `/assets/*`. Keep the two paths together in both the `@media` matcher and the `@pages` matcher. If you separate them, the images that every page loads fall into the `@pages` rule, which has no cache.
+The landing page shows no screenshot. It uses `og.png`, which the build renders from the hero image. The other screenshots stay in `assets/` for the repo README and the release notes. The `Caddyfile` gives `/img/*` the same TTL as `/assets/*`. Keep the two paths together in both the `@media` matcher and the `@pages` matcher. If you separate them, the images that every page loads fall into the `@pages` rule, which has no cache.
 
 ### The demo reel
 
 The screenshot gallery is now a set of screen recordings. There is one recording for each feature, one below the other, in `assets/demo/`. Each has an `<name>.mp4` file and a `<name>.webp` poster frame next to it. The number prefix is the order of recording. It is not the order of the page. `index.html` sets the page order. The page uses the files from `/assets/demo/…` with no build step. `public/assets` is the `assets/` folder in the repo root. Locally it is a symlink. In the image it is real files. Caddy already caches that path.
 
-Each clip is 1400×792 H.264 with CRF 26 and `+faststart`. The command `scripts/record-demos/record-demos.sh web` encodes it again from a 1680×950 master. That script also records the clips (see AGENTS.md). The poster is the first frame. All five clips together are about 4 MB. The page requests none of them when it loads. The markup has `preload="none"` and the poster. The `demoReel` function in `site.js` changes a clip to `preload="auto"` and plays it only when it scrolls into view. It pauses the clip again when the clip leaves the view. Five looping videos that decode at the same time would make the fan of a Mac run for no reason.
+Each clip is 1400×792 H.264 with CRF 26 and `+faststart`. The command `scripts/record-demos/record-demos.sh web` encodes it again from a 1680×950 master. That script also records the clips (see AGENTS.md). The poster is the first frame. All five clips together are about 4 MB. The page requests none of them when it loads. The markup has `preload="none"` and the poster. The `reel` function in `site.js` changes a clip to `preload="auto"` and plays it only while a reader can see it. On desktops, that is in the panel. Below 1024 pixels, it is on screen. It pauses every other clip, and it plays nothing while the tab is hidden. Many looping videos that decode at the same time would make the fan of a Mac run for no reason.
 
-`muted` and `playsinline` make the autoplay allowed. If the browser refuses a `play()` call, the page turns on the controls of the clip. It does not fail in silence. Reduce Motion gets the same result. A click pauses a clip, so a reader can read it.
+`muted` and `playsinline` make the autoplay allowed. If the browser refuses a `play()` call, the poster stays. Reduce Motion gets the same result. The clips are illustrations: they have no controls, and `pointer-events: none` stops a click from pausing them or opening the player UI.
 
 Each clip has its own `<h3>` and one line of text in its Section. Both are in `index.html`. They are the only place where the reel says what it shows. They name the ACTION. They never name the keys. Every keybind in the app can change, so text that names a key is wrong for a person who changed it.
 

@@ -38,8 +38,11 @@ const PUBLIC_DIR = join(here, "public");
 const SITE_URL = "https://macterm.thdxg.dev";
 
 // The design system's copy glyph: 16px, 1.5px stroke in currentColor (the
-// stroke comes from .ec-copy svg).
-const COPY_SVG = `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5"/></svg>`;
+// stroke comes from .ec-copy svg). The check after it in the same stroke shows
+// for a moment after a copy (site.js marks the button, bundle.css swaps them).
+const COPY_SVG =
+  `<svg class="ec-copy-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5"/></svg>` +
+  `<svg class="ec-copied-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>`;
 
 const escapeHtml = (s) =>
   s
@@ -55,8 +58,9 @@ const urlForSlug = (slug) => (slug === "index" ? "/docs/" : `/docs/${slug}`);
 // Works on the raw source and escapes each emitted piece itself (highlighting-
 // then-escaping would mangle the quotes it keys on). Handles top-level
 // `key: value`, list dashes, `#` comments, and inline flow maps. Classes are
-// the design system's tok-* (Helix scope) names: keys are properties, numbers
-// and booleans constants, every other scalar a string.
+// the design system's tok-* (Helix scope) names: keys are members (Helix reads
+// a YAML key as variable.other.member), numbers and booleans constants, every
+// other scalar a string.
 const span = (cls, text) => `<span class="${cls}">${escapeHtml(text)}</span>`;
 
 function highlightValue(val) {
@@ -81,7 +85,7 @@ function highlightFlowMap(text) {
     const [, sp, key, colon, val, trail] = m;
     return (
       escapeHtml(sp) +
-      span("tok-property", key) +
+      span("tok-member", key) +
       escapeHtml(colon) +
       highlightValue(val) +
       escapeHtml(trail)
@@ -112,7 +116,7 @@ function highlightYaml(code) {
         return (
           dash +
           escapeHtml(sp) +
-          span("tok-property", key) +
+          span("tok-member", key) +
           escapeHtml(colon) +
           highlightValue(val) +
           comment
