@@ -319,11 +319,12 @@ struct CustomPaletteFileTests {
         return examples
     }
 
-    /// The extensions anyone can install from Settings → Palettes
+    /// The extensions anyone can install from Settings → Extensions
     /// (`extensions/` at the repo root, a folder each): each has a manifest
-    /// naming its authors, a README, and a palette that reads through the
-    /// validator and says what it is — a description, the programs it needs —
-    /// and holds nothing but text and a few screenshots of one exact size.
+    /// with its name, description and authors, a README, and palettes in
+    /// `palettes/` that read through the validator and say what they are — a
+    /// description, the programs they need — and holds nothing but text and a
+    /// few screenshots of one exact size.
     @Test
     func every_extension_in_the_repo_reads_and_says_what_it_is() throws {
         let fm = FileManager.default
@@ -349,12 +350,22 @@ struct CustomPaletteFileTests {
                 Issue.record("\(id)/\(MactermExtension.manifestName) doesn't read: \(error.localizedDescription)")
             }
             #expect(MactermExtension.summary(readme: text(MactermExtension.readmeName)) != nil, "\(id): a README saying what it does")
-            do {
-                let palette = try Self.palette(text(MactermExtension.paletteName), id: id)
-                #expect(palette.description?.isEmpty == false, "\(id): a description")
-                #expect(!palette.requires.isEmpty, "\(id): requires: names the programs it needs")
-            } catch {
-                Issue.record("\(id)/\(MactermExtension.paletteName) doesn't read: \(error.localizedDescription)")
+            let palettesFolder = folder.appendingPathComponent(MactermExtension.palettesFolder, isDirectory: true)
+            let palettes = (try? fm.contentsOfDirectory(atPath: palettesFolder.path)) ?? []
+            #expect(!palettes.isEmpty, "\(id): at least one palette in \(MactermExtension.palettesFolder)/")
+            for file in palettes.sorted() {
+                let path = "\(MactermExtension.palettesFolder)/\(file)"
+                guard MactermExtension.isPalette(path) else {
+                    Issue.record("\(id)/\(path): only .yaml palettes go in \(MactermExtension.palettesFolder)/")
+                    continue
+                }
+                do {
+                    let palette = try Self.palette(text(path), id: MactermExtension.paletteID(extensionID: id, path: path))
+                    #expect(palette.description?.isEmpty == false, "\(id)/\(path): a description")
+                    #expect(!palette.requires.isEmpty, "\(id)/\(path): requires: names the programs it needs")
+                } catch {
+                    Issue.record("\(id)/\(path) doesn't read: \(error.localizedDescription)")
+                }
             }
             var screenshots = 0
             let root = folder.standardizedFileURL.path + "/"

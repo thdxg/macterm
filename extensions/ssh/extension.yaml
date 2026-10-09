@@ -1,1 +1,5 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+name: SSH Hosts
+description: "Connect to the hosts in your ~/.ssh/config"
+icon: server.rack
 authors: [thdxg]

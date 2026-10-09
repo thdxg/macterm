@@ -1258,7 +1258,7 @@ final class AppState {
     /// when the palette opens.
     let customPalettes: CustomPaletteStore
     /// The palettes anyone can install, read from Macterm's repository for
-    /// Settings → Palettes (`PaletteRegistry`); here so its hourly cache
+    /// Settings → Extensions (`PaletteRegistry`); here so its hourly cache
     /// outlives the Settings window.
     let paletteRegistry = PaletteRegistry()
 

@@ -71,11 +71,20 @@ struct DocsSectionHeader<Accessory: View>: View {
         self.accessory = accessory()
     }
 
+    /// The button floats over the header rather than sitting in it: it is
+    /// taller than the header's text, and laid out it made a header with one
+    /// a few points taller than a plain one. A hidden copy holds its width,
+    /// at no height, so the accessory keeps its place beside it.
     var body: some View {
         HStack {
             Text(title)
             Spacer()
             accessory
+            DocsLink(docs)
+                .hidden()
+                .frame(height: 0)
+        }
+        .overlay(alignment: .trailing) {
             DocsLink(docs)
         }
     }

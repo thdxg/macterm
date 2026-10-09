@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json",
+  "title": "Macterm extension",
+  "description": "extension.yaml: a Macterm extension as a whole — what Settings → Extensions shows and who maintains it. The extension's capabilities sit beside it in its folder: for now, palettes, one YAML file each in palettes/ (assets/palette.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "description",
+    "authors"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "The extension's name on its card in Settings → Extensions."
+    },
+    "description": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "One line on its card saying what the extension is for, starting with a verb."
+    },
+    "icon": {
+      "type": "string",
+      "description": "An SF Symbol name for its card. Defaults to puzzlepiece.extension."
+    },
+    "authors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$",
+        "maxLength": 39
+      },
+      "description": "The GitHub usernames of the people who maintain it."
+    }
+  }
+}
