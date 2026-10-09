@@ -13,6 +13,7 @@ struct ExtensionsSettings: View {
     private var appState
 
     @State private var query = ""
+    @State private var filter = ExtensionGalleryItem.Filter.all
     @State private var installingIDs: Set<String> = []
     @State private var uninstalling: CustomPaletteStore.InstalledExtension?
     @State private var problem: String?
@@ -24,11 +25,20 @@ struct ExtensionsSettings: View {
         let items = ExtensionGalleryItem.items(
             installed: appState.customPalettes.extensions,
             registry: registry.entries,
-            query: query
+            query: query,
+            filter: filter
         )
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsSearchField(text: $query, prompt: "Search extensions")
+                HStack(spacing: 10) {
+                    SettingsSearchField(text: $query, prompt: "Search extensions")
+                    Picker("Show", selection: $filter) {
+                        ForEach(ExtensionGalleryItem.Filter.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 RegistryStatus(state: registry.state)
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
@@ -36,7 +46,7 @@ struct ExtensionsSettings: View {
                 }
 
                 if items.isEmpty {
-                    Text(query.isEmpty ? "No extensions yet." : "No extensions match.")
+                    Text(query.isEmpty && filter == .all ? "No extensions yet." : "No extensions match.")
                         .settingsCaption()
                 }
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
