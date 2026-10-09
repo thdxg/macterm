@@ -13,9 +13,9 @@ body:
     id: steps
     attributes:
       label: Steps to reproduce
-      description: How can we reproduce this?
+      description: Write the steps that cause the problem.
       placeholder: |
-        1. Open macterm
+        1. Start Macterm
         2. ...
     validations:
       required: true
@@ -30,20 +30,20 @@ body:
     id: version
     attributes:
       label: Macterm version
-      placeholder: e.g. v1.1.0
+      placeholder: "For example: v1.1.0"
     validations:
       required: true
   - type: input
     id: macos
     attributes:
       label: macOS version
-      placeholder: e.g. macOS 26.0
+      placeholder: "For example: macOS 26.0"
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
       label: Logs or screenshots
-      description: Paste any relevant logs or attach screenshots.
+      description: Paste the related logs. Attach screenshots.
     validations:
       required: false
