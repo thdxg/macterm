@@ -134,6 +134,9 @@ private struct RegistryStatus: View {
 /// folder on GitHub when it comes from the repository; and a button saying whether it
 /// is installed.
 private struct ExtensionCard: View {
+    @Environment(\.openURL)
+    private var openURL
+
     let item: ExtensionGalleryItem
     let link: URL?
     let isInstalling: Bool
@@ -153,9 +156,11 @@ private struct ExtensionCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 4)
+                    // A Button, not a `Link`: a bordered `Link` draws at its
+                    // own height, a little off the Install button beside it.
                     if let link {
-                        Link(destination: link) {
-                            Image(systemName: "folder")
+                        Button { openURL(link) } label: {
+                            ButtonLabel(title: nil, systemImage: "book")
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -205,10 +210,12 @@ private struct ExtensionCard: View {
     }
 }
 
-/// A button's glyph and title, spaced as text: `Label` sets its icon in a
-/// fixed-width slot, which left a wide gap either side of the glyph.
+/// A card button's glyph and title, spaced as text — `Label` sets its icon
+/// in a fixed-width slot, which left a wide gap either side of the glyph —
+/// and drawn a little inside the bezel's own side padding, which is sized
+/// for a full-width push button and left these small ones mostly margin.
 private struct ButtonLabel: View {
-    let title: String
+    let title: String?
     let systemImage: String?
 
     var body: some View {
@@ -218,7 +225,8 @@ private struct ButtonLabel: View {
             } else {
                 ProgressView().controlSize(.mini)
             }
-            Text(title)
+            if let title { Text(title) }
         }
+        .padding(.horizontal, -3)
     }
 }
