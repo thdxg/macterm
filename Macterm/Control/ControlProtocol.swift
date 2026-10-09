@@ -280,7 +280,7 @@ struct ControlData: Codable {
     var password: ControlPasswordState?
     /// Desktop widgets (`widget.*`).
     var widgets: [ControlWidgetInfo]?
-    /// Custom palette files (`palette.list`).
+    /// The palettes of the installed extensions (`palette.list`).
     var palettes: [ControlPaletteInfo]?
 
     init(
@@ -386,8 +386,9 @@ struct ControlPaneInfo: Codable, Equatable {
     var leader: Bool?
 }
 
-/// One custom palette file (`CustomPaletteStore.Entry`), as `palette list`
-/// reports it: the file's stem is its id, `error` is why it didn't read.
+/// One palette of an installed extension (`CustomPaletteStore.Entry`), as
+/// `palette list` reports it. Its id is `<extension>/<file stem>`. `error`
+/// says why Macterm cannot read it.
 struct ControlPaletteInfo: Codable, Equatable {
     var id: String
     var file: String

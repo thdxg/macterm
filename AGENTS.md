@@ -726,7 +726,6 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `ProjectsSettings`, `WidgetsSettings`.
   - `ExtensionsSettings` (Settings → Extensions).
     - It is one grid of `ExtensionGalleryItem` cards that you can search by name. It has the installed extensions and the extensions of `PaletteRegistry` that are not installed yet. Each card shows the own name and description of the extension.
-    - The own palette files of the user are not extensions. The grid does not list them.
     - Each card has one button. **Install** installs at once, with no sheet. A book button next to it opens the folder of the extension on GitHub (`PaletteRegistry.folderURL`). **Installed** moves the extension to the Trash (`CustomPaletteStore.uninstall`).
     - Installed extensions come first, and each group is in order of name or of search rank. A menu next to the search field filters the grid to **All**, **Installed** or **Not Installed** (`ExtensionGalleryItem.Filter`).
     - The built-in screens are not extensions, and they have no card. There is no switch for on and off. To remove an extension, uninstall it.
@@ -737,7 +736,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - **`Custom/`** has extensions. Users and the docs use the name "extension" for what the code calls custom palettes.
     - `CustomPaletteFile` is the YAML model. It is validated into `CustomPalette`. A palette has named nodes. Each node has written `items:`, a `list:` or both (items first, and shown at once). Every row has an `enter:` or an `action:`, and an optional `alt:` for ⌥↩. The `alt:` is wired to `PaletteItem.alt`.
     - `CustomPaletteRows` turns the output of a command (JSON, NDJSON or plain lines) into rows by dotted paths. It is pure.
-    - `CustomPaletteStore` reads `~/.config/macterm/palettes/*.yaml` again at every open of the palette, by mtime. A file that fails keeps its error. Its row stays normal, with a warning glyph before the chevron (`PaletteItem.warning`). When you enter it, the screen shows the error as its `failure`. ⌘R reads the file again.
+    - `CustomPaletteStore` reads the palettes of the installed extensions (`~/.config/macterm/extensions/<id>/palettes/*.yaml`) again at every open of the palette, by mtime. Palettes come only from extensions: Macterm does not read `~/.config/macterm/palettes/`, which earlier versions read, and does not convert its files. The `authors:` of an extension are optional, so a user can write an extension for themselves. `CustomPaletteFileTests` requires them for each extension in the repository. A file that fails keeps its error. Its row stays normal, with a warning glyph before the chevron (`PaletteItem.warning`). When you enter it, the screen shows the error as its `failure`. ⌘R reads the file again.
     - `CustomPaletteRunner` has a timeout of 30 s. Exports and `MACTERM_PROJECT_DIR` and `MACTERM_PROJECT_NAME` go in the environment. Macterm NEVER substitutes selections into the text of a command. It probes `requires:` only after a listing fails, to name the program that is missing.
     - `CustomPaletteLaunch` (shared with the CLI).
     - `PaletteRegistry` holds the extensions that anyone can install.
@@ -844,9 +843,9 @@ The script has these rules. We learned each one with the real app:
   - `dockdrop` aims for the x of the tile while the Dock that hides automatically is still below the screen. It wiggles on the edge until the Dock slides up. Then it reads the tile again under magnification.
   - A desktop with Stacks or a sort order ignores the position of the folder. The take therefore switches both off in `DesktopViewSettings` of Finder. Finder restarts to read them.
 - **Demo 9 records the widgets of the desktop as they are**. Nothing is created or moved for the take. The frame is the full height below the menu bar, with the desktop icons hidden (`CreateDesktop`). The btop widget is reset to a shell, edited from its right-click menu, and dragged out and back. btop needs at least 80×24 cells. At a font of 16 pt, a widget that runs it needs 4×4 grid cells or more.
-- **Demo 11 writes its own palette into the real palettes folder.**
-  - The installed app reads `~/.config/macterm/palettes/` again at every open of the palette. There is no throwaway config to point it at.
-  - The take writes `macterm-demo-git.yaml` with a marker in the first line. It refuses to touch a file with that name that has no marker. It refuses to record next to another palette with the name Git (when you type `git`, the selection must land on its row). The EXIT trap removes the file only when it carries the marker.
+- **Demo 11 writes its own extension into the real extensions folder.**
+  - The installed app reads `~/.config/macterm/extensions/` again at every open of the palette. There is no throwaway config to point it at.
+  - The take writes the extension `macterm-demo-git`, with a marker in the first line of its `extension.yaml`. It refuses to touch a folder with that name that has no marker. It refuses to record next to another palette with the name Git (when you type `git`, the selection must land on its row). The EXIT trap removes the folder only when it carries the marker.
   - Its commands are POSIX sh, like the commands of every palette, whatever the login shell is. The file is therefore written one time (its listing needs jq).
   - The script first runs the listing of the commits one time, off camera. It runs it in the way that the palette runs it: through the login shell, into `sh`.
   - The palette has no CLI view, so its steps take beats. The script waits for the Diff split through `pane dump`.

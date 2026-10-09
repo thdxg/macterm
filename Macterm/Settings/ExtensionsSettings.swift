@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 
 /// Settings → Extensions: every extension as a card in one searchable grid —
-/// installed ones (folders in `~/.config/macterm/extensions/` and palette
-/// files in `~/.config/macterm/palettes/`, `CustomPaletteStore`) and the ones
-/// in Macterm's repository not installed yet (`PaletteRegistry`), by name.
+/// installed ones (folders in `~/.config/macterm/extensions/`,
+/// `CustomPaletteStore`) and the ones in Macterm's repository not installed
+/// yet (`PaletteRegistry`), by name.
 /// Each card's button says which: **Install** copies it in at once (its
 /// folder on GitHub is a link beside the button), **Installed** offers to move it to
 /// the Trash. The built-in screens aren't extensions and have no card.

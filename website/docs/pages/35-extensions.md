@@ -8,13 +8,25 @@ description: Add screens to the command palette with extensions. Install them fr
 
 # Extensions
 
-An extension adds to what Macterm can do. Today, an extension adds screens to the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods, and anything that a command can list. Install an extension from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)). Each extension brings one or more palettes. Or write your own palette: one YAML file in `~/.config/macterm/palettes/`. In both cases, each palette appears in the **Palettes** section of the command palette, with a chevron. When you select it, its screen opens in the same place.
+An extension adds to what Macterm can do. Today, an extension adds screens to the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods, and anything that a command can list. Install an extension from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)), or write your own. Each extension brings one or more palettes. Each palette appears in the **Palettes** section of the command palette, with a chevron. When you select it, its screen opens in the same place.
 
-Macterm reads the folder again each time that the palette opens. When you save the file, that is all that you do. You do not reload or restart anything.
+An extension is a folder in `~/.config/macterm/extensions/`. The folder has an `extension.yaml` file and a `palettes/` folder with one YAML file for each palette. Macterm reads the folder again each time that the palette opens. When you save a file, that is all that you do. You do not reload or restart anything.
 
-## A first palette
+> Earlier versions of Macterm also read palette files in `~/.config/macterm/palettes/`. Macterm does not read that folder now. To keep a palette from it, put the file in the `palettes/` folder of an extension.
 
-```yaml title="~/.config/macterm/palettes/git.yaml"
+## A first extension
+
+Make the folder `~/.config/macterm/extensions/git/`. Put an `extension.yaml` file in it, which gives the name and the description of the extension:
+
+```yaml title="~/.config/macterm/extensions/git/extension.yaml"
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
+name: Git
+description: Switch to, log or diff the branches of the project
+```
+
+Then put the palette in `palettes/`:
+
+```yaml title="~/.config/macterm/extensions/git/palettes/git.yaml"
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
 name: Git
 icon: arrow.triangle.branch
@@ -34,7 +46,7 @@ nodes:
 
 Press <kbd>⌘P</kbd>, type `git` and press <kbd>Return</kbd>. The screen lists the branches of the active project. Select a branch. A second screen shows what you can do with it. The pills above the palette read **Git › main**. Select **Log**. `git log` runs in a split next to the focused pane.
 
-## The file
+## The palette file
 
 | Key | |
 | --- | --- |
@@ -46,7 +58,16 @@ Press <kbd>⌘P</kbd>, type `git` and press <kbd>Return</kbd>. The screen lists 
 | `when` | Whether the palette can be used now: a check command and the reason to show when the check fails. See [when a palette can't be used](#when-a-palette-cant-be-used). |
 | `nodes` | Required. Every screen of the palette, by name. |
 
-The file name without `.yaml` is the id of the palette. Macterm stores its keybind under that id. If you rename the file, you lose the keybind.
+The id of a palette is the name of its extension folder and its file name without `.yaml`, for example `git/git`. Macterm stores its keybind under that id. If you rename the file or the folder, you lose the keybind.
+
+`extension.yaml` has these keys:
+
+| Key | |
+| --- | --- |
+| `name` | Required. The name on the card of the extension in Settings → Extensions. |
+| `description` | Required. One line on its card that says what the extension is for. |
+| `icon` | The name of an [SF Symbol](https://developer.apple.com/sf-symbols/) for its card. The default is `puzzlepiece.extension`. |
+| `authors` | The GitHub usernames of the people who maintain it. An extension in the Macterm repository must have them. An extension that you write for yourself does not need them. |
 
 ## Nodes
 
@@ -185,7 +206,7 @@ Every command also gets these variables:
 
 - `MACTERM_PROJECT_DIR`: the directory of the active project. It is not set for a remote project or a pinned tab.
 - `MACTERM_PROJECT_NAME`: the name of the project.
-- `MACTERM_EXTENSION_DIR`: the folder of the extension, when you installed it from the Macterm repository ([sharing an extension](#sharing-an-extension)).
+- `MACTERM_EXTENSION_DIR`: the folder of the extension that has the palette. A command can use it to run a script that is in that folder.
 - Every value that is exported above it.
 
 **Text that your shell prints at startup goes into the rows**. A greeting or a notice from your shell config becomes the first row of each listing. Keep the startup of non-interactive shells quiet.
@@ -227,7 +248,7 @@ To check every file from a terminal, run:
 macterm palette list
 ```
 
-The command prints the id of each file, its keybind, and its name or the error that stopped Macterm from reading it. See [the CLI](/docs/cli).
+The command prints the id of each palette, its keybind, and its name or the error that stopped Macterm from reading it. See [the CLI](/docs/cli).
 
 ## Keybinds and Settings
 
@@ -247,7 +268,7 @@ To add your extension, open a pull request with the folder. You do not need to c
 
 ### Docker containers
 
-```yaml title="~/.config/macterm/palettes/docker.yaml"
+```yaml title="~/.config/macterm/extensions/docker/palettes/docker.yaml"
 name: Docker
 icon: cube.box
 description: Running containers, their logs and a shell in them
@@ -271,7 +292,7 @@ nodes:
 
 This palette lists the hosts that are named in `~/.ssh/config`. It leaves out wildcard patterns. It does not list hosts in an `Include`d file.
 
-```yaml title="~/.config/macterm/palettes/ssh.yaml"
+```yaml title="~/.config/macterm/extensions/ssh/palettes/ssh.yaml"
 name: SSH Hosts
 icon: server.rack
 description: Hosts from ~/.ssh/config

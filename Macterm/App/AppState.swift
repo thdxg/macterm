@@ -1254,8 +1254,9 @@ final class AppState {
     /// `~/.config/macterm/widgets.yaml` (`AppState+DesktopWidgets`).
     @ObservationIgnored
     let widgetLayoutStore: WidgetLayoutStore
-    /// The custom palettes (`~/.config/macterm/palettes/*.yaml`), re-read
-    /// when the palette opens.
+    /// The installed extensions and their palettes
+    /// (`~/.config/macterm/extensions/`). Macterm reads them again when the
+    /// palette opens.
     let customPalettes: CustomPaletteStore
     /// The palettes anyone can install, read from Macterm's repository for
     /// Settings → Extensions (`PaletteRegistry`); here so its hourly cache

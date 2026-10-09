@@ -32,13 +32,13 @@ Each screen can have its own keybind in Settings → Keymaps, under **Palettes**
 
 ## Extensions
 
-Extensions add screens. You can install an extension from the Macterm repository, or write your own palettes. A palette is a YAML file in `~/.config/macterm/palettes/`. The output of a command becomes rows that you can search. Each row opens another screen, or runs a command in a new tab or split. For example, a Kubernetes palette goes from namespaces to pods to the logs of a pod. Each palette is in the **Palettes** section, next to the built-in screens.
+Extensions add screens. You can install an extension from the Macterm repository, or write your own extension in `~/.config/macterm/extensions/`. Each palette of an extension is a YAML file. The output of a command becomes rows that you can search. Each row opens another screen, or runs a command in a new tab or split. For example, a Kubernetes palette goes from namespaces to pods to the logs of a pod. Each palette is in the **Palettes** section, next to the built-in screens.
 
 See [extensions](/docs/extensions) for the file format and examples. The [cookbook](/docs/cookbook#kubernetes-palette) has a complete Kubernetes palette.
 
 ## Settings → Extensions
 
-Settings shows every [extension](/docs/extensions) as a card in one grid that you can search by name. The grid has the extensions that you installed, in `~/.config/macterm/extensions/`. It also has the extensions in [the Macterm repository](https://github.com/thdxg/macterm/tree/main/extensions) that you did not install. The installed extensions come first, and each group is in order of name. To show only one group, use the menu next to the search field: **All**, **Installed** or **Not Installed**. A card shows the name and the description of the extension. An extension can bring several palettes. Your own palette files in `~/.config/macterm/palettes/` are not extensions and are not in the list. Each card has one button:
+Settings shows every [extension](/docs/extensions) as a card in one grid that you can search by name. The grid has the extensions that you installed, in `~/.config/macterm/extensions/`. It also has the extensions in [the Macterm repository](https://github.com/thdxg/macterm/tree/main/extensions) that you did not install. The installed extensions come first, and each group is in order of name. To show only one group, use the menu next to the search field: **All**, **Installed** or **Not Installed**. A card shows the name and the description of the extension. An extension can bring several palettes. Each card has one button:
 
 - **Install** copies the folder of the extension into `~/.config/macterm/extensions/` at once. The extension is then installed like any other extension. Its commands run on your Mac, so read it first. The book button next to **Install** opens the extension on GitHub. You see every file that it installs, and its README.
 - **Installed** offers to move the extension to the Trash.

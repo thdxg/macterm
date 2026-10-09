@@ -73,7 +73,7 @@ Then do these steps:
 
 Take the screenshots with Macterm. Macterm frames the command palette in the same way each time:
 
-1. Install your extension, or keep it as a file in `~/.config/macterm/palettes/`. Open the screen that you want to show.
+1. Put your extension folder in `~/.config/macterm/extensions/`. Open the screen that you want to show.
 2. Run **Capture Palette Screenshot**. Bind it to a key in Settings → Keymaps, and press the key while the palette is open. If you run it from the menu (View) or from the palette, it captures the first screen of the palette.
 3. Save the file in the `screenshots/` folder of your extension. For an installed extension, Macterm offers that folder.
 

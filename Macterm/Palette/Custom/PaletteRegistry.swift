@@ -294,9 +294,8 @@ final class PaletteRegistry {
     }
 }
 
-/// One card in Settings → Extensions: an installed extension — a folder in
-/// the extensions folder, or a palette file of the user's own — or one from
-/// the repository not installed yet. The built-in screens aren't
+/// One card in Settings → Extensions: an installed extension (a folder in
+/// the extensions folder), or one from the repository that is not installed. The built-in screens aren't
 /// extensions and have no card.
 enum ExtensionGalleryItem: Identifiable, Equatable {
     /// `registry` is the repository's entry of the same id, when there is one.

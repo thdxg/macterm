@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json",
   "title": "Macterm extension palette",
-  "description": "A command-palette screen: one file for each palette, in the palettes/ folder of an extension or in ~/.config/macterm/palettes/. A palette is a graph of named nodes. Each node has rows that you write (`items`), a listing (`list`, a command whose output becomes rows), or both. Every row enters another node or runs an action. A row can name a second action for ⌥↩ (`alt`). A row can export values. They travel down the stack as environment variables into every command below the row.",
+  "description": "A command-palette screen: one file for each palette, in the palettes/ folder of an extension in ~/.config/macterm/extensions/. A palette is a graph of named nodes. Each node has rows that you write (`items`), a listing (`list`, a command whose output becomes rows), or both. Every row enters another node or runs an action. A row can name a second action for ⌥↩ (`alt`). A row can export values. They travel down the stack as environment variables into every command below the row.",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "nodes"],

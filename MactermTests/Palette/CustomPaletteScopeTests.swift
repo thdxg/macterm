@@ -12,8 +12,12 @@ struct CustomPaletteScopeTests {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("macterm-palette-tests-\(UUID().uuidString)", isDirectory: true)
         let config = base.appendingPathComponent("config", isDirectory: true)
-        let palettes = config.appendingPathComponent("palettes", isDirectory: true)
+        // One test extension, `t`: its palettes have the ids `t/<file stem>`.
+        let folder = config.appendingPathComponent("extensions/t", isDirectory: true)
+        let palettes = folder.appendingPathComponent("palettes", isDirectory: true)
         try FileManager.default.createDirectory(at: palettes, withIntermediateDirectories: true)
+        try "name: Test\ndescription: Palettes for the tests\n"
+            .write(to: folder.appendingPathComponent("extension.yaml"), atomically: true, encoding: .utf8)
         for (name, text) in files {
             try text.write(to: palettes.appendingPathComponent(name), atomically: true, encoding: .utf8)
         }
@@ -82,12 +86,12 @@ struct CustomPaletteScopeTests {
         try "name: Before\nnodes: { root: { list: ls, action: { copy: . } } }".write(to: target, atomically: false, encoding: .utf8)
         try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("git.yaml"), withDestinationURL: target)
         store.reload()
-        #expect(store.palette(id: "git")?.name == "Before")
+        #expect(store.palette(id: "t/git")?.name == "Before")
 
         try "name: After\nnodes: { root: { list: ls, action: { copy: . } } }".write(to: target, atomically: false, encoding: .utf8)
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: target.path)
         store.reloadIfChanged()
-        #expect(store.palette(id: "git")?.name == "After")
+        #expect(store.palette(id: "t/git")?.name == "After")
     }
 
     /// `git.yaml` and `git.yml` would share an id; the second says so
@@ -96,9 +100,9 @@ struct CustomPaletteScopeTests {
     func two_files_with_one_name_keep_the_first_and_explain_the_second() throws {
         let palette = "name: Git\nnodes: { root: { list: ls, action: { copy: . } } }"
         let (_, store, _) = try makeContext(files: ["git.yaml": palette, "git.yml": palette])
-        #expect(store.entries.map(\.id) == ["git", "git.yml"])
-        #expect(store.palette(id: "git")?.name == "Git")
-        #expect(store.entry(id: "git.yml")?.failure?.errorDescription == "another file is already the palette git. Rename one")
+        #expect(store.entries.map(\.id) == ["t/git", "t/git.yml"])
+        #expect(store.palette(id: "t/git")?.name == "Git")
+        #expect(store.entry(id: "t/git.yml")?.failure?.errorDescription == "another file is already the palette git. Rename one")
     }
 
     @Test
@@ -108,28 +112,28 @@ struct CustomPaletteScopeTests {
             "broken.yml": "name: Broken\nnodes: { root: { list: ls } }",
             "notes.txt": "not a palette",
         ])
-        #expect(store.entries.map(\.id) == ["broken", "kubernetes"], "by file name, yaml and yml alike, nothing else")
-        #expect(store.palette(id: "kubernetes")?.name == "Kubernetes")
-        #expect(store.entry(id: "broken")?.failure?.errorDescription == "root: needs enter: or action:")
-        #expect(store.entry(id: "broken")?.pill.title == "Broken", "a broken file is named as far as its YAML parses")
-        #expect(store.rootTarget(id: "kubernetes") == CustomPaletteTarget(
-            paletteID: "kubernetes", node: "menu", exports: [:], pill: PalettePill(title: "Kubernetes", systemImage: "shippingbox")
+        #expect(store.entries.map(\.id) == ["t/broken", "t/kubernetes"], "by file name, yaml and yml alike, nothing else")
+        #expect(store.palette(id: "t/kubernetes")?.name == "Kubernetes")
+        #expect(store.entry(id: "t/broken")?.failure?.errorDescription == "root: needs enter: or action:")
+        #expect(store.entry(id: "t/broken")?.pill.title == "Broken", "a broken file is named as far as its YAML parses")
+        #expect(store.rootTarget(id: "t/kubernetes") == CustomPaletteTarget(
+            paletteID: "t/kubernetes", node: "menu", exports: [:], pill: PalettePill(title: "Kubernetes", systemImage: "shippingbox")
         ))
-        #expect(store.rootTarget(id: "broken")?.node == "root", "a broken file still opens: on its error")
-        #expect(store.rootTarget(id: "nope") == nil)
-        #expect(PaletteHotkeys.shared.paletteIDs == ["broken", "kubernetes"], "the keybind table learns the files")
+        #expect(store.rootTarget(id: "t/broken")?.node == "root", "a broken file still opens: on its error")
+        #expect(store.rootTarget(id: "t/nope") == nil)
+        #expect(PaletteHotkeys.shared.paletteIDs == ["t/broken", "t/kubernetes"], "the keybind table learns the files")
 
         // A save is seen on the next reload-if-changed; an untouched folder is left alone.
         try "name: Fixed\nnodes: { root: { list: ls, action: { copy: . } } }"
             .write(to: dir.appendingPathComponent("broken.yml"), atomically: true, encoding: .utf8)
         store.reloadIfChanged()
-        #expect(store.palette(id: "broken")?.name == "Fixed")
+        #expect(store.palette(id: "t/broken")?.name == "Fixed")
     }
 
     @Test
     func a_menu_lists_its_items_and_entering_one_names_the_next_frame_after_it() throws {
         let (context, store, _) = try makeContext(files: ["kubernetes.yaml": CustomPaletteFileTests.kubernetes])
-        let root = try #require(store.rootTarget(id: "kubernetes"))
+        let root = try #require(store.rootTarget(id: "t/kubernetes"))
         let scope = CustomPaletteScope(target: root, runner: Recorder().runner)
         scope.activate(context: context) {}
         #expect(scope.loading == nil, "a menu has nothing to list")
@@ -167,7 +171,7 @@ struct CustomPaletteScopeTests {
         let recorder = Recorder()
         recorder.outputs["printf '%s\\n' one two"] = CustomPaletteCommandResult(stdout: "one\ntwo\n", stderr: "", status: 0)
         let target = CustomPaletteTarget(
-            paletteID: "sessions",
+            paletteID: "t/sessions",
             node: "root",
             exports: [:],
             pill: PalettePill(title: "Sessions", systemImage: "x")
@@ -195,7 +199,7 @@ struct CustomPaletteScopeTests {
         let command = "if [ -n \"$NAMESPACE\" ]; then set -- -n \"$NAMESPACE\"; else set -- -A; fi; kubectl get pods \"$@\" -o json"
         recorder.outputs[command] = CustomPaletteCommandResult(stdout: Self.podsJSON, stderr: "", status: 0)
         let target = CustomPaletteTarget(
-            paletteID: "kubernetes", node: "pods", exports: ["NAMESPACE": "prod"],
+            paletteID: "t/kubernetes", node: "pods", exports: ["NAMESPACE": "prod"],
             pill: PalettePill(title: "Pods", systemImage: "shippingbox")
         )
         let scope = CustomPaletteScope(target: target, runner: recorder.runner)
@@ -236,7 +240,7 @@ struct CustomPaletteScopeTests {
             stdout: #"{"items": [{"metadata": {"name": "prod"}}, {"metadata": {"name": "staging"}}]}"#, stderr: "", status: 0
         )
         let target = CustomPaletteTarget(
-            paletteID: "kubernetes",
+            paletteID: "t/kubernetes",
             node: "namespaces",
             exports: [:],
             pill: PalettePill(title: "Namespaces", systemImage: "shippingbox")
@@ -262,7 +266,7 @@ struct CustomPaletteScopeTests {
             stdout: "", stderr: "error: You must be logged in to the server (Unauthorized)", status: 1
         )
         let target = CustomPaletteTarget(
-            paletteID: "kubernetes",
+            paletteID: "t/kubernetes",
             node: "namespaces",
             exports: [:],
             pill: PalettePill(title: "Namespaces", systemImage: "shippingbox")
@@ -303,7 +307,12 @@ struct CustomPaletteScopeTests {
         )
         recorder.outputs[CustomPaletteRequirements.probe] = CustomPaletteCommandResult(stdout: "kubectl\n", stderr: "", status: 0)
         let scope = CustomPaletteScope(
-            target: CustomPaletteTarget(paletteID: "pods", node: "root", exports: [:], pill: PalettePill(title: "Pods", systemImage: "x")),
+            target: CustomPaletteTarget(
+                paletteID: "t/pods",
+                node: "root",
+                exports: [:],
+                pill: PalettePill(title: "Pods", systemImage: "x")
+            ),
             runner: recorder.runner
         )
         scope.activate(context: context) {}
@@ -326,7 +335,7 @@ struct CustomPaletteScopeTests {
     @Test
     func entering_a_broken_palette_shows_its_error_and_a_retry_rereads_the_file() throws {
         let (context, store, dir) = try makeContext(files: ["broken.yml": "name: Broken\nnodes: { root: { list: ls } }"])
-        let target = try #require(store.rootTarget(id: "broken"))
+        let target = try #require(store.rootTarget(id: "t/broken"))
         let scope = CustomPaletteScope(target: target, runner: Recorder().runner)
         var redraws = 0
         scope.activate(context: context) { redraws += 1 }
@@ -445,7 +454,7 @@ struct CustomPaletteScopeTests {
         let recorder = Recorder()
         recorder.outputs = ["api-check": Self.down, "other-check": Self.ok]
         let scope = CustomPaletteScope(
-            target: CustomPaletteTarget(paletteID: "ops", node: "root", exports: [:], pill: PalettePill(title: "Ops", systemImage: "x")),
+            target: CustomPaletteTarget(paletteID: "t/ops", node: "root", exports: [:], pill: PalettePill(title: "Ops", systemImage: "x")),
             runner: recorder.runner,
             conditionRunner: recorder.runner
         )
@@ -491,7 +500,7 @@ struct CustomPaletteScopeTests {
             "list-pods": CustomPaletteCommandResult(stdout: "api\nweb\n", stderr: "", status: 0),
         ]
         let root = CustomPaletteScope(
-            target: CustomPaletteTarget(paletteID: "k8s", node: "pods", exports: [:], pill: PalettePill(title: "K8s", systemImage: "x")),
+            target: CustomPaletteTarget(paletteID: "t/k8s", node: "pods", exports: [:], pill: PalettePill(title: "K8s", systemImage: "x")),
             runner: recorder.runner,
             conditionRunner: recorder.runner
         )
@@ -511,7 +520,7 @@ struct CustomPaletteScopeTests {
         // A deeper screen isn't gated again.
         recorder.outputs["list-more"] = CustomPaletteCommandResult(stdout: "x\n", stderr: "", status: 0)
         let deeper = CustomPaletteScope(
-            target: CustomPaletteTarget(paletteID: "k8s", node: "more", exports: [:], pill: PalettePill(title: "More", systemImage: "x")),
+            target: CustomPaletteTarget(paletteID: "t/k8s", node: "more", exports: [:], pill: PalettePill(title: "More", systemImage: "x")),
             runner: recorder.runner,
             conditionRunner: recorder.runner
         )
@@ -539,7 +548,7 @@ struct CustomPaletteScopeTests {
         availability.check(palettes, context: context)
         availability.check(palettes, context: context)
         await settle()
-        #expect(availability.unavailable == ["k8s": "Cluster unreachable"])
+        #expect(availability.unavailable == ["t/k8s": "Cluster unreachable"])
         #expect(recorder.calls.count == 1, "once per open")
 
         let row = { (unavailable: [String: String]) in
@@ -575,13 +584,13 @@ struct CustomPaletteScopeTests {
             "custom palettes follow the built-in screens"
         )
         let kubernetes = try #require(palettes.first { $0.title == "Kubernetes" })
-        #expect(try kubernetes.opensScope == .custom(#require(store.rootTarget(id: "kubernetes"))))
+        #expect(try kubernetes.opensScope == .custom(#require(store.rootTarget(id: "t/kubernetes"))))
         #expect(kubernetes.icon == "shippingbox")
         #expect(kubernetes.subtitle == "Namespaces, pods and their logs", "a palette's description is its row's second line")
         let broken = try #require(palettes.first { $0.title == "Broken" })
         #expect(broken.isEnabled, "a broken file's row reads like any other")
         #expect(broken.warning == "root: needs enter: or action:")
-        #expect(try broken.opensScope == .custom(#require(store.rootTarget(id: "broken"))))
+        #expect(try broken.opensScope == .custom(#require(store.rootTarget(id: "t/broken"))))
         #expect(kubernetes.warning == nil)
     }
 }
