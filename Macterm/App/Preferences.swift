@@ -124,6 +124,17 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
         }
     }
 
+    /// What following the channel gets you, for the caption under Settings →
+    /// Updates' picker. Stable releases reach every channel: Sparkle always
+    /// admits the default channel beside `Updater.allowedChannels`.
+    var summary: String {
+        switch self {
+        case .stable: "Stable releases only."
+        case .beta: "Betas of the next release, and stable releases."
+        case .tip: "A build of every commit that passes CI, and stable releases. Tip builds are not release-tested."
+        }
+    }
+
     /// The channel this BUILD was cut for, baked into `Info.plist` as
     /// `MactermUpdateChannel` by `scripts/build.sh`. Used as the default when
     /// the user has never chosen a channel.

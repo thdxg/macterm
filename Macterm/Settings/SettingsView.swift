@@ -2153,7 +2153,7 @@ private struct UpdatesSettings: View {
                     updater.updateChannel = UpdateChannel(rawValue: v) ?? .stable
                 }
 
-                Text("Tip builds come from every commit that passes CI and are not release-tested.")
+                Text((UpdateChannel(rawValue: updateChannel) ?? .stable).summary)
                     .settingsCaption()
             } header: {
                 Text("Channel")
