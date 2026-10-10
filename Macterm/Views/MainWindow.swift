@@ -339,6 +339,12 @@ struct MainWindow: View {
             let column: NavigationSplitViewVisibility = modelVisible ? .automatic : .detailOnly
             if columnVisibility != column { columnVisibility = column }
         }
+        .onChange(of: windowState.sidebarWidth) { _, width in
+            // The restore sets the window's own width after this view was
+            // built with the app-wide one. A write from `persistSidebarWidth`
+            // is the handoff's own width again, and changes nothing.
+            _ = sidebarWidthHandoff.adoptStoredWidth(CGFloat(width))
+        }
         .onChange(of: windowState.sidebarVisible) { _, visible in
             let isInitialReconciliation = initialSidebarVisibilityBeingApplied == visible
             if isInitialReconciliation { initialSidebarVisibilityBeingApplied = nil }
@@ -489,7 +495,13 @@ struct MainWindow: View {
     }
 
     private func recordNativeSidebarWidth(_ width: CGFloat) {
-        guard let accepted = sidebarWidthHandoff.nativeMeasured(width) else { return }
+        // Only while the native column is on screen. A hidden column still
+        // reports a width (its launch width, or a frame of the collapse), and
+        // recording it wrote that width over the window's own (#552). The
+        // overlay records its own drags.
+        guard windowState.sidebarVisible || activePeekStyle == .resizeTerminal,
+              let accepted = sidebarWidthHandoff.nativeMeasured(width)
+        else { return }
         persistSidebarWidth(accepted)
     }
 
