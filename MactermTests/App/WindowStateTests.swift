@@ -626,6 +626,49 @@ struct WindowStateTests {
     }
 
     @Test
+    func a_window_adopted_before_it_registers_keeps_its_saved_sidebar() {
+        // #552: the launch task can run `restoreWindows` before the scene's
+        // own window attaches. Its registration then looked like a window the
+        // user opened, which reset the restored sidebar to the defaults, and
+        // it took the pending entry meant for the second restored window.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+        let q = Project(name: "q", path: "/tmp/q", sortOrder: 1)
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.restoreSelection(projects: [p, q])
+        let w1 = WindowState(activeProjectID: p.id, sidebarWidth: 320)
+        w1.sidebarVisible = false
+        let w2 = WindowState(activeProjectID: q.id, sidebarWidth: 280)
+        writer.registerWindow(w1)
+        writer.registerWindow(w2)
+        writer.saveWorkspaces()
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.restoreSelection(projects: [p, q])
+        let first = WindowState()
+        reader.restoreWindows(adopting: first)
+        reader.registerWindow(first)
+        let second = WindowState()
+        reader.registerWindow(second)
+
+        #expect(first.activeProjectID == p.id)
+        #expect(first.sidebarWidth == 320)
+        #expect(!first.sidebarVisible)
+        #expect(second.activeProjectID == q.id, "the second window still gets its own entry")
+        #expect(second.sidebarWidth == 280)
+
+        // A window the user opens afterwards still comes up at the defaults.
+        let opened = WindowState(sidebarWidth: 333)
+        reader.registerWindow(opened)
+        #expect(opened.sidebarWidth == Preferences.defaultSidebarWidth)
+    }
+
+    @Test
     func a_snapshot_saved_before_frames_were_persisted_still_restores() throws {
         // `frame` is optional, so a v6 file written by an older build decodes
         // and its windows open at the default size.

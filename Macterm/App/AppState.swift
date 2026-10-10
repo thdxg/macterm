@@ -107,10 +107,20 @@ final class AppState {
     private var pendingWindowRestores: [WindowSnapshot] = []
 
     /// What the snapshot said, held until `restoreWindows` runs. Kept apart
-    /// from the FIFO because the scene's own window registers BEFORE the
+    /// from the FIFO because the scene's own window can register BEFORE the
     /// launch task — if the loaded list were the FIFO, that window would pop
-    /// the first entry early and every later window would be off by one.
+    /// the first entry early and every later window would be off by one. It
+    /// can also register after; see `windowAdoptedBeforeRegistration`.
     private var savedWindowSnapshots: [WindowSnapshot] = []
+
+    /// The scene's own window, when `restoreWindows` adopted the first saved
+    /// entry before that window attached and registered. The launch task can
+    /// run first. `registerWindow` then found no pending entry after the
+    /// restore and took the window for one the user opened: it reset the
+    /// saved sidebar width and visibility to the defaults, and the next save
+    /// wrote the defaults over the snapshot (#552). The window already has
+    /// its state, so `registerWindow` must not touch it.
+    private weak var windowAdoptedBeforeRegistration: WindowState?
 
     /// Creation-order index of the window that was key at quit, fronted once
     /// the last restored window has registered. Every restored window opens
@@ -163,6 +173,9 @@ final class AppState {
         }
         let saved = savedWindowSnapshots
         savedWindowSnapshots = []
+        if !windows.contains(where: { $0.id == first.id }) {
+            windowAdoptedBeforeRegistration = first
+        }
         // This runs after `restoreSelection`, which is the first moment the
         // app knows which project to show — the window registered before that
         // and so still has none.
@@ -354,7 +367,11 @@ final class AppState {
 
     func registerWindow(_ window: WindowState) {
         guard !windows.contains(where: { $0.id == window.id }) else { return }
-        if !pendingWindowRestores.isEmpty {
+        if window === windowAdoptedBeforeRegistration {
+            // `restoreWindows` already gave it entry 0. Never a pending entry,
+            // and never the defaults of a new window.
+            windowAdoptedBeforeRegistration = nil
+        } else if !pendingWindowRestores.isEmpty {
             // Consumed HERE, not at the request: a window registers a beat
             // after it is asked for (its NSWindow has to attach first), which
             // is why the request cannot hand it a payload directly.

@@ -208,6 +208,19 @@ struct SidebarWidthHandoff {
         return width
     }
 
+    /// Take the width that the window saved, when its restore sets it.
+    ///
+    /// `width` starts at the app-wide launch width, and only native
+    /// measurements and overlay drags change it after that. A window that is
+    /// restored with its sidebar hidden is never measured, so showing it or
+    /// peeking used the width of another window (#552). Returns nil when
+    /// nothing changed. A pending handoff target stays as it is.
+    mutating func adoptStoredWidth(_ width: CGFloat) -> CGFloat? {
+        guard abs(width - self.width) >= 0.5 else { return nil }
+        self.width = width
+        return width
+    }
+
     mutating func nativeMeasured(_ width: CGFloat) -> CGFloat? {
         if let pendingNativeWidth {
             guard abs(width - pendingNativeWidth) < 0.5 else { return nil }

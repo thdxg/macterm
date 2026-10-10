@@ -145,6 +145,20 @@ struct SidebarOverlayMetricsTests {
     }
 
     @Test
+    func a_restored_width_replaces_the_launch_width_and_keeps_a_pending_target() {
+        // #552: a window restored with its sidebar hidden is never measured,
+        // so the restored width must reach the handoff directly.
+        var handoff = SidebarWidthHandoff(width: 220)
+        #expect(handoff.adoptStoredWidth(320) == 320)
+        #expect(handoff.width == 320)
+        #expect(handoff.beginNativeHandoff() == 320)
+
+        // The window's own write of the same width changes nothing.
+        #expect(handoff.adoptStoredWidth(320.2) == nil)
+        #expect(handoff.pendingNativeWidth == 320)
+    }
+
+    @Test
     func an_unreachable_target_is_disarmed_instead_of_discarding_every_width() {
         var handoff = SidebarWidthHandoff(width: 400)
         #expect(handoff.beginNativeHandoff() == 400)
