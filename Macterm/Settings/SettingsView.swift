@@ -2107,8 +2107,6 @@ private struct UpdatesSettings: View {
     /// tracks `canCheckForUpdates`/`updateAvailable` reads in `body`).
     private var updater: Updater { .shared }
     @State
-    private var automaticallyChecks: Bool = Updater.shared.automaticallyChecksForUpdates
-    @State
     private var automaticallyDownloads: Bool = Updater.shared.automaticallyDownloadsUpdates
     @State
     private var updateChannel: String = Updater.shared.updateChannel.rawValue
@@ -2116,18 +2114,10 @@ private struct UpdatesSettings: View {
     var body: some View {
         Form {
             Section("Automatic Updates") {
-                Toggle("Check for updates automatically", isOn: $automaticallyChecks)
-                    .onChange(of: automaticallyChecks) { _, v in
-                        updater.automaticallyChecksForUpdates = v
+                Toggle("Update automatically", isOn: $automaticallyDownloads)
+                    .onChange(of: automaticallyDownloads) { _, v in
+                        updater.automaticallyDownloadsUpdates = v
                     }
-
-                Toggle(isOn: $automaticallyDownloads) {
-                    Text("Download updates in the background").dimsWhenDisabled()
-                }
-                .disabled(!automaticallyChecks)
-                .onChange(of: automaticallyDownloads) { _, v in
-                    updater.automaticallyDownloadsUpdates = v
-                }
 
                 HStack {
                     Spacer()
@@ -2137,13 +2127,18 @@ private struct UpdatesSettings: View {
                     .disabled(!updater.canCheckForUpdates)
                 }
 
-                Text("Macterm checks an EdDSA signature on each update. Macterm collects no analytics.")
-                    .settingsCaption()
+                Text(
+                    "Macterm checks for updates one time each day. When this setting is on, Macterm downloads "
+                        + "an update in the background and installs it when you quit. When this setting is off, a "
+                        + "toolbar button shows that an update is available. Macterm checks an EdDSA signature on "
+                        + "each update. Macterm collects no analytics."
+                )
+                .settingsCaption()
             }
 
-            // Deliberately its own section, and NOT disabled when automatic
-            // checks are off: the channel governs which updates are visible to
-            // any check, including a manual "Check for Updates Now".
+            // Deliberately its own section: the channel governs which updates
+            // are visible to any check, including a manual "Check for Updates
+            // Now".
             Section {
                 Picker("Update channel", selection: $updateChannel) {
                     ForEach(UpdateChannel.allCases) { option in
