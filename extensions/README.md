@@ -63,10 +63,11 @@ Then do these steps:
 - **`extension.yaml`** with these keys:
   - `name`.
   - `description`: one line that starts with a verb.
+  - `icon`: an SF Symbol name, or the path of a PNG file in the folder. The card of the extension and each of its palettes show it. A PNG must be exactly 128×128 pixels, with the shape in the alpha channel. Macterm draws it in the color of the theme.
   - `authors`: the GitHub usernames of the people who maintain the extension. A change to an extension that another person wrote needs the approval of that person in the pull request.
 - **At least one palette** in `palettes/`.
 - **`README.md`**.
-- **Files under 500 KB each.** All files are text, except the screenshots.
+- **Files under 500 KB each.** All files are text, except the screenshots and the icon file.
 - **Screenshots, if any, in `screenshots/`.** Use at most 6 PNG files. Each file is exactly 1600×1000 pixels. Then the screenshots of all extensions look the same in the gallery.
 
 ## Screenshots
@@ -81,7 +82,7 @@ The first time, macOS asks if Macterm can record the screen. The glass of the pa
 
 ## What each palette needs
 
-- **`name`, `icon` and `description`.** The description is one line that starts with a verb. It says what the palette is for. For example: *Follow a running container's logs or open a shell in it*.
+- **`name` and `description`.** The description is one line that starts with a verb. It says what the palette is for. For example: *Follow a running container's logs or open a shell in it*.
 - **`requires:`**. List every program that its commands need. Then Macterm reports a missing program by name.
 - **POSIX `sh` commands.** For anything that sh cannot do well, use a script with a `#!` line. Never use the syntax of your own shell. The palette must run in the same way for everyone.
 - **Values that you pass as variables** (`"$POD"`). Never paste a value into the text of a command.

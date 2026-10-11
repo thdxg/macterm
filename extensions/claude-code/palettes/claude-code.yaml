@@ -3,7 +3,6 @@
 # values picked above as environment variables. ⌥↩ (or ⌥-click) opens a row
 # in a split instead of a new tab.
 name: Claude Code
-icon: sparkle
 description: Manage Claude Code sessions in this project
 requires: [claude, jq]
 root: menu

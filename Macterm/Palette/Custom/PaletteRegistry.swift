@@ -35,20 +35,29 @@ final class PaletteRegistry {
         /// Each text file's contents, by path — everything but images —
         /// read once, so what Install writes is exactly what was validated.
         let texts: [String: String]
+        /// The icon file that the manifest names, by path, when there is one
+        /// — the one image read before Install, so that the card shows it.
+        let images: [String: Data]
         let manifest: Result<ExtensionManifest, CustomPaletteError>
+        /// What its card shows (`MactermExtension.icon(of:file:)`), and why
+        /// its icon file can't be used, if it can't.
+        let icon: PaletteIcon
+        let iconProblem: String?
         /// Each palette in `palettes/`, by path, as this build reads it or
         /// why it can't.
         let palettes: [(path: String, result: Result<CustomPalette, CustomPaletteError>)]
 
-        init(id: String, files: [File], texts: [String: String]) {
+        init(id: String, files: [File], texts: [String: String], images: [String: Data] = [:]) {
             self.id = id
             self.files = files
             self.texts = texts
+            self.images = images
             if let manifestText = texts[MactermExtension.manifestName] {
                 manifest = Self.read { try ExtensionManifest.parse(yaml: manifestText) }
             } else {
                 manifest = .failure(.invalid("no \(MactermExtension.manifestName)"))
             }
+            (icon, iconProblem) = MactermExtension.icon(of: try? manifest.get()) { images[$0] }
             palettes = files.map(\.path).filter(MactermExtension.isPalette).map { path in
                 let paletteID = MactermExtension.paletteID(extensionID: id, path: path)
                 return (path, Self.read { try CustomPalette(file: CustomPaletteFile.parse(yaml: texts[path] ?? ""), id: paletteID) })
@@ -66,13 +75,15 @@ final class PaletteRegistry {
         }
 
         static func == (lhs: Entry, rhs: Entry) -> Bool {
-            lhs.id == rhs.id && lhs.files == rhs.files && lhs.texts == rhs.texts
+            lhs.id == rhs.id && lhs.files == rhs.files && lhs.texts == rhs.texts && lhs.images == rhs.images
         }
 
         /// Why it can't be installed: its manifest or one of its palettes
-        /// doesn't read in this build, or it has no palette at all.
+        /// doesn't read in this build, it has no palette at all, or its icon
+        /// file is missing or the wrong size.
         var failure: CustomPaletteError? {
             if case let .failure(error) = manifest { return error }
+            if let iconProblem { return .invalid("\(MactermExtension.manifestName): \(iconProblem)") }
             for palette in palettes {
                 if case let .failure(error) = palette.result {
                     return .invalid("\(palette.path): \(error.localizedDescription)")
@@ -83,7 +94,6 @@ final class PaletteRegistry {
         }
 
         var name: String { (try? manifest.get())?.name ?? id }
-        var icon: String { (try? manifest.get())?.icon ?? MactermExtension.defaultIcon }
         var description: String? { try? manifest.get().description }
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
         var readme: String? { texts[MactermExtension.readmeName] }
@@ -215,7 +225,33 @@ final class PaletteRegistry {
                     }
                     return texts
                 }
-                outcome = .success(extensions.map { Entry(id: $0.id, files: $0.files, texts: texts[$0.id] ?? [:]) })
+                // The icon file that each manifest names, when the folder has
+                // it. A path that is not in the folder stays unread, and the
+                // entry says so.
+                let iconFiles: [(id: String, path: String)] = extensions.compactMap { id, files in
+                    guard let text = texts[id]?[MactermExtension.manifestName],
+                          let icon = (try? ExtensionManifest.parse(yaml: text))?.icon,
+                          MactermExtension.isIconFile(icon), files.contains(where: { $0.path == icon })
+                    else { return nil }
+                    return (id, icon)
+                }
+                let images = try await withThrowingTaskGroup(of: (String, String, Data).self) { group in
+                    for (id, path) in iconFiles {
+                        group.addTask {
+                            let (data, status) = try await fetch(Self.fileURL(ref: ref, id: id, path: path))
+                            guard status == 200 else { throw RegistryError(status: status, ref: ref) }
+                            return (id, path, data)
+                        }
+                    }
+                    var images: [String: [String: Data]] = [:]
+                    for try await (id, path, data) in group {
+                        images[id, default: [:]][path] = data
+                    }
+                    return images
+                }
+                outcome = .success(extensions.map {
+                    Entry(id: $0.id, files: $0.files, texts: texts[$0.id] ?? [:], images: images[$0.id] ?? [:])
+                })
             } catch {
                 outcome = .failure(error)
             }
@@ -252,7 +288,7 @@ final class PaletteRegistry {
 
     /// Copies `entry`'s folder into `store`'s extensions folder as `<id>/`
     /// and reloads the store, so it is installed at once — the text already
-    /// read, images fetched now, executables kept executable. Written beside
+    /// and the icon file read, other images fetched now, executables kept executable. Written beside
     /// the destination and moved into place, so a failed download leaves no
     /// half an extension. Never replaces a palette the user has: one of
     /// that id, a file or an installed extension, refuses.
@@ -264,7 +300,7 @@ final class PaletteRegistry {
         if store.installedExtension(id: entry.id) != nil || fm.fileExists(atPath: destination.path) {
             throw InstallError.alreadyInstalled(entry.id)
         }
-        var contents: [String: Data] = entry.texts.mapValues { Data($0.utf8) }
+        var contents: [String: Data] = entry.texts.mapValues { Data($0.utf8) }.merging(entry.images) { text, _ in text }
         for file in entry.files where contents[file.path] == nil {
             let (data, status) = try await fetch(Self.fileURL(ref: ref, id: entry.id, path: file.path))
             guard status == 200 else { throw RegistryError(status: status, ref: ref) }
@@ -337,7 +373,7 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
         }
     }
 
-    var icon: String {
+    var icon: PaletteIcon {
         switch self {
         case let .installed(installed, _): installed.icon
         case let .available(entry): entry.icon

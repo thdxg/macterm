@@ -1,6 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
 name: Docker
-icon: cube.box
 description: Follow a running container's logs or open a shell in it
 requires: [docker]
 when: { run: docker info, unavailable: Docker is not running }

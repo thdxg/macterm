@@ -7,7 +7,6 @@ import Testing
 struct CustomPaletteFileTests {
     static let kubernetes = """
     name: Kubernetes
-    icon: shippingbox
     description: Namespaces, pods and their logs
     root: menu
     nodes:
@@ -55,7 +54,6 @@ struct CustomPaletteFileTests {
         let palette = try Self.palette(Self.kubernetes, id: "kubernetes")
         #expect(palette.id == "kubernetes")
         #expect(palette.name == "Kubernetes")
-        #expect(palette.icon == "shippingbox")
         #expect(palette.root == "menu")
         #expect(Set(palette.nodes.keys) == ["menu", "namespaces", "namespace-menu", "pods"])
 
@@ -90,7 +88,7 @@ struct CustomPaletteFileTests {
     }
 
     @Test
-    func a_node_called_root_is_the_default_root_and_the_icon_has_a_default() throws {
+    func a_node_called_root_is_the_default_root() throws {
         let palette = try Self.palette("""
         name: Branches
         nodes:
@@ -100,7 +98,6 @@ struct CustomPaletteFileTests {
             export: { BRANCH: . }
         """)
         #expect(palette.root == "root")
-        #expect(palette.icon == CustomPalette.defaultIcon)
         guard let listing = palette.nodes["root"]?.listing else { return }
         #expect(listing.title == ".", "plain lines: the title is the line")
         #expect(listing.match == ["."])
@@ -333,8 +330,9 @@ struct CustomPaletteFileTests {
     /// (`extensions/` at the repo root, a folder each): each has a manifest
     /// with its name, description and authors, a README, and palettes in
     /// `palettes/` that read through the validator and say what they are — a
-    /// description, the programs they need — and holds nothing but text and a
-    /// few screenshots of one exact size.
+    /// description, the programs they need — and holds nothing but text, a
+    /// few screenshots of one exact size, and the icon file that its manifest
+    /// names, if any.
     @Test
     func every_extension_in_the_repo_reads_and_says_what_it_is() throws {
         let fm = FileManager.default
@@ -354,9 +352,14 @@ struct CustomPaletteFileTests {
             }
             #expect(MactermExtension.isID(id), "\(id): an id is lowercase words joined by -")
             let text = { (name: String) in (try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8)) ?? "" }
+            var iconFile: String?
             do {
                 let manifest = try ExtensionManifest.parse(yaml: text(MactermExtension.manifestName))
                 #expect(!manifest.authors.isEmpty, "\(id): authors: names at least one GitHub username")
+                #expect(manifest.icon != nil, "\(id): an icon, for its card and its palettes")
+                let resolved = MactermExtension.icon(of: manifest) { try? Data(contentsOf: folder.appendingPathComponent($0)) }
+                #expect(resolved.problem == nil, "\(id): \(resolved.problem ?? "")")
+                iconFile = manifest.icon.flatMap { MactermExtension.isIconFile($0) ? $0 : nil }
             } catch {
                 Issue.record("\(id)/\(MactermExtension.manifestName) doesn't read: \(error.localizedDescription)")
             }
@@ -389,7 +392,9 @@ struct CustomPaletteFileTests {
                 let name = "\(id)/\(path)"
                 #expect((values.fileSize ?? 0) <= MactermExtension.maxFileSize, "\(name): under 500 KB")
                 let data = try Data(contentsOf: file)
-                if MactermExtension.isScreenshot(path) {
+                if path == iconFile {
+                    continue
+                } else if MactermExtension.isScreenshot(path) {
                     screenshots += 1
                     let size = MactermExtension.pngSize(data)
                     let want = MactermExtension.screenshotPixelSize
@@ -400,7 +405,7 @@ struct CustomPaletteFileTests {
                 } else {
                     #expect(
                         String(data: data, encoding: .utf8) != nil,
-                        "\(name): text — the only images are PNG screenshots in \(MactermExtension.screenshotsFolder)/"
+                        "\(name): text — the only images are PNG screenshots in \(MactermExtension.screenshotsFolder)/ and the icon file"
                     )
                 }
             }

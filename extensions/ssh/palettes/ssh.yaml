@@ -1,6 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
 name: SSH Hosts
-icon: server.rack
 description: Connect to a host from ~/.ssh/config
 requires: [ssh]
 root: hosts

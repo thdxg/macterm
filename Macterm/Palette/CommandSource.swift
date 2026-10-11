@@ -68,7 +68,7 @@ struct CommandSource: PaletteSource {
                 score: 0,
                 isEnabled: unavailable == nil,
                 opensScope: unavailable == nil ? .custom(target) : nil,
-                icon: unavailable == nil ? nil : entry.pill.systemImage,
+                icon: unavailable == nil ? nil : entry.pill.icon,
                 warning: entry.failure?.localizedDescription,
                 action: {}
             )
@@ -96,7 +96,7 @@ struct CommandSource: PaletteSource {
                 category: command.category.rawValue,
                 score: 0,
                 isEnabled: false,
-                icon: command.paletteScope?.pill.systemImage,
+                icon: command.paletteScope?.pill.icon,
                 action: {}
             )
         }

@@ -1047,7 +1047,7 @@ struct PaletteScopeWindowTests {
 
         window.pushPaletteFrame(PaletteFrame(.passwords))
         window.pushPaletteFrame(PaletteFrame(.worktrees))
-        window.pushPaletteFrame(PaletteFrame(.worktrees, pill: PalettePill(title: "feature", systemImage: "tag")))
+        window.pushPaletteFrame(PaletteFrame(.worktrees, pill: PalettePill(title: "feature", icon: "tag")))
         #expect(window.paletteStack.map(\.scopeID) == [.passwords, .worktrees, .worktrees])
         #expect(
             window.paletteStack.map(\.pill.title) == ["Password Manager", "Worktrees", "feature"],

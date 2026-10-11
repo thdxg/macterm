@@ -157,7 +157,7 @@ private struct ExtensionCard: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
-                    Image(systemName: item.icon)
+                    PaletteIconImage(icon: item.icon, side: 20)
                         .font(.title3)
                         .foregroundStyle(.secondary)
                         .frame(width: 24)

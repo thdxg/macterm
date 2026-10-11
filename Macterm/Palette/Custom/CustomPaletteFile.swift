@@ -11,7 +11,6 @@ import Yams
 // grammar, so nothing a command prints is ever quoted into another command.
 //
 //     name: Kubernetes
-//     icon: shippingbox
 //     root: menu
 //     nodes:
 //       menu:
@@ -51,6 +50,9 @@ import Yams
 /// validates it into the model the scope runs.
 struct CustomPaletteFile: Codable, Equatable {
     var name: String
+    /// Not used. A palette shows the icon of its extension
+    /// (`ExtensionManifest.icon`). The key stays valid, so that a file that
+    /// sets it still reads (extensions are a compatibility promise).
     var icon: String?
     var description: String?
     /// Programs the commands need, by name.
@@ -170,7 +172,7 @@ struct CustomPaletteFile: Codable, Equatable {
     }
 
     /// What a file says it is, read leniently — so a file that fails
-    /// validation still has its name and glyph on its row, and the error
+    /// validation still has its name on its row, and the error
     /// waits until the row is entered. nil when the YAML doesn't parse.
     static func parseHeader(yaml: String) -> CustomPaletteHeader? {
         try? YAMLDecoder().decode(CustomPaletteHeader.self, from: yaml)
@@ -179,7 +181,6 @@ struct CustomPaletteFile: Codable, Equatable {
 
 struct CustomPaletteHeader: Codable, Equatable {
     var name: String?
-    var icon: String?
     var description: String?
 }
 
@@ -325,15 +326,12 @@ struct CustomPalette: Equatable, Identifiable {
     /// switch key on it.
     let id: String
     let name: String
-    let icon: String
     let description: String?
     let requires: [String]
     /// Checked each time the palette's row is shown and when it opens.
     let condition: CustomPaletteCondition?
     let root: String
     let nodes: [String: Node]
-
-    static let defaultIcon = "square.grid.2x2"
 
     struct Node: Equatable {
         let placeholder: String?
@@ -376,7 +374,6 @@ struct CustomPalette: Equatable, Identifiable {
         self.id = id
         name = file.name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { throw CustomPaletteError.invalid("name: must not be empty") }
-        icon = file.icon ?? Self.defaultIcon
         description = file.description
         requires = file.requires ?? []
         for program in requires where !CustomPaletteRequirements.isProgramName(program) {

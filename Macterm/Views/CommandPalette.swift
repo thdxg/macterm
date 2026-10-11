@@ -687,14 +687,18 @@ private struct PaletteScopePill: View {
     let isCurrent: Bool
 
     var body: some View {
-        Label(pill.title, systemImage: pill.systemImage)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(isCurrent ? MactermTheme.fg : MactermTheme.fgMuted)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .padding(.horizontal, 9)
-            .frame(height: Self.height)
-            .modifier(PillBackground())
+        Label {
+            Text(pill.title)
+        } icon: {
+            PaletteIconImage(icon: pill.icon, side: 14)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(isCurrent ? MactermTheme.fg : MactermTheme.fgMuted)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .padding(.horizontal, 9)
+        .frame(height: Self.height)
+        .modifier(PillBackground())
     }
 
     private struct PillBackground: ViewModifier {
@@ -792,7 +796,7 @@ private struct CommandPaletteRow: View {
     var body: some View {
         HStack(spacing: 8) {
             if let icon = item.icon {
-                Image(systemName: icon)
+                PaletteIconImage(icon: icon)
                     .font(.system(size: 13))
                     .foregroundStyle(item.isEnabled ? MactermTheme.fgMuted : MactermTheme.fgDim)
                     .frame(width: 18)
