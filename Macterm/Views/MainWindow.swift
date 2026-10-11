@@ -345,6 +345,9 @@ struct MainWindow: View {
             // is the handoff's own width again, and changes nothing.
             _ = sidebarWidthHandoff.adoptStoredWidth(CGFloat(width))
         }
+        .onChange(of: windowState.expandedProjects) {
+            appState.noteSidebarChanged()
+        }
         .onChange(of: windowState.sidebarVisible) { _, visible in
             let isInitialReconciliation = initialSidebarVisibilityBeingApplied == visible
             if isInitialReconciliation { initialSidebarVisibilityBeingApplied = nil }
@@ -488,7 +491,7 @@ struct MainWindow: View {
         // the next window you open should match what you just set (#345).
         if abs(rounded - windowState.sidebarWidth) >= 0.5 {
             windowState.sidebarWidth = rounded
-            appState.noteSidebarWidthChanged()
+            appState.noteSidebarChanged()
         }
         guard abs(rounded - preferences.sidebarWidth) >= 0.5 else { return }
         preferences.sidebarWidth = rounded

@@ -184,6 +184,9 @@ final class AppState {
         first.activeProjectID = saved[0].activeProjectID ?? first.activeProjectID
         if let width = saved[0].sidebarWidth { first.sidebarWidth = width }
         if let visible = saved[0].sidebarVisible { first.sidebarVisible = visible }
+        // After the project: making a project active opens its section, and
+        // the saved set must win over that.
+        if let expanded = saved[0].expandedProjectIDs { first.expandedProjects = Set(expanded) }
         if let frame = saved[0].frame {
             first.frame = frame
             applyRestoredFrame(of: first)
@@ -382,6 +385,7 @@ final class AppState {
             }
             if let width = restoring.sidebarWidth { window.sidebarWidth = width }
             if let visible = restoring.sidebarVisible { window.sidebarVisible = visible }
+            if let expanded = restoring.expandedProjectIDs { window.expandedProjects = Set(expanded) }
             if let frame = restoring.frame { window.frame = frame }
         } else if hasRestoredWindows {
             // A window the user opened, not one being restored: the sidebar
@@ -876,8 +880,9 @@ final class AppState {
         }
     }
 
-    /// A window's sidebar width changed; get it into the snapshot.
-    func noteSidebarWidthChanged() {
+    /// A window's sidebar width or open sections changed; get it into the
+    /// snapshot.
+    func noteSidebarChanged() {
         persistWindows()
     }
 
@@ -1758,7 +1763,8 @@ final class AppState {
                         isKey: window.id == keyWindowID,
                         activeTabID: window.activeProjectID.flatMap { selectedTab(for: $0, in: window)?.id },
                         sidebarVisible: window.sidebarVisible,
-                        frame: window.frame
+                        frame: window.frame,
+                        expandedProjectIDs: window.expandedProjects.sorted { $0.uuidString < $1.uuidString }
                     )
                 },
             quickTerminal: quickTerminalSnapshot(),
@@ -2520,6 +2526,9 @@ final class AppState {
         }
         workspaces.removeValue(forKey: projectID)
         unloadedProjectIDs.remove(projectID)
+        for window in windows {
+            window.expandedProjects.remove(projectID)
+        }
         vacateWindows(showing: projectID)
     }
 

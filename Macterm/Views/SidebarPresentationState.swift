@@ -16,12 +16,13 @@ enum SidebarRenameTarget: Equatable {
 ///
 /// The native split-view sidebar remains mounted while the hover overlay shows
 /// a second copy of the same content. Keeping this state on either view would
-/// give the copies different expansion/selection state and two competing
-/// rename fields. `MainWindow` tells each copy whether it is interactive; this
-/// shared state makes them one logical sidebar without lifecycle arbitration.
+/// give the copies different selection state and two competing rename fields.
+/// `MainWindow` tells each copy whether it is interactive; this shared state
+/// makes them one logical sidebar without lifecycle arbitration. Which project
+/// sections are open is not here: it is per window and persisted, so it lives
+/// on `WindowState.expandedProjects`, which both copies read.
 @MainActor @Observable
 final class SidebarPresentationState {
-    var expandedProjects: Set<UUID> = []
     var selection: Set<SidebarItem> = []
     var scrollPosition: SidebarItem?
     var renameText = ""

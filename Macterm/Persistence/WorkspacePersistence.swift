@@ -84,7 +84,7 @@ struct DesktopWidgetSnapshot: Codable {
 
 /// One window's restorable state (v6+).
 ///
-/// The project and the sidebar width. Pane and tab selection are still shared
+/// The project, the sidebar width and its open sections. Pane and tab selection are still shared
 /// across windows. The frame stays AppKit's to restore — SwiftUI's
 /// `WindowGroup` already persists window frames through the system's state
 /// restoration, so storing them here would be a second, competing source of
@@ -116,6 +116,10 @@ struct WindowSnapshot: Codable {
     /// snapshot, or a window that never reported a frame) opens at the
     /// scene's default size.
     var frame: String?
+    /// The projects whose sidebar sections were open, sorted so that an
+    /// unchanged set writes the same file. nil (an older snapshot) opens only
+    /// the active project, as before.
+    var expandedProjectIDs: [UUID]?
 }
 
 // MARK: - Snapshot types
