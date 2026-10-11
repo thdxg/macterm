@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Yams
 
@@ -11,6 +12,10 @@ import Yams
 /// `palettes/`.
 enum MactermExtension {
     static let manifestName = "extension.yaml"
+    /// The record of where an installed extension came from
+    /// (`ExtensionSource`). Install writes it. A folder without it is the
+    /// user's own.
+    static let sourceName = ".source.json"
     static let palettesFolder = "palettes"
     static let readmeName = "README.md"
     /// Where an installed extension's commands find its folder.
@@ -141,6 +146,60 @@ enum MactermExtension {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix("![") }
         return paragraphs.first?.split(separator: "\n").joined(separator: " ")
+    }
+}
+
+/// Where an installed extension came from: the repository, and each of its
+/// files as Install wrote it, by path, as a Git blob SHA. Install writes it
+/// to `MactermExtension.sourceName` in the folder of the extension. With it,
+/// Macterm can tell two things without Git: whether the user changed the
+/// copy (the files on disk differ from `files`), and whether the repository
+/// changed it (the tree of `main` differs from `files`). Uninstall moves it
+/// to the Trash with the folder. A user who deletes it makes the copy their
+/// own.
+struct ExtensionSource: Codable, Equatable {
+    var repository: String
+    var ref: String
+    var files: [String: String]
+
+    static func read(in folder: URL) -> ExtensionSource? {
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent(MactermExtension.sourceName)) else { return nil }
+        return try? JSONDecoder().decode(ExtensionSource.self, from: data)
+    }
+
+    func write(in folder: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(self).write(to: folder.appendingPathComponent(MactermExtension.sourceName))
+    }
+
+    /// The Git blob SHA of `data`, as the Git Trees API reports it for a file:
+    /// SHA-1 of `blob <size>\0` and the bytes.
+    static func blobSHA(_ data: Data) -> String {
+        var hash = Insecure.SHA1()
+        hash.update(data: Data("blob \(data.count)\0".utf8))
+        hash.update(data: data)
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Every file in `folder` that is not hidden, by path, as a Git blob SHA.
+    /// Hidden files (the source record, `.DS_Store`) are not part of an
+    /// extension.
+    static func files(in folder: URL) -> [String: String] {
+        let root = folder.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        var files: [String: String] = [:]
+        let enumerator = FileManager.default.enumerator(
+            at: folder.resolvingSymlinksInPath(),
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+        while let url = enumerator?.nextObject() as? URL {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+                  let data = try? Data(contentsOf: url)
+            else { continue }
+            files[String(url.standardizedFileURL.path.dropFirst(root.count))] = blobSHA(data)
+        }
+        return files
     }
 }
 

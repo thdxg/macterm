@@ -65,6 +65,11 @@ final class CustomPaletteStore {
         let paletteIDs: [String]
         /// What its card and each of its palettes show.
         let icon: PaletteIcon
+        /// Where it came from, when Install put it here. nil for an
+        /// extension of the user's own.
+        let source: ExtensionSource?
+        /// Its files on disk, by path, as Git blob SHAs (`ExtensionSource.files(in:)`).
+        let files: [String: String]
         /// What's wrong with it, if anything: its manifest, the first of its
         /// palettes that doesn't read, no palette at all, or its icon file.
         let problem: String?
@@ -94,6 +99,9 @@ final class CustomPaletteStore {
 
         var name: String { (try? manifest.get())?.name ?? id }
         var description: String? { try? manifest.get().description }
+        /// Whether the user changed it since Install wrote it. An extension
+        /// with no source record has nothing to differ from.
+        var isModified: Bool { source.map { $0.files != files } ?? false }
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
     }
 
@@ -168,6 +176,8 @@ final class CustomPaletteStore {
                 manifest: manifest,
                 paletteIDs: palettes.map(\.id),
                 icon: icon,
+                source: ExtensionSource.read(in: folder),
+                files: ExtensionSource.files(in: folder),
                 problem: problem,
                 features: palettes.map { "\($0.pill.title) palette" }
             )
@@ -291,9 +301,20 @@ final class CustomPaletteStore {
         for folder in Self.extensionFolders(in: extensionsURL) {
             let id = folder.lastPathComponent
             record(folder.appendingPathComponent(MactermExtension.manifestName), as: "extensions/\(id)")
+            record(folder.appendingPathComponent(MactermExtension.sourceName), as: "extensions/\(id)/\(MactermExtension.sourceName)")
             let palettes = folder.appendingPathComponent(MactermExtension.palettesFolder, isDirectory: true)
             for url in Self.paletteFiles(in: palettes) {
                 record(url, as: "extensions/\(id)/\(url.lastPathComponent)")
+            }
+            // Every other file too (a README, a script), so that an edit
+            // anywhere in the folder updates `InstalledExtension.files`.
+            let enumerator = FileManager.default.enumerator(
+                at: folder.resolvingSymlinksInPath(),
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            )
+            while let url = enumerator?.nextObject() as? URL {
+                record(url, as: "extensions/\(id)/files/\(url.path)")
             }
         }
         for url in iconFiles {

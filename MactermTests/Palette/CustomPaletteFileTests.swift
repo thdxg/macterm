@@ -390,6 +390,10 @@ struct CustomPaletteFileTests {
                 guard values.isRegularFile == true else { continue }
                 let path = String(file.standardizedFileURL.path.dropFirst(root.count))
                 let name = "\(id)/\(path)"
+                #expect(
+                    !path.split(separator: "/").contains { $0.hasPrefix(".") },
+                    "\(name): no hidden files. Macterm keeps its own record of an install in one (\(MactermExtension.sourceName))"
+                )
                 #expect((values.fileSize ?? 0) <= MactermExtension.maxFileSize, "\(name): under 500 KB")
                 let data = try Data(contentsOf: file)
                 if path == iconFile {

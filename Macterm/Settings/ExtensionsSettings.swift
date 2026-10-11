@@ -7,7 +7,9 @@ import SwiftUI
 /// yet (`PaletteRegistry`), by name.
 /// Each card's button says which: **Install** copies it in at once (its
 /// folder on GitHub is a link beside the button), **Installed** offers to move it to
-/// the Trash. The built-in screens aren't extensions and have no card.
+/// the Trash. An installed card also has an Update button when the
+/// repository's version differs (`ExtensionGalleryItem.update`). The
+/// built-in screens aren't extensions and have no card.
 struct ExtensionsSettings: View {
     @Environment(AppState.self)
     private var appState
@@ -16,6 +18,8 @@ struct ExtensionsSettings: View {
     @State private var filter = ExtensionGalleryItem.Filter.all
     @State private var installingIDs: Set<String> = []
     @State private var uninstalling: CustomPaletteStore.InstalledExtension?
+    /// An update that replaces a copy with changes, waiting for a yes.
+    @State private var confirmingUpdate: (installed: CustomPaletteStore.InstalledExtension, entry: PaletteRegistry.Entry)?
     @State private var problem: String?
 
     private let columns = [GridItem(.adaptive(minimum: 220, maximum: 360), spacing: 12, alignment: .top)]
@@ -56,6 +60,12 @@ struct ExtensionsSettings: View {
                             link: folderURL(item, ref: registry.ref),
                             isInstalling: installingIDs.contains(item.extensionID),
                             install: install,
+                            update: { installed, update in
+                                switch update {
+                                case let .available(entry): self.update(entry)
+                                case let .replacesChanges(entry): confirmingUpdate = (installed, entry)
+                                }
+                            },
                             uninstall: { uninstalling = $0 }
                         )
                     }
@@ -73,6 +83,20 @@ struct ExtensionsSettings: View {
         .onAppear {
             appState.customPalettes.reloadIfChanged()
             registry.refresh()
+            adoptIfLoaded()
+        }
+        .onChange(of: registry.state) { adoptIfLoaded() }
+        .confirmationDialog(
+            "Update \(confirmingUpdate?.installed.name ?? "")?",
+            isPresented: Binding(get: { confirmingUpdate != nil }, set: { if !$0 { confirmingUpdate = nil } }),
+            presenting: confirmingUpdate
+        ) { pending in
+            Button("Update", role: .destructive) { update(pending.entry) }
+        } message: { pending in
+            let name = pending.installed.name
+            Text(pending.installed.source == nil
+                ? "Your copy of \(name) is not the same as the version in the Macterm repository. Your copy goes to the Trash."
+                : "You changed \(name). Your changed copy goes to the Trash.")
         }
         .confirmationDialog(
             "Uninstall \(uninstalling?.name ?? "")?",
@@ -105,6 +129,27 @@ struct ExtensionsSettings: View {
             }
             installingIDs.remove(entry.id)
         }
+    }
+
+    /// Replaces the installed copy of `entry` with the repository's version.
+    private func update(_ entry: PaletteRegistry.Entry) {
+        installingIDs.insert(entry.id)
+        Task {
+            do {
+                try await appState.paletteRegistry.update(entry, into: appState.customPalettes)
+                problem = nil
+            } catch {
+                problem = "Cannot update \(entry.name): \(error.localizedDescription)"
+            }
+            installingIDs.remove(entry.id)
+        }
+    }
+
+    /// Records where an unrecorded copy came from when it is the same as the
+    /// repository's (`PaletteRegistry.adoptUnrecordedInstalls`).
+    private func adoptIfLoaded() {
+        guard case .loaded = appState.paletteRegistry.state else { return }
+        appState.paletteRegistry.adoptUnrecordedInstalls(in: appState.customPalettes)
     }
 
     /// The folder of an extension the repository has; none for a palette
@@ -151,6 +196,7 @@ private struct ExtensionCard: View {
     let link: URL?
     let isInstalling: Bool
     let install: (PaletteRegistry.Entry) -> Void
+    let update: (CustomPaletteStore.InstalledExtension, ExtensionGalleryItem.Update) -> Void
     let uninstall: (CustomPaletteStore.InstalledExtension) -> Void
 
     var body: some View {
@@ -196,6 +242,18 @@ private struct ExtensionCard: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(MactermTheme.failure)
                         .help(problem)
+                }
+                // A glyph only, as the book button: the card is too narrow
+                // for a third titled button next to its name.
+                if let available = item.update {
+                    Button { update(installed, available) } label: {
+                        ButtonLabel(title: nil, systemImage: isInstalling ? nil : "arrow.down.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(available.entry.failure != nil || isInstalling)
+                    .help(available.entry.failure.map { "This version of Macterm cannot read the update: \($0.localizedDescription)" }
+                        ?? "Update to the version in the Macterm repository")
                 }
                 Button { uninstall(installed) } label: {
                     ButtonLabel(title: "Installed", systemImage: "checkmark.circle.fill")

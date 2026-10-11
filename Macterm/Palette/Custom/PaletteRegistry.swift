@@ -26,6 +26,15 @@ final class PaletteRegistry {
         let path: String
         let size: Int
         let executable: Bool
+        /// Its Git blob SHA at the ref (`ExtensionSource.blobSHA`).
+        let sha: String
+
+        init(path: String, size: Int, executable: Bool, sha: String = "") {
+            self.path = path
+            self.size = size
+            self.executable = executable
+            self.sha = sha
+        }
     }
 
     struct Entry: Identifiable, Equatable {
@@ -97,6 +106,16 @@ final class PaletteRegistry {
         var description: String? { try? manifest.get().description }
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
         var readme: String? { texts[MactermExtension.readmeName] }
+        /// Its files at the ref, by path, as Git blob SHAs: what an
+        /// `ExtensionSource` records at install.
+        /// Hidden files are left out, as `ExtensionSource.files(in:)` leaves
+        /// them out on disk.
+        var shas: [String: String] {
+            Dictionary(
+                files.filter { !$0.path.split(separator: "/").contains { $0.hasPrefix(".") } }.map { ($0.path, $0.sha) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        }
     }
 
     enum State: Equatable {
@@ -179,6 +198,7 @@ final class PaletteRegistry {
                 let type: String
                 let mode: String
                 let size: Int?
+                let sha: String?
             }
 
             let tree: [Item]
@@ -187,7 +207,9 @@ final class PaletteRegistry {
         for item in try JSONDecoder().decode(Tree.self, from: data).tree where item.type == "blob" {
             let parts = item.path.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2, !parts[1].split(separator: "/").contains("..") else { continue }
-            byID[parts[0], default: []].append(File(path: parts[1], size: item.size ?? 0, executable: item.mode == "100755"))
+            byID[parts[0], default: []].append(File(
+                path: parts[1], size: item.size ?? 0, executable: item.mode == "100755", sha: item.sha ?? ""
+            ))
         }
         return byID
             .filter { _, files in files.contains { $0.path == MactermExtension.manifestName } }
@@ -277,29 +299,69 @@ final class PaletteRegistry {
 
     enum InstallError: LocalizedError, Equatable {
         case alreadyInstalled(String)
+        case notInstalled(String)
         case unreadable(String)
         var errorDescription: String? {
             switch self {
             case let .alreadyInstalled(id): "You already have a palette named \(id)."
+            case let .notInstalled(id): "\(id) is not installed."
             case let .unreadable(reason): "This version of Macterm cannot read it: \(reason)"
             }
         }
     }
 
     /// Copies `entry`'s folder into `store`'s extensions folder as `<id>/`
-    /// and reloads the store, so it is installed at once — the text already
-    /// and the icon file read, other images fetched now, executables kept executable. Written beside
-    /// the destination and moved into place, so a failed download leaves no
-    /// half an extension. Never replaces a palette the user has: one of
-    /// that id, a file or an installed extension, refuses.
+    /// (`write`) and reloads the store, so it is installed at once. Never
+    /// replaces a palette the user has: one of that id, a file or an
+    /// installed extension, refuses. `update` replaces one.
     @discardableResult
     func install(_ entry: Entry, into store: CustomPaletteStore) async throws -> URL {
+        let destination = store.extensionsURL.appendingPathComponent(entry.id, isDirectory: true)
+        if store.installedExtension(id: entry.id) != nil || FileManager.default.fileExists(atPath: destination.path) {
+            throw InstallError.alreadyInstalled(entry.id)
+        }
+        return try await write(entry, into: store, replacing: nil)
+    }
+
+    /// Puts `entry` in place of the installed extension of its id, as Install
+    /// writes it, and moves the old folder to the Trash — the undo, edits
+    /// and all. Settings asks first when the old copy has changes of the
+    /// user's own, or no source record (`ExtensionGalleryItem.update`).
+    @discardableResult
+    func update(_ entry: Entry, into store: CustomPaletteStore) async throws -> URL {
+        guard let installed = store.installedExtension(id: entry.id) else { throw InstallError.notInstalled(entry.id) }
+        return try await write(entry, into: store, replacing: installed.folder)
+    }
+
+    /// Writes a source record into each installed extension that has none
+    /// and whose files are exactly those of the repository's extension of its
+    /// id. That copy came from the repository, by an install from before the
+    /// records, or by hand. With the record, a later change in the
+    /// repository shows as an update and needs no confirmation. Settings
+    /// calls it each time that the extensions are read.
+    func adoptUnrecordedInstalls(in store: CustomPaletteStore) {
+        var adopted = false
+        for installed in store.extensions where installed.source == nil {
+            guard let entry = entries.first(where: { $0.id == installed.id }), entry.shas == installed.files else { continue }
+            do {
+                try ExtensionSource(repository: Self.repository, ref: ref, files: entry.shas).write(in: installed.folder)
+                adopted = true
+            } catch {
+                logger.error("source record for \(installed.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        if adopted { store.reload() }
+    }
+
+    /// Install and Update: the text already read and the icon file read,
+    /// other images fetched now, executables kept executable, and the source
+    /// record. Written beside the destination and moved into place, so a
+    /// failed download leaves no half an extension. `replacing` goes to the
+    /// Trash just before the move.
+    private func write(_ entry: Entry, into store: CustomPaletteStore, replacing old: URL?) async throws -> URL {
         if let failure = entry.failure { throw InstallError.unreadable(failure.localizedDescription) }
         let fm = FileManager.default
         let destination = store.extensionsURL.appendingPathComponent(entry.id, isDirectory: true)
-        if store.installedExtension(id: entry.id) != nil || fm.fileExists(atPath: destination.path) {
-            throw InstallError.alreadyInstalled(entry.id)
-        }
         var contents: [String: Data] = entry.texts.mapValues { Data($0.utf8) }.merging(entry.images) { text, _ in text }
         for file in entry.files where contents[file.path] == nil {
             let (data, status) = try await fetch(Self.fileURL(ref: ref, id: entry.id, path: file.path))
@@ -315,6 +377,8 @@ final class PaletteRegistry {
             try (contents[file.path] ?? Data()).write(to: url)
             if file.executable { try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
         }
+        try ExtensionSource(repository: Self.repository, ref: ref, files: entry.shas).write(in: staging)
+        if let old { try fm.trashItem(at: old, resultingItemURL: nil) }
         try fm.moveItem(at: staging, to: destination)
         store.reload()
         return destination
@@ -356,6 +420,35 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
     var isInstalled: Bool {
         if case .installed = self { return true }
         return false
+    }
+
+    /// What Update offers on the card of an installed extension: the
+    /// repository's version, when its files differ from the copy on disk.
+    enum Update: Equatable {
+        /// The copy is as Install wrote it. Update replaces it at once.
+        case available(PaletteRegistry.Entry)
+        /// The copy has changes of the user's own, or no record of where it
+        /// came from. Update asks first, because the copy goes to the Trash.
+        case replacesChanges(PaletteRegistry.Entry)
+
+        var entry: PaletteRegistry.Entry {
+            switch self {
+            case let .available(entry),
+                 let .replacesChanges(entry): entry
+            }
+        }
+    }
+
+    /// nil when there is nothing to update: the extension is not installed,
+    /// the repository has no extension of its id, the copy is the same as
+    /// the repository's, or the user changed a copy that the repository did
+    /// not change since the install. That copy is the user's now, and nothing
+    /// asks to replace it.
+    var update: Update? {
+        guard case let .installed(installed, entry?) = self, entry.shas != installed.files else { return nil }
+        guard let source = installed.source else { return .replacesChanges(entry) }
+        if source.files == entry.shas { return nil }
+        return installed.isModified ? .replacesChanges(entry) : .available(entry)
     }
 
     var title: String {
@@ -421,6 +514,6 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
     }
 
     static func == (lhs: ExtensionGalleryItem, rhs: ExtensionGalleryItem) -> Bool {
-        lhs.id == rhs.id && lhs.title == rhs.title && lhs.summary == rhs.summary
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.summary == rhs.summary && lhs.update == rhs.update
     }
 }

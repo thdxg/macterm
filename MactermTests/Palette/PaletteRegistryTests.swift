@@ -33,7 +33,7 @@ struct PaletteRegistryTests {
     private static let readme = "# Kubernetes\n\nBrowse a cluster's pods.\n\nNeeds `kubectl`.\n"
 
     /// GitHub's tree of `extensions/`, as the API returns it.
-    private static func tree(_ files: [(path: String, mode: String)]) -> Data {
+    private static func tree(_ files: [(path: String, mode: String)], shas: [String: String] = [:]) -> Data {
         var items: [[String: Any]] = []
         var folders = Set<String>()
         for file in files {
@@ -41,7 +41,7 @@ struct PaletteRegistryTests {
             if parts.count > 1, folders.insert(String(parts[0])).inserted {
                 items.append(["path": String(parts[0]), "mode": "040000", "type": "tree", "sha": "0"])
             }
-            items.append(["path": file.path, "mode": file.mode, "type": "blob", "sha": "0", "size": 10])
+            items.append(["path": file.path, "mode": file.mode, "type": "blob", "sha": shas[file.path] ?? "0", "size": 10])
         }
         return (try? JSONSerialization.data(withJSONObject: ["sha": "0", "tree": items, "truncated": false])) ?? Data()
     }
@@ -100,7 +100,15 @@ struct PaletteRegistryTests {
             files.append(.init(path: "palettes/\(name)", size: 10, executable: false))
             texts["palettes/\(name)"] = yaml
         }
-        return PaletteRegistry.Entry(id: id, files: files + extra, texts: texts.merging(extraTexts) { _, new in new })
+        let allTexts = texts.merging(extraTexts) { _, new in new }
+        // Each text file has its real Git blob SHA, as the tree reports it.
+        let withSHAs = (files + extra).map { file in
+            PaletteRegistry.File(
+                path: file.path, size: file.size, executable: file.executable,
+                sha: allTexts[file.path].map { ExtensionSource.blobSHA(Data($0.utf8)) } ?? file.sha
+            )
+        }
+        return PaletteRegistry.Entry(id: id, files: withSHAs, texts: allTexts)
     }
 
     @Test
@@ -485,5 +493,126 @@ struct PaletteRegistryTests {
         store.reloadIfChanged()
         #expect(store.entry(id: "kubernetes/pods")?.pill.icon == .symbol(MactermExtension.defaultIcon))
         #expect(store.installedExtension(id: "kubernetes")?.problem == "extension.yaml: icon: icon.png is not a PNG of 128×128 pixels")
+    }
+
+    @Test
+    func a_blob_sha_is_the_one_git_reports_and_hidden_files_are_not_part_of_an_extension() throws {
+        // `printf 'hello\n' | git hash-object --stdin`
+        #expect(ExtensionSource.blobSHA(Data("hello\n".utf8)) == "ce013625030ba8dba906f756967f9e9ca394464a")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macterm-source-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("palettes"), withIntermediateDirectories: true)
+        try "hello\n".write(to: folder.appendingPathComponent("palettes/a.yaml"), atomically: true, encoding: .utf8)
+        try "x".write(to: folder.appendingPathComponent(".DS_Store"), atomically: true, encoding: .utf8)
+        try "{}".write(to: folder.appendingPathComponent(MactermExtension.sourceName), atomically: true, encoding: .utf8)
+        #expect(ExtensionSource.files(in: folder) == ["palettes/a.yaml": "ce013625030ba8dba906f756967f9e9ca394464a"])
+    }
+
+    @Test
+    func install_records_the_source_and_an_edit_marks_the_copy_as_changed() async throws {
+        let store = try makeStore()
+        let registry = PaletteRegistry(ref: "main", fetch: Server().fetch)
+        let entry = Self.entry("kubernetes")
+        let folder = try await registry.install(entry, into: store)
+
+        let installed = try #require(store.installedExtension(id: "kubernetes"))
+        #expect(installed.source == ExtensionSource(repository: "thdxg/macterm", ref: "main", files: entry.shas))
+        #expect(installed.files == entry.shas, "what Install wrote is what the tree reported")
+        #expect(!installed.isModified)
+        #expect(ExtensionGalleryItem.installed(installed, registry: entry).update == nil, "the same as the repository")
+
+        // An edit to any file, not only a palette, is seen on the next reload.
+        try "# Mine\n\nMy notes.\n".write(to: folder.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(60)],
+            ofItemAtPath: folder.appendingPathComponent("README.md").path
+        )
+        store.reloadIfChanged()
+        #expect(store.installedExtension(id: "kubernetes")?.isModified == true)
+    }
+
+    @Test
+    func the_card_offers_an_update_only_where_the_repository_changed_and_asks_before_it_replaces_changes() async throws {
+        let store = try makeStore()
+        let registry = PaletteRegistry(ref: "main", fetch: Server().fetch)
+        let original = Self.entry("kubernetes")
+        let folder = try await registry.install(original, into: store)
+        let newer = Self.entry("kubernetes", palettes: ["pods.yaml": Self.pods, "contexts.yaml": Self.contexts])
+        let card = { (entry: PaletteRegistry.Entry) in
+            try ExtensionGalleryItem.installed(#require(store.installedExtension(id: "kubernetes")), registry: entry).update
+        }
+
+        #expect(try card(newer) == .available(newer), "an untouched copy updates at once")
+
+        let readme = folder.appendingPathComponent("README.md")
+        try "# Mine\n\nMy notes.\n".write(to: readme, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: readme.path)
+        store.reloadIfChanged()
+        #expect(try card(original) == nil, "a changed copy is the user's while the repository keeps its version")
+        #expect(try card(newer) == .replacesChanges(newer), "an update replaces the changes, so it asks")
+
+        // A copy with no record (installed before records, or by hand) can't
+        // say whether it was changed, so an update asks too.
+        try FileManager.default.removeItem(at: folder.appendingPathComponent(MactermExtension.sourceName))
+        store.reload()
+        #expect(try card(newer) == .replacesChanges(newer))
+        #expect(ExtensionGalleryItem.available(newer).update == nil, "not installed: Install, not Update")
+    }
+
+    @Test
+    func update_replaces_the_copy_and_moves_the_old_one_to_the_trash() async throws {
+        let store = try makeStore()
+        let registry = PaletteRegistry(ref: "main", fetch: Server().fetch)
+        let folder = try await registry.install(Self.entry("kubernetes"), into: store)
+        try "mine".write(to: folder.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+        store.reload()
+        let newer = Self.entry("kubernetes", palettes: ["pods.yaml": Self.pods, "contexts.yaml": Self.contexts])
+
+        try await registry.update(newer, into: store)
+        let installed = try #require(store.installedExtension(id: "kubernetes"))
+        #expect(installed.paletteIDs == ["kubernetes/contexts", "kubernetes/pods"], "the new version, at once")
+        #expect(installed.source?.files == newer.shas)
+        #expect(!installed.isModified)
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("notes.txt").path), "the old copy is in the Trash")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: store.extensionsURL.path)
+        #expect(leftovers == ["kubernetes"], "nothing staged is left behind")
+
+        await #expect(throws: PaletteRegistry.InstallError.notInstalled("docker")) {
+            try await registry.update(Self.entry("docker"), into: store)
+        }
+    }
+
+    @Test
+    func a_copy_without_a_record_is_adopted_only_when_it_matches_the_repository() async throws {
+        let store = try makeStore()
+        let entry = Self.entry("kubernetes")
+        let folder = try await PaletteRegistry(ref: "main", fetch: Server().fetch).install(entry, into: store)
+        try FileManager.default.removeItem(at: folder.appendingPathComponent(MactermExtension.sourceName))
+        store.reload()
+
+        // A registry whose tree reports `readme` as the README of the extension.
+        let registry = { (readme: String) async -> PaletteRegistry in
+            let server = Server()
+            var texts = entry.texts
+            texts["README.md"] = readme
+            server.responses[PaletteRegistry.treeURL(ref: "main").absoluteString] = (Self.tree(
+                texts.keys.map { ("kubernetes/\($0)", "100644") },
+                shas: Dictionary(uniqueKeysWithValues: texts.map { ("kubernetes/\($0.key)", ExtensionSource.blobSHA(Data($0.value.utf8))) })
+            ), 200)
+            for (path, text) in texts {
+                server.serve(ref: "main", id: "kubernetes", path, text)
+            }
+            let registry = PaletteRegistry(ref: "main", fetch: server.fetch)
+            registry.refresh()
+            await self.settle()
+            return registry
+        }
+
+        await registry("# Kubernetes\n\nSomething newer.\n").adoptUnrecordedInstalls(in: store)
+        #expect(store.installedExtension(id: "kubernetes")?.source == nil, "a copy that differs may hold changes: no record")
+
+        await registry(Self.readme).adoptUnrecordedInstalls(in: store)
+        let adopted = try #require(store.installedExtension(id: "kubernetes"))
+        #expect(adopted.source?.files == entry.shas, "the same files: it came from the repository")
+        #expect(!adopted.isModified)
     }
 }

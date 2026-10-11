@@ -67,6 +67,7 @@ Then do these steps:
   - `authors`: the GitHub usernames of the people who maintain the extension. A change to an extension that another person wrote needs the approval of that person in the pull request.
 - **At least one palette** in `palettes/`.
 - **`README.md`**.
+- **No hidden files.** Macterm keeps its record of an install in `.source.json` in the folder.
 - **Files under 500 KB each.** All files are text, except the screenshots and the icon file.
 - **Screenshots, if any, in `screenshots/`.** Use at most 6 PNG files. Each file is exactly 1600×1000 pixels. Then the screenshots of all extensions look the same in the gallery.
 

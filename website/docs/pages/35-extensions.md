@@ -273,6 +273,19 @@ The command prints the id of each palette, its keybind, and its name or the erro
 
 Anyone can install the extensions in **Settings → Extensions**. They are folders in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in the Macterm repository. Each folder has `extension.yaml` (its name, description and authors), a `README.md`, and its palettes in `palettes/`. An extension can have as many palettes as it needs. Each palette has its own name and description. An installed extension is in `~/.config/macterm/extensions/<id>/`. Its commands find the other files of the folder through `$MACTERM_EXTENSION_DIR`. An example is a script that is too long for the YAML. In the CLI, its palettes have the names `<extension>/<file>`. They never clash with a palette file of your own.
 
+### Updates
+
+An installed extension is your copy. You can change it in the same way as an extension that you wrote. Macterm never changes it by itself.
+
+When you install an extension, Macterm records each of its files in a hidden file in its folder, `.source.json`. When Settings → Extensions opens, Macterm compares your copy with that record and with the version in the repository:
+
+- **The repository changed the extension, and you did not change your copy.** The card shows an Update button (<kbd>↓</kbd> in a filled circle). Click it to get the new version.
+- **You changed your copy, and the repository did not change the extension.** The card shows no Update button. Your copy stays as it is.
+- **You changed your copy, and the repository also changed the extension.** The card shows the Update button. Before it updates, Macterm asks you. Your changed copy goes to the Trash.
+- **The folder has no `.source.json`.** This is an extension that you wrote, copied by hand, or installed with an older version of Macterm. If it is the same as the version in the repository, Macterm writes the record. If it is different, the Update button asks before it puts your copy in the Trash.
+
+An update moves the old folder to the Trash. To undo an update, put the old folder back. To keep a copy as your own, delete its `.source.json`. If you do not change the copy, Macterm then asks before each update.
+
 An extension can include screenshots for its README. **Capture Palette Screenshot** takes them at the one size that the repository accepts. It frames the command palette in the same way each time. Bind it in Settings → Keymaps and press it while the palette is open on the screen that you want. If you run it from the menu or from the palette, it captures the first screen of the palette. The first time, macOS asks if Macterm can record the screen.
 
 To add your extension, open a pull request with the folder. You do not need to clone the whole repository. [The README of the folder](https://github.com/thdxg/macterm/blob/main/extensions/README.md) says how to do it. It also says what an extension needs: POSIX commands, a `requires:`, and a `when:` where the extension cannot always work. Macterm reads every extension there with its validator before the extension merges.
