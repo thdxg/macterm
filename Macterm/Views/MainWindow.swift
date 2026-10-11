@@ -320,6 +320,7 @@ struct MainWindow: View {
             // After the restore, so the saved windows' projects exist. This
             // window adopts the first saved entry and opens the rest (#345).
             appState.restoreWindows(adopting: windowState)
+            appState.presentUpdateNoticeIfNeeded()
         }
         .onContinuousHover(coordinateSpace: .local) { phase in
             handleSidebarPeekHover(phase)
