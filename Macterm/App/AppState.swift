@@ -396,10 +396,13 @@ final class AppState {
         // A new window opens on whatever the user was last looking at, which
         // is both the useful default and what a single-window build did.
         if window.activeProjectID == nil { window.activeProjectID = activeProjectID }
+        // Listed before the frame moves: `setFrame` lays the window out at
+        // once, and a window that renders its tab while it is not listed owns
+        // nothing and builds a shadow of mirror panes (see `windowsSelecting`).
+        windows.append(window)
         // A restored window, or the scene's own window when `restoreWindows`
         // handed it the first saved entry before it attached.
         applyRestoredFrame(of: window)
-        windows.append(window)
         reconcileWindowViews()
         logger.debug("registerWindow: \(window.id, privacy: .public) count=\(self.windows.count)")
         frontRestoredKeyWindowIfNeeded()
@@ -570,8 +573,20 @@ final class AppState {
     /// stored answers always agree.
     private var tabOwners: [UUID: WindowState.ID] = [:]
 
+    /// The windows that show `tab`, in creation order. The scene's own window
+    /// counts from the moment `restoreWindows` adopts it, not only once it
+    /// registers. The launch task can give that window its project before
+    /// the window attaches, and it renders its tab in that gap. Left out, it
+    /// owned nothing and rendered a shadow: each pane built a mirror surface
+    /// and a second zmx client, and registration then threw both away and
+    /// built the real pane again. It comes last, so a registered window that
+    /// already shows the tab keeps it.
     private func windowsSelecting(_ tab: TerminalTab, in projectID: UUID) -> [WindowState] {
-        windows.filter { $0.activeProjectID == projectID && selectedTab(for: projectID, in: $0)?.id == tab.id }
+        var candidates = windows
+        if let adopted = windowAdoptedBeforeRegistration, !candidates.contains(where: { $0.id == adopted.id }) {
+            candidates.append(adopted)
+        }
+        return candidates.filter { $0.activeProjectID == projectID && selectedTab(for: projectID, in: $0)?.id == tab.id }
     }
 
     private func ownerWindow(of tab: TerminalTab, in projectID: UUID) -> WindowState? {

@@ -668,6 +668,59 @@ struct WindowStateTests {
         #expect(opened.sidebarWidth == Preferences.defaultSidebarWidth)
     }
 
+    /// A store with one project and one saved window on it, and a fresh
+    /// `AppState` that has read it back — the launch, up to `restoreWindows`.
+    private func relaunchWithOneSavedWindow() -> (AppState, Project) {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.restoreSelection(projects: [p])
+        writer.selectProject(p)
+        writer.registerWindow(WindowState(activeProjectID: p.id))
+        writer.saveWorkspaces()
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.restoreSelection(projects: [p])
+        return (reader, p)
+    }
+
+    @Test
+    func a_window_adopted_before_it_registers_renders_the_real_tab() throws {
+        // The launch task gives the scene's window its project before the
+        // window attaches, and the window renders its tab in that gap. It got
+        // a shadow then: each pane built a mirror surface and a second zmx
+        // client, and registration threw both away and built the real pane
+        // again.
+        let (state, project) = relaunchWithOneSavedWindow()
+        let first = WindowState()
+        state.restoreWindows(adopting: first)
+
+        let before = try #require(state.viewTab(for: project.id, in: first))
+        #expect(!before.isMirror)
+
+        state.registerWindow(first)
+        let after = try #require(state.viewTab(for: project.id, in: first))
+        #expect(!after.isMirror)
+        #expect(after.tab === before.tab, "registration keeps the panes the window already renders")
+    }
+
+    @Test
+    func a_registered_window_keeps_a_tab_that_an_adopted_window_also_shows() {
+        let (state, project) = relaunchWithOneSavedWindow()
+        let registered = WindowState(activeProjectID: project.id)
+        state.registerWindow(registered)
+        let first = WindowState()
+        state.restoreWindows(adopting: first)
+
+        #expect(state.viewTab(for: project.id, in: registered)?.isMirror == false)
+        #expect(state.viewTab(for: project.id, in: first)?.isMirror == true)
+    }
+
     @Test
     func a_snapshot_saved_before_frames_were_persisted_still_restores() throws {
         // `frame` is optional, so a v6 file written by an older build decodes
