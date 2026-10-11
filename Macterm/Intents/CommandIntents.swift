@@ -53,6 +53,7 @@ enum MactermKeybind: String, AppEnum {
     case renameTab = "rename_tab"
     case renameProject = "rename_project"
     case copySessionID = "copy_session_id"
+    case capturePane = "capture_pane"
     case applyLayout = "apply_layout"
     case saveLayout = "save_layout"
     case separateAllPanes = "separate_all_panes"
@@ -107,6 +108,7 @@ enum MactermKeybind: String, AppEnum {
         .renameTab: "Rename Current Tab",
         .renameProject: "Rename Current Project",
         .copySessionID: "Copy Session ID",
+        .capturePane: "Capture Pane",
         .applyLayout: "Apply Layout",
         .saveLayout: "Save Layout",
         .separateAllPanes: "Separate All Panes",
