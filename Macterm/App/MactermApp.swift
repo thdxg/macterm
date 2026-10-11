@@ -345,6 +345,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastInitialWindowRequest: Date?
 
     func applicationWillFinishLaunching(_: Notification) {
+        // Before any window opens, so every window's first occlusion report
+        // is seen (see `SurfaceVisibility`).
+        WindowOcclusionReports.startTracking()
         // The terminal window's identity is "the first window to become main"
         // (see reopenIfNeeded and MainAppResponder's key-window gate). That
         // observation must start HERE, not in applicationDidFinishLaunching:
