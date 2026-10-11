@@ -354,15 +354,15 @@ final class CustomPaletteScope: PaletteScope {
         }
         switch row.outcome {
         case let .enter(node):
-            let nextIcon = palette(context)?.nodes[node]?.icon ?? row.icon ?? target.pill.systemImage
-            let next = target.entering(node, pill: PalettePill(title: row.title, systemImage: nextIcon), adding: row.exports)
+            let nextIcon = (palette(context)?.nodes[node]?.icon ?? row.icon).map(PaletteIcon.symbol) ?? target.pill.icon
+            let next = target.entering(node, pill: PalettePill(title: row.title, icon: nextIcon), adding: row.exports)
             return PaletteItem(
                 id: "\(target.node)/\(row.id)",
                 title: row.title,
                 subtitle: subtitle,
                 isEnabled: isEnabled,
                 opensScope: .custom(next),
-                icon: row.icon,
+                icon: row.icon.map(PaletteIcon.symbol),
                 alt: alt,
                 action: {}
             )
@@ -373,7 +373,7 @@ final class CustomPaletteScope: PaletteScope {
                 title: row.title,
                 subtitle: subtitle,
                 isEnabled: isEnabled,
-                icon: row.icon,
+                icon: row.icon.map(PaletteIcon.symbol),
                 alt: alt,
                 action: { [appState = context.appState, projects = context.projectStore.projects] in
                     CustomPaletteActions.perform(action, operand: operand, exports: exports, appState: appState, projects: projects)

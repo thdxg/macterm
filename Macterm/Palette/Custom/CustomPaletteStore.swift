@@ -26,13 +26,18 @@ final class CustomPaletteStore {
         let id: String
         let fileURL: URL
         let result: Result<CustomPalette, CustomPaletteError>
-        /// The file's own name, glyph and description as far as its YAML
-        /// parses, for a file that failed validation.
+        /// The file's own name and description as far as its YAML parses,
+        /// for a file that failed validation.
         let header: CustomPaletteHeader?
         /// The installed extension that it belongs to, and the folder of that
         /// extension. Its commands get the folder as `MACTERM_EXTENSION_DIR`.
         var extensionID: String?
         var extensionDirectory: URL?
+        /// The icon of its extension (`MactermExtension.icon(of:file:)`).
+        /// Every palette of an extension shows it, so the palettes and the
+        /// card of the extension have one glyph. The `icon:` of a palette
+        /// file is not used.
+        var extensionIcon: PaletteIcon = .symbol(MactermExtension.defaultIcon)
 
         var palette: CustomPalette? { try? result.get() }
         var failure: CustomPaletteError? {
@@ -44,7 +49,7 @@ final class CustomPaletteStore {
         var pill: PalettePill {
             PalettePill(
                 title: palette?.name ?? header?.name ?? id,
-                systemImage: palette?.icon ?? header?.icon ?? CustomPalette.defaultIcon
+                icon: extensionIcon
             )
         }
 
@@ -58,8 +63,10 @@ final class CustomPaletteStore {
         let folder: URL
         let manifest: Result<ExtensionManifest, CustomPaletteError>
         let paletteIDs: [String]
+        /// What its card and each of its palettes show.
+        let icon: PaletteIcon
         /// What's wrong with it, if anything: its manifest, the first of its
-        /// palettes that doesn't read, or no palette at all.
+        /// palettes that doesn't read, no palette at all, or its icon file.
         let problem: String?
         /// What the extension adds to Macterm, one name for each feature, for
         /// example "Kubernetes palette". Today the features are its palettes.
@@ -87,7 +94,6 @@ final class CustomPaletteStore {
 
         var name: String { (try? manifest.get())?.name ?? id }
         var description: String? { try? manifest.get().description }
-        var icon: String { (try? manifest.get())?.icon ?? MactermExtension.defaultIcon }
         var authors: [String] { (try? manifest.get())?.authors ?? [] }
     }
 
@@ -97,6 +103,9 @@ final class CustomPaletteStore {
     private(set) var extensions: [InstalledExtension] = []
     /// What the last load saw, to skip a reload that would find the same.
     private var fingerprint: [String: Date] = [:]
+    /// The icon files that the manifests named at the last load, so that an
+    /// edit to one is seen as an edit to a palette is.
+    private var iconFiles: [URL] = []
 
     init(extensionsURL: URL) {
         self.extensionsURL = extensionsURL
@@ -133,11 +142,17 @@ final class CustomPaletteStore {
         // The id of a palette includes the id of its extension
         // (`<extension>/<stem>`), so two extensions never share a palette id.
         var extensionEntries: [Entry] = []
+        var iconFiles: [URL] = []
         extensions = Self.extensionFolders(in: extensionsURL).map { folder in
             let id = folder.lastPathComponent
-            let palettes = Self.extensionEntries(id: id, folder: folder)
-            extensionEntries += palettes
             let manifest = Self.manifest(in: folder)
+            let (icon, iconProblem) = MactermExtension.icon(of: try? manifest.get()) { path in
+                let url = folder.appendingPathComponent(path)
+                iconFiles.append(url)
+                return try? Data(contentsOf: url)
+            }
+            let palettes = Self.extensionEntries(id: id, folder: folder, icon: icon)
+            extensionEntries += palettes
             let problem: String? = if case let .failure(error) = manifest {
                 error.localizedDescription
             } else if let broken = palettes.first(where: { $0.failure != nil }), let failure = broken.failure {
@@ -145,18 +160,25 @@ final class CustomPaletteStore {
             } else if palettes.isEmpty {
                 "no palettes in \(MactermExtension.palettesFolder)/"
             } else {
-                nil
+                iconProblem.map { "\(MactermExtension.manifestName): \($0)" }
             }
             return InstalledExtension(
                 id: id,
                 folder: folder,
                 manifest: manifest,
                 paletteIDs: palettes.map(\.id),
+                icon: icon,
                 problem: problem,
                 features: palettes.map { "\($0.pill.title) palette" }
             )
         }
         entries = extensionEntries
+        // The fingerprint above was taken before the manifests named their
+        // icon files. Add their dates now.
+        self.iconFiles = iconFiles
+        for url in iconFiles {
+            fingerprint[Self.iconKey(url)] = Self.modificationDate(url)
+        }
         PaletteHotkeys.shared.paletteIDs = entries.map(\.id)
     }
 
@@ -189,8 +211,9 @@ final class CustomPaletteStore {
         }
     }
 
-    /// An installed extension's palettes, each read like a palette file.
-    private static func extensionEntries(id extensionID: String, folder: URL) -> [Entry] {
+    /// An installed extension's palettes, each read like a palette file,
+    /// each with the icon of the extension.
+    private static func extensionEntries(id extensionID: String, folder: URL, icon: PaletteIcon) -> [Entry] {
         let palettesFolder = folder.appendingPathComponent(MactermExtension.palettesFolder, isDirectory: true)
         var seen = Set<String>()
         return paletteFiles(in: palettesFolder).map { url in
@@ -207,6 +230,7 @@ final class CustomPaletteStore {
             }
             entry.extensionID = extensionID
             entry.extensionDirectory = folder
+            entry.extensionIcon = icon
             return entry
         }
     }
@@ -250,11 +274,19 @@ final class CustomPaletteStore {
     /// extensions. For a symbolic link (from a dotfiles manager), this is the
     /// date of the target, because the date of the link does not change when
     /// you save the file that it points at.
+    private static func modificationDate(_ url: URL) -> Date {
+        (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate ?? .distantPast
+    }
+
+    private static func iconKey(_ url: URL) -> String {
+        "icon:\(url.path)"
+    }
+
     private func currentFingerprint() -> [String: Date] {
         var dates: [String: Date] = [:]
         func record(_ url: URL, as key: String) {
-            dates[key] = (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate ?? .distantPast
+            dates[key] = Self.modificationDate(url)
         }
         for folder in Self.extensionFolders(in: extensionsURL) {
             let id = folder.lastPathComponent
@@ -263,6 +295,9 @@ final class CustomPaletteStore {
             for url in Self.paletteFiles(in: palettes) {
                 record(url, as: "extensions/\(id)/\(url.lastPathComponent)")
             }
+        }
+        for url in iconFiles {
+            record(url, as: Self.iconKey(url))
         }
         return dates
     }

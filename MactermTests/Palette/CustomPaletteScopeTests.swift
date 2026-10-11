@@ -16,7 +16,7 @@ struct CustomPaletteScopeTests {
         let folder = config.appendingPathComponent("extensions/t", isDirectory: true)
         let palettes = folder.appendingPathComponent("palettes", isDirectory: true)
         try FileManager.default.createDirectory(at: palettes, withIntermediateDirectories: true)
-        try "name: Test\ndescription: Palettes for the tests\n"
+        try "name: Test\ndescription: Palettes for the tests\nicon: shippingbox\n"
             .write(to: folder.appendingPathComponent("extension.yaml"), atomically: true, encoding: .utf8)
         for (name, text) in files {
             try text.write(to: palettes.appendingPathComponent(name), atomically: true, encoding: .utf8)
@@ -117,7 +117,7 @@ struct CustomPaletteScopeTests {
         #expect(store.entry(id: "t/broken")?.failure?.errorDescription == "root: needs enter: or action:")
         #expect(store.entry(id: "t/broken")?.pill.title == "Broken", "a broken file is named as far as its YAML parses")
         #expect(store.rootTarget(id: "t/kubernetes") == CustomPaletteTarget(
-            paletteID: "t/kubernetes", node: "menu", exports: [:], pill: PalettePill(title: "Kubernetes", systemImage: "shippingbox")
+            paletteID: "t/kubernetes", node: "menu", exports: [:], pill: PalettePill(title: "Kubernetes", icon: "shippingbox")
         ))
         #expect(store.rootTarget(id: "t/broken")?.node == "root", "a broken file still opens: on its error")
         #expect(store.rootTarget(id: "t/nope") == nil)
@@ -140,12 +140,12 @@ struct CustomPaletteScopeTests {
 
         let items = scope.sections(for: PaletteQuery(raw: ""), context: context).flatMap(\.items)
         #expect(items.map(\.title) == ["Namespaces", "Pods"])
-        #expect(items.map(\.icon) == ["shippingbox", "shippingbox"], "rows wear the palette's glyph by default")
+        #expect(items.map(\.icon) == ["shippingbox", "shippingbox"], "rows wear the extension's glyph by default")
         guard case let .custom(next)? = items[0].opensScope else { Issue.record("Namespaces does not enter a node")
             return
         }
         #expect(next.node == "namespaces")
-        #expect(next.pill == PalettePill(title: "Namespaces", systemImage: "shippingbox"), "the pill is the row that was picked")
+        #expect(next.pill == PalettePill(title: "Namespaces", icon: "shippingbox"), "the pill is the row that was picked")
         #expect(next.exports.isEmpty)
 
         let filtered = scope.sections(for: PaletteQuery(raw: "pod"), context: context).flatMap(\.items)
@@ -174,7 +174,7 @@ struct CustomPaletteScopeTests {
             paletteID: "t/sessions",
             node: "root",
             exports: [:],
-            pill: PalettePill(title: "Sessions", systemImage: "x")
+            pill: PalettePill(title: "Sessions", icon: "x")
         )
         let scope = CustomPaletteScope(target: target, runner: recorder.runner)
         scope.activate(context: context) {}
@@ -200,7 +200,7 @@ struct CustomPaletteScopeTests {
         recorder.outputs[command] = CustomPaletteCommandResult(stdout: Self.podsJSON, stderr: "", status: 0)
         let target = CustomPaletteTarget(
             paletteID: "t/kubernetes", node: "pods", exports: ["NAMESPACE": "prod"],
-            pill: PalettePill(title: "Pods", systemImage: "shippingbox")
+            pill: PalettePill(title: "Pods", icon: "shippingbox")
         )
         let scope = CustomPaletteScope(target: target, runner: recorder.runner)
         var redraws = 0
@@ -243,7 +243,7 @@ struct CustomPaletteScopeTests {
             paletteID: "t/kubernetes",
             node: "namespaces",
             exports: [:],
-            pill: PalettePill(title: "Namespaces", systemImage: "shippingbox")
+            pill: PalettePill(title: "Namespaces", icon: "shippingbox")
         )
         let scope = CustomPaletteScope(target: target, runner: recorder.runner)
         scope.activate(context: context) {}
@@ -269,7 +269,7 @@ struct CustomPaletteScopeTests {
             paletteID: "t/kubernetes",
             node: "namespaces",
             exports: [:],
-            pill: PalettePill(title: "Namespaces", systemImage: "shippingbox")
+            pill: PalettePill(title: "Namespaces", icon: "shippingbox")
         )
         let scope = CustomPaletteScope(target: target, runner: recorder.runner)
         scope.activate(context: context) {}
@@ -311,7 +311,7 @@ struct CustomPaletteScopeTests {
                 paletteID: "t/pods",
                 node: "root",
                 exports: [:],
-                pill: PalettePill(title: "Pods", systemImage: "x")
+                pill: PalettePill(title: "Pods", icon: "x")
             ),
             runner: recorder.runner
         )
@@ -454,7 +454,7 @@ struct CustomPaletteScopeTests {
         let recorder = Recorder()
         recorder.outputs = ["api-check": Self.down, "other-check": Self.ok]
         let scope = CustomPaletteScope(
-            target: CustomPaletteTarget(paletteID: "t/ops", node: "root", exports: [:], pill: PalettePill(title: "Ops", systemImage: "x")),
+            target: CustomPaletteTarget(paletteID: "t/ops", node: "root", exports: [:], pill: PalettePill(title: "Ops", icon: "x")),
             runner: recorder.runner,
             conditionRunner: recorder.runner
         )
@@ -500,7 +500,7 @@ struct CustomPaletteScopeTests {
             "list-pods": CustomPaletteCommandResult(stdout: "api\nweb\n", stderr: "", status: 0),
         ]
         let root = CustomPaletteScope(
-            target: CustomPaletteTarget(paletteID: "t/k8s", node: "pods", exports: [:], pill: PalettePill(title: "K8s", systemImage: "x")),
+            target: CustomPaletteTarget(paletteID: "t/k8s", node: "pods", exports: [:], pill: PalettePill(title: "K8s", icon: "x")),
             runner: recorder.runner,
             conditionRunner: recorder.runner
         )
@@ -520,7 +520,7 @@ struct CustomPaletteScopeTests {
         // A deeper screen isn't gated again.
         recorder.outputs["list-more"] = CustomPaletteCommandResult(stdout: "x\n", stderr: "", status: 0)
         let deeper = CustomPaletteScope(
-            target: CustomPaletteTarget(paletteID: "t/k8s", node: "more", exports: [:], pill: PalettePill(title: "More", systemImage: "x")),
+            target: CustomPaletteTarget(paletteID: "t/k8s", node: "more", exports: [:], pill: PalettePill(title: "More", icon: "x")),
             runner: recorder.runner,
             conditionRunner: recorder.runner
         )
@@ -557,7 +557,7 @@ struct CustomPaletteScopeTests {
         #expect(row(availability.unavailable)?.isEnabled == false)
         #expect(row(availability.unavailable)?.subtitle == "Cluster unreachable")
         #expect(row(availability.unavailable)?.opensScope == nil, "nowhere to go: no chevron")
-        #expect(row(availability.unavailable)?.icon == CustomPalette.defaultIcon, "its glyph, kept")
+        #expect(row(availability.unavailable)?.icon == "shippingbox", "its glyph, kept")
         #expect(row([:])?.opensScope != nil)
         #expect(row([:])?.isEnabled == true)
         #expect(row([:])?.subtitle == "Cluster screens")
@@ -569,6 +569,22 @@ struct CustomPaletteScopeTests {
         await settle()
         #expect(recorder.calls.count == 2, "checked again on the next open")
         #expect(availability.unavailable.isEmpty)
+    }
+
+    @Test
+    func every_palette_shows_the_icon_of_its_extension_and_ignores_its_own() throws {
+        let (_, store, palettes) = try makeContext(files: [
+            "own.yaml": "name: Own\nicon: star\nnodes: { root: { list: ls, action: { copy: . } } }",
+            "broken.yml": "name: Broken\nicon: star\nnodes: { root: { list: ls } }",
+        ])
+        #expect(store.palette(id: "t/own") != nil, "a file that sets icon: still reads")
+        #expect(store.entries.map(\.pill.icon) == ["shippingbox", "shippingbox"])
+
+        // An extension with no icon gives its palettes the default.
+        try "name: Test\ndescription: Palettes for the tests\n"
+            .write(to: palettes.deletingLastPathComponent().appendingPathComponent("extension.yaml"), atomically: true, encoding: .utf8)
+        store.reload()
+        #expect(store.entries.map(\.pill.icon) == [.symbol(MactermExtension.defaultIcon), .symbol(MactermExtension.defaultIcon)])
     }
 
     @Test

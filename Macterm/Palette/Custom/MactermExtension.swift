@@ -28,6 +28,40 @@ enum MactermExtension {
         imageExtensions.contains((path as NSString).pathExtension.lowercased())
     }
 
+    /// The edge of an icon file, in pixels: a square PNG. The card in
+    /// Settings, a pill and a palette row draw it at 16 to 20 points. At 2x,
+    /// that is at most 40 pixels, so 128 leaves room for a larger glyph
+    /// later. One exact size makes every bundled icon look the same.
+    static let iconPixelSize = 128
+
+    /// Whether the `icon` of a manifest names a file in the extension's
+    /// folder and not an SF Symbol: the value ends in `.png`. No SF Symbol
+    /// name does.
+    static func isIconFile(_ icon: String) -> Bool {
+        (icon as NSString).pathExtension.lowercased() == "png"
+    }
+
+    /// Whether an icon file's path stays inside the extension's folder:
+    /// relative, with no `..` and no empty part.
+    static func isIconPath(_ path: String) -> Bool {
+        !path.hasPrefix("/") && !path.split(separator: "/", omittingEmptySubsequences: false)
+            .contains { $0.isEmpty || $0 == "." || $0 == ".." }
+    }
+
+    /// What an extension shows as its icon: its SF Symbol, its icon file, or
+    /// the default. `file` reads a file of the extension by its path. An
+    /// icon file that is missing or not a PNG of exactly `iconPixelSize`
+    /// gives the default icon and the reason.
+    static func icon(of manifest: ExtensionManifest?, file: (String) -> Data?) -> (icon: PaletteIcon, problem: String?) {
+        guard let name = manifest?.icon else { return (.symbol(defaultIcon), nil) }
+        guard isIconFile(name) else { return (.symbol(name), nil) }
+        guard let data = file(name) else { return (.symbol(defaultIcon), "icon: no file \(name)") }
+        guard let size = pngSize(data), size.width == iconPixelSize, size.height == iconPixelSize else {
+            return (.symbol(defaultIcon), "icon: \(name) is not a PNG of \(iconPixelSize)×\(iconPixelSize) pixels")
+        }
+        return (.image(data), nil)
+    }
+
     /// Where an extension keeps its screenshots, and what they must be: PNGs
     /// of exactly `screenshotPixelSize`, at most `maxScreenshots` of them, so
     /// every extension's look the same size in the gallery whatever the theme
@@ -112,7 +146,9 @@ enum MactermExtension {
 
 /// `extension.yaml`: the extension as a whole, as opposed to its
 /// capabilities — what the gallery shows (name, description, icon) and who
-/// maintains it, by GitHub username.
+/// maintains it, by GitHub username. The icon is an SF Symbol name, or the
+/// path of a PNG in the extension's folder (`MactermExtension.icon(of:file:)`).
+/// The card and every palette of the extension show it.
 struct ExtensionManifest: Codable, Equatable {
     var name: String
     var description: String
@@ -155,6 +191,9 @@ struct ExtensionManifest: Codable, Equatable {
         if manifest.name.trimmingCharacters(in: .whitespaces).isEmpty { throw CustomPaletteError.invalid("\(file): name: is empty") }
         if manifest.description.trimmingCharacters(in: .whitespaces).isEmpty {
             throw CustomPaletteError.invalid("\(file): description: is empty")
+        }
+        if let icon = manifest.icon, MactermExtension.isIconFile(icon), !MactermExtension.isIconPath(icon) {
+            throw CustomPaletteError.invalid("\(file): icon: \(icon) is not a path inside the extension folder")
         }
         for author in manifest.authors where !isGitHubUsername(author) {
             throw CustomPaletteError.invalid("\(file): authors: \(author) is not a GitHub username")

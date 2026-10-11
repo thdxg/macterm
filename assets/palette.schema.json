@@ -14,7 +14,8 @@
     },
     "icon": {
       "type": "string",
-      "description": "An SF Symbol name for the row and the pill of the palette. The default is square.grid.2x2."
+      "deprecated": true,
+      "description": "Not used. The row and the pill of the palette show the icon of its extension (icon in extension.yaml). A file that sets this key still reads."
     },
     "description": {
       "type": "string",

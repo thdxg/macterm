@@ -2,7 +2,6 @@
 # Commands are POSIX sh, run in the active project's directory with the
 # values picked above as environment variables.
 name: Kubernetes
-icon: shippingbox
 description: Browse namespaces, pods, deployments, services and contexts
 requires: [kubectl]
 root: menu

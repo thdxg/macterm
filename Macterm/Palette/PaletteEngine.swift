@@ -31,10 +31,11 @@ struct PaletteItem: Identifiable {
     /// Set on an item that is a way into a palette scope: running it shows
     /// that scope instead of closing the palette, and `action` is not called.
     let opensScope: PaletteScopeID?
-    /// An SF Symbol drawn at the row's leading edge. A row that opens a
-    /// scope shows the scope's pill glyph by default, with a chevron at the
-    /// trailing edge, so a place to go reads differently from a thing to do.
-    let icon: String?
+    /// The glyph at the row's leading edge: an SF Symbol, or an extension's
+    /// icon file. A row that opens a scope shows the scope's pill glyph by
+    /// default, with a chevron at the trailing edge, so a place to go reads
+    /// differently from a thing to do.
+    let icon: PaletteIcon?
     /// Something wrong with what the row opens — a palette file that
     /// didn't read — shown as a warning glyph at the trailing edge, with
     /// this text as its tooltip. The row stays enabled: entering it shows
@@ -56,7 +57,7 @@ struct PaletteItem: Identifiable {
         score: Int = 1,
         isEnabled: Bool = true,
         opensScope: PaletteScopeID? = nil,
-        icon: String? = nil,
+        icon: PaletteIcon? = nil,
         warning: String? = nil,
         alt: PaletteAltAction? = nil,
         highlights: [Int] = [],
@@ -71,7 +72,7 @@ struct PaletteItem: Identifiable {
         self.score = score
         self.isEnabled = isEnabled
         self.opensScope = opensScope
-        self.icon = icon ?? opensScope?.pill.systemImage
+        self.icon = icon ?? opensScope?.pill.icon
         self.warning = warning
         self.alt = alt
         self.highlights = highlights

@@ -22,6 +22,7 @@ Make the folder `~/.config/macterm/extensions/git/`. Put an `extension.yaml` fil
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
 name: Git
 description: Switch to, log or diff the branches of the project
+icon: arrow.triangle.branch
 ```
 
 Then put the palette in `palettes/`:
@@ -29,7 +30,6 @@ Then put the palette in `palettes/`:
 ```yaml title="~/.config/macterm/extensions/git/palettes/git.yaml"
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
 name: Git
-icon: arrow.triangle.branch
 description: The current project's branches
 root: branches
 nodes:
@@ -51,7 +51,6 @@ Press <kbd>⌘P</kbd>, type `git` and press <kbd>Return</kbd>. The screen lists 
 | Key | |
 | --- | --- |
 | `name` | Required. The row of the palette, its pill, and its row in Settings. |
-| `icon` | The name of an [SF Symbol](https://developer.apple.com/sf-symbols/). The default is `square.grid.2x2`. |
 | `description` | One line under the row of the palette in the command palette, and on its card in Settings → Extensions. |
 | `root` | The node that the palette opens on. The default is a node with the name `root`. |
 | `requires` | The programs that its commands need, for example `[kubectl, jq]`. When a listing fails, the error names each of these programs that is not in your `PATH`. |
@@ -66,8 +65,22 @@ The id of a palette is the name of its extension folder and its file name withou
 | --- | --- |
 | `name` | Required. The name on the card of the extension in Settings → Extensions. |
 | `description` | Required. One line on its card that says what the extension is for. |
-| `icon` | The name of an [SF Symbol](https://developer.apple.com/sf-symbols/) for its card. The default is `puzzlepiece.extension`. |
+| `icon` | The icon of its card and of the row and the pill of each of its palettes. Give the name of an [SF Symbol](https://developer.apple.com/sf-symbols/), or the path of a PNG file in the extension folder, for example `icon.png`. See [Icon files](#icon-files). The default is `puzzlepiece.extension`. |
 | `authors` | The GitHub usernames of the people who maintain it. An extension in the Macterm repository must have them. An extension that you write for yourself does not need them. |
+
+### Icon files
+
+An extension can bundle its own icon in place of an SF Symbol. Put a PNG file in the extension folder, and give its path in `icon`:
+
+```yaml title="~/.config/macterm/extensions/git/extension.yaml"
+name: Git
+description: Switch to, log or diff the branches of the project
+icon: icon.png
+```
+
+The file must be a PNG of exactly 128×128 pixels. Macterm draws it as a template image, as it draws an SF Symbol. The alpha channel is the shape, and the color comes from the theme. Thus, use a single shape on a transparent background. Colors in the file are not shown.
+
+If the file is missing or has a different size, Macterm shows the default icon. The card of the extension in Settings → Extensions then shows a warning with the reason. An extension in the Macterm repository with such an icon cannot be installed. When you change the file, Macterm shows the new icon the next time that you open the palette.
 
 ## Nodes
 
@@ -270,7 +283,6 @@ To add your extension, open a pull request with the folder. You do not need to c
 
 ```yaml title="~/.config/macterm/extensions/docker/palettes/docker.yaml"
 name: Docker
-icon: cube.box
 description: Running containers, their logs and a shell in them
 root: containers
 nodes:
@@ -294,7 +306,6 @@ This palette lists the hosts that are named in `~/.ssh/config`. It leaves out wi
 
 ```yaml title="~/.config/macterm/extensions/ssh/palettes/ssh.yaml"
 name: SSH Hosts
-icon: server.rack
 description: Hosts from ~/.ssh/config
 root: hosts
 nodes:

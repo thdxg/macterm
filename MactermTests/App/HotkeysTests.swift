@@ -322,6 +322,14 @@ struct HotkeysTests {
     }
 
     @Test
+    func capturePane_is_an_unbound_pane_command() {
+        #expect(HotkeyAction.capturePane.defaultShortcut == "none")
+        #expect(HotkeyAction.capturePane.title == "Capture Pane")
+        #expect(AppCommand.capturePane.hotkeyAction == .capturePane)
+        #expect(AppCommand.capturePane.category == .panes)
+    }
+
+    @Test
     func layout_actions_are_unbound_by_default_and_titled_from_command() {
         // Both ship unbound: applying or saving a layout rewrites the live pane
         // tree, so a stock binding would make a mistyped chord destructive.

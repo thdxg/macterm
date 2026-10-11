@@ -178,6 +178,9 @@ extension AppCommand {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(sessionName, forType: .string)
             }
+        case .capturePane:
+            guard let projectID, let pane = ctx.appState.focusedPane(for: projectID) else { return nil }
+            return { PaneScreenshot.copy(pane, appState: ctx.appState) }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
         case .newRemoteProject:

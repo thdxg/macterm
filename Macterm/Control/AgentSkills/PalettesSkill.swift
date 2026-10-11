@@ -37,10 +37,13 @@ extension AgentSkills {
         # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/extension.schema.json
         name: Kubernetes
         description: Browse the namespaces and pods of a cluster
+        icon: shippingbox                      # an SF Symbol name; optional
         ```
 
         `name` and `description` are required. They show on the card of the extension in Settings →
-        Extensions. `icon` (an SF Symbol name) is optional. `authors:` (GitHub usernames) is optional for an
+        Extensions. `icon` is optional. It is an SF Symbol name, or the path of a PNG file in the extension
+        folder (exactly 128×128 pixels, the shape in the alpha channel). The card and the row and the pill of
+        each palette of the extension show it. `authors:` (GitHub usernames) is optional for an
         extension that the user keeps for themselves.
 
         ## The palette file
@@ -49,7 +52,6 @@ extension AgentSkills {
         # ~/.config/macterm/extensions/kubernetes/palettes/kubernetes.yaml
         # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
         name: Kubernetes
-        icon: shippingbox                      # an SF Symbol name; optional
         description: Namespaces, pods and their logs
         requires: [kubectl]
         root: menu                             # the node to open on; defaults to a node called root
@@ -148,7 +150,7 @@ extension AgentSkills {
 
         ## Keeping it theirs
 
-        - Select the icon from SF Symbols. The default is `square.grid.2x2`.
+        - Select the icon of the extension from SF Symbols. The default is `puzzlepiece.extension`.
         - Do not put secrets in the file. It is plain text in the config folder of the user.
         - Settings → Extensions removes an extension (Installed → Uninstall). Settings → Keymaps gives it
           a keybind. Tell the user about both. Do not do either for the user.

@@ -22,7 +22,7 @@
     },
     "icon": {
       "type": "string",
-      "description": "An SF Symbol name for its card. The default is puzzlepiece.extension."
+      "description": "The icon of its card and of the row and the pill of each of its palettes. Give an SF Symbol name, or the path of a PNG file in the extension folder (for example icon.png). The PNG must be exactly 128×128 pixels. Macterm draws it as a template image: the alpha channel is the shape, and the color comes from the theme. The default is puzzlepiece.extension."
     },
     "authors": {
       "type": "array",

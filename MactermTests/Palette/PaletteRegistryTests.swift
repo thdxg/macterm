@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 @testable import Macterm
 import Testing
@@ -404,5 +405,85 @@ struct PaletteRegistryTests {
         #expect(store.installedExtension(id: "kubernetes") == nil)
         #expect(store.entry(id: "kubernetes/pods") == nil, "its palettes go with it")
         #expect(!FileManager.default.fileExists(atPath: folder.path), "the whole folder")
+    }
+
+    /// A blank PNG of `side` × `side` pixels.
+    static func png(side: Int) -> Data {
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )
+        return rep?.representation(using: .png, properties: [:]) ?? Data()
+    }
+
+    @Test
+    func an_icon_is_a_symbol_or_a_png_of_one_size_in_the_extension_folder() throws {
+        let icon = Self.png(side: MactermExtension.iconPixelSize)
+        let files = ["icon.png": icon, "small.png": Self.png(side: 64), "fake.png": Data("not a png".utf8)]
+        let resolve = { (name: String?) in
+            MactermExtension.icon(of: ExtensionManifest(name: "X", description: "Y", icon: name)) { files[$0] }
+        }
+        #expect(resolve(nil) == (.symbol(MactermExtension.defaultIcon), nil))
+        #expect(resolve("cube.box") == (.symbol("cube.box"), nil), "a symbol name, dots and all")
+        #expect(resolve("icon.png") == (.image(icon), nil))
+        #expect(resolve("small.png") == (.symbol(MactermExtension.defaultIcon), "icon: small.png is not a PNG of 128×128 pixels"))
+        #expect(resolve("fake.png").problem == "icon: fake.png is not a PNG of 128×128 pixels")
+        #expect(resolve("gone.png") == (.symbol(MactermExtension.defaultIcon), "icon: no file gone.png"))
+
+        let parse = { (icon: String) in try ExtensionManifest.parse(yaml: "name: X\ndescription: Y\nicon: \(icon)\n") }
+        #expect(try parse("assets/icon.png").icon == "assets/icon.png")
+        for outside in ["../icon.png", "/tmp/icon.png", "assets//icon.png", "./icon.png"] {
+            #expect(throws: CustomPaletteError.invalid("extension.yaml: icon: \(outside) is not a path inside the extension folder")) {
+                try parse(outside)
+            }
+        }
+    }
+
+    @Test
+    func an_icon_file_shows_on_the_card_before_install_and_on_every_palette_after() async throws {
+        let icon = Self.png(side: MactermExtension.iconPixelSize)
+        let manifest = "name: Kubernetes\ndescription: Browse a cluster\nicon: icon.png\nauthors: [thdxg]\n"
+        let server = Server()
+        server.responses[PaletteRegistry.treeURL(ref: "main").absoluteString] = (Self.tree([
+            ("kubernetes/README.md", "100644"),
+            ("kubernetes/extension.yaml", "100644"),
+            ("kubernetes/icon.png", "100644"),
+            ("kubernetes/palettes/pods.yaml", "100644"),
+            ("missing/README.md", "100644"),
+            ("missing/extension.yaml", "100644"),
+            ("missing/palettes/pods.yaml", "100644"),
+        ]), 200)
+        for id in ["kubernetes", "missing"] {
+            server.serve(ref: "main", id: id, "README.md", Self.readme)
+            server.serve(ref: "main", id: id, "extension.yaml", manifest)
+            server.serve(ref: "main", id: id, "palettes/pods.yaml", Self.pods)
+        }
+        server.serve(ref: "main", id: "kubernetes", "icon.png", icon)
+        let registry = PaletteRegistry(ref: "main", fetch: server.fetch)
+        registry.refresh()
+        await settle()
+        let kubernetes = try #require(registry.entries.first { $0.id == "kubernetes" })
+        #expect(kubernetes.icon == .image(icon), "read with the text, so the card shows it")
+        #expect(kubernetes.failure == nil)
+        let missing = try #require(registry.entries.first { $0.id == "missing" })
+        #expect(missing.failure?.errorDescription == "extension.yaml: icon: no file icon.png", "it can't be installed")
+
+        let store = try makeStore()
+        server.responses.removeAll()
+        let folder = try await registry.install(kubernetes, into: store)
+        #expect(try Data(contentsOf: folder.appendingPathComponent("icon.png")) == icon, "installed from what the card showed")
+        #expect(store.installedExtension(id: "kubernetes")?.icon == .image(icon))
+        #expect(store.entry(id: "kubernetes/pods")?.pill.icon == .image(icon), "its palettes show it")
+
+        // A new icon file is seen on the next open of the palette, as a
+        // palette edit is. One of the wrong size gives the default and says why.
+        try Self.png(side: 64).write(to: folder.appendingPathComponent("icon.png"))
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(60)],
+            ofItemAtPath: folder.appendingPathComponent("icon.png").path
+        )
+        store.reloadIfChanged()
+        #expect(store.entry(id: "kubernetes/pods")?.pill.icon == .symbol(MactermExtension.defaultIcon))
+        #expect(store.installedExtension(id: "kubernetes")?.problem == "extension.yaml: icon: icon.png is not a PNG of 128×128 pixels")
     }
 }

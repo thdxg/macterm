@@ -32,9 +32,9 @@ enum PaletteScopeID: Hashable {
     /// opens it, so the row reads as a place to go rather than a thing to do.
     var pill: PalettePill {
         switch self {
-        case .passwords: PalettePill(title: "Password Manager", systemImage: "key.fill")
-        case .worktrees: PalettePill(title: "Worktrees", systemImage: "arrow.triangle.branch")
-        case .files: PalettePill(title: "Files", systemImage: "doc.text.magnifyingglass")
+        case .passwords: PalettePill(title: "Password Manager", icon: "key.fill")
+        case .worktrees: PalettePill(title: "Worktrees", icon: "arrow.triangle.branch")
+        case .files: PalettePill(title: "Files", icon: "doc.text.magnifyingglass")
         case let .custom(target): target.pill
         }
     }
@@ -77,7 +77,7 @@ enum PaletteScopeID: Hashable {
 /// A pill in the breadcrumb above the input: a frame's name and glyph.
 struct PalettePill: Hashable {
     let title: String
-    let systemImage: String
+    let icon: PaletteIcon
 }
 
 /// A listing in flight: what the scope is waiting on, shown with a spinner

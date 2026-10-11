@@ -218,7 +218,7 @@ struct CommandSourceTests {
         let (ctx, _) = makeContext()
         let item = try #require(findItem(title: AppCommand.worktrees.title, in: ctx))
         #expect(!item.isEnabled)
-        #expect(item.icon == PaletteScopeID.worktrees.pill.systemImage)
+        #expect(item.icon == PaletteScopeID.worktrees.pill.icon)
         #expect(item.opensScope == nil, "a muted row draws no chevron")
     }
 
