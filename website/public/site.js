@@ -73,8 +73,15 @@
 // pane leaves its start (`home`), data-end at its end. An `endless` pane (the
 // reel) never ends. Home goes back to the start; End, when there is one, to
 // the end. The returned shift() moves the glide with content that the caller
-// adds above the reader.
-const smoothPane = (pane, home, endless) => {
+// adds above the reader, and settle() adopts a scrollTop that the caller set.
+//
+// A `drift` pane (the reel) also scrolls down on its own, slowly
+// (`drift` pixels per second), so a visitor who does not scroll still sees
+// every feature. The reader always wins: a wheel, a scrolling key or a
+// scroll that the pane did not make (a scrollbar drag, a touch) stops the
+// drift, and it starts again only after IDLE ms with no such input. Reduce
+// Motion has no drift.
+const smoothPane = (pane, home, endless, drift = 0) => {
   const pinned = window.matchMedia("(min-width: 1024px)");
   const still = window.matchMedia("(prefers-reduced-motion: reduce)");
   const EASE = 0.14; // share of the distance covered in a 60 Hz frame
@@ -84,6 +91,15 @@ const smoothPane = (pane, home, endless) => {
   let last = 0;
   const limit = () => pane.scrollHeight - pane.clientHeight;
 
+  const IDLE = 2000; // ms of quiet before the drift starts again
+  const DELAY = 1500; // ms before the first drift, to show the first feature
+  let quietUntil = performance.now() + DELAY;
+  let driftFrame = 0;
+  let driftLast = 0;
+  const reader = () => {
+    quietUntil = performance.now() + IDLE;
+  };
+
   const edge = () => {
     pane.toggleAttribute("data-scrolled", pinned.matches && Math.abs(pane.scrollTop - home()) > 1);
     pane.toggleAttribute("data-end", pinned.matches && !endless && pane.scrollTop >= limit() - 1);
@@ -91,6 +107,39 @@ const smoothPane = (pane, home, endless) => {
   pane.addEventListener("scroll", edge, { passive: true });
   pinned.addEventListener("change", edge);
   edge();
+
+  // A scroll that neither the glide nor the drift made is the reader's.
+  pane.addEventListener(
+    "scroll",
+    () => {
+      if (!frame && Math.abs(pane.scrollTop - at) > 2) {
+        at = target = pane.scrollTop;
+        reader();
+      }
+    },
+    { passive: true },
+  );
+
+  const drifting = (now) => {
+    if (!pinned.matches || still.matches) {
+      driftFrame = 0;
+      return;
+    }
+    const dt = Math.min(now - driftLast, 64);
+    driftLast = now;
+    if (!frame && now >= quietUntil) {
+      at = target = Math.min(at + (drift * dt) / 1000, limit());
+      pane.scrollTop = at;
+    }
+    driftFrame = requestAnimationFrame(drifting);
+  };
+  const wake = () => {
+    if (!drift || driftFrame || !pinned.matches || still.matches) return;
+    driftLast = performance.now();
+    driftFrame = requestAnimationFrame(drifting);
+  };
+  pinned.addEventListener("change", wake);
+  still.addEventListener("change", wake);
 
   const glide = (now) => {
     const dt = Math.min(now - last, 64);
@@ -124,6 +173,7 @@ const smoothPane = (pane, home, endless) => {
       const side = e.target.closest && e.target.closest(".ec-split-side");
       if (side && side.scrollHeight > side.clientHeight) return;
       e.preventDefault();
+      reader();
       const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? pane.clientHeight : 1;
       scrollBy(e.deltaY * unit);
     },
@@ -137,6 +187,7 @@ const smoothPane = (pane, home, endless) => {
     if (e.key === " " && t.closest("a, button")) return;
     if (e.key === "Home" || (e.key === "End" && !endless)) {
       e.preventDefault();
+      reader();
       scrollTo(e.key === "Home" ? home() : limit());
       return;
     }
@@ -150,14 +201,20 @@ const smoothPane = (pane, home, endless) => {
     }[e.key];
     if (by === undefined) return;
     e.preventDefault();
+    reader();
     scrollBy(by);
   });
+
+  wake();
 
   return {
     edge,
     shift(dy) {
       at += dy;
       target += dy;
+    },
+    settle() {
+      at = target = pane.scrollTop;
     },
   };
 };
@@ -258,7 +315,7 @@ const smoothPane = (pane, home, endless) => {
     const first = list.firstElementChild;
     return list.offsetTop + first.offsetHeight / 2 - panel.clientHeight / 2;
   };
-  const smooth = smoothPane(panel, home, true);
+  const smooth = smoothPane(panel, home, true, 24);
 
   // Keep at least three pane heights of features on each side of the
   // reader. One lap is many times that, so this adds one lap at a time.
@@ -295,6 +352,7 @@ const smoothPane = (pane, home, endless) => {
     fill();
     panel.scrollTop = home();
     placedAt = panel.scrollTop;
+    smooth.settle();
     smooth.edge();
   };
   const layout = () => {
