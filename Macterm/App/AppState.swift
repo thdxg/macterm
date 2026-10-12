@@ -1279,6 +1279,16 @@ final class AppState {
     /// Settings → Extensions (`PaletteRegistry`); here so its hourly cache
     /// outlives the Settings window.
     let paletteRegistry = PaletteRegistry()
+    /// Applies the extension updates that need no question, when the user
+    /// turned that on. The app starts it after the launch restore. Tests
+    /// and benchmarks never do.
+    @ObservationIgnored
+    private(set) lazy var extensionAutoUpdater = ExtensionAutoUpdater(
+        registry: paletteRegistry,
+        store: customPalettes
+    ) { [weak self] names in
+        self?.presentToast(names.count == 1 ? "Extension updated" : "Extensions updated", subtitle: names.joined(separator: ", "))
+    }
 
     /// The exact text of our last `widgets.yaml` write — anything else on
     /// disk is an edit to absorb before the next write.
