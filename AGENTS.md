@@ -723,7 +723,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `GitWorktrees`: the Worktrees menu of the sidebar. It reads the worktrees of a project from the metadata files of git. It never runs git. A Mac without the Command Line Tools shows an install dialog for `/usr/bin/git`.
 - `Macterm/Config/`: `MactermConfig` (with `Animations`), `GhosttyConfigSource`, `GhosttyConfigText`, `ShellIntegrationFeatures`, `GhosttyColorSpace`, `MouseScrollMultiplier` and `MacosHidden`.
 - `Macterm/Settings/`
-  - `SettingsView`: the panes and `PinnedSidebar`. Keymaps is one grouped block. Passthrough Programs is above it. The search is at its top. There is one row for the column headers. A small gray label divides each `AppCommand.Category`. Each row has one menu for Global, Pass to TUI and Clear Keybind (`keymapRow`). A glyph after the title shows each flag that is on.
+  - `SettingsView`: the panes and `PinnedSidebar`. Keymaps is one grouped block. Passthrough Programs is above it. The search is at its top. There is no row of column headers. A small gray label divides each `AppCommand.Category`. Each row has one menu for Global, Pass to TUI and Clear Keybind (`keymapRow`). A glyph after the title shows each flag that is on. The menu is an AppKit pull-down (`KeymapRowMenu`), because on macOS 26 and later a SwiftUI `Menu` drops its checkmark column while no item is checked.
   - `ProjectsSettings`, `WidgetsSettings`.
   - `ExtensionsSettings` (Settings → Extensions).
     - It is one grid of `ExtensionGalleryItem` cards that you can search by name. It has the installed extensions and the extensions of `PaletteRegistry` that are not installed yet. Each card shows the own name and description of the extension.

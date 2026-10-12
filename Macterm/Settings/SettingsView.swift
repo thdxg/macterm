@@ -1620,18 +1620,17 @@ private struct KeymapSettings: View {
     /// under the row the moment the toggle or the rebind lands.
     private let globalHotkeys = GlobalHotkeys.shared
 
-    /// Column geometry, shared by the header and every row so the columns
-    /// actually line up. The keybind width lives on the *button*, not on its
-    /// label, so the header measures the same box the border draws.
+    /// Column geometry, shared by every row so the keybind buttons line up
+    /// down the table.
     ///
-    /// Alignment holds only because the header and every row end in the
-    /// SAME children — a flexible spacer, then two fixed-width boxes — with
-    /// an explicit `columnGap`. Both are load-bearing: SwiftUI's default
-    /// `HStack` spacing varies with the *types* of the adjacent views (two
-    /// Texts space differently than a Text and a Button), and because the
-    /// spacer pins everything after it to the trailing edge, one extra child
-    /// or one wider trailing view shifts that row's columns out of line with
-    /// the header. Don't add a control to a row without giving it a box here.
+    /// Alignment holds only because every row ends in the SAME children — a
+    /// flexible spacer, then two fixed-width boxes — with an explicit
+    /// `columnGap`. Both are load-bearing: SwiftUI's default `HStack` spacing
+    /// varies with the *types* of the adjacent views (two Texts space
+    /// differently than a Text and a Button), and because the spacer pins
+    /// everything after it to the trailing edge, one extra child or one wider
+    /// trailing view shifts that row's columns out of line with the others.
+    /// Don't add a control to a row without giving it a box here.
     private static let columnGap: CGFloat = 8
     private static let keybindColumn: CGFloat = 140
     private static let menuColumn: CGFloat = 24
@@ -1640,15 +1639,15 @@ private struct KeymapSettings: View {
 
     /// Short enough for a menu item; the precise rule lives in the item's
     /// tooltip rather than a description line under every row.
-    private static let passthroughTitle = "Pass to TUI"
-    private static let passthroughHelp = """
+    fileprivate static let passthroughTitle = "Pass to TUI"
+    fileprivate static let passthroughHelp = """
     When one of the programs listed at the top of this tab is running in the \
     focused pane, send this chord to it instead of running the action. \
     Everywhere else the action still runs.
     """
 
-    private static let globalTitle = "Global"
-    private static let globalHelp = """
+    fileprivate static let globalTitle = "Global"
+    fileprivate static let globalHelp = """
     Register this chord system-wide, so it runs the action while another app \
     is frontmost. The chord then belongs to Macterm everywhere — no other app \
     can see it, and it can no longer pass through to a program.
@@ -1723,9 +1722,6 @@ private struct KeymapSettings: View {
                 if isSearching, actionsByCategory.isEmpty {
                     Text("No keybinds match “\(query.trimmingCharacters(in: .whitespaces))”.")
                         .foregroundStyle(.secondary)
-                }
-                if !actionsByCategory.isEmpty {
-                    columnHeader
                 }
                 ForEach(actionsByCategory, id: \.category) { group in
                     sectionLabel(group.category.rawValue)
@@ -1811,23 +1807,6 @@ private struct KeymapSettings: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The one header row of the table, under the search: the column names
-    /// over the boxes every row lines its controls up in.
-    private var columnHeader: some View {
-        HStack(spacing: Self.columnGap) {
-            Text("Action")
-            Spacer(minLength: 0)
-            Text("Keybind")
-                .frame(width: Self.keybindColumn, alignment: .leading)
-            // Stands in for each row's trailing block (menu + warning slot)
-            // as ONE box of the same width, so the keybind column lands in
-            // the same place in the header as in every row.
-            Spacer().frame(width: Self.trailingColumn)
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 
     private func passthroughBinding(_ action: HotkeyAction) -> Binding<Bool> {
@@ -1940,29 +1919,21 @@ private struct KeymapSettings: View {
                 // The menu and the warning in ONE box of `trailingColumn`,
                 // spaced zero: as two siblings they added an extra
                 // inter-child gap and the menu's own intrinsic width, which
-                // pushed the row's keybind column left of the header label.
+                // pushed that row's keybind column out of line.
                 HStack(spacing: 0) {
-                    Menu {
-                        Toggle(Self.globalTitle, isOn: global)
-                            // The quick terminal is global by construction —
-                            // shown ticked so the row tells the truth,
-                            // disabled because there is nothing to decide.
-                            .disabled(isAlwaysGlobal)
-                            .help(Self.globalHelp)
-                        Toggle(Self.passthroughTitle, isOn: passthrough)
-                            .help(Self.passthroughHelp)
-                        Divider()
-                        Button("Clear Keybind") { clearShortcut(binding) }
-                            // Nothing to clear on an already-unmapped row, and a
-                            // live item that does nothing reads as broken.
-                            .disabled(isUnmapped)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("Keybind options")
+                    KeymapRowMenu(
+                        global: global,
+                        // The quick terminal is global by construction —
+                        // shown ticked so the row tells the truth, disabled
+                        // because there is nothing to decide.
+                        globalLocked: isAlwaysGlobal,
+                        passthrough: passthrough,
+                        // An unmapped row has no chord to make global, pass
+                        // through or clear, and a live item that does nothing
+                        // reads as broken.
+                        hasKeybind: !isUnmapped,
+                        clear: { clearShortcut(binding) }
+                    )
                     .frame(width: Self.menuColumn)
 
                     // Space is always reserved: shown conditionally, a
@@ -2011,6 +1982,100 @@ private struct KeymapSettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .help(Self.passthroughTitle)
+        }
+    }
+}
+
+/// The ⋯ menu of a Keymaps row: Global, Pass to TUI, Clear Keybind.
+///
+/// AppKit, not a SwiftUI `Menu`: on macOS 26 and later a menu drops its
+/// checkmark column while no item is checked, so the titles sat flush left
+/// and jumped right the moment an option went on. A blank `offStateImage`
+/// on every item keeps the column, and SwiftUI has no way to set one
+/// (`showsStateColumn` is already true and does not help).
+private struct KeymapRowMenu: NSViewRepresentable {
+    var global: Binding<Bool>
+    var globalLocked: Bool
+    var passthrough: Binding<Bool>
+    var hasKeybind: Bool
+    var clear: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: true)
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        (button.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
+        button.toolTip = "Keybind options"
+        // A pull-down shows its first item as the button and never lists it.
+        let face = NSMenuItem()
+        face.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "Keybind options")
+        button.menu?.addItem(face)
+        button.menu?.autoenablesItems = false
+        button.menu?.delegate = context.coordinator
+        return button
+    }
+
+    func updateNSView(_: NSPopUpButton, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSMenuDelegate {
+        var parent: KeymapRowMenu
+
+        init(_ parent: KeymapRowMenu) {
+            self.parent = parent
+        }
+
+        /// Built at each open, so the checkmarks read the bindings as they
+        /// are now and not as they were when the row was drawn.
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            while menu.numberOfItems > 1 {
+                menu.removeItem(at: 1)
+            }
+            let globalItem = item(KeymapSettings.globalTitle, help: KeymapSettings.globalHelp, action: #selector(toggleGlobal))
+            globalItem.state = parent.global.wrappedValue ? .on : .off
+            globalItem.isEnabled = parent.hasKeybind && !parent.globalLocked
+            let passthroughItem = item(
+                KeymapSettings.passthroughTitle,
+                help: KeymapSettings.passthroughHelp,
+                action: #selector(togglePassthrough)
+            )
+            passthroughItem.state = parent.passthrough.wrappedValue ? .on : .off
+            passthroughItem.isEnabled = parent.hasKeybind
+            let clearItem = item("Clear Keybind", help: nil, action: #selector(clear))
+            clearItem.isEnabled = parent.hasKeybind
+            menu.addItem(globalItem)
+            menu.addItem(passthroughItem)
+            menu.addItem(.separator())
+            menu.addItem(clearItem)
+        }
+
+        private func item(_ title: String, help: String?, action: Selector) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.toolTip = help
+            item.offStateImage = NSImage(size: item.onStateImage?.size ?? NSSize(width: 12, height: 12))
+            return item
+        }
+
+        @objc
+        private func toggleGlobal() {
+            parent.global.wrappedValue.toggle()
+        }
+
+        @objc
+        private func togglePassthrough() {
+            parent.passthrough.wrappedValue.toggle()
+        }
+
+        @objc
+        private func clear() {
+            parent.clear()
         }
     }
 }

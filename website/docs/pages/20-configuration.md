@@ -65,7 +65,7 @@ Macterm draws the window chrome itself. It ignores or forces these keys:
 
 Go to **Settings → Keymaps**. Click the keybind of a row. Press the keys that you want. If rows have the same keys, each row says so.
 
-Each row has a **⋯** menu. Use it to clear the keybind (**Clear Keybind**) and to set two options. You cannot select both options. A row with an option on shows a small icon after its name:
+Each row has a **⋯** menu. Use it to clear the keybind (**Clear Keybind**) and to set two options. The menu items are available only when the row has a keybind. You cannot select both options. A row with an option on shows a small icon after its name:
 
 - **Pass to TUI** gives the keys to the program in the focused pane. The action does not run. List the programs under **Passthrough Programs** at the top of the tab. Separate them with commas. Use the name that the tab shows.
 - **Global** registers the keys for the whole system, so the action runs when another app is in front. Macterm does not need the Accessibility permission. If another app already uses the keys, the row says so.
