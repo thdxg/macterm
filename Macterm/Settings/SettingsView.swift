@@ -1740,20 +1740,26 @@ private struct KeymapSettings: View {
         }
         .formStyle(.grouped)
         .background(
-            HotkeyCaptureView(capturingActionID: $capturingActionID) { event, rowID in
-                guard let shortcut = HotkeyRegistry.shortcutString(from: event) else { return }
-                if let action = HotkeyAction(rawValue: rowID) {
-                    values[action.id] = shortcut
-                    HotkeyRegistry.setShortcutString(shortcut, for: action)
-                } else if let paletteID = PaletteHotkeys.paletteID(fromRowID: rowID) {
-                    values[rowID] = shortcut
-                    PaletteHotkeys.shared.setShortcutString(shortcut, paletteID: paletteID)
-                } else {
-                    return
+            HotkeyCaptureView(
+                capturingActionID: $capturingActionID,
+                onClear: { rowID in
+                    if let binding = Self.binding(forRow: rowID) { clearShortcut(binding) }
+                },
+                onCapture: { event, rowID in
+                    guard let shortcut = HotkeyRegistry.shortcutString(from: event) else { return }
+                    if let action = HotkeyAction(rawValue: rowID) {
+                        values[action.id] = shortcut
+                        HotkeyRegistry.setShortcutString(shortcut, for: action)
+                    } else if let paletteID = PaletteHotkeys.paletteID(fromRowID: rowID) {
+                        values[rowID] = shortcut
+                        PaletteHotkeys.shared.setShortcutString(shortcut, paletteID: paletteID)
+                    } else {
+                        return
+                    }
+                    capturingActionID = nil
+                    HotkeyCaptureState.shared.isCapturing = false
                 }
-                capturingActionID = nil
-                HotkeyCaptureState.shared.isCapturing = false
-            }
+            )
         )
         .onAppear {
             appState.customPalettes.reloadIfChanged()
@@ -1870,6 +1876,11 @@ private struct KeymapSettings: View {
         )
     }
 
+    private static func binding(forRow rowID: String) -> HotkeyBinding? {
+        if let action = HotkeyAction(rawValue: rowID) { return .action(action) }
+        return PaletteHotkeys.paletteID(fromRowID: rowID).map { .palette($0) }
+    }
+
     private func clearShortcut(_ binding: HotkeyBinding) {
         values[binding.id] = "disabled"
         switch binding {
@@ -1915,6 +1926,7 @@ private struct KeymapSettings: View {
                 }
                 .buttonStyle(.bordered)
                 .frame(width: Self.keybindColumn)
+                .help("Click, then press the keys. Press Delete to clear the keybind.")
 
                 // The menu and the warning in ONE box of `trailingColumn`,
                 // spaced zero: as two siblings they added an extra
@@ -1928,11 +1940,10 @@ private struct KeymapSettings: View {
                         // because there is nothing to decide.
                         globalLocked: isAlwaysGlobal,
                         passthrough: passthrough,
-                        // An unmapped row has no chord to make global, pass
-                        // through or clear, and a live item that does nothing
-                        // reads as broken.
-                        hasKeybind: !isUnmapped,
-                        clear: { clearShortcut(binding) }
+                        // An unmapped row has no chord to make global or pass
+                        // through, and a live item that does nothing reads as
+                        // broken.
+                        hasKeybind: !isUnmapped
                     )
                     .frame(width: Self.menuColumn)
 
@@ -1986,7 +1997,10 @@ private struct KeymapSettings: View {
     }
 }
 
-/// The ⋯ menu of a Keymaps row: Global, Pass to TUI, Clear Keybind.
+/// The ⋯ menu of a Keymaps row: Global and Pass to TUI. Clearing is a bare
+/// Delete while the row records (`HotkeyCaptureView`), not an item here: a
+/// menu indents every title to its checkmark column, so a Clear Keybind
+/// item could not sit flush left.
 ///
 /// AppKit, not a SwiftUI `Menu`: on macOS 26 and later a menu drops its
 /// checkmark column while no item is checked, so the titles sat flush left
@@ -1998,7 +2012,6 @@ private struct KeymapRowMenu: NSViewRepresentable {
     var globalLocked: Bool
     var passthrough: Binding<Bool>
     var hasKeybind: Bool
-    var clear: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -2047,12 +2060,8 @@ private struct KeymapRowMenu: NSViewRepresentable {
             )
             passthroughItem.state = parent.passthrough.wrappedValue ? .on : .off
             passthroughItem.isEnabled = parent.hasKeybind
-            let clearItem = item("Clear Keybind", help: nil, action: #selector(clear))
-            clearItem.isEnabled = parent.hasKeybind
             menu.addItem(globalItem)
             menu.addItem(passthroughItem)
-            menu.addItem(.separator())
-            menu.addItem(clearItem)
         }
 
         private func item(_ title: String, help: String?, action: Selector) -> NSMenuItem {
@@ -2072,17 +2081,16 @@ private struct KeymapRowMenu: NSViewRepresentable {
         private func togglePassthrough() {
             parent.passthrough.wrappedValue.toggle()
         }
-
-        @objc
-        private func clear() {
-            parent.clear()
-        }
     }
 }
 
 private struct HotkeyCaptureView: NSViewRepresentable {
     @Binding
     var capturingActionID: String?
+    /// A bare Delete or Forward Delete while recording: clear the row. A
+    /// chord needs a modifier (`HotkeyRegistry.shortcutString`), so a bare
+    /// key can never be a binding and is free to mean "no keybind".
+    let onClear: (String) -> Void
     let onCapture: (NSEvent, String) -> Void
 
     func makeNSView(context: Context) -> NSView {
@@ -2094,7 +2102,7 @@ private struct HotkeyCaptureView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onCapture: onCapture)
+        Coordinator(onClear: onClear, onCapture: onCapture)
     }
 
     /// Every `addLocalMonitorForEvents` needs a paired `removeMonitor`, or each
@@ -2111,9 +2119,11 @@ private struct HotkeyCaptureView: NSViewRepresentable {
         let view: NSView
         var capturingActionID: String?
         private var monitor: Any?
+        private let onClear: (String) -> Void
         private let onCapture: (NSEvent, String) -> Void
 
-        init(onCapture: @escaping (NSEvent, String) -> Void) {
+        init(onClear: @escaping (String) -> Void, onCapture: @escaping (NSEvent, String) -> Void) {
+            self.onClear = onClear
             self.onCapture = onCapture
             view = NSView()
             super.init()
@@ -2122,6 +2132,14 @@ private struct HotkeyCaptureView: NSViewRepresentable {
                 if Int(event.keyCode) == kVK_Escape {
                     self.capturingActionID = nil
                     HotkeyCaptureState.shared.isCapturing = false
+                    return nil
+                }
+                let isBareDelete = [kVK_Delete, kVK_ForwardDelete].contains(Int(event.keyCode))
+                    && event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift])
+                if isBareDelete {
+                    self.capturingActionID = nil
+                    HotkeyCaptureState.shared.isCapturing = false
+                    self.onClear(actionID)
                     return nil
                 }
                 self.onCapture(event, actionID)
