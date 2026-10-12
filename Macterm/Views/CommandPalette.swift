@@ -253,7 +253,7 @@ struct CommandPalettePanel: View {
                                         CommandPaletteRow(item: item, isSelected: idx == selectedIndex, optionHeld: optionHeld)
                                     }
                                     .buttonStyle(.plain)
-                                    .id(RowScrollTarget(index: idx))
+                                    .id(RowScrollTarget(itemID: item.id))
                                     // Publish each row's Y-extent so a single hover
                                     // region on the ScrollView can map the pointer to
                                     // a row. Per-row tracking areas (`.onHover` /
@@ -523,8 +523,9 @@ struct CommandPalettePanel: View {
     /// with no measured frame yet (the lazy stack has not built it) is off
     /// screen, on the side the selection moved toward from `old`.
     private func scrollSelectionIntoView(_ idx: Int, from old: Int, proxy: ScrollViewProxy) {
+        guard flatItems.indices.contains(idx) else { return }
         guard viewportHeight > 0 else {
-            proxy.scrollTo(RowScrollTarget(index: idx))
+            proxy.scrollTo(RowScrollTarget(itemID: flatItems[idx].id))
             return
         }
         let pad = Self.scrollPadding
@@ -544,14 +545,17 @@ struct CommandPalettePanel: View {
         // `scrollTo` aligns the row's anchor fraction to the same fraction of the
         // viewport, so anchoring `pad` in from an edge leaves that gap.
         let anchor = UnitPoint(x: 0, y: towardTop ? pad / viewportHeight : 1 - pad / viewportHeight)
-        proxy.scrollTo(RowScrollTarget(index: idx), anchor: anchor)
+        proxy.scrollTo(RowScrollTarget(itemID: flatItems[idx].id), anchor: anchor)
     }
 
     /// A row's scroll id. Its own type, because the sections are keyed by
     /// their Int offset, and `scrollTo` with a bare row index found the
-    /// section with that offset.
+    /// section with that offset. It carries the item's id and never the row
+    /// index: an index id replaces the identity of the `ForEach`, and the lazy
+    /// stack then reused the row at that index with the content of an older
+    /// list, so a search showed rows that did not match.
     private struct RowScrollTarget: Hashable {
-        let index: Int
+        let itemID: String
     }
 
     /// Run the selected row: its alt action when `alt` and it has one, else
