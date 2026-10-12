@@ -153,20 +153,26 @@
       }
     },
     "alt": {
-      "description": "The second action of a row. ⌥↩ or ⌥-click runs it. It has exactly one of run, copy or open, and an optional title. The subtitle of the row shows the title while ⌥ is down. By default, it shows what the action does: \"Run in a Split\", \"Copy\".",
+      "description": "The second action of a row. ⌥↩ or ⌥-click runs it. It has exactly one of run (with or without cwd), cwd, copy or open, and an optional title. The subtitle of the row shows the title while ⌥ is down. By default, it shows what the action does: \"Run in a Split\", \"Open in a New Tab\", \"Copy\".",
       "allOf": [{ "$ref": "#/$defs/actionFields" }],
       "properties": { "title": { "type": "string" } },
       "unevaluatedProperties": false
     },
     "action": {
-      "description": "Exactly one of run, copy or open.",
+      "description": "Exactly one of run (with or without cwd), cwd, copy or open.",
       "allOf": [{ "$ref": "#/$defs/actionFields" }],
       "unevaluatedProperties": false
     },
     "actionFields": {
       "type": "object",
-      "oneOf": [{ "required": ["run"] }, { "required": ["copy"] }, { "required": ["open"] }],
-      "dependentRequired": { "in": ["run"] },
+      "oneOf": [
+        { "anyOf": [{ "required": ["run"] }, { "required": ["cwd"] }] },
+        { "required": ["copy"] },
+        { "required": ["open"] }
+      ],
+      "dependentSchemas": {
+        "in": { "anyOf": [{ "required": ["run"] }, { "required": ["cwd"] }] }
+      },
       "properties": {
         "run": {
           "type": "string",
@@ -176,6 +182,11 @@
           "type": "string",
           "enum": ["tab", "split"],
           "description": "Where `run` runs: a new tab of the active project (the default) or a split next to its focused pane."
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The directory where the new terminal starts. Without run, the terminal is a shell in that directory. In a listing, it is a path into the row or a literal. A relative path is relative to the project directory. The directory must exist. In a remote project, Macterm does not open the terminal, because the directory is on this Mac."
         },
         "copy": {
           "type": "string",

@@ -200,7 +200,6 @@ struct MactermApp: App {
                     projectStore: projectStore,
                     titleOverride: "Set Project Path to Current Directory"
                 )
-                AppCommandMenuItem(command: .worktrees, appState: appState, projectStore: projectStore, titleOverride: "Worktrees")
                 Divider()
                 AppCommandMenuItem(command: .nextProject, appState: appState, projectStore: projectStore, titleOverride: "Next Project")
                 AppCommandMenuItem(

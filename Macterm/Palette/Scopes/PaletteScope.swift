@@ -12,28 +12,26 @@ import Foundation
 /// conforming to `PaletteScope` in `Palette/Scopes/`; an `AppCommand` opens
 /// it by returning the case from `paletteScope`, which is what turns its
 /// palette row into a way in rather than a command. Built-in scopes are
-/// Swift because their listings are in-process reads (the keychain, git's
-/// files, the project's tree) that a shell command could only approximate
+/// Swift because their listings are in-process reads (the keychain, the
+/// project's tree) that a shell command could only approximate
 /// slowly or not at all.
 /// A custom palette (`CustomPaletteFile`, a YAML file of nodes) is the one
 /// `.custom` case, its screens told apart by `CustomPaletteTarget`.
 enum PaletteScopeID: Hashable {
     case passwords
-    case worktrees
     case files
     /// A screen of a custom palette (`CustomPaletteFile`): its file, node,
     /// the values exported above it and the pill naming it.
     case custom(CustomPaletteTarget)
 
     /// The screens Macterm ships.
-    static let builtIn: [PaletteScopeID] = [.passwords, .worktrees, .files]
+    static let builtIn: [PaletteScopeID] = [.passwords, .files]
 
     /// What the scope's pill says and shows — also the icon of the row that
     /// opens it, so the row reads as a place to go rather than a thing to do.
     var pill: PalettePill {
         switch self {
         case .passwords: PalettePill(title: "Password Manager", icon: "key.fill")
-        case .worktrees: PalettePill(title: "Worktrees", icon: "arrow.triangle.branch")
         case .files: PalettePill(title: "Files", icon: "doc.text.magnifyingglass")
         case let .custom(target): target.pill
         }
@@ -46,7 +44,6 @@ enum PaletteScopeID: Hashable {
     var summary: String {
         switch self {
         case .passwords: "Manage passwords"
-        case .worktrees: "Browse git worktrees in this project"
         case .files: "Browse files and folders in this project"
         case .custom: ""
         }
@@ -57,7 +54,6 @@ enum PaletteScopeID: Hashable {
     var command: AppCommand? {
         switch self {
         case .passwords: .passwordManager
-        case .worktrees: .worktrees
         case .files: .files
         case .custom: nil
         }
@@ -67,7 +63,6 @@ enum PaletteScopeID: Hashable {
     func makeScope() -> any PaletteScope {
         switch self {
         case .passwords: PasswordPaletteScope()
-        case .worktrees: WorktreesPaletteScope()
         case .files: FilesPaletteScope()
         case let .custom(target): CustomPaletteScope(target: target)
         }
@@ -107,8 +102,8 @@ struct PaletteFailure: Error, Equatable {
 /// long as it is on the stack: a scope whose listing takes time (a command's
 /// output) loads it once in `activate`, reports `loading` meanwhile, caches
 /// the rows and filters them per keystroke in `sections` — a custom
-/// palette's listing, and Files' index of the project. Passwords and
-/// Worktrees read live, in-process state and need none of that.
+/// palette's listing, and Files' index of the project. Passwords reads
+/// live, in-process state and needs none of that.
 @MainActor
 protocol PaletteScope: AnyObject {
     var placeholder: String { get }

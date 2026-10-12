@@ -79,14 +79,12 @@ struct PaletteScopeTests {
             #expect(frame.scope.failure == nil)
             #expect(frame.pill == id.pill)
         }
-        // Passwords and Worktrees read live state, so activating them loads
-        // nothing; Files indexes, and with no local project says so.
-        for id in [PaletteScopeID.passwords, .worktrees] {
-            let frame = PaletteFrame(id)
-            frame.scope.activate(context: makeContext()) {}
-            #expect(frame.scope.loading == nil && frame.scope.failure == nil, "\(id)")
-            frame.scope.deactivate()
-        }
+        // Passwords reads live state, so activating it loads nothing; Files
+        // indexes, and with no local project says so.
+        let passwords = PaletteFrame(.passwords)
+        passwords.scope.activate(context: makeContext()) {}
+        #expect(passwords.scope.loading == nil && passwords.scope.failure == nil)
+        passwords.scope.deactivate()
         let files = PaletteFrame(.files)
         files.scope.activate(context: makeContext()) {}
         #expect(files.scope.failure?.title == "No local project to search")
@@ -130,7 +128,7 @@ struct PaletteScopeTests {
         let window = WindowState()
         let scopes = (0 ..< 3).map { _ in ListingScope() }
         for scope in scopes {
-            window.pushPaletteFrame(PaletteFrame(.worktrees, scope: scope))
+            window.pushPaletteFrame(PaletteFrame(.files, scope: scope))
         }
 
         window.popPaletteFrame()
@@ -181,9 +179,9 @@ struct PaletteScopeTests {
 
     @Test
     func a_row_that_opens_a_screen_wears_its_glyph_and_keeps_it_when_rescored() {
-        let item = PaletteItem(title: "Worktrees", opensScope: .worktrees, action: {})
-        #expect(item.icon == "arrow.triangle.branch")
-        #expect(item.with(score: 7).icon == "arrow.triangle.branch")
+        let item = PaletteItem(title: "Files", opensScope: .files, action: {})
+        #expect(item.icon == "doc.text.magnifyingglass")
+        #expect(item.with(score: 7).icon == "doc.text.magnifyingglass")
         #expect(PaletteItem(title: "Pods", icon: "shippingbox", action: {}).icon == "shippingbox")
         #expect(PaletteItem(title: "Split Right", action: {}).icon == nil, "a thing to do has no glyph")
     }

@@ -214,11 +214,14 @@ struct CommandSourceTests {
 
     @Test
     func a_muted_palette_screen_keeps_its_glyph_but_no_way_in() throws {
-        // `/tmp` is no repository, so Worktrees is muted with a reason.
-        let (ctx, _) = makeContext()
-        let item = try #require(findItem(title: AppCommand.worktrees.title, in: ctx))
+        // Files cannot index a remote project, so it is muted with a reason.
+        let (ctx, state) = makeContext(seedProject: false)
+        let remote = Project(name: "devbox", path: "devbox:/srv/app", sortOrder: 0)
+        ctx.projectStore.add(remote)
+        state.activeProjectID = remote.id
+        let item = try #require(findItem(title: AppCommand.files.title, in: ctx))
         #expect(!item.isEnabled)
-        #expect(item.icon == PaletteScopeID.worktrees.pill.icon)
+        #expect(item.icon == PaletteScopeID.files.pill.icon)
         #expect(item.opensScope == nil, "a muted row draws no chevron")
     }
 

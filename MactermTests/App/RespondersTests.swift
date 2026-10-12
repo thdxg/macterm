@@ -63,23 +63,20 @@ struct MainAppResponderTests {
     }
 
     @Test
-    func a_worktrees_chord_outside_a_repository_says_so_instead_of_reaching_the_terminal() throws {
+    func a_files_chord_in_a_remote_project_says_so_instead_of_reaching_the_terminal() throws {
         let fx = makeFixture()
-        let action = HotkeyAction.worktrees
+        let action = HotkeyAction.files
         let prior = Preferences.defaults.string(forKey: action.defaultsKey)
         defer { HotkeyRegistry.setShortcutString(prior ?? action.defaultShortcut, for: action) }
         HotkeyRegistry.setShortcutString("cmd+opt+ctrl+shift+k", for: action)
 
-        let plain = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macterm-not-a-repo-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: plain) }
-        let project = Project(name: "plain", path: plain.path, sortOrder: 0)
+        // Set directly, not selected: selecting a remote project starts ssh.
+        let project = Project(name: "devbox", path: "devbox:/srv/app", sortOrder: 0)
         fx.projects.add(project)
-        fx.state.selectProject(project)
+        fx.state.activeProjectID = project.id
 
         #expect(try fx.responder.handle(keyDown(for: action)) == .handled)
-        #expect(fx.state.activeToast?.title == "Project is not a git repository")
+        #expect(fx.state.activeToast?.title == "The Files screen is not available for remote projects")
     }
 
     @Test

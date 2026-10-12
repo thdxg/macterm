@@ -53,7 +53,6 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case unpinTab = "unpin_tab"
     case autofillPassword = "autofill_password"
     case passwordManager = "password_manager"
-    case worktrees
     case files
     case capturePaletteScreenshot = "capture_palette_screenshot"
 
@@ -163,7 +162,6 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .autofillPassword: "cmd+opt+f"
         // Unbound by default: ⌥⌘F, the obvious chord, is Autofill Password's.
         case .passwordManager: "none"
-        case .worktrees: "none"
         case .files: "none"
         // Unbound by default: only someone making an extension's screenshots
         // needs it, and it acts on the palette as it stands, so it's bound

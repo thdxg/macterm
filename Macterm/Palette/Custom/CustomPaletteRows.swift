@@ -12,7 +12,7 @@ struct CustomPaletteRow: Equatable {
     /// Values this row adds to the environment below it.
     let exports: [String: String]
     /// The action's operand resolved against the row (a `copy:` or `open:`
-    /// path); nil for `run` and `enter`.
+    /// path, or a `run`'s `cwd:`); nil for `enter` and a `run` with no `cwd:`.
     let operand: String?
     /// The same for the listing's `alt:` action.
     var altOperand: String?
@@ -48,11 +48,13 @@ enum CustomPaletteRows {
         }
     }
 
-    /// A `copy:` or `open:` action's text resolved against the row; nil for `run`.
+    /// A `copy:` or `open:` action's text, or a `run`'s `cwd:`, resolved
+    /// against the row; nil for a `run` with no `cwd:`.
     static func actionOperand(_ action: CustomPaletteAction, in row: Any) -> String? {
         switch action {
         case let .copy(path),
-             let .open(path): resolve(path, in: row)
+             let .open(path),
+             let .run(_, _, path?): resolve(path, in: row)
         case .run: nil
         }
     }

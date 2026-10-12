@@ -28,7 +28,8 @@ Each screen can have its own keybind in Settings → Keymaps, under **Palettes**
 
 - **Password Manager** lists your saved passwords. Select one to type it into the focused pane (see [passwords](/docs/passwords#typing-a-password-on-demand)).
 - **Files** lists the files and directories of the current project. Search by name or by part of a path (`pal/eng` finds `Palette/PaletteEngine.swift`). Select one to open it in a split next to the focused pane. If the project has no pane, it opens in a new tab. A directory opens as a shell there. A file opens in your terminal editor (see [Text Files](/docs/configuration#open-files-in-your-terminal-editor)). Hold <kbd>⌥</kbd> to open it with its default app. The list leaves out dependency and build folders (`node_modules`, `build` and others) and hidden entries. Remote projects do not have this screen.
-- **Worktrees** lists the linked git worktrees of the current project, as in the **Worktrees** menu in the sidebar. The main worktree of the repository is not in the list. Each row shows the branch and the path relative to the project. Select a row to open a new tab there. The **Project** menu has the same command. It is not available when the project is not a git repository, or when it is a remote project. Its keybind then says why.
+
+To open a git worktree of the project from the palette, install the **Git** extension. Its **Worktrees** screen opens a worktree in a new tab or a split. The **Worktrees** menu in the sidebar also opens worktrees.
 
 ## Extensions
 
@@ -43,4 +44,4 @@ Settings shows every [extension](/docs/extensions) as a card in one grid that yo
 - **Install** copies the folder of the extension into `~/.config/macterm/extensions/` at once. The extension is then installed like any other extension. Its commands run on your Mac, so read it first. The book button next to **Install** opens the extension on GitHub. You see every file that it installs, and its README.
 - **Installed** offers to uninstall the extension. The prompt names the features that go with it, for example the **Kubernetes palette**. **Uninstall** moves its folder to the Trash.
 
-If an extension has a file that Macterm cannot read, its card shows a warning. Macterm reads the extensions of the repository when you open the pane, at most one time each hour. They do not depend on your version of Macterm. An extension that works keeps working after every update. If an extension needs a newer Macterm, the card says so. You can install it after you update. The built-in screens (Password Manager, Worktrees and Files) are not extensions and are not in the list.
+If an extension has a file that Macterm cannot read, its card shows a warning. Macterm reads the extensions of the repository when you open the pane, at most one time each hour. They do not depend on your version of Macterm. An extension that works keeps working after every update. If an extension needs a newer Macterm, the card says so. You can install it after you update. The built-in screens (Password Manager and Files) are not extensions and are not in the list.
