@@ -3,13 +3,13 @@ slug: index
 title: Introduction
 nav: Introduction
 group: Getting started
-description: A lightweight macOS terminal with vertical tabs, persistent sessions, and native experience.
+description: A feature-rich macOS terminal built to be pleasant, native, and lightweight.
 -->
 
 
 # Macterm
 
-A lightweight macOS terminal with vertical tabs, persistent sessions, and native experience. It uses [libghostty](https://ghostty.org).
+A feature-rich macOS terminal built to be pleasant, native, and lightweight. Macterm uses [libghostty](https://ghostty.org).
 
 Macterm needs macOS 14 or later. It has an MIT license.
 

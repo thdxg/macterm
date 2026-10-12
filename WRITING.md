@@ -20,7 +20,7 @@ Use one word for one thing in every file. Do not use a synonym to make the text 
 
 Use this description, word for word, in the README, the landing page meta tags, the docs introduction and the GitHub repository description:
 
-> A lightweight macOS terminal with vertical tabs, persistent sessions, and native experience
+> A feature-rich macOS terminal built to be pleasant, native, and lightweight
 
 The title of the landing page is **Macterm**.
 
