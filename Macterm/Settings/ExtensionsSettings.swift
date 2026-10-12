@@ -80,8 +80,7 @@ struct ExtensionsSettings: View {
                         }
                     Text(
                         "Macterm checks the Macterm repository when it starts and one time each day. "
-                            + "It updates only the extensions that you did not change. "
-                            + "An extension that you changed shows an Update button."
+                            + "It updates only the extensions that you did not change, so it never replaces your changes."
                     )
                     .settingsCaption()
                 }
