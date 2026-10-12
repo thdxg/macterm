@@ -10,11 +10,11 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case projects = "Projects"
     case appearance = "Appearance"
     case animations = "Animations"
-    case keymaps = "Keymaps"
     case quickTerminal = "Quick Terminal"
     case widgets = "Widgets"
     case passwords = "Password Manager"
     case extensions = "Extensions"
+    case keymaps = "Keymaps"
     case updates = "Updates"
 
     var id: String { rawValue }
