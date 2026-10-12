@@ -1620,28 +1620,26 @@ private struct KeymapSettings: View {
     /// under the row the moment the toggle or the rebind lands.
     private let globalHotkeys = GlobalHotkeys.shared
 
-    /// Column geometry, shared by the header and every row so the four columns
+    /// Column geometry, shared by the header and every row so the columns
     /// actually line up. The keybind width lives on the *button*, not on its
     /// label, so the header measures the same box the border draws.
     ///
-    /// Alignment holds only because the header and every row are built as the
-    /// SAME five children — title, flexible spacer, then four fixed-width
-    /// boxes — with an explicit `columnGap`. Both are load-bearing: SwiftUI's
-    /// default `HStack` spacing varies with the *types* of the adjacent views
-    /// (two Texts space differently than a Text and a Button), and because the
-    /// spacer pins everything after it to the trailing edge, one extra child or
-    /// one wider trailing view shifts that row's columns out of line with the
-    /// header. Don't add a control to a row without giving it a box here.
+    /// Alignment holds only because the header and every row end in the
+    /// SAME children — a flexible spacer, then two fixed-width boxes — with
+    /// an explicit `columnGap`. Both are load-bearing: SwiftUI's default
+    /// `HStack` spacing varies with the *types* of the adjacent views (two
+    /// Texts space differently than a Text and a Button), and because the
+    /// spacer pins everything after it to the trailing edge, one extra child
+    /// or one wider trailing view shifts that row's columns out of line with
+    /// the header. Don't add a control to a row without giving it a box here.
     private static let columnGap: CGFloat = 8
-    private static let globalColumn: CGFloat = 60
-    private static let passthroughColumn: CGFloat = 92
     private static let keybindColumn: CGFloat = 140
-    private static let clearColumn: CGFloat = 20
+    private static let menuColumn: CGFloat = 24
     private static let warningColumn: CGFloat = 16
-    private static let trailingColumn: CGFloat = clearColumn + warningColumn
+    private static let trailingColumn: CGFloat = menuColumn + warningColumn
 
-    /// Short enough for a column header; the precise rule lives in the
-    /// checkbox's tooltip rather than a description line under every row.
+    /// Short enough for a menu item; the precise rule lives in the item's
+    /// tooltip rather than a description line under every row.
     private static let passthroughTitle = "Pass to TUI"
     private static let passthroughHelp = """
     When one of the programs listed at the top of this tab is running in the \
@@ -1815,21 +1813,17 @@ private struct KeymapSettings: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The one header row of the table, under the search: the three column
-    /// names over the boxes every row lines its controls up in.
+    /// The one header row of the table, under the search: the column names
+    /// over the boxes every row lines its controls up in.
     private var columnHeader: some View {
         HStack(spacing: Self.columnGap) {
             Text("Action")
             Spacer(minLength: 0)
-            Text(Self.globalTitle)
-                .frame(width: Self.globalColumn, alignment: .center)
-            Text(Self.passthroughTitle)
-                .frame(width: Self.passthroughColumn, alignment: .center)
             Text("Keybind")
                 .frame(width: Self.keybindColumn, alignment: .leading)
-            // Stands in for each row's trailing block (clear button + warning
-            // slot) as ONE box of the same width, so the two columns to its
-            // left land in the same place in the header as in every row.
+            // Stands in for each row's trailing block (menu + warning slot)
+            // as ONE box of the same width, so the keybind column lands in
+            // the same place in the header as in every row.
             Spacer().frame(width: Self.trailingColumn)
         }
         .font(.caption)
@@ -1878,29 +1872,59 @@ private struct KeymapSettings: View {
         )
     }
 
-    /// A custom palette's row: the same five children as `hotkeyRow`, its
-    /// flags kept by `PaletteHotkeys`, so its columns line up with the header
-    /// and every action row.
-    @ViewBuilder
+    /// A custom palette's row, its flags kept by `PaletteHotkeys`.
     private func customPaletteRow(_ entry: CustomPaletteStore.Entry) -> some View {
-        let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
+        keymapRow(
+            title: entry.pill.title,
+            binding: .palette(entry.id),
+            global: paletteGlobalBinding(entry.id),
+            passthrough: palettePassthroughBinding(entry.id)
+        )
+    }
+
+    private func hotkeyRow(_ action: HotkeyAction) -> some View {
+        keymapRow(
+            title: action.title,
+            binding: .action(action),
+            global: globalBinding(action),
+            passthrough: passthroughBinding(action)
+        )
+    }
+
+    private func clearShortcut(_ binding: HotkeyBinding) {
+        values[binding.id] = "disabled"
+        switch binding {
+        case let .action(action): HotkeyRegistry.setShortcutString("disabled", for: action)
+        case let .palette(paletteID): PaletteHotkeys.shared.clearShortcut(paletteID: paletteID)
+        }
+        if capturingActionID == binding.id {
+            capturingActionID = nil
+            HotkeyCaptureState.shared.isCapturing = false
+        }
+    }
+
+    /// One row of the table: the title (with a glyph for each flag that is
+    /// on, since the flags themselves live in the menu), the keybind button,
+    /// the row's menu, and the conflict slot. Action rows and palette rows
+    /// both come through here, so their columns cannot drift apart.
+    @ViewBuilder
+    private func keymapRow(
+        title: String,
+        binding: HotkeyBinding,
+        global: Binding<Bool>,
+        passthrough: Binding<Bool>
+    ) -> some View {
+        let rowID = binding.id
+        let isAlwaysGlobal = if case let .action(action) = binding { action.isAlwaysGlobal } else { false }
         let partners = conflictPartners(forRow: rowID)
         let isCapturing = capturingActionID == rowID
         let isUnmapped = HotkeyRegistry.displaySymbols(for: values[rowID] ?? "disabled").isEmpty
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: Self.columnGap) {
-                Text(entry.pill.title)
+                Text(title)
+                flagGlyphs(global: global.wrappedValue, passthrough: passthrough.wrappedValue)
                 Spacer(minLength: 0)
-                Toggle("", isOn: paletteGlobalBinding(entry.id))
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
-                    .frame(width: Self.globalColumn, alignment: .center)
-                    .help(Self.globalHelp)
-                Toggle("", isOn: palettePassthroughBinding(entry.id))
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
-                    .frame(width: Self.passthroughColumn, alignment: .center)
-                    .help(Self.passthroughHelp)
+
                 Button {
                     HotkeyCaptureState.shared.isCapturing = true
                     capturingActionID = rowID
@@ -1912,111 +1936,39 @@ private struct KeymapSettings: View {
                 }
                 .buttonStyle(.bordered)
                 .frame(width: Self.keybindColumn)
+
+                // The menu and the warning in ONE box of `trailingColumn`,
+                // spaced zero: as two siblings they added an extra
+                // inter-child gap and the menu's own intrinsic width, which
+                // pushed the row's keybind column left of the header label.
                 HStack(spacing: 0) {
-                    Button {
-                        values[rowID] = "disabled"
-                        PaletteHotkeys.shared.clearShortcut(paletteID: entry.id)
-                        if capturingActionID == rowID {
-                            capturingActionID = nil
-                            HotkeyCaptureState.shared.isCapturing = false
-                        }
+                    Menu {
+                        Toggle(Self.globalTitle, isOn: global)
+                            // The quick terminal is global by construction —
+                            // shown ticked so the row tells the truth,
+                            // disabled because there is nothing to decide.
+                            .disabled(isAlwaysGlobal)
+                            .help(Self.globalHelp)
+                        Toggle(Self.passthroughTitle, isOn: passthrough)
+                            .help(Self.passthroughHelp)
+                        Divider()
+                        Button("Clear Keybind") { clearShortcut(binding) }
+                            // Nothing to clear on an already-unmapped row, and a
+                            // live item that does nothing reads as broken.
+                            .disabled(isUnmapped)
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
+                        Image(systemName: "ellipsis.circle")
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .disabled(isUnmapped)
-                    .help("Clear this keybind")
-                    .frame(width: Self.clearColumn)
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(MactermTheme.warning)
-                        .opacity(partners.isEmpty ? 0 : 1)
-                        .frame(width: Self.warningColumn)
-                }
-                .frame(width: Self.trailingColumn)
-            }
-            if !partners.isEmpty {
-                Text("Conflicts with \(partners.joined(separator: ", "))")
-                    .font(.system(size: 11))
-                    .foregroundStyle(MactermTheme.warning)
-            }
-            if let refusal = globalHotkeys.refusals[.palette(entry.id)] {
-                Text(refusal.message)
-                    .font(.system(size: 11))
-                    .foregroundStyle(MactermTheme.warning)
-            }
-        }
-    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Keybind options")
+                    .frame(width: Self.menuColumn)
 
-    @ViewBuilder
-    private func hotkeyRow(_ action: HotkeyAction) -> some View {
-        let partners = conflictPartners(forRow: action.id)
-        let isCapturing = capturingActionID == action.id
-        let isUnmapped = HotkeyRegistry.displaySymbols(for: values[action.id] ?? "disabled").isEmpty
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: Self.columnGap) {
-                Text(action.title)
-                Spacer(minLength: 0)
-
-                Toggle("", isOn: globalBinding(action))
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
-                    // The quick terminal is global by construction — shown
-                    // ticked so the row tells the truth, disabled because
-                    // there is nothing to decide.
-                    .disabled(action.isAlwaysGlobal)
-                    .frame(width: Self.globalColumn, alignment: .center)
-                    .help(Self.globalHelp)
-
-                Toggle("", isOn: passthroughBinding(action))
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
-                    .frame(width: Self.passthroughColumn, alignment: .center)
-                    .help(Self.passthroughHelp)
-
-                Button {
-                    HotkeyCaptureState.shared.isCapturing = true
-                    capturingActionID = action.id
-                } label: {
-                    Text(
-                        isCapturing
-                            ? "Press keys..."
-                            : HotkeyRegistry
-                            .displayString(for: values[action.id] ?? "disabled")
-                    )
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-                .frame(width: Self.keybindColumn)
-
-                // Both trailing controls in ONE box of `trailingColumn`, spaced
-                // zero: as two siblings they added an extra inter-child gap and
-                // the clear button's own intrinsic width, which is what pushed
-                // every row's columns left of the header labels.
-                HStack(spacing: 0) {
-                    Button {
-                        values[action.id] = "disabled"
-                        HotkeyRegistry.setShortcutString("disabled", for: action)
-                        if capturingActionID == action.id {
-                            capturingActionID = nil
-                            HotkeyCaptureState.shared.isCapturing = false
-                        }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    // Nothing to clear on an already-unmapped action, and a
-                    // live control that does nothing reads as broken.
-                    .disabled(isUnmapped)
-                    .help("Clear this keybind")
-                    .frame(width: Self.clearColumn)
-
-                    // Space is always reserved: shown conditionally, a conflict
-                    // would shift that row's columns out of line with every
-                    // other row — in exactly the row asking to be read closely.
+                    // Space is always reserved: shown conditionally, a
+                    // conflict would shift that row's columns out of line
+                    // with every other row — in exactly the row asking to be
+                    // read closely.
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(MactermTheme.warning)
                         .opacity(partners.isEmpty ? 0 : 1)
@@ -2035,11 +1987,30 @@ private struct KeymapSettings: View {
             // than left silent: the binding still works inside Macterm, so
             // nothing looks broken until the user tries it from another app —
             // where the keystroke never reaches us at all.
-            if let refusal = globalHotkeys.refusals[.action(action)] {
+            if let refusal = globalHotkeys.refusals[binding] {
                 Text(refusal.message)
                     .font(.system(size: 11))
                     .foregroundStyle(MactermTheme.warning)
             }
+        }
+    }
+
+    /// The flags that are on, as small gray glyphs after the title: with the
+    /// toggles inside the row's menu, this is what keeps a Global or a
+    /// Pass to TUI keybind visible at a glance.
+    @ViewBuilder
+    private func flagGlyphs(global: Bool, passthrough: Bool) -> some View {
+        if global {
+            Image(systemName: "globe")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(Self.globalTitle)
+        }
+        if passthrough {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(Self.passthroughTitle)
         }
     }
 }
