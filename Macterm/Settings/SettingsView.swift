@@ -2129,9 +2129,10 @@ private struct UpdatesSettings: View {
 
                 Text(
                     "Macterm checks for updates one time each day. When this setting is on, Macterm downloads "
-                        + "an update in the background and installs it when you quit. When this setting is off, a "
-                        + "toolbar button shows that an update is available. Macterm checks an EdDSA signature on "
-                        + "each update. Macterm collects no analytics."
+                        + "an update in the background and installs it when you quit. A toolbar button lets you "
+                        + "restart and install it immediately. When this setting is off, a toolbar button shows "
+                        + "that an update is available. Macterm checks an EdDSA signature on each update. Macterm "
+                        + "collects no analytics."
                 )
                 .settingsCaption()
             }
