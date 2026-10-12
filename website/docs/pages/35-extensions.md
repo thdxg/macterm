@@ -325,12 +325,12 @@ nodes:
       - { title: Stop, action: { run: docker stop "$CONTAINER" } }
 ```
 
-### SSH hosts
+### SSH
 
 This palette lists the hosts that are named in `~/.ssh/config`. It leaves out wildcard patterns. It does not list hosts in an `Include`d file.
 
 ```yaml title="~/.config/macterm/extensions/ssh/palettes/ssh.yaml"
-name: SSH Hosts
+name: SSH
 description: Hosts from ~/.ssh/config
 root: hosts
 nodes:
