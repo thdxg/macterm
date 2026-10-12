@@ -27,8 +27,27 @@ final class WindowState: Identifiable {
     let id = UUID()
 
     /// The project this window is showing. Independent per window — that is
-    /// the whole point.
-    var activeProjectID: UUID?
+    /// the whole point. A project that becomes active opens its sidebar
+    /// section, so the user sees the tab they are in.
+    var activeProjectID: UUID? {
+        didSet {
+            guard activeProjectID != oldValue else { return }
+            expandActiveProject()
+        }
+    }
+
+    /// The projects whose sidebar sections are open in this window.
+    ///
+    /// Per window, and persisted (`WindowSnapshot.expandedProjectIDs`), so a
+    /// relaunch keeps each section open or closed as the user left it. It
+    /// lived on the sidebar's view state before, which the next launch built
+    /// empty: every project except the active one came back closed.
+    ///
+    /// Model state and not view state because the restore writes it before
+    /// the sidebar builds, and the active-project rule above must run in the
+    /// same order as the restore: project first, then the saved set over it.
+    /// A saved set that closed the active project therefore stays closed.
+    var expandedProjects: Set<UUID> = []
 
     /// The tab this window shows for each project it has visited, keyed by
     /// project id.
@@ -141,5 +160,12 @@ final class WindowState: Identifiable {
     init(activeProjectID: UUID? = nil, sidebarWidth: Double? = nil) {
         self.activeProjectID = activeProjectID
         self.sidebarWidth = sidebarWidth ?? Preferences.shared.sidebarWidth
+        expandActiveProject()
+    }
+
+    /// The pinned workspace has no section to open.
+    private func expandActiveProject() {
+        guard let activeProjectID, activeProjectID != PinnedTabs.projectID else { return }
+        expandedProjects.insert(activeProjectID)
     }
 }

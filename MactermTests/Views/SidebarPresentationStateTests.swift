@@ -43,16 +43,14 @@ struct SidebarPresentationStateTests {
     }
 
     @Test
-    func selection_and_expansion_live_on_the_shared_state() {
+    func selection_lives_on_the_shared_state() {
         let state = SidebarPresentationState()
         let projectID = UUID()
         let tabID = UUID()
 
-        state.expandedProjects.insert(projectID)
         state.selection = [.tab(projectID: projectID, tabID: tabID)]
         state.scrollPosition = .tab(projectID: projectID, tabID: tabID)
 
-        #expect(state.expandedProjects == [projectID])
         #expect(state.selection == [.tab(projectID: projectID, tabID: tabID)])
         #expect(state.scrollPosition == .tab(projectID: projectID, tabID: tabID))
     }

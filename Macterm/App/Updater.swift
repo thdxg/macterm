@@ -93,6 +93,12 @@ final class Updater {
         // Now that callbacks are wired, actually start the updater. Local,
         // Debug, and benchmark builds skip it (see `startUpdater` above).
         if startUpdater {
+            // Checks are not a user choice: the daily check only reads the
+            // appcast, and the toolbar flag is how an update gets seen at all.
+            // This also turns checks back on for a user who switched the old
+            // "Check for updates automatically" toggle off. The one toggle that
+            // remains is `automaticallyDownloadsUpdates`.
+            controller.updater.automaticallyChecksForUpdates = true
             controller.startUpdater()
         }
     }
@@ -103,11 +109,10 @@ final class Updater {
         controller.checkForUpdates(nil)
     }
 
-    var automaticallyChecksForUpdates: Bool {
-        get { updater.automaticallyChecksForUpdates }
-        set { updater.automaticallyChecksForUpdates = newValue }
-    }
-
+    /// Settings → Updates → "Update automatically". On: Sparkle downloads a
+    /// found update in the background and installs it when the app quits, so
+    /// the next launch is the new version. Off: the scheduled check only shows
+    /// the toolbar button.
     var automaticallyDownloadsUpdates: Bool {
         get { updater.automaticallyDownloadsUpdates }
         set { updater.automaticallyDownloadsUpdates = newValue }

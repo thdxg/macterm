@@ -320,6 +320,7 @@ struct MainWindow: View {
             // After the restore, so the saved windows' projects exist. This
             // window adopts the first saved entry and opens the rest (#345).
             appState.restoreWindows(adopting: windowState)
+            appState.presentUpdateNoticeIfNeeded()
         }
         .onContinuousHover(coordinateSpace: .local) { phase in
             handleSidebarPeekHover(phase)
@@ -344,6 +345,9 @@ struct MainWindow: View {
             // built with the app-wide one. A write from `persistSidebarWidth`
             // is the handoff's own width again, and changes nothing.
             _ = sidebarWidthHandoff.adoptStoredWidth(CGFloat(width))
+        }
+        .onChange(of: windowState.expandedProjects) {
+            appState.noteSidebarChanged()
         }
         .onChange(of: windowState.sidebarVisible) { _, visible in
             let isInitialReconciliation = initialSidebarVisibilityBeingApplied == visible
@@ -488,7 +492,7 @@ struct MainWindow: View {
         // the next window you open should match what you just set (#345).
         if abs(rounded - windowState.sidebarWidth) >= 0.5 {
             windowState.sidebarWidth = rounded
-            appState.noteSidebarWidthChanged()
+            appState.noteSidebarChanged()
         }
         guard abs(rounded - preferences.sidebarWidth) >= 0.5 else { return }
         preferences.sidebarWidth = rounded

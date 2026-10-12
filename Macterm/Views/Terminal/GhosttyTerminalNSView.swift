@@ -779,12 +779,19 @@ final class GhosttyTerminalNSView: NSView {
     ///
     /// The bool is "visible" (matches Ghostty's own `updateOcclusionState`):
     /// true when the surface's window reports `.visible`, false otherwise —
-    /// including when the view has no window at all. `rendersForPreview`
-    /// overrides that verdict for as long as it is set.
+    /// including when the view has no window at all. A window that has not
+    /// reported its occlusion yet counts as visible while it is on screen
+    /// (`SurfaceVisibility`). `rendersForPreview` overrides that verdict for
+    /// as long as it is set.
     private func syncOcclusion() {
         guard let surface else { return }
-        let visible = rendersForPreview ||
-            (!hiddenInLayout && (window?.occlusionState.contains(.visible) ?? false))
+        let visible = SurfaceVisibility.isVisible(
+            rendersForPreview: rendersForPreview,
+            hiddenInLayout: hiddenInLayout,
+            windowIsVisible: window?.isVisible ?? false,
+            windowReportsVisible: window?.occlusionState.contains(.visible) ?? false,
+            windowHasReportedOcclusion: window.map(WindowOcclusionReports.hasReported) ?? false
+        )
         ghostty_surface_set_occlusion(surface, visible)
     }
 
@@ -922,8 +929,11 @@ final class GhosttyTerminalNSView: NSView {
             forName: NSWindow.didChangeOcclusionStateNotification,
             object: window,
             queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.syncOcclusion() }
+        ) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                if let window { WindowOcclusionReports.noteReport(from: window) }
+                self?.syncOcclusion()
+            }
         }
         windowObservers = [backing, screen, occlusion]
         syncOcclusion()

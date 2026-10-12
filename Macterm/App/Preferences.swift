@@ -515,6 +515,14 @@ final class Preferences {
         set { defaults.set(newValue, forKey: Keys.hasSeededFirstRun) }
     }
 
+    /// The `CFBundleShortVersionString` of the previous launch. `UpdateNotice`
+    /// compares it with the running version to show the update toast. Like
+    /// `hasSeededFirstRun`: nothing in the UI reads it, so it's a read-through.
+    var lastLaunchedVersion: String? {
+        get { defaults.string(forKey: Keys.lastLaunchedVersion) }
+        set { defaults.set(newValue, forKey: Keys.lastLaunchedVersion) }
+    }
+
     /// Slide the hidden sidebar out while the pointer sits at the window's
     /// leading edge, and back in when it leaves (`MainWindow`'s hover peek).
     var peekSidebarWhenHidden: Bool {
@@ -1147,6 +1155,7 @@ final class Preferences {
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let installationID = "macterm.installationID"
         static let hasSeededFirstRun = "macterm.firstRun.seeded"
+        static let lastLaunchedVersion = "macterm.lastLaunchedVersion"
         static let migrationV2GhosttyConfigOwned = "macterm.migration.v2_ghostty_config_owned"
         static let migrationRetiredToggleKeys = "macterm.migration.retired_toggle_keys"
         static let migrationRetiredPaneDimKey = "macterm.migration.retired_pane_dim_key"

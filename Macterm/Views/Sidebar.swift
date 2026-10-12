@@ -415,17 +415,14 @@ struct SidebarContent: View {
                 }
             }
         }
-        .onChange(of: windowState.activeProjectID) { _, newID in
-            if let newID, newID != PinnedTabs.projectID {
-                presentation.expandedProjects.insert(newID)
-            }
+        .onChange(of: windowState.activeProjectID) {
+            // `WindowState` opens the section of the new project itself.
             syncSelection()
         }
         .onChange(of: activeTabID) {
             syncSelection()
         }
         .onAppear {
-            if let id = windowState.activeProjectID { presentation.expandedProjects.insert(id) }
             syncSelection()
         }
         .overlay(alignment: .top) {
@@ -450,7 +447,7 @@ struct SidebarContent: View {
     /// list, which may be well below the fold.
     private func openDroppedFolders(_ paths: [String]) {
         guard let project = appState.openProjects(atPaths: paths, store: projectStore, in: windowState) else { return }
-        presentation.expandedProjects.insert(project.id)
+        windowState.expandedProjects.insert(project.id)
         presentation.scrollPosition = .project(project.id)
     }
 
@@ -530,12 +527,12 @@ struct SidebarContent: View {
         let ws = appState.workspaces[project.id]
         let tabs = ws?.tabs ?? []
         DisclosureGroup(isExpanded: Binding(
-            get: { presentation.expandedProjects.contains(project.id) },
+            get: { windowState.expandedProjects.contains(project.id) },
             set: {
                 if $0 {
-                    presentation.expandedProjects.insert(project.id)
+                    windowState.expandedProjects.insert(project.id)
                 } else {
-                    presentation.expandedProjects.remove(project.id)
+                    windowState.expandedProjects.remove(project.id)
                 }
             }
         )) {
@@ -640,7 +637,7 @@ struct SidebarContent: View {
             // project drags (the union payload can't be inspected here); the
             // hovered header itself doesn't move when it expands, so the
             // drop stays on target.
-            if targeted { presentation.expandedProjects.insert(project.id) }
+            if targeted { windowState.expandedProjects.insert(project.id) }
         }
     }
 
@@ -655,7 +652,7 @@ struct SidebarContent: View {
         }
         for project in projectStore.projects {
             items.append(.project(project.id))
-            guard presentation.expandedProjects.contains(project.id) else { continue }
+            guard windowState.expandedProjects.contains(project.id) else { continue }
             items.append(contentsOf: (appState.workspaces[project.id]?.tabs ?? []).map {
                 .tab(projectID: project.id, tabID: $0.id)
             })
@@ -690,7 +687,7 @@ struct SidebarContent: View {
                 )
             }
         }
-        presentation.expandedProjects.insert(project.id)
+        windowState.expandedProjects.insert(project.id)
     }
 
     /// Apply a pane drag-and-drop: the pane leaves its split tree and becomes
@@ -709,7 +706,7 @@ struct SidebarContent: View {
                 at: index
             )
         }
-        presentation.expandedProjects.insert(project.id)
+        windowState.expandedProjects.insert(project.id)
     }
 
     /// Apply a project drag-and-drop onto a section (header or tab row): move
@@ -843,7 +840,7 @@ struct SidebarContent: View {
     private func createTab(in project: Project) {
         appState.selectProject(project, in: windowState)
         appState.createTab(projectID: project.id, projects: projectStore.projects)
-        presentation.expandedProjects.insert(project.id)
+        windowState.expandedProjects.insert(project.id)
     }
 
     /// `createTab(in:)` with the worktree's directory as the working directory
@@ -851,7 +848,7 @@ struct SidebarContent: View {
     private func createTab(in project: Project, worktree: GitWorktree) {
         appState.selectProject(project, in: windowState)
         appState.createTab(projectID: project.id, projects: projectStore.projects, workingDirectory: worktree.path)
-        presentation.expandedProjects.insert(project.id)
+        windowState.expandedProjects.insert(project.id)
     }
 
     /// A pinned row's menu — two exits with distinct semantics: Unpin (a
@@ -892,7 +889,7 @@ struct SidebarContent: View {
                             to: destination.id,
                             destPath: destination.path
                         )
-                        presentation.expandedProjects.insert(destination.id)
+                        windowState.expandedProjects.insert(destination.id)
                     }
                 }
             }
@@ -942,7 +939,7 @@ struct SidebarContent: View {
                 ForEach(moveTargets) { destination in
                     Button(destination.name) {
                         appState.moveTab(tab.id, from: project.id, to: destination.id, destPath: destination.path)
-                        presentation.expandedProjects.insert(destination.id)
+                        windowState.expandedProjects.insert(destination.id)
                     }
                 }
             }
@@ -969,11 +966,10 @@ struct SidebarContent: View {
         }
     }
 
-    /// Remove a single project: drop its workspace and its `ProjectStore` entry,
-    /// and collapse its disclosure. Shared by the single-item menu and the
-    /// bulk path so both prune identically.
+    /// Remove a single project: drop its workspace (which also drops it from
+    /// every window's open sections) and its `ProjectStore` entry. Shared by
+    /// the single-item menu and the bulk path so both prune identically.
     private func removeProject(_ project: Project) {
-        presentation.expandedProjects.remove(project.id)
         appState.removeProject(project.id)
         projectStore.remove(id: project.id)
     }
@@ -1013,7 +1009,7 @@ struct SidebarContent: View {
 
     private func openProject() {
         if let project = appState.openProject(store: projectStore) {
-            presentation.expandedProjects.insert(project.id)
+            windowState.expandedProjects.insert(project.id)
         }
     }
 

@@ -668,6 +668,129 @@ struct WindowStateTests {
         #expect(opened.sidebarWidth == Preferences.defaultSidebarWidth)
     }
 
+    /// A store with one project and one saved window on it, and a fresh
+    /// `AppState` that has read it back — the launch, up to `restoreWindows`.
+    private func relaunchWithOneSavedWindow() -> (AppState, Project) {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.restoreSelection(projects: [p])
+        writer.selectProject(p)
+        writer.registerWindow(WindowState(activeProjectID: p.id))
+        writer.saveWorkspaces()
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.restoreSelection(projects: [p])
+        return (reader, p)
+    }
+
+    @Test
+    func a_window_adopted_before_it_registers_renders_the_real_tab() throws {
+        // The launch task gives the scene's window its project before the
+        // window attaches, and the window renders its tab in that gap. It got
+        // a shadow then: each pane built a mirror surface and a second zmx
+        // client, and registration threw both away and built the real pane
+        // again.
+        let (state, project) = relaunchWithOneSavedWindow()
+        let first = WindowState()
+        state.restoreWindows(adopting: first)
+
+        let before = try #require(state.viewTab(for: project.id, in: first))
+        #expect(!before.isMirror)
+
+        state.registerWindow(first)
+        let after = try #require(state.viewTab(for: project.id, in: first))
+        #expect(!after.isMirror)
+        #expect(after.tab === before.tab, "registration keeps the panes the window already renders")
+    }
+
+    @Test
+    func a_registered_window_keeps_a_tab_that_an_adopted_window_also_shows() {
+        let (state, project) = relaunchWithOneSavedWindow()
+        let registered = WindowState(activeProjectID: project.id)
+        state.registerWindow(registered)
+        let first = WindowState()
+        state.restoreWindows(adopting: first)
+
+        #expect(state.viewTab(for: project.id, in: registered)?.isMirror == false)
+        #expect(state.viewTab(for: project.id, in: first)?.isMirror == true)
+    }
+
+    @Test
+    func each_window_keeps_its_open_project_sections_across_a_relaunch() {
+        // The sections were view state, rebuilt empty at every launch: every
+        // project but the active one came back closed. A closed active
+        // project must stay closed too, although activation opens it.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-\(UUID().uuidString).json")
+        let projects = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macterm-window-tests-projects-\(UUID().uuidString)", isDirectory: true)
+        let files = ProjectFileStore(directoryURL: projects)
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+        let q = Project(name: "q", path: "/tmp/q", sortOrder: 1)
+        let r = Project(name: "r", path: "/tmp/r", sortOrder: 2)
+
+        let writer = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        writer.restoreSelection(projects: [p, q, r])
+        let w1 = WindowState(activeProjectID: p.id)
+        w1.expandedProjects = [q.id, r.id]
+        let w2 = WindowState(activeProjectID: q.id)
+        w2.expandedProjects = [q.id, p.id]
+        writer.registerWindow(w1)
+        writer.registerWindow(w2)
+        writer.saveWorkspaces()
+
+        let reader = AppState(workspaceStore: WorkspaceStore(fileURL: tmp), projectFiles: files)
+        reader.restoreSelection(projects: [p, q, r])
+        let first = WindowState()
+        reader.restoreWindows(adopting: first)
+        reader.registerWindow(first)
+        let second = WindowState()
+        reader.registerWindow(second)
+
+        #expect(first.activeProjectID == p.id)
+        #expect(first.expandedProjects == [q.id, r.id], "the closed active project stays closed")
+        #expect(second.expandedProjects == [q.id, p.id])
+
+        // A window the user opens afterwards opens only its active project.
+        let opened = WindowState()
+        reader.registerWindow(opened)
+        #expect(opened.expandedProjects == Set([opened.activeProjectID].compactMap(\.self)))
+    }
+
+    @Test
+    func activating_a_project_opens_its_section_and_removing_it_forgets_it() {
+        let state = makeAppState()
+        let p = Project(name: "p", path: "/tmp", sortOrder: 0)
+        let q = Project(name: "q", path: "/tmp/q", sortOrder: 1)
+        state.restoreSelection(projects: [p, q])
+        let window = WindowState(activeProjectID: p.id)
+        state.registerWindow(window)
+        #expect(window.expandedProjects == [p.id])
+
+        window.expandedProjects.remove(p.id)
+        window.activeProjectID = q.id
+        #expect(window.expandedProjects == [q.id], "only a change of project opens a section")
+
+        window.activeProjectID = PinnedTabs.projectID
+        #expect(window.expandedProjects == [q.id], "the pinned workspace has no section")
+
+        state.removeProject(q.id)
+        #expect(!window.expandedProjects.contains(q.id))
+    }
+
+    @Test
+    func a_snapshot_saved_before_sections_were_persisted_opens_the_active_project() throws {
+        let json = #"{"activeProjectID":null,"sidebarWidth":200,"isKey":true}"#
+        let snapshot = try JSONDecoder().decode(WindowSnapshot.self, from: Data(json.utf8))
+        #expect(snapshot.expandedProjectIDs == nil)
+    }
+
     @Test
     func a_snapshot_saved_before_frames_were_persisted_still_restores() throws {
         // `frame` is optional, so a v6 file written by an older build decodes
