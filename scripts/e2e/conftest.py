@@ -5,7 +5,7 @@ $HOME, isolated app data + zmx namespace, Darwin-notification control — see
 scripts/_harness.py, shared with the benchmark) and asserted against through
 the bundled `macterm` CLI, whose `pane dump`/`pane inspect`/`pane list` read
 libghostty's own live state. `mise run e2e` builds the Debug app and runs
-this; `pytest e2e --app <path>` targets an already-built app.
+this; `pytest scripts/e2e --app <path>` targets an already-built app.
 
 Isolation model: launching the app costs ~15-30s on a shared runner, so ONE
 instance serves the whole session. Tests own their blast radius instead —
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts"))
 
 from _harness import HarnessError, MactermHarness, wait_for  # noqa: E402

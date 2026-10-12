@@ -1345,7 +1345,7 @@ struct ControlHandlerTests {
         _ = seedProject(appState, projectStore)
         // `--no-submit` changes only the trailing newline, so it inherits
         // pane.run's guards unchanged. (That the newline is actually withheld
-        // needs a live surface — e2e/test_terminal_io.py proves that half.)
+        // needs a live surface — scripts/e2e/test_terminal_io.py proves that half.)
         let response = await handler.handle(
             request("pane.run", args: ControlArgs(run: "git status", submit: false))
         )

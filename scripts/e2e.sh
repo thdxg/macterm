@@ -33,5 +33,5 @@ if [ ! -x "$VENV/bin/pytest" ]; then
   "$VENV/bin/pip" install --quiet pytest==8.4.1
 fi
 
-"$VENV/bin/pytest" e2e -v \
+"$VENV/bin/pytest" scripts/e2e -v \
   --app "$DERIVED_DATA/Build/Products/Debug/Macterm Debug.app"

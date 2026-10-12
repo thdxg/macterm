@@ -1,7 +1,7 @@
 """Shared harness for scripted, hermetic Macterm instances.
 
 Extracted from benchmark.py so the resource benchmark and the e2e suite
-(e2e/) launch and drive the app through one code path. The recipe — every
+(scripts/e2e/) launch and drive the app through one code path. The recipe — every
 piece of it earned against real CI runners:
 
 - Launch via LaunchServices (`open -n --env…`), never by exec'ing the binary:

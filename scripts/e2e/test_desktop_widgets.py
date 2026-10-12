@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from _harness import MactermHarness, wait_for
 
-DIAG_ROOT = Path(__file__).resolve().parent.parent / "build" / "e2e" / "diagnostics"
+DIAG_ROOT = Path(__file__).resolve().parents[2] / "build" / "e2e" / "diagnostics"
 
 
 def _widgets(app):

@@ -89,7 +89,7 @@ CI blocks your PR when one of these checks fails. Run them on your Mac first to 
 ## Tests
 
 - **Unit tests** are in `MactermTests/`. Run them with `mise run test`. Each production type has one `XxxTests.swift` file, in the same path as the source. The tests run inside the Debug app. They cover the model, persistence, palette and hotkey logic. They do not cover SwiftUI views or the libghostty bindings.
-- **End-to-end tests** are in `e2e/`. Run them with `mise run e2e`. This pytest suite starts the real app in an isolated environment. It controls the app with the bundled `macterm` CLI. You need `python3`. The script makes its own virtual environment in `build/`. The app takes about 15 to 30 seconds to start, so these tests are slower than the unit tests. Do not run them before every commit. Run them when you change panes, sessions, layouts or the control socket.
+- **End-to-end tests** are in `scripts/e2e/`. Run them with `mise run e2e`. This pytest suite starts the real app in an isolated environment. It controls the app with the bundled `macterm` CLI. You need `python3`. The script makes its own virtual environment in `build/`. The app takes about 15 to 30 seconds to start, so these tests are slower than the unit tests. Do not run them before every commit. Run them when you change panes, sessions, layouts or the control socket.
 
 ## Pull requests
 

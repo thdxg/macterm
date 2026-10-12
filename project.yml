@@ -145,7 +145,7 @@ targets:
           # literal; PRODUCT_MODULE_NAME is pinned above so the Swift module
           # name doesn't follow; and everything pointing at the built Debug
           # bundle by path (MactermTests' TEST_HOST, scripts/run.sh,
-          # scripts/e2e.sh, e2e/conftest.py) names "Macterm Debug.app".
+          # scripts/e2e.sh, scripts/e2e/conftest.py) names "Macterm Debug.app".
           PRODUCT_NAME: Macterm Debug
     dependencies:
       # Build ordering only: the post-build script copies the CLI binary into

@@ -11,7 +11,7 @@ signal; the near-redundant idle unfocused/minimized states were dropped to cut
 false-positive labels — fewer cells, fewer noise trips.)
 
 The launch/drive/teardown machinery lives in _harness.py, shared with the e2e
-suite (e2e/) — this file owns only the sampling and reporting.
+suite (scripts/e2e/) — this file owns only the sampling and reporting.
 
 Per state: settle, then sample several short windows and report the
 per-metric median — each window reads the process's CPU-time delta (the

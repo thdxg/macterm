@@ -30,7 +30,6 @@ jobs:
               - "project.yml"
               - "mise.toml"
               - "scripts/**"
-              - "e2e/**"
               - ".github/workflows/test.yml"
               # The Xcode pin lives here; a bump must rebuild what it governs.
               - ".github/actions/select-xcode/**"
@@ -242,7 +241,7 @@ jobs:
         run: mise run e2e --verbose
 
       # Screenshot, unified log, and per-pane terminal text captured by the
-      # suite's failure fixtures (e2e/conftest.py).
+      # suite's failure fixtures (scripts/e2e/conftest.py).
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v7

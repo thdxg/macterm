@@ -191,7 +191,7 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
   - **An entry with an empty prompt is only for on-demand use** (`PasswordEntryID.isOnDemandOnly`). Detection never reads an empty prompt line, so nothing ever autofills it. Its keychain account is `<command> — on demand`.
   - The screen is also an action that you can bind (`HotkeyAction.passwordManager`). It has no keybind by default, because ⌥⌘F belongs to Autofill. It is in the View menu. It toggles the palette on that screen (`AppState.toggleCommandPalette(scope:)`). While the palette is up, the app responder stands aside, so `PaletteResponder` answers that chord itself.
   - You add entries from the `+` of Settings, or from the Add rows of the palette. Both use `PasswordEditorSheet`, which Details… shares. `MainWindow` presents the copy of the palette from `WindowState.passwordEditor`. The sheet **requires a command**. Only detection creates entries with only a prompt (key passphrases, `read -s`). You can edit them as they are. You never create them, and you never make them by hand.
-- **`pane password` (DEBUG only)** reads the phase, prompt, command and bubble of a pane. It never reads a secret. `--answer accept|dismiss|autofill` presses the buttons of the bubble. `e2e/test_passwords.py` drives the whole flow with it against a `stty -echo; read` script.
+- **`pane password` (DEBUG only)** reads the phase, prompt, command and bubble of a pane. It never reads a secret. `--answer accept|dismiss|autofill` presses the buttons of the bubble. `scripts/e2e/test_passwords.py` drives the whole flow with it against a `stty -echo; read` script.
 - **Never** add a CLI verb, an App Intent or a log line that carries a secret. Any process in a pane can call `macterm`.
   - Autofill Password is an `AppCommand` (default ⌥⌘F). Its action is nil unless the focused pane is at a saved prompt. As for every chord with a nil action, `isAppShortcut` then swallows it in `keyDown`. It does nothing, and it does not reach libghostty (which has no default on `super+alt+f`).
 
@@ -785,8 +785,8 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
     - Matching is the matching of `Macterm/Search/`.
 - `Macterm/Search/`: `SearchText` (prepared, folded text), `SearchScoring` (the scoring of fzf and the positions of highlights), and `SearchIndex` with `SearchSession` and `Search` (the engine, see Search).
 - `CLI/`: the `macterm` binary. `MactermCommand` (the ArgumentParser tree), `ControlClient`, `Output`, `SSHCommand`, `TutorCommand`, `SkillsCommand`, `WidgetCommand`, and `PaletteCommand` (`palette list`, and the hidden runner `palette exec`).
-- `scripts/`: `setup.sh`, `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh` and `benchmark.py` with `_harness.py` (`MactermHarness`, shared with e2e). It also has `e2e.sh`, `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
-- `e2e/` is the pytest suite. `website/` has the docs site (`docs/pages/*.md`) and the Caddyfile that serves the update feed.
+- `scripts/`: `setup.sh`, `build.sh`, `_lib.sh` (version mapping, update channel), `publish-appcast.sh` and `benchmark.py` with `_harness.py` (`MactermHarness`, shared with e2e). It also has `e2e.sh` with `e2e/` (the pytest suite), `ghosttykit-api-diff.sh`, `ghostty-shim.sh` and `record-demos/` (the demo clips of the website).
+- `website/` has the docs site (`docs/pages/*.md`) and the Caddyfile that serves the update feed.
 
 ## Tests
 
@@ -799,7 +799,7 @@ There is one `XxxTests.swift` for each production type. It mirrors the source pa
 - The coverage targets the model, persistence, palette and hotkey logic, and pure helpers. Nothing unit-tests SwiftUI views and the bindings of libghostty.
 - A wait that polls for a condition must sleep. Do not use `Task.yield()` in a loop with a fixed count.
 
-### End-to-end (`e2e/`)
+### End-to-end (`scripts/e2e/`)
 
 The suite starts the real Debug app in a hermetic way through `MactermHarness`. It uses a throwaway `$HOME`, `MACTERM_BENCHMARK_DATA_DIR` and `ZMX_DIR`. The socket directory of zmx is per user. Without the override, a hermetic instance would share sessions with the real Macterm of the developer. The suite asserts through the CLI (`pane dump` and others read the live state of libghostty).
 
