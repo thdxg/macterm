@@ -615,4 +615,73 @@ struct PaletteRegistryTests {
         #expect(adopted.source?.files == entry.shas, "the same files: it came from the repository")
         #expect(!adopted.isModified)
     }
+
+    /// A server whose tree at `main` holds `entries`, each file with its
+    /// real Git blob SHA, and serves their text.
+    private static func serving(_ entries: [PaletteRegistry.Entry]) -> Server {
+        let server = Server()
+        var files: [(path: String, mode: String)] = []
+        var shas: [String: String] = [:]
+        for entry in entries {
+            for (path, text) in entry.texts {
+                files.append(("\(entry.id)/\(path)", "100644"))
+                shas["\(entry.id)/\(path)"] = ExtensionSource.blobSHA(Data(text.utf8))
+                server.serve(ref: "main", id: entry.id, path, text)
+            }
+        }
+        server.responses[PaletteRegistry.treeURL(ref: "main").absoluteString] = (Self.tree(files, shas: shas), 200)
+        return server
+    }
+
+    @Test
+    func auto_update_takes_only_the_updates_that_need_no_question() async throws {
+        let store = try makeStore()
+        let installer = PaletteRegistry(ref: "main", fetch: Server().fetch)
+        let readme = "# Mine\n\nMy notes.\n"
+        for id in ["untouched", "changed", "unrecorded", "current"] {
+            try await installer.install(Self.entry(id), into: store)
+        }
+        let changed = store.extensionsURL.appendingPathComponent("changed/README.md")
+        try readme.write(to: changed, atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: store.extensionsURL.appendingPathComponent("unrecorded/\(MactermExtension.sourceName)"))
+        store.reload()
+
+        let newer = { (id: String) in Self.entry(id, palettes: ["pods.yaml": Self.pods, "contexts.yaml": Self.contexts]) }
+        let registry = [newer("untouched"), newer("changed"), newer("unrecorded"), Self.entry("current"), newer("other")]
+        #expect(
+            ExtensionAutoUpdater.pending(installed: store.extensions, registry: registry).map(\.id) == ["untouched"],
+            "not a changed copy, not a copy with no record, not one that is current, not one that is not installed"
+        )
+        let future = Self.entry("untouched", palettes: ["pods.yaml": Self.pods, "future.yaml": Self.fromTheFuture])
+        #expect(ExtensionAutoUpdater.pending(installed: store.extensions, registry: [future]).isEmpty, "not one that this build can't read")
+    }
+
+    @Test
+    func auto_update_reads_nothing_while_off_and_announces_what_it_updated() async throws {
+        let store = try makeStore()
+        try await PaletteRegistry(ref: "main", fetch: Server().fetch).install(Self.entry("kubernetes"), into: store)
+        try await PaletteRegistry(ref: "main", fetch: Server().fetch).install(Self.entry("docker"), into: store)
+        let docker = store.extensionsURL.appendingPathComponent("docker/README.md")
+        try "# Mine\n\nMy notes.\n".write(to: docker, atomically: true, encoding: .utf8)
+        store.reload()
+
+        let newer = { (id: String) in Self.entry(id, palettes: ["pods.yaml": Self.pods, "contexts.yaml": Self.contexts]) }
+        let server = Self.serving([newer("kubernetes"), newer("docker")])
+        let registry = PaletteRegistry(ref: "main", fetch: server.fetch)
+        var enabled = false
+        var announced: [[String]] = []
+        let updater = ExtensionAutoUpdater(registry: registry, store: store, isEnabled: { enabled }, announce: { announced.append($0) })
+
+        #expect(await updater.runOnce().isEmpty)
+        #expect(server.treeReads == 0, "off: no read of the repository at all")
+
+        enabled = true
+        #expect(await updater.runOnce() == ["Kubernetes"])
+        #expect(announced == [["Kubernetes"]])
+        #expect(store.installedExtension(id: "kubernetes")?.paletteIDs == ["kubernetes/contexts", "kubernetes/pods"])
+        #expect(try String(contentsOf: docker, encoding: .utf8) == "# Mine\n\nMy notes.\n", "a changed copy waits for a click")
+
+        #expect(await updater.runOnce().isEmpty, "nothing left to update")
+        #expect(announced.count == 1, "no toast for nothing")
+    }
 }

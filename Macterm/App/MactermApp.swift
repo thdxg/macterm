@@ -796,6 +796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasInstalledResponders = true
         if BenchmarkControl.isEnabled {
             BenchmarkControl.connect(appState: appState, projectStore: projectStore)
+        } else {
+            // A benchmark or an e2e run reads no network, as for Sparkle.
+            appState.performWhenRestored { appState.extensionAutoUpdater.start() }
         }
         let handler = ControlHandler(appState: appState, projectStore: projectStore)
         controlHandler = handler
