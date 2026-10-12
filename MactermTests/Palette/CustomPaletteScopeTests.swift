@@ -424,6 +424,49 @@ struct CustomPaletteScopeTests {
         #expect(pane.env?["HOST"] == "a")
     }
 
+    /// A `cwd:` opens a terminal in its directory: relative to the project,
+    /// a plain shell when there is no `run:`, the command in the env when
+    /// there is one. A directory that is not there, or a remote project,
+    /// opens nothing.
+    @Test
+    func a_cwd_action_opens_a_terminal_in_its_directory() throws {
+        let (context, _, _) = try makeContext(files: [:])
+        let state = context.appState
+        let project = try #require(context.projectStore.projects.first)
+        let name = "macterm-cwd-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: "/tmp/\(name)", withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: "/tmp/\(name)") }
+        let perform = { (action: CustomPaletteAction, operand: String?) in
+            CustomPaletteActions.perform(action, operand: operand, exports: [:], appState: state, projects: context.projectStore.projects)
+        }
+
+        perform(.run(command: nil, in: .tab, cwd: ".path"), name)
+        let shell = try #require(state.focusedPane(for: project.id))
+        #expect(shell.projectPath == "/tmp/\(name)", "relative to the project")
+        #expect(shell.command == nil)
+        #expect(shell.env?[CustomPaletteScript.commandVariable] == nil, "no run: is a plain shell")
+
+        perform(.run(command: "make", in: .split, cwd: "/tmp/\(name)/"), "/tmp/\(name)/")
+        let tab = try #require(state.workspaces[project.id]?.activeTab)
+        #expect(tab.splitRoot.allPanes().count == 2, "in: split splits")
+        let split = try #require(state.focusedPane(for: project.id))
+        #expect(split.id != shell.id)
+        #expect(split.env?[CustomPaletteScript.commandVariable] == "make")
+
+        let tabs = state.workspaces[project.id]?.tabs.count
+        perform(.run(command: nil, in: .tab, cwd: ".path"), "\(name)/missing")
+        #expect(state.workspaces[project.id]?.tabs.count == tabs)
+        #expect(state.activeToast?.title == "No directory at /tmp/\(name)/missing")
+
+        let remote = Project(name: "box", path: "me@box:/srv", sortOrder: 1)
+        context.projectStore.add(remote)
+        state.selectProject(remote)
+        let remoteTabs = state.workspaces[remote.id]?.tabs.count
+        perform(.run(command: nil, in: .tab, cwd: "/tmp"), "/tmp")
+        #expect(state.workspaces[remote.id]?.tabs.count == remoteTabs)
+        #expect(state.activeToast?.title == "A remote project cannot open a directory on this Mac")
+    }
+
     /// An `open:` path a listing printed relative to the project (`git
     /// ls-files`) opens there, not under the app's `/`.
     @Test
@@ -596,7 +639,7 @@ struct CustomPaletteScopeTests {
         let rows = { CommandSource().emptyItems(context: context) ?? [] }
         let palettes = rows().filter { $0.category == AppCommand.Category.palettes.rawValue }
         #expect(
-            palettes.map(\.title) == ["Password Manager", "Worktrees", "Files", "Broken", "Kubernetes"],
+            palettes.map(\.title) == ["Password Manager", "Files", "Broken", "Kubernetes"],
             "custom palettes follow the built-in screens"
         )
         let kubernetes = try #require(palettes.first { $0.title == "Kubernetes" })

@@ -104,6 +104,9 @@ struct CustomPaletteFile: Codable, Equatable {
         var run: String?
         /// Where `run` runs: `tab` (default) or `split`.
         var `in`: String?
+        /// The directory the new terminal starts in. With no `run`, the
+        /// terminal is a plain shell there.
+        var cwd: String?
         var copy: String?
         var open: String?
     }
@@ -127,7 +130,7 @@ struct CustomPaletteFile: Codable, Equatable {
     ]
     static let itemKeys: Set<String> = ["title", "subtitle", "icon", "export", "enter", "action", "alt", "when"]
     static let conditionKeys: Set<String> = ["run", "unavailable"]
-    static let actionKeys: Set<String> = ["title", "run", "in", "copy", "open"]
+    static let actionKeys: Set<String> = ["title", "run", "in", "cwd", "copy", "open"]
 
     /// The first key the file has that no level takes, named where it is
     /// (`pods: mathc: no such key`), as every other mistake is. The decoder
@@ -208,16 +211,25 @@ enum CustomPaletteRunTarget: String, Equatable {
 
 /// A validated action: exactly one thing to do.
 enum CustomPaletteAction: Equatable {
-    case run(command: String, in: CustomPaletteRunTarget)
+    /// A new terminal. `command` runs before its shell; nil is a plain
+    /// shell. `cwd` is where it starts (a path into the row in a listing,
+    /// as `copy:` and `open:` are); nil is where a new tab or split starts.
+    case run(command: String?, in: CustomPaletteRunTarget, cwd: String? = nil)
     case copy(String)
     case open(String)
 
     init(_ action: CustomPaletteFile.Action, at place: String) throws {
-        let ops = [action.run != nil, action.copy != nil, action.open != nil].filter(\.self).count
+        if action.cwd != nil, action.copy != nil || action.open != nil {
+            throw CustomPaletteError.invalid("\(place): cwd: goes with run:, not copy: or open:")
+        }
+        let ops = [action.run != nil || action.cwd != nil, action.copy != nil, action.open != nil].filter(\.self).count
         guard ops == 1 else {
             throw CustomPaletteError.invalid("\(place): action needs exactly one of run:, copy:, open:")
         }
-        if let run = action.run {
+        if let cwd = action.cwd, cwd.trimmingCharacters(in: .whitespaces).isEmpty {
+            throw CustomPaletteError.invalid("\(place): cwd: must not be empty")
+        }
+        if action.run != nil || action.cwd != nil {
             let target: CustomPaletteRunTarget
             switch action.in {
             case nil: target = .tab
@@ -227,11 +239,11 @@ enum CustomPaletteAction: Equatable {
                 }
                 target = parsed
             }
-            self = .run(command: run, in: target)
+            self = .run(command: action.run, in: target, cwd: action.cwd)
         } else {
-            // `in:` says where a command runs; a copy or an open has none.
+            // `in:` says where a terminal opens; a copy or an open has none.
             if let raw = action.in {
-                throw CustomPaletteError.invalid("\(place): in: \(raw) goes with run:, not copy: or open:")
+                throw CustomPaletteError.invalid("\(place): in: \(raw) goes with run: or cwd:, not copy: or open:")
             }
             self = if let copy = action.copy { .copy(copy) } else { .open(action.open ?? "") }
         }
@@ -311,8 +323,10 @@ struct CustomPaletteAlt: Equatable {
 
     static func defaultTitle(_ action: CustomPaletteAction) -> String {
         switch action {
-        case .run(_, .tab): "Run in a New Tab"
-        case .run(_, .split): "Run in a Split"
+        case .run(nil, .tab, _): "Open in a New Tab"
+        case .run(nil, .split, _): "Open in a Split"
+        case .run(_, .tab, _): "Run in a New Tab"
+        case .run(_, .split, _): "Run in a Split"
         case .copy: "Copy"
         case .open: "Open"
         }

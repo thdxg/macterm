@@ -58,8 +58,7 @@ enum DockMenu {
         case .newTab,
              .openProject,
              .toggleCommandPalette,
-             .passwordManager,
-             .worktrees: .frontTerminalWindow
+             .passwordManager: .frontTerminalWindow
         case .toggleQuickTerminal: .none
         default: .activate
         }

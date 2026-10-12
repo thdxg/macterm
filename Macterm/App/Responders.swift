@@ -260,8 +260,8 @@ final class MainAppResponder: KeyResponder {
         if let action = HotkeyAction.allCases.first(where: { HotkeyRegistry.matches(event, action: $0) }) {
             let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
             guard let run = action.appCommand.action(in: ctx) else {
-                // Unavailable for a reason worth saying (Worktrees outside a
-                // repository): say it rather than hand the chord on.
+                // Unavailable for a reason worth saying (Files in a remote
+                // project): say it rather than hand the chord on.
                 guard let notice = action.appCommand.unavailableNotice(in: ctx) else { return .passThrough }
                 appState.presentToast(notice)
                 return .handled

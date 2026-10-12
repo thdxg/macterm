@@ -276,8 +276,8 @@ final class CustomPaletteScope: PaletteScope {
         let search = SearchQuery(query.trimmed)
         let written: [PaletteItem] = node.items.enumerated().compactMap { index, entry in
             guard let match = Search.match(search, fields: [entry.title, entry.subtitle].compactMap(\.self)) else { return nil }
-            // Every value in a written item is literal, so a `copy:` or
-            // `open:` operand is the action's own text.
+            // Every value in a written item is literal, so a `copy:`,
+            // `open:` or `cwd:` operand is the action's own text.
             return item(Row(
                 id: "menu:\(index)",
                 title: entry.title,
@@ -431,11 +431,12 @@ final class CustomPaletteScope: PaletteScope {
 }
 
 private extension CustomPaletteOutcome {
-    /// A written item's `copy:` or `open:` text, which is literal.
+    /// A written item's `copy:`, `open:` or `cwd:` text, which is literal.
     var literalOperand: String? {
         switch self {
         case let .perform(.copy(text)),
-             let .perform(.open(text)): text
+             let .perform(.open(text)),
+             let .perform(.run(_, _, text?)): text
         case .perform(.run),
              .enter: nil
         }
@@ -453,7 +454,7 @@ enum CustomPaletteActions {
         projects: [Project]
     ) {
         switch action {
-        case let .run(command, place):
+        case let .run(command, place, cwd):
             guard let projectID = appState.activeProjectID else {
                 appState.presentToast("No project to run in")
                 return
@@ -467,15 +468,21 @@ enum CustomPaletteActions {
                     return
                 }
                 var env = CustomPaletteEnvironment.make(projectName: nil, projectDirectory: nil, exports: exports)
-                env[CustomPaletteScript.commandVariable] = CustomPaletteScript.script(command)
-                appState.splitPane(
-                    pane.id,
-                    direction: .auto(for: pane.nsView?.bounds.size ?? .zero),
-                    projectID: projectID,
-                    projectDirectory: PinnedTabs.fallbackRoot,
-                    command: nil,
-                    env: env
-                )
+                if let command { env[CustomPaletteScript.commandVariable] = CustomPaletteScript.script(command) }
+                let direction = SplitDirection.auto(for: pane.nsView?.bounds.size ?? .zero)
+                if cwd != nil {
+                    guard let directory = directory(operand, base: PinnedTabs.fallbackRoot, appState: appState) else { return }
+                    appState.splitPane(pane.id, direction: direction, projectID: projectID, env: env, newPaneWorkingDirectory: directory)
+                } else {
+                    appState.splitPane(
+                        pane.id,
+                        direction: direction,
+                        projectID: projectID,
+                        projectDirectory: PinnedTabs.fallbackRoot,
+                        command: nil,
+                        env: env
+                    )
+                }
                 return
             }
             guard let project = projects.first(where: { $0.id == projectID }) else {
@@ -491,7 +498,28 @@ enum CustomPaletteActions {
             // (`CustomPaletteLaunch`). A remote pane is ssh, whose environment
             // stays on this Mac, so there it is typed for the host's shell.
             let typed: String? = project.isRemote ? command : nil
-            if !project.isRemote { env[CustomPaletteScript.commandVariable] = CustomPaletteScript.script(command) }
+            if !project.isRemote, let command { env[CustomPaletteScript.commandVariable] = CustomPaletteScript.script(command) }
+            if cwd != nil {
+                // A `cwd:` is a directory on this Mac, where every listing
+                // runs. A remote project's terminals are on the host.
+                guard !project.isRemote else {
+                    appState.presentToast("A remote project cannot open a directory on this Mac")
+                    return
+                }
+                guard let directory = directory(operand, base: project.path, appState: appState) else { return }
+                if place == .split, let pane = appState.focusedPane(for: projectID) {
+                    appState.splitPane(
+                        pane.id,
+                        direction: .auto(for: pane.nsView?.bounds.size ?? .zero),
+                        projectID: projectID,
+                        env: env,
+                        newPaneWorkingDirectory: directory
+                    )
+                } else {
+                    appState.createTab(projectID: projectID, projects: projects, workingDirectory: directory, env: env)
+                }
+                return
+            }
             switch place {
             case .tab:
                 appState.createTab(projectID: projectID, projects: projects, command: typed, env: env)
@@ -521,6 +549,25 @@ enum CustomPaletteActions {
                 NSWorkspace.shared.open(fileURL(operand, appState: appState, projects: projects))
             }
         }
+    }
+
+    /// A `cwd:` as an existing directory: `~` expanded, a relative path
+    /// against `base`. nil, with a toast that says why, when the row names
+    /// none or the directory is not there.
+    static func directory(_ operand: String?, base: String, appState: AppState) -> String? {
+        guard let operand, !operand.isEmpty else {
+            appState.presentToast("The row has no directory")
+            return nil
+        }
+        let path = operand.hasPrefix("/") || operand.hasPrefix("~")
+            ? ProjectPath.canonicalLocal(operand)
+            : ProjectPath.canonicalLocal(ProjectPath.canonicalLocal(base) + "/" + operand)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            appState.presentToast("No directory at \(path)")
+            return nil
+        }
+        return path
     }
 
     /// An `open:` path as a file URL: a relative one (`git ls-files`'s

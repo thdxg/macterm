@@ -249,7 +249,7 @@ final class SearchSession {
 }
 
 /// The engine for a short list built on the spot (the palette's commands,
-/// projects, saved passwords, worktrees; a Settings list), where preparing an
+/// projects, saved passwords; a Settings list), where preparing an
 /// index first buys nothing. A list that can run long — a custom palette's
 /// listing, the project's files — is a `SearchIndex` or `SearchSession`
 /// instead. Same scoring and folding as `SearchIndex`.

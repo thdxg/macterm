@@ -9,7 +9,7 @@ struct KeymapSearchTests {
         #expect(Set(ordered) == Set(HotkeyAction.allCases), "every bindable action is listed once")
         #expect(ordered.count == HotkeyAction.allCases.count)
         #expect(ordered.first?.appCommand.category == .palettes)
-        #expect(ordered.prefix(4).map(\.appCommand) == [.toggleCommandPalette, .passwordManager, .worktrees, .files])
+        #expect(ordered.prefix(3).map(\.appCommand) == [.toggleCommandPalette, .passwordManager, .files])
         // Categories are contiguous runs, as the palette's sections are.
         let categories = ordered.map(\.appCommand.category)
         var seen: [AppCommand.Category] = []

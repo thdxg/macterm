@@ -12,7 +12,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
     // custom palettes they are the user's own entries.
     case toggleCommandPalette
     case passwordManager
-    case worktrees
     case files
     // Tabs
     case newTab
@@ -108,7 +107,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .unloadProject: "Unload Current Project"
         case .removeProject: "Remove Current Project"
         case .replaceProjectPathWithCurrentDir: "Replace Project Path with Current Directory"
-        case .worktrees: "Worktrees"
         case .files: "Files"
         case .applyLayout: "Apply Layout"
         case .saveLayout: "Save Layout"
@@ -130,7 +128,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
         switch self {
         case .toggleCommandPalette,
              .passwordManager,
-             .worktrees,
              .files: .palettes
         case .newTab,
              .closePane,
@@ -228,7 +225,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .capturePane: .capturePane
         case .autofillPassword: .autofillPassword
         case .passwordManager: .passwordManager
-        case .worktrees: .worktrees
         case .files: .files
         case .capturePaletteScreenshot: .capturePaletteScreenshot
         case .applyLayout: .applyLayout
@@ -248,7 +244,6 @@ enum AppCommand: String, CaseIterable, Identifiable {
     var paletteScope: PaletteScopeID? {
         switch self {
         case .passwordManager: .passwords
-        case .worktrees: .worktrees
         case .files: .files
         default: nil
         }

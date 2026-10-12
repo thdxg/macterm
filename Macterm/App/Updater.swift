@@ -41,6 +41,20 @@ final class Updater {
     /// Flips back to `false` after the user installs, skips, or dismisses it.
     var updateAvailable = false
 
+    /// `true` once Sparkle has downloaded an update in the background
+    /// ("Update automatically") and holds it for install on quit. The toolbar
+    /// then offers Restart to Update. Without it, a user who keeps Macterm open
+    /// for weeks never learns that an update waits: Sparkle downloads silently
+    /// and never shows a scheduled reminder for it.
+    ///
+    /// Never cleared: the update installs when the app quits, whatever the
+    /// channel or a later check says.
+    var updateReadyToInstall = false
+
+    /// Sparkle's handler that installs the downloaded update and relaunches.
+    @ObservationIgnored
+    private var installAndRelaunchHandler: (() -> Void)?
+
     @ObservationIgnored
     private var cancellable: AnyCancellable?
 
@@ -87,6 +101,10 @@ final class Updater {
         // background checks route through the user-driver delegate — wire both.
         updaterDelegate.onUpdateFound = { [weak self] in self?.updateAvailable = true }
         updaterDelegate.onUpdateCleared = { [weak self] in self?.updateAvailable = false }
+        updaterDelegate.onReadyToInstall = { [weak self] handler in
+            self?.installAndRelaunchHandler = handler
+            self?.updateReadyToInstall = true
+        }
         userDriverDelegate.onUpdateFound = { [weak self] in self?.updateAvailable = true }
         userDriverDelegate.onUpdateCleared = { [weak self] in self?.updateAvailable = false }
 
@@ -107,6 +125,17 @@ final class Updater {
 
     func checkForUpdates() {
         controller.checkForUpdates(nil)
+    }
+
+    /// Install the update that Sparkle downloaded in the background and
+    /// relaunch, with no further UI. Quit is a detach (sessions survive), so
+    /// the relaunch reattaches every pane.
+    func installAndRelaunch() {
+        guard let installAndRelaunchHandler else {
+            checkForUpdates()
+            return
+        }
+        installAndRelaunchHandler()
     }
 
     /// Settings → Updates → "Update automatically". On: Sparkle downloads a
@@ -177,6 +206,23 @@ private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         }
     }
 
+    var onReadyToInstall: ((@escaping () -> Void) -> Void)?
+
+    /// Called on the main thread when a background download is ready to
+    /// install on quit. Returning `true` takes control of the install: Sparkle
+    /// still installs on quit, but it stops its own update cycles, so it never
+    /// shows its "impatient" alert after `SUScheduledImpatientCheckInterval`.
+    /// The toolbar's Restart to Update is the reminder instead. Sparkle 2.3
+    /// and later accepts the handler again after a cancelled termination.
+    func updater(
+        _: SPUUpdater,
+        willInstallUpdateOnQuit _: SUAppcastItem,
+        immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
+    ) -> Bool {
+        onReadyToInstall?(immediateInstallHandler)
+        return true
+    }
+
     func updater(_: SPUUpdater, didFindValidUpdate _: SUAppcastItem) {
         DispatchQueue.main.async { self.onUpdateFound?() }
     }
@@ -234,12 +280,22 @@ struct CheckForUpdatesMenuItem: View {
 }
 
 /// Toolbar button shown in the main window's title bar only when Sparkle has
-/// found a valid update. Clicking surfaces the standard Sparkle prompt.
+/// found a valid update. Clicking surfaces the standard Sparkle prompt. When
+/// the update is already downloaded, it is Restart to Update instead, and a
+/// click installs and relaunches.
 struct UpdateAvailableToolbarButton: View {
     private var updater: Updater { .shared }
 
     var body: some View {
-        if updater.updateAvailable {
+        if updater.updateReadyToInstall {
+            Button {
+                updater.installAndRelaunch()
+            } label: {
+                Label("Restart to Update", systemImage: "arrow.clockwise.circle.fill")
+                    .foregroundStyle(.tint)
+            }
+            .help("An update is ready. Click to restart Macterm and install it.")
+        } else if updater.updateAvailable {
             Button {
                 updater.checkForUpdates()
             } label: {

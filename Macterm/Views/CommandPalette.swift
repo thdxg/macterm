@@ -220,7 +220,10 @@ struct CommandPalettePanel: View {
                         // is above the top padding of the rows, so the padding
                         // shows. Inside the padding, it hid the padding.
                         Color.clear.frame(height: 0).id(Self.listTop)
-                        VStack(alignment: .leading, spacing: 0) {
+                        // Lazy: only the rows in view are built. The empty
+                        // query lists every command, and an eager stack built
+                        // all of them on each open and on the first keystroke.
+                        LazyVStack(alignment: .leading, spacing: 0) {
                             // A screen's notices: centered in the results, and
                             // filling them when there are no rows — a compact
                             // strip above rows an earlier listing left.
@@ -250,7 +253,7 @@ struct CommandPalettePanel: View {
                                         CommandPaletteRow(item: item, isSelected: idx == selectedIndex, optionHeld: optionHeld)
                                     }
                                     .buttonStyle(.plain)
-                                    .id(idx)
+                                    .id(RowScrollTarget(index: idx))
                                     // Publish each row's Y-extent so a single hover
                                     // region on the ScrollView can map the pointer to
                                     // a row. Per-row tracking areas (`.onHover` /
@@ -293,10 +296,10 @@ struct CommandPalettePanel: View {
                     else { return }
                     selectedIndex = idx
                 }
-                .onChange(of: selectedIndex) { _, idx in
+                .onChange(of: selectedIndex) { old, idx in
                     // Only follow keyboard navigation; hovering shouldn't scroll.
                     guard !hoverTracker.isHoverSelection(idx) else { return }
-                    scrollSelectionIntoView(idx, proxy: proxy)
+                    scrollSelectionIntoView(idx, from: old, proxy: proxy)
                 }
                 // A new screen or a new query is a new list, and it starts at
                 // its top. The scroll view keeps its offset when its content
@@ -516,22 +519,39 @@ struct CommandPalettePanel: View {
     /// Scroll just enough to reveal `idx` when it sits within `scrollPadding` of
     /// an edge, anchoring it that far in from whichever edge it ran toward. A
     /// row already comfortably inside the viewport is left untouched, so keyboard
-    /// navigation nudges the list instead of re-centering on every move. Falls
-    /// back to a plain `scrollTo` until the row's geometry is known.
-    private func scrollSelectionIntoView(_ idx: Int, proxy: ScrollViewProxy) {
-        guard let range = rowFrames[idx], viewportHeight > 0 else {
-            proxy.scrollTo(idx)
+    /// navigation nudges the list instead of re-centering on every move. A row
+    /// with no measured frame yet (the lazy stack has not built it) is off
+    /// screen, on the side the selection moved toward from `old`.
+    private func scrollSelectionIntoView(_ idx: Int, from old: Int, proxy: ScrollViewProxy) {
+        guard viewportHeight > 0 else {
+            proxy.scrollTo(RowScrollTarget(index: idx))
             return
         }
         let pad = Self.scrollPadding
+        let towardTop: Bool
+        if let range = rowFrames[idx] {
+            if range.lowerBound < pad {
+                towardTop = true
+            } else if range.upperBound > viewportHeight - pad {
+                towardTop = false
+            } else {
+                // Already comfortably visible — leave it alone.
+                return
+            }
+        } else {
+            towardTop = idx < old
+        }
         // `scrollTo` aligns the row's anchor fraction to the same fraction of the
         // viewport, so anchoring `pad` in from an edge leaves that gap.
-        if range.lowerBound < pad {
-            proxy.scrollTo(idx, anchor: UnitPoint(x: 0, y: pad / viewportHeight))
-        } else if range.upperBound > viewportHeight - pad {
-            proxy.scrollTo(idx, anchor: UnitPoint(x: 0, y: 1 - pad / viewportHeight))
-        }
-        // Otherwise the row is already comfortably visible — leave it alone.
+        let anchor = UnitPoint(x: 0, y: towardTop ? pad / viewportHeight : 1 - pad / viewportHeight)
+        proxy.scrollTo(RowScrollTarget(index: idx), anchor: anchor)
+    }
+
+    /// A row's scroll id. Its own type, because the sections are keyed by
+    /// their Int offset, and `scrollTo` with a bare row index found the
+    /// section with that offset.
+    private struct RowScrollTarget: Hashable {
+        let index: Int
     }
 
     /// Run the selected row: its alt action when `alt` and it has one, else

@@ -62,7 +62,6 @@ enum MactermKeybind: String, AppEnum {
     case unpinTab = "unpin_tab"
     case autofillPassword = "autofill_password"
     case passwordManager = "password_manager"
-    case worktrees
     case files
     case capturePaletteScreenshot = "capture_palette_screenshot"
 
@@ -117,7 +116,6 @@ enum MactermKeybind: String, AppEnum {
         .unpinTab: "Unpin Tab",
         .autofillPassword: "Autofill Password",
         .passwordManager: "Password Manager",
-        .worktrees: "Worktrees",
         .files: "Files",
         .capturePaletteScreenshot: "Capture Palette Screenshot",
     ]

@@ -1169,14 +1169,14 @@ struct PaletteScopeWindowTests {
         #expect(window.paletteScope == nil)
 
         window.pushPaletteFrame(PaletteFrame(.passwords))
-        window.pushPaletteFrame(PaletteFrame(.worktrees))
-        window.pushPaletteFrame(PaletteFrame(.worktrees, pill: PalettePill(title: "feature", icon: "tag")))
-        #expect(window.paletteStack.map(\.scopeID) == [.passwords, .worktrees, .worktrees])
+        window.pushPaletteFrame(PaletteFrame(.files))
+        window.pushPaletteFrame(PaletteFrame(.files, pill: PalettePill(title: "feature", icon: "tag")))
+        #expect(window.paletteStack.map(\.scopeID) == [.passwords, .files, .files])
         #expect(
-            window.paletteStack.map(\.pill.title) == ["Password Manager", "Worktrees", "feature"],
+            window.paletteStack.map(\.pill.title) == ["Password Manager", "Files", "feature"],
             "a frame is named by its own pill unless the row that opened it says otherwise"
         )
-        #expect(window.paletteScope == .worktrees)
+        #expect(window.paletteScope == .files)
         #expect(window.paletteStack[1] != window.paletteStack[2], "two frames of one scope are two frames")
 
         window.popPaletteFrame()
@@ -1199,7 +1199,7 @@ struct PaletteScopeWindowTests {
         state.registerWindow(window)
         state.noteKeyWindow(window)
 
-        window.pushPaletteFrame(PaletteFrame(.worktrees))
+        window.pushPaletteFrame(PaletteFrame(.files))
         window.pushPaletteFrame(PaletteFrame(.passwords))
         state.commandPaletteQuery = "prod"
         state.openCommandPalette(scope: .passwords)

@@ -21,6 +21,7 @@ struct ExtensionsSettings: View {
     /// An update that replaces a copy with changes, waiting for a yes.
     @State private var confirmingUpdate: (installed: CustomPaletteStore.InstalledExtension, entry: PaletteRegistry.Entry)?
     @State private var problem: String?
+    @State private var autoUpdate = Preferences.shared.autoUpdateExtensions
 
     private let columns = [GridItem(.adaptive(minimum: 220, maximum: 360), spacing: 12, alignment: .top)]
 
@@ -58,7 +59,7 @@ struct ExtensionsSettings: View {
                         ExtensionCard(
                             item: item,
                             link: folderURL(item, ref: registry.ref),
-                            isInstalling: installingIDs.contains(item.extensionID),
+                            isInstalling: installingIDs.contains(item.extensionID) || registry.writingIDs.contains(item.extensionID),
                             install: install,
                             update: { installed, update in
                                 switch update {
@@ -69,6 +70,19 @@ struct ExtensionsSettings: View {
                             uninstall: { uninstalling = $0 }
                         )
                     }
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Update extensions automatically", isOn: $autoUpdate)
+                        .onChange(of: autoUpdate) { _, on in
+                            Preferences.shared.autoUpdateExtensions = on
+                            if on { Task { await appState.extensionAutoUpdater.runOnce() } }
+                        }
+                    Text(
+                        "Macterm checks the Macterm repository when it starts and one time each day. "
+                            + "It updates only the extensions that you did not change, so it never replaces your changes."
+                    )
+                    .settingsCaption()
                 }
 
                 HStack(alignment: .firstTextBaseline) {

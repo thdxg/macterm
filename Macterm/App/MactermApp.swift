@@ -200,7 +200,6 @@ struct MactermApp: App {
                     projectStore: projectStore,
                     titleOverride: "Set Project Path to Current Directory"
                 )
-                AppCommandMenuItem(command: .worktrees, appState: appState, projectStore: projectStore, titleOverride: "Worktrees")
                 Divider()
                 AppCommandMenuItem(command: .nextProject, appState: appState, projectStore: projectStore, titleOverride: "Next Project")
                 AppCommandMenuItem(
@@ -797,6 +796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasInstalledResponders = true
         if BenchmarkControl.isEnabled {
             BenchmarkControl.connect(appState: appState, projectStore: projectStore)
+        } else {
+            // A benchmark or an e2e run reads no network, as for Sparkle.
+            appState.performWhenRestored { appState.extensionAutoUpdater.start() }
         }
         let handler = ControlHandler(appState: appState, projectStore: projectStore)
         controlHandler = handler

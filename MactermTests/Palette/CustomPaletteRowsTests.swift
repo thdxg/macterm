@@ -82,6 +82,11 @@ struct CustomPaletteRowsTests {
             listing: listing(title: ".name", outcome: .perform(.run(command: "x", in: .tab)))
         )
         #expect(run[0].operand == nil)
+        let cwd = try CustomPaletteRows.parse(
+            output: #"[{"name": "docs", "path": "/tmp/docs"}]"#,
+            listing: listing(title: ".name", outcome: .perform(.run(command: nil, in: .tab, cwd: ".path")))
+        )
+        #expect(cwd[0].operand == "/tmp/docs", "a cwd: is a path into the row")
     }
 
     @Test

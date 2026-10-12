@@ -1,12 +1,17 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
 name: Git
-description: Switch to, log or diff the branches of the project
+description: Switch to, log or diff the branches of the project, or open its worktrees
 requires: [git]
 when: { run: git rev-parse --git-dir, unavailable: Not a git repository }
-root: branches
+root: git
 nodes:
+  git:
+    items:
+      - { title: Branches, subtitle: "Switch to, log or diff a branch", icon: arrow.triangle.branch, enter: branches }
+      - { title: Worktrees, subtitle: "Open a worktree of the repository", icon: folder, enter: worktrees }
   branches:
     placeholder: Search branches...
+    icon: arrow.triangle.branch
     list: git branch --format='%(refname:short)'
     export: { BRANCH: . }
     enter: branch
@@ -15,3 +20,30 @@ nodes:
       - { title: Switch to it, action: { run: git switch "$BRANCH", in: split } }
       - { title: Log, action: { run: git log --oneline --graph "$BRANCH", in: split } }
       - { title: Diff against HEAD, action: { run: git diff HEAD..."$BRANCH", in: split } }
+  worktrees:
+    placeholder: Search by branch or path...
+    icon: folder
+    # Every worktree but the one the project is in, and none that git
+    # calls prunable (its directory is gone). One JSON object per line.
+    list: |
+      git worktree list --porcelain | awk -v top="$(git rev-parse --show-toplevel)" -v home="$HOME" '
+        function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); gsub(/\t/, "\\t", s); return s }
+        function flush(shown) {
+          if (path != "" && path != top && !prunable && !bare) {
+            shown = path
+            if (index(path, home "/") == 1) shown = "~" substr(path, length(home) + 1)
+            printf "{\"path\":\"%s\",\"shown\":\"%s\",\"head\":\"%s\"}\n", esc(path), esc(shown), esc(head)
+          }
+          path = ""; head = ""; sha = ""; prunable = 0; bare = 0
+        }
+        /^worktree / { flush(); path = substr($0, 10); next }
+        /^HEAD / { sha = substr($0, 6, 7); next }
+        /^branch / { head = substr($0, 8); sub(/^refs\/heads\//, "", head); next }
+        /^detached/ { head = sha " (detached)"; next }
+        /^prunable/ { prunable = 1; next }
+        /^bare/ { bare = 1; next }
+        END { flush() }'
+    title: .head
+    subtitle: .shown
+    action: { cwd: .path }
+    alt: { cwd: .path, in: split }

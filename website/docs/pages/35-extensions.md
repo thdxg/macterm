@@ -8,7 +8,7 @@ description: Add screens to the command palette with extensions. Install them fr
 
 # Extensions
 
-An extension adds to what Macterm can do. Today, an extension adds screens to the [command palette](/docs/command-palette): Git branches, Docker containers, SSH hosts, Kubernetes pods, and anything that a command can list. Install an extension from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)), or write your own. Each extension brings one or more palettes. Each palette appears in the **Palettes** section of the command palette, with a chevron. When you select it, its screen opens in the same place.
+An extension adds to what Macterm can do. Today, an extension adds screens to the [command palette](/docs/command-palette): Git branches and worktrees, Docker containers, SSH hosts, Kubernetes pods, and anything that a command can list. Install an extension from **Settings → Extensions** (see [sharing an extension](#sharing-an-extension)), or write your own. Each extension brings one or more palettes. Each palette appears in the **Palettes** section of the command palette, with a chevron. When you select it, its screen opens in the same place.
 
 An extension is a folder in `~/.config/macterm/extensions/`. The folder has an `extension.yaml` file and a `palettes/` folder with one YAML file for each palette. Macterm reads the folder again each time that the palette opens. When you save a file, that is all that you do. You do not reload or restart anything.
 
@@ -177,16 +177,28 @@ An action is exactly one of these:
 | Action | What it does |
 | --- | --- |
 | `run: <command>` | Runs the command in a new tab of the active project. With `in: split`, it runs in a split next to the focused pane. If a pinned tab is active, it always runs in a split next to that tab. The exported variables are in its environment. |
+| `cwd: <directory>` | Opens a shell in the directory, in a new tab of the active project. With `in: split`, it opens in a split next to the focused pane. With `run:`, the command runs in that directory. In a listing, the value is a path or literal text. |
 | `copy: <text>` | Copies the text to the clipboard. In a listing, the value is a path or literal text. |
 | `open: <url or file>` | Opens the URL or file with the default app. In a listing, the value is a path or literal text. |
 
 A `run:` command runs before the shell of the new terminal starts. When the command ends, you see the shell prompt of your shell. **Macterm never types the command at the shell prompt.** The command stays out of the history of your shell.
 
+A relative `cwd:` is relative to the project directory. The directory must exist. If it does not exist, Macterm shows a message and opens nothing. This listing opens each worktree of the repository in a new tab, and <kbd>⌥↩</kbd> opens it in a split:
+
+```yaml
+worktrees:
+  list: git worktree list --porcelain | sed -n 's/^worktree //p'
+  action: { cwd: . }
+  alt: { cwd: ., in: split }
+```
+
+**A `cwd:` is a directory on your Mac**, where every listing runs. In a [remote project](/docs/remote-projects), Macterm does not open a terminal for a `cwd:` action, and shows a message.
+
 **In a [remote project](/docs/remote-projects), Macterm types a `run:` command at the shell prompt of the host**, as you wrote it. ssh does not carry an environment to the host. The own shell of the host runs the command. It does not run in `sh`, and a shebang has no meaning there. The command enters the history of that shell. **The exported variables and `MACTERM_PROJECT_*` are not set.** A palette for remote projects therefore cannot pass a selection to `run:` through `"$VAR"`.
 
 ### Alt actions
 
-A row can have a second action, `alt:`. <kbd>⌥↩</kbd> or <kbd>⌥</kbd>-click runs it. While you hold <kbd>⌥</kbd>, the subtitle of the row says what the alt action does. It shows the `title:` of the alt action. If there is no title, it shows the kind of action (**Run in a Split**, **Run in a New Tab**, **Copy**, **Open**).
+A row can have a second action, `alt:`. <kbd>⌥↩</kbd> or <kbd>⌥</kbd>-click runs it. While you hold <kbd>⌥</kbd>, the subtitle of the row says what the alt action does. It shows the `title:` of the alt action. If there is no title, it shows the kind of action (**Run in a Split**, **Run in a New Tab**, **Open in a Split**, **Open in a New Tab**, **Copy**, **Open**).
 
 ```yaml
 - title: New Session
@@ -284,6 +296,8 @@ When you install an extension, Macterm records each of its files in a hidden fil
 - **You changed your copy, and the repository also changed the extension.** The card shows the Update button. Before it updates, Macterm asks you. Your changed copy goes to the Trash.
 - **The folder has no `.source.json`.** This is an extension that you wrote, copied by hand, or installed with an older version of Macterm. If it is the same as the version in the repository, Macterm writes the record. If it is different, the Update button asks before it puts your copy in the Trash.
 
+To get updates with no click, turn on **Update extensions automatically** in Settings → Extensions. It is off by default, because an extension runs commands on your Mac. When it is on, Macterm checks the repository when it starts and one time each day. It updates only the extensions that you did not change. A message names each extension that it updated. An extension that you changed, or one without `.source.json`, still waits for you to click its Update button.
+
 An update moves the old folder to the Trash. To undo an update, put the old folder back. To keep a copy as your own, delete its `.source.json`. If you do not change the copy, Macterm then asks before each update.
 
 An extension can include screenshots for its README. **Capture Palette Screenshot** takes them at the one size that the repository accepts. It frames the command palette in the same way each time. Bind it in Settings → Keymaps and press it while the palette is open on the screen that you want. If you run it from the menu or from the palette, it captures the first screen of the palette. The first time, macOS asks if Macterm can record the screen.
@@ -313,12 +327,12 @@ nodes:
       - { title: Stop, action: { run: docker stop "$CONTAINER" } }
 ```
 
-### SSH hosts
+### SSH
 
 This palette lists the hosts that are named in `~/.ssh/config`. It leaves out wildcard patterns. It does not list hosts in an `Include`d file.
 
 ```yaml title="~/.config/macterm/extensions/ssh/palettes/ssh.yaml"
-name: SSH Hosts
+name: SSH
 description: Hosts from ~/.ssh/config
 root: hosts
 nodes:

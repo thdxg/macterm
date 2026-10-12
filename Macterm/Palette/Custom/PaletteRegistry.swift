@@ -139,6 +139,10 @@ final class PaletteRegistry {
     private(set) var state: State = .idle
     @ObservationIgnored private let fetch: Fetch
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// The extensions that an install or an update writes now. A click on
+    /// Update and an automatic update must never write one folder at the
+    /// same time.
+    private(set) var writingIDs: Set<String> = []
 
     init(
         ref: String = PaletteRegistry.defaultRef,
@@ -215,6 +219,13 @@ final class PaletteRegistry {
             .filter { _, files in files.contains { $0.path == MactermExtension.manifestName } }
             .map { (id: $0.key, files: $0.value.sorted { $0.path < $1.path }) }
             .sorted { $0.id < $1.id }
+    }
+
+    /// `refresh`, and returns when the read is over: at once when the
+    /// extensions were read in the last hour.
+    func refreshAndWait() async {
+        refresh()
+        await task?.value
     }
 
     /// Reads the repository's extensions, unless they were read in the last
@@ -300,11 +311,13 @@ final class PaletteRegistry {
     enum InstallError: LocalizedError, Equatable {
         case alreadyInstalled(String)
         case notInstalled(String)
+        case inProgress(String)
         case unreadable(String)
         var errorDescription: String? {
             switch self {
             case let .alreadyInstalled(id): "You already have a palette named \(id)."
             case let .notInstalled(id): "\(id) is not installed."
+            case let .inProgress(id): "Macterm is already writing \(id)."
             case let .unreadable(reason): "This version of Macterm cannot read it: \(reason)"
             }
         }
@@ -360,6 +373,8 @@ final class PaletteRegistry {
     /// Trash just before the move.
     private func write(_ entry: Entry, into store: CustomPaletteStore, replacing old: URL?) async throws -> URL {
         if let failure = entry.failure { throw InstallError.unreadable(failure.localizedDescription) }
+        guard writingIDs.insert(entry.id).inserted else { throw InstallError.inProgress(entry.id) }
+        defer { writingIDs.remove(entry.id) }
         let fm = FileManager.default
         let destination = store.extensionsURL.appendingPathComponent(entry.id, isDirectory: true)
         var contents: [String: Data] = entry.texts.mapValues { Data($0.utf8) }.merging(entry.images) { text, _ in text }

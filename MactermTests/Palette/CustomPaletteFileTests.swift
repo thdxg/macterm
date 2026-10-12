@@ -168,7 +168,7 @@ struct CustomPaletteFileTests {
     @Test
     func in_match_and_export_names_are_checked() {
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { copy: ., in: split } } }")
-            == "root: in: split goes with run:, not copy: or open:")
+            == "root: in: split goes with run: or cwd:, not copy: or open:")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, match: [], action: { copy: . } } }")
             == "root: match: needs at least one field, or leave it out")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, export: { my-var: . }, action: { copy: . } } }")
@@ -179,6 +179,34 @@ struct CustomPaletteFileTests {
             )
             == "root item 1 (A): export: MACTERM_PALETTE_COMMAND is set by Macterm. Use another name")
         #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, export: { _NS1: . }, action: { copy: . } } }") == nil)
+    }
+
+    /// `cwd:` opens a terminal in a directory: alone it is a shell there,
+    /// with `run:` the command starts there, and it never goes with a copy
+    /// or an open.
+    @Test
+    func cwd_is_a_terminal_in_a_directory() throws {
+        let palette = try Self.palette("""
+        name: X
+        nodes:
+          root:
+            items:
+              - { title: Here, action: { cwd: ~/src } }
+              - { title: Build, action: { run: make, cwd: ./app, in: split } }
+            list: ls
+            action: { cwd: .path }
+            alt: { cwd: .path, in: split }
+        """)
+        let root = try #require(palette.nodes["root"])
+        #expect(root.items[0].outcome == .perform(.run(command: nil, in: .tab, cwd: "~/src")))
+        #expect(root.items[1].outcome == .perform(.run(command: "make", in: .split, cwd: "./app")))
+        #expect(root.listing?.outcome == .perform(.run(command: nil, in: .tab, cwd: ".path")))
+        #expect(root.listing?.alt?.title == "Open in a Split")
+
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { cwd: ., copy: . } } }")
+            == "root: cwd: goes with run:, not copy: or open:")
+        #expect(Self.invalidMessage("name: X\nnodes: { root: { list: ls, action: { cwd: \"\" } } }")
+            == "root: cwd: must not be empty")
     }
 
     /// A node named like a number or a boolean is still a name, and its keys
