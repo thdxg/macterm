@@ -1220,7 +1220,7 @@ final class AppState {
     var newTabInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.tabInheritsWorkingDirectory }
     @ObservationIgnored
     var newSplitInheritsWorkingDirectory: () -> Bool = { GhosttyApp.shared.splitInheritsWorkingDirectory }
-    /// Settings → General → Text Files, read when a file opens. Injectable
+    /// Settings → General → Opening Text Files, read when a file opens. Injectable
     /// so tests drive both placements without touching shared preferences.
     @ObservationIgnored
     var textFilePlacement: () -> TextFilePlacement = { Preferences.shared.textFilePlacement }

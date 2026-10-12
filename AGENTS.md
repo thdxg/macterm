@@ -399,7 +399,7 @@ Desktop widgets are terminals on the desktop (`DesktopWidget`, `AppState+Desktop
 
 Unlike Ghostty, Macterm does not declare scripts and executables. A script that you open with Macterm is edited and not run. `OpenFolderTests` reads the plist back for this contract.
 
-**Text files (Settings → General → Text Files)** open in the terminal editor of the user (`AppState+TextFiles.swift`). Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
+**Text files (Settings → General → Opening Text Files)** open in the terminal editor of the user (`AppState+TextFiles.swift`). Ghostty has no equivalent. Upstream declined the detection of `file:line` and a link that you can configure (discussions #11378 and #9546). This feature is therefore our own.
 
 - **A ⌘-click goes to the pane first** (`GhosttyTerminalNSView.onOpenLink`). This is only for the `.unknown` kind of the link regex. It is never for OSC 8 or for opens by a keybind.
   - `FileLink` splits `:line[:col]` off. The regex of libghostty keeps it, and `foo.swift:42` even parses as a URL scheme. `FileLink` resolves the path against the cwd of the real pane.

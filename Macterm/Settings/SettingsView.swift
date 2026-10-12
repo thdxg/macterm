@@ -636,10 +636,13 @@ private struct GeneralSettings: View {
                 .onChange(of: textFilePlacement) { _, v in
                     Preferences.shared.textFilePlacement = v
                 }
-                Text("Opens files in the editor that $VISUAL or $EDITOR names in your shell.")
-                    .settingsCaption()
+                Text(
+                    "You can set Macterm as the default app to open text files from Finder. "
+                        + "It opens them in the editor that $VISUAL or $EDITOR names in your shell."
+                )
+                .settingsCaption()
             } header: {
-                DocsSectionHeader("Text Files", docs: .textFiles)
+                DocsSectionHeader("Opening Text Files", docs: .textFiles)
             }
 
             Section {

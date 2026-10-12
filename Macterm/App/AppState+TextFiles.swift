@@ -4,7 +4,7 @@ import os
 private let logger = Logger(subsystem: appBundleID, category: "TextFiles")
 
 /// Opening a text file in the user's terminal editor (`$VISUAL`, else
-/// `$EDITOR`; Settings → General → Text Files picks a split or a tab) — a
+/// `$EDITOR`; Settings → General → Opening Text Files picks a split or a tab) — a
 /// ⌘-click on a path in a pane, or a file opened WITH Macterm from Finder,
 /// the Dock or `open -a` (`FinderServiceProvider`).
 ///
