@@ -15,10 +15,27 @@ struct Toast: Identifiable, Equatable {
     /// (which file was written, how many tabs were applied).
     var subtitle: String?
 
-    /// How long the toast stays up before auto-dismissing. Two seconds reads as
-    /// deliberate without lingering over the terminal; a subtitle earns a little
-    /// longer because there's more to read.
-    var duration: Duration { subtitle == nil ? .seconds(2) : .seconds(2.6) }
+    /// How long the toast stays up before auto-dismissing. The time grows with
+    /// the text to read (title and subtitle together), so a long error message
+    /// stays up long enough to read and a short confirmation does not linger
+    /// over the terminal.
+    var duration: Duration { Self.duration(forCharacters: title.count + (subtitle?.count ?? 0)) }
+
+    /// A short toast stays up at least this long, so that it reads as deliberate.
+    static let minimumDuration: Duration = .seconds(2)
+    /// The subtitle truncates to one line, so text past this time is not
+    /// visible to read.
+    static let maximumDuration: Duration = .seconds(6)
+    /// The time to see that a toast arrived, before reading starts.
+    private static let glanceTime: Duration = .seconds(1)
+    /// A slow reading rate (about 180 words per minute). A toast arrives
+    /// without warning, over work the user looks at.
+    private static let charactersPerSecond = 15.0
+
+    static func duration(forCharacters count: Int) -> Duration {
+        let reading = glanceTime + .seconds(Double(count) / charactersPerSecond)
+        return min(max(reading, minimumDuration), maximumDuration)
+    }
 
     static func == (lhs: Toast, rhs: Toast) -> Bool {
         lhs.id == rhs.id

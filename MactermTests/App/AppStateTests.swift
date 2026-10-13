@@ -1881,9 +1881,17 @@ struct AppStateTests {
     }
 
     @Test
-    func a_subtitled_toast_stays_up_longer() {
-        // Two lines need more reading time than one.
-        #expect(Toast(title: "Bare").duration < Toast(title: "Detailed", subtitle: "more").duration)
+    func a_longer_toast_stays_up_longer() {
+        // More text needs more reading time. The subtitle counts too.
+        let short = Toast(title: "Layout saved", subtitle: "~/a.yaml")
+        let long = Toast(title: "Layout saved", subtitle: "~/.config/macterm/projects/website.yaml")
+        #expect(short.duration < long.duration)
+    }
+
+    @Test
+    func toast_duration_is_clamped() {
+        #expect(Toast(title: "Done").duration == Toast.minimumDuration)
+        #expect(Toast(title: "Failed", subtitle: String(repeating: "x", count: 500)).duration == Toast.maximumDuration)
     }
 
     // MARK: - saveLayout duplicate conflicts
