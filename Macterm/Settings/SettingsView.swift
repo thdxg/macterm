@@ -1546,11 +1546,6 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: positionMode) { _, v in
                     Preferences.shared.quickTerminalPositionMode = v
                 }
-                Text(
-                    "Fixed sets the position of the panel with the sliders. "
-                        + "Dynamic adds a grab handle and remembers where you drag the panel."
-                )
-                .settingsCaption()
 
                 SettingsSlider(
                     label: "X",
@@ -1588,11 +1583,6 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: sizeMode) { _, v in
                     Preferences.shared.quickTerminalSizeMode = v
                 }
-                Text(
-                    "Fixed sets the size of the panel with the sliders. "
-                        + "Dynamic lets you resize the panel from its edges. The panel opens again at that size."
-                )
-                .settingsCaption()
 
                 SettingsSlider(
                     label: "Width",
