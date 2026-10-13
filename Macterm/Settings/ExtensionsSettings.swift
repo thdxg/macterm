@@ -72,17 +72,16 @@ struct ExtensionsSettings: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Update extensions automatically")
+                    Spacer()
                     Toggle("Update extensions automatically", isOn: $autoUpdate)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                         .onChange(of: autoUpdate) { _, on in
                             Preferences.shared.autoUpdateExtensions = on
                             if on { Task { await appState.extensionAutoUpdater.runOnce() } }
                         }
-                    Text(
-                        "Macterm checks the Macterm repository when it starts and one time each day. "
-                            + "It updates only the extensions that you did not change, so it never replaces your changes."
-                    )
-                    .settingsCaption()
                 }
 
                 HStack(alignment: .firstTextBaseline) {

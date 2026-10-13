@@ -250,15 +250,6 @@ enum SidebarPeekStyle: String, CaseIterable, Identifiable {
         case .overlayTerminal: "Overlay terminal"
         }
     }
-
-    var explanation: String {
-        switch self {
-        case .resizeTerminal:
-            "Slides the native sidebar column out and resizes the terminal for a time."
-        case .overlayTerminal:
-            "Shows a floating sidebar over the terminal. The terminal keeps its size."
-        }
-    }
 }
 
 /// Single observable source of truth for UserDefaults-backed preferences.
