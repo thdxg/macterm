@@ -1,3 +1,6 @@
+# task.quiet (below) is new in mise 2026.9.4. An older mise rejects it.
+min_version = "2026.9.4"
+
 # Pinned exactly (not "latest"): swiftformat/swiftlint output is part of the CI
 # contract — a new release can change rules and turn a green main red on
 # untouched code, and float local vs CI. Bump these in deliberate commits.
@@ -9,7 +12,8 @@ xcodegen = "2.45.4"
 xcbeautify = "3.2.1"
 
 [settings]
-task.output = "quiet"
+task.output = "interleave"
+task.quiet = true
 
 # ─── Tasks ──────────────────────────────────────────────────────────────────
 # Every task takes a -v/--verbose flag. Without it (local dev) the task runs
