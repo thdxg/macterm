@@ -101,8 +101,10 @@ fi
 # When a stable identity was requested, an ad-hoc signature slipping through
 # would ship an update that silently resets every user's TCC grants — exactly
 # what the identity exists to prevent — so fail rather than package it.
-if [[ -n "$CODESIGN_IDENTITY" ]] \
-  && codesign --display --verbose "$APP_BUNDLE" 2>&1 | grep -q "Signature=adhoc"; then
+# Capture the output first. "grep -q" exits at the first match, and under
+# pipefail the SIGPIPE that codesign then gets fails the whole pipeline.
+APP_SIGNATURE="$(codesign --display --verbose "$APP_BUNDLE" 2>&1 || true)"
+if [[ -n "$CODESIGN_IDENTITY" ]] && grep -q "Signature=adhoc" <<<"$APP_SIGNATURE"; then
   echo "ERROR: $APP_BUNDLE has an ad-hoc signature, but MACTERM_CODESIGN_IDENTITY is set" >&2
   exit 1
 fi
@@ -111,12 +113,12 @@ fi
 # responsible for the programs in every pane; the same regression — an ad-hoc
 # identity resetting users' grants — applies to it.
 ZMX_BINARY="$APP_BUNDLE/Contents/Resources/zmx/zmx"
-if [[ -n "$CODESIGN_IDENTITY" ]] \
-  && codesign --display --verbose "$ZMX_BINARY" 2>&1 | grep -q "Signature=adhoc"; then
+ZMX_SIGNATURE="$(codesign --display --verbose "$ZMX_BINARY" 2>&1 || true)"
+if [[ -n "$CODESIGN_IDENTITY" ]] && grep -q "Signature=adhoc" <<<"$ZMX_SIGNATURE"; then
   echo "ERROR: $ZMX_BINARY has an ad-hoc signature, but MACTERM_CODESIGN_IDENTITY is set" >&2
   exit 1
 fi
-if ! codesign --display --verbose "$ZMX_BINARY" 2>&1 | grep -q "^Identifier=com.thdxg.macterm$"; then
+if ! grep -q "^Identifier=com.thdxg.macterm$" <<<"$ZMX_SIGNATURE"; then
   echo "ERROR: $ZMX_BINARY is not signed as com.thdxg.macterm. Pane programs would ask for permission as a second app" >&2
   exit 1
 fi
