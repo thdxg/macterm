@@ -589,6 +589,25 @@ final class GhosttyTerminalNSView: NSView {
         config.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2.0)
         config.context = GHOSTTY_SURFACE_CONTEXT_SPLIT
 
+        // The size the pty opens at (a fork field). Without it libghostty
+        // starts the surface at a placeholder of 800×600 px and takes this
+        // view's size from the `ghostty_surface_set_size` that follows
+        // creation. The child reads its window size once at startup, so
+        // `zmx attach` reported the placeholder grid (47×13 cells) whenever
+        // that resize lost the race with its startup, which under launch
+        // load it did. zmx then laid the reattach snapshot out for that
+        // grid. Gated like every other size push: a sliver mid-layout keeps
+        // the placeholder, which the first admitted size replaces as before.
+        let initialWidthPx = UInt32(backingSize.width)
+        let initialHeightPx = UInt32(backingSize.height)
+        if SurfaceSizeGate.admits(
+            widthPx: initialWidthPx, heightPx: initialHeightPx,
+            cellWidthPx: Self.lastMeasuredCellSize.width, cellHeightPx: Self.lastMeasuredCellSize.height
+        ) {
+            config.initial_width_px = initialWidthPx
+            config.initial_height_px = initialHeightPx
+        }
+
         // Every `const char*` field and the env-var array must stay valid for
         // libghostty. `working_directory`/`command` are consumed during spawn,
         // but `initial_input` is written to the pty asynchronously (on a later
@@ -987,11 +1006,21 @@ final class GhosttyTerminalNSView: NSView {
     /// line and leaves the content above the viewport when the pane grows
     /// back. Keeping the last grid renders the pane clipped for as long as
     /// it is that small, with its content intact.
+    /// The cell size the last size push measured on any surface, in backing
+    /// pixels. Every surface shares the font config, so this is the metric
+    /// `createSurface` judges a creation size by before that surface has a
+    /// font of its own. Zero until the first push; the gate then admits any
+    /// non-empty size.
+    private static var lastMeasuredCellSize: (width: UInt32, height: UInt32) = (0, 0)
+
     private func applySurfaceSize(_ backingSize: CGSize) {
         guard let surface else { return }
         let widthPx = UInt32(backingSize.width)
         let heightPx = UInt32(backingSize.height)
         let cells = ghostty_surface_size(surface)
+        if cells.cell_width_px > 0, cells.cell_height_px > 0 {
+            Self.lastMeasuredCellSize = (cells.cell_width_px, cells.cell_height_px)
+        }
         guard SurfaceSizeGate.admits(
             widthPx: widthPx, heightPx: heightPx,
             cellWidthPx: cells.cell_width_px, cellHeightPx: cells.cell_height_px
