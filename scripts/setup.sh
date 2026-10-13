@@ -43,7 +43,7 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # checkout holding a stale copy needs `rm -rf GhosttyKit.xcframework
 # Macterm/Resources/terminfo && mise run setup` once. CI's download cache
 # hashes this file, so a bump here also refreshes it.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-12-9f424c4}"
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-13-c63d1bc}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
@@ -75,7 +75,7 @@ GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-12-9f424c4}"
 # recreated. Drop 0006 once upstream ghostty's formatter replays
 # `flags.mouse_format`/`mouse_event` itself. 0001 and 0002 are no-ops against
 # this upstream.
-ZMX_TAG="${ZMX_TAG:-build-2026-10-12-29940b6}"
+ZMX_TAG="${ZMX_TAG:-build-2026-10-13-711e251}"
 # Which tag the on-disk fork artifacts actually came from. Without this the
 # presence checks below would keep a stale copy forever after a pin bump — the
 # same silent-staleness trap that makes symlinking these artifacts a bad idea.
