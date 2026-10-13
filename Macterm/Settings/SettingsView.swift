@@ -656,11 +656,8 @@ private struct GeneralSettings: View {
                     .onChange(of: backgroundSSHConnections) { _, v in
                         Preferences.shared.backgroundSSHConnections = v
                     }
-                Text(
-                    "Asks remote hosts for live tab names and close warnings. "
-                        + "Turn it off if each connection asks for Touch ID."
-                )
-                .settingsCaption()
+                Text("Enable for live tab names and close warnings.")
+                    .settingsCaption()
                 Toggle("Reconnect panes after a dropped connection", isOn: $reconnectRemotePanes)
                     .onChange(of: reconnectRemotePanes) { _, v in
                         Preferences.shared.reconnectRemotePanes = v
@@ -1190,25 +1187,22 @@ private struct AppearanceSettings: View {
                 }
                 .disabled(backgroundOpacity >= 0.999 || liquidGlass)
 
-                Text(blurFootnote)
-                    .settingsCaption()
+                if let blurFootnote {
+                    Text(blurFootnote)
+                        .settingsCaption()
+                }
 
                 Toggle("Adaptive background", isOn: $adaptiveTerminalChrome)
                     .onChange(of: adaptiveTerminalChrome) { _, enabled in
                         Preferences.shared.adaptiveTerminalChromeEnabled = enabled
                     }
-                Text(
-                    "The whole window takes the color for a single pane. "
-                        + "In a split, only the pane of each full-screen program changes color."
-                )
-                .settingsCaption()
+                Text("The background matches the color of each full-screen program.")
+                    .settingsCaption()
             }
 
             Section("Sidebar") {
                 Toggle("Peek sidebar when hidden", isOn: $peekSidebarWhenHidden)
                     .onChange(of: peekSidebarWhenHidden) { _, v in Preferences.shared.peekSidebarWhenHidden = v }
-                Text("Shows the hidden sidebar while the pointer is at the left edge of the window.")
-                    .settingsCaption()
 
                 Group {
                     Picker(selection: $sidebarPeekStyle) {
@@ -1221,8 +1215,6 @@ private struct AppearanceSettings: View {
                     .onChange(of: sidebarPeekStyle) { _, style in
                         Preferences.shared.sidebarPeekStyle = style
                     }
-                    Text(sidebarPeekStyle.explanation)
-                        .settingsCaption()
                 }
                 .disabled(!peekSidebarWhenHidden)
                 .padding(.leading, 16)
@@ -1254,15 +1246,11 @@ private struct AppearanceSettings: View {
                     .onChange(of: autoAssignProjectColors) { _, v in
                         Preferences.shared.autoAssignProjectColors = v
                     }
-                Text("Gives each new project the color that projects use least. Existing projects keep their color.")
-                    .settingsCaption()
 
                 Toggle("Show AI agent icons", isOn: $showAgentIcons)
                     .onChange(of: showAgentIcons) { _, v in
                         Preferences.shared.showAgentIcons = v
                     }
-                Text("Uses the logo of the AI agent that runs in a tab as the icon of the tab.")
-                    .settingsCaption()
 
                 Toggle("Show tab status indicator", isOn: $showTabStatusIndicator)
                     .onChange(of: showTabStatusIndicator) { _, v in
@@ -1278,37 +1266,26 @@ private struct AppearanceSettings: View {
                     .onChange(of: showSpinnerOverAgentIcons) { _, v in
                         Preferences.shared.showSpinnerOverAgentIcons = v
                     }
-                    Text("When off, a tab with an AI agent keeps its logo while the agent works. The completion dot still appears.")
-                        .settingsCaption()
                 }
                 .disabled(!(showTabStatusIndicator && showAgentIcons))
                 .padding(.leading, 16)
 
                 Toggle("Show new project button", isOn: $showNewProjectButton)
                     .onChange(of: showNewProjectButton) { _, v in Preferences.shared.showNewProjectButton = v }
-                Text("When hidden, create projects with the command palette or the context menu.")
-                    .settingsCaption()
 
                 Toggle("Show new tab button on projects", isOn: $showProjectNewTabButton)
                     .onChange(of: showProjectNewTabButton) { _, v in
                         Preferences.shared.showProjectNewTabButton = v
                     }
-                Text("Shows the button while the pointer is on a project row.")
-                    .settingsCaption()
             }
 
             Section("Tab Switching") {
-                Toggle("Show tab previews while cycling", isOn: $showTabSwitcherOverlay)
+                Toggle("Show tab previews", isOn: $showTabSwitcherOverlay)
                     .onChange(of: showTabSwitcherOverlay) { _, v in
                         Preferences.shared.showTabSwitcherOverlay = v
                     }
-                Text(
-                    "While you hold the Recent Tab keybind, Macterm shows the tabs of the project with a preview of each pane. "
-                        + "The selection moves, but Macterm does not switch tabs until you release the keys."
-                )
-                .settingsCaption()
 
-                Picker("Recent tabs to cycle through", selection: $recentTabCandidates) {
+                Picker("Recent tabs limit", selection: $recentTabCandidates) {
                     ForEach(Preferences.recentTabCandidateRange, id: \.self) { count in
                         Text("\(count)").tag(count)
                     }
@@ -1317,17 +1294,10 @@ private struct AppearanceSettings: View {
                 .onChange(of: recentTabCandidates) { _, v in
                     Preferences.shared.recentTabCandidates = v
                 }
-                Text("The number of recent tabs that the Recent Tab keybind goes through, with or without previews.")
-                    .settingsCaption()
             }
 
             Section("Toolbar") {
                 Toggle("Show toolbar", isOn: showToolbar)
-                Text(
-                    "Hiding it removes the title bar, the window buttons and the drag area. "
-                        + "Switch tabs with the sidebar, or with ⌘ and the tab number."
-                )
-                .settingsCaption()
 
                 Group {
                     Picker(selection: $preferences.tabSwitcherVisibility) {
@@ -1337,8 +1307,6 @@ private struct AppearanceSettings: View {
                     } label: {
                         Text("Tab switcher").dimsWhenDisabled()
                     }
-                    Text("A numbered control in the title bar. Use it to switch tabs by number.")
-                        .settingsCaption()
 
                     Picker(selection: $preferences.tabSwitcherPosition) {
                         ForEach(TabSwitcherPosition.allCases) { option in
@@ -1347,8 +1315,6 @@ private struct AppearanceSettings: View {
                     } label: {
                         Text("Tab switcher position").dimsWhenDisabled()
                     }
-                    Text("Left puts the switcher before the window title, next to the sidebar.")
-                        .settingsCaption()
                 }
                 .disabled(preferences.hideTitleBar)
             }
@@ -1376,16 +1342,13 @@ private struct AppearanceSettings: View {
         )
     }
 
-    private var blurFootnote: String {
+    private var blurFootnote: String? {
         if backgroundOpacity >= 0.999 {
             return WindowAppearance.glassSupported
                 ? "Blur and Liquid Glass work only when opacity is below 100%."
                 : "Blur works only when opacity is below 100%."
         }
-        if liquidGlass {
-            return "Liquid Glass uses the macOS material. The blur slider has no effect. "
-                + "Regular is more frosted. Clear is more transparent."
-        }
+        if liquidGlass { return nil }
         return "Set blur to 0 to turn it off."
     }
 
@@ -1474,8 +1437,6 @@ private struct AnimationsSettings: View {
                     .onChange(of: animatedSplits) { _, v in
                         Preferences.shared.animatedSplits = v
                     }
-                Text("Panes slide in and out when the layout changes.")
-                    .settingsCaption()
             } header: {
                 DocsSectionHeader("Splits", docs: .animations)
             }
@@ -1526,11 +1487,6 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: positionMode) { _, v in
                     Preferences.shared.quickTerminalPositionMode = v
                 }
-                Text(
-                    "Fixed sets the position of the panel with the sliders. "
-                        + "Dynamic adds a grab handle and remembers where you drag the panel."
-                )
-                .settingsCaption()
 
                 SettingsSlider(
                     label: "X",
@@ -1568,11 +1524,6 @@ private struct QuickTerminalSettings: View {
                 .onChange(of: sizeMode) { _, v in
                     Preferences.shared.quickTerminalSizeMode = v
                 }
-                Text(
-                    "Fixed sets the size of the panel with the sliders. "
-                        + "Dynamic lets you resize the panel from its edges. The panel opens again at that size."
-                )
-                .settingsCaption()
 
                 SettingsSlider(
                     label: "Width",
@@ -2252,12 +2203,6 @@ private struct UpdatesSettings: View {
                     }
                     .disabled(!updater.canCheckForUpdates)
                 }
-
-                Text(
-                    "Macterm checks for updates each day. When this setting is on, Macterm installs an update "
-                        + "when you quit. When it is off, a toolbar button shows that an update is available."
-                )
-                .settingsCaption()
             }
 
             // Deliberately its own section: the channel governs which updates
