@@ -9,6 +9,10 @@ between the scrollback and the visible screen erased the last screenful of
 scrollback rows in place. The fork's zmx replays the scrollback as logical
 lines and scrolls it out before the clear; the fork's libghostty opens the
 pty at the view's real size.
+
+The pane is a desktop widget: its session persists across a relaunch like
+any pane's, and it needs no window. A second instance's window is not key
+under the shared instance, and a tab that is never shown has no surface.
 """
 
 import json
@@ -27,37 +31,40 @@ def _text(harness, session):
     return json.loads(result.stdout)["dump"]["text"]
 
 
+def _widgets(harness):
+    return harness.cli_json("widget", "list").get("widgets") or []
+
+
 def test_reattached_scrollback_keeps_long_lines_and_the_rows_above_the_screen(request):
     """Its own instance, since the shared one must not be restarted under
     the other tests."""
     harness = MactermHarness(request.config.getoption("--app"), home_prefix="macterm-e2e-reattach-home-")
     try:
         harness.launch()
-        harness.open_project()
         harness.wait_for_socket()
-        tab = harness.cli_json("tab", "new")["tabs"][0]
-        pane = wait_for(lambda: harness.panes(tab=tab["id"]), message="the tab's pane")[0]
-        session = pane["session"]
-        wait_for(lambda: _text(harness, session), timeout=60, message="the shell prompt")
+        created = harness.cli_json("widget", "new", "--size", "2x2")["widgets"][0]
+        session = created["session"]
+        wait_for(lambda: _text(harness, session), timeout=60, message="the widget's shell prompt")
         rows = harness.pane_inspect(session=session)["rows"]
 
         nonce = uuid.uuid4().hex[:12]
         wide = f"wide-{nonce}-" + "0" * 400
         above = f"above-{nonce}"
-        # A line wider than any pane, a marker, then a screenful of filler so
-        # the marker ends up a few rows above the visible screen: inside the
-        # band the old snapshot erased, whatever grid the client attached
-        # with. The markers are assembled here, so the typed command line
-        # never contains them (printf builds the wide line from a width).
+        screen = f"screen-{nonce}-" + "0" * 200
+        filler = rows + 1
+        # A line wider than any pane, a marker, then one screen of filler plus
+        # one row, so the marker and the whole line end up in the scrollback a
+        # row or two above the visible screen: inside the band the old
+        # snapshot erased. Then a second wide line that stays on the visible
+        # screen, which the snapshot replays with its own layout. The markers
+        # are assembled here, so the typed command line never contains them
+        # (printf builds the wide lines from a width).
         harness.pane_run(
-            f'/bin/sh -c "printf wide-%s-%0400d {nonce} 0; echo; printf above-%s {nonce}; echo; seq 1 {rows + 3}"',
+            f'/bin/sh -c "printf wide-%s-%0400d {nonce} 0; echo; printf above-%s {nonce}; echo;'
+            f' seq -f filler-%g 1 {filler}; printf screen-%s-%0200d {nonce} 0; echo"',
             session=session,
         )
-        wait_for(
-            lambda: f"\n{rows + 3}\n" in (_text(harness, session) or ""),
-            timeout=60,
-            message="the filler to finish",
-        )
+        wait_for(lambda: screen in (_text(harness, session) or ""), timeout=60, message="the output to finish")
         before = _text(harness, session)
         assert wide in before
         assert above in before
@@ -65,10 +72,11 @@ def test_reattached_scrollback_keeps_long_lines_and_the_rows_above_the_screen(re
         harness.kill()
         harness.launch()
         harness.wait_for_socket()
+        wait_for(lambda: _widgets(harness), timeout=30, message="the widget to be restored")
 
         def replayed():
             text = _text(harness, session) or ""
-            return text if f"\n{rows + 3}\n" in text else None
+            return text if f"filler-{filler}" in text else None
 
         after = wait_for(replayed, timeout=60, message="the reattached session to replay its scrollback")
         # One line, not a stack of rows cut at the width the client reported
@@ -77,5 +85,7 @@ def test_reattached_scrollback_keeps_long_lines_and_the_rows_above_the_screen(re
         # The rows right above the screen survived the clear between the
         # scrollback and the visible screen.
         assert above in after, f"the rows above the screen were erased:\n{after}"
+        # The visible screen is replayed as logical lines too.
+        assert screen in after, f"the wide line on the screen came back split:\n{after}"
     finally:
         harness.cleanup()
