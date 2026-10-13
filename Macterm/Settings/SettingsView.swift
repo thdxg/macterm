@@ -2272,12 +2272,6 @@ private struct UpdatesSettings: View {
                     }
                     .disabled(!updater.canCheckForUpdates)
                 }
-
-                Text(
-                    "Macterm checks for updates each day. When this setting is on, Macterm installs an update "
-                        + "when you quit. When it is off, a toolbar button shows that an update is available."
-                )
-                .settingsCaption()
             }
 
             // Deliberately its own section: the channel governs which updates
