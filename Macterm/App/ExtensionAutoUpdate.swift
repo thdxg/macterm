@@ -4,7 +4,7 @@ import os
 private let logger = Logger(subsystem: appBundleID, category: "ExtensionAutoUpdater")
 
 /// Settings → Extensions → Update extensions automatically
-/// (`Preferences.autoUpdateExtensions`, off by default).
+/// (`Preferences.autoUpdateExtensions`, on by default).
 ///
 /// It applies only the updates that the card would apply with no question
 /// (`ExtensionGalleryItem.Update.available`): copies that the user did not

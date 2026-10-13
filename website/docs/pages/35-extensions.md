@@ -296,7 +296,7 @@ When you install an extension, Macterm records each of its files in a hidden fil
 - **You changed your copy, and the repository also changed the extension.** The card shows the Update button. Before it updates, Macterm asks you. Your changed copy goes to the Trash.
 - **The folder has no `.source.json`.** This is an extension that you wrote, copied by hand, or installed with an older version of Macterm. If it is the same as the version in the repository, Macterm writes the record. If it is different, the Update button asks before it puts your copy in the Trash.
 
-To get updates with no click, turn on **Update extensions automatically** in Settings → Extensions. It is off by default, because an extension runs commands on your Mac. When it is on, Macterm checks the repository when it starts and one time each day. It updates only the extensions that you did not change. A message names each extension that it updated. An extension that you changed, or one without `.source.json`, still waits for you to click its Update button.
+**Update extensions automatically** in Settings → Extensions is on by default. Macterm checks the repository when it starts and one time each day. It updates only the extensions that you did not change. A message names each extension that it updated. An extension that you changed, or one without `.source.json`, still waits for you to click its Update button. An extension runs commands on your Mac. To get each update only when you click, turn off **Update extensions automatically**.
 
 An update moves the old folder to the Trash. To undo an update, put the old folder back. To keep a copy as your own, delete its `.source.json`. If you do not change the copy, Macterm then asks before each update.
 

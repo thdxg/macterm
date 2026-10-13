@@ -1117,7 +1117,7 @@ final class Preferences {
         )
         static let showSpinnerOverAgentIcons = PreferenceStorageKey("macterm.sidebar.showSpinnerOverAgentIcons", default: true)
         static let autoAssignProjectColors = PreferenceStorageKey("macterm.projects.autoAssignColors", default: false)
-        static let autoUpdateExtensions = PreferenceStorageKey("macterm.extensions.autoUpdate", default: false)
+        static let autoUpdateExtensions = PreferenceStorageKey("macterm.extensions.autoUpdate", default: true)
         static let showNewProjectButton = PreferenceStorageKey("macterm.sidebar.showNewProjectButton", default: true)
         static let showProjectNewTabButton = PreferenceStorageKey("macterm.sidebar.showProjectNewTabButton", default: true)
         static let backgroundSSHConnections = PreferenceStorageKey("macterm.remote.backgroundSSHConnections", default: true)
