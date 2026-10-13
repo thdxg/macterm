@@ -12,3 +12,4 @@ nodes:
   host:
     items:
       - { title: Connect, action: { run: ssh "$HOST" }, alt: { run: ssh "$HOST", in: split } }
+      - { title: Create Remote Project, subtitle: Add this host as a project, action: { run: macterm project create "$HOST:~" --name "$HOST" --select } }
