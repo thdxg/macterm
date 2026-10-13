@@ -125,8 +125,8 @@
 	# time and only the supporting files get a real TTL.
 	#
 	# /img/* is the build's generated image derivatives (see build-images.mjs)
-	# and must be listed everywhere /assets/* is: it holds the responsive
-	# screenshots, the favicons, and the OG card that every page references, so
+	# and must be listed everywhere /assets/* is: it holds the favicons
+	# and the OG card that every page references, so
 	# leaving it to the @pages rule below would put `max-age=0` on the images
 	# the whole site is built out of and revalidate each one on every visit.
 	#

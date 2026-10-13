@@ -1,31 +1,21 @@
 // Renders the repo's full-resolution PNGs into web-sized derivatives under
 // public/img/ at build time.
 //
-// Why this exists: assets/ holds the originals the README and the release
-// notes use — 3168x1956 screenshots, ~2.5MB each, and the icon glyph. The
-// landing page displays the hero at ~1000 CSS px, so shipping the original
-// meant a 2.5MB LCP image for a 1000px slot. That is the page's largest
-// element, so it *is* the Largest Contentful Paint, and Core Web Vitals is a
-// ranking signal — the original alone put the page well outside the 2.5s
-// threshold on anything but a fast connection.
-//
-// The originals stay untouched and authoritative; everything here is a
-// generated artifact (public/img/ is gitignored), so replacing a screenshot in
-// assets/ is still a one-file change and the derivatives can never go stale.
-//
-// Outputs, per screenshot:
-//   img/hero-<width>.webp     the landing page's hero, and its 1400w PNG
-//   img/<name>-<width>.webp   the responsive srcset (WEBP_QUALITY)
-//   img/<name>-1400.png       the <picture> fallback for a WebP-less client
-// Plus, once:
+// The pages show no screenshot (the landing page plays the recordings in
+// assets/demo/), so the only images left to render are the ones every page
+// loads in its <head>:
 //   img/og.png                1200x630 social card, letterboxed on the canvas
 //   img/icon-<size>.png       favicon, apple-touch-icon and header brand mark
+//
+// The originals in assets/ stay untouched and authoritative; everything here is
+// a generated artifact (public/img/ is gitignored), so replacing an original is
+// still a one-file change and the derivatives can never go stale.
 //
 // Reads from public/assets/ rather than ../assets/ because that is the path
 // that exists in both trees: locally it is a symlink to the repo-root assets/,
 // and the Containerfile replaces it with real files copied from the build context.
 
-import { readdirSync, mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import sharp from "sharp";
@@ -34,110 +24,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = join(here, "public", "assets");
 const OUT_DIR = join(here, "public", "img");
 
-// The hero is capped at 1100 CSS px by the landing page's `max-width: 1180px`
-// figure minus 40px padding on each side, so 2200 covers it at 2x DPR. We also
-// include 3132 (the original width) for 3x displays and zoom.
-const WIDTHS = [640, 1000, 1400, 2200, 3132];
-// The width the <picture> fallback <img> is emitted at. Only reached by a
-// client with no WebP support, so it trades bytes for compatibility.
-const FALLBACK_WIDTH = 1400;
-const WEBP_QUALITY = 90;
-
-// Open Graph's canonical card size. Cropping the wider-than-tall screenshots
-// to this 1.90:1 box would cut the sidebar or the shell out of frame, so the
-// image is letterboxed onto the site's own ground instead — the whole
-// screenshot stays visible and the bars read as intentional matting. The
-// colour is the design system's `page` token; a card on a different ground than
-// the site reads as a rendering bug in every link preview.
+// Open Graph's canonical card size. Cropping the wider-than-tall hero to this
+// 1.90:1 box would cut the sidebar or the shell out of frame, so the image is
+// letterboxed onto the site's own ground instead — the whole image stays
+// visible and the bars read as intentional matting. The colour is the design
+// system's `page` token; a card on a different ground than the site reads as a
+// rendering bug in every link preview.
 const OG = { width: 1200, height: 630, background: "#111214" };
-
-// The landing page now shows recordings rather than a screenshot gallery, so
-// only screenshot-1 is still displayed (the "Built on libghostty" figure, and
-// og.png is rendered from it). The others are the README's and the release
-// notes', and are still rendered here so that stays one drop-in per file. The
-// count is checked because a missing source is a 404 wherever it IS used; the
-// build doesn't fail on it — a contributor touching only CSS shouldn't be
-// blocked by an asset they never touched — but it must not pass silently.
-const EXPECTED_SCREENSHOTS = 5;
 
 // 180 is the apple-touch-icon size iOS actually asks for; 32 and 16 are the
 // classic favicon rungs. The 730x730 original has no business being either.
 const ICON_SIZES = [180, 32, 16];
 
-// The landing page's hero. Same rungs as a screenshot; kept separate because
-// it is the one image the page actually loads, and the social card is rendered
-// from it rather than from a gallery shot that no longer appears anywhere.
-async function buildHero() {
-  const src = join(SRC_DIR, "hero.png");
-  if (!existsSync(src)) {
-    console.warn("build-images: assets/hero.png missing — the landing page's hero will 404");
-    return 0;
-  }
-  // Never upscale: rungs wider than the original are skipped, and the
-  // original's own width becomes the top rung. index.html's srcset is
-  // hand-authored, so it lists exactly these widths.
-  const { width: srcWidth } = await sharp(src).metadata();
-  const widths = WIDTHS.filter((w) => w < srcWidth).concat(srcWidth);
-  for (const width of widths) {
-    await sharp(src)
-      .resize({ width })
-      .webp({ quality: WEBP_QUALITY, smartSubsample: true })
-      .toFile(join(OUT_DIR, `hero-${width}.webp`));
-  }
-  await sharp(src)
-    .resize({ width: FALLBACK_WIDTH, withoutEnlargement: true })
-    .png()
-    .toFile(join(OUT_DIR, `hero-${FALLBACK_WIDTH}.png`));
-  return 1;
-}
-
-async function buildScreenshots() {
-  const sources = readdirSync(SRC_DIR)
-    .filter((f) => /^screenshot-\d+\.png$/.test(f))
-    .sort();
-  if (!sources.length) {
-    throw new Error(`build-images: no screenshot-*.png in ${SRC_DIR}`);
-  }
-
-  for (const file of sources) {
-    const name = file.replace(/\.png$/, "");
-    const input = join(SRC_DIR, file);
-    const { width: srcWidth } = await sharp(input).metadata();
-
-    for (const width of WIDTHS) {
-      // Never upscale — a derivative wider than the original is bytes spent to
-      // add no detail. A screenshot smaller than a rung simply skips it, and
-      // the srcset the page emits is filtered to match.
-      if (srcWidth && width > srcWidth) continue;
-      await sharp(input)
-        .resize({ width, withoutEnlargement: true })
-        .webp({ quality: WEBP_QUALITY, smartSubsample: true })
-        .toFile(join(OUT_DIR, `${name}-${width}.webp`));
-    }
-
-    await sharp(input)
-      .resize({ width: FALLBACK_WIDTH, withoutEnlargement: true })
-      .png({ compressionLevel: 9, palette: true })
-      .toFile(join(OUT_DIR, `${name}-${FALLBACK_WIDTH}.png`));
-  }
-
-  const missing = [];
-  for (let n = 1; n <= EXPECTED_SCREENSHOTS; n++) {
-    if (!sources.includes(`screenshot-${n}.png`)) missing.push(`screenshot-${n}.png`);
-  }
-  if (missing.length) {
-    console.warn(
-      `build-images: WARNING — public/index.html's gallery expects ` +
-        `${EXPECTED_SCREENSHOTS} screenshots; missing ${missing.join(", ")}. ` +
-        `Those thumbnails will 404. Add them to assets/ and rebuild.`
-    );
-  }
-
-  return sources.length;
-}
-
-// From the hero rather than a screenshot: the card should be the image the
-// page itself leads with.
+// From the hero, the same image the repo README leads with.
 async function buildOgCard() {
   const input = join(SRC_DIR, "hero.png");
   if (!existsSync(input)) {
@@ -173,13 +72,9 @@ async function buildIcons() {
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
-  const hero = await buildHero();
-  const count = await buildScreenshots();
   await buildOgCard();
   await buildIcons();
-  console.log(
-    `build-images: wrote ${hero} hero set, ${count} screenshot set(s), og.png, and ${ICON_SIZES.length} icons to ${OUT_DIR}`
-  );
+  console.log(`build-images: wrote og.png and ${ICON_SIZES.length} icons to ${OUT_DIR}`);
 }
 
 await main();
