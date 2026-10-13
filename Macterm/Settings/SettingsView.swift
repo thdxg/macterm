@@ -5,7 +5,7 @@ import SwiftUI
 /// The panes of the settings window, in sidebar order. Titles are the
 /// user-visible sidebar labels — Title Case, matching the macOS convention the
 /// rest of the app's menus follow.
-private enum SettingsPane: String, CaseIterable, Identifiable {
+enum SettingsPane: String, CaseIterable, Identifiable {
     case general = "General"
     case projects = "Projects"
     case appearance = "Appearance"
@@ -34,6 +34,52 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .updates: "arrow.triangle.2.circlepath"
         }
     }
+
+    /// The section headers and control labels of the pane, so that the
+    /// sidebar search finds a pane by what is on it. Keep them in sync with
+    /// the text of the pane.
+    var searchTerms: [String] {
+        switch self {
+        case .general:
+            [
+                "Ghostty Config", "Load Ghostty's default config files", "Layout", "Auto-tile panes",
+                "Opening Text Files", "Open in", "Remote Projects", "Background SSH connections",
+                "Reconnect panes after a dropped connection", "Session Persistence",
+                "Full Disk Access", "Notifications",
+            ]
+        case .projects: ["Layouts"]
+        case .appearance:
+            [
+                "Window", "Background opacity", "Background blur", "Liquid Glass", "Adaptive background",
+                "Sidebar", "Peek sidebar when hidden", "Project icon", "Tab icon", "Icon size",
+                "Auto-assign project colors", "Show AI agent icons", "Show tab status indicator",
+                "Show new project button", "Show new tab button on projects", "Tab Switching",
+                "Show tab previews while cycling", "Recent tabs to cycle through", "Toolbar", "Show toolbar",
+                "Tab switcher",
+            ]
+        case .animations:
+            [
+                "Scrolling", "Smooth scrolling", "Snap to whole row", "Cursor", "Smooth cursor",
+                "Cursor trail", "Splits", "Animate splits",
+            ]
+        case .quickTerminal: ["Position", "Size", "Width", "Height"]
+        case .widgets: ["Desktop"]
+        case .passwords: ["Enable password manager", "Require authentication", "Saved Passwords", "Keychain"]
+        case .extensions: ["Update extensions automatically", "Palettes"]
+        case .keymaps: ["Keybinds", "Shortcuts", "Passthrough Programs", "Global"]
+        case .updates: ["Automatic Updates", "Update automatically", "Channel", "Update channel", "Version"]
+        }
+    }
+
+    /// The panes that match `query`, best first, through the search engine
+    /// of the app. The title is the first field, so that a match in a title
+    /// beats the same match in a search term. The terms are one field, like a
+    /// subtitle: one field for each term would cost each term its position
+    /// in the list (`SearchIndex.fieldPenalty`). An empty query keeps every
+    /// pane in sidebar order.
+    static func matching(_ query: String) -> [SettingsPane] {
+        Search.rank(allCases, by: query) { [$0.title, $0.searchTerms.joined(separator: " · ")] }
+    }
 }
 
 /// Sidebar-style preferences window, mirroring the macOS System Settings
@@ -41,8 +87,15 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
 /// the right. `NavigationSplitView` is the native container — it also places
 /// the pane title over the detail column, which nothing else does (see
 /// `PinnedSidebar`).
+///
+/// The search field at the top of the sidebar is the one of System Settings
+/// (`.searchable` with `.sidebar` placement). It also keeps the first pane
+/// row out of the soft scroll-edge band of the titlebar. That band reaches
+/// about 12 pt below the titlebar, and it darkened the top of a selected
+/// first row like a shadow. AppKit has no switch for the band, only a style.
 struct SettingsView: View {
     @State private var selection: SettingsPane = .general
+    @State private var query = ""
 
     /// Sidebar width — the pane list is six short labels, so there's nothing to
     /// gain from resizing it, and dragging it narrow just truncates them.
@@ -57,11 +110,21 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
             List(selection: $selection) {
-                ForEach(SettingsPane.allCases) { pane in
+                ForEach(SettingsPane.matching(query)) { pane in
                     NavigationLink(value: pane) {
                         Label(pane.title, systemImage: pane.symbol)
                     }
                 }
+            }
+            .overlay {
+                if SettingsPane.matching(query).isEmpty {
+                    ContentUnavailableView.search(text: query)
+                }
+            }
+            .searchable(text: $query, placement: .sidebar, prompt: "Search")
+            // Return opens the best match, as in System Settings.
+            .onSubmit(of: .search) {
+                if let best = SettingsPane.matching(query).first { selection = best }
             }
             .navigationSplitViewColumnWidth(Self.sidebarWidth)
             .hidingSidebarToggle()
