@@ -16,6 +16,11 @@ private let logger = Logger(subsystem: appBundleID, category: "PaletteScreenshot
 /// glass shows what is behind it, which neither `ImageRenderer` nor
 /// `cacheDisplay` can draw. That takes macOS's Screen Recording permission,
 /// asked for the first time.
+///
+/// The capture itself is the permission check. `CGPreflightScreenCaptureAccess`
+/// keeps its first answer for the life of the process, so a grant made while
+/// Macterm runs read as a refusal until a relaunch. Only a refusal from
+/// ScreenCaptureKit (`SCStreamError.userDeclined`) asks for the permission.
 @MainActor
 enum PaletteScreenshot {
     /// Captures the key window's palette and asks where to save it. With the
@@ -23,14 +28,6 @@ enum PaletteScreenshot {
     /// first and captures its first screen once it is drawn; a deeper
     /// screen is captured by this command's keybind, pressed on it.
     static func capture(appState: AppState) {
-        guard CGPreflightScreenCaptureAccess() else {
-            CGRequestScreenCaptureAccess()
-            appState.presentToast(
-                "Macterm needs Screen Recording to capture the palette",
-                subtitle: "Allow it in System Settings → Privacy & Security. Then try again."
-            )
-            return
-        }
         guard let windowState = appState.keyWindow ?? appState.windows.first else { return }
         if windowState.isCommandPaletteVisible, windowState.paletteAnchor?.window != nil {
             Task { await captureAndSave(windowState: windowState, appState: appState) }
@@ -55,10 +52,25 @@ enum PaletteScreenshot {
         do {
             let png = try await capture(rect: rect, on: screen)
             save(png, suggestedFolder: folder, appState: appState)
+        } catch where isPermissionRefusal(error) {
+            logger.error("palette screenshot: no Screen Recording permission")
+            CGRequestScreenCaptureAccess()
+            appState.presentToast(
+                "Macterm needs Screen Recording to capture the palette",
+                subtitle: "Allow it in System Settings → Privacy & Security. If it is on, remove Macterm from the list. Then try again."
+            )
         } catch {
             logger.error("palette screenshot: \(error.localizedDescription, privacy: .public)")
             appState.presentToast("Cannot capture the palette", subtitle: error.localizedDescription)
         }
+    }
+
+    /// True when ScreenCaptureKit refused the capture for lack of Screen
+    /// Recording. A toggle that is on in System Settings can still refuse: the
+    /// grant names the code signature, and each ad-hoc debug build has a new one.
+    private static func isPermissionRefusal(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == SCStreamErrorDomain && error.code == SCStreamError.Code.userDeclined.rawValue
     }
 
     /// `rect` (AppKit screen coordinates, on `screen`) as a PNG of exactly
