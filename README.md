@@ -49,11 +49,17 @@
 - **Pinned tabs** \
   Pin a tab above your projects to keep it. It starts each time Macterm starts. If its session ends, Macterm starts it again with its command.
 - **Command palette** \
-  Press <kbd>⌘P</kbd> to split panes, switch projects or open a folder. Each command is in the palette, and each row shows its keybind.
-- **Declarative layouts** \
-  Write the tabs, splits and commands of a project in YAML. Macterm builds the tabs from the file when you apply the layout.
+  Press <kbd>⌘P</kbd> to split panes, switch projects, find a file or open a folder. Each command is in the palette, and each row shows its keybind.
+- **Extensions** \
+  Install an extension to add palettes to the command palette. The Git extension switches branches and shows logs and diffs. Other extensions cover Docker, Kubernetes, SSH and Claude Code. To write your own, use a YAML file. A command prints a list, and Macterm makes it a screen that you can search.
+- **Save and restore layouts** \
+  Save the tabs, splits and commands of a project as a YAML file. Apply the layout to build them again, or edit the file by hand.
 - **Control CLI** \
   The bundled `macterm` command controls the running app. Scripts and AI agents can open panes, run commands, and apply and save layouts. `macterm skills` prints skills that teach a coding agent to use the CLI.
+- **Tab switcher** \
+  Hold the recent-tab keybind to see a live preview of each tab, and select one.
+- **Animations** \
+  Scrolling and splits move smoothly. You can also turn on a gliding cursor with a trail.
 - **Quick terminal** \
   A drop-down terminal with a global keybind (<kbd>⌃`</kbd>). Use it for short tasks from any app.
 - **Desktop widgets** \
