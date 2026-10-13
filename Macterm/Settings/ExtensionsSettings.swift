@@ -72,17 +72,11 @@ struct ExtensionsSettings: View {
                     }
                 }
 
-                HStack {
-                    Text("Update extensions automatically")
-                    Spacer()
-                    Toggle("Update extensions automatically", isOn: $autoUpdate)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .onChange(of: autoUpdate) { _, on in
-                            Preferences.shared.autoUpdateExtensions = on
-                            if on { Task { await appState.extensionAutoUpdater.runOnce() } }
-                        }
-                }
+                Toggle("Update extensions automatically", isOn: $autoUpdate)
+                    .onChange(of: autoUpdate) { _, on in
+                        Preferences.shared.autoUpdateExtensions = on
+                        if on { Task { await appState.extensionAutoUpdater.runOnce() } }
+                    }
 
                 HStack(alignment: .firstTextBaseline) {
                     Text("Extensions add screens to the command palette.")
