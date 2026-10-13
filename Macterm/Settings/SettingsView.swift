@@ -1494,8 +1494,6 @@ private struct AnimationsSettings: View {
                     .onChange(of: animatedSplits) { _, v in
                         Preferences.shared.animatedSplits = v
                     }
-                Text("Panes slide in and out when the layout changes.")
-                    .settingsCaption()
             } header: {
                 DocsSectionHeader("Splits", docs: .animations)
             }
