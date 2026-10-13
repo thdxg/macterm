@@ -1672,11 +1672,11 @@ private struct KeymapSettings: View {
     /// palettes' `PaletteHotkeys.rowID`s together, so the conflict check
     /// sees both tables.
     @State
-    private var values: [String: String] = [:]
+    private var values: [String: String]
     @State
-    private var passthrough: [String: Bool] = [:]
+    private var passthrough: [String: Bool]
     @State
-    private var global: [String: Bool] = [:]
+    private var global: [String: Bool]
     @State
     private var capturingActionID: String?
     @State
@@ -1719,20 +1719,45 @@ private struct KeymapSettings: View {
     can see it, and it can no longer pass through to a program.
     """
 
-    /// Titles of the *other* bindings — actions and custom palettes — that
-    /// share the row `rowID`'s chord, for the inline conflict message.
-    private func conflictPartners(forRow rowID: String) -> [String] {
-        guard let key = HotkeyRegistry.conflictKey(for: values[rowID] ?? "disabled") else {
-            return []
+    /// What every row reads, built once for each render of the body: a scan
+    /// of every binding for each row parsed about ten thousand chords, and a
+    /// read of the theme color for each row read the ghostty palette through
+    /// the C config a hundred times. Both slowed the pane to open.
+    private struct RowContext {
+        /// The bindings that share each chord, keyed by
+        /// `HotkeyRegistry.conflictKey`, in table order.
+        let chords: [String: [(rowID: String, title: String)]]
+        let warning: Color
+    }
+
+    private func rowContext() -> RowContext {
+        RowContext(chords: bindingsByChord(), warning: MactermTheme.warning)
+    }
+
+    /// The bindings — actions and custom palettes — that share each chord,
+    /// keyed by `HotkeyRegistry.conflictKey`, in table order.
+    private func bindingsByChord() -> [String: [(rowID: String, title: String)]] {
+        var table: [String: [(rowID: String, title: String)]] = [:]
+        for action in HotkeyAction.allCases {
+            guard let key = HotkeyRegistry.conflictKey(for: values[action.id] ?? "disabled") else { continue }
+            table[key, default: []].append((action.id, action.title))
         }
-        var partners = HotkeyAction.allCases
-            .filter { $0.id != rowID && HotkeyRegistry.conflictKey(for: values[$0.id] ?? "disabled") == key }
-            .map(\.title)
-        partners += appState.customPalettes.entries
-            .filter { PaletteHotkeys.rowID(paletteID: $0.id) != rowID }
-            .filter { HotkeyRegistry.conflictKey(for: values[PaletteHotkeys.rowID(paletteID: $0.id)] ?? "disabled") == key }
-            .map(\.pill.title)
-        return partners
+        for entry in appState.customPalettes.entries {
+            let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
+            guard let key = HotkeyRegistry.conflictKey(for: values[rowID] ?? "disabled") else { continue }
+            table[key, default: []].append((rowID, entry.pill.title))
+        }
+        return table
+    }
+
+    /// Titles of the *other* bindings that share the row `rowID`'s chord,
+    /// for the inline conflict message.
+    private func conflictPartners(
+        forRow rowID: String,
+        in table: [String: [(rowID: String, title: String)]]
+    ) -> [String] {
+        guard let key = HotkeyRegistry.conflictKey(for: values[rowID] ?? "disabled") else { return [] }
+        return (table[key] ?? []).filter { $0.rowID != rowID }.map(\.title)
     }
 
     /// The custom palettes the search matches, best first (`Search.rank`,
@@ -1776,8 +1801,43 @@ private struct KeymapSettings: View {
 
     private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
+    /// Loads the stored bindings before the first render, so that the table
+    /// does not render once with no chords and again with them.
+    init() {
+        let stored = Self.storedBindings()
+        _values = State(initialValue: stored.values)
+        _passthrough = State(initialValue: stored.passthrough)
+        _global = State(initialValue: stored.global)
+    }
+
+    /// Every binding's stored chord and flags, by row id.
+    private struct StoredBindings {
+        let values: [String: String]
+        let passthrough: [String: Bool]
+        let global: [String: Bool]
+    }
+
+    private static func storedBindings() -> StoredBindings {
+        var map: [String: String] = [:]
+        var flags: [String: Bool] = [:]
+        var globals: [String: Bool] = [:]
+        for action in HotkeyAction.allCases {
+            map[action.id] = HotkeyRegistry.selectedShortcutString(for: action)
+            flags[action.id] = HotkeyRegistry.passesThroughToPrograms(for: action)
+            globals[action.id] = HotkeyRegistry.isGlobal(action)
+        }
+        for paletteID in PaletteHotkeys.shared.paletteIDs {
+            let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
+            flags[rowID] = PaletteHotkeys.shared.passesThrough(paletteID: paletteID)
+            globals[rowID] = PaletteHotkeys.shared.isGlobal(paletteID: paletteID)
+        }
+        let values = map.merging(PaletteHotkeys.shared.shortcutStringsByRowID()) { _, palette in palette }
+        return StoredBindings(values: values, passthrough: flags, global: globals)
+    }
+
     var body: some View {
-        Form {
+        let context = rowContext()
+        return Form {
             passthroughSection
 
             // One block: the search at its top, then every category as a
@@ -1792,11 +1852,11 @@ private struct KeymapSettings: View {
                 ForEach(actionsByCategory, id: \.category) { group in
                     sectionLabel(group.category.rawValue)
                     ForEach(group.actions) { action in
-                        hotkeyRow(action)
+                        hotkeyRow(action, context: context)
                     }
                     if group.category == .palettes {
                         ForEach(matchingCustomPalettes) { entry in
-                            customPaletteRow(entry)
+                            customPaletteRow(entry, context: context)
                         }
                     }
                 }
@@ -1829,22 +1889,12 @@ private struct KeymapSettings: View {
         )
         .onAppear {
             appState.customPalettes.reloadIfChanged()
-            var map: [String: String] = [:]
-            var flags: [String: Bool] = [:]
-            var globals: [String: Bool] = [:]
-            for action in HotkeyAction.allCases {
-                map[action.id] = HotkeyRegistry.selectedShortcutString(for: action)
-                flags[action.id] = HotkeyRegistry.passesThroughToPrograms(for: action)
-                globals[action.id] = HotkeyRegistry.isGlobal(action)
-            }
-            for paletteID in PaletteHotkeys.shared.paletteIDs {
-                let rowID = PaletteHotkeys.rowID(paletteID: paletteID)
-                flags[rowID] = PaletteHotkeys.shared.passesThrough(paletteID: paletteID)
-                globals[rowID] = PaletteHotkeys.shared.isGlobal(paletteID: paletteID)
-            }
-            values = map.merging(PaletteHotkeys.shared.shortcutStringsByRowID()) { _, palette in palette }
-            passthrough = flags
-            global = globals
+            // A reload can add palettes and their stored chords. Assign only
+            // a change, so the usual open renders the table once.
+            let stored = Self.storedBindings()
+            if stored.values != values { values = stored.values }
+            if stored.passthrough != passthrough { passthrough = stored.passthrough }
+            if stored.global != global { global = stored.global }
         }
         .onDisappear {
             capturingActionID = nil
@@ -1924,21 +1974,26 @@ private struct KeymapSettings: View {
     }
 
     /// A custom palette's row, its flags kept by `PaletteHotkeys`.
-    private func customPaletteRow(_ entry: CustomPaletteStore.Entry) -> some View {
+    private func customPaletteRow(
+        _ entry: CustomPaletteStore.Entry,
+        context: RowContext
+    ) -> some View {
         keymapRow(
             title: entry.pill.title,
             binding: .palette(entry.id),
             global: paletteGlobalBinding(entry.id),
-            passthrough: palettePassthroughBinding(entry.id)
+            passthrough: palettePassthroughBinding(entry.id),
+            context: context
         )
     }
 
-    private func hotkeyRow(_ action: HotkeyAction) -> some View {
+    private func hotkeyRow(_ action: HotkeyAction, context: RowContext) -> some View {
         keymapRow(
             title: action.title,
             binding: .action(action),
             global: globalBinding(action),
-            passthrough: passthroughBinding(action)
+            passthrough: passthroughBinding(action),
+            context: context
         )
     }
 
@@ -1968,11 +2023,12 @@ private struct KeymapSettings: View {
         title: String,
         binding: HotkeyBinding,
         global: Binding<Bool>,
-        passthrough: Binding<Bool>
+        passthrough: Binding<Bool>,
+        context: RowContext
     ) -> some View {
         let rowID = binding.id
         let isAlwaysGlobal = if case let .action(action) = binding { action.isAlwaysGlobal } else { false }
-        let partners = conflictPartners(forRow: rowID)
+        let partners = conflictPartners(forRow: rowID, in: context.chords)
         let isCapturing = capturingActionID == rowID
         let isUnmapped = HotkeyRegistry.displaySymbols(for: values[rowID] ?? "disabled").isEmpty
         VStack(alignment: .leading, spacing: 4) {
@@ -2018,7 +2074,7 @@ private struct KeymapSettings: View {
                     // with every other row — in exactly the row asking to be
                     // read closely.
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(MactermTheme.warning)
+                        .foregroundStyle(context.warning)
                         .opacity(partners.isEmpty ? 0 : 1)
                         .frame(width: Self.warningColumn)
                 }
@@ -2028,7 +2084,7 @@ private struct KeymapSettings: View {
             if !partners.isEmpty {
                 Text("Conflicts with \(partners.joined(separator: ", "))")
                     .font(.system(size: 11))
-                    .foregroundStyle(MactermTheme.warning)
+                    .foregroundStyle(context.warning)
             }
 
             // A flagged chord the system would not give us. Said here rather
@@ -2038,7 +2094,7 @@ private struct KeymapSettings: View {
             if let refusal = globalHotkeys.refusals[binding] {
                 Text(refusal.message)
                     .font(.system(size: 11))
-                    .foregroundStyle(MactermTheme.warning)
+                    .foregroundStyle(context.warning)
             }
         }
     }
@@ -2083,6 +2139,13 @@ private struct KeymapRowMenu: NSViewRepresentable {
         Coordinator(self)
     }
 
+    /// One image for every row. The pane makes a menu for each keybind, and
+    /// the symbol lookup was a measurable part of opening it.
+    private static let faceImage = NSImage(
+        systemSymbolName: "ellipsis.circle",
+        accessibilityDescription: "Keybind options"
+    )
+
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = NSPopUpButton(frame: .zero, pullsDown: true)
         button.isBordered = false
@@ -2091,7 +2154,7 @@ private struct KeymapRowMenu: NSViewRepresentable {
         button.toolTip = "Keybind options"
         // A pull-down shows its first item as the button and never lists it.
         let face = NSMenuItem()
-        face.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "Keybind options")
+        face.image = Self.faceImage
         button.menu?.addItem(face)
         button.menu?.autoenablesItems = false
         button.menu?.delegate = context.coordinator
