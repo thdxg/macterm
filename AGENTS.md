@@ -848,12 +848,11 @@ The script has these rules. We learned each one with the real app:
   - `dockdrop` aims for the x of the tile while the Dock that hides automatically is still below the screen. It wiggles on the edge until the Dock slides up. Then it reads the tile again under magnification.
   - A desktop with Stacks or a sort order ignores the position of the folder. The take therefore switches both off in `DesktopViewSettings` of Finder. Finder restarts to read them.
 - **Demo 9 records the widgets of the desktop as they are**. Nothing is created or moved for the take. The frame is the full height below the menu bar, with the desktop icons hidden (`CreateDesktop`). The btop widget is reset to a shell, edited from its right-click menu, and dragged out and back. btop needs at least 80×24 cells. At a font of 16 pt, a widget that runs it needs 4×4 grid cells or more.
-- **Demo 11 writes its own extension into the real extensions folder.**
+- **Demo 11 copies the Git extension of this checkout into the real extensions folder.**
   - The installed app reads `~/.config/macterm/extensions/` again at every open of the palette. There is no throwaway config to point it at.
-  - The take writes the extension `macterm-demo-git`, with a marker in the first line of its `extension.yaml`. It refuses to touch a folder with that name that has no marker. It refuses to record next to another palette with the name Git (when you type `git`, the selection must land on its row). The EXIT trap removes the folder only when it carries the marker.
-  - Its commands are POSIX sh, like the commands of every palette, whatever the login shell is. The file is therefore written one time (its listing needs jq).
-  - The script first runs the listing of the commits one time, off camera. It runs it in the way that the palette runs it: through the login shell, into `sh`.
-  - The palette has no CLI view, so its steps take beats. The script waits for the Diff split through `pane dump`.
+  - The take copies `extensions/git` to `macterm-demo-git`, with a marker in the first line of its `extension.yaml`. It refuses to touch a folder with that name that has no marker. It refuses to record next to another palette with the name Git (when you type `git`, the selection must land on its row). The EXIT trap removes the folder only when it carries the marker.
+  - The take shows the real extension, so the video cannot drift from what users install. It searches two branches of the project (the two shortest names) and runs **Log** in a split. It never runs **Switch to it**, because that changes the branch of the project.
+  - The palette has no CLI view, so its steps take beats. The script waits for the Log split through `pane dump`.
 - **Demo 10 is `ssh demo-box` from a local shell.**
   - The script types the password with `pane key`. `pane run` pastes, and ssh reads the markers for a bracketed paste as password.
   - The ssh-terminfo wrapper of Macterm would open a second password prompt, off screen. The recorder therefore installs the entry over the key, and it lists the host in `~/Library/Caches/macterm/ssh-terminfo` for the take.
