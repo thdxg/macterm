@@ -275,7 +275,7 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: jdx/mise-action@v5.0.1
+      - uses: jdx/mise-action@v5.1.1
         if: steps.published.outputs.published != 'true'
 
       # Pin the toolchain: `macos-26` defaults to whatever Xcode the image
