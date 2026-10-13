@@ -38,38 +38,22 @@
 
 ## Features
 
-- **Session persistence** \
-  When you quit, your shells keep running. When you start Macterm again, every pane returns with its scrollback and its running programs.
-- **Multiplexing** \
-  Drag a pane onto another pane to join them. Move a pane to its own tab with a drag or a keybind. Macterm saves your projects, tabs and splits and restores them when you start it again.
-- **Remote projects** \
-  Open a folder on another machine over SSH. Your shells keep running on that machine. They keep running when you quit Macterm, when the connection drops and when you restart your Mac.
-- **Vertical project sidebar** \
-  Projects and their tabs are in a native macOS sidebar. The sidebar is vertical, so there is room to read long names. To add a project from Finder, right-click a folder and select **Services → New Macterm Project Here**.
-- **Pinned tabs** \
-  Pin a tab above your projects to keep it. It starts each time Macterm starts. If its session ends, Macterm starts it again with its command.
-- **Command palette** \
-  Press <kbd>⌘P</kbd> to split panes, switch projects, find a file or open a folder. Each command is in the palette, and each row shows its keybind.
-- **Extensions** \
-  Install an extension to add palettes to the command palette. The Git extension switches branches and shows logs and diffs. Other extensions cover Docker, Kubernetes, SSH and Claude Code. To write your own, use a YAML file. A command prints a list, and Macterm makes it a screen that you can search.
-- **Save and restore layouts** \
-  Save the tabs, splits and commands of a project as a YAML file. Apply the layout to build them again, or edit the file by hand.
-- **Control CLI** \
-  The bundled `macterm` command controls the running app. Scripts and AI agents can open panes, run commands, and apply and save layouts. `macterm skills` prints skills that teach a coding agent to use the CLI.
-- **Tab switcher** \
-  Hold the recent-tab keybind to see a live preview of each tab, and select one.
-- **Animations** \
-  Scrolling and splits move smoothly. You can also turn on a gliding cursor with a trail.
-- **Quick terminal** \
-  A drop-down terminal with a global keybind (<kbd>⌃`</kbd>). Use it for short tasks from any app.
-- **Desktop widgets** \
-  Put a terminal on your desktop next to the macOS widgets. It has the same grid and the same shape. Its shell keeps running when you quit. The widget returns to the same place.
-- **Password autofill** \
-  When `ssh`, `sudo` or another program asks for a password, Macterm offers to save the password in your keychain after the password works. The next time the same prompt appears, Macterm fills it in after Touch ID or your login password.
-- **Adaptive background** \
-  The window takes the background color that the running program paints. A full-screen program colors the whole window. In a split, each pane takes its own color.
-- **Ghostty compatibility** \
-  Macterm reads your existing Ghostty config. Your theme, font and keybinds carry over.
+- **Session persistence**: your shells keep running when you quit, and every pane returns when you start Macterm again.
+- **Vertical project sidebar**: projects and their tabs in a native macOS sidebar.
+- **Splits and multiplexing**: split panes, drag a pane onto another, and move a pane to its own tab.
+- **Remote projects**: open a folder on another machine over SSH. Its shells keep running on that machine.
+- **Pinned tabs**: keep a tab above your projects. It starts with Macterm.
+- **Command palette**: press <kbd>⌘P</kbd> for every command, with its keybind on the row.
+- **Extensions**: add palettes for Git, Docker, Kubernetes, SSH and Claude Code, or write your own in YAML.
+- **Save and restore layouts**: the tabs, splits and commands of a project in one YAML file.
+- **Control CLI**: scripts and coding agents control Macterm with the `macterm` command.
+- **Tab switcher**: hold the recent-tab keybind to pick a tab from live previews.
+- **Animations**: scrolling, splits and the cursor glide into place.
+- **Quick terminal**: a drop-down terminal over any app, with a global keybind.
+- **Desktop widgets**: a terminal on your desktop, in the grid and shape of the macOS widgets.
+- **Password autofill**: Macterm saves the passwords that you type at a prompt and fills them in again.
+- **Adaptive background**: the window takes the background color of the running program.
+- **Ghostty compatibility**: your Ghostty config, theme, font and keybinds carry over.
 
 ## Install
 
