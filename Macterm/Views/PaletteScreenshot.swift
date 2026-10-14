@@ -55,9 +55,12 @@ enum PaletteScreenshot {
         } catch where isPermissionRefusal(error) {
             logger.error("palette screenshot: no Screen Recording permission")
             CGRequestScreenCaptureAccess()
+            // The subtitle is one line (`Toast`), so it carries only the
+            // instruction the system dialog does not give: a switch that is
+            // already on names another build, and only a new row fixes that.
             appState.presentToast(
-                "Macterm needs Screen Recording to capture the palette",
-                subtitle: "Allow it in System Settings → Privacy & Security. If it is on, remove Macterm from the list. Then try again."
+                "Allow Screen Recording for Macterm in Privacy & Security",
+                subtitle: "If it is on, remove Macterm from the list. Then try again."
             )
         } catch {
             logger.error("palette screenshot: \(error.localizedDescription, privacy: .public)")
@@ -138,7 +141,6 @@ enum PaletteScreenshot {
         try? FileManager.default.createDirectory(at: suggestedFolder, withIntermediateDirectories: true)
         let panel = NSSavePanel()
         panel.title = "Save Palette Screenshot"
-        panel.message = "An extension keeps its screenshots in a screenshots folder next to extension.yaml."
         panel.allowedContentTypes = [.png]
         panel.directoryURL = suggestedFolder
         panel.nameFieldStringValue = MactermExtension.nextScreenshotName(in: suggestedFolder)
