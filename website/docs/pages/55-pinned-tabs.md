@@ -27,7 +27,7 @@ When you press <kbd>⌘W</kbd> on a pinned tab, its processes end. The row stays
 
 ## pinned.yaml
 
-The pinned tabs are in `~/.config/macterm/pinned.yaml`. Macterm keeps the file up to date, and you can edit it. (The file was in `~/.config/macterm/projects/`. The first time that Macterm runs, it moves an existing file up.)
+The pinned tabs are in `~/.config/macterm/pinned.yaml`. Macterm keeps the file up to date, and you can edit it.
 
 ```yaml
 path: <pinned>

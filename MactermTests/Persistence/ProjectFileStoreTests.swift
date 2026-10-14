@@ -328,4 +328,16 @@ struct ProjectFileStoreTests {
         #expect(filenames(store) == ["aaa.yaml", "api.yaml"])
         #expect(try store.loadFull(forProjectPath: "/repo", preferredSlug: "api")?.name == "api")
     }
+
+    /// The default store keeps the single layout files (`pinned.yaml`,
+    /// `widgets.yaml`) one level above `projects/`; a store anywhere else
+    /// keeps them inside its own directory.
+    @Test
+    func the_config_directory_is_the_parent_only_for_the_default_store() {
+        let custom = URL(fileURLWithPath: "/tmp/somewhere/projects", isDirectory: true)
+        #expect(ProjectFileStore(directoryURL: custom).configDirectoryURL == custom)
+        let standard = ProjectFileStore()
+        #expect(standard.configDirectoryURL.standardizedFileURL
+            == ProjectFileStore.defaultDirectory().deletingLastPathComponent().standardizedFileURL)
+    }
 }

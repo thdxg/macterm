@@ -4,10 +4,9 @@ import os
 private let logger = Logger(subsystem: appBundleID, category: "PinnedLayoutStore")
 
 // The auto-maintained declaration of the pinned tabs:
-// `~/.config/macterm/pinned.yaml`, beside `widgets.yaml`. It used to live in
-// `projects/`; an existing file there is moved up at launch
-// (`migrateLegacyFile`), and until the old location is retired it keeps
-// working in place whenever it can't be (`fileURL`).
+// `~/.config/macterm/pinned.yaml`, beside `widgets.yaml`. (Before 1.31 it
+// lived in `projects/`; 1.31 moved an existing file up at launch, and #446
+// retired that location. A file still there is ignored.)
 // Unlike every project file it has TWO writers — the app (on pin/unpin/membership change and
 // at quit) and the user's editor — so the store tracks the exact text of its
 // own last write and callers absorb any external change before overwriting
@@ -140,60 +139,9 @@ struct PinnedLayoutStore {
     /// sessions are per-flavor). `ProjectFileStore.configDirectoryURL`, so
     /// tests isolate it automatically.
     let directoryURL: URL
-    /// Where the file lived before it moved up: the projects directory.
-    /// Still honored (see `fileURL`) until that location is retired (#446).
-    let legacyDirectoryURL: URL?
 
-    init(directoryURL: URL, legacyDirectoryURL: URL? = nil) {
-        self.directoryURL = directoryURL
-        self.legacyDirectoryURL = legacyDirectoryURL
-    }
-
-    /// The file's place: `~/.config/macterm/pinned.yaml`.
-    var preferredFileURL: URL { directoryURL.appendingPathComponent(Self.filename) }
-
-    /// `projects/pinned.yaml`, when it's a distinct place.
-    var legacyFileURL: URL? {
-        guard let legacyDirectoryURL, legacyDirectoryURL.standardizedFileURL != directoryURL.standardizedFileURL else {
-            return nil
-        }
-        return legacyDirectoryURL.appendingPathComponent(Self.filename)
-    }
-
-    /// The file every read and write goes to: the new place, unless only the
-    /// old one exists — a migration that couldn't move it — in which case
-    /// the old one keeps working where it is. With both present, the new
-    /// one wins.
-    var fileURL: URL {
-        let manager = FileManager.default
-        if let legacy = legacyFileURL, !manager.fileExists(atPath: preferredFileURL.path), manager.fileExists(atPath: legacy.path) {
-            return legacy
-        }
-        return preferredFileURL
-    }
-
-    /// Carry a `projects/pinned.yaml` from before the move up to its new
-    /// place — once, and only when there is nothing at the new place yet: a
-    /// file already there is the live one. A leftover old file is harmless
-    /// (the project listing skips the reserved name) and is logged.
-    func migrateLegacyFile() {
-        guard let legacy = legacyFileURL else { return }
-        let manager = FileManager.default
-        guard manager.fileExists(atPath: legacy.path) else { return }
-        let target = preferredFileURL
-        guard !manager.fileExists(atPath: target.path) else {
-            logger.info("Both \(legacy.path, privacy: .public) and \(target.path, privacy: .public) exist; using the latter")
-            return
-        }
-        do {
-            try manager.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            try manager.moveItem(at: legacy, to: target)
-            logger.info("Moved \(legacy.path, privacy: .public) to \(target.path, privacy: .public)")
-        } catch {
-            // Not fatal: `fileURL` keeps the old file working in place.
-            logger.error("Failed to move \(legacy.path, privacy: .public); using it in place: \(error, privacy: .public)")
-        }
-    }
+    /// The file every read and write goes to: `~/.config/macterm/pinned.yaml`.
+    var fileURL: URL { directoryURL.appendingPathComponent(Self.filename) }
 
     enum ReadResult {
         /// No file — NOT "no pinned tabs": an absent file is treated as "no

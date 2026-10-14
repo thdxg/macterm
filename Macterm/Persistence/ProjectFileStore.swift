@@ -199,8 +199,8 @@ struct ProjectFileStore {
         // `pinned.yaml` is the auto-managed pinned-tabs declaration, not a
         // project layout — surfacing it here would offer "Create Project" on
         // a file with no `path:` (and "Remove" on state the app rewrites).
-        // It now lives one level up, but a legacy one still works here until
-        // that location is retired (`PinnedLayoutStore.fileURL`).
+        // It lives one level up since 1.31; a leftover here from before the
+        // move is still not a project.
         scan().filter { $0.url.lastPathComponent.lowercased() != PinnedLayoutStore.filename }.map { file in
             let full = try? ProjectFile.parse(yaml: (try? String(contentsOf: file.url, encoding: .utf8)) ?? "")
             return Listing(

@@ -1375,10 +1375,7 @@ final class AppState {
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
-        pinnedLayoutStore = PinnedLayoutStore(
-            directoryURL: projectFiles.configDirectoryURL,
-            legacyDirectoryURL: projectFiles.directoryURL
-        )
+        pinnedLayoutStore = PinnedLayoutStore(directoryURL: projectFiles.configDirectoryURL)
         widgetLayoutStore = WidgetLayoutStore(directoryURL: projectFiles.configDirectoryURL)
         customPalettes = CustomPaletteStore(configDirectoryURL: projectFiles.configDirectoryURL)
         if let quickTerminal { adoptQuickTerminal(quickTerminal) }

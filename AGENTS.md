@@ -286,11 +286,7 @@ Pinned tabs belong to no project. The sidebar shows them above the projects. The
   - The file is a `ProjectFile` whose reserved `path: <pinned>` is the marker. It has no IDs for entries. Macterm matches entries back by name, then by the exact layout, then by position (`PinnedLayoutMatcher`).
   - `AppState` tracks its own last write. It absorbs external edits before each write. A file that does not parse suspends the auto-writes with an alert.
   - A file that is absent or empty means "no input". It never means "remove everything".
-- **`pinned.yaml` moved up from `projects/`, and the old place still works.**
-  - At launch, Macterm moves an existing `projects/pinned.yaml` up (`PinnedLayoutStore.migrateLegacyFile`).
-  - If it cannot move the file, or if nothing has moved it yet, every read and write uses the old file in place (`PinnedLayoutStore.fileURL`). If both files exist, the new one wins.
-  - The listing of projects still skips the reserved name in `projects/`.
-  - To retire the old location, drop `legacyDirectoryURL` and the fallback. This is #446. Until then, do not remove either of them.
+- **`pinned.yaml` lived in `projects/` before 1.31. That location is retired (#446)**. Macterm reads and writes only the new place. The 1.31 releases moved an existing file up at launch. A file that is still in `projects/` is ignored. The listing of projects still skips the reserved name there. A leftover file is therefore never offered as a project, and no project can take the name.
 - At launch, every record materializes. `materializeRestoredPinnedTabs` asks `zmx ls` which sessions survived. A session that is dead starts again from the declaration. The declaration refreshes at pin time, when the pinned foreground changes (debounced), and at quit. It never refreshes at unload.
 - Sidebar drag: the pinned rows and the tab lists share one `.dropDestination` at the level of the ForEach. It drives the native insertion line. Rows have no destinations of their own. A target on a row kills the line and swallows clicks. `PinTabDropZone` above the List makes the first pin possible by drag. `--project pinned` addresses the workspace over the CLI.
 - **No project may have the name `Pinned`** (any case, padding ignored). `ControlHandler.resolveProject` reads it as this workspace before any project, so such a project cannot be reached by name.
