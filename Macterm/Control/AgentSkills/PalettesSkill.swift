@@ -154,9 +154,10 @@ extension AgentSkills {
         - Do not put secrets in the file. It is plain text in the config folder of the user.
         - Settings → Extensions removes an extension (Installed → Uninstall). Settings → Keymaps gives it
           a keybind. Tell the user about both. Do not do either for the user.
-        - The reference for users, with Git, Docker and SSH examples, is
-          https://macterm.thdxg.dev/docs/extensions. A complete Kubernetes palette is in
-          https://macterm.thdxg.dev/docs/cookbook#kubernetes-palette.
+        - The reference for users is https://macterm.thdxg.dev/docs/extension-palettes. Git, Docker
+          and SSH examples are in https://macterm.thdxg.dev/docs/extensions and
+          https://macterm.thdxg.dev/docs/extension-examples. The extensions in
+          https://github.com/thdxg/macterm/tree/main/extensions are complete examples too.
 
         \#(currencyNote(for: "macterm-palettes"))
         """#
