@@ -513,15 +513,16 @@ Rules:
 
 ### Ghostty config pipeline
 
-In automatic mode, Macterm delegates the user layer to `ghostty_config_load_default_files`. Settings can append custom files. `GhosttyApp.loadConfig` loads `macterm-defaults.conf`, then the user files, then `~/.config/macterm/config.ghostty`, then `macterm-overrides.conf` (the last one wins). It regenerates both private files (`MactermConfig.regenerate()`) before every load, because the overrides depend on the content of the user. `GhosttyConfigSource` is the seam for raw text, for keys that the C API cannot expose. Every source that the live app builds gets `MactermConfig.userConfigPath`, so the loader and every raw-text reader see the same layers.
+In automatic mode, Macterm delegates the user layer to `ghostty_config_load_default_files`. Settings can append custom files. `GhosttyApp.loadConfig` loads `macterm-defaults.conf`, then the user files, then `macterm-overrides.conf` (the last one wins). It regenerates both private files (`MactermConfig.regenerate()`) before every load, because the overrides depend on the content of the user. `GhosttyConfigSource` is the seam for raw text, for keys that the C API cannot expose.
 
-**`~/.config/macterm/config.ghostty` is the Macterm-only layer of the user** (`MactermConfigFile`). It loads after the Ghostty config, so a key in it wins over the Ghostty config and applies to Macterm alone. Ghostty.app never reads it.
+**`~/.config/macterm/config.ghostty` is a custom config file of the user that Macterm seeds and lists for them** (`MactermConfigFile`). Ghostty.app never reads it, so a key in it applies to Macterm alone.
 
-- Macterm seeds it once, at the first launch that finds it missing (`MactermConfig.init`), as a template: every line of `MactermConfig.defaults` commented out, each under its note. A commented line sets nothing. `MactermConfigFileTests` pins that no line of the template is bare. An uncommented default in that position would override the Ghostty config in silence.
+- Macterm seeds it at the first launch that finds it missing (`MactermConfig.init`), as a template: every line of `MactermConfig.defaults` commented out, each under its note. A commented line sets nothing. `MactermConfigFileTests` pins that no line of the template is bare. An uncommented default would override the Ghostty config in silence.
+- At the same time, one time per install (`Preferences.addMactermConfigFileOnce`, flag `macterm.ghostty.addedMactermConfigFile`), Macterm appends it to the custom config files of Settings → General → Ghostty Config, so it loads last. **It is a row like any other from then on.** The user can move it or remove it. Macterm never puts it back on its own. There is no special layer, no special row and no special path in the loader.
 - The defaults layer stays the home of each default. The file lists the defaults. It never holds them. A user who deletes the file, or who installed before a default was added, loses nothing.
-- Macterm never writes the file again. An absent file means "no input". A present file belongs to the user. Open Macterm Config (`AppCommand.openMactermConfig`, the command palette, the View menu, and the Open button of its row in Settings → General → Ghostty Config) seeds it again before it opens the file in the terminal editor, the way a text file from Finder opens.
-- The file is not part of `GhosttyConfigSelection`. That selection is the preference of the user about the Ghostty files. A user who turns the Ghostty files off keeps the Macterm file.
-- Hermetic runs (`MactermConfig.isHermetic`: tests, `MACTERM_BENCHMARK=1`) neither seed nor load it, as for the Ghostty layer.
+- Macterm never writes the file again. An absent file means "no input". A present file belongs to the user. Open Macterm Config (`AppCommand.openMactermConfig`, the command palette and the View menu) seeds it again before it opens the file in the terminal editor, the way a text file from Finder opens. If the file is not in the list, a toast says where to add it.
+- The listed path is `MactermConfigFile.listedPath`: `~`-abbreviated under the home directory, absolute elsewhere, because `~` expands through the user record and not through `$HOME`.
+- Hermetic runs (`MactermConfig.isHermetic`: tests, `MACTERM_BENCHMARK=1`) neither seed nor list it, as they load no user config.
 
 **Ghostty keys that Macterm applies to its own behavior** have no Settings UI.
 

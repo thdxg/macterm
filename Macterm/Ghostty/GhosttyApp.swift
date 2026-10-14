@@ -547,27 +547,25 @@ final class GhosttyApp {
         // user's own value (#75), which may have changed since the last load.
         MactermConfig.shared.regenerate()
 
-        // Four-layer ghostty config:
+        // Three-layer ghostty config:
         //   1. Macterm defaults — tasteful first-launch values.
         //   2. User's Ghostty config files, overriding any default. In automatic
-        //      mode, libghostty loads its default roots.
-        //   3. User's Macterm-only file, `~/.config/macterm/config.ghostty`
-        //      (`MactermConfigFile`), overriding their Ghostty config for
-        //      Macterm alone. Seeded as a commented template, so it is inert
-        //      until edited.
-        //   4. Macterm overrides — keys Macterm absolutely needs to control,
+        //      mode, libghostty loads its default roots; the custom files
+        //      follow, among them `~/.config/macterm/config.ghostty`
+        //      (`MactermConfigFile`) unless the user removed it.
+        //   3. Macterm overrides — keys Macterm absolutely needs to control,
         //      currently the background keys for the window-level translucency
         //      contract (default-background paint, opacity value, blur).
         //      Loaded last so it overrides the user.
         // libghostty merges last-wins, so this ordering produces:
-        //   Macterm defaults < Ghostty config < Macterm-only file < Macterm overrides
+        //   Macterm defaults < user's Ghostty config < Macterm overrides
         MactermConfig.shared.defaultsPath.withCString { ghostty_config_load_file(cfg, $0) }
         let selection: GhosttyConfigSelection = if MactermConfig.isHermetic {
             .disabled
         } else {
             Preferences.shared.ghosttyConfigSelection
         }
-        let source = GhosttyConfigSource(selection: selection, mactermConfigPath: MactermConfig.userConfigPath)
+        let source = GhosttyConfigSource(selection: selection)
         result.missingUserConfigPaths = source.load(
             loadDefaultFiles: { ghostty_config_load_default_files(cfg) },
             loadCustomFile: { path in

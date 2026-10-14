@@ -596,14 +596,10 @@ private struct GeneralSettings: View {
                     defaultGhosttyLocationRows
                 }
                 ghosttyConfigFileRows
-                MactermConfigFileRow()
 
                 HStack {
-                    Text(
-                        "Macterm loads the files from top to bottom. A later file overrides an earlier file. "
-                            + "The last file applies only to Macterm."
-                    )
-                    .settingsCaption()
+                    Text("Macterm loads the files from top to bottom. A later file overrides an earlier file.")
+                        .settingsCaption()
                     Spacer()
                     Button("Reload") {
                         commitGhosttyConfig()
@@ -966,42 +962,6 @@ private struct GhosttyDefaultLocationRow: View {
             Text("Ghostty default")
                 .settingsCaption()
                 .fixedSize()
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-/// The Macterm-only layer, `~/.config/macterm/config.ghostty`
-/// (`MactermConfigFile`). Always last, and it can be neither moved nor
-/// removed, so the row has no menu; it opens the file in the terminal editor
-/// the way the Open Macterm Config command does.
-private struct MactermConfigFileRow: View {
-    @Environment(AppState.self)
-    private var appState
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-
-            Text((MactermConfigFile.defaultURL().path as NSString).abbreviatingWithTildeInPath)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(MactermConfigFile.defaultURL().path)
-
-            Spacer(minLength: 8)
-
-            Text("Macterm only")
-                .settingsCaption()
-                .fixedSize()
-
-            Button("Open") {
-                let url = MactermConfigFile.defaultURL()
-                MactermConfigFile.seedIfMissing(at: url)
-                appState.appDelegate?.finderServices.openTextFiles([url.path])
-            }
-            .help("Open the file in your terminal editor.")
         }
         .padding(.vertical, 2)
     }

@@ -262,12 +262,19 @@ extension AppCommand {
                 ctx.appState.presentToast("Ghostty config reloaded")
             }
         case .openMactermConfig:
-            // The user's Macterm-only layer, in their terminal editor, the
-            // way a text file from Finder opens. Seeded again first: a
-            // deleted file comes back as the template on request only.
+            // The user's own file, in their terminal editor, the way a text
+            // file from Finder opens. Seeded again first: a deleted file
+            // comes back as the template on request only. A row the user
+            // removed from Settings is never put back; the toast says where
+            // it went, because edits to an unlisted file change nothing.
             return {
                 let url = MactermConfigFile.defaultURL()
                 MactermConfigFile.seedIfMissing(at: url)
+                if !MactermConfigFile.isListed(url, in: Preferences.shared.ghosttyConfigSelection) {
+                    ctx.appState.presentToast(
+                        "This file is not in your config files. Add it in Settings → General → Ghostty Config."
+                    )
+                }
                 ctx.appState.appDelegate?.finderServices.openTextFiles([url.path])
             }
         case .toggleQuickTerminal:

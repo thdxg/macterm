@@ -726,6 +726,22 @@ final class Preferences {
         defaults.removeObject(forKey: Keys.userGhosttyConfigPath)
     }
 
+    /// Appends `path` — `~/.config/macterm/config.ghostty`
+    /// (`MactermConfigFile`) — to the custom config files, one time for this
+    /// install, on the launch that seeds the file. From then on the row is
+    /// the user's like any other: they can move it or remove it, and
+    /// Macterm never puts it back on its own. A path already in the list
+    /// is left where it is. Returns true when the list changed.
+    @discardableResult
+    func addMactermConfigFileOnce(_ path: String) -> Bool {
+        guard !defaults.bool(forKey: Keys.hasAddedMactermConfigFile) else { return false }
+        defaults.set(true, forKey: Keys.hasAddedMactermConfigFile)
+        let selection = ghosttyConfigSelection.adding(customPath: path)
+        guard selection != ghosttyConfigSelection else { return false }
+        setGhosttyConfig(loadsDefaultFiles: selection.loadsDefaultFiles, customPaths: selection.customPaths)
+        return true
+    }
+
     /// Programs a passthrough-flagged keybind yields to, as the user typed them
     /// (`nvim, hx`). Stored raw so the Settings field round-trips their spacing
     /// verbatim; `KeybindPassthrough.programNames` does the parsing and is the
@@ -1142,6 +1158,8 @@ final class Preferences {
 
         static let loadsDefaultGhosttyConfigFiles = "macterm.ghostty.loadsDefaultConfigFiles"
         static let customGhosttyConfigPaths = "macterm.ghostty.customConfigPaths"
+        /// Set once `addMactermConfigFileOnce` has run for this install.
+        static let hasAddedMactermConfigFile = "macterm.ghostty.addedMactermConfigFile"
         /// Legacy single-path key. Read only for migration.
         static let userGhosttyConfigPath = "macterm.ghostty.userConfigPath"
         static let installationID = "macterm.installationID"

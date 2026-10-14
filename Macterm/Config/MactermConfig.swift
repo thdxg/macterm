@@ -12,10 +12,11 @@ private let logger = Logger(subsystem: appBundleID, category: "MactermConfig")
 /// custom-color mode in Settings.
 ///
 /// `GhosttyApp.loadConfig` loads them in this order:
-///   defaults → user's Ghostty config files → `~/.config/macterm/config.ghostty` → overrides
-/// libghostty does last-wins merge, so the user wins over our defaults, the
-/// user's Macterm-only file (`MactermConfigFile`) wins over their Ghostty
-/// config, and our overrides win over both.
+///   defaults → user's Ghostty config files → overrides
+/// libghostty does last-wins merge, so the user wins over our defaults and
+/// our overrides win over the user. `~/.config/macterm/config.ghostty`
+/// (`MactermConfigFile`) is one of the user's files: seeded here at first
+/// launch and added to their custom config files, last, one time.
 ///
 /// See the README for the full list of Ghostty config settings Macterm honors
 /// and the small set it ignores or overrides.
@@ -33,28 +34,23 @@ final class MactermConfig {
         defaultsURL = dir.appendingPathComponent("macterm-defaults.conf")
         overridesURL = dir.appendingPathComponent("macterm-overrides.conf")
         regenerate()
-        // The user's own layer. Seeded once, here, so it exists before the
-        // first load; never under a hermetic run, which also never loads it.
+        // The user's own file, seeded here so it exists before the first
+        // load, and added to the custom config files one time per install.
+        // Never under a hermetic run, which loads no user config at all.
         if !Self.isHermetic {
-            MactermConfigFile.seedIfMissing()
+            let url = MactermConfigFile.defaultURL()
+            MactermConfigFile.seedIfMissing(at: url)
+            Preferences.shared.addMactermConfigFileOnce(MactermConfigFile.listedPath(for: url))
         }
     }
 
-    /// True under unit tests and the benchmark and e2e harnesses. The user
-    /// layers — the Ghostty config and `~/.config/macterm/config.ghostty` —
-    /// are neither loaded nor read as text then, so a run is reproducible on
-    /// any Mac. To verify a user-config feature live, use a throwaway `HOME`
-    /// with `MACTERM_BENCHMARK_DATA_DIR` and no `MACTERM_BENCHMARK`.
+    /// True under unit tests and the benchmark and e2e harnesses. The user's
+    /// config files are neither loaded nor read as text then, so a run is
+    /// reproducible on any Mac. To verify a user-config feature live, use a
+    /// throwaway `HOME` with `MACTERM_BENCHMARK_DATA_DIR` and no
+    /// `MACTERM_BENCHMARK`.
     static var isHermetic: Bool {
         Preferences.isTestRun || BenchmarkControl.isEnabled
-    }
-
-    /// `~/.config/macterm/config.ghostty`, the layer after the Ghostty config
-    /// (`MactermConfigFile`), or nil under a hermetic run. Every
-    /// `GhosttyConfigSource` built for the live app passes this, so the
-    /// loader and every raw-text reader see the same layers.
-    static var userConfigPath: String? {
-        isHermetic ? nil : MactermConfigFile.defaultURL().path
     }
 
     var defaultsPath: String { defaultsURL.path }
@@ -306,9 +302,8 @@ final class MactermConfig {
         return FileManager.default.isExecutableFile(atPath: shim) ? dir.path : nil
     }
 
-    /// The user's root-config text in load order — the Ghostty files, then
-    /// `~/.config/macterm/config.ghostty` — read for merging their
-    /// `shell-integration-features` value into the overrides. nil when
+    /// The user's Ghostty root-config text in load order, read for merging
+    /// their `shell-integration-features` value into the overrides. nil when
     /// loading is disabled or none of the selected files is readable.
     ///
     /// Static so anything else that must consult the user's *stated* config
@@ -316,10 +311,7 @@ final class MactermConfig {
     /// raw text rather than the effective post-override value.
     static func userGhosttyConfigText() -> String? {
         guard !isHermetic else { return nil }
-        return GhosttyConfigSource(
-            selection: Preferences.shared.ghosttyConfigSelection,
-            mactermConfigPath: userConfigPath
-        ).mergedText()
+        return GhosttyConfigSource(selection: Preferences.shared.ghosttyConfigSelection).mergedText()
     }
 
     private func userGhosttyConfigText() -> String? {

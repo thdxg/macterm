@@ -20,13 +20,13 @@ If you have no config, Macterm uses `~/Library/Application Support/com.mitchellh
 
 ## Settings for Macterm only
 
-Macterm also reads `~/.config/macterm/config.ghostty`. It loads this file after your Ghostty config, so a key in it wins over the same key in your Ghostty config. Ghostty does not read the file. Use it for a setting that you want in Macterm and not in Ghostty, for example a larger font:
+Macterm also has a config file of its own, `~/.config/macterm/config.ghostty`. Macterm writes it the first time that it starts, and adds it to the config files in **Settings → General → Ghostty Config**, after your Ghostty config. A later file overrides an earlier file, so a key in it wins over the same key in your Ghostty config. Ghostty does not read the file. Use it for a setting that you want in Macterm and not in Ghostty, for example a larger font:
 
 ```ini title="~/.config/macterm/config.ghostty"
 font-size = 16
 ```
 
-Macterm writes the file the first time that it starts. The file lists each default of Macterm as a comment, with a note that says what the key does. To change a value, remove the `#` at the start of its line and edit the value. To open the file in your terminal editor, run **Open Macterm Config** from the command palette, or click **Open** on its row in **Settings → General → Ghostty Config**. If you delete the file, Macterm writes it again only when you run **Open Macterm Config**.
+The file lists each default of Macterm as a comment, with a note that says what the key does. To change a value, remove the `#` at the start of its line and edit the value. To open the file in your terminal editor, run **Open Macterm Config** from the command palette. The file is a config file like any other. You can move it or remove it in Settings. Macterm adds it one time only. If you delete the file, Macterm writes it again only when you run **Open Macterm Config**.
 
 ## Defaults that differ from Ghostty
 

@@ -34,13 +34,38 @@ struct MactermConfigFileTests {
         #expect(MactermConfig.defaultsBody == MactermConfig.defaults.map(\.line).joined(separator: "\n") + "\n")
     }
 
-    /// The header tells the user the load order and the reload command.
+    /// The header tells the user where the file is listed, the load order
+    /// and the reload command.
     @Test
     func template_explains_the_load_order() {
         let template = MactermConfigFile.template
         #expect(template.hasPrefix("# Macterm config\n"))
+        #expect(template.contains("Settings > General > Ghostty Config"))
         #expect(template.contains("after your Ghostty config"))
         #expect(template.contains("Reload Ghostty Config"))
+    }
+
+    // MARK: - the listed path
+
+    /// Under the home directory the list shows `~`, as the user would type
+    /// it. Anywhere else (a throwaway `HOME`) the path stays absolute, since
+    /// `~` expands through the user record and would name the wrong file.
+    @Test
+    func listed_path_abbreviates_only_under_the_real_home() {
+        let underHome = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".config/macterm/config.ghostty")
+        #expect(MactermConfigFile.listedPath(for: underHome) == "~/.config/macterm/config.ghostty")
+        let elsewhere = URL(fileURLWithPath: "/private/tmp/other-home/.config/macterm/config.ghostty")
+        #expect(MactermConfigFile.listedPath(for: elsewhere) == elsewhere.path)
+    }
+
+    @Test
+    func is_listed_matches_a_tilde_path_or_its_expansion() {
+        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".config/macterm/config.ghostty")
+        let tilde = GhosttyConfigSelection(loadsDefaultFiles: true, customPaths: ["~/.config/macterm/config.ghostty"])
+        let absolute = GhosttyConfigSelection(loadsDefaultFiles: true, customPaths: [url.path])
+        #expect(MactermConfigFile.isListed(url, in: tilde))
+        #expect(MactermConfigFile.isListed(url, in: absolute))
+        #expect(!MactermConfigFile.isListed(url, in: .automatic))
     }
 
     // MARK: - seedIfMissing

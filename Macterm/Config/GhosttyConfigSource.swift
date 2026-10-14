@@ -6,12 +6,21 @@ struct GhosttyConfigSelection: Equatable {
 
     static let automatic = Self(loadsDefaultFiles: true, customPaths: [])
     static let disabled = Self(loadsDefaultFiles: false, customPaths: [])
+
+    /// The selection with `path` appended as the last custom file, or this
+    /// selection unchanged when a custom path already names that file
+    /// (`~` and its expansion are the same file). How
+    /// `~/.config/macterm/config.ghostty` joins the list at first launch
+    /// (`Preferences.addMactermConfigFileOnce`).
+    func adding(customPath path: String) -> Self {
+        let expanded = (path as NSString).expandingTildeInPath
+        let listed = customPaths.contains { ($0 as NSString).expandingTildeInPath == expanded }
+        guard !listed else { return self }
+        return Self(loadsDefaultFiles: loadsDefaultFiles, customPaths: customPaths + [path])
+    }
 }
 
-/// Loads the selected config and exposes the same root files to raw-text
-/// consumers: the Ghostty files the selection names, then — when the caller
-/// passes it — `~/.config/macterm/config.ghostty` (`MactermConfigFile`), the
-/// Macterm-only layer that loads after all of them.
+/// Loads the selected config and exposes the same root files to raw-text consumers.
 struct GhosttyConfigSource {
     struct DefaultFileLocation: Equatable, Identifiable {
         let searchedPath: String
@@ -28,29 +37,20 @@ struct GhosttyConfigSource {
     private static let legacyConfigFilename = "config"
 
     let selection: GhosttyConfigSelection
-    /// The Macterm-only file, loaded after every file of `selection`. nil
-    /// leaves it out: a hermetic run (`MactermConfig.userConfigPath`), or a
-    /// test of the Ghostty layers alone. It is not part of `selection`,
-    /// because the selection is the user's preference about the Ghostty
-    /// files, and turning those off must not turn this one off.
-    let mactermConfigPath: String?
     let applicationSupportConfigDirectory: String
     let xdgConfigDirectory: String
 
     init(
         selection: GhosttyConfigSelection,
-        mactermConfigPath: String? = nil,
         applicationSupportConfigDirectory: String = Self.expandedApplicationSupportConfigDirectory,
         xdgConfigDirectory: String = Self.expandedXDGConfigDirectory
     ) {
         self.selection = selection
-        self.mactermConfigPath = mactermConfigPath
         self.applicationSupportConfigDirectory = applicationSupportConfigDirectory
         self.xdgConfigDirectory = xdgConfigDirectory
     }
 
-    /// Root files in last-wins load order: Ghostty's default files, the
-    /// custom files, then the Macterm file.
+    /// Root files in Ghostty's last-wins load order.
     var pathsForRawInspection: [String] {
         let defaultPaths = selection.loadsDefaultFiles
             ? Self.defaultFilePaths(
@@ -58,15 +58,10 @@ struct GhosttyConfigSource {
                 xdgConfigDirectory: xdgConfigDirectory
             )
             : []
-        return defaultPaths
-            + selection.customPaths.map { ($0 as NSString).expandingTildeInPath }
-            + (mactermConfigPath.map { [$0] } ?? [])
+        return defaultPaths + selection.customPaths.map { ($0 as NSString).expandingTildeInPath }
     }
 
-    /// Loads the selected layers and returns any missing custom paths. The
-    /// Macterm file loads last through the same closure; it is never
-    /// reported, because the user can delete it and an absent file means
-    /// "no input".
+    /// Loads the selected layers and returns any missing custom paths.
     func load(
         loadDefaultFiles: () -> Void,
         loadCustomFile: (String) -> Bool
@@ -74,14 +69,10 @@ struct GhosttyConfigSource {
         if selection.loadsDefaultFiles {
             loadDefaultFiles()
         }
-        let missing = selection.customPaths.compactMap { path in
+        return selection.customPaths.compactMap { path in
             let expandedPath = (path as NSString).expandingTildeInPath
             return loadCustomFile(expandedPath) ? nil : expandedPath
         }
-        if let mactermConfigPath {
-            _ = loadCustomFile(mactermConfigPath)
-        }
-        return missing
     }
 
     /// Joins readable root files with a newline so adjacent settings cannot merge.

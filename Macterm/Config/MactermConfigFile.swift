@@ -3,25 +3,29 @@ import os
 
 private let logger = Logger(subsystem: appBundleID, category: "MactermConfigFile")
 
-/// `~/.config/macterm/config.ghostty`: the user's own Macterm-only config
-/// layer. `GhosttyApp.loadConfig` loads it after every Ghostty file and before
-/// `macterm-overrides.conf`, so a key in it wins over the same key in the
-/// Ghostty config and applies to Macterm alone (Ghostty.app never reads it).
+/// `~/.config/macterm/config.ghostty`: a config file of the user's own that
+/// Macterm seeds and lists for them. At the first launch that finds it
+/// missing, Macterm writes it as a template — every line of
+/// `MactermConfig.defaults` commented out, each under a note that says what
+/// it does — and, one time per install, appends it to the custom config files
+/// of Settings → General → Ghostty Config (`Preferences.addMactermConfigFileOnce`).
+/// From then on it is a custom file like any other: it loads after the
+/// Ghostty default files, in its place in the list, and the user can move it
+/// or remove it there. Ghostty.app never reads it, so a key in it applies to
+/// Macterm alone; last in the list, it wins over the Ghostty config.
 ///
-/// Macterm writes it once, at the first launch that finds it missing, as a
-/// template: every line of `MactermConfig.defaults` commented out, each under
-/// a note that says what it does. A commented line changes nothing, so the
-/// template is inert until the user uncomments a key — the defaults layer
-/// (`macterm-defaults.conf`) stays the single source of each default, and the
-/// Ghostty config keeps its promise that a key the user set there wins. The
-/// file is therefore a discoverable, editable listing of the defaults, not
-/// their home: a user who deletes it, or installed before a default was
-/// added, loses nothing.
+/// A commented line changes nothing, so the template is inert until the user
+/// uncomments a key — the defaults layer (`macterm-defaults.conf`) stays the
+/// single source of each default, and a key the user set in their Ghostty
+/// config keeps winning. The file is a discoverable, editable listing of the
+/// defaults, not their home: a user who deletes it, or installed before a
+/// default was added, loses nothing.
 ///
 /// Macterm never writes it again: an absent file means "no input", and a
 /// present one belongs to the user. Open Macterm Config seeds it again
 /// before it opens the editor, so a deleted file comes back as the template
-/// on request only.
+/// on request only — and it never puts the row back, because a removed row
+/// was the user's choice.
 enum MactermConfigFile {
     static let filename = "config.ghostty"
 
@@ -33,6 +37,19 @@ enum MactermConfigFile {
     /// The real file, under the user's `~/.config/macterm`.
     nonisolated static func defaultURL() -> URL {
         url(in: ProjectFileStore.defaultConfigDirectory())
+    }
+
+    /// The path as it goes into the custom config files: `~`-abbreviated,
+    /// as the user would type it and as every row shows it. A file outside
+    /// the home directory (a throwaway `HOME`) keeps its absolute path,
+    /// because `~` expands through the user record, not `$HOME`.
+    nonisolated static func listedPath(for url: URL) -> String {
+        (url.path as NSString).abbreviatingWithTildeInPath
+    }
+
+    /// True when a custom path of `selection` names the file at `url`.
+    nonisolated static func isListed(_ url: URL, in selection: GhosttyConfigSelection) -> Bool {
+        selection.customPaths.contains { ($0 as NSString).expandingTildeInPath == url.path }
     }
 
     /// The text Macterm seeds. Every non-empty line is a comment, so loading
@@ -54,10 +71,12 @@ enum MactermConfigFile {
     private static let header: [String] = [
         "# Macterm config",
         "#",
-        "# Macterm wrote this file the first time that it started. Macterm loads",
+        "# Macterm wrote this file the first time that it started, and added it to",
+        "# its config files in Settings > General > Ghostty Config. Macterm loads",
         "# it after your Ghostty config. A key in this file wins over the same key",
         "# in your Ghostty config, and it applies only to Macterm. Ghostty does",
-        "# not read this file.",
+        "# not read this file. You can move or remove it in Settings like any other",
+        "# config file.",
         "#",
         "# The lines below are the defaults of Macterm. Each one is a comment, so",
         "# it changes nothing. To change a value, remove the \"#\" at the start of",
