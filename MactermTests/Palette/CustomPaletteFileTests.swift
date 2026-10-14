@@ -432,7 +432,7 @@ struct CustomPaletteFileTests {
                     let want = MactermExtension.screenshotPixelSize
                     #expect(
                         size?.width == want.width && size?.height == want.height,
-                        "\(name): a screenshot is a \(want.width)×\(want.height) PNG — take it with Capture Palette Screenshot"
+                        "\(name): a screenshot is a \(want.width)×\(want.height) PNG — take it with Capture Palette"
                     )
                 } else {
                     #expect(

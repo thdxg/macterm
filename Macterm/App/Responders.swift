@@ -43,7 +43,7 @@ final class PaletteResponder: KeyResponder {
             }
             return .handled
         }
-        // Capture Palette Screenshot acts on the palette as it stands, so its
+        // Capture Palette acts on the palette as it stands, so its
         // chord is answered here, with the palette up, too.
         if appState.isCommandPaletteVisible, HotkeyRegistry.matches(event, action: .capturePaletteScreenshot) {
             PaletteScreenshot.capture(appState: appState)
