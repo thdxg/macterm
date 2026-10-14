@@ -1,0 +1,53 @@
+name: Test
+
+# Fork-owned (listed in DOWNSTREAM_FILES of sync-upstream.yml and
+# assert-no-drift.yml). Builds zmx and runs its test suite on every pull
+# request and every push to main, so a downstream patch is proven on CI
+# before build-zmx.yml publishes it. Nobody has to build zmx on a dev
+# machine: the macOS 27 SDK breaks the native build there, and a cross
+# build for Linux takes minutes and still needs a container to run.
+#
+# Linux runs the tests natively. macOS is where the published binary runs
+# and where patches 0001, 0002 and 0004 live, so it runs the tests too and
+# compiles the x86_64 slice that build-zmx.yml lipos in.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-15, as build-zmx.yml: its Xcode is older than the 26.4 build
+        # that breaks zig#31658 on dev machines.
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          # Keep in step with build-zmx.yml and minimum_zig_version in
+          # build.zig.zon.
+          version: 0.16.0
+
+      - name: Run the tests
+        run: zig build test --summary all
+
+      - name: Build the x86_64 slice
+        if: runner.os == 'macOS'
+        run: zig build -Dtarget=x86_64-macos --prefix zig-out-x86_64

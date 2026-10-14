@@ -1,0 +1,118 @@
+name: Build zmx
+
+# Drop this into thdxg/zmx at .github/workflows/build-zmx.yml.
+# Mirrors thdxg/ghostty's build-ghosttykit.yml: builds the arm64 binary on a
+# macos runner with pinned zig and publishes it as a release asset that
+# Macterm's setup.sh downloads. zmx is never compiled on a dev machine.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'build.zig'
+      - 'build.zig.zon'
+
+# One build at a time, in the order they were pushed: a build that finished
+# after a newer one would otherwise publish last and be marked latest. A queued
+# run of the same commit then finds its release already there and skips.
+concurrency:
+  group: build-zmx
+  cancel-in-progress: false
+
+jobs:
+  # The release tag is a function of the commit alone —
+  # build-<commit date, UTC>-<short sha> — so two builds on one day can't share
+  # a name, and a tag, once published, always names the same bytes. The old
+  # build-<today> tag was deleted and re-cut by a second build the same day,
+  # silently changing what Macterm's pin pointed at.
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      date: ${{ steps.tag.outputs.date }}
+      exists: ${{ steps.tag.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          DATE=$(TZ=UTC git show -s --format=%cd --date=format-local:%Y-%m-%d HEAD)
+          TAG="build-${DATE}-$(git rev-parse --short=7 HEAD)"
+          # A published release is never replaced. Its tag existing means this
+          # exact commit was already built; check the tag rather than the
+          # release, which a run that died mid-upload can leave as a draft.
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            EXISTS=true
+            echo "::notice::$TAG is already released; skipping the build"
+          else
+            EXISTS=false
+          fi
+          {
+            echo "tag=$TAG"
+            echo "date=$DATE"
+            echo "exists=$EXISTS"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: tag
+    if: needs.tag.outputs.exists == 'false'
+    # macos-15: the GhosttyKit CI proved zig links here (its Xcode is older
+    # than the 26.4 build that breaks zig#31658 on dev machines).
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          # Must satisfy minimum_zig_version in build.zig.zon, which the daily
+          # upstream sync can bump out from under this pin — when the build
+          # starts failing with stdlib API mismatches right after a sync,
+          # check that field first.
+          version: 0.16.0
+
+      # Build both arches and lipo into a universal binary — Macterm ships a
+      # universal app, so an arm64-only zmx would fail to exec on Intel.
+      - name: Build zmx (aarch64 + x86_64)
+        run: |
+          zig build -Doptimize=ReleaseSafe -Dtarget=aarch64-macos --prefix zig-out-arm64
+          zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-macos --prefix zig-out-x86_64
+
+      - name: Make universal binary
+        run: |
+          mkdir -p zig-out/bin
+          lipo -create -output zig-out/bin/zmx \
+            zig-out-arm64/bin/zmx zig-out-x86_64/bin/zmx
+
+      - name: Verify binary
+        run: |
+          test -x zig-out/bin/zmx
+          # Both slices must be present, or the universal build is broken.
+          lipo zig-out/bin/zmx -verify_arch arm64 x86_64
+          file zig-out/bin/zmx
+
+      - name: Package
+        run: |
+          # Tar (not a bare asset) so the executable bit survives the GitHub
+          # asset round-trip; setup.sh extracts + chmod +x.
+          tar czf zmx-universal-macos.tar.gz -C zig-out/bin zmx
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.tag.outputs.tag }}
+          DATE: ${{ needs.tag.outputs.date }}
+        run: |
+          COMMIT=$(git rev-parse --short=7 HEAD)
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "zmx $DATE ($COMMIT)" \
+            --latest \
+            --notes "Built from commit ${GITHUB_SHA} (committed $DATE)." \
+            zmx-universal-macos.tar.gz

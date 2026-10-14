@@ -1,0 +1,542 @@
+From: Ethan Lee <ethantlee21@gmail.com>
+Subject: [PATCH] feat: make the session daemon its own responsible process on macOS
+
+macOS attributes privacy-gated operations (Local Network, TCC) to a
+process's *responsible process*, fixed at spawn and inherited from the
+parent, so a session created by `zmx attach` was attributed to the app
+that ran it, and to nothing once that app quit: every survivor becomes
+responsible for itself and a client reattaching over the socket never
+re-attributes it. Each program in the session was then judged by its own
+identity, which for anything not Apple-signed meant local network access
+refused with EHOSTUNREACH and no prompt (macterm#419).
+
+Responsibility cannot be changed after the fact, but the disclaim exists
+as a spawn attribute and POSIX_SPAWN_SETEXEC lets the forked child apply
+it to itself by exec'ing in place: same pid, session and fds. The daemon
+re-execs as `zmx __daemon <session> [-- command...]` with the rest of its
+state in ZMX_DAEMON_* variables consumed before the shell exists, and
+falls back to the forked image if that fails. Its code signature's
+identifier is what macOS then asks the user about; Macterm signs its
+bundled copy as the app itself. Linux is unchanged; the bats file pins the
+contract on Darwin and skips elsewhere.
+---
+diff --git a/src/daemonize.zig b/src/daemonize.zig
+index 800431b..98be69a 100644
+--- a/src/daemonize.zig
++++ b/src/daemonize.zig
+@@ -1,4 +1,5 @@
+ const std = @import("std");
++const builtin = @import("builtin");
+ const lib_posix = @import("posix.zig");
+ const Cfg = @import("cfg.zig");
+ const socket = @import("socket.zig");
+@@ -124,6 +125,161 @@ pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
+     };
+ }
+ 
++/// State the macOS daemon rebuilds itself from after `reexecDisclaimed`.
++/// Everything else a `Daemon` holds is either derived from the environment
++/// (`Cfg`) or created after this point.
++pub const Reexec = struct {
++    session_name: []const u8,
++    shell: []const u8,
++    is_task_mode: bool,
++    command: ?[]const []const u8,
++    /// The session's cwd as `Daemon.cwd` holds it (OSC 7 form); empty when unknown.
++    cwd: []const u8,
++    /// The already-bound listen socket. It is CLOEXEC, so `reexecDisclaimed`
++    /// clears that flag: recreating it in the new image would race the
++    /// client, which connects the moment the fork returns to it.
++    server_sock_fd: i32,
++};
++
++/// The hidden subcommand the re-exec'd image runs:
++/// `zmx __daemon <session> [-- command...]`.
++pub const reexec_command = "__daemon";
++
++/// Environment variables that carry the rest of `Reexec` plus the terminal
++/// size across the re-exec (argv carries only what is naturally argv: the
++/// command). `takeReexecState` reads and unsets them before the shell is
++/// spawned, so no program in the session ever sees them.
++pub const reexec_env = struct {
++    pub const socket_fd = "ZMX_DAEMON_SOCKET_FD";
++    pub const rows = "ZMX_DAEMON_ROWS";
++    pub const cols = "ZMX_DAEMON_COLS";
++    pub const xpixel = "ZMX_DAEMON_XPIXEL";
++    pub const ypixel = "ZMX_DAEMON_YPIXEL";
++    pub const shell = "ZMX_DAEMON_SHELL";
++    pub const task_mode = "ZMX_DAEMON_TASK_MODE";
++    pub const cwd = "ZMX_DAEMON_CWD";
++    pub const all = [_][:0]const u8{ socket_fd, rows, cols, xpixel, ypixel, shell, task_mode, cwd };
++};
++
++/// What `takeReexecState` hands the `__daemon` entry.
++pub const ReexecState = struct {
++    server_sock_fd: i32,
++    size: ipc.Resize,
++    shell: []const u8,
++    is_task_mode: bool,
++    cwd: []const u8,
++};
++
++extern "c" fn responsibility_spawnattrs_setdisclaim(attr: *std.c.posix_spawnattr_t, disclaim: c_int) c_int;
++
++/// macOS only. Replaces this process — already forked off the client and
++/// `setsid`'d — with a fresh image of zmx running `__daemon`, spawned with
++/// `responsibility_spawnattrs_setdisclaim` so the kernel records the daemon
++/// as its own *responsible process*. Returns only on failure; the caller then
++/// carries on in the forked image as before.
++///
++/// Why: macOS attributes privacy-gated operations (Local Network, TCC) to the
++/// responsible process, a per-process value fixed at spawn and inherited from
++/// the parent, so a session created by `zmx attach` is attributed to the
++/// terminal app that ran it. The moment that app exits, every process in the
++/// session becomes responsible for itself, and a client reattaching over the
++/// socket never re-attributes them: reattach is a connect, not a fork. From
++/// then on each program in the session is judged by its own identity, which
++/// for anything that is not an Apple binary means local-network access is
++/// refused with EHOSTUNREACH and no prompt (macterm#419). Responsibility
++/// cannot be changed after the fact (the `responsibility_set_*` calls need a
++/// private entitlement), but the disclaim exists as a spawn attribute, and
++/// `POSIX_SPAWN_SETEXEC` lets the forked child apply it to itself by exec'ing
++/// in place: same pid, same session, same fds. The daemon is then the
++/// responsible process for as long as the session lives, whatever happens to
++/// the app, and its code signature's identifier is what the system asks the
++/// user about: Macterm signs its bundled copy as the app itself, so the prompt
++/// names Macterm and the daemon shares the app's grant.
++fn reexecDisclaimed(spec: Reexec, size: ipc.Resize) !void {
++    const gpa = std.heap.c_allocator;
++
++    _ = try lib_posix.fcntl(spec.server_sock_fd, lib_posix.F.SETFD, 0);
++
++    var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
++    var exe_len: u32 = exe_buf.len;
++    if (std.c._NSGetExecutablePath(&exe_buf, &exe_len) != 0) return error.ExecutablePathTooLong;
++    const exe = try gpa.dupeZ(u8, std.mem.sliceTo(&exe_buf, 0));
++
++    var argv: std.ArrayList(?[*:0]const u8) = .empty;
++    try argv.append(gpa, exe.ptr);
++    try argv.append(gpa, reexec_command);
++    try argv.append(gpa, (try gpa.dupeZ(u8, spec.session_name)).ptr);
++    if (spec.command) |command| {
++        try argv.append(gpa, "--");
++        for (command) |arg| try argv.append(gpa, (try gpa.dupeZ(u8, arg)).ptr);
++    }
++    try argv.append(gpa, null);
++
++    try setReexecEnv(gpa, reexec_env.socket_fd, "{d}", .{spec.server_sock_fd});
++    try setReexecEnv(gpa, reexec_env.rows, "{d}", .{size.rows});
++    try setReexecEnv(gpa, reexec_env.cols, "{d}", .{size.cols});
++    try setReexecEnv(gpa, reexec_env.xpixel, "{d}", .{size.xpixel});
++    try setReexecEnv(gpa, reexec_env.ypixel, "{d}", .{size.ypixel});
++    try setReexecEnv(gpa, reexec_env.shell, "{s}", .{spec.shell});
++    try setReexecEnv(gpa, reexec_env.task_mode, "{d}", .{@intFromBool(spec.is_task_mode)});
++    try setReexecEnv(gpa, reexec_env.cwd, "{s}", .{spec.cwd});
++
++    var attr: std.c.posix_spawnattr_t = undefined;
++    if (std.c.posix_spawnattr_init(&attr) != 0) return error.SpawnAttrInit;
++    defer _ = std.c.posix_spawnattr_destroy(&attr);
++    if (std.c.posix_spawnattr_setflags(&attr, .{ .SETEXEC = true }) != 0) return error.SpawnAttrFlags;
++    if (responsibility_spawnattrs_setdisclaim(&attr, 1) != 0) return error.SpawnAttrDisclaim;
++
++    var pid: std.c.pid_t = undefined;
++    const rc = std.c.posix_spawn(
++        &pid,
++        exe.ptr,
++        null,
++        &attr,
++        @ptrCast(argv.items.ptr),
++        @ptrCast(std.c.environ),
++    );
++    // SETEXEC never returns on success.
++    std.log.warn("posix_spawn(SETEXEC) failed rc={d}", .{rc});
++    return error.ReexecFailed;
++}
++
++fn setReexecEnv(gpa: std.mem.Allocator, name: [:0]const u8, comptime fmt: []const u8, args: anytype) !void {
++    const value = try std.fmt.allocPrintSentinel(gpa, fmt, args, 0);
++    defer gpa.free(value);
++    if (cross.c.setenv(name.ptr, value.ptr, 1) != 0) return error.SetEnvFailed;
++}
++
++pub fn unsetReexecEnv() void {
++    for (reexec_env.all) |name| _ = cross.c.unsetenv(name.ptr);
++}
++
++/// Reads the state `reexecDisclaimed` left in the environment, then removes
++/// it. Null when this process was not re-exec'd. Strings are copied, since
++/// `unsetenv` may free the originals.
++pub fn takeReexecState(gpa: std.mem.Allocator) !?ReexecState {
++    const fd_str = lib_posix.getenv(reexec_env.socket_fd) orelse return null;
++    const state: ReexecState = .{
++        .server_sock_fd = try std.fmt.parseInt(i32, fd_str, 10),
++        .size = .{
++            .rows = try parseReexecInt(u16, reexec_env.rows),
++            .cols = try parseReexecInt(u16, reexec_env.cols),
++            .xpixel = try parseReexecInt(u16, reexec_env.xpixel),
++            .ypixel = try parseReexecInt(u16, reexec_env.ypixel),
++        },
++        .shell = try gpa.dupe(u8, lib_posix.getenv(reexec_env.shell) orelse return error.ReexecStateIncomplete),
++        .is_task_mode = std.mem.eql(u8, lib_posix.getenv(reexec_env.task_mode) orelse "0", "1"),
++        .cwd = try gpa.dupe(u8, lib_posix.getenv(reexec_env.cwd) orelse ""),
++    };
++    unsetReexecEnv();
++    return state;
++}
++
++fn parseReexecInt(comptime T: type, name: [:0]const u8) !T {
++    const raw = lib_posix.getenv(name) orelse return error.ReexecStateIncomplete;
++    return std.fmt.parseInt(T, raw, 10);
++}
++
+ /// daemonize is the first fork in a double-fork technique to create a
+ /// completely disconnected session (container of process groups).
+ ///
+@@ -167,7 +323,7 @@ pub fn spawnPty(sesh_name: []const u8, cmd: Cmd, size: ipc.Resize) !PtyInfo {
+ ///                 ✝          │ PID≠SID → can't get a tty
+ ///                            ▼
+ ///                          DAEMON ✓
+-pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32) !PtyInfo {
++pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32, reexec: ?Reexec) !PtyInfo {
+     // creates the daemon
+     const pid = try lib_posix.fork();
+     assert(pid != -1);
+@@ -235,5 +391,12 @@ pub fn daemonize(sesh_name: []const u8, cmd: Cmd, keep_fds_open: []i32) !PtyInfo
+         }
+     }
+ 
++    if (reexec) |spec| {
++        reexecDisclaimed(spec, term_size) catch |err| {
++            std.log.warn("daemon re-exec failed, continuing in the forked image: {s}", .{@errorName(err)});
++            unsetReexecEnv();
++        };
++    }
++
+     return spawnPty(sesh_name, cmd, term_size);
+ }
+diff --git a/src/loop.zig b/src/loop.zig
+index c5e7fda..b8f01cf 100644
+--- a/src/loop.zig
++++ b/src/loop.zig
+@@ -68,6 +68,8 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
+     defer _ = lib_posix.fcntl(stdin_fd, lib_posix.F.SETFL, stdin_orig_flags) catch {};
+ 
+     const detach_key_disabled = util.isDetachKeyDisabled();
++    // Outside the loop: it carries a partial sequence between reads.
++    var claim_filter: util.ClaimFilter = .{};
+ 
+     while (true) {
+         poll_fds.clearRetainingCapacity();
+@@ -123,7 +125,18 @@ pub fn clientLoop(client_sock_fd: i32, env_str: []const u8) !ClientResult {
+                         std.log.info("detach key detected", .{});
+                         try ipc.appendMessage(gpa, &sock_write_buf, .Detach, "");
+                     } else {
+-                        try ipc.appendMessage(gpa, &sock_write_buf, .Input, buf[0..n]);
++                        // Excise any leadership claims and forward the rest.
++                        // Unlike the detach key this cannot drop the whole
++                        // read: a claim is written programmatically and may
++                        // share a read with the user's keystrokes.
++                        const filtered = claim_filter.feed(buf[0..n]);
++                        for (0..filtered.claims) |_| {
++                            std.log.info("leadership claim detected", .{});
++                            try ipc.appendMessage(gpa, &sock_write_buf, .Claim, "");
++                        }
++                        if (filtered.forward.len > 0) {
++                            try ipc.appendMessage(gpa, &sock_write_buf, .Input, filtered.forward);
++                        }
+                     }
+                 } else {
+                     std.log.info("eof stdin", .{});
+@@ -472,6 +485,7 @@ fn daemonLoop(daemon: *Daemon, gpa: std.mem.Allocator, io: std.Io, server_sock_f
+                         .Init => try daemon.handleInit(gpa, client, pty_fd, &term, msg.payload),
+                         .Switch => try daemon.handleSwitch(gpa, msg.payload),
+                         .Resize => try daemon.handleResize(gpa, client, pty_fd, &term, msg.payload),
++                        .Claim => try daemon.handleClaim(gpa, client),
+                         .Detach => {
+                             daemon.handleDetach(gpa, client, i);
+                             break :clients_loop;
+@@ -760,10 +774,23 @@ pub const Daemon = struct {
+             }
+         }
+ 
++        // macOS: the daemon re-execs itself disclaimed (see
++        // daemonize.reexecDisclaimed) and picks up in `resumeAfterReexec`;
++        // for it, daemonize() never returns.
++        const reexec: ?daemonize.Reexec = if (builtin.os.tag.isDarwin()) .{
++            .session_name = sesh_name,
++            .shell = self.shell,
++            .is_task_mode = self.is_task_mode,
++            .command = self.command,
++            .cwd = self.cwd,
++            .server_sock_fd = server_sock_fd,
++        } else null;
++
+         const pty_info = daemonize.daemonize(
+             sesh_name,
+             cmd,
+             &keep_fds_open,
++            reexec,
+         ) catch |err| {
+             switch (err) {
+                 error.IsClientProc => {
+@@ -789,6 +816,28 @@ pub const Daemon = struct {
+         // deadlock.
+         // =======
+ 
++        return self.serve(sesh_name, server_sock_fd, dir, pty_info);
++    }
++
++    /// The macOS daemon, picking up after `daemonize.reexecDisclaimed`: the
++    /// same process as the forked child, in a fresh image, with its state
++    /// restored by the `__daemon` entry from `daemonize.takeReexecState`.
++    /// Spawns the pty and serves exactly as `run` would have.
++    pub fn resumeAfterReexec(self: *Daemon, io: std.Io, server_sock_fd: lib_posix.socket_t, size: ipc.Resize) !bool {
++        var dir = try std.Io.Dir.openDirAbsolute(io, self.cfg.socket_dir, .{});
++        defer dir.close(io);
++        const cmd = try daemonize.createCmdZ(self.shell, self.is_task_mode, self.command);
++        const pty_info = daemonize.spawnPty(self.session_name, cmd, size) catch |err| {
++            lib_posix.close(server_sock_fd);
++            dir.deleteFile(io, self.session_name) catch {};
++            return err;
++        };
++        return self.serve(self.session_name, server_sock_fd, dir, pty_info);
++    }
++
++    /// Everything the daemon does once its pty exists, shared by the fork
++    /// path (`run`) and the macOS re-exec path (`resumeAfterReexec`).
++    fn serve(self: *Daemon, sesh_name: []const u8, server_sock_fd: lib_posix.socket_t, dir: std.Io.Dir, pty_info: daemonize.PtyInfo) !bool {
+         self.pid = pty_info.pid;
+ 
+         var threaded: std.Io.Threaded = .init_single_threaded;
+@@ -908,6 +957,18 @@ pub const Daemon = struct {
+         }
+     }
+ 
++    /// Make this client the leader without it having to send input.
++    ///
++    /// `handleInput` already switches leadership on any real keystroke, which
++    /// is what a human at a keyboard does. A GUI frontend showing one session
++    /// in two panes needs to say "size the pty from this one" when the user
++    /// merely clicks or focuses it — and it cannot do that by typing, because
++    /// the keystroke would reach the running program.
++    pub fn handleClaim(self: *Daemon, gpa: std.mem.Allocator, client: *Client) !void {
++        if (self.leader_client_fd == client.socket_fd) return;
++        try self.setLeader(gpa, client);
++    }
++
+     /// Queue input from `zmx send` without changing interactive client leadership.
+     pub fn handleSend(self: *Daemon, gpa: std.mem.Allocator, payload: []const u8) void {
+         self.queuePtyInput(gpa, payload);
+@@ -1359,6 +1420,69 @@ pub const Daemon = struct {
+     }
+ };
+ 
++test "claim makes a non-leader client the leader" {
++    const alloc = std.testing.allocator;
++    var daemon = Daemon{
++        .cfg = undefined,
++        .clients = .empty,
++        .leader_client_fd = 42,
++        .session_name = "test",
++        .socket_path = "",
++        .running = true,
++        .pid = 0,
++        .created_at = 0,
++    };
++    // Built by hand rather than through Client.deinit's teardown: that closes
++    // socket_fd, and this fd number is a stand-in, not a real socket.
++    var client = Client{
++        .alloc = alloc,
++        .socket_fd = 7,
++        .read_buf = try ipc.SocketBuffer.init(alloc),
++        .write_buf = .empty,
++    };
++    defer client.read_buf.deinit();
++    defer client.write_buf.deinit(alloc);
++
++    try daemon.handleClaim(alloc, &client);
++
++    try std.testing.expectEqual(@as(?i32, 7), daemon.leader_client_fd);
++    // setLeader asks the new leader for its size, which is what resizes the
++    // pty — a claim that did not would leave the session at the old geometry.
++    try std.testing.expect(client.write_buf.items.len > 0);
++    try std.testing.expect(client.has_pending_output);
++}
++
++test "claim by the existing leader is a no-op" {
++    const alloc = std.testing.allocator;
++    var daemon = Daemon{
++        .cfg = undefined,
++        .clients = .empty,
++        .leader_client_fd = 7,
++        .session_name = "test",
++        .socket_path = "",
++        .running = true,
++        .pid = 0,
++        .created_at = 0,
++    };
++    // Built by hand rather than through Client.deinit's teardown: that closes
++    // socket_fd, and this fd number is a stand-in, not a real socket.
++    var client = Client{
++        .alloc = alloc,
++        .socket_fd = 7,
++        .read_buf = try ipc.SocketBuffer.init(alloc),
++        .write_buf = .empty,
++    };
++    defer client.read_buf.deinit();
++    defer client.write_buf.deinit(alloc);
++
++    try daemon.handleClaim(alloc, &client);
++
++    try std.testing.expectEqual(@as(?i32, 7), daemon.leader_client_fd);
++    // No size request: re-asking a leader for a size it already set would
++    // make every focus change a redundant pty resize and TUI redraw.
++    try std.testing.expectEqual(@as(usize, 0), client.write_buf.items.len);
++}
++
+ test "terminal retains the configured scrollback without the default byte cap" {
+     const alloc = std.testing.allocator;
+     const cfg = Cfg{ .socket_dir = "", .log_dir = "" };
+diff --git a/src/main.zig b/src/main.zig
+index 7ddef1e..177d912 100644
+--- a/src/main.zig
++++ b/src/main.zig
+@@ -1,4 +1,5 @@
+ const std = @import("std");
++const builtin = @import("builtin");
+ const Environ = std.process.Environ;
+ const build_options = @import("build_options");
+ const ghostty_vt = @import("ghostty-vt");
+@@ -13,6 +14,7 @@ const lib_posix = @import("posix.zig");
+ const signal = @import("signal.zig");
+ const Cfg = @import("cfg.zig");
+ const loop = @import("loop.zig");
++const daemonize = @import("daemonize.zig");
+ const Client = loop.Client;
+ const Daemon = loop.Daemon;
+ const version = build_options.version;
+@@ -497,11 +499,46 @@ pub fn main(init: std.process.Init) !void {
+         const sesh = try socket.resolveSessionOrEnv(gpa, io, sesh_arg);
+         defer gpa.free(sesh);
+         return envGet(gpa, io, &cfg, sesh, single_kv, shell_mode);
++    } else if (std.mem.eql(u8, cmd, daemonize.reexec_command)) {
++        return daemonEntry(gpa, io, &cfg, &args);
+     } else {
+         return printError(io, "unknown command \"{s}\"", .{cmd});
+     }
+ }
+ 
++/// The macOS session daemon after its disclaiming re-exec; not a user command
++/// (see `daemonize.reexecDisclaimed`). argv is `__daemon <session> [-- command...]`;
++/// the rest of the state rides in `daemonize.reexec_env` and is consumed here,
++/// before the shell exists.
++fn daemonEntry(gpa: std.mem.Allocator, io: std.Io, cfg: *Cfg, args: anytype) !void {
++    const sesh = args.next() orelse {
++        return printError(io, "{s}: session name required", .{daemonize.reexec_command});
++    };
++    var command: std.ArrayList([]const u8) = .empty;
++    defer command.deinit(gpa);
++    if (args.next()) |sep| {
++        if (!std.mem.eql(u8, sep, "--")) {
++            return printError(io, "{s}: unexpected argument \"{s}\"", .{ daemonize.reexec_command, sep });
++        }
++        while (args.next()) |arg| try command.append(gpa, arg);
++    }
++    const state = (try daemonize.takeReexecState(gpa)) orelse {
++        return printError(io, "{s}: no re-exec state in the environment", .{daemonize.reexec_command});
++    };
++
++    const socket_path = socket.getSocketPath(gpa, cfg.socket_dir, sesh) catch |err| switch (err) {
++        error.NameTooLong => return socket.printSessionNameTooLong(io, sesh, cfg.socket_dir),
++        error.OutOfMemory => return err,
++    };
++    var daemon = Daemon.init(io, cfg, sesh, socket_path);
++    daemon.shell = state.shell;
++    daemon.is_task_mode = state.is_task_mode;
++    if (command.items.len > 0) daemon.command = command.items;
++    if (state.cwd.len > 0) daemon.setCwd(state.cwd);
++    std.log.info("daemon re-exec'd disclaimed session={s} pid={d}", .{ sesh, std.c.getpid() });
++    _ = try daemon.resumeAfterReexec(io, state.server_sock_fd, state.size);
++}
++
+ fn help(io: std.Io) !void {
+     const help_text =
+         \\zmx - session persistence for terminal processes
+diff --git a/test/daemon_responsibility.bats b/test/daemon_responsibility.bats
+new file mode 100644
+index 0000000..d327c41
+--- /dev/null
++++ b/test/daemon_responsibility.bats
+@@ -0,0 +1,72 @@
++#!/usr/bin/env bats
++# macOS attributes privacy-gated operations (Local Network, TCC) to a process's
++# *responsible process*, a value fixed at spawn and inherited from the parent.
++# The daemon re-execs itself disclaimed (daemonize.reexecDisclaimed) so that it,
++# and not the terminal that ran `zmx attach`, is the responsible process for
++# everything in the session -- and stays so after that terminal exits. These
++# tests pin that contract. The semantics are Darwin-only, so they skip elsewhere.
++
++load test_helper
++
++# Compiles a probe around the libSystem call that reports a pid's responsible
++# pid. Prints "<pid> <responsible>" per argument.
++build_probe() {
++  local src="$BATS_TEST_TMPDIR/rpid.c"
++  cat > "$src" <<'CEOF'
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++extern pid_t responsibility_get_pid_responsible_for_pid(pid_t);
++int main(int argc, char **argv) {
++  for (int i = 1; i < argc; i++) {
++    pid_t p = atoi(argv[i]);
++    printf("%d %d\n", p, responsibility_get_pid_responsible_for_pid(p));
++  }
++  return 0;
++}
++CEOF
++  cc -o "$BATS_TEST_TMPDIR/rpid" "$src"
++}
++
++responsible_for() {
++  "$BATS_TEST_TMPDIR/rpid" "$1" | awk '{print $2}'
++}
++
++@test "macos: the daemon is its own responsible process and the session's programs inherit it" {
++  [[ "$(uname)" == "Darwin" ]] || skip "responsibility is a macOS concept"
++  command -v cc >/dev/null || skip "needs a C compiler for the responsibility probe"
++  build_probe
++
++  "$ZMX" run resp-test -d sleep 60
++  wait_for_session resp-test
++
++  # `zmx run` types the command into the shell over IPC, so the daemon's argv
++  # ends at the session name.
++  local daemon shell
++  daemon=$(pgrep -f "__daemon resp-test$")
++  [[ -n "$daemon" ]]
++  shell=$(pgrep -P "$daemon")
++  [[ -n "$shell" ]]
++
++  # The daemon disclaimed the terminal that created it...
++  [ "$(responsible_for "$daemon")" -eq "$daemon" ]
++  # ...so the session's shell is attributed to the daemon, not to this test's own root.
++  [ "$(responsible_for "$shell")" -eq "$daemon" ]
++  [ "$(responsible_for $$)" -ne "$daemon" ]
++}
++
++@test "macos: the re-exec's state never reaches the session" {
++  [[ "$(uname)" == "Darwin" ]] || skip "the re-exec only happens on macOS"
++
++  # The typed command line is echoed into the history too, so the name is
++  # assembled at run time: the joined string only ever appears as real output.
++  "$ZMX" run leak-test -d sh -c 'env | grep ZMX_DAEMON""_ || echo no-daemon-vars'
++  wait_for_session leak-test
++  local i=0
++  until "$ZMX" history leak-test 2>/dev/null | grep -q "no-daemon-vars"; do
++    sleep 0.1
++    (( i++ < 50 )) || { echo "timed out waiting for the command"; "$ZMX" history leak-test; return 1; }
++  done
++  run "$ZMX" history leak-test
++  [[ "$output" != *"ZMX_DAEMON_"* ]]
++}

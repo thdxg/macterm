@@ -29,6 +29,13 @@ pub const Tag = enum(u8) {
     /// Scoped history: the active screen plus a bounded number of
     /// preceding scrollback rows. Request payload is `Capture`.
     Capture = 22,
+    /// A client asking to become the session's leader without sending input
+    /// (see util.ClaimFilter). Numbered after upstream's newest tag: these are
+    /// wire values, so a downstream tag must never squat on a number upstream
+    /// has since taken — a claim decoding as EnvGet would be silent corruption.
+    /// It was 22 until upstream took that for Capture; a daemon receiving the
+    /// old value sees a Capture with no payload and drops it.
+    Claim = 23,
     // Non-exhaustive: this enum comes off the wire via bytesToValue and
     // @enumFromInt, so out-of-range values are representable
     // rather than UB. Switches must handle `_` (unknown tag).
@@ -356,7 +363,7 @@ test "Tag wire values are frozen" {
         .{ Tag.Write, 12 },    .{ Tag.TaskComplete, 13 }, .{ Tag.LabelGet, 14 },
         .{ Tag.LabelSet, 15 }, .{ Tag.LabelClear, 16 },   .{ Tag.LabelData, 17 },
         .{ Tag.Send, 18 },     .{ Tag.EnvGet, 19 },       .{ Tag.EnvSet, 20 },
-        .{ Tag.EnvData, 21 },  .{ Tag.Capture, 22 },
+        .{ Tag.EnvData, 21 },  .{ Tag.Capture, 22 },      .{ Tag.Claim, 23 },
     }) |p| try std.testing.expectEqual(@as(u8, p[1]), @intFromEnum(p[0]));
 }
 

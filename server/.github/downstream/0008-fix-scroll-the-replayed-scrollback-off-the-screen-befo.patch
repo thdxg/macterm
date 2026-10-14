@@ -1,0 +1,106 @@
+From 1e39c5eb39c55be6cae57b5e40f5b8a32f87686a Mon Sep 17 00:00:00 2001
+From: Ethan Lee <ethantlee21@gmail.com>
+Date: Tue, 13 Oct 2026 01:17:37 -0400
+Subject: [PATCH] fix: scroll the replayed scrollback off the screen before the
+ clear
+
+The snapshot writes the scrollback, then clears the screen with ESC[2J
+and lays the visible screen out with cursor positioning. ED 2 erases the
+screen in place, and after the scrollback phase its last rows are still
+on the screen, so every reattach lost up to a screenful of scrollback
+right above the visible content.
+
+Write one linefeed per screen row before the clear. Whatever row the
+cursor is on, that scrolls every row the scrollback phase wrote into the
+client's scrollback and leaves the screen blank for the clear.
+---
+ src/util.zig | 66 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+
+diff --git a/src/util.zig b/src/util.zig
+index 0ee9457..2fe2516 100644
+--- a/src/util.zig
++++ b/src/util.zig
+@@ -1010,6 +1010,14 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
+             };
+         }
+ 
++        // Scroll the scrollback off the screen before clearing it. After
++        // phase 1 its last rows are still on the screen, and \x1b[2J erases
++        // the screen in place, so the client would lose them. One linefeed
++        // per screen row scrolls every row that phase 1 wrote into the
++        // client's scrollback, whatever row the cursor is on, and leaves the
++        // screen blank.
++        for (0..pages.rows) |_| builder.writer.writeAll("\r\n") catch {};
++
+         // Clear visible screen after scrollback. \x1b[2J clears only the visible
+         // rows (not the scrollback buffer). \x1b[H homes the cursor. \x1b[0m resets
+         // SGR style so phase 1 styles don't bleed into phase 2.
+@@ -1811,6 +1819,64 @@ test "serializeTerminalState keeps a soft-wrapped scrollback line whole" {
+     try testing.expect(std.mem.indexOf(u8, output, "abcdefghij\r\n") == null);
+ }
+ 
++test "serializeTerminalState keeps the scrollback rows that are on screen before the clear" {
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    // Eleven lines on two rows: SCROLL_0..SCROLL_8 are scrollback, SCROLL_9
++    // and the prompt are the screen.
++    var term = try testCreateTerminal(alloc, io, 10, 2, "");
++    defer term.deinit(alloc);
++    {
++        var stream = term.vtStream();
++        defer stream.deinit();
++        var buf: [16]u8 = undefined;
++        for (0..10) |i| {
++            const line = std.fmt.bufPrint(&buf, "SCROLL_{d}\r\n", .{i}) catch unreachable;
++            stream.nextSlice(line);
++        }
++        stream.nextSlice("prompt");
++    }
++
++    var client = try serializeRoundtrip(alloc, io, &term);
++    defer client.deinit(alloc);
++
++    // The last two scrollback rows were still on the client's screen when
++    // the snapshot cleared it. They must end up in its scrollback, not
++    // erased.
++    const history = serializeTerminal(alloc, &client, .plain) orelse return error.TestUnexpectedNull;
++    defer alloc.free(history);
++    try testing.expect(std.mem.indexOf(u8, history, "SCROLL_7\nSCROLL_8\n") != null);
++    try expectScreensMatch(alloc, &term, &client);
++    try expectCursorAt(&client, 1, 6);
++}
++
++test "serializeTerminalState lets a wider client lay a wrapped line out on one row" {
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    var term = try testCreateTerminal(alloc, io, 10, 2, "abcdefghijklmnopqrstuvwxy\r\n\r\nprompt");
++    defer term.deinit(alloc);
++
++    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    defer alloc.free(output);
++
++    // The client reflows the logical line at its own width, and the row it
++    // lands on was scrolled out before the clear.
++    var wide = try ghostty_vt.Terminal.init(io, alloc, .{
++        .cols = 40,
++        .rows = 2,
++        .max_scrollback_lines = 2_000,
++    });
++    defer wide.deinit(alloc);
++    var stream = wide.vtStream();
++    defer stream.deinit();
++    stream.nextSlice(output);
++    const history = serializeTerminal(alloc, &wide, .plain) orelse return error.TestUnexpectedNull;
++    defer alloc.free(history);
++    try testing.expect(std.mem.indexOf(u8, history, "abcdefghijklmnopqrstuvwxy\n") != null);
++}
++
+ test "serializeTerminalState replays the mouse format set last" {
+     const alloc = testing.allocator;
+     const io = testing.io;
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,69 @@
+From 717b87a33d505f51a9bb84587f8e94799537d67e Mon Sep 17 00:00:00 2001
+From: Ethan Lee <ethantlee21@gmail.com>
+Date: Tue, 13 Oct 2026 01:17:37 -0400
+Subject: [PATCH] fix: replay scrollback as logical lines so the client can
+ reflow them
+
+On reattach the daemon resizes its terminal to the attaching client's
+size and serializes a snapshot laid out for it, one line per row. A
+client that attaches before its window is laid out reports a
+placeholder size there (libghostty's embedded surface starts at 800x600
+px, 47x13 cells at a common font), and its real size arrives one message
+later. The scrollback then stays hard-wrapped at the placeholder width
+for the life of the session: a resize cannot join rows that arrived as
+separate lines.
+
+Format the scrollback phase with the formatter's unwrap option.
+Soft-wrapped rows reach the client as one logical line, which it wraps
+at its own width and reflows on every later resize. The visible-screen
+phase is unchanged: its cursor position depends on the row layout.
+---
+ src/util.zig | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/src/util.zig b/src/util.zig
+index 5ef2a55..0ee9457 100644
+--- a/src/util.zig
++++ b/src/util.zig
+@@ -998,6 +998,13 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
+                 ),
+             };
+             scroll_fmt.extra = .none; // no modes, cursor, keyboard — just content
++            // Join soft-wrapped rows into their logical line. The client
++            // wraps the line at its own width and reflows it on every later
++            // resize. A row-per-line replay would hard-wrap the scrollback at
++            // the width this terminal was resized to for the snapshot, and a
++            // client that attaches before its window is laid out reports a
++            // placeholder size there, not the one it renders at.
++            scroll_fmt.opts.unwrap = true;
+             scroll_fmt.format(&builder.writer) catch |err| {
+                 std.log.warn("failed to format scrollback err={s}", .{@errorName(err)});
+             };
+@@ -1786,6 +1793,24 @@ test "serializeTerminalState excludes synchronized output replay" {
+     try testing.expect(std.mem.indexOf(u8, output, "\x1b[?2026h") == null);
+ }
+ 
++test "serializeTerminalState keeps a soft-wrapped scrollback line whole" {
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    // Ten columns: the 25-character line wraps over three rows. Two rows of
++    // screen and two newlines push all three into scrollback.
++    var term = try testCreateTerminal(alloc, io, 10, 2, "abcdefghijklmnopqrstuvwxy\r\n\r\nprompt");
++    defer term.deinit(alloc);
++
++    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    defer alloc.free(output);
++
++    // The line reaches the client as one, not as three rows that the
++    // client's own grid can never join again.
++    try testing.expect(std.mem.indexOf(u8, output, "abcdefghijklmnopqrstuvwxy") != null);
++    try testing.expect(std.mem.indexOf(u8, output, "abcdefghij\r\n") == null);
++}
++
+ test "serializeTerminalState replays the mouse format set last" {
+     const alloc = testing.allocator;
+     const io = testing.io;
+-- 
+2.54.0 (Apple Git-157)
+

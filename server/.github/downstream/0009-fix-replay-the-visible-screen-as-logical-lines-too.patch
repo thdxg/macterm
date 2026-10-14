@@ -1,0 +1,79 @@
+From 2dcaa33308db2b3c479ba5d46fcec88e68d7cd3d Mon Sep 17 00:00:00 2001
+From: Ethan Lee <ethantlee21@gmail.com>
+Date: Tue, 13 Oct 2026 02:06:54 -0400
+Subject: [PATCH] fix: replay the visible screen as logical lines too
+
+The scrollback phase joins soft-wrapped rows so the client can reflow
+them, but the visible-screen phase still emitted one line per row. A
+client that attaches in a warm-up window and only then moves into its
+real pane (Macterm's incubator, 107x35 cells) got a last screenful cut
+at that width for good.
+
+The client has the width this terminal was resized to for the snapshot,
+so a joined line wraps at the same cells and the cursor lands on the same
+row; a later resize then reflows it like any other line.
+---
+ src/util.zig | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/src/util.zig b/src/util.zig
+index 2fe2516..946d8d7 100644
+--- a/src/util.zig
++++ b/src/util.zig
+@@ -1026,6 +1026,13 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
+ 
+     // Phase 2: visible screen with full extras (modes, cursor, keyboard, etc.)
+     var vis_fmt = ghostty_vt.formatter.TerminalFormatter.init(term, .vt);
++    // Logical lines here too. The client has the width this terminal was
++    // resized to for the snapshot, so a joined line wraps at the same cells
++    // and the cursor lands on the same row; a later resize then reflows it,
++    // where a row-per-line replay would have cut it at the attach width for
++    // good. A client that attaches in a warm-up window and only then moves
++    // into its real pane gets a visible screen it can reshape.
++    vis_fmt.opts.unwrap = true;
+ 
+     // Restrict content to the active viewport only
+     const active_tl = pages.pin(.{ .active = .{ .x = 0, .y = 0 } });
+@@ -1851,6 +1858,39 @@ test "serializeTerminalState keeps the scrollback rows that are on screen before
+     try expectCursorAt(&client, 1, 6);
+ }
+ 
++test "serializeTerminalState keeps a soft-wrapped line on the visible screen whole" {
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    // Four rows, no scrollback: the wrapped line and the prompt are the
++    // visible screen.
++    var term = try testCreateTerminal(alloc, io, 10, 4, "abcdefghijklmnopqrstuvwxy\r\nprompt");
++    defer term.deinit(alloc);
++
++    // At the same size the screen and the cursor come back as they were.
++    var client = try serializeRoundtrip(alloc, io, &term);
++    defer client.deinit(alloc);
++    try expectScreensMatch(alloc, &term, &client);
++    try expectCursorAt(&client, 3, 6);
++
++    // A wider client lays the line out on one row: it arrived as one.
++    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
++    defer alloc.free(output);
++    try testing.expect(std.mem.indexOf(u8, output, "abcdefghijklmnopqrstuvwxy") != null);
++    var wide = try ghostty_vt.Terminal.init(io, alloc, .{
++        .cols = 40,
++        .rows = 4,
++        .max_scrollback_lines = 2_000,
++    });
++    defer wide.deinit(alloc);
++    var stream = wide.vtStream();
++    defer stream.deinit();
++    stream.nextSlice(output);
++    const screen = try wide.plainString(alloc);
++    defer alloc.free(screen);
++    try testing.expect(std.mem.indexOf(u8, screen, "abcdefghijklmnopqrstuvwxy\n") != null);
++}
++
+ test "serializeTerminalState lets a wider client lay a wrapped line out on one row" {
+     const alloc = testing.allocator;
+     const io = testing.io;
+-- 
+2.54.0 (Apple Git-157)
+

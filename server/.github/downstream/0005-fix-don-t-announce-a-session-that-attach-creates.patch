@@ -1,0 +1,126 @@
+From bb554ef9bcc040fc34e6fe22bc64cac851fc4d28 Mon Sep 17 00:00:00 2001
+From: Ethan Lee <ethantlee21@gmail.com>
+Date: Tue, 6 Oct 2026 19:17:13 -0400
+Subject: [PATCH] fix: don't announce a session that attach creates
+
+`zmx attach` printed `session "<name>" created` and then cleared the
+screen with ESC[2J, so the line was never meant to be seen. On a
+terminal only a row or two tall, the line's newline scrolled it into
+scrollback, which ESC[2J doesn't reach, and a terminal that then grew
+pulled it back down above the session's prompt. Macterm hit this
+whenever a pane was created mid split animation (thdxg/macterm#487).
+
+Attach now creates the session silently. `zmx run` still announces it.
+---
+ src/loop.zig            | 16 ++++++++++----
+ src/main.zig            |  3 +++
+ test/attach_create.bats | 49 +++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 64 insertions(+), 4 deletions(-)
+ create mode 100644 test/attach_create.bats
+
+diff --git a/src/loop.zig b/src/loop.zig
+index eed7d28..cd481aa 100644
+--- a/src/loop.zig
++++ b/src/loop.zig
+@@ -620,6 +620,12 @@ pub const Daemon = struct {
+     task_ended_at: ?u64 = null, // timestamp when task exited
+     pty_fd: i32 = -1, // set by daemonLoop so handleRun can probe the foreground process
+     shell: []const u8 = "/bin/sh",
++    /// Whether the client that creates the session prints `session "<name>"
++    /// created`. `attach` turns it off: it clears the screen right after, and
++    /// on a terminal only a row or two tall the line's newline scrolls it into
++    /// scrollback, out of the clear's reach, where it survives above the
++    /// session's prompt once the terminal grows.
++    announce_create: bool = true,
+ 
+     /// Create a Daemon. Caller is responsible for freeing all variables passed
+     /// into the init fn.
+@@ -796,10 +802,12 @@ pub const Daemon = struct {
+             switch (err) {
+                 error.IsClientProc => {
+                     // send a msg to the client that the session was created.
+-                    var w_buf: [2048]u8 = undefined;
+-                    var w = std.Io.File.stdout().writer(io, &w_buf);
+-                    try w.interface.print("session \"{s}\" created\n", .{sesh_name});
+-                    try w.interface.flush();
++                    if (self.announce_create) {
++                        var w_buf: [2048]u8 = undefined;
++                        var w = std.Io.File.stdout().writer(io, &w_buf);
++                        try w.interface.print("session \"{s}\" created\n", .{sesh_name});
++                        try w.interface.flush();
++                    }
+                     lib_posix.close(server_sock_fd);
+                     return false;
+                 },
+diff --git a/src/main.zig b/src/main.zig
+index ea11c8a..3fc9653 100644
+--- a/src/main.zig
++++ b/src/main.zig
+@@ -1647,6 +1647,9 @@ fn attach(gpa: std.mem.Allocator, io: std.Io, daemon: *Daemon, env_str: []const
+         return switchSesh(gpa, io, daemon, sesh);
+     }
+ 
++    // The screen is cleared below, so announcing the new session only risks
++    // leaving the line behind (see `Daemon.announce_create`).
++    daemon.announce_create = false;
+     const is_daemon_proc = try daemon.ensureSession(io);
+     if (is_daemon_proc) return;
+ 
+diff --git a/test/attach_create.bats b/test/attach_create.bats
+new file mode 100644
+index 0000000..9d28cd5
+--- /dev/null
++++ b/test/attach_create.bats
+@@ -0,0 +1,49 @@
++#!/usr/bin/env bats
++# What `zmx attach` prints when it creates the session it attaches to.
++#
++# `zmx run` announces a new session with `session "<name>" created`; `attach`
++# must not. It clears the screen right after, so the line is never meant to be
++# seen, and on a terminal one row tall its newline scrolls it into scrollback,
++# out of the clear's reach — a terminal that grows then shows it above the
++# session's prompt.
++
++load test_helper
++
++# attach_output <session> <rows> <cols>: everything `zmx attach` writes to a
++# pty of that size in its first second, as text.
++attach_output() {
++  python3 - "$ZMX" "$1" "$2" "$3" 3>&- <<'PY'
++import fcntl, os, pty, signal, struct, sys, termios, time
++zmx, name, rows, cols = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
++pid, fd = pty.fork()
++if pid == 0:
++    fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
++    os.execve(zmx, [zmx, "attach", name, "/bin/sh"], os.environ)
++out, end = b"", time.time() + 1
++os.set_blocking(fd, False)
++while time.time() < end:
++    try:
++        out += os.read(fd, 65536)
++    except (BlockingIOError, OSError):
++        time.sleep(0.05)
++os.kill(pid, signal.SIGKILL)
++os.waitpid(pid, 0)
++sys.stdout.write(out.decode(errors="replace"))
++PY
++}
++
++@test "attach: creating the session prints no announcement" {
++  command -v python3 >/dev/null || skip "python3 needed to allocate a test PTY"
++  run attach_output test-attach-quiet 1 80
++  [ "$status" -eq 0 ]
++  # The attach really happened: its clear reached the terminal.
++  [[ "$output" == *$'\e[2J'* ]]
++  [[ "$output" != *"created"* ]]
++  wait_for_session test-attach-quiet
++}
++
++@test "run: creating the session still announces it" {
++  run "$ZMX" run test-run-announce -d echo hello
++  [ "$status" -eq 0 ]
++  [[ "$output" == *"session \"test-run-announce\" created"* ]]
++}
+-- 
+2.53.0
+

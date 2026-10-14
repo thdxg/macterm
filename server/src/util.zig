@@ -519,6 +519,89 @@ pub fn stripAnsi(alloc: std.mem.Allocator, data: []const u8) ![]const u8 {
 }
 
 /// Dcts Ctrl+\ across raw, Kitty CSI u, and xterm modifyOtherKeys encodings.
+/// Filters Macterm's leadership-claim sequence out of a client's stdin.
+///
+/// zmx only ever hands leadership to a client that sends real user input
+/// (`isUserInput`), which is the right rule for a human at a keyboard but
+/// leaves a GUI frontend showing one session in two panes no way to say "size
+/// the pty from this one" without typing into the user's program. The claim is
+/// an APC string — no keyboard produces one, and terminals discard unknown APC
+/// — so it is inert if it ever reaches a program that predates this.
+///
+/// Deliberately NOT shaped like `isCtrlBackslash`, which returns a bool and
+/// lets its caller drop the whole read. A detach key is a keystroke and
+/// arrives alone; a claim is written programmatically and can land in the same
+/// 4096-byte read as whatever the user is typing, so an all-or-nothing match
+/// would swallow their keystrokes. This excises occurrences and forwards the
+/// rest.
+///
+/// It also carries a partial sequence across reads: a pty write can be split
+/// anywhere, so a claim can arrive as two halves. The carry is bounded by the
+/// sequence length, so a stream of ESCs cannot grow it.
+pub const ClaimFilter = struct {
+    pub const sequence = "\x1b_zmx;claim\x1b\\";
+    /// Matches the client's stdin read buffer; `feed` asserts on more.
+    pub const max_input = 4096;
+    /// Shortest trailing partial sequence worth holding back for the next
+    /// read. Anything shorter is forwarded immediately, because a partial of
+    /// 1-2 bytes is a bare ESC or ESC `_` — Escape is a key people press
+    /// constantly in a TUI, and delaying it until their NEXT keystroke would
+    /// be a visible input lag. Three bytes (ESC `_` `z`) is already a sequence
+    /// no keyboard produces. The cost is a claim split within its first two
+    /// bytes being dropped rather than rejoined; that needs the split to land
+    /// exactly there, and the user's next keystroke re-establishes leadership
+    /// anyway.
+    pub const min_carry = 3;
+
+    carry: [sequence.len - 1]u8 = undefined,
+    carry_len: usize = 0,
+    work: [max_input + sequence.len - 1]u8 = undefined,
+
+    pub const Result = struct {
+        /// How many complete claim sequences were consumed.
+        claims: usize,
+        /// The bytes to forward to the daemon as Input. Borrowed from the
+        /// filter and valid until the next `feed`.
+        forward: []const u8,
+    };
+
+    pub fn feed(self: *ClaimFilter, input: []const u8) Result {
+        std.debug.assert(input.len <= max_input);
+
+        // Carried partial prefix first, so a split sequence rejoins.
+        @memcpy(self.work[0..self.carry_len], self.carry[0..self.carry_len]);
+        @memcpy(self.work[self.carry_len..][0..input.len], input);
+        const buf = self.work[0 .. self.carry_len + input.len];
+        self.carry_len = 0;
+
+        var claims: usize = 0;
+        var out: usize = 0;
+        var i: usize = 0;
+        while (i < buf.len) {
+            if (buf.len - i >= sequence.len and
+                std.mem.eql(u8, buf[i..][0..sequence.len], sequence))
+            {
+                claims += 1;
+                i += sequence.len;
+                continue;
+            }
+            // A proper prefix of the sequence running to the end of the buffer
+            // may be the front half of a claim split across reads: hold it.
+            if (buf.len - i >= min_carry and buf.len - i < sequence.len and
+                std.mem.eql(u8, buf[i..], sequence[0 .. buf.len - i]))
+            {
+                self.carry_len = buf.len - i;
+                @memcpy(self.carry[0..self.carry_len], buf[i..]);
+                break;
+            }
+            buf[out] = buf[i];
+            out += 1;
+            i += 1;
+        }
+        return .{ .claims = claims, .forward = buf[0..out] };
+    }
+};
+
 pub fn isCtrlBackslash(buf: []const u8) bool {
     if (buf.len == 0) return false;
     return buf[0] == 0x1C or isKeyPressed(buf, 0x5c, 0b100) or isModifyOtherKey(buf, 0x5c, 0b100);
@@ -787,6 +870,85 @@ fn writeColorOverrides(writer: *std.Io.Writer, term: *const ghostty_vt.Terminal)
     writeDynamicColor(writer, .cursor, colors.cursor);
 }
 
+/// Replays the mouse event mode and mouse format the program is actually
+/// getting, after the formatter's mode replay.
+///
+/// DECSET 9/1000/1002/1003 each set `flags.mouse_event` and 1005/1006/1015/1016
+/// each set `flags.mouse_format`, the last one set winning, but every mode also
+/// keeps its own bit in `term.modes`. The formatter replays those bits in
+/// numeric order, so a program that turned on several modes of a group gets the
+/// highest-numbered one after a reattach rather than the one it set last.
+/// crossterm's EnableMouseCapture sends `?1015h` before `?1006h` and gets SGR;
+/// replayed, it got urxvt, whose releases don't name the button, so a right
+/// button's release reached the program as a left one.
+///
+/// Setting the effective mode again makes it the last one set. When the
+/// effective setting is the default (no events, X10 format) while some of the
+/// group's bits are on, resetting a bit that is already off brings the client
+/// back to the default without touching the replayed bits.
+///
+/// Drop this once ghostty's formatter replays the effective mouse modes itself.
+fn writeMouseModes(writer: *std.Io.Writer, term: *const ghostty_vt.Terminal) void {
+    const event: ?ghostty_vt.Mode = switch (term.flags.mouse_event) {
+        .none => null,
+        .x10 => .mouse_event_x10,
+        .normal => .mouse_event_normal,
+        .button => .mouse_event_button,
+        .any => .mouse_event_any,
+    };
+    writeEffectiveMode(writer, term, &.{
+        .mouse_event_x10,
+        .mouse_event_normal,
+        .mouse_event_button,
+        .mouse_event_any,
+    }, event);
+
+    const format: ?ghostty_vt.Mode = switch (term.flags.mouse_format) {
+        .x10 => null,
+        .utf8 => .mouse_format_utf8,
+        .sgr => .mouse_format_sgr,
+        .urxvt => .mouse_format_urxvt,
+        .sgr_pixels => .mouse_format_sgr_pixels,
+    };
+    writeEffectiveMode(writer, term, &.{
+        .mouse_format_utf8,
+        .mouse_format_sgr,
+        .mouse_format_urxvt,
+        .mouse_format_sgr_pixels,
+    }, format);
+}
+
+fn writeEffectiveMode(
+    writer: *std.Io.Writer,
+    term: *const ghostty_vt.Terminal,
+    group: []const ghostty_vt.Mode,
+    effective: ?ghostty_vt.Mode,
+) void {
+    var mode: ghostty_vt.Mode = undefined;
+    var suffix: u8 = 'h';
+    if (effective) |m| {
+        mode = m;
+    } else {
+        var any_set = false;
+        var unset: ?ghostty_vt.Mode = null;
+        for (group) |m| {
+            if (term.modes.get(m)) {
+                any_set = true;
+            } else if (unset == null) {
+                unset = m;
+            }
+        }
+        if (!any_set) return;
+        mode = unset orelse return;
+        suffix = 'l';
+    }
+
+    const tag = ghostty_vt.modes.ModeTag.fromMode(mode);
+    writer.print("\x1b[?{d}{c}", .{ tag.value, suffix }) catch |err| {
+        std.log.warn("failed to format mouse mode err={s}", .{@errorName(err)});
+    };
+}
+
 pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Terminal) ?[]const u8 {
     var builder: std.Io.Writer.Allocating = .init(alloc);
     defer builder.deinit();
@@ -836,10 +998,25 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
                 ),
             };
             scroll_fmt.extra = .none; // no modes, cursor, keyboard — just content
+            // Join soft-wrapped rows into their logical line. The client
+            // wraps the line at its own width and reflows it on every later
+            // resize. A row-per-line replay would hard-wrap the scrollback at
+            // the width this terminal was resized to for the snapshot, and a
+            // client that attaches before its window is laid out reports a
+            // placeholder size there, not the one it renders at.
+            scroll_fmt.opts.unwrap = true;
             scroll_fmt.format(&builder.writer) catch |err| {
                 std.log.warn("failed to format scrollback err={s}", .{@errorName(err)});
             };
         }
+
+        // Scroll the scrollback off the screen before clearing it. After
+        // phase 1 its last rows are still on the screen, and \x1b[2J erases
+        // the screen in place, so the client would lose them. One linefeed
+        // per screen row scrolls every row that phase 1 wrote into the
+        // client's scrollback, whatever row the cursor is on, and leaves the
+        // screen blank.
+        for (0..pages.rows) |_| builder.writer.writeAll("\r\n") catch {};
 
         // Clear visible screen after scrollback. \x1b[2J clears only the visible
         // rows (not the scrollback buffer). \x1b[H homes the cursor. \x1b[0m resets
@@ -849,6 +1026,13 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
 
     // Phase 2: visible screen with full extras (modes, cursor, keyboard, etc.)
     var vis_fmt = ghostty_vt.formatter.TerminalFormatter.init(term, .vt);
+    // Logical lines here too. The client has the width this terminal was
+    // resized to for the snapshot, so a joined line wraps at the same cells
+    // and the cursor lands on the same row; a later resize then reflows it,
+    // where a row-per-line replay would have cut it at the attach width for
+    // good. A client that attaches in a warm-up window and only then moves
+    // into its real pane gets a visible screen it can reshape.
+    vis_fmt.opts.unwrap = true;
 
     // Restrict content to the active viewport only
     const active_tl = pages.pin(.{ .active = .{ .x = 0, .y = 0 } });
@@ -885,6 +1069,7 @@ pub fn serializeTerminalState(alloc: std.mem.Allocator, term: *ghostty_vt.Termin
         return null;
     };
 
+    writeMouseModes(&builder.writer, term);
     writePwd(&builder.writer, term);
 
     // The formatter has no title extra and never emits OSC 0/1/2, so the title
@@ -1623,6 +1808,184 @@ test "serializeTerminalState excludes synchronized output replay" {
     try testing.expect(std.mem.indexOf(u8, output, "\x1b[?2026h") == null);
 }
 
+test "serializeTerminalState keeps a soft-wrapped scrollback line whole" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // Ten columns: the 25-character line wraps over three rows. Two rows of
+    // screen and two newlines push all three into scrollback.
+    var term = try testCreateTerminal(alloc, io, 10, 2, "abcdefghijklmnopqrstuvwxy\r\n\r\nprompt");
+    defer term.deinit(alloc);
+
+    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
+    defer alloc.free(output);
+
+    // The line reaches the client as one, not as three rows that the
+    // client's own grid can never join again.
+    try testing.expect(std.mem.indexOf(u8, output, "abcdefghijklmnopqrstuvwxy") != null);
+    try testing.expect(std.mem.indexOf(u8, output, "abcdefghij\r\n") == null);
+}
+
+test "serializeTerminalState keeps the scrollback rows that are on screen before the clear" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // Eleven lines on two rows: SCROLL_0..SCROLL_8 are scrollback, SCROLL_9
+    // and the prompt are the screen.
+    var term = try testCreateTerminal(alloc, io, 10, 2, "");
+    defer term.deinit(alloc);
+    {
+        var stream = term.vtStream();
+        defer stream.deinit();
+        var buf: [16]u8 = undefined;
+        for (0..10) |i| {
+            const line = std.fmt.bufPrint(&buf, "SCROLL_{d}\r\n", .{i}) catch unreachable;
+            stream.nextSlice(line);
+        }
+        stream.nextSlice("prompt");
+    }
+
+    var client = try serializeRoundtrip(alloc, io, &term);
+    defer client.deinit(alloc);
+
+    // The last two scrollback rows were still on the client's screen when
+    // the snapshot cleared it. They must end up in its scrollback, not
+    // erased.
+    const history = serializeTerminal(alloc, &client, .plain) orelse return error.TestUnexpectedNull;
+    defer alloc.free(history);
+    try testing.expect(std.mem.indexOf(u8, history, "SCROLL_7\nSCROLL_8\n") != null);
+    try expectScreensMatch(alloc, &term, &client);
+    try expectCursorAt(&client, 1, 6);
+}
+
+test "serializeTerminalState keeps a soft-wrapped line on the visible screen whole" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // Four rows, no scrollback: the wrapped line and the prompt are the
+    // visible screen.
+    var term = try testCreateTerminal(alloc, io, 10, 4, "abcdefghijklmnopqrstuvwxy\r\nprompt");
+    defer term.deinit(alloc);
+
+    // At the same size the screen and the cursor come back as they were.
+    var client = try serializeRoundtrip(alloc, io, &term);
+    defer client.deinit(alloc);
+    try expectScreensMatch(alloc, &term, &client);
+    try expectCursorAt(&client, 3, 6);
+
+    // A wider client lays the line out on one row: it arrived as one.
+    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
+    defer alloc.free(output);
+    try testing.expect(std.mem.indexOf(u8, output, "abcdefghijklmnopqrstuvwxy") != null);
+    var wide = try ghostty_vt.Terminal.init(io, alloc, .{
+        .cols = 40,
+        .rows = 4,
+        .max_scrollback_lines = 2_000,
+    });
+    defer wide.deinit(alloc);
+    var stream = wide.vtStream();
+    defer stream.deinit();
+    stream.nextSlice(output);
+    const screen = try wide.plainString(alloc);
+    defer alloc.free(screen);
+    try testing.expect(std.mem.indexOf(u8, screen, "abcdefghijklmnopqrstuvwxy\n") != null);
+}
+
+test "serializeTerminalState lets a wider client lay a wrapped line out on one row" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var term = try testCreateTerminal(alloc, io, 10, 2, "abcdefghijklmnopqrstuvwxy\r\n\r\nprompt");
+    defer term.deinit(alloc);
+
+    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
+    defer alloc.free(output);
+
+    // The client reflows the logical line at its own width, and the row it
+    // lands on was scrolled out before the clear.
+    var wide = try ghostty_vt.Terminal.init(io, alloc, .{
+        .cols = 40,
+        .rows = 2,
+        .max_scrollback_lines = 2_000,
+    });
+    defer wide.deinit(alloc);
+    var stream = wide.vtStream();
+    defer stream.deinit();
+    stream.nextSlice(output);
+    const history = serializeTerminal(alloc, &wide, .plain) orelse return error.TestUnexpectedNull;
+    defer alloc.free(history);
+    try testing.expect(std.mem.indexOf(u8, history, "abcdefghijklmnopqrstuvwxy\n") != null);
+}
+
+test "serializeTerminalState replays the mouse format set last" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // crossterm's EnableMouseCapture: urxvt before SGR, so SGR is in effect.
+    var term = try testCreateTerminal(alloc, io, 80, 24, "\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1015h\x1b[?1006h");
+    defer term.deinit(alloc);
+    try testing.expect(term.flags.mouse_format == .sgr);
+    try testing.expect(term.flags.mouse_event == .any);
+
+    var client = try serializeRoundtrip(alloc, io, &term);
+    defer client.deinit(alloc);
+
+    try testing.expect(client.flags.mouse_format == .sgr);
+    try testing.expect(client.flags.mouse_event == .any);
+    try testing.expect(client.modes.get(.mouse_format_urxvt));
+}
+
+test "serializeTerminalState replays the mouse event mode set last" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var term = try testCreateTerminal(alloc, io, 80, 24, "\x1b[?1003h\x1b[?1000h");
+    defer term.deinit(alloc);
+    try testing.expect(term.flags.mouse_event == .normal);
+
+    var client = try serializeRoundtrip(alloc, io, &term);
+    defer client.deinit(alloc);
+
+    try testing.expect(client.flags.mouse_event == .normal);
+    try testing.expect(client.modes.get(.mouse_event_any));
+}
+
+test "serializeTerminalState replays default mouse modes left on by a later reset" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // Resetting any mode of a group returns it to its default, even with
+    // another mode of the group still on.
+    var term = try testCreateTerminal(alloc, io, 80, 24, "\x1b[?1006h\x1b[?1015h\x1b[?1015l" ++
+        "\x1b[?1000h\x1b[?1002h\x1b[?1002l");
+    defer term.deinit(alloc);
+    try testing.expect(term.flags.mouse_format == .x10);
+    try testing.expect(term.flags.mouse_event == .none);
+
+    var client = try serializeRoundtrip(alloc, io, &term);
+    defer client.deinit(alloc);
+
+    try testing.expect(client.flags.mouse_format == .x10);
+    try testing.expect(client.flags.mouse_event == .none);
+    try testing.expect(client.modes.get(.mouse_format_sgr));
+    try testing.expect(client.modes.get(.mouse_event_normal));
+}
+
+test "serializeTerminalState adds no mouse modes when mouse reporting is off" {
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var term = try testCreateTerminal(alloc, io, 80, 24, "hello");
+    defer term.deinit(alloc);
+
+    const output = serializeTerminalState(alloc, &term) orelse return error.TestUnexpectedNull;
+    defer alloc.free(output);
+
+    for ([_][]const u8{ "\x1b[?9", "\x1b[?100", "\x1b[?101" }) |prefix| {
+        try testing.expect(std.mem.indexOf(u8, output, prefix) == null);
+    }
+}
+
 test "serializeTerminalState replays the title" {
     const alloc = testing.allocator;
     const io = testing.io;
@@ -2304,4 +2667,76 @@ test "isUserInput: kitty keyboard status reply is a terminal response" {
     try testing.expect(isUserInput("\x1b[?1u\r"));
     try testing.expect(isUserInput("\x1b[?1u\x1b[97;1u"));
     try testing.expect(!isUserInput("\x1b[?1u\x1b[97;1:3u"));
+}
+
+test "ClaimFilter: a lone claim is consumed and forwards nothing" {
+    var f: ClaimFilter = .{};
+    const r = f.feed(ClaimFilter.sequence);
+    try testing.expectEqual(@as(usize, 1), r.claims);
+    try testing.expectEqualStrings("", r.forward);
+}
+
+test "ClaimFilter: plain input passes through untouched" {
+    var f: ClaimFilter = .{};
+    const r = f.feed("ls -la\r");
+    try testing.expectEqual(@as(usize, 0), r.claims);
+    try testing.expectEqualStrings("ls -la\r", r.forward);
+}
+
+test "ClaimFilter: a claim sharing a read with keystrokes keeps them" {
+    // The bug the all-or-nothing isCtrlBackslash shape would have: a claim is
+    // written programmatically and can land in the same read as typing.
+    var f: ClaimFilter = .{};
+    const r = f.feed("abc" ++ ClaimFilter.sequence ++ "def");
+    try testing.expectEqual(@as(usize, 1), r.claims);
+    try testing.expectEqualStrings("abcdef", r.forward);
+}
+
+test "ClaimFilter: several claims in one read are all counted" {
+    var f: ClaimFilter = .{};
+    const r = f.feed(ClaimFilter.sequence ++ "x" ++ ClaimFilter.sequence);
+    try testing.expectEqual(@as(usize, 2), r.claims);
+    try testing.expectEqualStrings("x", r.forward);
+}
+
+test "ClaimFilter: a claim split across two reads is rejoined" {
+    var f: ClaimFilter = .{};
+    const seq = ClaimFilter.sequence;
+    const first = f.feed("hi" ++ seq[0..5]);
+    try testing.expectEqual(@as(usize, 0), first.claims);
+    try testing.expectEqualStrings("hi", first.forward);
+
+    const second = f.feed(seq[5..] ++ "there");
+    try testing.expectEqual(@as(usize, 1), second.claims);
+    try testing.expectEqualStrings("there", second.forward);
+}
+
+test "ClaimFilter: a trailing escape is forwarded immediately, not held" {
+    // Escape is pressed constantly in a TUI; holding it back until the user's
+    // NEXT keystroke would be visible input lag.
+    var f: ClaimFilter = .{};
+    const r = f.feed("\x1b");
+    try testing.expectEqual(@as(usize, 0), r.claims);
+    try testing.expectEqualStrings("\x1b", r.forward);
+    try testing.expectEqual(@as(usize, 0), f.carry_len);
+}
+
+test "ClaimFilter: a held partial that turns out not to be a claim is not lost" {
+    var f: ClaimFilter = .{};
+    const first = f.feed("\x1b_z");
+    try testing.expectEqualStrings("", first.forward);
+    try testing.expectEqual(@as(usize, 3), f.carry_len);
+
+    const second = f.feed("nope");
+    try testing.expectEqual(@as(usize, 0), second.claims);
+    try testing.expectEqualStrings("\x1b_znope", second.forward);
+}
+
+test "ClaimFilter: an escape-heavy stream cannot grow the carry" {
+    var f: ClaimFilter = .{};
+    for (0..64) |_| {
+        const r = f.feed("\x1b\x1b\x1b\x1b");
+        try testing.expectEqual(@as(usize, 0), r.claims);
+        try testing.expect(f.carry_len < ClaimFilter.sequence.len);
+    }
 }
