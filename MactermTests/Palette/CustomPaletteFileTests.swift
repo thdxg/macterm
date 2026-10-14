@@ -459,7 +459,7 @@ struct CustomPaletteFileTests {
     @Test
     func every_palette_file_in_the_docs_reads() throws {
         let examples = try Self.docsExamples()
-        #expect(Set(examples.keys) == ["git", "docker", "ssh", "kubernetes"])
+        #expect(Set(examples.keys) == ["git", "docker", "ssh"])
         for (id, yaml) in examples {
             #expect(throws: Never.self, "the docs' \(id).yaml doesn't read") {
                 try Self.palette(yaml, id: id)
@@ -468,8 +468,11 @@ struct CustomPaletteFileTests {
     }
 
     @Test
-    func the_cookbook_kubernetes_palette_reads_a_port_by_index_and_a_namespace_from_above() throws {
-        let palette = try Self.palette(#require(Self.docsExamples()["kubernetes"]), id: "kubernetes")
+    func the_kubernetes_extension_reads_a_port_by_index_and_a_namespace_from_above() throws {
+        let file = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("extensions/kubernetes/palettes/kubernetes.yaml")
+        let palette = try Self.palette(String(contentsOf: file, encoding: .utf8), id: "kubernetes/kubernetes")
         guard let services = palette.nodes["services"]?.listing else {
             Issue.record("services is not a listing")
             return

@@ -35,7 +35,7 @@ To open a git worktree of the project from the palette, install the **Git** exte
 
 Extensions add screens. You can install an extension from the Macterm repository, or write your own extension in `~/.config/macterm/extensions/`. Each palette of an extension is a YAML file. The output of a command becomes rows that you can search. Each row opens another screen, or runs a command in a new tab or split. For example, a Kubernetes palette goes from namespaces to pods to the logs of a pod. Each palette is in the **Palettes** section, next to the built-in screens.
 
-See [extensions](/docs/extensions) for the file format and examples. The [cookbook](/docs/cookbook#kubernetes-palette) has a complete Kubernetes palette.
+See [extensions](/docs/extensions) to make one, the [palette reference](/docs/extension-palettes) for the file format, and the [examples](/docs/extension-examples) for complete palettes.
 
 ## Settings → Extensions
 

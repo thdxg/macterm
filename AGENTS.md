@@ -296,7 +296,7 @@ Pinned tabs belong to no project. The sidebar shows them above the projects. The
 
 ### Desktop widgets
 
-Desktop widgets are terminals on the desktop (`DesktopWidget`, `AppState+DesktopWidgets.swift`, `DesktopWidgetWindows`, Settings → Widgets). Each one is one pane. Its zmx session persists in the same way as the session of a pinned tab. A panel of our own draws it, in the shape of a system widget. The grammar for users is in `website/docs/pages/45-desktop-widgets.md`.
+Desktop widgets are terminals on the desktop (`DesktopWidget`, `AppState+DesktopWidgets.swift`, `DesktopWidgetWindows`, Settings → Widgets). Each one is one pane. Its zmx session persists in the same way as the session of a pinned tab. A panel of our own draws it, in the shape of a system widget. The grammar for users is in `website/docs/pages/44-desktop-widgets.md`.
 
 - **A widget is not WidgetKit, and it cannot be.**
   - A WidgetKit widget is an archived SwiftUI snapshot that another process renders. It has no NSView and no text input. Its budget of refreshes is minutes.
@@ -765,7 +765,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
       - **Macterm never types a local `run:` action**. The command rides in the env of the new pane (first surface build only). The surface puts `macterm palette exec <shell> <flags> --` after the wrapper of zmx, in front of the launch that ghostty resolved.
       - The runner runs the command through the shell of the user as `-i -l -c`. It is interactive, so exports that only `.zshrc` has count. It takes the terminal back with `tcsetpgrp`. zsh and bash leave it in their own process group. The login shell that we ran with exec then hung. Then it runs the launch with exec, untouched. Shell integration, `login(1)` and history are exactly the same as in a plain pane.
       - Macterm still types the `run:` of a remote project, because ssh carries no env.
-    - The grammar for users is in `website/docs/pages/35-extensions.md`. A complete Kubernetes palette is in the cookbook. `CustomPaletteFileTests` reads every palette file with a caption in the docs back through the validator. An example that stops reading therefore fails a test.
+    - The grammar for users is in `website/docs/pages/47-extensions.md` (making and sharing an extension), `48-extension-palettes.md` (every key of a palette file) and `49-extension-examples.md`. `CustomPaletteFileTests` reads every palette file with a caption in the docs back through the validator. An example that stops reading therefore fails a test.
   - **`Scopes/`**
     - `PaletteScope` holds the alternate screens of the palette: a placeholder and its own sections. It also has `loading`, `failure`, `retry`, and a lifecycle `activate` and `deactivate`, for a screen whose listing takes time.
       - It is a class for each screen. Its `PaletteFrame` keeps it for as long as the frame is on `WindowState.paletteStack`.
