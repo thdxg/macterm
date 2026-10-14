@@ -103,7 +103,7 @@ final class WindowState: Identifiable {
 
     var isCommandPaletteVisible = false
     /// The view the palette and its breadcrumb row are drawn over while the
-    /// palette is up — what Capture Palette Screenshot frames
+    /// palette is up — what Capture Palette frames
     /// (`PaletteScreenshot`). Unobserved; the palette sets it as it mounts.
     @ObservationIgnored
     weak var paletteAnchor: NSView?

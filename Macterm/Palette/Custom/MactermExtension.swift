@@ -71,7 +71,7 @@ enum MactermExtension {
     /// of exactly `screenshotPixelSize`, at most `maxScreenshots` of them, so
     /// every extension's look the same size in the gallery whatever the theme
     /// behind them. The size is the command palette framed with room around
-    /// it at 2x (`screenshotPointSize`) — what Capture Palette Screenshot
+    /// it at 2x (`screenshotPointSize`) — what Capture Palette
     /// (`PaletteScreenshot`) writes, as Raycast's Window Capture writes its
     /// store's 2000×1250.
     static let screenshotsFolder = "screenshots"

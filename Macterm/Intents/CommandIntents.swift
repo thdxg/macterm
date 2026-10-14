@@ -119,7 +119,7 @@ enum MactermKeybind: String, AppEnum {
         .autofillPassword: "Autofill Password",
         .passwordManager: "Password Manager",
         .files: "Files",
-        .capturePaletteScreenshot: "Capture Palette Screenshot",
+        .capturePaletteScreenshot: "Capture Palette",
     ]
 }
 
