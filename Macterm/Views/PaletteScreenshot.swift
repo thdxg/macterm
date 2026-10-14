@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 private let logger = Logger(subsystem: appBundleID, category: "PaletteScreenshot")
 
-/// Capture Palette Screenshot: the command palette as it is on screen, framed
+/// Capture Palette: the command palette as it is on screen, framed
 /// the same way every time (`MactermExtension.screenshotRect`) and written as
 /// a PNG of exactly `MactermExtension.screenshotPixelSize` — the screenshot
 /// an extension in the repository must have, so every one in the gallery is

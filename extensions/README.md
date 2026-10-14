@@ -76,7 +76,7 @@ Then do these steps:
 Take the screenshots with Macterm. Macterm frames the command palette in the same way each time:
 
 1. Put your extension folder in `~/.config/macterm/extensions/`. Open the screen that you want to show.
-2. Run **Capture Palette Screenshot**. Bind it to a key in Settings → Keymaps, and press the key while the palette is open. If you run it from the menu (View) or from the palette, it captures the first screen of the palette.
+2. Run **Capture Palette**. Bind it to a key in Settings → Keymaps, and press the key while the palette is open. If you run it from the menu (View) or from the palette, it captures the first screen of the palette.
 3. Save the file in the `screenshots/` folder of your extension. For an installed extension, Macterm offers that folder.
 
 The first time, macOS asks if Macterm can record the screen. The glass of the palette shows what is behind it. Only a screen capture can get that. Your theme and your background show through. The size and the framing are the same for everyone.

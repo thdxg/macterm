@@ -122,7 +122,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .openMactermConfig: "Open Macterm Config"
         case .toggleQuickTerminal: "Toggle Quick Terminal"
         case .checkForUpdate: "Check for Update"
-        case .capturePaletteScreenshot: "Capture Palette Screenshot"
+        case .capturePaletteScreenshot: "Capture Palette"
         }
     }
 

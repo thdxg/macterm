@@ -169,7 +169,7 @@ struct MactermApp: App {
                     command: .capturePaletteScreenshot,
                     appState: appState,
                     projectStore: projectStore,
-                    titleOverride: "Capture Palette Screenshot"
+                    titleOverride: "Capture Palette"
                 )
             }
             CommandGroup(after: .windowList) {
