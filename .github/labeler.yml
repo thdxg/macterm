@@ -18,6 +18,13 @@
       - any-glob-to-any-file:
           - "Macterm/Palette/**"
 
+"area:extensions":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/**"
+          - "assets/extension.schema.json"
+          - "assets/palette.schema.json"
+
 "area:state":
   - changed-files:
       - any-glob-to-any-file:
