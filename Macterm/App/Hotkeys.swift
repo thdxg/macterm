@@ -40,6 +40,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case zoomPane = "zoom_pane"
     case toggleCommandPalette = "toggle_command_palette"
     case reloadGhosttyConfig = "reload_ghostty_config"
+    case openMactermConfig = "open_macterm_config"
     case toggleQuickTerminal = "toggle_quick_terminal"
     case renameTab = "rename_tab"
     case renameProject = "rename_project"
@@ -139,6 +140,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .zoomPane: "cmd+shift+return"
         case .toggleCommandPalette: "cmd+p"
         case .reloadGhosttyConfig: "cmd+shift+,"
+        // Unbound by default: it opens an editor pane, which is a palette
+        // action rather than a reflex, and ⌘, already belongs to Settings.
+        case .openMactermConfig: "none"
         case .toggleQuickTerminal: "ctrl+`"
         case .renameTab: "cmd+r"
         case .renameProject: "none"

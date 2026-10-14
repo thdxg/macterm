@@ -45,8 +45,16 @@ struct ProjectFileStore {
     /// throwaway-home isolation. The login session sets `$HOME` for normal
     /// launches, so env-first behaves identically outside the harness.
     nonisolated static func defaultDirectory() -> URL {
+        defaultConfigDirectory().appendingPathComponent("projects", isDirectory: true)
+    }
+
+    /// `~/.config/macterm`: the directory of every file the user edits by
+    /// hand — `config.ghostty` (`MactermConfigFile`), `pinned.yaml`,
+    /// `widgets.yaml`, `projects/` and `extensions/`. Resolved the same
+    /// `$HOME`-first way as `defaultDirectory`, for the same reason.
+    nonisolated static func defaultConfigDirectory() -> URL {
         URL(fileURLWithPath: ProjectPath.currentHome, isDirectory: true)
-            .appendingPathComponent(".config/macterm/projects", isDirectory: true)
+            .appendingPathComponent(".config/macterm", isDirectory: true)
     }
 
     // MARK: - Scan / match

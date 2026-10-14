@@ -127,6 +127,62 @@ struct GhosttyConfigSourceTests {
         #expect(source.pathsForRawInspection == loadedPaths)
     }
 
+    /// `~/.config/macterm/config.ghostty` is the last layer: after Ghostty's
+    /// files and every custom file, in the load and in the raw text. It is
+    /// never reported missing, because deleting it is allowed.
+    @Test
+    func macterm_file_loads_last_and_is_never_reported_missing() {
+        let source = GhosttyConfigSource(
+            selection: GhosttyConfigSelection(loadsDefaultFiles: true, customPaths: ["/custom/first.ghostty"]),
+            mactermConfigPath: "/home/.config/macterm/config.ghostty",
+            applicationSupportConfigDirectory: appSupport,
+            xdgConfigDirectory: xdg
+        )
+        var loadedPaths: [String] = []
+
+        let missing = source.load(
+            loadDefaultFiles: {},
+            loadCustomFile: { path in
+                loadedPaths.append(path)
+                return false
+            }
+        )
+
+        #expect(loadedPaths == ["/custom/first.ghostty", "/home/.config/macterm/config.ghostty"])
+        #expect(missing == ["/custom/first.ghostty"])
+        #expect(source.pathsForRawInspection.last == "/home/.config/macterm/config.ghostty")
+
+        let text = source.mergedText { path in
+            switch path {
+            case "/xdg/ghostty/config.ghostty": "font-size = 14"
+            case "/home/.config/macterm/config.ghostty": "font-size = 18"
+            default: throw CocoaError(.fileNoSuchFile)
+            }
+        }
+        #expect(text == "font-size = 14\nfont-size = 18")
+    }
+
+    /// Turning the Ghostty files off is a preference about the Ghostty
+    /// files. The Macterm file is not one of them, so it still loads.
+    @Test
+    func macterm_file_loads_when_the_ghostty_layers_are_off() {
+        let source = GhosttyConfigSource(
+            selection: .disabled,
+            mactermConfigPath: "/home/.config/macterm/config.ghostty",
+            applicationSupportConfigDirectory: appSupport,
+            xdgConfigDirectory: xdg
+        )
+        var loadedPaths: [String] = []
+
+        _ = source.load(loadDefaultFiles: {}, loadCustomFile: { path in
+            loadedPaths.append(path)
+            return true
+        })
+
+        #expect(loadedPaths == ["/home/.config/macterm/config.ghostty"])
+        #expect(source.pathsForRawInspection == loadedPaths)
+    }
+
     @Test
     func disabled_loading_has_no_paths_or_callbacks() {
         let source = GhosttyConfigSource(

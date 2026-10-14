@@ -18,9 +18,19 @@ font-size = 14
 
 If you have no config, Macterm uses `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`. If your config is in another place, set the path in **Settings → General → Ghostty Config**. To apply an edit with no restart, run **Reload Ghostty Config** from the command palette.
 
+## Settings for Macterm only
+
+Macterm also reads `~/.config/macterm/config.ghostty`. It loads this file after your Ghostty config, so a key in it wins over the same key in your Ghostty config. Ghostty does not read the file. Use it for a setting that you want in Macterm and not in Ghostty, for example a larger font:
+
+```ini title="~/.config/macterm/config.ghostty"
+font-size = 16
+```
+
+Macterm writes the file the first time that it starts. The file lists each default of Macterm as a comment, with a note that says what the key does. To change a value, remove the `#` at the start of its line and edit the value. To open the file in your terminal editor, run **Open Macterm Config** from the command palette, or click **Open** on its row in **Settings → General → Ghostty Config**. If you delete the file, Macterm writes it again only when you run **Open Macterm Config**.
+
 ## Defaults that differ from Ghostty
 
-Macterm has its own defaults for a few keys. Macterm loads them before your config, so a key that you set always wins.
+Macterm has its own defaults for a few keys. Macterm loads them before your config, so a key that you set always wins. The same keys are the commented lines in `~/.config/macterm/config.ghostty`.
 
 | Key | Macterm default |
 | --- | --- |
@@ -29,8 +39,9 @@ Macterm has its own defaults for a few keys. Macterm loads them before your conf
 | `macos-option-as-alt` | `true` |
 | `window-padding-x`, `window-padding-y` | `16` |
 | `tab-inherit-working-directory` | `false`. New tabs start at the project root. |
+| `macos-secure-input-indication` | `false`. The password bubble marks a password prompt instead. |
 
-The full list is `defaultsBody` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
+The full list is `defaults` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
 
 ## Keys Macterm overrides
 

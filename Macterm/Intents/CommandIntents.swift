@@ -49,6 +49,7 @@ enum MactermKeybind: String, AppEnum {
     case zoomPane = "zoom_pane"
     case toggleCommandPalette = "toggle_command_palette"
     case reloadGhosttyConfig = "reload_ghostty_config"
+    case openMactermConfig = "open_macterm_config"
     case toggleQuickTerminal = "toggle_quick_terminal"
     case renameTab = "rename_tab"
     case renameProject = "rename_project"
@@ -103,6 +104,7 @@ enum MactermKeybind: String, AppEnum {
         .zoomPane: "Zoom Pane",
         .toggleCommandPalette: "Command Palette",
         .reloadGhosttyConfig: "Reload Ghostty Config",
+        .openMactermConfig: "Open Macterm Config",
         .toggleQuickTerminal: "Toggle Quick Terminal",
         .renameTab: "Rename Current Tab",
         .renameProject: "Rename Current Project",

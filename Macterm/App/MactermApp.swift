@@ -160,6 +160,12 @@ struct MactermApp: App {
                     titleOverride: "Reload Ghostty Config"
                 )
                 AppCommandMenuItem(
+                    command: .openMactermConfig,
+                    appState: appState,
+                    projectStore: projectStore,
+                    titleOverride: "Open Macterm Config"
+                )
+                AppCommandMenuItem(
                     command: .capturePaletteScreenshot,
                     appState: appState,
                     projectStore: projectStore,

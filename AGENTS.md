@@ -513,7 +513,15 @@ Rules:
 
 ### Ghostty config pipeline
 
-In automatic mode, Macterm delegates the user layer to `ghostty_config_load_default_files`. Settings can append custom files. `GhosttyApp.loadConfig` loads `macterm-defaults.conf`, then the user files, then `macterm-overrides.conf` (the last one wins). It regenerates both private files (`MactermConfig.regenerate()`) before every load, because the overrides depend on the content of the user. `GhosttyConfigSource` is the seam for raw text, for keys that the C API cannot expose.
+In automatic mode, Macterm delegates the user layer to `ghostty_config_load_default_files`. Settings can append custom files. `GhosttyApp.loadConfig` loads `macterm-defaults.conf`, then the user files, then `~/.config/macterm/config.ghostty`, then `macterm-overrides.conf` (the last one wins). It regenerates both private files (`MactermConfig.regenerate()`) before every load, because the overrides depend on the content of the user. `GhosttyConfigSource` is the seam for raw text, for keys that the C API cannot expose. Every source that the live app builds gets `MactermConfig.userConfigPath`, so the loader and every raw-text reader see the same layers.
+
+**`~/.config/macterm/config.ghostty` is the Macterm-only layer of the user** (`MactermConfigFile`). It loads after the Ghostty config, so a key in it wins over the Ghostty config and applies to Macterm alone. Ghostty.app never reads it.
+
+- Macterm seeds it once, at the first launch that finds it missing (`MactermConfig.init`), as a template: every line of `MactermConfig.defaults` commented out, each under its note. A commented line sets nothing. `MactermConfigFileTests` pins that no line of the template is bare. An uncommented default in that position would override the Ghostty config in silence.
+- The defaults layer stays the home of each default. The file lists the defaults. It never holds them. A user who deletes the file, or who installed before a default was added, loses nothing.
+- Macterm never writes the file again. An absent file means "no input". A present file belongs to the user. Open Macterm Config (`AppCommand.openMactermConfig`, the command palette, the View menu, and the Open button of its row in Settings → General → Ghostty Config) seeds it again before it opens the file in the terminal editor, the way a text file from Finder opens.
+- The file is not part of `GhosttyConfigSelection`. That selection is the preference of the user about the Ghostty files. A user who turns the Ghostty files off keeps the Macterm file.
+- Hermetic runs (`MactermConfig.isHermetic`: tests, `MACTERM_BENCHMARK=1`) neither seed nor load it, as for the Ghostty layer.
 
 **Ghostty keys that Macterm applies to its own behavior** have no Settings UI.
 
@@ -523,7 +531,7 @@ In automatic mode, Macterm delegates the user layer to `ghostty_config_load_defa
 - `macos-icon`.
 - `focus-follows-mouse`. Macterm reads it live on each pointer move. It moves focus only away from another pane.
 
-**When the default of Macterm departs from the default of ghostty, the departure is a line in `macterm-defaults.conf`**. The place is `MactermConfig.defaultsBody`. `MactermConfigTests` pins it: `tab-inherit-working-directory = false` and `macos-secure-input-indication = false`. It is never a fallback in `Preferences`. The user can then override it in the same way as any other key.
+**When the default of Macterm departs from the default of ghostty, the departure is a line in `macterm-defaults.conf`**. The place is the `MactermConfig.defaults` table: the line, and the note that the template of `config.ghostty` prints above its commented copy. `defaultsBody` is derived from it. `MactermConfigTests` pins it: `tab-inherit-working-directory = false` and `macos-secure-input-indication = false`. It is never a fallback in `Preferences`. The user can then override it in the same way as any other key.
 
 **Wheel scrolling belongs to libghostty on every path**. `GhosttyTerminalNSView.scrollWheel` forwards events exactly as Ghostty.app does (2× precise deltas, momentum phase). `SurfaceScrollView` only draws the scroller. It turns scroller drags into `scroll_to_row` and, under smooth scrolling, into the sub-row remainder (see Animations). We removed the row accumulator in the style of iTerm2 from #102, with its Scroll speed slider. `mouse-scroll-multiplier` therefore means the same thing here as in Ghostty. Do not bring back a wheel path on the side of Macterm.
 
@@ -721,7 +729,7 @@ This is the motion pane. It is directly under Appearance in the sidebar of Setti
   - `PasswordAuthenticator`.
   - `ObjCExceptionCatcher`: a trampoline with `@try` and `@catch`. AppKit raises ObjC exceptions that Swift cannot catch.
   - `GitWorktrees`: the Worktrees menu of the sidebar. It reads the worktrees of a project from the metadata files of git. It never runs git. A Mac without the Command Line Tools shows an install dialog for `/usr/bin/git`.
-- `Macterm/Config/`: `MactermConfig` (with `Animations`), `GhosttyConfigSource`, `GhosttyConfigText`, `ShellIntegrationFeatures`, `GhosttyColorSpace`, `MouseScrollMultiplier` and `MacosHidden`.
+- `Macterm/Config/`: `MactermConfig` (with `Animations`), `MactermConfigFile` (`~/.config/macterm/config.ghostty`), `GhosttyConfigSource`, `GhosttyConfigText`, `ShellIntegrationFeatures`, `GhosttyColorSpace`, `MouseScrollMultiplier` and `MacosHidden`.
 - `Macterm/Settings/`
   - `SettingsView`: the panes and `PinnedSidebar`. The soft scroll-edge band of the titlebar darkens a selected first row. AppKit has no switch for the band, and a top margin does not clear it. Do not put a `.searchable` field in the sidebar to clear it: it blanks the icons of the unselected rows for about 100 ms at each open. Keymaps is one grouped block. Passthrough Programs is above it. The search is at its top. There is no row of column headers. A small gray label divides each `AppCommand.Category`. Each row has one menu for Global and Pass to TUI (`keymapRow`). A glyph after the title shows each flag that is on. The menu is an AppKit pull-down (`KeymapRowMenu`), because on macOS 26 and later a SwiftUI `Menu` drops its checkmark column while no item is checked. A bare Delete while a row records clears its keybind (`HotkeyCaptureView`).
   - `ProjectsSettings`, `WidgetsSettings`.

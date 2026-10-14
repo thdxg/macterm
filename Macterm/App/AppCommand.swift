@@ -62,6 +62,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case newDesktopWidget
     case closeWindow
     case reloadGhosttyConfig
+    case openMactermConfig
     case toggleQuickTerminal
     case checkForUpdate
     case capturePaletteScreenshot
@@ -118,6 +119,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .closeWindow: "Close Window"
         case .toggleCommandPalette: "Command Palette"
         case .reloadGhosttyConfig: "Reload Ghostty Config"
+        case .openMactermConfig: "Open Macterm Config"
         case .toggleQuickTerminal: "Toggle Quick Terminal"
         case .checkForUpdate: "Check for Update"
         case .capturePaletteScreenshot: "Capture Palette Screenshot"
@@ -174,6 +176,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .newDesktopWidget,
              .closeWindow: .window
         case .reloadGhosttyConfig,
+             .openMactermConfig,
              .toggleQuickTerminal,
              .checkForUpdate,
              .capturePaletteScreenshot: .other
@@ -218,6 +221,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .closeWindow: .closeWindow
         case .toggleCommandPalette: .toggleCommandPalette
         case .reloadGhosttyConfig: .reloadGhosttyConfig
+        case .openMactermConfig: .openMactermConfig
         case .toggleQuickTerminal: .toggleQuickTerminal
         case .renameTab: .renameTab
         case .renameProject: .renameProject
