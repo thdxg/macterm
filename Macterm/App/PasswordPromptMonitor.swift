@@ -15,8 +15,9 @@ private let logger = Logger(subsystem: appBundleID, category: "PasswordPrompt")
 /// `keyDown` at the point the key is sent, as the text the tty receives), and
 /// a timer — slow (`idleInterval`) for the focused pane while nothing is
 /// happening, fast (`busyInterval`) only while some pane is in a phase with a
-/// deadline (a sighting to confirm, a submission to judge). A pane parked at a
-/// prompt, or an unanswered offer, costs the slow cadence only.
+/// deadline (a sighting to confirm, a submission to judge) or for the short
+/// `outputWatchWindow` after a heartbeat (see `viewDidOutput`). A pane parked
+/// at a prompt, or an unanswered offer, costs the slow cadence only.
 ///
 /// Per pane it is a small state machine (`Phase`): a first sighting must hold
 /// for `confirmDelay` before it counts (a script that drops echo for an
@@ -45,6 +46,16 @@ final class PasswordPromptMonitor {
     static let idleInterval: TimeInterval = 1.0
     static let busyInterval: TimeInterval = 0.15
     static let confirmDelay: TimeInterval = 0.2
+    /// How long after an output heartbeat an idle pane is polled at the fast
+    /// cadence. libghostty's heartbeat is leading-edge: the first output after
+    /// 500 ms of quiet fires at once, and every chunk in the 500 ms that
+    /// follow is dropped with no trailing flush. The command the user typed
+    /// echoes (a heartbeat, before any tty change), then the program starts
+    /// and prints its prompt inside the window — a chunk nobody hears about.
+    /// Without the watch, that prompt waited for the idle timer: up to 1.25 s
+    /// before it was even sighted. The window outlasts the drop window by a
+    /// tick, so the sighting lands within one fast tick of the tty change.
+    static let outputWatchWindow: TimeInterval = 0.75
     /// An unanswered save offer is dropped after this long: a bound on how
     /// long a secret sits in memory, generous enough to outlast an ssh
     /// session's first stretch of work.
@@ -165,6 +176,10 @@ final class PasswordPromptMonitor {
         /// Something was typed into the pane since the current bubble
         /// appeared, which hands Return and Escape back to the terminal.
         var typedSinceBubble = false
+        /// Until when the pane's output heartbeat keeps the fast poll on
+        /// (`outputWatchWindow`), so a prompt printed inside libghostty's
+        /// drop window is still sighted at once.
+        var watchOutputUntil: Date?
         let bubble: PasswordBubble
 
         init(view: GhosttyTerminalNSView, bubble: PasswordBubble) {
@@ -173,8 +188,21 @@ final class PasswordPromptMonitor {
         }
 
         var offer: Offer? { offers.first }
-        /// Worth keeping when the pane isn't focused.
-        var isTracked: Bool { !phase.isIdle || !offers.isEmpty }
+        /// Idle, but recently printed: the tty may flip any moment.
+        func isWatchingOutput(at time: Date) -> Bool {
+            guard phase.isIdle, let until = watchOutputUntil else { return false }
+            return time < until
+        }
+
+        /// Worth keeping, and polling, when the pane isn't focused.
+        func isTracked(at time: Date) -> Bool {
+            !phase.isIdle || !offers.isEmpty || isWatchingOutput(at: time)
+        }
+
+        /// Served by the fast timer.
+        func isTimed(at time: Date) -> Bool {
+            phase.isTimed || isWatchingOutput(at: time)
+        }
     }
 
     private var trackers: [ObjectIdentifier: Tracker] = [:]
@@ -267,9 +295,13 @@ final class PasswordPromptMonitor {
         receive(input, in: view)
     }
 
-    /// The pane printed something. A prompt is output, so read the tty now.
+    /// The pane printed something. A prompt is output, so read the tty now —
+    /// and keep reading it at the fast cadence for `outputWatchWindow`: the
+    /// heartbeat is throttled with drops, so the prompt itself is usually in
+    /// a chunk that never gets a heartbeat of its own.
     func viewDidOutput(_ view: GhosttyTerminalNSView) {
         guard trackers[ObjectIdentifier(view)] != nil || view === probes.focusedView() else { return }
+        tracker(for: view).watchOutputUntil = now().addingTimeInterval(Self.outputWatchWindow)
         observe(view)
     }
 
@@ -588,8 +620,12 @@ final class PasswordPromptMonitor {
         return tracker
     }
 
+    /// The timer's cadence, or nil while it is off. For tests.
+    var pollInterval: TimeInterval? { timer == nil ? nil : timerInterval }
+
     private func scheduleIfNeeded() {
-        let timed = trackers.values.contains { $0.phase.isTimed }
+        let time = now()
+        let timed = trackers.values.contains { $0.isTimed(at: time) }
         let wanted: TimeInterval? = timed ? Self.busyInterval : (probes.isAppActive() ? Self.idleInterval : nil)
         guard wanted != (timer == nil ? nil : timerInterval) else { return }
         timer?.invalidate()
@@ -605,7 +641,8 @@ final class PasswordPromptMonitor {
         timerInterval = wanted
     }
 
-    private func tick() {
+    /// One timer tick. Internal so the tests can drive it on the fake clock.
+    func tick() {
         let focused = probes.focusedView()
         if let focused { _ = tracker(for: focused) }
         let time = now()
@@ -617,11 +654,11 @@ final class PasswordPromptMonitor {
             }
             tracker.offers.removeAll { time.timeIntervalSince($0.createdAt) > Self.offerLifetime }
             let isFocused = view === focused
-            if isFocused || !tracker.phase.isIdle {
+            if isFocused || !tracker.phase.isIdle || tracker.isWatchingOutput(at: time) {
                 step(tracker)
             }
             refreshBubble(tracker)
-            if !isFocused, !tracker.isTracked {
+            if !isFocused, !tracker.isTracked(at: time) {
                 view.detectedPasswordInput = false
                 tracker.bubble.close()
                 trackers[key] = nil
@@ -649,7 +686,10 @@ final class PasswordPromptMonitor {
         let time = now()
         switch tracker.phase {
         case .idle:
-            if atPrompt { tracker.phase = .sighted(since: time, capture: PasswordLineCapture()) }
+            if atPrompt {
+                tracker.phase = .sighted(since: time, capture: PasswordLineCapture())
+                scheduleConfirm(for: view)
+            }
         case let .sighted(since, _):
             if !atPrompt {
                 tracker.phase = .idle
@@ -663,6 +703,20 @@ final class PasswordPromptMonitor {
             judge(submission, in: tracker, view: view, atPrompt: atPrompt, time: time)
         }
         return atPrompt
+    }
+
+    /// Look again the moment the hold is up, so a sighting is confirmed at
+    /// `confirmDelay` and not at the fast tick after it (up to `busyInterval`
+    /// later). The timer stays the fallback; a sighting the hold outlived is
+    /// nothing to confirm.
+    private func scheduleConfirm(for view: GhosttyTerminalNSView) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.confirmDelay) { [weak self, weak view] in
+            guard let self, let view,
+                  let tracker = trackers[ObjectIdentifier(view)],
+                  case .sighted = tracker.phase
+            else { return }
+            observe(view)
+        }
     }
 
     /// A sighting held: read which prompt it is and whether a password is

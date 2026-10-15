@@ -142,6 +142,41 @@ struct PasswordPromptMonitorStateTests {
         #expect(h.state.phase == "idle")
     }
 
+    /// The command's echo is the heartbeat; the prompt that follows is in a
+    /// chunk libghostty drops. The watch polls the tty on the fast timer
+    /// until the drop window has closed, so the prompt is sighted within a
+    /// tick instead of at the next idle poll.
+    @Test
+    func output_keeps_the_fast_poll_on_until_the_heartbeat_window_has_closed() {
+        let h = Harness()
+        h.advance(0)
+        #expect(h.monitor.pollInterval == nil, "an idle pane in an inactive app: no timer")
+        h.monitor.viewDidOutput(h.view)
+        #expect(h.state.phase == "idle", "the echo comes before the tty changes")
+        #expect(h.monitor.pollInterval == PasswordPromptMonitor.busyInterval)
+
+        h.world.now += 0.3
+        h.world.atPrompt = true
+        h.world.screen += "\(login)\n"
+        h.monitor.tick()
+        #expect(h.state.phase == "sighted", "the tick inside the window reads the tty")
+
+        h.world.now += PasswordPromptMonitor.confirmDelay
+        h.monitor.tick()
+        #expect(h.state.phase == "prompting")
+    }
+
+    @Test
+    func the_watch_ends_with_the_window() {
+        let h = Harness()
+        h.advance(0)
+        h.monitor.viewDidOutput(h.view)
+        h.world.now += PasswordPromptMonitor.outputWatchWindow
+        h.monitor.tick()
+        #expect(h.monitor.pollInterval == nil, "nothing came of it: back to the idle cadence")
+        #expect(h.state.phase == "idle")
+    }
+
     @Test
     func typing_at_a_sighting_confirms_it_at_once() {
         let h = Harness()
