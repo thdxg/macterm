@@ -34,7 +34,7 @@
 #        7 animations (Claude Code scrollback, a split, the cursor in Helix) ·
 #        8 a folder dropped on the Dock tile · 9 desktop widgets beside the
 #        system's · 10 saving and autofilling an ssh password (podman) ·
-#        11 a custom palette: a Git palette's nested screens and a run action
+#        11 the Git extension: its nested screens, a search and a run action
 set -euo pipefail
 
 # ---------------------------------------------------------------- constants --
@@ -74,9 +74,9 @@ RPASSWORD=tidepool42lantern      # demo 10 types it, key by key: lowercase and d
 CLAUDE_PORT=8765
 ANIM_KIT_SYMBOL=ghost_rows       # a shader uniform only the new kit has
 
-# Demo 11's palette. The installed app reads the extensions in
+# Demo 11's extension. The installed app reads the extensions in
 # ~/.config/macterm/extensions/ again each time that the palette opens. The
-# take therefore writes its own extension there, with a name of its own. Its
+# take therefore copies the Git extension of this checkout there, under a name of its own. Its
 # extension.yaml has PAL_MARK as its first line. The EXIT trap below removes
 # the extension (and only a folder with the mark), however the run ends.
 EXT_ROOT="$HOME/.config/macterm/extensions"
@@ -693,7 +693,7 @@ web_assets() {
     "08-open-folder:08-open-folder" \
     "09-widgets:09-desktop-widgets" \
     "10-passwords:10-passwords" \
-    "11-palettes:11-custom-palettes"
+    "11-palettes:11-extensions"
   do
     name="${pair%%:*}"; src="$OUT/${pair#*:}.mp4"
     [ -f "$src" ] || { printf '\033[33m..\033[0m no %s, skipping\n' "$src"; continue; }
@@ -1454,122 +1454,59 @@ demo10() {  # save a password typed at an ssh login, autofill the next one
   pw_cleanup
 }
 
-# ── custom palettes ─────────────────────────────────────────────────────────
-# A Git palette over the macterm project's own history: open it from ⌘P, enter
-# its menu, then the commits listing; search, open a commit's menu, Delete back
-# a screen, search for another, and run the commit's Diff action in a split. The
-# file's commands are POSIX sh, as every palette's are whatever the login shell
-# (started through it for its PATH), and the listing needs jq.
-K_DELETE=51
+# ── extensions ──────────────────────────────────────────────────────────────
+# The Git extension of this checkout (extensions/git), copied under a name of
+# the take's own. Open its palette from ⌘P, enter Branches, search a branch,
+# open its menu, Delete back a screen, search another, and run its Log action
+# in a split. Its commands need only git. The take never runs Switch to it,
+# because that would change the branch of the project.
+K_DELETE=51 K_DOWN=125
 
-login_shell() { dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}'; }
-
-pal_write() {
-  local list diff stat branches log
-  list="git log -40 --format='%h%x09%s%x09%ar' | jq -cR 'split(\"\\t\") | {hash: .[0], subject: .[1], when: .[2]}'"
-  diff='git show "$COMMIT"'
-  stat='git show --stat "$COMMIT"'
-  log='git log --oneline -20 "$BRANCH"'
-  branches="git branch --format='%(refname:short)'"
-  mkdir -p "$PAL_EXT/palettes"
-  printf '%s\nname: Git (demo)\ndescription: The commits and branches of the project\n' "$PAL_MARK" > "$PAL_MANIFEST"
-  cat > "$PAL_FILE" <<EOF
-name: Git
-icon: arrow.triangle.branch
-description: The project's commits and branches
-requires: [git, jq]
-root: menu
-nodes:
-  menu:
-    items:
-      - title: Commits
-        subtitle: The last 40 on this branch
-        icon: clock.arrow.circlepath
-        enter: commits
-      - title: Branches
-        icon: arrow.triangle.branch
-        enter: branches
-  commits:
-    placeholder: Search commits...
-    list: |-
-      $list
-    title: .subject
-    subtitle: .when
-    icon: smallcircle.filled.circle
-    match: [.subject, .hash]
-    export: { COMMIT: .hash }
-    enter: commit
-  commit:
-    items:
-      - title: Diff
-        subtitle: git show, in a split
-        icon: plus.forwardslash.minus
-        action:
-          run: |-
-            $diff
-          in: split
-      - title: Files changed
-        icon: doc.on.doc
-        action:
-          run: |-
-            $stat
-          in: split
-  branches:
-    placeholder: Search branches...
-    list: |-
-      $branches
-    icon: arrow.triangle.branch
-    export: { BRANCH: . }
-    action:
-      run: |-
-        $log
-      in: split
-EOF
+pal_write() {  # install this checkout's Git extension, with the mark first
+  local src="$REPO/extensions/git"
+  [ -f "$src/extension.yaml" ] || die "no $src/extension.yaml to install"
+  rm -rf "$PAL_EXT"
+  cp -R "$src" "$PAL_EXT"
+  { printf '%s\n' "$PAL_MARK"; cat "$src/extension.yaml"; } > "$PAL_MANIFEST"
 }
 
-# The palette has no CLI view — nothing reports which screen is up or whether
-# a listing has finished — so its steps take beats, like demo 4's panel. The
-# listing gets a long one, and pal_check has already run the same command the
-# way the palette runs it, off camera, so a slow or failing listing stops the
-# take before it starts rather than ruining it.
-PAL_LIST_BEAT=1.8
+# Two branches of the macterm project to search for, shortest names first, so
+# that the typing is short. Set by pal_check.
+PAL_BRANCH_A="" PAL_BRANCH_B=""
 
-pal_check() {  # the commits listing, run as the palette will run it
-  local shell repo out cmd line
-  shell="$(login_shell)"; repo="$(shown_repo)"
-  [ -n "$repo" ] || die "no macterm project to list commits in"
-  cmd="$(awk '/^  commits:/ {f=1} f && /^    list:/ {getline; sub(/^ +/, ""); print; exit}' "$PAL_FILE")"
-  # The palette's own route: the login shell (for its PATH) hands the command,
-  # from the environment, to sh with errexit. The line is one single-quoted
-  # string, so it reads the same in nu, fish, zsh and bash.
-  line="/bin/sh -c 'set -e; eval \"\$MACTERM_PALETTE_COMMAND\"'"
-  out="$(cd "$repo" && MACTERM_PALETTE_COMMAND="$cmd" "$shell" -l -c "$line" 2>&1)" \
-    || die "the demo palette's listing failed: $out"
-  case "$out" in
-    \[*|\{*) ;;
-    *) die "the demo palette's listing printed something other than JSON in $shell (a startup message?): $(printf '%s' "$out" | head -n 2)" ;;
-  esac
+pal_check() {  # the project is a git repository with two branches to show
+  local repo; repo="$(shown_repo)"
+  [ -n "$repo" ] || die "no macterm project to show branches of"
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || die "$repo is not a git repository"
+  local names
+  names="$(git -C "$repo" branch --format='%(refname:short)' | awk '{ print length($0), $0 }' | sort -n | cut -d' ' -f2-)"
+  PAL_BRANCH_A="$(printf '%s\n' "$names" | sed -n 1p)"
+  PAL_BRANCH_B="$(printf '%s\n' "$names" | sed -n 2p)"
+  [ -n "$PAL_BRANCH_A" ] && [ -n "$PAL_BRANCH_B" ] || die "demo 11 needs two branches in $repo"
 }
 
+# The palette has no CLI view — nothing reports which screen is up — so its
+# steps take beats, like demo 4's panel.
 drive11() {
   sleep 0.8
   kc $K_P "$CMD"; sleep 1.0                        # the command palette
   ktype "git" 0.08; sleep 1.0                      # the palette's row, under Palettes
-  kc $K_RET; sleep 1.3                             # Git: a menu of its own
-  kc $K_RET; sleep "$PAL_LIST_BEAT"                # Commits: the listing runs
-  ktype "palette" 0.07; sleep 1.3                  # search the commits
-  kc $K_RET; sleep 1.6                             # a commit's menu; the pills read the trail
+  kc $K_RET; sleep 1.3                             # Git: Branches and Worktrees
+  kc $K_RET; sleep 1.4                             # Branches: the listing
+  ktype "$PAL_BRANCH_A" 0.07; sleep 1.3            # search the branches
+  kc $K_RET; sleep 1.6                             # a branch's menu; the pills read the trail
   kc $K_DELETE; sleep 1.2                          # back one screen, search cleared
-  ktype "fzf" 0.08; sleep 1.2                      # a different commit this time
-  kc $K_RET; sleep 1.4                             # another commit
-  kc $K_RET                                        # Diff: a split runs git show
-  # a hunk header: what git's own pager and delta (or any other) both show
-  wait_text 15 '@@ ' --project macterm --pane 2 || return 0
+  ktype "$PAL_BRANCH_B" 0.08; sleep 1.2            # a different branch this time
+  kc $K_RET; sleep 1.4                             # its menu: Switch to it, Log, Diff
+  kc $K_DOWN; sleep 0.6                            # Log
+  kc $K_RET                                        # a split runs git log --graph
+  # a graph line: a star, then an abbreviated hash
+  wait_text 15 '\* [0-9a-f]{7,}' --project macterm --pane 2 || return 0
   sleep 2.6
 }
 
-demo11() {  # a custom palette: nested screens, a search, a run action
-  say "demo 11 — custom palettes"
+demo11() {  # the Git extension: nested screens, a search, a run action
+  say "demo 11 — the Git extension"
   if [ -e "$PAL_EXT" ] && [ "$(head -n 1 "$PAL_MANIFEST" 2>/dev/null)" != "$PAL_MARK" ]; then
     die "$PAL_EXT exists and isn't this script's — move it aside first"
   fi
@@ -1579,12 +1516,11 @@ demo11() {  # a custom palette: nested screens, a search, a run action
     [ -f "$f" ] && [ "$f" != "$PAL_FILE" ] || continue
     grep -Eiq '^name: *["'\'']?git["'\'']? *$' "$f" && die "$f is also named Git; uninstall its extension for the take"
   done
-  command -v jq >/dev/null || die "demo 11's palette needs jq"
-  pal_write
   pal_check
+  pal_write
   reset_project
   record palettes drive11
-  encode palettes 11-custom-palettes.mp4
+  encode palettes 11-extensions.mp4
   reset_project                                    # quits the pager, drops the split
   rm -rf "$PAL_EXT"
 }
