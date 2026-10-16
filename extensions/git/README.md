@@ -8,3 +8,21 @@ Browse the branches and the worktrees of the project.
 The palette is muted outside a git repository.
 
 Needs `git`.
+
+## Screenshots
+
+### Git
+
+![Git](screenshots/git.png)
+
+### Branches
+
+![Branches](screenshots/branches.png)
+
+### Branch
+
+![Branch](screenshots/branch.png)
+
+### Worktrees
+
+![Worktrees](screenshots/worktrees.png)

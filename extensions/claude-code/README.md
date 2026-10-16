@@ -5,3 +5,13 @@ Start a Claude Code session, or resume one of the sessions of a project. The thr
 Press ⌥↩ (or ⌥-click) to open a session in a split. Without it, a session opens in a new tab.
 
 Needs `claude` and `jq`.
+
+## Screenshots
+
+### Claude Code
+
+![Claude Code](screenshots/claude-code.png)
+
+### All Sessions
+
+![All Sessions](screenshots/all-sessions.png)

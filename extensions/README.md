@@ -11,7 +11,8 @@ extensions/
       kubernetes.yaml
       contexts.yaml   # as many as it needs, each its own palette
     screenshots/      # optional: up to 6 PNGs, each exactly 1600×1000
-      screenshot-1.png
+      kubernetes.png  # each named after the screen that it shows
+      pods.png
 ```
 
 A person installs an extension. The capabilities of the extension decide what it can do. Today an extension can add palettes. Each file in `palettes/` is a screen in the command palette, with its own name and description. A future kind of capability will be a new folder next to `palettes/`.
@@ -78,6 +79,14 @@ Take the screenshots with Macterm. Macterm frames the command palette in the sam
 1. Put your extension folder in `~/.config/macterm/extensions/`. Open the screen that you want to show.
 2. Run **Capture Palette**. Bind it to a key in Settings → Keymaps, and press the key while the palette is open. If you run it from the menu (View) or from the palette, it captures the first screen of the palette.
 3. Save the file in the `screenshots/` folder of your extension. For an installed extension, Macterm offers that folder.
+4. Give the file the name of the screen that it shows, in lowercase words that you join with `-`. Use the name on the last pill above the palette (`branches.png`, `all-sessions.png`). For a screen of one item, use the kind of the item (`branch.png`, `container.png`).
+5. Show each screenshot in the `README.md` of the extension, under a `## Screenshots` heading. Put the name of the screen above it:
+
+   ```markdown
+   ### Branches
+
+   ![Branches](screenshots/branches.png)
+   ```
 
 The first time, macOS asks if Macterm can record the screen. The glass of the palette shows what is behind it. Only a screen capture can get that. Your theme and your background show through. The size and the framing are the same for everyone.
 
