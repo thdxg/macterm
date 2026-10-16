@@ -250,6 +250,7 @@ These rules for the spawn script come from tests against a real host:
 
 - `AppState.reconnectDroppedRemotePanes` starts the surface of a dropped pane again in place (`destroySurface`, then `requestSurfaceReattach`, never `killPersistentSession`).
 - `AppState.handleProcessExit` classifies a remote exit. It asks the host if the session survived. It **never uses the exit code**, which is always 0 on macOS.
+- A key typed at the kept pane fires `close_surface` again (`GhosttyTerminalNSView.exitAcknowledgedByKey`). That close is the request of the user. It closes the pane the way Cmd+W does, with no probe. Without the flag, a host that refuses us (`Permission denied`) kept the pane at "Press any key to close the terminal" for ever.
 - Only triggers cause a new connection (wake, activation, project selection), with the backoff of `RemoteReconnectPolicy`. There is no timer and no verb for the user to connect again.
 - `Pane.ensureNSView` passes `command` only on the first surface build. A new start therefore never types a `run:` of a layout again.
 

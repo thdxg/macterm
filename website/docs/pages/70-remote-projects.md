@@ -60,6 +60,8 @@ You can also type `devbox:~/dev/api` in the command palette (<kbd>⌘P</kbd>) an
 
 Macterm connects a pane again when the Mac wakes, when you return to the app, and when you select the project. To turn this off, use **Settings → General → Remote Projects → Reconnect panes after a dropped connection**.
 
+A pane that lost its connection shows `Process exited. Press any key to close the terminal.` Press a key to close the pane. This is the same as **Close Pane**: Macterm asks you first if a program is running in the session.
+
 ## Layouts
 
 [Declarative layouts](/docs/declarative-layouts) work with no change. The `cwd` of each pane and `~` resolve on the remote side.

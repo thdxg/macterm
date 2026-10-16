@@ -397,6 +397,17 @@ final class GhosttyTerminalNSView: NSView {
     /// view has no back-reference to its pane. See `KeybindPassthrough`.
     var yieldsToProgram: ((NSEvent) -> Bool)?
     var onProcessExit: (() -> Void)?
+    /// A key reached this surface after its child had exited: the key that
+    /// libghostty's "Process exited. Press any key to close the terminal."
+    /// asks for. libghostty answers it with one more `close_surface`, and
+    /// `AppState.handleProcessExit` reads this flag to tell that close from
+    /// the one the exit itself fired. The first close of a remote pane asks
+    /// the host whether the session survived, and keeps the pane when the
+    /// host cannot answer (#281). Without this flag the key re-ran that
+    /// probe, and a pane whose host refuses us (`Permission denied`) could
+    /// never close by key. Both key paths set it (`keyDown`, and `sendKey`
+    /// for `pane key`). A view gets one surface, so it never resets.
+    var exitAcknowledgedByKey = false
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
     var isZoomed: Bool = false
@@ -1207,6 +1218,7 @@ final class GhosttyTerminalNSView: NSView {
         guard let surface else { super.keyDown(with: event)
             return
         }
+        if processExited { exitAcknowledgedByKey = true }
         // A Return or Escape the password bubble answers is consumed here and
         // never reaches libghostty. Everything else is reported to the
         // password monitor at the point it is actually sent, below, as the
@@ -2105,6 +2117,7 @@ extension GhosttyTerminalNSView {
     @discardableResult
     func sendKey(keyCode: UInt16, mods flags: NSEvent.ModifierFlags) -> Bool {
         guard let surface else { return false }
+        if processExited { exitAcknowledgedByKey = true }
         onInteraction?()
         PasswordPromptMonitor.shared.viewDidSendKey(self, keyCode: keyCode, mods: flags)
         if TerminalCommandSubmission.clearsInputEvidence(

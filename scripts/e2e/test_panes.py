@@ -211,3 +211,32 @@ def test_dropped_remote_pane_reconnects_on_project_select(app):
         assert panes[pane["id"]]["session"] == pane["session"]
     finally:
         app.cli("project", "select", original["name"], check=False)
+
+
+def test_key_at_dead_remote_pane_closes_it(app):
+    """libghostty's exit message says "Press any key to close the terminal".
+    The exit itself asks the host whether the session survived and keeps
+    the pane when the host cannot answer (#281) — this host never answers.
+    The key typed at the kept pane is the user's own close request, so it
+    closes the pane without that probe (the pane is the tab's last, so the
+    tab goes with it and the workspace opens a fresh one)."""
+    projects = app.cli_json("project", "list")["projects"]
+    original = next(p for p in projects if p.get("active"))
+    app.cli("project", "create", "e2e-badhost.invalid:/tmp", "--name", "deadremotekey", "--select")
+    try:
+        pane = wait_for(lambda: app.panes(), timeout=30, message="the remote pane")[0]
+        wait_for(
+            lambda: _process_exited(app, pane["id"]) is True,
+            timeout=60,
+            message="the ssh client's death (processExited)",
+        )
+
+        app.cli("pane", "key", "return", "--pane", pane["id"])
+
+        wait_for(
+            lambda: pane["id"] not in {p["id"] for p in app.panes()},
+            timeout=30,
+            message="the dead pane closing on the key",
+        )
+    finally:
+        app.cli("project", "select", original["name"], check=False)

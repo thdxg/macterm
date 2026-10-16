@@ -2504,6 +2504,27 @@ struct AppStateTests {
     }
 
     @Test
+    func remote_process_exit_closes_the_pane_when_a_key_acknowledged_it() async throws {
+        // The user pressed the key that libghostty's exit message asks for:
+        // the close is their own request, so no probe decides it. The host
+        // here would answer "unreachable" (nil), which alone keeps the pane.
+        let remoteKilled = KilledSessions()
+        let state = makeAppState()
+        let p = seedProject(state, name: "remote", path: "devbox:~/dev/api")
+        _ = state.workspaces[p.id]?.createTab(projectPath: "devbox:~/dev/api")
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let pane = try #require(tab.splitRoot.allPanes().first)
+        state.zmx = probeAnsweringZmx(entries: nil, remoteKilled: remoteKilled)
+        pane.ensureNSView().exitAcknowledgedByKey = true
+
+        state.handleProcessExit(pane.id, projectID: p.id)
+
+        #expect(state.workspaces[p.id]?.tabs.allSatisfy { $0.splitRoot.findPane(id: pane.id) == nil } == true)
+        await remoteKilled.settle(expecting: 1)
+        #expect(await remoteKilled.names == [pane.sessionName])
+    }
+
+    @Test
     func remote_process_exit_keeps_the_pane_when_probes_are_disabled() async throws {
         // backgroundSSHConnections off (#272): no probe is allowed, so every
         // remote exit conservatively keeps the pane.

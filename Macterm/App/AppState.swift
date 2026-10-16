@@ -3498,11 +3498,25 @@ final class AppState {
     /// wrongly keeping a pane costs a manual close, wrongly closing one
     /// costs the user's running session. With `backgroundSSHConnections`
     /// off (#272) no probe is allowed, so every remote exit keeps the pane.
+    ///
+    /// A kept pane shows libghostty's "Process exited. Press any key to
+    /// close the terminal." A key typed at it fires `close_surface` again
+    /// (`GhosttyTerminalNSView.exitAcknowledgedByKey`), and that close is
+    /// the user's own request, so no probe decides it: the pane closes the
+    /// way Cmd+W closes it, with the busy confirmation when the host still
+    /// reports a program in the session. Before this, the key re-ran the
+    /// probe, and a host that refuses us (`Permission denied`) kept the
+    /// pane at the message for ever.
     func handleProcessExit(_ paneID: UUID, projectID: UUID) {
         let pane = workspaces[projectID]?.tabs
             .compactMap { $0.splitRoot.findPane(id: paneID) }
             .first
         guard let pane, pane.isRemote, let remote = pane.remoteSpec else {
+            paneProcessExited(paneID, projectID: projectID)
+            return
+        }
+        if pane.nsView?.exitAcknowledgedByKey == true {
+            logger.info("remote pane ssh ended and a key acknowledged it — closing the pane")
             paneProcessExited(paneID, projectID: projectID)
             return
         }
