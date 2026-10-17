@@ -21,7 +21,7 @@ A palette is one YAML file in the `palettes/` folder of an [extension](/docs/ext
 | `when` | Whether the palette can be used now: a check command and the reason to show when the check fails. See [when a palette can't be used](#when-a-palette-cant-be-used). |
 | `nodes` | Required. Every screen of the palette, by name. |
 
-The id of a palette is the name of its extension folder and its file name without `.yaml`, for example `git/git`. Macterm stores its keybind under that id. If you rename the file or the folder, you lose the keybind.
+The id of a palette is the name of its extension folder and its file name without `.yaml`, for example `git/branches`. Macterm stores its keybind under that id. If you rename the file or the folder, you lose the keybind.
 
 ## Nodes
 

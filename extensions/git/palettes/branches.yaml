@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
+name: Git Branches
+description: Switch to, log or diff a branch of the project
+requires: [git]
+when: { run: git rev-parse --git-dir, unavailable: Not a git repository }
+root: branches
+nodes:
+  branches:
+    placeholder: Search branches...
+    icon: arrow.triangle.branch
+    list: git branch --format='%(refname:short)'
+    export: { BRANCH: . }
+    enter: branch
+  branch:
+    items:
+      - { title: Switch to it, action: { run: git switch "$BRANCH", in: split } }
+      - { title: Log, action: { run: git log --oneline --graph "$BRANCH", in: split } }
+      - { title: Diff against HEAD, action: { run: git diff HEAD..."$BRANCH", in: split } }

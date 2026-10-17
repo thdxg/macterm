@@ -1,25 +1,10 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/thdxg/macterm/main/assets/palette.schema.json
-name: Git
-description: Switch to, log or diff the branches of the project, or open its worktrees
+name: Git Worktrees
+description: Open a worktree of the repository
 requires: [git]
 when: { run: git rev-parse --git-dir, unavailable: Not a git repository }
-root: git
+root: worktrees
 nodes:
-  git:
-    items:
-      - { title: Branches, subtitle: "Switch to, log or diff a branch", icon: arrow.triangle.branch, enter: branches }
-      - { title: Worktrees, subtitle: "Open a worktree of the repository", icon: folder, enter: worktrees }
-  branches:
-    placeholder: Search branches...
-    icon: arrow.triangle.branch
-    list: git branch --format='%(refname:short)'
-    export: { BRANCH: . }
-    enter: branch
-  branch:
-    items:
-      - { title: Switch to it, action: { run: git switch "$BRANCH", in: split } }
-      - { title: Log, action: { run: git log --oneline --graph "$BRANCH", in: split } }
-      - { title: Diff against HEAD, action: { run: git diff HEAD..."$BRANCH", in: split } }
   worktrees:
     placeholder: Search by branch or path...
     icon: folder

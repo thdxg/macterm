@@ -82,7 +82,7 @@ ANIM_KIT_SYMBOL=ghost_rows       # a shader uniform only the new kit has
 EXT_ROOT="$HOME/.config/macterm/extensions"
 PAL_EXT="$EXT_ROOT/macterm-demo-git"
 PAL_MANIFEST="$PAL_EXT/extension.yaml"
-PAL_FILE="$PAL_EXT/palettes/git.yaml"
+PAL_FILE="$PAL_EXT/palettes/branches.yaml"
 PAL_MARK="# written by record-demos.sh for demo 11; removed when the take ends"
 
 MACTERM=/Applications/Macterm.app/Contents/Resources/bin/macterm
@@ -1456,7 +1456,7 @@ demo10() {  # save a password typed at an ssh login, autofill the next one
 
 # ── extensions ──────────────────────────────────────────────────────────────
 # The Git extension of this checkout (extensions/git), copied under a name of
-# the take's own. Open its palette from ⌘P, enter Branches, search a branch,
+# the take's own. Open its Git Branches palette from ⌘P, search a branch,
 # open its menu, Delete back a screen, search another, and run its Log action
 # in a split. Its commands need only git. The take never runs Switch to it,
 # because that would change the branch of the project.
@@ -1490,9 +1490,8 @@ pal_check() {  # the project is a git repository with two branches to show
 drive11() {
   sleep 0.8
   kc $K_P "$CMD"; sleep 1.0                        # the command palette
-  ktype "git" 0.08; sleep 1.0                      # the palette's row, under Palettes
-  kc $K_RET; sleep 1.3                             # Git: Branches and Worktrees
-  kc $K_RET; sleep 1.4                             # Branches: the listing
+  ktype "git br" 0.08; sleep 1.0                   # the palette's row, under Palettes
+  kc $K_RET; sleep 1.4                             # Git Branches: the listing
   ktype "$PAL_BRANCH_A" 0.07; sleep 1.3            # search the branches
   kc $K_RET; sleep 1.6                             # a branch's menu; the pills read the trail
   kc $K_DELETE; sleep 1.2                          # back one screen, search cleared
@@ -1510,11 +1509,11 @@ demo11() {  # the Git extension: nested screens, a search, a run action
   if [ -e "$PAL_EXT" ] && [ "$(head -n 1 "$PAL_MANIFEST" 2>/dev/null)" != "$PAL_MARK" ]; then
     die "$PAL_EXT exists and isn't this script's — move it aside first"
   fi
-  # typing "git" must land on this palette, not one of yours with the same name
+  # typing "git br" must land on this palette, not one of yours with the same name
   local f
   for f in "$EXT_ROOT"/*/palettes/*.yaml "$EXT_ROOT"/*/palettes/*.yml; do
     [ -f "$f" ] && [ "$f" != "$PAL_FILE" ] || continue
-    grep -Eiq '^name: *["'\'']?git["'\'']? *$' "$f" && die "$f is also named Git; uninstall its extension for the take"
+    grep -Eiq '^name: *["'\'']?git branches["'\'']? *$' "$f" && die "$f is also named Git Branches; uninstall its extension for the take"
   done
   pal_check
   pal_write

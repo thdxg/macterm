@@ -29,7 +29,7 @@ Each screen can have its own keybind in Settings → Keymaps, under **Palettes**
 - **Password Manager** lists your saved passwords. Select one to type it into the focused pane (see [passwords](/docs/passwords#typing-a-password-on-demand)).
 - **Files** lists the files and directories of the current project. Search by name or by part of a path (`pal/eng` finds `Palette/PaletteEngine.swift`). Select one to open it in a split next to the focused pane. If the project has no pane, it opens in a new tab. A directory opens as a shell there. A file opens in your terminal editor (see [Open files in your terminal editor](/docs/configuration#open-files-in-your-terminal-editor)). Hold <kbd>⌥</kbd> to open it with its default app. The list leaves out dependency and build folders (`node_modules`, `build` and others) and hidden entries. Remote projects do not have this screen.
 
-To open a git worktree of the project from the palette, install the **Git** extension. Its **Worktrees** screen opens a worktree in a new tab or a split. The **Worktrees** menu in the sidebar also opens worktrees.
+To open a git worktree of the project from the palette, install the **Git** extension. Its **Git Worktrees** palette opens a worktree in a new tab or a split. The **Worktrees** menu in the sidebar also opens worktrees.
 
 ## Extensions
 

@@ -55,5 +55,5 @@ nodes:
 Each extension in **Settings → Extensions** is also an example. Their files are in [`extensions/`](https://github.com/thdxg/macterm/tree/main/extensions) in the Macterm repository. Read them to see the larger parts of the format together:
 
 - [**Kubernetes**](https://github.com/thdxg/macterm/blob/main/extensions/kubernetes/palettes/kubernetes.yaml) has namespaces, pods, deployments, services and contexts, on several screens. A `when:` check mutes the rows while the cluster does not answer. **Pods**, **Deployments** and **Services** each open from the first screen and from a namespace. Each listing passes `-A` or `-n "$NAMESPACE"`, and it does not paste the namespace into the command.
-- [**Git**](https://github.com/thdxg/macterm/tree/main/extensions/git) lists branches and worktrees. A `cwd:` action opens a worktree in a new tab.
+- [**Git**](https://github.com/thdxg/macterm/tree/main/extensions/git) has two palettes, for branches and for worktrees. A `cwd:` action opens a worktree in a new tab.
 - [**Claude Code**](https://github.com/thdxg/macterm/tree/main/extensions/claude-code) puts fixed rows above a listing of sessions.
