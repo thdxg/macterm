@@ -34,6 +34,12 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case resizePaneDown = "resize_pane_down"
     case resizePaneUp = "resize_pane_up"
     case resizePaneRight = "resize_pane_right"
+    case moveTabUp = "move_tab_up"
+    case moveTabDown = "move_tab_down"
+    case movePaneLeft = "move_pane_left"
+    case movePaneDown = "move_pane_down"
+    case movePaneUp = "move_pane_up"
+    case movePaneRight = "move_pane_right"
     case newWindow = "new_window"
     case closeWindow = "close_window"
     case openProject = "open_project"
@@ -134,6 +140,15 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .resizePaneDown: "cmd+shift+j"
         case .resizePaneUp: "cmd+shift+k"
         case .resizePaneRight: "cmd+shift+l"
+        // The arrow row of the same families: ⌃←/⌃→ step the tab through the
+        // sidebar's list (it runs top to bottom), and ⌘⌃ + an arrow moves the
+        // pane the way ⌘⌃ + h/j/k/l moves focus.
+        case .moveTabUp: "ctrl+left"
+        case .moveTabDown: "ctrl+right"
+        case .movePaneLeft: "cmd+ctrl+left"
+        case .movePaneDown: "cmd+ctrl+down"
+        case .movePaneUp: "cmd+ctrl+up"
+        case .movePaneRight: "cmd+ctrl+right"
         case .newWindow: "cmd+n"
         case .closeWindow: "cmd+shift+w"
         case .openProject: "cmd+o"

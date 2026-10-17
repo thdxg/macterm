@@ -32,6 +32,39 @@ struct TerminalTabTests {
         #expect(tab.paneFocusHistory.isEmpty)
     }
 
+    // MARK: - moveFocusedPane
+
+    @Test
+    func moveFocusedPane_swaps_with_the_neighbor_and_keeps_focus() {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        #expect(tab.moveFocusedPane(.right))
+        #expect(tab.splitRoot.allPanes().map(\.id) == [ids["b"], ids["a"]])
+        #expect(tab.focusedPaneID == ids["a"])
+        // And back.
+        #expect(tab.moveFocusedPane(.left))
+        #expect(tab.splitRoot.allPanes().map(\.id) == [ids["a"], ids["b"]])
+    }
+
+    @Test
+    func moveFocusedPane_follows_the_focus_neighbor_across_axes() {
+        // a | (b / c), focus on c: up swaps with b, left swaps with a.
+        let (tab, ids) = makeTab(H(pane("a"), V(pane("b"), pane("c"))), focused: "c")
+        #expect(tab.moveFocusedPane(.up))
+        #expect(tab.splitRoot.allPanes().map(\.id) == [ids["a"], ids["c"], ids["b"]])
+        #expect(tab.moveFocusedPane(.left))
+        #expect(tab.splitRoot.allPanes().map(\.id) == [ids["c"], ids["a"], ids["b"]])
+        #expect(tab.focusedPaneID == ids["c"])
+    }
+
+    @Test
+    func moveFocusedPane_without_a_neighbor_leaves_the_tree() {
+        let (tab, ids) = makeTab(H(pane("a"), pane("b")), focused: "a")
+        #expect(!tab.moveFocusedPane(.left))
+        #expect(!tab.moveFocusedPane(.up))
+        #expect(!tab.moveFocusedPane(.down))
+        #expect(tab.splitRoot.allPanes().map(\.id) == [ids["a"], ids["b"]])
+    }
+
     // MARK: - nextFocusAfterClose
 
     @Test

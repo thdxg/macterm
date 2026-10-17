@@ -55,6 +55,14 @@ extension AppCommand {
         case .recentTab:
             guard let projectID else { return nil }
             return { ctx.appState.cycleRecentTab(projectID: projectID) }
+        // nil at either end of the list, so the palette hides the row and
+        // the menu disables it.
+        case .moveTabUp:
+            guard let projectID, ctx.appState.activeTabMoveOffset(step: -1, projectID: projectID) != nil else { return nil }
+            return { ctx.appState.moveActiveTab(step: -1, projectID: projectID) }
+        case .moveTabDown:
+            guard let projectID, ctx.appState.activeTabMoveOffset(step: 1, projectID: projectID) != nil else { return nil }
+            return { ctx.appState.moveActiveTab(step: 1, projectID: projectID) }
         case .renameTab:
             guard let projectID,
                   let tab = ctx.appState.workspaces[projectID]?.activeTab
@@ -167,6 +175,19 @@ extension AppCommand {
         case .resizeDown:
             guard let projectID else { return nil }
             return { ctx.appState.resizePane(.down, projectID: projectID) }
+        // nil when no pane is that way (a single-pane tab, an edge pane).
+        case .movePaneLeft:
+            guard let projectID, ctx.appState.canMoveFocusedPane(.left, projectID: projectID) else { return nil }
+            return { ctx.appState.moveFocusedPane(.left, projectID: projectID) }
+        case .movePaneRight:
+            guard let projectID, ctx.appState.canMoveFocusedPane(.right, projectID: projectID) else { return nil }
+            return { ctx.appState.moveFocusedPane(.right, projectID: projectID) }
+        case .movePaneUp:
+            guard let projectID, ctx.appState.canMoveFocusedPane(.up, projectID: projectID) else { return nil }
+            return { ctx.appState.moveFocusedPane(.up, projectID: projectID) }
+        case .movePaneDown:
+            guard let projectID, ctx.appState.canMoveFocusedPane(.down, projectID: projectID) else { return nil }
+            return { ctx.appState.moveFocusedPane(.down, projectID: projectID) }
         case .copySessionID:
             // The focused pane's zmx session name (`macterm-<slug>-<hex>`) — the
             // id `macterm session list` prints and `zmx attach` takes. Useful for

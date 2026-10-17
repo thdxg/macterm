@@ -2717,6 +2717,56 @@ struct AppStateTests {
         #expect(saved.tabs.map(\.id) == [t2, t1])
     }
 
+    @Test
+    func moveActiveTab_steps_one_place_and_stops_at_the_ends() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let ws = try #require(state.workspaces[p.id])
+        let t1 = ws.tabs[0].id
+        let t2 = ws.createTab(projectPath: p.path).id
+        let t3 = ws.createTab(projectPath: p.path).id
+        ws.activeTabID = t1
+        let ctx = AppCommandContext(appState: state, projectStore: ProjectStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("macterm-tests-move-\(UUID().uuidString).json")
+        ))
+
+        #expect(AppCommand.moveTabUp.action(in: ctx) == nil)
+        state.moveActiveTab(step: 1, projectID: p.id)
+        #expect(ws.tabs.map(\.id) == [t2, t1, t3])
+        let moveDown = try #require(AppCommand.moveTabDown.action(in: ctx))
+        moveDown()
+        #expect(ws.tabs.map(\.id) == [t2, t3, t1])
+        #expect(AppCommand.moveTabDown.action(in: ctx) == nil)
+        state.moveActiveTab(step: 1, projectID: p.id)
+        #expect(ws.tabs.map(\.id) == [t2, t3, t1])
+        state.moveActiveTab(step: -1, projectID: p.id)
+        #expect(ws.tabs.map(\.id) == [t2, t1, t3])
+        #expect(ws.activeTabID == t1)
+    }
+
+    @Test
+    func movePane_commands_swap_the_focused_pane_and_hide_without_a_neighbor() throws {
+        let state = makeAppState()
+        let p = seedProject(state)
+        let tab = try #require(state.workspaces[p.id]?.activeTab)
+        let ctx = AppCommandContext(appState: state, projectStore: ProjectStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("macterm-tests-move-\(UUID().uuidString).json")
+        ))
+        #expect(AppCommand.movePaneRight.action(in: ctx) == nil)
+
+        let first = try #require(tab.focusedPaneID)
+        let second = try #require(tab.split(paneID: first, direction: .horizontal))
+        tab.focusPane(first)
+        #expect(AppCommand.movePaneLeft.action(in: ctx) == nil)
+        #expect(AppCommand.movePaneUp.action(in: ctx) == nil)
+        let moveRight = try #require(AppCommand.movePaneRight.action(in: ctx))
+        moveRight()
+        #expect(tab.splitRoot.allPanes().map(\.id) == [second, first])
+        #expect(tab.focusedPaneID == first)
+    }
+
     // MARK: - Busy-close confirmations
 
     @Test

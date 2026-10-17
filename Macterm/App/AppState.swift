@@ -3000,6 +3000,36 @@ final class AppState {
         if ws.tabs.map(\.id) != before { saveWorkspaces() }
     }
 
+    /// Where Move Tab Up (`step` -1) or Move Tab Down (`step` 1) would put
+    /// the active tab, as a drop offset for `reorderTab`, or nil when it is
+    /// already at that end. The pinned workspace steps through its RECORDS —
+    /// the sidebar rows, unloaded ones included — so one keystroke moves the
+    /// tab past exactly one row.
+    func activeTabMoveOffset(step: Int, projectID: UUID) -> Int? {
+        guard let ws = workspaces[projectID], let tabID = ws.activeTabID else { return nil }
+        let ids = projectID == PinnedTabs.projectID ? pinnedRecords.map(\.id) : ws.tabs.map(\.id)
+        guard let from = ids.firstIndex(of: tabID) else { return nil }
+        let to = from + step
+        guard ids.indices.contains(to) else { return nil }
+        // A drop offset is in pre-removal space: one past the target slot
+        // when the tab moves toward the end.
+        return step > 0 ? to + 1 : to
+    }
+
+    /// Move the active tab one place up or down in its project's tab list
+    /// (Move Tab Up / Move Tab Down). Selection and the tab's sessions stay;
+    /// only its position changes. A no-op at either end.
+    func moveActiveTab(step: Int, projectID: UUID) {
+        guard let offset = activeTabMoveOffset(step: step, projectID: projectID),
+              let tabID = workspaces[projectID]?.activeTabID
+        else { return }
+        if projectID == PinnedTabs.projectID {
+            reorderPinnedTab(tabID, toIndex: offset)
+        } else {
+            reorderTab(tabID, inProject: projectID, toIndex: offset)
+        }
+    }
+
     func selectNextTab(projectID: UUID) {
         // The pinned workspace cycles in RECORD order — unloaded rows
         // included, restored on landing — so the keyboard walks exactly what
@@ -4011,6 +4041,20 @@ final class AppState {
         if let bestID = tab.splitRoot.nearestPane(from: focusedID, direction: direction) {
             tab.focusPane(bestID)
         }
+    }
+
+    /// Swap the focused pane with its neighbor in `direction` (Move Pane
+    /// Left/Right/Up/Down). The neighbor is the pane that Focus in the same
+    /// direction would go to. Shells and focus stay with their panes.
+    func moveFocusedPane(_ direction: PaneFocusDirection, projectID: UUID) {
+        guard let tab = workspaces[projectID]?.activeTab, tab.moveFocusedPane(direction) else { return }
+        saveWorkspaces()
+    }
+
+    /// Whether Move Pane in `direction` has a pane to swap with.
+    func canMoveFocusedPane(_ direction: PaneFocusDirection, projectID: UUID) -> Bool {
+        guard let tab = workspaces[projectID]?.activeTab, let paneID = tab.focusedPaneID else { return false }
+        return tab.splitRoot.nearestPane(from: paneID, direction: direction) != nil
     }
 
     /// Cycle focus through the active tab's panes in tree order, wrapping at

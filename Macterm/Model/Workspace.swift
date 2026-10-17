@@ -338,6 +338,19 @@ final class TerminalTab: Identifiable {
         animatedResizeGeneration &+= 1
     }
 
+    /// Swap the focused pane with its neighbor in `direction` — the pane that
+    /// Focus Left/Right/Up/Down would go to. The focused pane moves and keeps
+    /// focus; the tree shape and the ratios stay. Returns false (tree
+    /// unchanged) when there is no focused pane or no neighbor that way.
+    @discardableResult
+    func moveFocusedPane(_ direction: PaneFocusDirection) -> Bool {
+        guard let paneID = focusedPaneID,
+              let neighborID = splitRoot.nearestPane(from: paneID, direction: direction)
+        else { return false }
+        splitRoot = splitRoot.swappingPanes(paneID, neighborID)
+        return true
+    }
+
     /// Set an absolute ratio on the nearest matching-axis split around a pane
     /// (control CLI `pane resize-split`). Returns false when the pane sits in
     /// no split of that axis.

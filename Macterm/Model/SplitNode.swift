@@ -239,6 +239,31 @@ extension SplitNode {
         }
     }
 
+    /// The same tree with the panes `a` and `b` in each other's places. The
+    /// shape and every ratio stay; only the two leaves change position. The
+    /// `Pane` objects are reused as they are, so surfaces and shells are
+    /// untouched. Mutates the branches in place and returns the receiver, as
+    /// `resizing` does; assign the result to publish the change.
+    func swappingPanes(_ a: UUID, _ b: UUID) -> SplitNode {
+        guard a != b, let paneA = findPane(id: a), let paneB = findPane(id: b) else { return self }
+        return replacingPanes { pane in
+            if pane.id == a { return paneB }
+            if pane.id == b { return paneA }
+            return pane
+        }
+    }
+
+    private func replacingPanes(_ replacement: (Pane) -> Pane) -> SplitNode {
+        switch self {
+        case let .pane(pane):
+            return .pane(replacement(pane))
+        case let .split(branch):
+            branch.first = branch.first.replacingPanes(replacement)
+            branch.second = branch.second.replacingPanes(replacement)
+            return .split(branch)
+        }
+    }
+
     func contains(paneID: UUID) -> Bool {
         switch self {
         case let .pane(p): p.id == paneID
@@ -280,12 +305,16 @@ extension SplitNode {
     }
 
     /// Find the nearest pane in a direction from the currently focused pane.
+    /// Panes at the same distance resolve in tree order (the first one wins),
+    /// so the answer never depends on dictionary order. Move Pane swaps with
+    /// this pane and must pick the same one each time.
     func nearestPane(from focusedID: UUID, direction: PaneFocusDirection) -> UUID? {
         let frames = paneFrames()
         guard let focusedFrame = frames[focusedID] else { return nil }
         var bestID: UUID?
         var bestDist: CGFloat = .greatestFiniteMagnitude
-        for (id, frame) in frames where id != focusedID {
+        for id in allPanes().map(\.id) where id != focusedID {
+            guard let frame = frames[id] else { continue }
             let isCandidate: Bool = switch direction {
             case .left: frame.midX < focusedFrame.midX && frame.maxY > focusedFrame.minY && frame.minY < focusedFrame.maxY
             case .right: frame.midX > focusedFrame.midX && frame.maxY > focusedFrame.minY && frame.minY < focusedFrame.maxY

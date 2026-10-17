@@ -81,8 +81,33 @@ struct SplitNodeGeometryTests {
 
     @Test
     func nearestPane_right_from_left_pane_in_HV_grid_picks_upper() throws {
+        // b and c are the same distance away: the tie goes to tree order, the
+        // same answer every run (Move Pane swaps with this pane).
         let (tree, ids) = build(H(pane("a"), V(pane("b"), pane("c"))))
-        let target = try tree.nearestPane(from: #require(ids["a"]), direction: .right)
-        #expect(target == ids["b"]! || target == ids["c"]!)
+        for _ in 0 ..< 20 {
+            #expect(try tree.nearestPane(from: #require(ids["a"]), direction: .right) == ids["b"])
+        }
+    }
+
+    // MARK: - swappingPanes
+
+    @Test
+    func swappingPanes_trades_two_leaves_and_keeps_shape_and_ratios() throws {
+        let (tree, ids) = build(H(pane("a"), V(pane("b"), pane("c"), ratio: 0.3), ratio: 0.6))
+        let swapped = try tree.swappingPanes(#require(ids["a"]), #require(ids["c"]))
+        #expect(swapped.allPanes().map(\.id) == [ids["c"], ids["b"], ids["a"]])
+        guard case let .split(root) = swapped, case let .split(inner) = root.second else {
+            Issue.record("shape changed")
+            return
+        }
+        #expect(root.direction == .horizontal && root.ratio == 0.6)
+        #expect(inner.direction == .vertical && inner.ratio == 0.3)
+    }
+
+    @Test
+    func swappingPanes_with_an_unknown_pane_is_a_noop() throws {
+        let (tree, ids) = build(H(pane("a"), pane("b")))
+        let swapped = try tree.swappingPanes(#require(ids["a"]), UUID())
+        #expect(swapped.allPanes().map(\.id) == [ids["a"], ids["b"]])
     }
 }

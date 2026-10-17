@@ -23,6 +23,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case nextTabInProject
     case previousTabInProject
     case recentTab
+    case moveTabUp
+    case moveTabDown
     case separateAllPanes
     case pinTab
     case unpinTab
@@ -42,6 +44,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
     case resizeRight
     case resizeUp
     case resizeDown
+    case movePaneLeft
+    case movePaneRight
+    case movePaneUp
+    case movePaneDown
     case copySessionID
     case capturePane
     case autofillPassword
@@ -80,6 +86,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextTabInProject: "Next Tab in Project"
         case .previousTabInProject: "Previous Tab in Project"
         case .recentTab: "Recent Tab"
+        case .moveTabUp: "Move Tab Up"
+        case .moveTabDown: "Move Tab Down"
         case .separateAllPanes: "Separate All Panes"
         case .pinTab: "Pin Tab"
         case .unpinTab: "Unpin Tab"
@@ -98,6 +106,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .resizeRight: "Resize Pane Right"
         case .resizeUp: "Resize Pane Up"
         case .resizeDown: "Resize Pane Down"
+        case .movePaneLeft: "Move Pane Left"
+        case .movePaneRight: "Move Pane Right"
+        case .movePaneUp: "Move Pane Up"
+        case .movePaneDown: "Move Pane Down"
         case .copySessionID: "Copy Session ID"
         case .capturePane: "Capture Pane"
         case .autofillPassword: "Autofill Password"
@@ -140,6 +152,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .nextTabInProject,
              .previousTabInProject,
              .recentTab,
+             .moveTabUp,
+             .moveTabDown,
              .separateAllPanes,
              .pinTab,
              .unpinTab: .tabs
@@ -158,6 +172,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .resizeRight,
              .resizeUp,
              .resizeDown,
+             .movePaneLeft,
+             .movePaneRight,
+             .movePaneUp,
+             .movePaneDown,
              .copySessionID,
              .capturePane,
              .autofillPassword: .panes
@@ -195,6 +213,8 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .nextTabInProject: .nextTabInProject
         case .previousTabInProject: .previousTabInProject
         case .recentTab: .recentTab
+        case .moveTabUp: .moveTabUp
+        case .moveTabDown: .moveTabDown
         case .separateAllPanes: .separateAllPanes
         case .pinTab: .pinTab
         case .unpinTab: .unpinTab
@@ -213,6 +233,10 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .resizeRight: .resizePaneRight
         case .resizeUp: .resizePaneUp
         case .resizeDown: .resizePaneDown
+        case .movePaneLeft: .movePaneLeft
+        case .movePaneRight: .movePaneRight
+        case .movePaneUp: .movePaneUp
+        case .movePaneDown: .movePaneDown
         case .openProject: .openProject
         case .nextProject: .nextProject
         case .previousProject: .previousProject

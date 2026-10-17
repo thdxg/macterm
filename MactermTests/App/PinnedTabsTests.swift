@@ -549,6 +549,29 @@ struct PinnedTabsTests {
     }
 
     @Test
+    func moveActiveTab_in_pinned_steps_past_one_sidebar_row() throws {
+        let fx = makeFixture()
+        let p = seedProject(fx.state)
+        let tab = try #require(fx.state.workspaces[p.id]?.activeTab)
+        fx.state.pinTab(tab.id, fromProject: p.id)
+        // An UNLOADED record below the loaded tab: one step down passes it.
+        let unloadedID = UUID()
+        fx.state.pinnedRecords.append(PinnedTabRecord(
+            id: unloadedID,
+            declaration: LayoutTab(name: "idle", layout: .pane(LayoutPane(cwd: "/tmp"))),
+            originProjectID: nil
+        ))
+        fx.state.pinnedWorkspace?.activeTabID = tab.id
+
+        #expect(fx.state.activeTabMoveOffset(step: -1, projectID: pinnedID) == nil)
+        fx.state.moveActiveTab(step: 1, projectID: pinnedID)
+        #expect(fx.state.pinnedRecords.map(\.id) == [unloadedID, tab.id])
+        #expect(fx.state.activeTabMoveOffset(step: 1, projectID: pinnedID) == nil)
+        fx.state.moveActiveTab(step: -1, projectID: pinnedID)
+        #expect(fx.state.pinnedRecords.map(\.id) == [tab.id, unloadedID])
+    }
+
+    @Test
     func selectTabByIndex_in_pinned_counts_sidebar_rows() throws {
         let fx = makeFixture()
         let p = seedProject(fx.state)

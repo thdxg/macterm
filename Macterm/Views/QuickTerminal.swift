@@ -480,6 +480,11 @@ final class QuickTerminalSplitState {
         tab.resize(direction, delta: delta)
     }
 
+    func moveFocusedPane(_ direction: PaneFocusDirection) {
+        guard tab.moveFocusedPane(direction) else { return }
+        onStructureChange()
+    }
+
     func closePane(_ paneID: UUID) {
         // Closing a quick-terminal pane is permanent, so its zmx session dies
         // with it (transient hide/show never reaches here, and neither does

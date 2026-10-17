@@ -43,6 +43,12 @@ enum MactermKeybind: String, AppEnum {
     case resizePaneDown = "resize_pane_down"
     case resizePaneUp = "resize_pane_up"
     case resizePaneRight = "resize_pane_right"
+    case moveTabUp = "move_tab_up"
+    case moveTabDown = "move_tab_down"
+    case movePaneLeft = "move_pane_left"
+    case movePaneDown = "move_pane_down"
+    case movePaneUp = "move_pane_up"
+    case movePaneRight = "move_pane_right"
     case newWindow = "new_window"
     case closeWindow = "close_window"
     case openProject = "open_project"
@@ -98,6 +104,12 @@ enum MactermKeybind: String, AppEnum {
         .resizePaneDown: "Resize Pane Down",
         .resizePaneUp: "Resize Pane Up",
         .resizePaneRight: "Resize Pane Right",
+        .moveTabUp: "Move Tab Up",
+        .moveTabDown: "Move Tab Down",
+        .movePaneLeft: "Move Pane Left",
+        .movePaneDown: "Move Pane Down",
+        .movePaneUp: "Move Pane Up",
+        .movePaneRight: "Move Pane Right",
         .newWindow: "New Window",
         .closeWindow: "Close Window",
         .openProject: "Open Project",

@@ -83,6 +83,13 @@ final class QuickTerminalResponder: KeyResponder {
         (.resizePaneRight, .right),
     ]
 
+    private static let moveActions: [(HotkeyAction, PaneFocusDirection)] = [
+        (.movePaneLeft, .left),
+        (.movePaneDown, .down),
+        (.movePaneUp, .up),
+        (.movePaneRight, .right),
+    ]
+
     func handle(_ event: NSEvent) -> KeyDisposition {
         let qt = QuickTerminalService.shared
         guard qt.isVisible else { return .passThrough }
@@ -140,6 +147,10 @@ final class QuickTerminalResponder: KeyResponder {
         }
         if let (_, dir) = Self.resizeActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
             state.resize(dir)
+            return .handled
+        }
+        if let (_, dir) = Self.moveActions.first(where: { HotkeyRegistry.matches(event, action: $0.0) }) {
+            state.moveFocusedPane(dir)
             return .handled
         }
 

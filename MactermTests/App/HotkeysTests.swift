@@ -361,6 +361,20 @@ struct HotkeysTests {
     }
 
     @Test
+    func move_tab_and_move_pane_ship_on_the_arrow_keys() {
+        #expect(HotkeyAction.moveTabUp.defaultShortcut == "ctrl+left")
+        #expect(HotkeyAction.moveTabDown.defaultShortcut == "ctrl+right")
+        #expect(HotkeyAction.movePaneLeft.defaultShortcut == "cmd+ctrl+left")
+        #expect(HotkeyAction.movePaneRight.defaultShortcut == "cmd+ctrl+right")
+        #expect(HotkeyAction.movePaneUp.defaultShortcut == "cmd+ctrl+up")
+        #expect(HotkeyAction.movePaneDown.defaultShortcut == "cmd+ctrl+down")
+        #expect(AppCommand.moveTabUp.category == .tabs)
+        #expect(AppCommand.movePaneLeft.category == .panes)
+        #expect(HotkeyAction.moveTabUp.title == "Move Tab Up")
+        #expect(HotkeyAction.movePaneRight.title == "Move Pane Right")
+    }
+
+    @Test
     func no_two_actions_ship_the_same_default_shortcut() {
         // Guards the swap above (and any future default): two actions on one
         // chord surface as a conflict in Settings → Keymaps, and whichever
