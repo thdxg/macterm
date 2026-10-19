@@ -1177,31 +1177,42 @@ struct WorkspaceView: View {
 
 /// Small badge shown in the corner of a tab while one of its panes is zoomed.
 /// Clicking it exits zoom and restores the full split layout.
+/// On macOS 26 it is the native glass capsule button. Below that, it is a
+/// flat badge in the theme colors.
 struct ZoomIndicator: View {
     let onExit: () -> Void
 
     var body: some View {
-        Button(action: onExit) {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.down.right.and.arrow.up.left")
-                Text("Zoomed")
-            }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(MactermTheme.fg)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(MactermTheme.surface)
-                    .overlay(
+        if #available(macOS 26.0, *), WindowAppearance.glassSupported {
+            Button(action: onExit) { label }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .help("Exit zoom")
+        } else {
+            Button(action: onExit) {
+                label
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(MactermTheme.fg)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(MactermTheme.border, lineWidth: 1)
+                            .fill(MactermTheme.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(MactermTheme.border, lineWidth: 1)
+                            )
                     )
-            )
-            .contentShape(Rectangle())
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Exit zoom")
         }
-        .buttonStyle(.plain)
-        .help("Exit zoom")
+    }
+
+    private var label: some View {
+        Label("Zoomed", systemImage: "arrow.down.right.and.arrow.up.left")
     }
 }
 
