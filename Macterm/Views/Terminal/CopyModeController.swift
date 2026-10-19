@@ -35,21 +35,25 @@ final class CopyModeController {
         return state.selectMode ? "Select Mode" : "Copy Mode"
     }
 
-    /// Turn the mode on. The selection starts at the terminal cursor, so the
-    /// block shows at once.
+    /// Turn the mode on. The selection starts at the terminal cursor, and the
+    /// renderer draws the cursor on its head from then on (fork patch 0014),
+    /// so the cursor shows there at once and the program's cursor goes away.
     func enter() {
         guard !isActive else { return }
         state = CopyModeState()
         isActive = true
         send("start_selection")
+        send("selection_cursor:on")
         publish()
     }
 
-    /// Turn the mode off and clear the selection.
+    /// Turn the mode off: the cursor goes back to the program's, and the
+    /// selection is cleared.
     func exit() {
         guard isActive else { return }
         isActive = false
         state = CopyModeState()
+        send("selection_cursor:off")
         send("clear_selection")
         publish()
     }

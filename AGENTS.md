@@ -196,18 +196,19 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
 - **Never** add a CLI verb, an App Intent or a log line that carries a secret. Any process in a pane can call `macterm`.
   - Autofill Password is an `AppCommand` (default ⌥⌘F). Its action is nil unless the focused pane is at a saved prompt. As for every chord with a nil action, `isAppShortcut` then swallows it in `keyDown`. It does nothing, and it does not reach libghostty (which has no default on `super+alt+f`).
 
-### Copy mode (fork patch 0013)
+### Copy mode (fork patches 0013 and 0014)
 
-Copy mode is a keyboard cursor over the scrollback, in the model of Helix. The grammar for users is in `website/docs/pages/42-copy-mode.md`. The **terminal's selection is the cursor**: its end is the head that the motions move, its start is the anchor. A one-cell selection draws as a block, so v1 has no renderer change.
+Copy mode is a keyboard cursor over the scrollback, in the model of Helix. The grammar for users is in `website/docs/pages/42-copy-mode.md`. The **terminal's selection is the cursor**: its end is the head that the motions move, its start is the anchor.
 
 - **The primitives are fork patch 0013** (`.github/downstream/0013-selection-motions.patch` in thdxg/ghostty): the binding actions `start_selection`, `move_selection:<motion>`, `extend_selection:<motion>`, `collapse_selection`, `flip_selection`, `select_line` and `clear_selection`. The arithmetic is `Selection.move` and `Selection.expandToLines`, with tests in `Selection.zig`. The fork's `Test` workflow is off, so `build-ghosttykit.yml` runs `zig build test -Dtest-filter=Selection -Dtest-filter="parse:"` before each build. `adjust_selection` of upstream cannot serve: it needs a selection that the mouse made, it only grows it, and it skips blank cells.
+- **The drawn cursor is fork patch 0014** (`0014-selection-cursor.patch`): the binding action `selection_cursor:on|off` sets `Terminal.flags.selection_cursor`, and the render state (`render.zig`) then takes the head of the selection as the cursor cell instead of the program's cursor. That cursor is a steady block, shown even while the program hides its own, and a one-cell selection draws as that cursor alone, as in Helix. The program's cursor does not move, and hit tests and the IME point stay on it. `CopyModeController.enter` sends `on` after `start_selection`; `exit` sends `off` before `clear_selection`. `smooth-cursor` glides it between motions. The build's filter `"selection head"` runs its test.
 - **The keys live in Macterm, not in a ghostty key table** (`HelixKeymap` in `Macterm/Model/CopyMode.swift`, pure, `CopyModeTests`). This is so a Vim keymap can be a Settings choice next to Helix, and so counts (`5j`) and `g` sequences work. `CopyModeController` (`Macterm/Views/Terminal/`) owns the mode of one view. It resolves each key through the keymap and runs the actions with `sendBindingAction` (`ghostty_surface_binding_action`).
 - **`keyDown` and `sendKey` give the controller every key first** while the mode is on. A ⌘ chord is not the keymap's (`resolve` answers nil), so ⌘C, ⌘W and every app shortcut work as before. Any other key that is not in the table is swallowed, so nothing types into the shell. `sendKey` has the same gate so that `pane key` drives the mode in the e2e suite.
 - The mode keeps no position. Its state is `selectMode` and a pending prefix (`g`, a count). A mouse drag while the mode is on moves the selection, and the next motion continues from it. `destroySurface` resets the mode without touching the surface.
 - The pill is `Pane.copyModeLabel` (`Copy Mode`, `Select Mode`, never persisted), drawn by `ModePill` in `TerminalPane` — the Zoomed pill's chrome, shared through `ModePill` in `MainWindow.swift`. A click on it leaves the mode.
 - **Copy Mode** is an `AppCommand` (`HotkeyAction.copyMode`, default ⌘⇧Space, `MactermKeybind.copyMode`). Its action is nil without a focused pane with a view.
 - **`pane copy-mode enter|exit|status` is DEBUG only**, like `pane password`. `status` returns the selection text, so `scripts/e2e/test_copy_mode.py` reads no clipboard.
-- Not yet: the Vim keymap and its Settings picker, prompt motions, a drawn head in a multi-cell selection, hiding the real cursor while the mode is on.
+- Not yet: the Vim keymap and its Settings picker, and prompt motions.
 
 ### Search (`Macterm/Search/`)
 
