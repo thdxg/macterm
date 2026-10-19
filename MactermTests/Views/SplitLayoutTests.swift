@@ -183,6 +183,35 @@ struct SplitLayoutTests {
         ))
     }
 
+    @Test
+    func a_zoom_pushes_every_hidden_tile_off_the_container_by_the_edge_that_grows_toward_it() throws {
+        // Zooming the LEFT pane: the right pane rides the right edge out.
+        let (tree, ids) = build(H(pane("l"), pane("r")))
+        let leaves = SplitLayout.resolve(tree, in: bounds).leaves
+        let l = try #require(leaves.first { $0.id == ids["l"] })
+        let r = try #require(leaves.first { $0.id == ids["r"] })
+        let pushedRight = SplitLayout.pushedAside(r.rect, by: l.rect, in: bounds)
+        #expect(pushedRight.size == r.rect.size)
+        #expect(pushedRight.minX == r.rect.minX + (bounds.maxX - l.rect.maxX))
+        #expect(pushedRight.minX >= bounds.maxX)
+        #expect(pushedRight.minY == r.rect.minY)
+
+        // Zooming the RIGHT pane: the left pane leaves to the left.
+        let pushedLeft = SplitLayout.pushedAside(l.rect, by: r.rect, in: bounds)
+        #expect(pushedLeft.size == l.rect.size)
+        #expect(pushedLeft.maxX <= bounds.minX)
+
+        // In a grid, the diagonal tile moves on both axes.
+        let (grid, gids) = build(H(V(pane("a"), pane("b")), V(pane("c"), pane("d"))))
+        let cells = SplitLayout.resolve(grid, in: bounds).leaves
+        let a = try #require(cells.first { $0.id == gids["a"] })
+        let d = try #require(cells.first { $0.id == gids["d"] })
+        let pushedDiagonal = SplitLayout.pushedAside(d.rect, by: a.rect, in: bounds)
+        #expect(pushedDiagonal.minX >= bounds.maxX)
+        #expect(pushedDiagonal.minY >= bounds.maxY)
+        #expect(pushedDiagonal.size == d.rect.size)
+    }
+
     /// A divider outliving its branch keeps its thickness and travels to the
     /// seam, so it arrives on top of the divider coming the other way rather
     /// than blinking out where the boundary no longer is.

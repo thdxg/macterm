@@ -246,6 +246,35 @@ struct SplitLayout: Equatable {
         }
     }
 
+    /// Where a tile that a zoom hides goes: pushed off the container by the
+    /// zoomed pane's growing edges. A tile beyond an edge of the zoomed pane
+    /// moves exactly as far as that edge travels to the container, so it
+    /// ends fully outside and rides the edge the whole way. A diagonal tile
+    /// moves on both axes. The size never changes, so the program in the
+    /// hidden pane gets no resize.
+    ///
+    /// Without this, a zoom of a left or top pane showed no motion. Its text
+    /// is anchored at its top-left corner and its background is transparent,
+    /// so its growth was invisible, and its sibling only faded in place.
+    static func pushedAside(_ rect: CGRect, by zoomed: CGRect, in bounds: CGRect) -> CGRect {
+        // Tiles are separated by at least the divider band, so the slack only
+        // absorbs the rounding of ratio arithmetic.
+        let slack: CGFloat = 0.5
+        var dx: CGFloat = 0
+        var dy: CGFloat = 0
+        if rect.minX >= zoomed.maxX - slack {
+            dx = bounds.maxX - zoomed.maxX
+        } else if rect.maxX <= zoomed.minX + slack {
+            dx = bounds.minX - zoomed.minX
+        }
+        if rect.minY >= zoomed.maxY - slack {
+            dy = bounds.maxY - zoomed.maxY
+        } else if rect.maxY <= zoomed.minY + slack {
+            dy = bounds.minY - zoomed.minY
+        }
+        return rect.offsetBy(dx: dx, dy: dy)
+    }
+
     /// What must change for a layout change to be animated: the tree's
     /// structure by pane identity, the zoomed pane, and the tab's
     /// `animatedResizeGeneration`. Ratios themselves are left out on purpose

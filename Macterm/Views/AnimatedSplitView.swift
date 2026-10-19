@@ -147,7 +147,10 @@ enum SplitAnimation {
 ///   off.
 /// - **Zoom keeps the other tiles mounted**, at opacity 0 beneath the zoomed
 ///   pane, so unzoom can slide them back without the orphan-and-reattach
-///   round trip a remount costs. They sleep through
+///   round trip a remount costs. The zoomed pane's growing edges push them
+///   off the container at their own size (`SplitLayout.pushedAside`), so a
+///   zoom of any pane shows motion, and no hidden program gets a resize.
+///   The container clips them. They sleep through
 ///   `GhosttyTerminalNSView.hiddenInLayout`. Dividers ARE removed while
 ///   zoomed: a grab band is an NSView and would catch drags through the
 ///   zoomed pane even when invisible.
@@ -267,6 +270,7 @@ struct AnimatedSplitView: View {
             // A zoom onto a pane that is no longer in the tree is no zoom.
             let zoomed = zoomedPaneID.flatMap { id in layout.leaves.contains { $0.id == id } ? id : nil }
             let isSplit = layout.leaves.count > 1 && zoomed == nil
+            let zoomedRect = zoomed.flatMap { id in layout.leaves.first { $0.id == id }?.rect }
             let placed = layout.leaves.map { leaf in
                 PlacedLeaf(
                     pane: leaf.pane,
@@ -289,9 +293,13 @@ struct AnimatedSplitView: View {
 
             ZStack(alignment: .topLeading) {
                 ForEach(placed) { leaf in
-                    let rect = arrivingIDs.contains(leaf.id)
-                        ? SplitLayout.collapsed(leaf.rect, placement: leaf.placement)
-                        : leaf.rect
+                    let rect = if arrivingIDs.contains(leaf.id) {
+                        SplitLayout.collapsed(leaf.rect, placement: leaf.placement)
+                    } else if leaf.hidden, let zoomedRect {
+                        SplitLayout.pushedAside(leaf.rect, by: zoomedRect, in: bounds)
+                    } else {
+                        leaf.rect
+                    }
                     leafView(leaf.pane, isSplit: isSplit)
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
@@ -324,6 +332,7 @@ struct AnimatedSplitView: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            .clipped()
             .animation(
                 animation,
                 value: SplitLayout.animationKey(of: root, zoomedPaneID: zoomed, resizeGeneration: resizeGeneration)
