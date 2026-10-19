@@ -10,7 +10,7 @@ description: Move through the scrollback and select text with the keyboard, with
 
 Copy mode lets you move through the scrollback and select text with the keyboard. It is the copy mode of tmux and the vi mode of Alacritty, with the keys of Helix.
 
-Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd> in a pane to start it. A block cursor appears at the terminal cursor, and a **Copy Mode** pill appears in the corner of the pane. A click on the pill also leaves the mode. Press <kbd>Esc</kbd> to leave it. The pane types into the shell again.
+Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd> in a pane to start it. The cursor becomes a block that you move, and a **Copy Mode** pill appears in the corner of the pane. A click on the pill also leaves the mode. Press <kbd>Esc</kbd> to leave it. The cursor goes back to where the shell left it, and the pane types into the shell again.
 
 While copy mode is on, the keys of the pane move the selection and do not reach the shell. <kbd>⌘</kbd> keys still work: <kbd>⌘</kbd><kbd>C</kbd> copies the selection, <kbd>⌘</kbd><kbd>W</kbd> closes the pane.
 
@@ -63,4 +63,4 @@ For now, you cannot change the keys inside copy mode. A later version adds a Vim
 
 - Copy mode moves through the scrollback of the pane. A full-screen program on the alternate screen (`less`, `btop`, an editor) has no scrollback. There, copy mode moves only on the visible screen.
 - Copy mode starts at the terminal cursor, which is at the prompt. Press <kbd>k</kbd> or <kbd>⌃</kbd><kbd>u</kbd> to go up into the scrollback.
-- In a multi-cell selection, the head is not drawn as a separate cursor yet. The selection is the cursor.
+- The cursor of copy mode is the cursor of the pane, drawn on the head of the selection. The shell's own cursor does not move, and comes back when you leave the mode. With **Smooth cursor** on (Settings → Animations), the cursor glides between motions.

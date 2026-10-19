@@ -53,7 +53,10 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # ff779564c6: an ED2 (Ctrl+L) at a prompt with blank rows below it moves the
 # screen into the scrollback again, not only when the prompt is on the last
 # row. C API: ghostty_surface_paste_text is new. Nothing else changed.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-19-c767c9f}"
+# build-2026-10-19-2684fe9: + downstream patch 0014 (thdxg/ghostty#29): the
+# `selection_cursor:on|off` action draws the cursor on the head of the
+# selection, for copy mode. No C API change.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-19-2684fe9}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit

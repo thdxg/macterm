@@ -61,27 +61,36 @@ struct TerminalPane: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                // Secure-input badge: the OS is shielding keystrokes for this
-                // pane's password prompt (or the global toggle). Focus-scoped,
-                // so at most one pane shows it.
-                if focused, SecureInput.shared.enabled, GhosttyApp.shared.secureInputIndication {
-                    SecureInputBadge()
-                }
-            }
-            .overlay(alignment: .topLeading) {
-                // Copy-mode pill: the pane's keys move the selection, not the
-                // shell. The Zoomed pill's chrome, since both are modes that
-                // one click leaves. Per pane, since the mode is.
-                if let label = pane.copyModeLabel {
-                    ModePill(
-                        title: label,
-                        systemImage: "character.cursor.ibeam",
-                        help: "Leave copy mode"
-                    ) { [weak pane] in
-                        pane?.nsView?.copyMode.exit()
+                // The pane's badges, one row in the trailing corner, in this
+                // order from the left: Read-Only, Copy Mode, Zoomed, then the
+                // lock. The Zoomed pill is here too, not on the tab: a zoomed
+                // pane is the only pane on screen, and one row cannot overlap
+                // itself.
+                HStack(spacing: 6) {
+                    // Copy-mode pill: the pane's keys move the selection, not
+                    // the shell. The Zoomed pill's chrome, since both are
+                    // modes that one click leaves. Per pane, since the mode is.
+                    if let label = pane.copyModeLabel {
+                        ModePill(
+                            title: label,
+                            systemImage: "character.cursor.ibeam",
+                            help: "Leave copy mode"
+                        ) { [weak pane] in
+                            pane?.nsView?.copyMode.exit()
+                        }
                     }
-                    .padding(8)
+                    if isZoomed {
+                        ZoomIndicator(onExit: onZoomRequest)
+                            .transition(.opacity)
+                    }
+                    // Secure-input badge: the OS is shielding keystrokes for
+                    // this pane's password prompt (or the global toggle).
+                    // Focus-scoped, so at most one pane shows it.
+                    if focused, SecureInput.shared.enabled, GhosttyApp.shared.secureInputIndication {
+                        SecureInputBadge()
+                    }
                 }
+                .padding(8)
             }
         }
         .background {
@@ -125,7 +134,6 @@ private struct SecureInputBadge: View {
             .padding(5)
             .background(MactermTheme.bg, in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(MactermTheme.border))
-            .padding(6)
             .allowsHitTesting(false)
             .help("Secure keyboard input is active")
     }
