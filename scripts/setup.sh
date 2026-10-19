@@ -48,7 +48,10 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # start_selection, move_selection:<motion>, extend_selection:<motion>,
 # collapse_selection, flip_selection, select_line, clear_selection. No C API
 # change. The fork's build now runs `zig build test` on the patches first.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-19-72ae9d4}"
+# build-2026-10-19-2684fe9: + downstream patch 0014 (thdxg/ghostty#29): the
+# `selection_cursor:on|off` action draws the cursor on the head of the
+# selection, for copy mode. No C API change.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-19-2684fe9}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
