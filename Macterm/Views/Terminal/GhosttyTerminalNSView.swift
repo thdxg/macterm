@@ -44,6 +44,11 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func accessibilitySelectedText() -> String? {
+        selectedText()
+    }
+
+    /// The text of the surface's selection, nil when there is none.
+    func selectedText() -> String? {
         guard let surface else { return nil }
         var text = ghostty_text_s()
         guard ghostty_surface_read_selection(surface, &text) else { return nil }
@@ -545,6 +550,12 @@ final class GhosttyTerminalNSView: NSView {
     private var keyTextAccumulator: [String] = []
     private var currentKeyEvent: NSEvent?
 
+    /// The pane's copy mode. While it is on, `keyDown` and `sendKey` give it
+    /// every key first; it answers with keybind actions on this surface.
+    private(set) lazy var copyMode = CopyModeController { [weak self] action in
+        self?.sendBindingAction(action)
+    }
+
     init(
         paneID: UUID,
         workingDirectory: String,
@@ -863,6 +874,8 @@ final class GhosttyTerminalNSView: NSView {
     func destroySurface() {
         isDestroyed = true
         clearCommandSubmissionEvidence()
+        // The selection dies with the surface; the mode must not outlive it.
+        copyMode.reset()
         // A composition in flight has nowhere left to commit — drop it before
         // the surface goes, so a reattached surface starts uncomposed rather
         // than inheriting a preedit that can never be resolved.
@@ -1224,6 +1237,9 @@ final class GhosttyTerminalNSView: NSView {
         // password monitor at the point it is actually sent, below, as the
         // text the tty will receive — not `event.characters`.
         if PasswordPromptMonitor.shared.viewWillSendKey(self, event: event) { return }
+        // Copy mode takes every key that is its own. A ⌘ chord is not, so
+        // ⌘C still copies and the app's shortcuts still run.
+        if copyMode.isActive, copyMode.handle(CopyModeKey(event: event)) { return }
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // What zmx will count as user input: a key that reaches the pty. Cmd
@@ -2117,6 +2133,9 @@ extension GhosttyTerminalNSView {
     @discardableResult
     func sendKey(keyCode: UInt16, mods flags: NSEvent.ModifierFlags) -> Bool {
         guard let surface else { return false }
+        // The same gate as `keyDown`, so `pane key` drives copy mode the way
+        // the keyboard does (the e2e suite has no keyboard).
+        if copyMode.isActive, copyMode.handle(CopyModeKey(keyCode: keyCode, flags: flags)) { return true }
         if processExited { exitAcknowledgedByKey = true }
         onInteraction?()
         PasswordPromptMonitor.shared.viewDidSendKey(self, keyCode: keyCode, mods: flags)

@@ -98,6 +98,7 @@ final class ControlHandler {
         case "pane.resize": return try paneResize(args)
         case "pane.move": return try paneMove(args)
         case "pane.password": return try panePassword(args)
+        case "pane.copy-mode": return try paneCopyMode(args)
         case "tab.merge": return try tabMerge(args)
         #endif
         case "grid": return try grid(args)
@@ -1088,6 +1089,29 @@ final class ControlHandler {
             }
         }
         return ControlData(password: monitor.state(for: target.pane.nsView))
+    }
+
+    /// DEBUG-ONLY: a pane's copy mode as a verb, so the e2e suite can enter
+    /// it with nobody at the keyboard, then drive it with `pane key` (which
+    /// goes through the same gate as a real key) and read the selection back
+    /// instead of the clipboard.
+    private func paneCopyMode(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard let view = target.pane.nsView else {
+            throw ControlError(code: .noSurface, message: "that pane has no surface")
+        }
+        switch args.copyMode {
+        case nil: break
+        case "enter": view.copyMode.enter()
+        case "exit": view.copyMode.exit()
+        default: throw ControlError(code: .badRequest, message: "copy-mode takes enter or exit")
+        }
+        return ControlData(copyMode: ControlCopyModeState(
+            active: view.copyMode.isActive,
+            selectMode: view.copyMode.state.selectMode,
+            selection: view.selectedText()
+        ))
     }
 
     /// DEBUG-ONLY (#227): drive `TerminalTab.movePane(to:)` — the grab-handle

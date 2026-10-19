@@ -25,6 +25,7 @@ enum Output {
         if let dump = data.dump { renderDump(dump) }
         if let tutorial = data.tutorial { print(tutorial.text) }
         if let password = data.password { renderPassword(password) }
+        if let copyMode = data.copyMode { renderCopyMode(copyMode) }
         if let widgets = data.widgets { renderWidgets(widgets) }
         if let palettes = data.palettes { renderPalettes(palettes) }
     }
@@ -33,6 +34,12 @@ enum Output {
         var line = "phase=\(state.phase) saved=\(state.saved) bubble=\(state.bubble ?? "none")"
         if let prompt = state.prompt { line += " prompt=\(prompt)" }
         if let command = state.command { line += " command=\(command)" }
+        print(line)
+    }
+
+    private static func renderCopyMode(_ state: ControlCopyModeState) {
+        var line = "active=\(state.active) select=\(state.selectMode)"
+        if let selection = state.selection { line += " selection=\(selection)" }
         print(line)
     }
 

@@ -202,6 +202,13 @@ extension AppCommand {
         case .capturePane:
             guard let projectID, let pane = ctx.appState.focusedPane(for: projectID) else { return nil }
             return { PaneScreenshot.copy(pane, appState: ctx.appState) }
+        case .copyMode:
+            // The mode lives on the pane's view: it reads the keys there and
+            // drives the surface's selection. No surface, no mode.
+            guard let projectID, let pane = ctx.appState.focusedPane(for: projectID),
+                  let view = pane.nsView
+            else { return nil }
+            return { view.copyMode.toggle() }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
         case .newRemoteProject:

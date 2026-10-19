@@ -124,6 +124,10 @@ final class Pane: Identifiable {
     private var agentIconPID: pid_t?
 
     let searchState = TerminalSearchState()
+    /// What the copy-mode pill of the pane says (`Copy Mode`, `Select Mode`),
+    /// nil while the mode is off. The view's `CopyModeController` owns the
+    /// mode and reports it here. Live UI state only — never persisted.
+    var copyModeLabel: String?
     /// Temporary full-pane fill used when a TUI owns this leaf's background in
     /// a split. It is presentation-only, never persisted, and intentionally a
     /// CGColor so the model remains independent of AppKit and SwiftUI.

@@ -1177,20 +1177,37 @@ struct WorkspaceView: View {
 
 /// Small badge shown in the corner of a tab while one of its panes is zoomed.
 /// Clicking it exits zoom and restores the full split layout.
-/// On macOS 26 it is the native glass capsule button. Below that, it is a
-/// flat badge in the theme colors.
 struct ZoomIndicator: View {
     let onExit: () -> Void
 
     var body: some View {
+        ModePill(
+            title: "Zoomed",
+            systemImage: "arrow.down.right.and.arrow.up.left",
+            help: "Exit zoom",
+            action: onExit
+        )
+    }
+}
+
+/// A mode that the user can leave with one click, as a pill in a corner of
+/// the terminal: Zoomed, Copy Mode. On macOS 26 it is the native glass
+/// capsule button. Below that, it is a flat badge in the theme colors.
+struct ModePill: View {
+    let title: String
+    let systemImage: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
         if #available(macOS 26.0, *), WindowAppearance.glassSupported {
-            Button(action: onExit) { label }
+            Button(action: action) { label }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
-                .help("Exit zoom")
+                .help(help)
         } else {
-            Button(action: onExit) {
+            Button(action: action) {
                 label
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(MactermTheme.fg)
@@ -1207,12 +1224,12 @@ struct ZoomIndicator: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Exit zoom")
+            .help(help)
         }
     }
 
     private var label: some View {
-        Label("Zoomed", systemImage: "arrow.down.right.and.arrow.up.left")
+        Label(title, systemImage: systemImage)
     }
 }
 

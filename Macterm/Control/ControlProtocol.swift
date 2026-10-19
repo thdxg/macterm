@@ -122,6 +122,9 @@ struct ControlArgs: Codable, Equatable {
     /// Reply to the pane's password bubble (debug-only `pane.password`):
     /// `accept`, `dismiss` or `autofill`. Nil just reads the state.
     var answer: String?
+    /// Turn the pane's copy mode on or off (debug-only `pane.copy-mode`):
+    /// `enter` or `exit`. Nil just reads the state.
+    var copyMode: String?
     /// Destination pane selector for `pane.move` (same tab); nil = the
     /// workspace edge (a root-level move).
     var dest: String?
@@ -278,6 +281,8 @@ struct ControlData: Codable {
     var tutorial: ControlTutorial?
     /// The pane's password-prompt state (debug-only `pane.password`).
     var password: ControlPasswordState?
+    /// The pane's copy-mode state (debug-only `pane.copy-mode`).
+    var copyMode: ControlCopyModeState?
     /// Desktop widgets (`widget.*`).
     var widgets: [ControlWidgetInfo]?
     /// The palettes of the installed extensions (`palette.list`).
@@ -294,6 +299,7 @@ struct ControlData: Codable {
         dump: ControlPaneDump? = nil,
         tutorial: ControlTutorial? = nil,
         password: ControlPasswordState? = nil,
+        copyMode: ControlCopyModeState? = nil,
         widgets: [ControlWidgetInfo]? = nil,
         palettes: [ControlPaletteInfo]? = nil
     ) {
@@ -307,6 +313,7 @@ struct ControlData: Codable {
         self.dump = dump
         self.tutorial = tutorial
         self.password = password
+        self.copyMode = copyMode
         self.palettes = palettes
         self.widgets = widgets
     }
@@ -315,6 +322,15 @@ struct ControlData: Codable {
 /// What the password monitor knows about a pane (debug-only `pane.password`):
 /// its phase, the prompt it confirmed, and which bubble is up. Never the
 /// password itself.
+/// A pane's copy mode (debug-only `pane.copy-mode`): whether it is on,
+/// whether select mode is on, and the text of the selection, so a test can
+/// check a motion without the clipboard.
+struct ControlCopyModeState: Codable, Equatable {
+    var active: Bool
+    var selectMode: Bool
+    var selection: String?
+}
+
 struct ControlPasswordState: Codable, Equatable {
     /// `idle`, `sighted`, `prompting` or `verifying`.
     var phase: String

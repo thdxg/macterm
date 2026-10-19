@@ -52,6 +52,7 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     case renameProject = "rename_project"
     case copySessionID = "copy_session_id"
     case capturePane = "capture_pane"
+    case copyMode = "copy_mode"
     case applyLayout = "apply_layout"
     case saveLayout = "save_layout"
     case separateAllPanes = "separate_all_panes"
@@ -163,6 +164,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .renameProject: "none"
         case .copySessionID: "none"
         case .capturePane: "none"
+        // Space is the one key that no ghostty default binds with ⌘⇧, and
+        // the chord Alacritty's vi mode uses (with ⌃⇧).
+        case .copyMode: "cmd+shift+space"
         // Unbound by default: both rewrite or replace the live pane tree, so a
         // stray keystroke on a stock binding would be destructive.
         case .applyLayout: "none"

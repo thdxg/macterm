@@ -520,6 +520,7 @@ struct PaneCommand: ParsableCommand {
         subs.append(Resize.self)
         subs.append(Move.self)
         subs.append(Password.self)
+        subs.append(CopyMode.self)
         #endif
         return subs
     }
@@ -904,6 +905,28 @@ struct PaneCommand: ParsableCommand {
             var args = target.controlArgs()
             args.answer = answer
             try runControlCommand(command: "pane.password", args: args, options: options)
+        }
+    }
+
+    /// DEBUG-only: a pane's copy mode as a verb — enter it, leave it, or read
+    /// its state and selection — so the e2e suite can drive it with `pane
+    /// key` and check the selection without the clipboard.
+    struct CopyMode: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "copy-mode",
+            abstract: "[debug] Read a pane's copy-mode state, or enter or exit the mode."
+        )
+
+        @Argument(help: "enter or exit. Omit it to read the state.")
+        var action: String?
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            var args = target.controlArgs()
+            args.copyMode = action
+            try runControlCommand(command: "pane.copy-mode", args: args, options: options)
         }
     }
 

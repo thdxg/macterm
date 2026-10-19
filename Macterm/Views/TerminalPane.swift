@@ -68,6 +68,21 @@ struct TerminalPane: View {
                     SecureInputBadge()
                 }
             }
+            .overlay(alignment: .topLeading) {
+                // Copy-mode pill: the pane's keys move the selection, not the
+                // shell. The Zoomed pill's chrome, since both are modes that
+                // one click leaves. Per pane, since the mode is.
+                if let label = pane.copyModeLabel {
+                    ModePill(
+                        title: label,
+                        systemImage: "character.cursor.ibeam",
+                        help: "Leave copy mode"
+                    ) { [weak pane] in
+                        pane?.nsView?.copyMode.exit()
+                    }
+                    .padding(8)
+                }
+            }
         }
         .background {
             if let color = pane.adaptiveBackgroundColor {
@@ -304,6 +319,8 @@ private struct TerminalSurface: NSViewRepresentable {
         view.onTitleChange = { [weak pane] title in pane?.receiveReportedTitle(title) }
         view.isFocused = focused
         view.rendersForeignGeometry = isNonLeaderMirror
+
+        view.copyMode.onLabelChange = { [weak pane] label in pane?.copyModeLabel = label }
 
         view.onSearchStart = { [weak pane, weak view] needle in
             guard let pane else { return }
