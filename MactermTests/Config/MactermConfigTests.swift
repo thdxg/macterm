@@ -28,6 +28,14 @@ struct MactermConfigTests {
         #expect(!MactermConfig.defaultsBody.contains("macos-auto-secure-input"))
     }
 
+    /// Cell backgrounds that a program paints follow the window opacity by
+    /// default, so a translucent window stays translucent inside a TUI. The
+    /// user's config can turn it back to ghostty's opaque paint.
+    @Test
+    func painted_cell_backgrounds_follow_window_opacity_by_default() {
+        #expect(MactermConfig.defaultsBody.contains("background-opacity-cells = true\n"))
+    }
+
     /// Scrolling is libghostty's on every path (the #102 accumulator is gone),
     /// so `mouse-scroll-multiplier` keeps ghostty's own default — and
     /// `macos-shortcuts` defaults to `ask` in both. A pin would be noise.

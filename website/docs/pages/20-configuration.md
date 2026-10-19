@@ -40,6 +40,7 @@ Macterm has its own defaults for a few keys. Macterm loads them before your conf
 | `window-padding-x`, `window-padding-y` | `16` |
 | `tab-inherit-working-directory` | `false`. New tabs start at the project root. |
 | `macos-secure-input-indication` | `false`. The password bubble marks a password prompt instead. |
+| `background-opacity-cells` | `true`. The backgrounds that a program paints follow the window opacity. |
 
 The full list is `defaults` in [`MactermConfig.swift`](https://github.com/thdxg/macterm/blob/main/Macterm/Config/MactermConfig.swift).
 
@@ -55,7 +56,7 @@ Macterm draws the window chrome itself. It ignores or forces these keys:
 | `bell-features = title`, `border` | Not implemented |
 | `macos-non-native-fullscreen` | Not implemented. Full screen is always native. |
 
-`background-opacity-cells` works as in Ghostty. All other keys work as the upstream docs describe them. This includes `bell-features = system`, `audio` and `attention` (`attention` puts a badge on the Dock icon with the number of tabs that wait for you), `mouse-scroll-multiplier` and `custom-shader`.
+`background-opacity-cells` works as in Ghostty (Macterm sets it to `true` by default). All other keys work as the upstream docs describe them. This includes `bell-features = system`, `audio` and `attention` (`attention` puts a badge on the Dock icon with the number of tabs that wait for you), `mouse-scroll-multiplier` and `custom-shader`.
 
 ## Keys with no Settings equivalent
 

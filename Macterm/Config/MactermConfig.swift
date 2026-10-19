@@ -198,6 +198,14 @@ final class MactermConfig {
             note: "The lock badge that Ghostty draws on a pane at a password prompt. Secure input itself stays on.\n"
                 + "The password bubble of Macterm already marks the prompt."
         ),
+        // A TUI's painted cell backgrounds follow the window opacity, so a
+        // translucent window stays translucent inside helix or vim. Ghostty
+        // paints them opaque by default, which turns a full-screen program
+        // into a solid block in an otherwise see-through window.
+        .init(
+            line: "background-opacity-cells = true",
+            note: "The backgrounds that a program paints follow the window opacity. Set false to paint them opaque, as Ghostty does."
+        ),
     ]
 
     /// The full text of `macterm-defaults.conf`, the first config layer: the
