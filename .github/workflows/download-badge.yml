@@ -1,4 +1,4 @@
-name: Download badge
+name: Download Badge
 
 # The README's download count. shields.io's own `github/downloads/total` badge
 # reads only the first page of releases (the newest 100), so once the repo

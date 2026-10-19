@@ -1,4 +1,4 @@
-name: Benchmark report
+name: Benchmark Report
 
 # Trusted-side half of the benchmark PR feedback (see benchmark.yml). A
 # `pull_request` run from a fork gets a read-only GITHUB_TOKEN, so it can't

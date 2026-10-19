@@ -1,4 +1,4 @@
-name: Release tip
+name: Release Tip
 
 # The `tip` channel: a universal Release build of every CI-passing commit on
 # main, published to a rolling `tip` prerelease and offered by Sparkle to anyone
