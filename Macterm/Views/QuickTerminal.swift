@@ -670,13 +670,6 @@ private struct QuickTerminalView: View {
         .overlay {
             WorkspaceDropPreview(resolution: dropResolution)
         }
-        .overlay(alignment: .topTrailing) {
-            if let zoomID = state.tab.zoomedPaneID {
-                ZoomIndicator(onExit: { state.tab.toggleZoom(paneID: zoomID) })
-                    .padding(8)
-                    .transition(.opacity)
-            }
-        }
     }
 }
 
