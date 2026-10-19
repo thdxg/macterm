@@ -171,6 +171,7 @@ enum Output {
             ["foreground", fg],
             ["process exited", "\(i.processExited)"],
             ["needs confirm quit", "\(i.needsConfirmQuit)"],
+            ["read-only", opt(i.readOnly)],
         ]
         printColumns(rows)
     }

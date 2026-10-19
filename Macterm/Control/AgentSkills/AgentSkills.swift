@@ -111,6 +111,9 @@ enum AgentSkills {
     - **No terminal yet.** A pane in a tab that was never on the screen has no terminal. `pane run`, `key`,
       `dump` and `inspect` answer `no_surface`, and its `--run` command did not start. `macterm tab select`
       shows the tab. It also changes what the user sees.
+    - **`read_only` means ask.** The user can make a pane read-only. Then `pane run` and `pane key` answer
+      `read_only` and type nothing. `macterm pane inspect` shows `read-only`. Do not try to turn it off. Ask
+      the user.
     - **Wait for a sentinel, not for a fixed time.** Make the command create a file when it ends, or print a
       marker that you assemble at run time: `printf done-%s 4f1c` prints `done-4f1c`. The echoed command line
       never contains it. Use a new random token each time. Give each wait loop a deadline.

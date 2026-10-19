@@ -128,6 +128,11 @@ final class Pane: Identifiable {
     /// nil while the mode is off. The view's `CopyModeController` owns the
     /// mode and reports it here. Live UI state only — never persisted.
     var copyModeLabel: String?
+    /// The surface is read-only (ghostty's `toggle_readonly`): libghostty
+    /// sends no input to the pty. Drives the Read-Only pill. A new surface
+    /// starts writable, so `destroySurface` clears it. Live UI state only —
+    /// never persisted.
+    var isReadOnly = false
     /// Temporary full-pane fill used when a TUI owns this leaf's background in
     /// a split. It is presentation-only, never persisted, and intentionally a
     /// CGColor so the model remains independent of AppKit and SwiftUI.
@@ -1090,6 +1095,8 @@ final class Pane: Identifiable {
         view.onOutputActivity = nil
         view.onScrollbarUpdate = nil
         view.onLinkHover = nil
+        view.onReadOnlyChange = nil
+        isReadOnly = false
         view.onMouseShapeChange = nil
         view.onPromptTitle = nil
         view.onSetTabTitle = nil

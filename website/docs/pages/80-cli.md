@@ -132,11 +132,14 @@ content scale       2.0
 foreground          79497 (nvim src/main.rs)
 process exited      false
 needs confirm quit  false
+read-only           false
 ```
 
 `pane dump` prints the text of the viewport. `--scrollback` adds the full scrollback before it. It reads the own cells of the terminal, so it sees what a full-screen program draws.
 
 Both commands need a **live surface**. A pane that you never showed returns `no_surface`. Select its tab one time.
+
+`read-only` is `true` while the pane is [read-only](/docs/configuration#read-only-panes). Then `pane run` returns `read_only` and types nothing. `pane key` also returns `read_only` for a key that would go to the program. A Ghostty keybind still runs, because it is not input.
 
 > The C ABI of libghostty does not give the cursor position, and it has no direct alt-screen query. `alt-screen` here is a guess. It shows `-` until the surface sends its first scrollbar update.
 
@@ -212,7 +215,7 @@ Any process of the same user can use the protocol directly. Use one request for 
 {"v":2,"id":"<echoed>","ok":true,"data":{"panes":[{"id":"…","session":"macterm-api-1a2b3c4d5e6f","index":2}]}}
 ```
 
-A failure looks like `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}`. The codes are `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `unsupported_version` and `internal`. Both sides ignore unknown fields. When a field must not be ignored in silence, use the version checks above.
+A failure looks like `{"ok":false,"error":{"code":"…","message":"…","action":"…"}}`. The codes are `starting`, `unknown_command`, `bad_request`, `not_found`, `ambiguous`, `busy`, `no_surface`, `read_only`, `unsupported_version` and `internal`. Both sides ignore unknown fields. When a field must not be ignored in silence, use the version checks above.
 
 ```sh
 echo '{"v":1,"id":"x","command":"status"}' | nc -U ~/Library/Application\ Support/Macterm/control.sock

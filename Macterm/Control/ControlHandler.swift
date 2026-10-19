@@ -99,6 +99,7 @@ final class ControlHandler {
         case "pane.move": return try paneMove(args)
         case "pane.password": return try panePassword(args)
         case "pane.copy-mode": return try paneCopyMode(args)
+        case "pane.read-only": return try paneReadOnly(args)
         case "tab.merge": return try tabMerge(args)
         #endif
         case "grid": return try grid(args)
@@ -311,6 +312,15 @@ final class ControlHandler {
         action: "try again after its window opens"
     )
 
+    /// libghostty drops every input to a read-only surface and reports
+    /// nothing, so `pane.run` and `pane.key` refuse it themselves. Otherwise
+    /// they would say ok for text that the program never got.
+    private static let paneReadOnly = ControlError(
+        code: .readOnly,
+        message: "the pane is read-only, so the terminal does not send input to its program",
+        action: "click the Read-Only pill of the pane or run Read-Only Mode, then try again"
+    )
+
     private func parseWidgetSpan(_ raw: String?) throws -> DesktopWidgetSpan? {
         guard let raw else { return nil }
         guard let span = DesktopWidgetSpan(parsing: raw) else {
@@ -442,7 +452,8 @@ final class ControlHandler {
             // must report exactly what the close guards read, and for a
             // remote pane the surface's own verdict is meaningless (the local
             // ssh client reads as a perpetually running program).
-            needsConfirmQuit: pane.needsConfirmClose
+            needsConfirmQuit: pane.needsConfirmClose,
+            readOnly: pane.isReadOnly
         )
         return ControlData(inspect: inspect)
     }
@@ -945,11 +956,13 @@ final class ControlHandler {
     /// `no_surface` miss.
     private func paneSendText(_ args: ControlArgs, text: String) throws -> ControlData {
         if let target = widgetTarget(args) {
+            if target.pane.isReadOnly { throw Self.paneReadOnly }
             guard let view = target.pane.nsView, view.sendText(text) else { throw Self.widgetNotLive }
             return ControlData(widgets: [widgetInfo(index: target.index, widget: target.widget)])
         }
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
+        if target.pane.isReadOnly { throw Self.paneReadOnly }
         guard let view = target.pane.nsView, view.sendText(text) else {
             throw ControlError(
                 code: .noSurface,
@@ -982,7 +995,17 @@ final class ControlHandler {
                 action: "use a name such as ctrl+c, escape, up or ctrl+\\ (see `macterm pane key --help`)"
             )
         }
+        /// A keybind (`toggle_readonly` itself, search) and a copy-mode key
+        /// still work on a read-only surface: refuse only a key that would go
+        /// to the program.
+        func refuseIfReadOnly(_ pane: Pane) throws {
+            guard pane.isReadOnly, let view = pane.nsView,
+                  view.keyReachesProgram(keyCode: shortcut.keyCode, mods: shortcut.modifiers)
+            else { return }
+            throw Self.paneReadOnly
+        }
         if let target = widgetTarget(args) {
+            try refuseIfReadOnly(target.pane)
             guard let view = target.pane.nsView, view.sendKey(keyCode: shortcut.keyCode, mods: shortcut.modifiers) else {
                 throw Self.widgetNotLive
             }
@@ -990,6 +1013,7 @@ final class ControlHandler {
         }
         let (_, workspace) = try resolveWorkspace(args)
         let target = try resolvePane(args, in: workspace)
+        try refuseIfReadOnly(target.pane)
         guard let view = target.pane.nsView,
               view.sendKey(keyCode: shortcut.keyCode, mods: shortcut.modifiers)
         else {
@@ -1112,6 +1136,20 @@ final class ControlHandler {
             selectMode: view.copyMode.state.selectMode,
             selection: view.selectedText()
         ))
+    }
+
+    /// DEBUG-ONLY: toggle read-only on a pane with the `toggle_readonly`
+    /// binding action, as the Read-Only Mode command does. The e2e suite has
+    /// no keyboard. libghostty reports the change asynchronously: read it
+    /// back with `pane inspect`.
+    private func paneReadOnly(_ args: ControlArgs) throws -> ControlData {
+        let (_, workspace) = try resolveWorkspace(args)
+        let target = try resolvePane(args, in: workspace)
+        guard let view = target.pane.nsView, view.surface != nil else {
+            throw ControlError(code: .noSurface, message: "that pane has no surface")
+        }
+        view.sendBindingAction("toggle_readonly")
+        return ControlData(panes: [paneInfo(target.pane, in: target.tab, workspace: workspace)])
     }
 
     /// DEBUG-ONLY (#227): drive `TerminalTab.movePane(to:)` — the grab-handle

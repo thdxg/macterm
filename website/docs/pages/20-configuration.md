@@ -84,6 +84,18 @@ Each row has a **⋯** menu with two options. The options are available only whe
 
 **Copy Mode** (<kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>) is one of the rows. It starts a keyboard selection over the scrollback with the keys of Helix. See [Copy Mode](/docs/copy-mode).
 
+Macterm owns the splits, so Ghostty's split keybinds (`toggle_split_zoom`, `new_split`, `goto_split`, `resize_split` and `equalize_splits`) do nothing in Macterm. Bind the split commands under **Settings → Keymaps**.
+
+## Read-only panes
+
+A read-only pane sends no input to its program. To turn the mode on or off for the focused pane, run **Read-Only Mode** from the command palette. It has no keybind by default. To add one, go to **Settings → Keymaps**.
+
+A Ghostty `toggle_readonly` keybind also works. Do not set both, because then two keybinds do the same thing.
+
+A read-only pane shows a **Read-Only** pill in its top-right corner, first in the row of pane pills. Click the pill to turn read-only off.
+
+The mode also stops password autofill. `macterm pane run` and `macterm pane key` return the error `read_only` and type nothing. A Ghostty keybind still runs. See [Reading a pane](/docs/cli#reading-a-pane).
+
 ## Open files in your terminal editor
 
 Macterm can open text files in a terminal editor such as Helix or Neovim. macOS cannot make such an editor a default app on its own.

@@ -67,6 +67,13 @@ struct TerminalPane: View {
                 // pane is the only pane on screen, and one row cannot overlap
                 // itself.
                 HStack(spacing: 6) {
+                    // Read-Only pill: libghostty sends no input to the pty.
+                    // A click turns read-only off.
+                    if pane.isReadOnly {
+                        ModePill(title: "Read-Only", systemImage: "eye", help: "Turn off read-only") { [weak pane] in
+                            pane?.nsView?.sendBindingAction("toggle_readonly")
+                        }
+                    }
                     // Copy-mode pill: the pane's keys move the selection, not
                     // the shell. The Zoomed pill's chrome, since both are
                     // modes that one click leaves. Per pane, since the mode is.
@@ -403,6 +410,9 @@ private struct TerminalSurface: NSViewRepresentable {
         }
         view.onLinkHover = { [weak pane] url in
             pane?.hoverURL = url
+        }
+        view.onReadOnlyChange = { [weak pane] isReadOnly in
+            pane?.isReadOnly = isReadOnly
         }
         view.onOpenLink = { [weak appState, weak projectStore, weak pane] text in
             // The quick terminal's and desktop widgets' hosting views carry

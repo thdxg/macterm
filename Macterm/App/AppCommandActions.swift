@@ -209,6 +209,13 @@ extension AppCommand {
                   let view = pane.nsView
             else { return nil }
             return { view.copyMode.toggle() }
+        case .readOnlyMode:
+            // The state lives in libghostty, which enforces it: the command
+            // is the same `toggle_readonly` that a ghostty keybind sends.
+            guard let projectID, let pane = ctx.appState.focusedPane(for: projectID),
+                  let view = pane.nsView, view.surface != nil
+            else { return nil }
+            return { view.sendBindingAction("toggle_readonly") }
         case .openProject:
             return { _ = ctx.appState.openProject(store: ctx.projectStore) }
         case .newRemoteProject:

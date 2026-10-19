@@ -256,6 +256,9 @@ enum ControlErrorCode: String, Codable {
     case busy
     /// The target pane exists but its terminal surface hasn't been created.
     case noSurface = "no_surface"
+    /// The pane is read-only (ghostty's `toggle_readonly`), so libghostty
+    /// would drop the input. Refused before anything is sent.
+    case readOnly = "read_only"
     /// The client needs a newer protocol than this app speaks (its request's
     /// `v` exceeds `ControlProtocol.version`). Refused before any side effect.
     case unsupportedVersion = "unsupported_version"
@@ -513,6 +516,10 @@ struct ControlPaneInspect: Codable, Equatable {
     /// libghostty liveness flags.
     var processExited: Bool
     var needsConfirmQuit: Bool
+    /// The pane is read-only (`Pane.isReadOnly`): `pane.run` and `pane.key`
+    /// refuse it with `read_only`. Optional so that a newer client still
+    /// decodes the reply of an app from before the field.
+    var readOnly: Bool?
 }
 
 /// Terminal cell text read out of the core (`pane.dump`) via

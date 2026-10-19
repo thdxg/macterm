@@ -224,6 +224,15 @@ final class GhosttyCallbacks: @unchecked Sendable {
             }
             DispatchQueue.main.async { view.surfaceDidHoverLink(url) }
             return true
+        case GHOSTTY_ACTION_READONLY:
+            // ghostty's `toggle_readonly` (the Read-Only Mode command, or a
+            // user keybind). libghostty itself drops every key, text and paste
+            // to the pty while it is on. This is only the notice for the
+            // pane's pill and the control CLI's `read_only` refusal.
+            guard let view = surfaceView(from: target) else { return false }
+            let isReadOnly = action.action.readonly == GHOSTTY_READONLY_ON
+            DispatchQueue.main.async { view.surfaceDidChangeReadOnly(isReadOnly) }
+            return true
         case GHOSTTY_ACTION_SECURE_INPUT:
             // App target: the user's `toggle_secure_input` keybind. Surface
             // target: libghostty detected a password prompt — honored only

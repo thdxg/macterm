@@ -211,6 +211,16 @@ Copy mode is a keyboard cursor over the scrollback, in the model of Helix. The g
 - **`pane copy-mode enter|exit|status` is DEBUG only**, like `pane password`. `status` returns the selection text, so `scripts/e2e/test_copy_mode.py` reads no clipboard.
 - Not yet: the Vim keymap and its Settings picker, and prompt motions.
 
+### Read-only panes
+
+Read-only is a mode of libghostty. The control is the **Read-Only Mode** `AppCommand` (`HotkeyAction.readOnlyMode`, no default chord). It only sends `toggle_readonly` to the focused pane, so the state stays in libghostty. Every pane mode (Zoom Pane, Copy Mode, Read-Only Mode) is a Macterm command, so it is in the palette and in Keymaps.
+
+- **One trigger for each action.** A ghostty `toggle_readonly` keybind still works, because libghostty handles it before Macterm hears of it. It has no default, so nothing fires two times unless the user binds both. For the same reason, Macterm deliberately ignores ghostty's split actions (`toggle_split_zoom`, `new_split` and the others). libghostty binds some of them by default (`super+shift+enter`). If Macterm answered them, a user who rebinds Zoom Pane would still zoom on the old chord.
+- **libghostty enforces it**. While it is on, the surface drops every key, text and paste to the pty, and tells nobody. Keybinds still run. We verified this live for `pane run`, `pane key` and password autofill.
+- **The CLI refuses what libghostty would drop** (`read_only`, `ControlHandler.paneReadOnly`). Without this, both verbs said ok for text that the program never got. `pane run` always refuses. `pane key` refuses only a key that `GhosttyTerminalNSView.keyReachesProgram` says would go to the program: not a keybind (`ghostty_surface_key_is_binding`) and not a copy-mode key. `pane inspect` reports `readOnly`, optional on the wire so that a newer CLI reads an older app. `pane read-only` (DEBUG only) sends the binding action, because the e2e suite has no keyboard (`test_read_only.py`).
+- `GHOSTTY_ACTION_READONLY` is only the notice. `GhosttyCallbacks` sends it to `Pane.isReadOnly` (live only, never persisted). `Pane.destroySurface` clears it, because a new surface starts writable.
+- **The pill is the first `ModePill` in the trailing badge row of `TerminalPane`** (Read-Only, Copy Mode, Zoomed, then the lock). A click sends `toggle_readonly` to the surface.
+
 ### Search (`Macterm/Search/`)
 
 **Every search in the app goes through one engine**. This covers the palette and its screens. It covers the lists in Settings (Keymaps, saved passwords). It also covers the path mode of the palette. The path mode completes and does not search, but it uses the engine in the same way. Do not add a matcher of your own. The palette of a plugin must use the engine too.

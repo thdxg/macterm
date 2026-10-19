@@ -358,6 +358,11 @@ final class GhosttyTerminalNSView: NSView {
         onLinkHover?(url?.isEmpty == true ? nil : url)
     }
 
+    /// Forward a read-only change (`GHOSTTY_ACTION_READONLY`).
+    func surfaceDidChangeReadOnly(_ isReadOnly: Bool) {
+        onReadOnlyChange?(isReadOnly)
+    }
+
     /// Record the actual payload resolved for a libghostty clipboard request.
     /// Unlike key-code inference, this distinguishes real content from an
     /// empty/whitespace clipboard or a remapped Command-V binding.
@@ -446,6 +451,9 @@ final class GhosttyTerminalNSView: NSView {
     /// The link URL under the mouse (`GHOSTTY_ACTION_MOUSE_OVER_LINK`), nil
     /// when the pointer leaves it. Drives the pane's hover-URL banner.
     var onLinkHover: ((String?) -> Void)?
+    /// The surface went read-only or back (`GHOSTTY_ACTION_READONLY`).
+    /// Drives the pane's Read-Only pill.
+    var onReadOnlyChange: ((Bool) -> Void)?
     /// A clicked link (`GHOSTTY_ACTION_OPEN_URL` from the link regex), given
     /// first refusal: true means it was handled — a local file opened in its
     /// default app or the user's editor (`AppState.openClickedLink`) — and
@@ -2146,50 +2154,12 @@ extension GhosttyTerminalNSView {
         ) {
             clearCommandSubmissionEvidence()
         }
-        var m = GHOSTTY_MODS_NONE.rawValue
-        if flags.contains(.shift) { m |= GHOSTTY_MODS_SHIFT.rawValue }
-        if flags.contains(.control) { m |= GHOSTTY_MODS_CTRL.rawValue }
-        if flags.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
-        if flags.contains(.command) { m |= GHOSTTY_MODS_SUPER.rawValue }
-        let mods = ghostty_input_mods_e(rawValue: m)
-        // The unshifted codepoint lets libghostty compute the control byte for
-        // letter chords (`ctrl+c` → keycode 8, unshifted 0x63 → 0x03). Named /
-        // non-character keys leave it 0 and are driven by keycode alone.
-        let codepoint = Self.unshiftedCodepoint(forKeyCode: keyCode)
-        // Ctrl/Cmd/Option chords stay on the keycode-only path: ctrl encodes its
-        // control byte from `unshifted_codepoint`, cmd is never forwarded as
-        // text, and an Option chord's text is a layout translation this path has
-        // no NSEvent to read. Everything else — bare and shift-only printables —
-        // needs its literal character or libghostty emits nothing.
-        let text: String? = flags.isDisjoint(with: [.control, .command, .option])
-            ? HotkeyRegistry.printableText(forKeyCode: keyCode, shift: flags.contains(.shift))
-            : nil
-        // Shift produced the character, so it's consumed — same policy
-        // `keyDown` applies to its own translated text.
-        let consumedMods = text != nil && flags.contains(.shift)
-            ? ghostty_input_mods_e(rawValue: GHOSTTY_MODS_SHIFT.rawValue)
-            : GHOSTTY_MODS_NONE
         for action in [GHOSTTY_ACTION_PRESS, GHOSTTY_ACTION_RELEASE] {
-            var ke = ghostty_input_key_s()
-            ke.action = action
-            ke.keycode = UInt32(keyCode)
-            ke.mods = mods
-            ke.consumed_mods = consumedMods
-            ke.composing = false
-            ke.unshifted_codepoint = codepoint
-            // Text rides the press only, mirroring `keyUp`, which never carries
-            // it — a release that repeated the character would type it twice
-            // under any protocol that reports releases.
-            if action == GHOSTTY_ACTION_PRESS, let text {
-                text.withCString { ptr in
-                    ke.text = ptr
-                    _ = ghostty_surface_key(surface, ke)
-                }
-            } else {
-                ke.text = nil
+            Self.withChordEvent(keyCode: keyCode, mods: flags, action: action) { ke in
                 _ = ghostty_surface_key(surface, ke)
             }
         }
+        let text = Self.chordText(keyCode: keyCode, mods: flags)
         // Typed characters are the evidence a following `pane key return` reads
         // to tell a real submission from a bare Return (the AI-agent activity
         // heuristic), exactly as `keyDown` records its literal text.
@@ -2204,6 +2174,75 @@ extension GhosttyTerminalNSView {
             onCommandSubmitted?(consumeCommandSubmissionEvidence())
         }
         return true
+    }
+
+    /// Whether `sendKey` would give this chord to the program in the pane.
+    /// It does not when copy mode takes the key (every key but a ⌘ chord)
+    /// or when the chord is a keybind of the surface. libghostty still runs
+    /// keybinds on a read-only surface (`toggle_readonly` itself, search),
+    /// so the control CLI refuses only a key that this answers true for.
+    func keyReachesProgram(keyCode: UInt16, mods flags: NSEvent.ModifierFlags) -> Bool {
+        guard let surface else { return false }
+        if copyMode.isActive, !flags.contains(.command) { return false }
+        var isBinding = false
+        Self.withChordEvent(keyCode: keyCode, mods: flags, action: GHOSTTY_ACTION_PRESS) { ke in
+            isBinding = ghostty_surface_key_is_binding(surface, ke, nil)
+        }
+        return !isBinding
+    }
+
+    /// Build the libghostty key event for a CLI chord (`sendKey`) and pass it
+    /// to `body`. The event's text pointer is valid only inside `body`.
+    private static func withChordEvent(
+        keyCode: UInt16,
+        mods flags: NSEvent.ModifierFlags,
+        action: ghostty_input_action_e,
+        _ body: (ghostty_input_key_s) -> Void
+    ) {
+        var m = GHOSTTY_MODS_NONE.rawValue
+        if flags.contains(.shift) { m |= GHOSTTY_MODS_SHIFT.rawValue }
+        if flags.contains(.control) { m |= GHOSTTY_MODS_CTRL.rawValue }
+        if flags.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
+        if flags.contains(.command) { m |= GHOSTTY_MODS_SUPER.rawValue }
+        let text = chordText(keyCode: keyCode, mods: flags)
+        var ke = ghostty_input_key_s()
+        ke.action = action
+        ke.keycode = UInt32(keyCode)
+        ke.mods = ghostty_input_mods_e(rawValue: m)
+        // Shift produced the character, so it's consumed — same policy
+        // `keyDown` applies to its own translated text.
+        ke.consumed_mods = text != nil && flags.contains(.shift)
+            ? ghostty_input_mods_e(rawValue: GHOSTTY_MODS_SHIFT.rawValue)
+            : GHOSTTY_MODS_NONE
+        ke.composing = false
+        // The unshifted codepoint lets libghostty compute the control byte for
+        // letter chords (`ctrl+c` → keycode 8, unshifted 0x63 → 0x03). Named /
+        // non-character keys leave it 0 and are driven by keycode alone.
+        ke.unshifted_codepoint = unshiftedCodepoint(forKeyCode: keyCode)
+        // Text rides the press only, mirroring `keyUp`, which never carries
+        // it — a release that repeated the character would type it twice
+        // under any protocol that reports releases.
+        if action == GHOSTTY_ACTION_PRESS, let text {
+            text.withCString { ptr in
+                ke.text = ptr
+                body(ke)
+            }
+        } else {
+            ke.text = nil
+            body(ke)
+        }
+    }
+
+    /// The literal text of a CLI chord. Ctrl/Cmd/Option chords stay on the
+    /// keycode-only path: ctrl encodes its control byte from
+    /// `unshifted_codepoint`, cmd is never forwarded as text, and an Option
+    /// chord's text is a layout translation this path has no NSEvent to read.
+    /// Everything else — bare and shift-only printables — needs its literal
+    /// character or libghostty emits nothing.
+    private static func chordText(keyCode: UInt16, mods flags: NSEvent.ModifierFlags) -> String? {
+        flags.isDisjoint(with: [.control, .command, .option])
+            ? HotkeyRegistry.printableText(forKeyCode: keyCode, shift: flags.contains(.shift))
+            : nil
     }
 
     /// The unshifted Unicode scalar for a hardware key code, for the small set

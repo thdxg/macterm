@@ -521,6 +521,7 @@ struct PaneCommand: ParsableCommand {
         subs.append(Move.self)
         subs.append(Password.self)
         subs.append(CopyMode.self)
+        subs.append(ReadOnly.self)
         #endif
         return subs
     }
@@ -927,6 +928,22 @@ struct PaneCommand: ParsableCommand {
             var args = target.controlArgs()
             args.copyMode = action
             try runControlCommand(command: "pane.copy-mode", args: args, options: options)
+        }
+    }
+
+    /// DEBUG-only: ghostty's `toggle_readonly` as a verb, so the e2e suite
+    /// can make a pane read-only with no keyboard.
+    struct ReadOnly: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "read-only",
+            abstract: "[debug] Toggle read-only on a pane. Read the state with pane inspect."
+        )
+
+        @OptionGroup var target: PaneTarget
+        @OptionGroup var options: ConnectionOptions
+
+        func run() throws {
+            try runControlCommand(command: "pane.read-only", args: target.controlArgs(), options: options)
         }
     }
 
