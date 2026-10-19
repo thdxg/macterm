@@ -1093,13 +1093,6 @@ struct WorkspaceView: View {
                 if value == nil { dropResolution = nil }
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if zoomedPaneID != nil {
-                ZoomIndicator(onExit: { appState.toggleZoom(projectID: project.id) })
-                    .padding(8)
-                    .transition(.opacity)
-            }
-        }
     }
 
     private func renderedNode(of tab: TerminalTab, zoomedPaneID: UUID?) -> SplitNode {
@@ -1175,8 +1168,8 @@ struct WorkspaceView: View {
     }
 }
 
-/// Small badge shown in the corner of a tab while one of its panes is zoomed.
-/// Clicking it exits zoom and restores the full split layout.
+/// Small badge shown in the corner of the zoomed pane (`TerminalPane`'s
+/// badge row). Clicking it exits zoom and restores the full split layout.
 struct ZoomIndicator: View {
     let onExit: () -> Void
 
