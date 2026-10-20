@@ -56,7 +56,10 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # build-2026-10-19-2684fe9: + downstream patch 0014 (thdxg/ghostty#29): the
 # `selection_cursor:on|off` action draws the cursor on the head of the
 # selection, for copy mode. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-19-2684fe9}"
+# build-2026-10-20-0787827: downstream patch 0013 changed (thdxg/ghostty#30):
+# a repeated word_next moves on, as `w` does in Helix. Before, it stopped on
+# the blank before the next word. No C API change.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-20-0787827}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
