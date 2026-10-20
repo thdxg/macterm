@@ -80,6 +80,37 @@ def test_copy_mode_selects_lines_with_helix_keys(app, live_pane):
     wait_for(lambda: marker in (app.pane_text(pane=pane_id) or ""), message="the shell to type again")
 
 
+def test_a_repeated_w_moves_word_by_word(app, live_pane):
+    pane_id = live_pane["id"]
+    nonce = uuid.uuid4().hex[:8]
+    one, two, three = (f"{name}-{nonce}" for name in ("one", "two", "three"))
+    app.pane_run(f'/bin/sh -c "echo {one} {two} {three}"', pane=pane_id)
+    # The typed command holds the same words, so look for the output row.
+    line = f"{one} {two} {three}"
+    wait_for(lambda: any(row.startswith(line) for row in _rows(app, pane_id)), message="the word line")
+
+    rows = _rows(app, pane_id)
+    line_row = next(i for i, row in enumerate(rows) if row.startswith(line))
+    cursor_row = max(i for i, row in enumerate(rows) if row.strip())
+
+    _state(app, pane_id, "enter")
+    for _ in range(cursor_row - line_row):
+        _key(app, pane_id, "k")
+    _key(app, pane_id, "g")
+    _key(app, pane_id, "h")
+
+    # The first `w` selects the first word and the blank after it.
+    _key(app, pane_id, "w")
+    assert _state(app, pane_id)["selection"].strip() == one
+
+    # The second `w` moves on to the next word. It stopped on the blank
+    # before fork thdxg/ghostty#30.
+    _key(app, pane_id, "w")
+    assert _state(app, pane_id)["selection"].strip() == two
+
+    _state(app, pane_id, "exit")
+
+
 def test_escape_leaves_select_mode_before_copy_mode(app, live_pane):
     pane_id = live_pane["id"]
     state = _state(app, pane_id, "enter")
