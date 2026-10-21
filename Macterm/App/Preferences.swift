@@ -1199,7 +1199,7 @@ final class Preferences {
             "macterm.toolbar.tabSwitcherVisibility", default: TabSwitcherVisibility.whenMultiple
         )
         static let tabSwitcherPosition = PreferenceStorageKey("macterm.toolbar.tabSwitcherPosition", default: TabSwitcherPosition.trailing)
-        static let copyModeKeymap = PreferenceStorageKey("macterm.copyMode.keymap", default: CopyModeKeymap.helix)
+        static let copyModeKeymap = PreferenceStorageKey("macterm.copyMode.keymap", default: CopyModeKeymap.vim)
 
         static let loadsDefaultGhosttyConfigFiles = "macterm.ghostty.loadsDefaultConfigFiles"
         static let customGhosttyConfigPaths = "macterm.ghostty.customConfigPaths"

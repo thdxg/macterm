@@ -48,6 +48,7 @@
 - **Save and restore layouts**: the tabs, splits and commands of a project in one YAML file.
 - **Control CLI**: scripts and coding agents control Macterm with the `macterm` command.
 - **Tab switcher**: hold the recent-tab keybind to pick a tab from live previews.
+- **Copy mode**: move through the scrollback and select text with the keys of Vim or Helix.
 - **Animations**: scrolling, splits and the cursor glide into place.
 - **Quick terminal**: a drop-down terminal over any app, with a global keybind.
 - **Desktop widgets**: a terminal on your desktop, in the grid and shape of the macOS widgets.

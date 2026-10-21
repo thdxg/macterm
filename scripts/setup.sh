@@ -66,7 +66,11 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # build-2026-10-21-b8d644c: + downstream patch 0016 (thdxg/ghostty#32): a
 # plain click moves the cursor of copy mode to the cell under the pointer,
 # instead of clearing the selection. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-b8d644c}"
+# build-2026-10-21-731a782: + downstream patch 0017 (thdxg/ghostty#33, #34): the
+# `select_word:next|end|prev` action selects what a Helix word motion moves
+# over, as Helix does, and the word motions of move_selection and
+# extend_selection stop where the cursor of Helix stops. No C API change.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-731a782}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
