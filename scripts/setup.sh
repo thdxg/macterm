@@ -59,7 +59,11 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # build-2026-10-20-0787827: downstream patch 0013 changed (thdxg/ghostty#30):
 # a repeated word_next moves on, as `w` does in Helix. Before, it stopped on
 # the blank before the next word. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-20-0787827}"
+# build-2026-10-21-475091c: + downstream patch 0015 (thdxg/ghostty#31): the
+# selection primitives of the Vim keymap of copy mode —
+# `move_selection:next_word_start`, `select_line_bounds` and
+# `selection_rectangle:on|off`. No C API change.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-475091c}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
