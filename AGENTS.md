@@ -196,7 +196,7 @@ A pane that asks for a password gets a native `NSPopover` at the cursor (`Passwo
 - **Never** add a CLI verb, an App Intent or a log line that carries a secret. Any process in a pane can call `macterm`.
   - Autofill Password is an `AppCommand` (default ⌥⌘F). Its action is nil unless the focused pane is at a saved prompt. As for every chord with a nil action, `isAppShortcut` then swallows it in `keyDown`. It does nothing, and it does not reach libghostty (which has no default on `super+alt+f`).
 
-### Copy mode (fork patches 0013, 0014 and 0015)
+### Copy mode (fork patches 0013 to 0016)
 
 Copy mode is a keyboard cursor over the scrollback, in the model of Helix. The grammar for users is in `website/docs/pages/42-copy-mode.md`. The **terminal's selection is the cursor**: its end is the head that the motions move, its start is the anchor.
 
@@ -210,6 +210,7 @@ Copy mode is a keyboard cursor over the scrollback, in the model of Helix. The g
 - **Every badge of a pane is one row in its trailing corner** (`TerminalPane`, the `topTrailing` overlay): from the left, Read-Only, Copy Mode, Zoomed, then the secure-input lock. The Zoomed pill moved there from the tab's own overlay in `WorkspaceView`: a zoomed pane is the only pane on screen, so the corner is the same, and one row cannot overlap itself. The quick terminal's zoomed pane got the pill with the move.
 - **Copy Mode** is an `AppCommand` (`HotkeyAction.copyMode`, default ⌘⇧Space, `MactermKeybind.copyMode`). Its action is nil without a focused pane with a view.
 - **`pane copy-mode enter|exit|status` is DEBUG only**, like `pane password`. `status` returns the selection text, so `scripts/e2e/test_copy_mode.py` reads no clipboard. `enter --keymap helix|vim` names the keymap, so the suite drives both without a change of the setting.
+- **A click moves the cursor: fork patch 0016** (`0016-selection-click.patch`). While `flags.selection_cursor` is on, a plain left click puts a one-cell selection at the cell under the pointer instead of clearing the selection, which sent the drawn cursor back to the prompt. Shift-click, double click and triple click are unchanged, the rectangle flag of a block selection stays, and copy-on-select skips that one-cell cursor on release. Nothing on the Macterm side: the keymap state does not hold a position.
 - Not yet: prompt motions.
 
 ### Read-only panes

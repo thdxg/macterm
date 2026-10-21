@@ -77,7 +77,7 @@ A number before a motion repeats it.
 | <kbd>Esc</kbd> | Leave visual mode, then leave copy mode |
 | <kbd>q</kbd> | Leave copy mode |
 
-The mouse still works. A drag makes a selection, and the next motion continues from it.
+The mouse still works. A click moves the cursor to the cell under the pointer, a drag makes a selection, and the next motion continues from there.
 
 ## The keybind
 

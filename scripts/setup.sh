@@ -63,7 +63,10 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # selection primitives of the Vim keymap of copy mode —
 # `move_selection:next_word_start`, `select_line_bounds` and
 # `selection_rectangle:on|off`. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-475091c}"
+# build-2026-10-21-b8d644c: + downstream patch 0016 (thdxg/ghostty#32): a
+# plain click moves the cursor of copy mode to the cell under the pointer,
+# instead of clearing the selection. No C API change.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-b8d644c}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
