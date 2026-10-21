@@ -37,8 +37,8 @@ struct QuitConfirmationView: View {
                     Text("Quit \(appDisplayName)?")
                         .font(.system(size: 13, weight: .bold))
                     Text(rows.count == 1
-                        ? "1 process is still running. Quit anyway?"
-                        : "\(rows.count) processes are still running. Quit anyway?")
+                        ? String(localized: "1 process is still running. Quit anyway?")
+                        : String(localized: "\(rows.count) processes are still running. Quit anyway?"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -79,7 +79,7 @@ enum QuitConfirmation {
             backing: .buffered,
             defer: false
         )
-        window.title = "Quit \(appDisplayName)"
+        window.title = String(localized: "Quit \(appDisplayName)")
         window.isReleasedWhenClosed = false
         window.center()
 

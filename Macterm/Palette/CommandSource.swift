@@ -13,13 +13,24 @@ struct CommandSource: PaletteSource {
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
         let query = SearchQuery(query)
         return allItems(context).compactMap { item in
-            guard let match = Search.match(query, fields: [item.title]) else { return nil }
+            // A command also matches by its English title, so `split` finds
+            // its row under any language. The shown title stays the first
+            // field: it ranks first and takes the highlights.
+            var fields = [item.title]
+            if let english = Self.englishTitles[item.title], english != item.title { fields.append(english) }
+            guard let match = Search.match(query, fields: fields) else { return nil }
             // Carry every field forward (notably `isEnabled`) so a disabled
             // hint row stays muted/unselectable when it matches a search — a
             // hand-copied initializer would silently reset it to the default.
             return item.with(match)
         }
     }
+
+    /// The English title of each command, by the title the palette shows.
+    private static let englishTitles = Dictionary(
+        AppCommand.allCases.map { ($0.title, $0.englishTitle) },
+        uniquingKeysWith: { first, _ in first }
+    )
 
     func emptyItems(context: PaletteContext) -> [PaletteItem]? {
         allItems(context)
@@ -62,7 +73,7 @@ struct CommandSource: PaletteSource {
                 id: "palette:\(entry.id)",
                 title: entry.pill.title,
                 subtitle: unavailable ?? entry.description,
-                category: AppCommand.Category.palettes.rawValue,
+                category: AppCommand.Category.palettes.title,
                 keybind: symbols.isEmpty ? nil : HotkeyRegistry.displayString(for: chord),
                 keybindSymbols: symbols.isEmpty ? nil : symbols,
                 score: 0,
@@ -93,7 +104,7 @@ struct CommandSource: PaletteSource {
             return PaletteItem(
                 title: command.title,
                 subtitle: hint,
-                category: command.category.rawValue,
+                category: command.category.title,
                 score: 0,
                 isEnabled: false,
                 icon: command.paletteScope?.pill.icon,
@@ -117,7 +128,7 @@ struct CommandSource: PaletteSource {
             // A palette screen says what it lists, as a custom palette's
             // `description:` does.
             subtitle: command.paletteSubtitle(in: commandCtx) ?? command.paletteScope?.summary,
-            category: command.category.rawValue,
+            category: command.category.title,
             keybind: command.hotkeyAction.flatMap(keybindDisplay),
             keybindSymbols: command.hotkeyAction.flatMap(keybindSymbols),
             score: 0,
@@ -130,8 +141,7 @@ struct CommandSource: PaletteSource {
 
     private func keybindDisplay(_ action: HotkeyAction) -> String? {
         let raw = HotkeyRegistry.selectedShortcutString(for: action)
-        let display = HotkeyRegistry.displayString(for: raw)
-        return (display == "Disabled" || display == "None") ? nil : display
+        return HotkeyRegistry.isUnbound(raw) ? nil : HotkeyRegistry.displayString(for: raw)
     }
 
     private func keybindSymbols(_ action: HotkeyAction) -> [String]? {

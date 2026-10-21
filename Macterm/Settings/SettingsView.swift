@@ -4,7 +4,8 @@ import SwiftUI
 
 /// The panes of the settings window, in sidebar order. Titles are the
 /// user-visible sidebar labels — Title Case, matching the macOS convention the
-/// rest of the app's menus follow.
+/// rest of the app's menus follow. The raw value is an identifier; `title` is
+/// the label in the user's language.
 private enum SettingsPane: String, CaseIterable, Identifiable {
     case general = "General"
     case projects = "Projects"
@@ -18,7 +19,21 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case updates = "Updates"
 
     var id: String { rawValue }
-    var title: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: String(localized: "General", comment: "Settings pane")
+        case .projects: String(localized: "Projects", comment: "Settings pane")
+        case .appearance: String(localized: "Appearance", comment: "Settings pane")
+        case .animations: String(localized: "Animations", comment: "Settings pane")
+        case .quickTerminal: String(localized: "Quick Terminal", comment: "Settings pane")
+        case .widgets: String(localized: "Widgets", comment: "Settings pane")
+        case .passwords: String(localized: "Password Manager", comment: "Settings pane")
+        case .extensions: String(localized: "Extensions", comment: "Settings pane")
+        case .keymaps: String(localized: "Keymaps", comment: "Settings pane")
+        case .updates: String(localized: "Updates", comment: "Settings pane")
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -435,7 +450,7 @@ private struct SettingsSlider: View {
     static let labelWidth: CGFloat = 126
     static let valueWidth: CGFloat = 52
 
-    let label: String
+    let label: LocalizedStringKey
     @Binding var value: Double
     let range: ClosedRange<Double>
     var step: Double?
@@ -513,7 +528,8 @@ private struct HostWindowReader: NSViewRepresentable {
 private func anchorName(_ value: Double, zero: String, one: String) -> String {
     if abs(value) < 0.001 { return zero }
     if abs(value - 1) < 0.001 { return one }
-    if abs(value - 0.5) < 0.001 { return "Center" }
+    if abs(value - 0.5) <
+        0.001 { return String(localized: "Center", comment: "Settings → Quick Terminal: the middle of a position slider") }
     return "\(Int((value * 100).rounded()))%"
 }
 
@@ -534,9 +550,11 @@ private struct GeneralSettings: View {
     /// (very long home/TMPDIR paths push past sun_path).
     private var zmxUnavailableReason: String {
         if !ZmxClient.live.isBundled() {
-            return "Session persistence is off. The zmx binary is not in the app. Run `mise run setup` and build again."
+            return String(localized: "Session persistence is off. The zmx binary is not in the app. Run `mise run setup` and build again.")
         }
-        return "Session persistence is off. The zmx socket path of this system is too long. Terminals run with no persistence."
+        return String(
+            localized: "Session persistence is off. The zmx socket path of this system is too long. Terminals run with no persistence."
+        )
     }
 
     /// Ghostty's default locations form an optional base layer. Custom files
@@ -642,10 +660,10 @@ private struct GeneralSettings: View {
                 .onChange(of: textFilePlacement) { _, v in
                     Preferences.shared.textFilePlacement = v
                 }
-                Text(
-                    "You can set Macterm as the default app to open text files from Finder. "
-                        + "It opens them in the editor that $VISUAL or $EDITOR names in your shell."
-                )
+                Text("""
+                You can set Macterm as the default app to open text files from Finder. \
+                It opens them in the editor that $VISUAL or $EDITOR names in your shell.
+                """)
                 .settingsCaption()
             } header: {
                 DocsSectionHeader("Opening Text Files", docs: .textFiles)
@@ -662,11 +680,8 @@ private struct GeneralSettings: View {
                     .onChange(of: reconnectRemotePanes) { _, v in
                         Preferences.shared.reconnectRemotePanes = v
                     }
-                Text(
-                    "Connects a disconnected pane to its session again when you wake "
-                        + "the Mac or return to the app."
-                )
-                .settingsCaption()
+                Text("Connects a disconnected pane to its session again when you wake the Mac or return to the app.")
+                    .settingsCaption()
             } header: {
                 DocsSectionHeader("Remote Projects", docs: .remoteProjects)
             }
@@ -777,7 +792,7 @@ private struct GeneralSettings: View {
             TextField(
                 "Config file path",
                 text: $editingCustomGhosttyConfigText,
-                prompt: Text("~/.config/ghostty/config")
+                prompt: Text(verbatim: "~/.config/ghostty/config")
             )
             .labelsHidden()
             .textFieldStyle(.roundedBorder)
@@ -812,9 +827,9 @@ private struct GeneralSettings: View {
         let expanded = (path as NSString).expandingTildeInPath
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory) else {
-            return "File not found."
+            return String(localized: "File not found.")
         }
-        return isDirectory.boolValue ? "Not a file." : nil
+        return isDirectory.boolValue ? String(localized: "Not a file.") : nil
     }
 
     /// Expanded forms of every path already in the list, so adds and edits
@@ -903,7 +918,7 @@ private struct GeneralSettings: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.showsHiddenFiles = true
-        panel.prompt = "Add"
+        panel.prompt = String(localized: "Add", comment: "Settings → General: the button of the open panel that adds Ghostty config files")
         // Start beside the last selected file instead of at a generic location.
         if let lastPath = customGhosttyConfigPaths.last {
             let expandedPath = (lastPath as NSString).expandingTildeInPath
@@ -1049,11 +1064,10 @@ private struct FullDiskAccessBanner: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Full Disk Access is off")
                         .font(.system(size: 13, weight: .semibold))
-                    Text(
-                        "macOS asks for each folder when a terminal command reads "
-                            + "Documents, Downloads or other protected places. "
-                            + "One Full Disk Access grant covers all of them."
-                    )
+                    Text("""
+                    macOS asks for each folder when a terminal command reads Documents, Downloads \
+                    or other protected places. One Full Disk Access grant covers all of them.
+                    """)
                     .settingsCaption()
                     if let url = FullDiskAccess.settingsURL {
                         Button("Open System Settings…") {
@@ -1287,7 +1301,7 @@ private struct AppearanceSettings: View {
 
                 Picker("Recent tabs limit", selection: $recentTabCandidates) {
                     ForEach(Preferences.recentTabCandidateRange, id: \.self) { count in
-                        Text("\(count)").tag(count)
+                        Text(verbatim: "\(count)").tag(count)
                     }
                     Text("Unlimited").tag(Preferences.unlimitedRecentTabCandidates)
                 }
@@ -1345,11 +1359,11 @@ private struct AppearanceSettings: View {
     private var blurFootnote: String? {
         if backgroundOpacity >= 0.999 {
             return WindowAppearance.glassSupported
-                ? "Blur and Liquid Glass work only when opacity is below 100%."
-                : "Blur works only when opacity is below 100%."
+                ? String(localized: "Blur and Liquid Glass work only when opacity is below 100%.")
+                : String(localized: "Blur works only when opacity is below 100%.")
         }
         if liquidGlass { return nil }
-        return "Set blur to 0 to turn it off."
+        return String(localized: "Set blur to 0 to turn it off.")
     }
 
     @ViewBuilder
@@ -1493,7 +1507,13 @@ private struct QuickTerminalSettings: View {
                     value: $fixedX,
                     range: 0 ... 1,
                     step: 0.05,
-                    display: { anchorName($0, zero: "Left", one: "Right") }
+                    display: {
+                        anchorName(
+                            $0,
+                            zero: String(localized: "Left", comment: "Settings → Quick Terminal: the left end of the X position slider"),
+                            one: String(localized: "Right", comment: "Settings → Quick Terminal: the right end of the X position slider")
+                        )
+                    }
                 )
                 .onChange(of: fixedX) { _, v in
                     Preferences.shared.quickTerminalFixedX = v
@@ -1505,7 +1525,13 @@ private struct QuickTerminalSettings: View {
                     value: $fixedYTopDown,
                     range: 0 ... 1,
                     step: 0.05,
-                    display: { anchorName($0, zero: "Top", one: "Bottom") }
+                    display: {
+                        anchorName(
+                            $0,
+                            zero: String(localized: "Top", comment: "Settings → Quick Terminal: the top end of the Y position slider"),
+                            one: String(localized: "Bottom", comment: "Settings → Quick Terminal: the bottom end of the Y position slider")
+                        )
+                    }
                 )
                 .onChange(of: fixedYTopDown) { _, v in
                     Preferences.shared.quickTerminalFixedY = 1 - v
@@ -1599,19 +1625,25 @@ private struct KeymapSettings: View {
 
     /// Short enough for a menu item; the precise rule lives in the item's
     /// tooltip rather than a description line under every row.
-    fileprivate static let passthroughTitle = "Pass to TUI"
-    fileprivate static let passthroughHelp = """
+    fileprivate static let passthroughTitle = String(
+        localized: "Pass to TUI",
+        comment: "Settings → Keymaps: the row menu item that gives a chord to a full-screen program"
+    )
+    fileprivate static let passthroughHelp = String(localized: """
     When one of the programs listed at the top of this tab is running in the \
     focused pane, send this chord to it instead of running the action. \
     Everywhere else the action still runs.
-    """
+    """)
 
-    fileprivate static let globalTitle = "Global"
-    fileprivate static let globalHelp = """
+    fileprivate static let globalTitle = String(
+        localized: "Global",
+        comment: "Settings → Keymaps: the row menu item that registers a chord system-wide"
+    )
+    fileprivate static let globalHelp = String(localized: """
     Register this chord system-wide, so it runs the action while another app \
     is frontmost. The chord then belongs to Macterm everywhere — no other app \
     can see it, and it can no longer pass through to a program.
-    """
+    """)
 
     /// What every row reads, built once for each render of the body: a scan
     /// of every binding for each row parsed about ten thousand chords, and a
@@ -1661,7 +1693,7 @@ private struct KeymapSettings: View {
         Search.rank(appState.customPalettes.entries, by: query) { entry in
             let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
             let shortcut = values[rowID] ?? "disabled"
-            var fields = [entry.pill.title, AppCommand.Category.palettes.rawValue, HotkeyRegistry.displayString(for: shortcut)]
+            var fields = [entry.pill.title, AppCommand.Category.palettes.title, HotkeyRegistry.displayString(for: shortcut)]
             if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
             return fields
         }
@@ -1745,7 +1777,7 @@ private struct KeymapSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(actionsByCategory, id: \.category) { group in
-                    sectionLabel(group.category.rawValue)
+                    sectionLabel(group.category.title)
                     ForEach(group.actions) { action in
                         hotkeyRow(action, context: context)
                     }
@@ -1827,11 +1859,8 @@ private struct KeymapSettings: View {
                 ),
                 prompt: Text(verbatim: "nvim, hx")
             )
-            Text(
-                "A keybind with Pass to TUI selected goes to these programs. The action does not run. "
-                    + "Separate the names with commas."
-            )
-            .settingsCaption()
+            Text("A keybind with Pass to TUI selected goes to these programs. The action does not run. Separate the names with commas.")
+                .settingsCaption()
         } header: {
             DocsSectionHeader("Passthrough Programs", docs: .keybinds)
         }
@@ -1956,7 +1985,9 @@ private struct KeymapSettings: View {
                     HotkeyCaptureState.shared.isCapturing = true
                     capturingActionID = rowID
                 } label: {
-                    Text(isCapturing ? "Press keys..." : HotkeyRegistry.displayString(for: values[rowID] ?? "disabled"))
+                    Text(verbatim: isCapturing
+                        ? String(localized: "Press keys...", comment: "Settings → Keymaps: the keybind button while it records a chord")
+                        : HotkeyRegistry.displayString(for: values[rowID] ?? "disabled"))
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle((isUnmapped && !isCapturing) ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2058,7 +2089,7 @@ private struct KeymapRowMenu: NSViewRepresentable {
     /// the symbol lookup was a measurable part of opening it.
     private static let faceImage = NSImage(
         systemSymbolName: "ellipsis.circle",
-        accessibilityDescription: "Keybind options"
+        accessibilityDescription: String(localized: "Keybind options")
     )
 
     func makeNSView(context: Context) -> NSPopUpButton {
@@ -2066,7 +2097,7 @@ private struct KeymapRowMenu: NSViewRepresentable {
         button.isBordered = false
         button.imagePosition = .imageOnly
         (button.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
-        button.toolTip = "Keybind options"
+        button.toolTip = String(localized: "Keybind options")
         // A pull-down shows its first item as the button and never lists it.
         let face = NSMenuItem()
         face.image = Self.faceImage

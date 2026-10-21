@@ -873,9 +873,9 @@ struct WelcomeView: View {
 
     private var shortcuts: [(HotkeyAction, String)] {
         [
-            (.openProject, "Open a project"),
-            (.toggleCommandPalette, "Command palette"),
-            (.toggleSidebar, "Toggle sidebar"),
+            (.openProject, String(localized: "Open a project")),
+            (.toggleCommandPalette, String(localized: "Command palette")),
+            (.toggleSidebar, String(localized: "Toggle sidebar")),
         ]
     }
 
@@ -947,10 +947,10 @@ struct EmptyProjectView: View {
 
     private var shortcuts: [(HotkeyAction, String)] {
         [
-            (.newTab, "New tab"),
-            (.openProject, "Open another project"),
-            (.toggleCommandPalette, "Command palette"),
-            (.toggleSidebar, "Toggle sidebar"),
+            (.newTab, String(localized: "New tab")),
+            (.openProject, String(localized: "Open another project")),
+            (.toggleCommandPalette, String(localized: "Command palette")),
+            (.toggleSidebar, String(localized: "Toggle sidebar")),
         ]
     }
 
@@ -1175,9 +1175,9 @@ struct ZoomIndicator: View {
 
     var body: some View {
         ModePill(
-            title: "Zoomed",
+            title: String(localized: "Zoomed"),
             systemImage: "arrow.down.right.and.arrow.up.left",
-            help: "Exit zoom",
+            help: String(localized: "Exit zoom"),
             action: onExit
         )
     }

@@ -896,7 +896,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let project = projectsByID[ws.projectID]
             let projectName = ws.projectID == PinnedTabs.projectID
                 ? PinnedTabs.displayName
-                : (project?.name ?? "Project")
+                : (project?.name ?? String(localized: "Project", comment: "Quit dialog: a project with no name"))
             for tab in ws.tabs {
                 for pane in tab.splitRoot.allPanes() where pane.needsConfirmClose {
                     // The adaptive poll may be slow or fully paused here (e.g.
@@ -915,7 +915,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for widget in appState?.desktopWidgets ?? [] {
             for pane in widget.tab.splitRoot.allPanes() where pane.needsConfirmClose {
                 pane.refreshForegroundProcess(trackExecution: false)
-                rows.append(RunningProcessRow(projectName: "Desktop Widget", processName: pane.processTitle))
+                rows.append(RunningProcessRow(projectName: String(localized: "Desktop Widget"), processName: pane.processTitle))
             }
         }
         return rows
@@ -930,7 +930,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for pane in qtTab.splitRoot.allPanes() where pane.needsConfirmClose {
             pane.refreshForegroundProcess(trackExecution: false)
             rows.append(RunningProcessRow(
-                projectName: "Quick Terminal",
+                projectName: String(localized: "Quick Terminal"),
                 processName: pane.processTitle
             ))
         }

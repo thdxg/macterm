@@ -433,11 +433,11 @@ final class QuickTerminalSplitState {
     private func presentConfirmAlert() {
         QuickTerminalService.shared.suppressAutoHide = true
         let alert = NSAlert()
-        alert.messageText = "Close running process?"
-        alert.informativeText = "A process is still running in this pane. Close the pane anyway?"
+        alert.messageText = String(localized: "Close running process?")
+        alert.informativeText = String(localized: "A process is still running in this pane. Close the pane anyway?")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Close"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
             confirmPendingClose()

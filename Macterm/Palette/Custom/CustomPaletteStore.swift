@@ -88,13 +88,13 @@ final class CustomPaletteStore {
         /// "A will be deleted.", "A and B will be deleted.", and for more
         /// than two, "A, B, and 3 more features will be deleted."
         static func deletionMessage(_ names: [String]) -> String {
-            let subject = switch names.count {
+            switch names.count {
             case 0,
-                 1: names.first ?? ""
-            case 2: "\(names[0]) and \(names[1])"
-            default: "\(names[0]), \(names[1]), and \(names.count - 2) more feature\(names.count == 3 ? "" : "s")"
+                 1: String(localized: "\(names.first ?? "") will be deleted.")
+            case 2: String(localized: "\(names[0]) and \(names[1]) will be deleted.")
+            case 3: String(localized: "\(names[0]), \(names[1]), and 1 more feature will be deleted.")
+            default: String(localized: "\(names[0]), \(names[1]), and \(names.count - 2) more features will be deleted.")
             }
-            return "\(subject) will be deleted."
         }
 
         var name: String { (try? manifest.get())?.name ?? id }
@@ -179,7 +179,12 @@ final class CustomPaletteStore {
                 source: ExtensionSource.read(in: folder),
                 files: ExtensionSource.files(in: folder),
                 problem: problem,
-                features: palettes.map { "\($0.pill.title) palette" }
+                features: palettes.map { palette in
+                    String(
+                        localized: "\(palette.pill.title) palette",
+                        comment: "A feature of an extension, named in the prompt to uninstall it"
+                    )
+                }
             )
         }
         entries = extensionEntries

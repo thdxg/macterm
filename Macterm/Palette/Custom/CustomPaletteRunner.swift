@@ -263,14 +263,19 @@ enum CustomPaletteRequirements {
 
     /// "This palette needs kubectl and jq, which aren't on your PATH."
     static func message(missing: [String]) -> String {
-        let names = switch missing.count {
+        switch missing.count {
         case 0,
-             1: missing.joined()
-        case 2: missing.joined(separator: " and ")
-        default: missing.dropLast().joined(separator: ", ") + " and " + (missing.last ?? "")
+             1: String(localized: "This palette needs \(missing.joined()), which is not on your PATH.")
+        case 2: String(localized: "This palette needs \(missing[0]) and \(missing[1]), which are not on your PATH.")
+        default:
+            String(
+                localized: """
+                This palette needs \(missing.dropLast().joined(separator: ", ")) and \(missing.last ?? ""), \
+                which are not on your PATH.
+                """,
+                comment: "The first value is a list of program names with commas between them"
+            )
         }
-        let verb = missing.count == 1 ? "is not" : "are not"
-        return "This palette needs \(names), which \(verb) on your PATH."
     }
 }
 

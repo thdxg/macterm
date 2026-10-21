@@ -260,7 +260,10 @@ struct CustomPaletteCondition: Equatable {
     let command: String
     let reason: String
 
-    static let defaultReason = "Unavailable"
+    static let defaultReason = String(
+        localized: "Unavailable",
+        comment: "Command palette: the reason on a muted extension row whose check failed and whose file names no reason"
+    )
 
     init(command: String, reason: String) {
         self.command = command
@@ -323,12 +326,12 @@ struct CustomPaletteAlt: Equatable {
 
     static func defaultTitle(_ action: CustomPaletteAction) -> String {
         switch action {
-        case .run(nil, .tab, _): "Open in a New Tab"
-        case .run(nil, .split, _): "Open in a Split"
-        case .run(_, .tab, _): "Run in a New Tab"
-        case .run(_, .split, _): "Run in a Split"
-        case .copy: "Copy"
-        case .open: "Open"
+        case .run(nil, .tab, _): String(localized: "Open in a New Tab")
+        case .run(nil, .split, _): String(localized: "Open in a Split")
+        case .run(_, .tab, _): String(localized: "Run in a New Tab")
+        case .run(_, .split, _): String(localized: "Run in a Split")
+        case .copy: String(localized: "Copy", comment: "Command palette: the Option action of an extension row that copies text")
+        case .open: String(localized: "Open", comment: "Command palette: the Option action of an extension row that opens a URL or file")
         }
     }
 }

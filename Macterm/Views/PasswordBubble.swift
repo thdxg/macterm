@@ -222,7 +222,7 @@ private struct PasswordBubbleView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func header(symbol: String, title: String, detail: String) -> some View {
+    private func header(symbol: String, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbol)
                 .font(.title2)

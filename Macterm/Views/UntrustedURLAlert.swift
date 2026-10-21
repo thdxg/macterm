@@ -8,18 +8,19 @@ import AppKit
 enum UntrustedURLAlert {
     static func presentConfirmation(for url: URL, displayString: String, in window: NSWindow?) {
         let workspace = NSWorkspace.shared
-        let handler = workspace.urlForApplication(toOpen: url)
-            .map { "\u{201C}\($0.deletingPathExtension().lastPathComponent)\u{201D}" }
-            ?? "the default application"
+        let handler = workspace.urlForApplication(toOpen: url)?.deletingPathExtension().lastPathComponent
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.icon = NSImage(named: NSImage.cautionName)
-        alert.messageText = "Open Link from Terminal Output?"
-        alert.informativeText = "This link opens in \(handler). "
-            + "Continue only if you know and trust the destination."
+        alert.messageText = String(localized: "Open Link from Terminal Output?")
+        alert.informativeText = if let handler {
+            String(localized: "This link opens in \u{201C}\(handler)\u{201D}. Continue only if you know and trust the destination.")
+        } else {
+            String(localized: "This link opens in the default application. Continue only if you know and trust the destination.")
+        }
         alert.accessoryView = targetView(displayString)
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Open Link")
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.addButton(withTitle: String(localized: "Open Link"))
 
         present(alert, in: window) { response in
             // Cancel is deliberately the default button.
@@ -32,11 +33,11 @@ enum UntrustedURLAlert {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.icon = NSImage(named: NSImage.cautionName)
-        alert.messageText = "\(appDisplayName) Blocked This Link"
+        alert.messageText = String(localized: "\(appDisplayName) Blocked This Link")
         alert.informativeText = reason.message
         alert.accessoryView = targetView(displayString)
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Copy Link")
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.addButton(withTitle: String(localized: "Copy Link"))
 
         present(alert, in: window) { response in
             // A blocked target never reaches Launch Services. Copying the

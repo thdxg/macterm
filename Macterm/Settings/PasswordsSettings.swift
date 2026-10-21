@@ -102,10 +102,14 @@ struct PasswordsSettings: View {
         }
     }
 
-    private static let enabledCaption = "Offers to save a password that you type at a password prompt after it works, "
-        + "and fills it in the next time that the prompt appears."
-    private static let authenticationCaption = "Asks for Touch ID, or your login password, before it fills in "
-        + "or shows a saved password. Macterm stores passwords in your login keychain."
+    private static let enabledCaption = String(localized: """
+    Offers to save a password that you type at a password prompt after it works, \
+    and fills it in the next time that the prompt appears.
+    """)
+    private static let authenticationCaption = String(localized: """
+    Asks for Touch ID, or your login password, before it fills in \
+    or shows a saved password. Macterm stores passwords in your login keychain.
+    """)
 
     private var filtered: [SavedPassword] {
         vault.entries(matching: query)
@@ -115,7 +119,10 @@ struct PasswordsSettings: View {
     private func copy(_ entry: SavedPassword) {
         Task { @MainActor in
             let authorized = await PasswordAuthenticator.shared.authorize(
-                reason: "copy the password for “\(entry.id.title)”"
+                reason: String(
+                    localized: "copy the password for “\(entry.id.title)”",
+                    comment: "Touch ID reason. It completes the system sentence “Macterm is trying to …”."
+                )
             )
             guard authorized, let secret = vault.password(for: entry.id) else { return }
             PasswordClipboard.copy(secret)
@@ -149,11 +156,11 @@ private struct SavedPasswordRow: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(entry.id.displayCommand ?? "Any command")
+                Text(verbatim: entry.id.displayCommand ?? String(localized: "Any command"))
                     .font(.body.monospaced())
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(entry.id.isOnDemandOnly ? "Filled from the command palette only" : entry.id.prompt)
+                Text(verbatim: entry.id.isOnDemandOnly ? String(localized: "Filled from the command palette only") : entry.id.prompt)
                     .font(entry.id.isOnDemandOnly ? .caption : .caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

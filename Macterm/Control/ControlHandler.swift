@@ -1307,7 +1307,7 @@ final class ControlHandler {
             // and its panes just changed, so confirm it the same way the
             // palette command does — `layout save` already toasts, and the two
             // verbs shouldn't disagree about whether a CLI apply is visible.
-            appState.presentToast("Layout applied")
+            appState.presentToast(String(localized: "Layout applied"))
         }
         return ControlData()
     }

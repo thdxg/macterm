@@ -46,9 +46,9 @@ struct NewRemoteProjectSheet: View {
             Text("New Remote Project")
                 .font(.headline)
             Form {
-                TextField("Name", text: $name, prompt: Text(host.isEmpty ? "devbox" : host))
+                TextField("Name", text: $name, prompt: Text(verbatim: host.isEmpty ? "devbox" : host))
                 TextField("Host", text: $host, prompt: Text("[user@]host or ssh alias"))
-                TextField("Directory", text: $directory, prompt: Text("~/dev/api"))
+                TextField("Directory", text: $directory, prompt: Text(verbatim: "~/dev/api"))
                 TextField("zmx path (optional)", text: $zmxPath, prompt: Text("find it in PATH"))
             }
             .textFieldStyle(.roundedBorder)
@@ -58,11 +58,11 @@ struct NewRemoteProjectSheet: View {
                     .foregroundStyle(MactermTheme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(
-                "Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there. "
-                    + "If Macterm cannot find it, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. "
-                    + "Port, identity and ControlMaster come from ~/.ssh/config."
-            )
+            Text("""
+            Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there. \
+            If Macterm cannot find it, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. \
+            Port, identity and ControlMaster come from ~/.ssh/config.
+            """)
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

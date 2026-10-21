@@ -21,7 +21,7 @@ enum DockMenu {
     /// reopening it).
     static func title(for command: AppCommand) -> String {
         switch command {
-        case .openProject: "New Project…"
+        case .openProject: String(localized: "New Project…")
         default: command.title
         }
     }

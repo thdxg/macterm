@@ -73,7 +73,10 @@ private struct WidgetRow: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(widget.name ?? "Widget \(index)")
+                Text(verbatim: widget.name ?? String(
+                    localized: "Widget \(index)",
+                    comment: "Settings → Widgets: the name of a widget that has no name"
+                ))
                 Text(subtitle)
                     .settingsCaption()
                     .lineLimit(1)

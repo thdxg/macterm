@@ -328,7 +328,10 @@ final class GhosttyApp {
         let result = reloadConfig()
         var lines: [String] = []
         for missing in result.missingUserConfigPaths {
-            lines.append("File not found: \(missing)")
+            lines.append(String(
+                localized: "File not found: \(missing)",
+                comment: "A line of the Ghostty config alert. The argument is a file path."
+            ))
         }
         if !result.diagnostics.isEmpty {
             lines.append(contentsOf: result.diagnostics)
@@ -337,15 +340,15 @@ final class GhosttyApp {
 
         let alert = NSAlert()
         alert.messageText = if result.missingUserConfigPaths.count > 1 {
-            "Ghostty configs not found"
+            String(localized: "Ghostty configs not found")
         } else if result.missingUserConfigPaths.count == 1 {
-            "Ghostty config not found"
+            String(localized: "Ghostty config not found")
         } else {
-            "Issues in your Ghostty config"
+            String(localized: "Issues in your Ghostty config")
         }
         alert.informativeText = lines.joined(separator: "\n\n")
         alert.alertStyle = result.missingUserConfigPaths.isEmpty ? .informational : .warning
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: String(localized: "OK"))
         alert.runModal()
         return false
     }

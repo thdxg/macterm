@@ -25,14 +25,14 @@ enum ProjectColor: String, CaseIterable, Codable {
     /// Title Case, matching the menu convention.
     var displayName: String {
         switch self {
-        case .red: "Red"
-        case .orange: "Orange"
-        case .yellow: "Yellow"
-        case .green: "Green"
-        case .cyan: "Cyan"
-        case .blue: "Blue"
-        case .purple: "Purple"
-        case .pink: "Pink"
+        case .red: String(localized: "Red", comment: "Project color tag")
+        case .orange: String(localized: "Orange", comment: "Project color tag")
+        case .yellow: String(localized: "Yellow", comment: "Project color tag")
+        case .green: String(localized: "Green", comment: "Project color tag")
+        case .cyan: String(localized: "Cyan", comment: "Project color tag")
+        case .blue: String(localized: "Blue", comment: "Project color tag")
+        case .purple: String(localized: "Purple", comment: "Project color tag")
+        case .pink: String(localized: "Pink", comment: "Project color tag")
         }
     }
 }

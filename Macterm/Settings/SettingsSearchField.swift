@@ -6,11 +6,11 @@ import SwiftUI
 /// put it in the Settings window's toolbar.
 struct SettingsSearchField: NSViewRepresentable {
     @Binding var text: String
-    let prompt: String
+    let prompt: LocalizedStringResource
 
     func makeNSView(context: Context) -> NSSearchField {
         let field = NSSearchField()
-        field.placeholderString = prompt
+        field.placeholderString = String(localized: prompt)
         field.sendsSearchStringImmediately = true
         field.delegate = context.coordinator
         return field

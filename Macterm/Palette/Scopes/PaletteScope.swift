@@ -31,8 +31,8 @@ enum PaletteScopeID: Hashable {
     /// opens it, so the row reads as a place to go rather than a thing to do.
     var pill: PalettePill {
         switch self {
-        case .passwords: PalettePill(title: "Password Manager", icon: "key.fill")
-        case .files: PalettePill(title: "Files", icon: "doc.text.magnifyingglass")
+        case .passwords: PalettePill(title: AppCommand.passwordManager.title, icon: "key.fill")
+        case .files: PalettePill(title: AppCommand.files.title, icon: "doc.text.magnifyingglass")
         case let .custom(target): target.pill
         }
     }
@@ -43,8 +43,8 @@ enum PaletteScopeID: Hashable {
     /// Palettes.
     var summary: String {
         switch self {
-        case .passwords: "Manage passwords"
-        case .files: "Browse files and folders in this project"
+        case .passwords: String(localized: "Manage passwords")
+        case .files: String(localized: "Browse files and folders in this project")
         case .custom: ""
         }
     }

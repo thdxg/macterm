@@ -1307,7 +1307,8 @@ final class AppState {
         registry: paletteRegistry,
         store: customPalettes
     ) { [weak self] names in
-        self?.presentToast(names.count == 1 ? "Extension updated" : "Extensions updated", subtitle: names.joined(separator: ", "))
+        let title = names.count == 1 ? String(localized: "Extension updated") : String(localized: "Extensions updated")
+        self?.presentToast(title, subtitle: names.joined(separator: ", "))
     }
 
     /// The exact text of our last `widgets.yaml` write — anything else on
@@ -2375,7 +2376,7 @@ final class AppState {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = "Select a project folder"
+        panel.message = String(localized: "Select a project folder")
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         // Always create: picking a folder that already backs a project makes a
         // second, independent project for it, not a jump to the existing one.
@@ -2411,7 +2412,7 @@ final class AppState {
         guard !PinnedTabs.reservesName(name) else {
             present(.notice(
                 .reservedProjectName,
-                title: "Cannot rename project",
+                title: String(localized: "Cannot rename project"),
                 message: PinnedTabs.reservedNameMessage,
                 host: .mainWindow
             ))
@@ -2565,9 +2566,12 @@ final class AppState {
         }
         present(PendingDialog(
             kind: .unloadProject(projectID),
-            title: "Unload project with running processes?",
-            message: "A process is still running in this project. Unloading ends every process in its tabs. Macterm keeps the layout.",
-            confirmTitle: "Unload",
+            title: String(localized: "Unload project with running processes?"),
+            message: String(localized: """
+            A process is still running in this project. Unloading ends every process in its tabs. \
+            Macterm keeps the layout.
+            """),
+            confirmTitle: String(localized: "Unload"),
             host: host
         ) { [weak self] in self?.unloadProject(projectID) })
     }
@@ -2582,9 +2586,9 @@ final class AppState {
         }
         present(PendingDialog(
             kind: .removeProject(projectID),
-            title: "Remove project with running processes?",
-            message: "A process is still running in this project. Removing it ends every process in its tabs.",
-            confirmTitle: "Remove",
+            title: String(localized: "Remove project with running processes?"),
+            message: String(localized: "A process is still running in this project. Removing it ends every process in its tabs."),
+            confirmTitle: String(localized: "Remove"),
             host: host,
             onConfirm: removal
         ))
@@ -2608,9 +2612,12 @@ final class AppState {
         }
         present(PendingDialog(
             kind: .removeSelection,
-            title: "Remove items with running processes?",
-            message: "A process is still running in one of the selected items. Removing them ends every process in their tabs.",
-            confirmTitle: "Remove",
+            title: String(localized: "Remove items with running processes?"),
+            message: String(localized: """
+            A process is still running in one of the selected items. \
+            Removing them ends every process in their tabs.
+            """),
+            confirmTitle: String(localized: "Remove"),
             host: .mainWindow,
             onConfirm: removal
         ))
@@ -2763,9 +2770,9 @@ final class AppState {
         }
         present(PendingDialog(
             kind: .closeTab(tabID: tabID, projectID: projectID),
-            title: "Close running processes?",
-            message: "A process is still running in this tab. Closing the tab ends it.",
-            confirmTitle: "Close",
+            title: String(localized: "Close running processes?"),
+            message: String(localized: "A process is still running in this tab. Closing the tab ends it."),
+            confirmTitle: String(localized: "Close"),
             host: .mainWindow
         ) { [weak self] in self?.closeTab(tabID, projectID: projectID) })
     }
@@ -3601,9 +3608,9 @@ final class AppState {
         }
         present(PendingDialog(
             kind: .closePane(paneID: paneID, projectID: projectID),
-            title: "Close running process?",
-            message: "A process is still running in this pane. Close the pane anyway?",
-            confirmTitle: "Close",
+            title: String(localized: "Close running process?"),
+            message: String(localized: "A process is still running in this pane. Close the pane anyway?"),
+            confirmTitle: String(localized: "Close"),
             host: .mainWindow
         ) { [weak self] in self?.closePane(paneID, projectID: projectID) })
     }
@@ -3650,16 +3657,16 @@ final class AppState {
             let projectID = project.id
             present(PendingDialog(
                 kind: .applyLayout(projectID: projectID),
-                title: "Apply layout?",
-                message: "If you apply this layout, Macterm closes some panes and ends the processes in them.",
-                confirmTitle: "Apply",
+                title: String(localized: "Apply layout?"),
+                message: String(localized: "If you apply this layout, Macterm closes some panes and ends the processes in them."),
+                confirmTitle: String(localized: "Apply"),
                 host: host
             ) { [weak self] in
                 guard let self else { return }
                 executeLayoutPlan(plan, projectID: projectID)
                 // Always user-invoked: reaching here means they clicked through
                 // the destructive-apply confirmation.
-                presentToast("Layout applied")
+                presentToast(String(localized: "Layout applied"))
             })
         } else {
             executeLayoutPlan(plan, projectID: project.id)
@@ -3673,14 +3680,14 @@ final class AppState {
     /// caller is user-invoked, so a clean apply gets a success toast.
     func applyLayoutPresentingError(_ project: Project, host: DialogHost = .mainWindow) {
         if let error = applyLayout(project: project, host: host) {
-            presentLayoutError(verb: "apply", message: error.localizedDescription, host: host)
+            presentLayoutError(verb: "apply", message: LayoutFileError.displayMessage(for: error), host: host)
             return
         }
         // A destructive plan is staged, not applied — its confirmation dialog is
         // up, and the toast belongs to whatever the user chooses there
         // (`confirmPendingDialog`), not to merely opening the prompt.
         if !isLayoutApplyPending {
-            presentToast("Layout applied")
+            presentToast(String(localized: "Layout applied"))
         }
     }
 
@@ -3741,7 +3748,7 @@ final class AppState {
             // bare filename doesn't tell them where to go look. `~` keeps it
             // readable (and keeps the username out of a screenshot).
             if pendingDialog == nil {
-                presentToast("Layout saved", subtitle: ProjectPath.homeContracted(target.path))
+                presentToast(String(localized: "Layout saved"), subtitle: ProjectPath.homeContracted(target.path))
             }
             return nil
         } catch {
@@ -3786,10 +3793,12 @@ final class AppState {
         let names = strays.map { "“\($0.url.lastPathComponent)”" }.joined(separator: ", ")
         presentLayoutError(
             verb: "save",
-            message: "Macterm saved the layout to “\(target.lastPathComponent)”. These other files also "
-                + "declare the path of this project, and Macterm ignores them: \(names). "
-                + "Remove them or merge them in the projects folder.",
-            title: "Layout saved with a conflict",
+            message: String(localized: """
+            Macterm saved the layout to “\(target.lastPathComponent)”. These other files also \
+            declare the path of this project, and Macterm ignores them: \(names). \
+            Remove them or merge them in the projects folder.
+            """),
+            title: String(localized: "Layout saved with a conflict"),
             host: host
         )
         return true
@@ -3818,11 +3827,12 @@ final class AppState {
         let names = colliding.map { "“\($0.name)”" }.joined(separator: ", ")
         presentLayoutError(
             verb: "save",
-            message: "\(names) share this folder and the layout file "
-                + "“\(target.lastPathComponent)” with this project. Your save replaced their "
-                + "layout. Each save replaces the one before. Give the projects different names to "
-                + "keep separate layout files.",
-            title: "Layout file shared with another project",
+            message: String(localized: """
+            \(names) share this folder and the layout file “\(target.lastPathComponent)” with this project. \
+            Your save replaced their layout. Each save replaces the one before. \
+            Give the projects different names to keep separate layout files.
+            """),
+            title: String(localized: "Layout file shared with another project"),
             host: host
         )
     }
@@ -3834,7 +3844,7 @@ final class AppState {
         host: DialogHost = .mainWindow
     ) {
         if let error = saveLayout(project: project, siblingProjects: siblingProjects, host: host) {
-            presentLayoutError(verb: "save", message: error.localizedDescription, host: host)
+            presentLayoutError(verb: "save", message: LayoutFileError.displayMessage(for: error), host: host)
         }
     }
 

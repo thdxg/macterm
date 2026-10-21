@@ -92,11 +92,19 @@ extension AppState {
         return false
     }
 
-    /// Raise a layout notice: `title` defaults to "Couldn't <verb> layout".
+    /// Raise a layout notice: `title` defaults to "Cannot <verb> layout".
+    /// `verb` is an identifier (`apply`, `save`); the title is a whole
+    /// sentence for each one, so that a translation does not put an English
+    /// verb into it.
     func presentLayoutError(verb: String, message: String, title: String? = nil, host: DialogHost = .mainWindow) {
+        let defaultTitle = switch verb {
+        case "apply": String(localized: "Cannot apply layout")
+        case "save": String(localized: "Cannot save layout")
+        default: String(localized: "Cannot \(verb) layout")
+        }
         present(.notice(
             .layoutError(verb: verb),
-            title: title ?? "Cannot \(verb) layout",
+            title: title ?? defaultTitle,
             message: message,
             host: host
         ))

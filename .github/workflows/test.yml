@@ -35,6 +35,7 @@ jobs:
               - ".github/actions/select-xcode/**"
               - "Macterm/Info.plist"
               - "Macterm/Macterm.entitlements"
+              - "Macterm/*.xcstrings"
             # The extensions anyone can install: the unit tests read each
             # through the validator; nothing else needs to run for them.
             extensions:
@@ -159,6 +160,12 @@ jobs:
 
       - name: Test
         run: mise run test --verbose
+
+      # The test build wrote the strings of every Swift file. The catalog
+      # must hold exactly those strings, so a new UI string cannot ship
+      # without its entry (and its translations).
+      - name: String Catalog
+        run: mise run strings --check --no-build --verbose
 
       # Saves under the key resolved at restore time, NOT a re-evaluated
       # expression — `**/*.swift` would otherwise pick up whatever the build

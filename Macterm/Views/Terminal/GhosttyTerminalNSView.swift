@@ -32,7 +32,7 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func accessibilityHelp() -> String? {
-        "Terminal content area"
+        String(localized: "Terminal content area")
     }
 
     override func accessibilityValue() -> Any? {
@@ -1773,32 +1773,32 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     private func contextMenu() -> NSMenu {
-        let menu = NSMenu(title: "Terminal")
+        let menu = NSMenu(title: String(localized: "Terminal", comment: "Title of the right-click menu of a pane"))
         // Auto-enabling would override every `isEnabled` below: with no
         // `validateMenuItem` on the target, AppKit enables any item whose target
         // responds to its action, which is what kept Paste enabled on an empty
         // pasteboard. Off, the explicit states (Paste, Jump to Top/Bottom) hold.
         menu.autoenablesItems = false
         if let surface, ghostty_surface_has_selection(surface) {
-            let copy = NSMenuItem(title: "Copy", action: #selector(handleCopy), keyEquivalent: "")
+            let copy = NSMenuItem(title: String(localized: "Copy"), action: #selector(handleCopy), keyEquivalent: "")
             copy.target = self
             menu.addItem(copy)
         }
-        let paste = NSMenuItem(title: "Paste", action: #selector(handlePaste), keyEquivalent: "")
+        let paste = NSMenuItem(title: String(localized: "Paste"), action: #selector(handlePaste), keyEquivalent: "")
         paste.target = self
         paste.isEnabled = GhosttyCallbacks.hasPasteboardContent()
         menu.addItem(paste)
         menu.addItem(.separator())
         addScrollNavigationItems(menu)
         menu.addItem(.separator())
-        addSplitItem(menu, "Split Right", .horizontal, .second)
-        addSplitItem(menu, "Split Left", .horizontal, .first)
-        addSplitItem(menu, "Split Down", .vertical, .second)
-        addSplitItem(menu, "Split Up", .vertical, .first)
+        addSplitItem(menu, String(localized: "Split Right"), .horizontal, .second)
+        addSplitItem(menu, String(localized: "Split Left"), .horizontal, .first)
+        addSplitItem(menu, String(localized: "Split Down"), .vertical, .second)
+        addSplitItem(menu, String(localized: "Split Up"), .vertical, .first)
         if onZoomRequest != nil {
             menu.addItem(.separator())
             let zoom = NSMenuItem(
-                title: isZoomed ? "Restore Pane" : "Zoom Pane",
+                title: isZoomed ? String(localized: "Restore Pane") : String(localized: "Zoom Pane"),
                 action: #selector(handleZoom),
                 keyEquivalent: ""
             )
@@ -1819,12 +1819,12 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     private func addScrollNavigationItems(_ menu: NSMenu) {
-        let jumpToTop = NSMenuItem(title: "Jump to Top", action: #selector(handleJumpToTop), keyEquivalent: "")
+        let jumpToTop = NSMenuItem(title: String(localized: "Jump to Top"), action: #selector(handleJumpToTop), keyEquivalent: "")
         jumpToTop.target = self
         jumpToTop.isEnabled = lastScrollbarSnapshot?.canScrollUp ?? false
         menu.addItem(jumpToTop)
 
-        let jumpToBottom = NSMenuItem(title: "Jump to Bottom", action: #selector(handleJumpToBottom), keyEquivalent: "")
+        let jumpToBottom = NSMenuItem(title: String(localized: "Jump to Bottom"), action: #selector(handleJumpToBottom), keyEquivalent: "")
         jumpToBottom.target = self
         jumpToBottom.isEnabled = lastScrollbarSnapshot?.canScrollDown ?? false
         menu.addItem(jumpToBottom)

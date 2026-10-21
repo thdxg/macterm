@@ -62,11 +62,11 @@ struct DocsLink: View {
 /// A Settings section header with the docs button trailing — after any
 /// controls the section already carries there, like an add menu.
 struct DocsSectionHeader<Accessory: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let docs: DocsSection
     let accessory: Accessory
 
-    init(_ title: String, docs: DocsSection, @ViewBuilder accessory: () -> Accessory) {
+    init(_ title: LocalizedStringKey, docs: DocsSection, @ViewBuilder accessory: () -> Accessory) {
         self.title = title
         self.docs = docs
         self.accessory = accessory()
@@ -92,7 +92,7 @@ struct DocsSectionHeader<Accessory: View>: View {
 }
 
 extension DocsSectionHeader where Accessory == EmptyView {
-    init(_ title: String, docs: DocsSection) {
+    init(_ title: LocalizedStringKey, docs: DocsSection) {
         self.init(title, docs: docs) { EmptyView() }
     }
 }

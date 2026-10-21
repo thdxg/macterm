@@ -1,0 +1,6621 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "\"%@\" is not a key combination. Try ctrl+c, escape or up." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”은(는) 키 조합이 아닙니다. ctrl+c, escape 또는 up을 사용해 보십시오."
+          }
+        }
+      }
+    },
+    "\"%@\" is not an action in %@ now." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "\"%1$@\" is not an action in %2$@ now."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%1$@”은(는) 현재 %2$@의 동작이 아닙니다."
+          }
+        }
+      }
+    },
+    "%@" : {
+      "shouldTranslate" : false
+    },
+    "%@\n\nPinned-tab auto-save is paused so your edits are not overwritten. Fix the file, or delete it, to start auto-save again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@\n\n편집한 내용을 덮어쓰지 않도록 고정된 탭 자동 저장을 일시 정지했습니다. 자동 저장을 다시 시작하려면 파일을 수정하거나 삭제하십시오."
+          }
+        }
+      }
+    },
+    "%@\n\nWidget auto-save is paused so your edits are not overwritten. Fix the file, or delete it, to start auto-save again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@\n\n편집한 내용을 덮어쓰지 않도록 위젯 자동 저장을 일시 정지했습니다. 자동 저장을 다시 시작하려면 파일을 수정하거나 삭제하십시오."
+          }
+        }
+      }
+    },
+    "%@ Blocked This Link" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 이 링크를 차단함"
+          }
+        }
+      }
+    },
+    "%@ and %@ will be deleted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ and %2$@ will be deleted."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 및 %@이(가) 삭제됩니다."
+          }
+        }
+      }
+    },
+    "%@ cannot find that item now." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 지금 해당 항목을 찾을 수 없습니다."
+          }
+        }
+      }
+    },
+    "%@ does not allow Shortcuts. Set macos-shortcuts = allow in your Ghostty config." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 단축어를 허용하지 않습니다. Ghostty 설정에서 macos-shortcuts = allow를 설정하십시오."
+          }
+        }
+      }
+    },
+    "%@ is missing the `path: %@` marker. Macterm does not touch it" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is missing the `path: %2$@` marker. Macterm does not touch it"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 `path: %@` 표시가 없습니다. Macterm은 이 파일을 변경하지 않습니다"
+          }
+        }
+      }
+    },
+    "%@ is not available" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 사용할 수 없음"
+          }
+        }
+      }
+    },
+    "%@ is not installed." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 설치되어 있지 않습니다."
+          }
+        }
+      }
+    },
+    "%@ is not ready yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 아직 준비되지 않았습니다."
+          }
+        }
+      }
+    },
+    "%@ is not valid YAML: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is not valid YAML: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@은(는) 올바른 YAML이 아닙니다: %@"
+          }
+        }
+      }
+    },
+    "%@ is not valid: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is not valid: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 올바르지 않습니다: %@"
+          }
+        }
+      }
+    },
+    "%@ palette" : {
+      "comment" : "A feature of an extension, named in the prompt to uninstall it",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 팔레트"
+          }
+        }
+      }
+    },
+    "%@ share this folder and the layout file “%@” with this project. Your save replaced their layout. Each save replaces the one before. Give the projects different names to keep separate layout files." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ share this folder and the layout file “%2$@” with this project. Your save replaced their layout. Each save replaces the one before. Give the projects different names to keep separate layout files."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 프로젝트가 이 프로젝트와 폴더 및 레이아웃 파일 “%2$@”을(를) 공유합니다. 저장하면서 해당 프로젝트의 레이아웃을 대체했습니다. 저장할 때마다 이전 레이아웃이 대체됩니다. 레이아웃 파일을 따로 유지하려면 프로젝트 이름을 다르게 지정하십시오."
+          }
+        }
+      }
+    },
+    "%@ will be deleted." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 삭제됩니다."
+          }
+        }
+      }
+    },
+    "%@ — %lld tabs" : {
+      "comment" : "Settings → Layouts: a layout file's path and tab count",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$lld tabs"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 탭 %lld개"
+          }
+        }
+      }
+    },
+    "%@ — 1 tab" : {
+      "comment" : "Settings → Layouts: a layout file's path and tab count",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 탭 1개"
+          }
+        }
+      }
+    },
+    "%@ — any command" : {
+      "comment" : "Command palette, Password Manager: a saved password that answers its prompt for every command",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 모든 명령"
+          }
+        }
+      }
+    },
+    "%@ — no tabs" : {
+      "comment" : "Settings → Layouts: a layout file's path and tab count",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 탭 없음"
+          }
+        }
+      }
+    },
+    "%@, %@, and %lld more features will be deleted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@, and %3$lld more features will be deleted."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, %@ 및 기능 %lld개가 더 삭제됩니다."
+          }
+        }
+      }
+    },
+    "%@, %@, and 1 more feature will be deleted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@, and 1 more feature will be deleted."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, %@ 및 기능 1개가 더 삭제됩니다."
+          }
+        }
+      }
+    },
+    "%@s" : {
+      "comment" : "A duration in seconds, as in 4.2s",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@초"
+          }
+        }
+      }
+    },
+    "%lld panes" : {
+      "comment" : "Sidebar title of a tab with four or more panes",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 %lld개"
+          }
+        }
+      }
+    },
+    "%lld processes are still running. Quit anyway?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로세스 %lld개가 아직 실행 중입니다. 그래도 종료하시겠습니까?"
+          }
+        }
+      }
+    },
+    "%lldh %lldm" : {
+      "comment" : "A duration in hours and minutes, as in 2h 5m",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldh %2$lldm"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld시간 %lld분"
+          }
+        }
+      }
+    },
+    "%lldm %llds" : {
+      "comment" : "A duration in minutes and seconds, as in 3m 20s",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldm %2$llds"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld분 %lld초"
+          }
+        }
+      }
+    },
+    "1 process is still running. Quit anyway?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로세스 1개가 아직 실행 중입니다. 그래도 종료하시겠습니까?"
+          }
+        }
+      }
+    },
+    "A build of every commit that passes CI, and stable releases. Tip builds get no release tests." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI를 통과한 모든 커밋의 빌드와 안정 버전을 받습니다. Tip 빌드는 릴리스 테스트를 거치지 않습니다."
+          }
+        }
+      }
+    },
+    "A fading streak follows the cursor on larger moves." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커서가 크게 이동하면 사라지는 자취가 따라갑니다."
+          }
+        }
+      }
+    },
+    "A key combination such as ctrl+c, escape or up, or a single printable key such as j." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ctrl+c, escape 또는 up 같은 키 조합, 또는 j 같은 출력 가능한 키 하나입니다."
+          }
+        }
+      }
+    },
+    "A keybind with Pass to TUI selected goes to these programs. The action does not run. Separate the names with commas." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TUI로 전달이 선택된 단축키는 이 프로그램으로 전달됩니다. 동작은 실행되지 않습니다. 이름은 쉼표로 구분하십시오."
+          }
+        }
+      }
+    },
+    "A pane there has a running program. Close it in %@ instead." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "해당 위치의 페인에서 프로그램이 실행 중입니다. 대신 %@에서 닫으십시오."
+          }
+        }
+      }
+    },
+    "A password is already saved for that command and prompt." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "해당 명령과 프롬프트에 대한 암호가 이미 저장되어 있습니다."
+          }
+        }
+      }
+    },
+    "A password is saved for this prompt." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프롬프트에 대해 저장된 암호가 있습니다."
+          }
+        }
+      }
+    },
+    "A process is still running in one of the selected items. Removing them ends every process in their tabs." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 항목 중 하나에서 프로세스가 아직 실행 중입니다. 제거하면 탭의 모든 프로세스가 종료됩니다."
+          }
+        }
+      }
+    },
+    "A process is still running in this pane. Close the pane anyway?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 페인에서 프로세스가 아직 실행 중입니다. 그래도 페인을 닫으시겠습니까?"
+          }
+        }
+      }
+    },
+    "A process is still running in this project. Removing it ends every process in its tabs." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트에서 프로세스가 아직 실행 중입니다. 제거하면 탭의 모든 프로세스가 종료됩니다."
+          }
+        }
+      }
+    },
+    "A process is still running in this project. Unloading ends every process in its tabs. Macterm keeps the layout." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트에서 프로세스가 아직 실행 중입니다. 언로드하면 탭의 모든 프로세스가 종료됩니다. Macterm은 레이아웃을 유지합니다."
+          }
+        }
+      }
+    },
+    "A process is still running in this tab. Closing the tab ends it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 탭에서 프로세스가 아직 실행 중입니다. 탭을 닫으면 프로세스가 종료됩니다."
+          }
+        }
+      }
+    },
+    "A process is still running in this widget. Remove the widget anyway?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 위젯에서 프로세스가 아직 실행 중입니다. 그래도 위젯을 제거하시겠습니까?"
+          }
+        }
+      }
+    },
+    "A remote project cannot open a directory on this Mac" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 프로젝트는 이 Mac의 디렉토리를 열 수 없습니다"
+          }
+        }
+      }
+    },
+    "A shortcut wants to run an action in %@. It can create projects and tabs. It can also type into your terminals." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축어가 %@에서 동작을 실행하려고 합니다. 단축어는 프로젝트와 탭을 만들 수 있습니다. 터미널에 입력할 수도 있습니다."
+          }
+        }
+      }
+    },
+    "A terminal program wants to replace your clipboard with:\n\n%@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널 프로그램이 클립보드의 내용을 다음으로 바꾸려고 합니다:\n\n%@"
+          }
+        }
+      }
+    },
+    "A widget is a terminal on your desktop." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯은 데스크탑에 있는 터미널입니다."
+          }
+        }
+      }
+    },
+    "Action" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "동작"
+          }
+        }
+      }
+    },
+    "Adaptive background" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "적응형 배경"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "comment" : "Command palette, Password Manager: the section of rows that add a password\nSettings → General: the button of the open panel that adds Ghostty config files",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가"
+          }
+        }
+      }
+    },
+    "Add Config File" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 파일 추가"
+          }
+        }
+      }
+    },
+    "Add Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 추가"
+          }
+        }
+      }
+    },
+    "Add Password for Command: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령에 대한 암호 추가: %@"
+          }
+        }
+      }
+    },
+    "Add Password…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 추가…"
+          }
+        }
+      }
+    },
+    "Add Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 추가"
+          }
+        }
+      }
+    },
+    "Add a config file" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 파일 추가"
+          }
+        }
+      }
+    },
+    "Add a folder as a project and select it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더를 프로젝트로 추가하고 선택합니다."
+          }
+        }
+      }
+    },
+    "Add a password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 추가"
+          }
+        }
+      }
+    },
+    "Add a project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 추가"
+          }
+        }
+      }
+    },
+    "Add a project to move the tab into first" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭을 옮길 프로젝트를 먼저 추가하십시오"
+          }
+        }
+      }
+    },
+    "Add a widget at the center of the desktop" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 가운데에 위젯 추가"
+          }
+        }
+      }
+    },
+    "Add another project: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 프로젝트 추가: %@"
+          }
+        }
+      }
+    },
+    "Add remote project: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 프로젝트 추가: %@"
+          }
+        }
+      }
+    },
+    "All" : {
+      "comment" : "Settings → Extensions: the filter that shows every extension",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모두"
+          }
+        }
+      }
+    },
+    "Allow" : {
+      "comment" : "A value of the macos-shortcuts setting\nButton of the Shortcuts permission alert\nButton of the clipboard write alert",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "허용"
+          }
+        }
+      }
+    },
+    "Allow Screen Recording for Macterm in Privacy & Security" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "개인정보 보호 및 보안에서 Macterm의 화면 기록을 허용하십시오"
+          }
+        }
+      }
+    },
+    "Allow Shortcuts to control %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축어가 %@을(를) 제어하도록 허용하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Allow clipboard write?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클립보드 쓰기를 허용하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Always" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항상"
+          }
+        }
+      }
+    },
+    "An update is available. Click to install." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트를 사용할 수 있습니다. 클릭하여 설치하십시오."
+          }
+        }
+      }
+    },
+    "An update is ready. Click to restart Macterm and install it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트가 준비되었습니다. 클릭하면 Macterm을 재시작하고 업데이트를 설치합니다."
+          }
+        }
+      }
+    },
+    "Animate splits" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "분할 애니메이션"
+          }
+        }
+      }
+    },
+    "Animations" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "애니메이션"
+          }
+        }
+      }
+    },
+    "Any command" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 명령"
+          }
+        }
+      }
+    },
+    "Appearance" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모양"
+          }
+        }
+      }
+    },
+    "Apply" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "적용"
+          }
+        }
+      }
+    },
+    "Apply Layout" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 적용"
+          }
+        }
+      }
+    },
+    "Apply layout?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃을 적용하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Ask" : {
+      "comment" : "A value of the macos-shortcuts setting",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "묻기"
+          }
+        }
+      }
+    },
+    "Asks for Touch ID, or your login password, before it fills in or shows a saved password. Macterm stores passwords in your login keychain." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호를 입력하거나 표시하기 전에 Touch ID 또는 로그인 암호를 요청합니다. Macterm은 암호를 로그인 키체인에 저장합니다."
+          }
+        }
+      }
+    },
+    "Auto-assign project colors" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 색상 자동 지정"
+          }
+        }
+      }
+    },
+    "Auto-tile panes" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 자동 배치"
+          }
+        }
+      }
+    },
+    "Autofill" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 완성"
+          }
+        }
+      }
+    },
+    "Autofill Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 자동 완성"
+          }
+        }
+      }
+    },
+    "Automatic Updates" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 업데이트"
+          }
+        }
+      }
+    },
+    "Background SSH connections" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "백그라운드 SSH 연결"
+          }
+        }
+      }
+    },
+    "Background blur" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "배경 흐림 효과"
+          }
+        }
+      }
+    },
+    "Background opacity" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "배경 불투명도"
+          }
+        }
+      }
+    },
+    "Beta" : {
+      "comment" : "Update channel",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "베타"
+          }
+        }
+      }
+    },
+    "Betas of the next release and stable releases." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 릴리스의 베타와 안정 버전을 받습니다."
+          }
+        }
+      }
+    },
+    "Blue" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파란색"
+          }
+        }
+      }
+    },
+    "Blur and Liquid Glass work only when opacity is below 100%." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흐림 효과와 Liquid Glass는 불투명도가 100% 미만일 때만 작동합니다."
+          }
+        }
+      }
+    },
+    "Blur works only when opacity is below 100%." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흐림 효과는 불투명도가 100% 미만일 때만 작동합니다."
+          }
+        }
+      }
+    },
+    "Bottom" : {
+      "comment" : "Settings → Quick Terminal: the bottom end of the Y position slider",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아래"
+          }
+        }
+      }
+    },
+    "Browse files and folders in this project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트의 파일 및 폴더 탐색"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "취소"
+          }
+        }
+      }
+    },
+    "Cannot %@ layout" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 작업(%@)을 수행할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot apply layout" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃을 적용할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot be read by this version: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 버전에서 읽을 수 없음: %@"
+          }
+        }
+      }
+    },
+    "Cannot capture the palette" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "팔레트를 캡처할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot capture the pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 캡처할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot install %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cannot install %1$@: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 설치할 수 없음: %@"
+          }
+        }
+      }
+    },
+    "Cannot list %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 목록을 가져올 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot read %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 읽을 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot read the extensions of Macterm: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm의 확장 프로그램을 읽을 수 없음: %@"
+          }
+        }
+      }
+    },
+    "Cannot remove the layout file" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일을 제거할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot rename project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 이름을 변경할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot save layout" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃을 저장할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot save the screenshot" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크린샷을 저장할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot save to the keychain." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키체인에 저장할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Cannot uninstall %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cannot uninstall %1$@: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 제거할 수 없음: %@"
+          }
+        }
+      }
+    },
+    "Cannot unpin" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고정 해제할 수 없음"
+          }
+        }
+      }
+    },
+    "Cannot update %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cannot update %1$@: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 업데이트할 수 없음: %@"
+          }
+        }
+      }
+    },
+    "Capture Palette" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "팔레트 캡처"
+          }
+        }
+      }
+    },
+    "Capture Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 캡처"
+          }
+        }
+      }
+    },
+    "Center" : {
+      "comment" : "Settings → Quick Terminal: the middle of a position slider",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가운데"
+          }
+        }
+      }
+    },
+    "Change the order in the menu of a row. The order is the same as in the sidebar." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "행의 메뉴에서 순서를 변경합니다. 순서는 사이드바와 같습니다."
+          }
+        }
+      }
+    },
+    "Channel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "채널"
+          }
+        }
+      }
+    },
+    "Check for Update" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트 확인"
+          }
+        }
+      }
+    },
+    "Check for Updates Now" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금 업데이트 확인"
+          }
+        }
+      }
+    },
+    "Check for Updates…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트 확인…"
+          }
+        }
+      }
+    },
+    "Check the palette's file" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "팔레트의 파일을 확인하십시오"
+          }
+        }
+      }
+    },
+    "Checking %@…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 확인 중…"
+          }
+        }
+      }
+    },
+    "Choose Files…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 선택…"
+          }
+        }
+      }
+    },
+    "Clear" : {
+      "comment" : "Liquid glass style: transparent",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "투명"
+          }
+        }
+      }
+    },
+    "Click to work here" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "여기에서 작업하려면 클릭"
+          }
+        }
+      }
+    },
+    "Click, then press the keys. Press Delete to clear the keybind." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클릭한 다음 키를 누르십시오. 단축키를 지우려면 Delete를 누르십시오."
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "닫기"
+          }
+        }
+      }
+    },
+    "Close ${tab}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${tab} 닫기"
+          }
+        }
+      }
+    },
+    "Close %lld Tabs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 %lld개 닫기"
+          }
+        }
+      }
+    },
+    "Close Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 닫기"
+          }
+        }
+      }
+    },
+    "Close Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 닫기"
+          }
+        }
+      }
+    },
+    "Close Window" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "윈도우 닫기"
+          }
+        }
+      }
+    },
+    "Close a tab and end its sessions. If a program is running, the action fails." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭을 닫고 해당 세션을 종료합니다. 프로그램이 실행 중이면 동작이 실패합니다."
+          }
+        }
+      }
+    },
+    "Close running process?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중인 프로세스를 닫으시겠습니까?"
+          }
+        }
+      }
+    },
+    "Close running processes?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중인 프로세스를 닫으시겠습니까?"
+          }
+        }
+      }
+    },
+    "Cmd+1…%lld to switch tabs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cmd+1…%lld로 탭 전환"
+          }
+        }
+      }
+    },
+    "Color" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "색상"
+          }
+        }
+      }
+    },
+    "Command" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령"
+          }
+        }
+      }
+    },
+    "Command Finished" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령 완료"
+          }
+        }
+      }
+    },
+    "Command Palette" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령 팔레트"
+          }
+        }
+      }
+    },
+    "Command palette" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령 팔레트"
+          }
+        }
+      }
+    },
+    "Completed in %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 만에 완료"
+          }
+        }
+      }
+    },
+    "Config file path" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 파일 경로"
+          }
+        }
+      }
+    },
+    "Conflicts with %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@와(과) 충돌"
+          }
+        }
+      }
+    },
+    "Connects a disconnected pane to its session again when you wake the Mac or return to the app." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac을 깨우거나 앱으로 돌아오면 연결이 끊어진 페인을 세션에 다시 연결합니다."
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "comment" : "Command palette: the Option action of an extension row that copies text",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복사"
+          }
+        }
+      }
+    },
+    "Copy Link" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "링크 복사"
+          }
+        }
+      }
+    },
+    "Copy Mode" : {
+      "comment" : "Pill on a pane in copy mode",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복사 모드"
+          }
+        }
+      }
+    },
+    "Copy Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 복사"
+          }
+        }
+      }
+    },
+    "Copy Path" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경로 복사"
+          }
+        }
+      }
+    },
+    "Copy Session ID" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 ID 복사"
+          }
+        }
+      }
+    },
+    "Create Another Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 프로젝트 생성"
+          }
+        }
+      }
+    },
+    "Create Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 생성"
+          }
+        }
+      }
+    },
+    "Current version" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 버전"
+          }
+        }
+      }
+    },
+    "Cursor" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커서"
+          }
+        }
+      }
+    },
+    "Cursor trail" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커서 자취"
+          }
+        }
+      }
+    },
+    "Cyan" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "청록색"
+          }
+        }
+      }
+    },
+    "Deny" : {
+      "comment" : "A value of the macos-shortcuts setting\nButton of the clipboard write alert",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "거부"
+          }
+        }
+      }
+    },
+    "Desktop Widget" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 위젯"
+          }
+        }
+      }
+    },
+    "Detail" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세부 정보"
+          }
+        }
+      }
+    },
+    "Details…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세부 정보…"
+          }
+        }
+      }
+    },
+    "Directories" : {
+      "comment" : "Command palette: the section of folder rows in path mode",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디렉토리"
+          }
+        }
+      }
+    },
+    "Directory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디렉토리"
+          }
+        }
+      }
+    },
+    "Don't Allow" : {
+      "comment" : "Button of the Shortcuts permission alert",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "허용 안 함"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "comment" : "Button on a desktop widget that ends editing\nTooltip of a tab whose command finished",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료"
+          }
+        }
+      }
+    },
+    "Done Editing" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "편집 완료"
+          }
+        }
+      }
+    },
+    "Dynamic" : {
+      "comment" : "Quick terminal position or size: remembered from the panel",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "동적"
+          }
+        }
+      }
+    },
+    "Each pane is a persistent zmx session on the host, over ssh. zmx must be installed there. If Macterm cannot find it, set an absolute path, for example ~/bin/zmx or /usr/local/bin/zmx. Port, identity and ControlMaster come from ~/.ssh/config." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "각 페인은 ssh를 통해 연결된 호스트의 영구 zmx 세션입니다. 호스트에 zmx가 설치되어 있어야 합니다. Macterm이 zmx를 찾지 못하면 ~/bin/zmx 또는 /usr/local/bin/zmx와 같은 절대 경로를 설정하십시오. 포트, ID 및 ControlMaster는 ~/.ssh/config에서 가져옵니다."
+          }
+        }
+      }
+    },
+    "Edit Path" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경로 편집"
+          }
+        }
+      }
+    },
+    "Edit Widget" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯 편집"
+          }
+        }
+      }
+    },
+    "Enable for live tab names and close warnings." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실시간 탭 이름과 닫기 경고를 사용하려면 켜십시오."
+          }
+        }
+      }
+    },
+    "Enable password manager" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 관리자 사용"
+          }
+        }
+      }
+    },
+    "Enter Path…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경로 입력…"
+          }
+        }
+      }
+    },
+    "Every time" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매번"
+          }
+        }
+      }
+    },
+    "Exit zoom" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확대 종료"
+          }
+        }
+      }
+    },
+    "Exited with code %lld (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Exited with code %1$lld (%2$@)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 %lld(으)로 종료(%@)"
+          }
+        }
+      }
+    },
+    "Extension updated" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램을 업데이트했습니다"
+          }
+        }
+      }
+    },
+    "Extensions" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램"
+          }
+        }
+      }
+    },
+    "Extensions add screens to the command palette." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램은 명령 팔레트에 화면을 추가합니다."
+          }
+        }
+      }
+    },
+    "Extensions updated" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램을 업데이트했습니다"
+          }
+        }
+      }
+    },
+    "Failed" : {
+      "comment" : "Tooltip of a tab whose command failed",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패"
+          }
+        }
+      }
+    },
+    "File not found." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일이 없습니다."
+          }
+        }
+      }
+    },
+    "File not found: %@" : {
+      "comment" : "A line of the Ghostty config alert. The argument is a file path.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일을 찾을 수 없음: %@"
+          }
+        }
+      }
+    },
+    "Files" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일"
+          }
+        }
+      }
+    },
+    "Filled from the command palette only" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령 팔레트에서만 입력"
+          }
+        }
+      }
+    },
+    "Finish editing the other widget first." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "먼저 다른 위젯의 편집을 완료하십시오."
+          }
+        }
+      }
+    },
+    "Fixed" : {
+      "comment" : "Quick terminal position or size: from the Settings sliders",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고정"
+          }
+        }
+      }
+    },
+    "Focus ${pane}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${pane}에 포커스"
+          }
+        }
+      }
+    },
+    "Focus ${project}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${project}에 포커스"
+          }
+        }
+      }
+    },
+    "Focus ${tab}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${tab}에 포커스"
+          }
+        }
+      }
+    },
+    "Focus Down" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아래로 포커스 이동"
+          }
+        }
+      }
+    },
+    "Focus Left" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "왼쪽으로 포커스 이동"
+          }
+        }
+      }
+    },
+    "Focus Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인에 포커스"
+          }
+        }
+      }
+    },
+    "Focus Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트에 포커스"
+          }
+        }
+      }
+    },
+    "Focus Right" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오른쪽으로 포커스 이동"
+          }
+        }
+      }
+    },
+    "Focus Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭에 포커스"
+          }
+        }
+      }
+    },
+    "Focus Up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위로 포커스 이동"
+          }
+        }
+      }
+    },
+    "Folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더"
+          }
+        }
+      }
+    },
+    "Foreground Process" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "포그라운드 프로세스"
+          }
+        }
+      }
+    },
+    "Full Disk Access is off" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전체 디스크 접근 권한이 꺼져 있음"
+          }
+        }
+      }
+    },
+    "General" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일반"
+          }
+        }
+      }
+    },
+    "Get ${detail} from ${pane}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${pane}에서 ${detail} 가져오기"
+          }
+        }
+      }
+    },
+    "Get Pane Contents" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 내용 가져오기"
+          }
+        }
+      }
+    },
+    "Get Pane Details" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 세부 정보 가져오기"
+          }
+        }
+      }
+    },
+    "Get the contents of ${pane}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${pane}의 내용 가져오기"
+          }
+        }
+      }
+    },
+    "Ghostty Config" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정"
+          }
+        }
+      }
+    },
+    "Ghostty config not found" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정 파일을 찾을 수 없음"
+          }
+        }
+      }
+    },
+    "Ghostty config reloaded" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정을 다시 불러왔습니다"
+          }
+        }
+      }
+    },
+    "Ghostty configs not found" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정 파일을 찾을 수 없음"
+          }
+        }
+      }
+    },
+    "Ghostty default" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 기본값"
+          }
+        }
+      }
+    },
+    "GitHub answered %lld." : {
+      "comment" : "The value is the HTTP status code of the answer from GitHub",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub의 응답: %lld"
+          }
+        }
+      }
+    },
+    "Gives all panes the same size when you split or close a pane." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 분할하거나 닫을 때 모든 페인을 같은 크기로 맞춥니다."
+          }
+        }
+      }
+    },
+    "Global" : {
+      "comment" : "Settings → Keymaps: the row menu item that registers a chord system-wide",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전역"
+          }
+        }
+      }
+    },
+    "Green" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "초록색"
+          }
+        }
+      }
+    },
+    "Height" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "높이"
+          }
+        }
+      }
+    },
+    "Hidden" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숨김"
+          }
+        }
+      }
+    },
+    "Hide" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가리기"
+          }
+        }
+      }
+    },
+    "Hide Toolbar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 막대 가리기"
+          }
+        }
+      }
+    },
+    "Host" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호스트"
+          }
+        }
+      }
+    },
+    "ID" : {
+      "shouldTranslate" : false
+    },
+    "Icon size" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아이콘 크기"
+          }
+        }
+      }
+    },
+    "Idle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유휴"
+          }
+        }
+      }
+    },
+    "If it is on, remove Macterm from the list. Then try again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이미 켜져 있으면 목록에서 Macterm을 제거한 다음 다시 시도하십시오."
+          }
+        }
+      }
+    },
+    "If you apply this layout, Macterm closes some panes and ends the processes in them." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 레이아웃을 적용하면 Macterm이 일부 페인을 닫고 그 안의 프로세스를 종료합니다."
+          }
+        }
+      }
+    },
+    "Include Scrollback" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크롤백 포함"
+          }
+        }
+      }
+    },
+    "Indexing %@…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 색인 중…"
+          }
+        }
+      }
+    },
+    "Install" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치"
+          }
+        }
+      }
+    },
+    "Install it" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치하기"
+          }
+        }
+      }
+    },
+    "Installed" : {
+      "comment" : "Settings → Extensions: the filter that shows installed extensions",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치됨"
+          }
+        }
+      }
+    },
+    "Installing" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치 중"
+          }
+        }
+      }
+    },
+    "Invalid file. Fix it in an editor to use it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잘못된 파일입니다. 사용하려면 편집기에서 수정하십시오."
+          }
+        }
+      }
+    },
+    "Invoke ${keybind}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${keybind} 실행"
+          }
+        }
+      }
+    },
+    "Invoke Keybind" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키 실행"
+          }
+        }
+      }
+    },
+    "Issues in your Ghostty config" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정의 문제"
+          }
+        }
+      }
+    },
+    "Jump to Bottom" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "맨 아래로 이동"
+          }
+        }
+      }
+    },
+    "Jump to Top" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "맨 위로 이동"
+          }
+        }
+      }
+    },
+    "Key" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키"
+          }
+        }
+      }
+    },
+    "Keybind Action" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키 동작"
+          }
+        }
+      }
+    },
+    "Keybind options" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키 옵션"
+          }
+        }
+      }
+    },
+    "Keybinds" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키"
+          }
+        }
+      }
+    },
+    "Keychain: %@" : {
+      "comment" : "A keychain error. The argument is the system message.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키체인: %@"
+          }
+        }
+      }
+    },
+    "Keymap" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키맵"
+          }
+        }
+      }
+    },
+    "Keymaps" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키맵"
+          }
+        }
+      }
+    },
+    "Large" : {
+      "comment" : "Sidebar icon size",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "크게"
+          }
+        }
+      }
+    },
+    "Layout" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃"
+          }
+        }
+      }
+    },
+    "Layout applied" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃을 적용했습니다"
+          }
+        }
+      }
+    },
+    "Layout file" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일"
+          }
+        }
+      }
+    },
+    "Layout file shared with another project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 프로젝트와 공유하는 레이아웃 파일"
+          }
+        }
+      }
+    },
+    "Layout saved" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃을 저장했습니다"
+          }
+        }
+      }
+    },
+    "Layout saved with a conflict" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "충돌이 있는 상태로 레이아웃을 저장했습니다"
+          }
+        }
+      }
+    },
+    "Layouts" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃"
+          }
+        }
+      }
+    },
+    "Leave copy mode" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복사 모드 종료"
+          }
+        }
+      }
+    },
+    "Left" : {
+      "comment" : "Settings → Quick Terminal: the left end of the X position slider\nTab switcher position",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "왼쪽"
+          }
+        }
+      }
+    },
+    "Liquid Glass" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liquid Glass"
+          }
+        }
+      }
+    },
+    "Listing %@…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 목록을 가져오는 중…"
+          }
+        }
+      }
+    },
+    "Load Ghostty's default config files" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty의 기본 설정 파일 불러오기"
+          }
+        }
+      }
+    },
+    "Local Folder…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 폴더…"
+          }
+        }
+      }
+    },
+    "Macterm can fill in the password the next time that this prompt appears." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음에 이 프롬프트가 나타나면 Macterm이 암호를 자동으로 입력할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Macterm cannot capture the display of the palette." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 팔레트가 있는 디스플레이를 캡처할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Macterm could not encode the image." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 이미지를 인코딩하지 못했습니다."
+          }
+        }
+      }
+    },
+    "Macterm could not read the saved password." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 저장된 암호를 읽을 수 없습니다."
+          }
+        }
+      }
+    },
+    "Macterm could not save the changes." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 변경 사항을 저장할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Macterm could not save the password." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 암호를 저장할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Macterm could not write the capture as a PNG." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 캡처를 PNG로 저장하지 못했습니다."
+          }
+        }
+      }
+    },
+    "Macterm deletes “%@”. The projects that use it stay, but they lose their saved layout." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 “%@”을(를) 삭제합니다. 이 파일을 사용하는 프로젝트는 유지되지만 저장된 레이아웃을 잃습니다."
+          }
+        }
+      }
+    },
+    "Macterm has no notification permission" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm에 알림 권한이 없음"
+          }
+        }
+      }
+    },
+    "Macterm is already writing %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 이미 %@에 쓰는 중입니다."
+          }
+        }
+      }
+    },
+    "Macterm loads the files from top to bottom. A later file overrides an earlier file." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm은 위에서 아래 순서로 파일을 불러옵니다. 뒤에 있는 파일이 앞에 있는 파일보다 우선합니다."
+          }
+        }
+      }
+    },
+    "Macterm offers Autofill when both the command and the prompt match. With no prompt, Macterm never offers the password at a prompt. Select it in Password Manager in the command palette." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령과 프롬프트가 모두 일치하면 Macterm이 자동 완성을 제안합니다. 프롬프트가 없으면 Macterm은 프롬프트에서 암호를 제안하지 않습니다. 명령 팔레트의 암호 관리자에서 선택하십시오."
+          }
+        }
+      }
+    },
+    "Macterm removes the password for “%@” from your keychain." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 키체인에서 “%@”의 암호를 제거합니다."
+          }
+        }
+      }
+    },
+    "Macterm saved the layout to “%@”. These other files also declare the path of this project, and Macterm ignores them: %@. Remove them or merge them in the projects folder." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Macterm saved the layout to “%1$@”. These other files also declare the path of this project, and Macterm ignores them: %2$@. Remove them or merge them in the projects folder."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 레이아웃을 “%1$@”에 저장했습니다. 다음 파일도 이 프로젝트의 경로를 선언하며, Macterm은 이 파일을 무시합니다: %2$@. 프로젝트 폴더에서 이 파일을 제거하거나 병합하십시오."
+          }
+        }
+      }
+    },
+    "Macterm saves a key passphrase from its prompt. Type it there one time and save it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm은 키 암호문을 해당 프롬프트에서 저장합니다. 프롬프트에 한 번 입력하고 저장하십시오."
+          }
+        }
+      }
+    },
+    "Macterm types this into the shell of the new tab when the shell starts. Leave it empty for a plain shell." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "셸이 시작될 때 Macterm이 새로운 탭의 셸에 이 내용을 입력합니다. 일반 셸을 사용하려면 비워 두십시오."
+          }
+        }
+      }
+    },
+    "Macterm updated to v%@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 v%@(으)로 업데이트되었습니다"
+          }
+        }
+      }
+    },
+    "Macterm's repository has no extensions at %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 저장소의 %@에 확장 프로그램이 없습니다."
+          }
+        }
+      }
+    },
+    "Make a project from ${folder}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${folder}(으)로 프로젝트 만들기"
+          }
+        }
+      }
+    },
+    "Manage passwords" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 관리"
+          }
+        }
+      }
+    },
+    "Medium" : {
+      "comment" : "Sidebar icon size",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중간"
+          }
+        }
+      }
+    },
+    "Mode" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모드"
+          }
+        }
+      }
+    },
+    "Move Down" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아래로 이동"
+          }
+        }
+      }
+    },
+    "Move Pane Down" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 아래로 이동"
+          }
+        }
+      }
+    },
+    "Move Pane Left" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 왼쪽으로 이동"
+          }
+        }
+      }
+    },
+    "Move Pane Right" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 오른쪽으로 이동"
+          }
+        }
+      }
+    },
+    "Move Pane Up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 위로 이동"
+          }
+        }
+      }
+    },
+    "Move Tab Down" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭을 아래로 이동"
+          }
+        }
+      }
+    },
+    "Move Tab Up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭을 위로 이동"
+          }
+        }
+      }
+    },
+    "Move Up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위로 이동"
+          }
+        }
+      }
+    },
+    "Move to Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트로 이동"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름"
+          }
+        }
+      }
+    },
+    "New Desktop Widget" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 데스크탑 위젯"
+          }
+        }
+      }
+    },
+    "New Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 암호"
+          }
+        }
+      }
+    },
+    "New Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 프로젝트"
+          }
+        }
+      }
+    },
+    "New Project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 프로젝트…"
+          }
+        }
+      }
+    },
+    "New Remote Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 원격 프로젝트"
+          }
+        }
+      }
+    },
+    "New Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 탭"
+          }
+        }
+      }
+    },
+    "New Tab in %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 새로운 탭"
+          }
+        }
+      }
+    },
+    "New Widget" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 위젯"
+          }
+        }
+      }
+    },
+    "New Window" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 윈도우"
+          }
+        }
+      }
+    },
+    "New split" : {
+      "comment" : "Opening text files: open the editor in a new split",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 분할"
+          }
+        }
+      }
+    },
+    "New tab" : {
+      "comment" : "Opening text files: open the editor in a new tab",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 탭"
+          }
+        }
+      }
+    },
+    "New tab in ${project}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${project}에 새로운 탭"
+          }
+        }
+      }
+    },
+    "Next Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 페인"
+          }
+        }
+      }
+    },
+    "Next Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 프로젝트"
+          }
+        }
+      }
+    },
+    "Next Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 탭"
+          }
+        }
+      }
+    },
+    "Next Tab in Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트의 다음 탭"
+          }
+        }
+      }
+    },
+    "No additional config files." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가 설정 파일이 없습니다."
+          }
+        }
+      }
+    },
+    "No default config files found." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 설정 파일이 없습니다."
+          }
+        }
+      }
+    },
+    "No directory at %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 디렉토리가 없음"
+          }
+        }
+      }
+    },
+    "No extensions match." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일치하는 확장 프로그램이 없습니다."
+          }
+        }
+      }
+    },
+    "No extensions yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램이 아직 없습니다."
+          }
+        }
+      }
+    },
+    "No keybinds match “%@”." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”와(과) 일치하는 단축키가 없습니다."
+          }
+        }
+      }
+    },
+    "No layout file declares %@. Use “Save Layout” to create one." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 선언하는 레이아웃 파일이 없습니다. “레이아웃 저장”을 사용하여 만드십시오."
+          }
+        }
+      }
+    },
+    "No layout file for this project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트의 레이아웃 파일 없음"
+          }
+        }
+      }
+    },
+    "No layout files." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일이 없습니다."
+          }
+        }
+      }
+    },
+    "No local project to search" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검색할 로컬 프로젝트가 없음"
+          }
+        }
+      }
+    },
+    "No node named %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(이)라는 이름의 노드가 없음"
+          }
+        }
+      }
+    },
+    "No pane to run beside" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "옆에서 실행할 페인이 없음"
+          }
+        }
+      }
+    },
+    "No path declared." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선언된 경로가 없습니다."
+          }
+        }
+      }
+    },
+    "No project selected" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 프로젝트 없음"
+          }
+        }
+      }
+    },
+    "No project to run in" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행할 프로젝트가 없음"
+          }
+        }
+      }
+    },
+    "No projects." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트가 없습니다."
+          }
+        }
+      }
+    },
+    "No saved passwords match “%@”." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”와(과) 일치하는 저장된 암호가 없습니다."
+          }
+        }
+      }
+    },
+    "No saved passwords." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호가 없습니다."
+          }
+        }
+      }
+    },
+    "No terminal pane to type into" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "입력할 터미널 페인이 없음"
+          }
+        }
+      }
+    },
+    "No widgets." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯이 없습니다."
+          }
+        }
+      }
+    },
+    "None" : {
+      "comment" : "A keybind that has no key",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "없음"
+          }
+        }
+      }
+    },
+    "None — fill from the palette only" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "없음 — 팔레트에서만 입력"
+          }
+        }
+      }
+    },
+    "Not Installed" : {
+      "comment" : "Settings → Extensions: the filter that shows extensions that are not installed",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치 안 됨"
+          }
+        }
+      }
+    },
+    "Not Now" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "나중에"
+          }
+        }
+      }
+    },
+    "Not a file." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일이 아닙니다."
+          }
+        }
+      }
+    },
+    "Not global: a system-wide keybind needs a modifier key." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전역 아님: 시스템 전역 단축키에는 보조 키가 필요합니다."
+          }
+        }
+      }
+    },
+    "Not global: the system refused it (error %d)." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전역 아님: 시스템이 거부했습니다(오류 %d)."
+          }
+        }
+      }
+    },
+    "Not global: this keybind goes to programs instead." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전역 아님: 이 단축키는 대신 프로그램으로 전달됩니다."
+          }
+        }
+      }
+    },
+    "Not global: this keybind is already taken." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전역 아님: 이 단축키는 이미 사용 중입니다."
+          }
+        }
+      }
+    },
+    "Not running. Select it to load the project again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중이 아닙니다. 선택하면 프로젝트를 다시 불러옵니다."
+          }
+        }
+      }
+    },
+    "Not running. Select it to restore it from its saved layout." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중이 아닙니다. 선택하면 저장된 레이아웃에서 복원합니다."
+          }
+        }
+      }
+    },
+    "Nothing at rows: %@ in the output" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "출력에서 rows: %@에 아무것도 없습니다"
+          }
+        }
+      }
+    },
+    "Number" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숫자"
+          }
+        }
+      }
+    },
+    "Number — circle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숫자 — 원"
+          }
+        }
+      }
+    },
+    "Number — filled circle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숫자 — 채워진 원"
+          }
+        }
+      }
+    },
+    "Number — filled square" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숫자 — 채워진 사각형"
+          }
+        }
+      }
+    },
+    "Number — square" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숫자 — 사각형"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확인"
+          }
+        }
+      }
+    },
+    "Off leaves the text at the shell prompt and does not run it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "끄면 텍스트를 셸 프롬프트에 남겨 두고 실행하지 않습니다."
+          }
+        }
+      }
+    },
+    "Off reads only the text on the screen." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "끄면 화면의 텍스트만 읽습니다."
+          }
+        }
+      }
+    },
+    "Offers to save a password that you type at a password prompt after it works, and fills it in the next time that the prompt appears." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 프롬프트에 입력한 암호가 작동하면 저장을 제안하고, 다음에 그 프롬프트가 나타나면 자동으로 입력합니다."
+          }
+        }
+      }
+    },
+    "Once per app launch" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱을 실행할 때마다 한 번"
+          }
+        }
+      }
+    },
+    "Open" : {
+      "comment" : "Command palette: the Option action of an extension row that opens a URL or file",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "열기"
+          }
+        }
+      }
+    },
+    "Open Command Palette" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령 팔레트 열기"
+          }
+        }
+      }
+    },
+    "Open Link" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "링크 열기"
+          }
+        }
+      }
+    },
+    "Open Link from Terminal Output?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널 출력의 링크를 여시겠습니까?"
+          }
+        }
+      }
+    },
+    "Open Macterm Config" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 설정 파일 열기"
+          }
+        }
+      }
+    },
+    "Open Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 열기"
+          }
+        }
+      }
+    },
+    "Open Project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 열기…"
+          }
+        }
+      }
+    },
+    "Open System Settings…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 설정 열기…"
+          }
+        }
+      }
+    },
+    "Open a project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 열기"
+          }
+        }
+      }
+    },
+    "Open a tab in a project. You can run a command in it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트에 탭을 엽니다. 탭에서 명령을 실행할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Open another project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 프로젝트 열기"
+          }
+        }
+      }
+    },
+    "Open as new project: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 프로젝트로 열기: %@"
+          }
+        }
+      }
+    },
+    "Open folder as new project..." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더를 새로운 프로젝트로 열기..."
+          }
+        }
+      }
+    },
+    "Open in" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "열 위치"
+          }
+        }
+      }
+    },
+    "Open in a New Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 탭에서 열기"
+          }
+        }
+      }
+    },
+    "Open in a Split" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "분할에서 열기"
+          }
+        }
+      }
+    },
+    "Open the command palette in the frontmost window." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "맨 앞 윈도우에서 명령 팔레트를 엽니다."
+          }
+        }
+      }
+    },
+    "Open the command palette to capture it" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캡처하려면 명령 팔레트를 여십시오"
+          }
+        }
+      }
+    },
+    "Open the docs for this section" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 섹션의 문서 열기"
+          }
+        }
+      }
+    },
+    "Open with Default App" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 앱으로 열기"
+          }
+        }
+      }
+    },
+    "Opening Text Files" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "텍스트 파일 열기"
+          }
+        }
+      }
+    },
+    "Opening this local target could execute code." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 로컬 대상을 열면 코드가 실행될 수 있습니다."
+          }
+        }
+      }
+    },
+    "Orange" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주황색"
+          }
+        }
+      }
+    },
+    "Other" : {
+      "comment" : "Command category",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기타"
+          }
+        }
+      }
+    },
+    "Output is not JSON: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "출력이 JSON이 아닙니다: %@"
+          }
+        }
+      }
+    },
+    "Overlay terminal" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널 위에 겹치기"
+          }
+        }
+      }
+    },
+    "Palettes" : {
+      "comment" : "Command category",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "팔레트"
+          }
+        }
+      }
+    },
+    "Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인"
+          }
+        }
+      }
+    },
+    "Pane Detail" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 세부 정보"
+          }
+        }
+      }
+    },
+    "Pane copied to the clipboard" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 클립보드에 복사했습니다"
+          }
+        }
+      }
+    },
+    "Panes" : {
+      "comment" : "Command category",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인"
+          }
+        }
+      }
+    },
+    "Pass to TUI" : {
+      "comment" : "Settings → Keymaps: the row menu item that gives a chord to a full-screen program",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TUI로 전달"
+          }
+        }
+      }
+    },
+    "Passthrough Programs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전달할 프로그램"
+          }
+        }
+      }
+    },
+    "Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호"
+          }
+        }
+      }
+    },
+    "Password Manager" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 관리자"
+          }
+        }
+      }
+    },
+    "Password Prompt Detected" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 프롬프트 감지됨"
+          }
+        }
+      }
+    },
+    "Paste" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "붙여넣기"
+          }
+        }
+      }
+    },
+    "Path" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경로"
+          }
+        }
+      }
+    },
+    "Peek sidebar when hidden" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가려진 사이드바 미리 보기"
+          }
+        }
+      }
+    },
+    "Peek style" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "미리 보기 스타일"
+          }
+        }
+      }
+    },
+    "Pin Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 고정"
+          }
+        }
+      }
+    },
+    "Pink" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "분홍색"
+          }
+        }
+      }
+    },
+    "Pinned Tab" : {
+      "comment" : "Sidebar title of a pinned tab that has no name",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고정된 탭"
+          }
+        }
+      }
+    },
+    "Pinned layout file problem" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고정된 탭 레이아웃 파일 문제"
+          }
+        }
+      }
+    },
+    "Position" : {
+      "comment" : "Heading of the tab switcher position options in the toolbar menu",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위치"
+          }
+        }
+      }
+    },
+    "Press keys..." : {
+      "comment" : "Settings → Keymaps: the keybind button while it records a chord",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키를 누르십시오..."
+          }
+        }
+      }
+    },
+    "Previous Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 페인"
+          }
+        }
+      }
+    },
+    "Previous Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 프로젝트"
+          }
+        }
+      }
+    },
+    "Previous Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 탭"
+          }
+        }
+      }
+    },
+    "Previous Tab in Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트의 이전 탭"
+          }
+        }
+      }
+    },
+    "Process" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로세스"
+          }
+        }
+      }
+    },
+    "Programs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로그램"
+          }
+        }
+      }
+    },
+    "Project" : {
+      "comment" : "Command palette: the section of a project row\nQuit dialog: a project with no name",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트"
+          }
+        }
+      }
+    },
+    "Project icon" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 아이콘"
+          }
+        }
+      }
+    },
+    "Projects" : {
+      "comment" : "Command category\nSettings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트"
+          }
+        }
+      }
+    },
+    "Prompt" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프롬프트"
+          }
+        }
+      }
+    },
+    "Purple" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보라색"
+          }
+        }
+      }
+    },
+    "Quick Terminal" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠른 터미널"
+          }
+        }
+      }
+    },
+    "Quit" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종료"
+          }
+        }
+      }
+    },
+    "Quit %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 종료"
+          }
+        }
+      }
+    },
+    "Quit %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 종료하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Read the ID, session, directory, process or size of a pane." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인의 ID, 세션, 디렉토리, 프로세스 또는 크기를 읽습니다."
+          }
+        }
+      }
+    },
+    "Read the text that a pane shows." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인에 표시된 텍스트를 읽습니다."
+          }
+        }
+      }
+    },
+    "Read your Ghostty config again. Click after you save an edit in another app." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정을 다시 읽습니다. 다른 앱에서 편집한 내용을 저장한 후 클릭하십시오."
+          }
+        }
+      }
+    },
+    "Read-Only" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "읽기 전용"
+          }
+        }
+      }
+    },
+    "Read-Only Mode" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "읽기 전용 모드"
+          }
+        }
+      }
+    },
+    "Reading the extensions from the Macterm repository…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 저장소에서 확장 프로그램을 읽는 중…"
+          }
+        }
+      }
+    },
+    "Recent" : {
+      "comment" : "Command palette: the section of recently visited projects",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최근 항목"
+          }
+        }
+      }
+    },
+    "Recent Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최근 탭"
+          }
+        }
+      }
+    },
+    "Recent tabs limit" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최근 탭 개수 제한"
+          }
+        }
+      }
+    },
+    "Reconnect panes after a dropped connection" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결이 끊어진 후 페인 다시 연결"
+          }
+        }
+      }
+    },
+    "Red" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빨간색"
+          }
+        }
+      }
+    },
+    "Register this chord system-wide, so it runs the action while another app is frontmost. The chord then belongs to Macterm everywhere — no other app can see it, and it can no longer pass through to a program." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 단축키를 시스템 전체에 등록하여 다른 앱이 앞에 있을 때도 동작을 실행합니다. 그러면 이 단축키는 어디서나 Macterm에 속하며, 다른 앱은 이 단축키를 받을 수 없고 프로그램으로 전달할 수도 없습니다."
+          }
+        }
+      }
+    },
+    "Regular" : {
+      "comment" : "Liquid glass style",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일반"
+          }
+        }
+      }
+    },
+    "Reload" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 불러오기"
+          }
+        }
+      }
+    },
+    "Reload Ghostty Config" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정 다시 불러오기"
+          }
+        }
+      }
+    },
+    "Remote Machine…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 컴퓨터…"
+          }
+        }
+      }
+    },
+    "Remote Projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 프로젝트"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거"
+          }
+        }
+      }
+    },
+    "Remove %lld Items" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항목 %lld개 제거"
+          }
+        }
+      }
+    },
+    "Remove %lld Projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 %lld개 제거"
+          }
+        }
+      }
+    },
+    "Remove Current Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 프로젝트 제거"
+          }
+        }
+      }
+    },
+    "Remove Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 제거"
+          }
+        }
+      }
+    },
+    "Remove Saved Password" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호 제거"
+          }
+        }
+      }
+    },
+    "Remove Widget" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯 제거"
+          }
+        }
+      }
+    },
+    "Remove items with running processes?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중인 프로세스가 있는 항목을 제거하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Remove layout file?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일을 제거하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Remove project with running processes?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중인 프로세스가 있는 프로젝트를 제거하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Remove saved password?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호를 제거하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Remove widget?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯을 제거하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Remove…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거…"
+          }
+        }
+      }
+    },
+    "Removing a layout deletes its file. The project stays." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃을 제거하면 해당 파일이 삭제됩니다. 프로젝트는 유지됩니다."
+          }
+        }
+      }
+    },
+    "Rename Current Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 프로젝트 이름 변경"
+          }
+        }
+      }
+    },
+    "Rename Current Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 탭 이름 변경"
+          }
+        }
+      }
+    },
+    "Rename Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 이름 변경"
+          }
+        }
+      }
+    },
+    "Rename Project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 이름 변경…"
+          }
+        }
+      }
+    },
+    "Rename Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 이름 변경"
+          }
+        }
+      }
+    },
+    "Replace Project Path with Current Directory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 경로를 현재 디렉토리로 대체"
+          }
+        }
+      }
+    },
+    "Require authentication" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인증 요구"
+          }
+        }
+      }
+    },
+    "Required" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필수"
+          }
+        }
+      }
+    },
+    "Resize Pane Down" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 크기를 아래로 조절"
+          }
+        }
+      }
+    },
+    "Resize Pane Left" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 크기를 왼쪽으로 조절"
+          }
+        }
+      }
+    },
+    "Resize Pane Right" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 크기를 오른쪽으로 조절"
+          }
+        }
+      }
+    },
+    "Resize Pane Up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 크기를 위로 조절"
+          }
+        }
+      }
+    },
+    "Resize terminal" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널 크기 조절"
+          }
+        }
+      }
+    },
+    "Resolves to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실제 경로: %@"
+          }
+        }
+      }
+    },
+    "Restart to Update" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재시작하여 업데이트"
+          }
+        }
+      }
+    },
+    "Restore Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 복원"
+          }
+        }
+      }
+    },
+    "Retry" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 시도"
+          }
+        }
+      }
+    },
+    "Right" : {
+      "comment" : "Settings → Quick Terminal: the right end of the X position slider\nTab switcher position",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오른쪽"
+          }
+        }
+      }
+    },
+    "Run ${command} in ${pane}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${pane}에서 ${command} 실행"
+          }
+        }
+      }
+    },
+    "Run Command in Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인에서 명령 실행"
+          }
+        }
+      }
+    },
+    "Run in a New Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 탭에서 실행"
+          }
+        }
+      }
+    },
+    "Run in a Split" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "분할에서 실행"
+          }
+        }
+      }
+    },
+    "Run one of the keybind actions of Macterm." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm의 단축키 동작 중 하나를 실행합니다."
+          }
+        }
+      }
+    },
+    "Running" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장"
+          }
+        }
+      }
+    },
+    "Save Layout" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 저장"
+          }
+        }
+      }
+    },
+    "Save Palette Screenshot" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "팔레트 스크린샷 저장"
+          }
+        }
+      }
+    },
+    "Save Password?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호를 저장하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Saved" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장됨"
+          }
+        }
+      }
+    },
+    "Saved Password Did Not Work" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호가 맞지 않음"
+          }
+        }
+      }
+    },
+    "Saved Passwords" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호"
+          }
+        }
+      }
+    },
+    "Saved for this prompt from any command. Macterm offers Autofill when both the command and the prompt match. With no prompt, Macterm never offers the password at a prompt. Select it in Password Manager in the command palette." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 명령에서 이 프롬프트에 대해 저장됩니다. 명령과 프롬프트가 모두 일치하면 Macterm이 자동 완성을 제안합니다. 프롬프트가 없으면 Macterm은 프롬프트에서 암호를 제안하지 않습니다. 명령 팔레트의 암호 관리자에서 선택하십시오."
+          }
+        }
+      }
+    },
+    "Screenshot saved" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크린샷을 저장했습니다"
+          }
+        }
+      }
+    },
+    "Scrolling" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크롤"
+          }
+        }
+      }
+    },
+    "Scrolling moves one whole row at a time. Each row slides into place." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크롤하면 한 번에 한 행씩 이동합니다. 각 행이 미끄러지듯 제자리로 들어갑니다."
+          }
+        }
+      }
+    },
+    "Search" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검색"
+          }
+        }
+      }
+    },
+    "Search %@..." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 검색..."
+          }
+        }
+      }
+    },
+    "Search by action or keybind" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "동작 또는 단축키로 검색"
+          }
+        }
+      }
+    },
+    "Search by command or prompt..." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령 또는 프롬프트로 검색..."
+          }
+        }
+      }
+    },
+    "Search extensions" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램 검색"
+          }
+        }
+      }
+    },
+    "Search files by name or path..." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름 또는 경로로 파일 검색..."
+          }
+        }
+      }
+    },
+    "Search projects or commands..." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 또는 명령 검색..."
+          }
+        }
+      }
+    },
+    "Search saved passwords" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호 검색"
+          }
+        }
+      }
+    },
+    "Secure keyboard input is active" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보안 키보드 입력이 켜져 있습니다"
+          }
+        }
+      }
+    },
+    "See its files and README on GitHub" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub에서 파일과 README 보기"
+          }
+        }
+      }
+    },
+    "Select Mode" : {
+      "comment" : "Pill on a pane in Helix copy mode",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택 모드"
+          }
+        }
+      }
+    },
+    "Select a folder in Finder to make it a %@ project." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder에서 폴더를 선택하면 %@ 프로젝트로 만들 수 있습니다."
+          }
+        }
+      }
+    },
+    "Select a project folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 폴더 선택"
+          }
+        }
+      }
+    },
+    "Send ${key} to ${pane}" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${pane}에 ${key} 보내기"
+          }
+        }
+      }
+    },
+    "Send Key" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키 보내기"
+          }
+        }
+      }
+    },
+    "Send one key combination to a pane, such as ctrl+c, escape or up." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ctrl+c, escape 또는 up 같은 키 조합 하나를 페인에 보냅니다."
+          }
+        }
+      }
+    },
+    "Separate All Panes" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 페인 분리"
+          }
+        }
+      }
+    },
+    "Separate Current Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 페인 분리"
+          }
+        }
+      }
+    },
+    "Separate Panes" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 분리"
+          }
+        }
+      }
+    },
+    "Session Name" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 이름"
+          }
+        }
+      }
+    },
+    "Session Persistence" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 유지"
+          }
+        }
+      }
+    },
+    "Session persistence is off. The zmx binary is not in the app. Run `mise run setup` and build again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 유지가 꺼져 있습니다. 앱에 zmx 바이너리가 없습니다. `mise run setup`을 실행하고 다시 빌드하십시오."
+          }
+        }
+      }
+    },
+    "Session persistence is off. The zmx socket path of this system is too long. Terminals run with no persistence." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 유지가 꺼져 있습니다. 이 시스템의 zmx 소켓 경로가 너무 깁니다. 터미널이 세션 유지 없이 실행됩니다."
+          }
+        }
+      }
+    },
+    "Set Project Path to Current Directory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 경로를 현재 디렉토리로 설정"
+          }
+        }
+      }
+    },
+    "Set blur to 0 to turn it off." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흐림 효과를 끄려면 0으로 설정하십시오."
+          }
+        }
+      }
+    },
+    "Shortcut" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키"
+          }
+        }
+      }
+    },
+    "Show" : {
+      "comment" : "Heading of the tab switcher visibility options in the toolbar menu\nNotification action that shows the pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보기"
+          }
+        }
+      }
+    },
+    "Show AI agent icons" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 에이전트 아이콘 표시"
+          }
+        }
+      }
+    },
+    "Show Toolbar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 막대 보기"
+          }
+        }
+      }
+    },
+    "Show Window" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "윈도우 보기"
+          }
+        }
+      }
+    },
+    "Show a pane and put the keyboard in it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인을 보여주고 키보드 입력을 해당 페인으로 보냅니다."
+          }
+        }
+      }
+    },
+    "Show a project and bring its window forward." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트를 보여주고 해당 윈도우를 앞으로 가져옵니다."
+          }
+        }
+      }
+    },
+    "Show a tab and bring its window forward." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭을 보여주고 해당 윈도우를 앞으로 가져옵니다."
+          }
+        }
+      }
+    },
+    "Show new project button" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 프로젝트 버튼 표시"
+          }
+        }
+      }
+    },
+    "Show new tab button on projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트에 새로운 탭 버튼 표시"
+          }
+        }
+      }
+    },
+    "Show or hide the quick terminal overlay." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠른 터미널 오버레이를 보이거나 가립니다."
+          }
+        }
+      }
+    },
+    "Show spinner over agent icons" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트 아이콘 위에 스피너 표시"
+          }
+        }
+      }
+    },
+    "Show tab previews" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 미리 보기 표시"
+          }
+        }
+      }
+    },
+    "Show tab status indicator" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 상태 표시기 표시"
+          }
+        }
+      }
+    },
+    "Show toolbar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 막대 표시"
+          }
+        }
+      }
+    },
+    "Showing in another window" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 윈도우에 표시 중"
+          }
+        }
+      }
+    },
+    "Shows a spinner while a command runs. Shows a dot when the command ends." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령이 실행되는 동안 스피너를 표시합니다. 명령이 끝나면 점을 표시합니다."
+          }
+        }
+      }
+    },
+    "Sidebar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사이드바"
+          }
+        }
+      }
+    },
+    "Size" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "크기"
+          }
+        }
+      }
+    },
+    "Small" : {
+      "comment" : "Sidebar icon size",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작게"
+          }
+        }
+      }
+    },
+    "Smooth cursor" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부드러운 커서"
+          }
+        }
+      }
+    },
+    "Smooth scrolling" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부드러운 스크롤"
+          }
+        }
+      }
+    },
+    "Snap to whole row" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "행 단위로 맞추기"
+          }
+        }
+      }
+    },
+    "Split Automatically" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동으로 분할"
+          }
+        }
+      }
+    },
+    "Split Down" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아래로 분할"
+          }
+        }
+      }
+    },
+    "Split Left" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "왼쪽으로 분할"
+          }
+        }
+      }
+    },
+    "Split Right" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오른쪽으로 분할"
+          }
+        }
+      }
+    },
+    "Split Up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위로 분할"
+          }
+        }
+      }
+    },
+    "Splits" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "분할"
+          }
+        }
+      }
+    },
+    "Stable" : {
+      "comment" : "Update channel",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "안정 버전"
+          }
+        }
+      }
+    },
+    "Stable releases only." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "안정 버전만 받습니다."
+          }
+        }
+      }
+    },
+    "Submit" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행"
+          }
+        }
+      }
+    },
+    "Switch to project: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트로 전환: %@"
+          }
+        }
+      }
+    },
+    "Switch to remote project: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 프로젝트로 전환: %@"
+          }
+        }
+      }
+    },
+    "Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭"
+          }
+        }
+      }
+    },
+    "Tab Switcher" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 전환기"
+          }
+        }
+      }
+    },
+    "Tab Switching" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 전환"
+          }
+        }
+      }
+    },
+    "Tab icon" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 아이콘"
+          }
+        }
+      }
+    },
+    "Tab switcher" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 전환기"
+          }
+        }
+      }
+    },
+    "Tab switcher position" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 전환기 위치"
+          }
+        }
+      }
+    },
+    "Tabs" : {
+      "comment" : "Command category",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭"
+          }
+        }
+      }
+    },
+    "Terminal" : {
+      "comment" : "Title of the right-click menu of a pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널"
+          }
+        }
+      }
+    },
+    "Terminal content area" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널 콘텐츠 영역"
+          }
+        }
+      }
+    },
+    "That is not a folder on the disk." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디스크에 있는 폴더가 아닙니다."
+          }
+        }
+      }
+    },
+    "The Files screen is not available for remote projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 프로젝트에서는 파일 화면을 사용할 수 없음"
+          }
+        }
+      }
+    },
+    "The background matches the color of each full-screen program." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "배경이 각 전체 화면 프로그램의 색상에 맞춰집니다."
+          }
+        }
+      }
+    },
+    "The command did not finish within %lld seconds." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령이 %lld초 안에 완료되지 않았습니다."
+          }
+        }
+      }
+    },
+    "The command exited with status %d." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령이 상태 %d(으)로 종료되었습니다."
+          }
+        }
+      }
+    },
+    "The command is empty." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령이 비어 있습니다."
+          }
+        }
+      }
+    },
+    "The cursor glides between positions. It does not jump." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커서가 위치 사이를 부드럽게 이동합니다. 건너뛰지 않습니다."
+          }
+        }
+      }
+    },
+    "The default is the name of the folder." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본값은 폴더의 이름입니다."
+          }
+        }
+      }
+    },
+    "The file target names another computer, or carries a query or fragment." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 대상이 다른 컴퓨터를 가리키거나 쿼리 또는 프래그먼트를 포함합니다."
+          }
+        }
+      }
+    },
+    "The keys that move the cursor and select text in copy mode. A change applies the next time the mode starts." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복사 모드에서 커서를 이동하고 텍스트를 선택하는 키입니다. 변경 사항은 다음에 모드를 시작할 때 적용됩니다."
+          }
+        }
+      }
+    },
+    "The layout file declares no tabs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일에 탭이 없음"
+          }
+        }
+      }
+    },
+    "The layout file declares no tabs, so there is no layout to apply." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일에 탭이 선언되어 있지 않아 적용할 레이아웃이 없습니다."
+          }
+        }
+      }
+    },
+    "The layout file is invalid and was not applied.\n\n%@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레이아웃 파일이 유효하지 않아 적용하지 않았습니다.\n\n%@"
+          }
+        }
+      }
+    },
+    "The local target does not exist or is not a regular file or directory." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 대상이 없거나 일반 파일 또는 디렉토리가 아닙니다."
+          }
+        }
+      }
+    },
+    "The pane has no frame yet. Try again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인에 아직 프레임이 없습니다. 다시 시도하십시오."
+          }
+        }
+      }
+    },
+    "The row has no directory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 행에 디렉토리가 없습니다"
+          }
+        }
+      }
+    },
+    "The target contains invisible or line-breaking characters." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상에 보이지 않는 문자나 줄바꿈 문자가 있습니다."
+          }
+        }
+      }
+    },
+    "The target is not an absolute URL with a scheme." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상이 스킴을 포함한 절대 URL이 아닙니다."
+          }
+        }
+      }
+    },
+    "The terminal of that pane is not live yet. Select its tab one time, then try again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "해당 페인의 터미널이 아직 실행되지 않았습니다. 해당 탭을 한 번 선택한 다음 다시 시도하십시오."
+          }
+        }
+      }
+    },
+    "The web target does not contain a valid host." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "웹 대상에 유효한 호스트가 없습니다."
+          }
+        }
+      }
+    },
+    "There is no folder at %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 폴더가 없습니다."
+          }
+        }
+      }
+    },
+    "This file is not in your config files. Add it in Settings → General → Ghostty Config." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 파일은 설정 파일 목록에 없습니다. 설정 → 일반 → Ghostty 설정에서 추가하십시오."
+          }
+        }
+      }
+    },
+    "This link opens in the default application. Continue only if you know and trust the destination." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 링크는 기본 애플리케이션에서 열립니다. 대상을 알고 신뢰하는 경우에만 계속하십시오."
+          }
+        }
+      }
+    },
+    "This link opens in “%@”. Continue only if you know and trust the destination." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 링크는 “%@”에서 열립니다. 대상을 알고 신뢰하는 경우에만 계속하십시오."
+          }
+        }
+      }
+    },
+    "This palette needs %@ and %@, which are not on your PATH." : {
+      "comment" : "The first value is a list of program names with commas between them",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This palette needs %1$@ and %2$@, which are not on your PATH."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 팔레트에는 %@ 및 %@이(가) 필요하지만 PATH에 없습니다."
+          }
+        }
+      }
+    },
+    "This palette needs %@, which is not on your PATH." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 팔레트에는 %@이(가) 필요하지만 PATH에 없습니다."
+          }
+        }
+      }
+    },
+    "This palette's file is gone" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 팔레트의 파일이 없습니다"
+          }
+        }
+      }
+    },
+    "This version of Macterm cannot read it: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 버전의 Macterm은 이 항목을 읽을 수 없습니다: %@"
+          }
+        }
+      }
+    },
+    "This version of Macterm cannot read the update: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 버전의 Macterm은 업데이트를 읽을 수 없습니다: %@"
+          }
+        }
+      }
+    },
+    "Tip" : {
+      "comment" : "Update channel: a build of every commit",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tip"
+          }
+        }
+      }
+    },
+    "Title" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제목"
+          }
+        }
+      }
+    },
+    "Toggle Quick Terminal" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠른 터미널 전환"
+          }
+        }
+      }
+    },
+    "Toggle Sidebar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사이드바 전환"
+          }
+        }
+      }
+    },
+    "Toggle sidebar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사이드바 전환"
+          }
+        }
+      }
+    },
+    "Toolbar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 막대"
+          }
+        }
+      }
+    },
+    "Top" : {
+      "comment" : "Settings → Quick Terminal: the top end of the Y position slider",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위"
+          }
+        }
+      }
+    },
+    "Turn off read-only" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "읽기 전용 끄기"
+          }
+        }
+      }
+    },
+    "Turned off in Settings → Password Manager" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 → 암호 관리자에서 꺼져 있음"
+          }
+        }
+      }
+    },
+    "Type a command into a pane's shell." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인의 셸에 명령을 입력합니다."
+          }
+        }
+      }
+    },
+    "Type the password. When it works, Macterm offers to update the saved password." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호를 입력하십시오. 암호가 맞으면 Macterm이 저장된 암호를 업데이트할지 묻습니다."
+          }
+        }
+      }
+    },
+    "Unavailable" : {
+      "comment" : "Command palette: the reason on a muted extension row whose check failed and whose file names no reason",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용할 수 없음"
+          }
+        }
+      }
+    },
+    "Uninstall" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거"
+          }
+        }
+      }
+    },
+    "Uninstall %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 제거하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Uninstall it" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거하기"
+          }
+        }
+      }
+    },
+    "Unlimited" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제한 없음"
+          }
+        }
+      }
+    },
+    "Unload" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "언로드"
+          }
+        }
+      }
+    },
+    "Unload Current Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 프로젝트 언로드"
+          }
+        }
+      }
+    },
+    "Unload Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 언로드"
+          }
+        }
+      }
+    },
+    "Unload project with running processes?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중인 프로세스가 있는 프로젝트를 언로드하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Unloaded" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "언로드됨"
+          }
+        }
+      }
+    },
+    "Unpin Tab" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 고정 해제"
+          }
+        }
+      }
+    },
+    "Unpin to Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고정 해제하여 프로젝트로 이동"
+          }
+        }
+      }
+    },
+    "Update" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트"
+          }
+        }
+      }
+    },
+    "Update %@?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 업데이트하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Update Available" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트 사용 가능"
+          }
+        }
+      }
+    },
+    "Update Saved Password?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 암호를 업데이트하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Update automatically" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동으로 업데이트"
+          }
+        }
+      }
+    },
+    "Update channel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트 채널"
+          }
+        }
+      }
+    },
+    "Update extensions automatically" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램 자동 업데이트"
+          }
+        }
+      }
+    },
+    "Update to the version in the Macterm repository" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 저장소의 버전으로 업데이트"
+          }
+        }
+      }
+    },
+    "Updates" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트"
+          }
+        }
+      }
+    },
+    "Using %@ and ignoring the duplicate %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Using %1$@ and ignoring the duplicate %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 사용 중, 중복된 %2$@ 무시"
+          }
+        }
+      }
+    },
+    "Version" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "버전"
+          }
+        }
+      }
+    },
+    "Visual" : {
+      "comment" : "Pill on a pane in Vim visual mode",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비주얼"
+          }
+        }
+      }
+    },
+    "Visual Block" : {
+      "comment" : "Pill on a pane in Vim visual block mode",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비주얼 블록"
+          }
+        }
+      }
+    },
+    "Visual Line" : {
+      "comment" : "Pill on a pane in Vim visual line mode",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비주얼 라인"
+          }
+        }
+      }
+    },
+    "When multiple tabs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭이 여러 개일 때"
+          }
+        }
+      }
+    },
+    "When one of the programs listed at the top of this tab is running in the focused pane, send this chord to it instead of running the action. Everywhere else the action still runs." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 탭 상단에 나열된 프로그램 중 하나가 포커스된 페인에서 실행 중이면, 동작을 실행하는 대신 이 단축키를 해당 프로그램으로 보냅니다. 그 외의 경우에는 동작이 그대로 실행됩니다."
+          }
+        }
+      }
+    },
+    "Widget %lld" : {
+      "comment" : "Settings → Widgets: the name of a widget that has no name",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯 %lld"
+          }
+        }
+      }
+    },
+    "Widget layout file problem" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯 레이아웃 파일 문제"
+          }
+        }
+      }
+    },
+    "Widgets" : {
+      "comment" : "Settings pane",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위젯"
+          }
+        }
+      }
+    },
+    "Width" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "너비"
+          }
+        }
+      }
+    },
+    "Window" : {
+      "comment" : "Command category",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "윈도우"
+          }
+        }
+      }
+    },
+    "Working Directory" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 디렉토리"
+          }
+        }
+      }
+    },
+    "Works when Macterm is not the active app." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm이 활성 앱이 아닐 때도 작동합니다."
+          }
+        }
+      }
+    },
+    "Worktrees" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "워크트리"
+          }
+        }
+      }
+    },
+    "X" : {
+      "shouldTranslate" : false
+    },
+    "Y" : {
+      "shouldTranslate" : false
+    },
+    "Yellow" : {
+      "comment" : "Project color tag",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "노란색"
+          }
+        }
+      }
+    },
+    "You already have a palette named %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(이)라는 이름의 팔레트가 이미 있습니다."
+          }
+        }
+      }
+    },
+    "You can set Macterm as the default app to open text files from Finder. It opens them in the editor that $VISUAL or $EDITOR names in your shell." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder에서 텍스트 파일을 여는 기본 앱으로 Macterm을 설정할 수 있습니다. Macterm은 셸의 $VISUAL 또는 $EDITOR가 지정하는 편집기에서 파일을 엽니다."
+          }
+        }
+      }
+    },
+    "You changed %@. Your changed copy goes to the Trash." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 변경했습니다. 변경한 사본은 휴지통으로 이동합니다."
+          }
+        }
+      }
+    },
+    "Your Ghostty config asks for notifications." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 설정이 알림을 요청합니다."
+          }
+        }
+      }
+    },
+    "Your copy of %@ is not the same as the version in the Macterm repository. Your copy goes to the Trash." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 사본이 Macterm 저장소의 버전과 다릅니다. 사본은 휴지통으로 이동합니다."
+          }
+        }
+      }
+    },
+    "Zoom Pane" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페인 확대"
+          }
+        }
+      }
+    },
+    "Zoomed" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확대됨"
+          }
+        }
+      }
+    },
+    "[user@]host or ssh alias" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[user@]host 또는 ssh 별칭"
+          }
+        }
+      }
+    },
+    "autofill the password for “%@”" : {
+      "comment" : "Touch ID reason. macOS shows it after “Macterm is trying to”.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”의 암호를 자동 완성"
+          }
+        }
+      }
+    },
+    "change the saved password entry for “%@”" : {
+      "comment" : "Touch ID reason. It completes the system sentence “Macterm is trying to …”.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”의 저장된 암호 항목을 변경"
+          }
+        }
+      }
+    },
+    "copy the password for “%@”" : {
+      "comment" : "Touch ID reason. It completes the system sentence “Macterm is trying to …”.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”의 암호를 복사"
+          }
+        }
+      }
+    },
+    "could not read %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "could not read %1$@: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 읽을 수 없음: %@"
+          }
+        }
+      }
+    },
+    "error %d" : {
+      "comment" : "A keychain error with no message. The argument is a status code.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오류 %d"
+          }
+        }
+      }
+    },
+    "find it in PATH" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PATH에서 찾기"
+          }
+        }
+      }
+    },
+    "macOS asks for each folder when a terminal command reads Documents, Downloads or other protected places. One Full Disk Access grant covers all of them." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널 명령이 문서, 다운로드 또는 기타 보호된 위치를 읽을 때 macOS가 폴더마다 묻습니다. 전체 디스크 접근 권한을 한 번 허용하면 모든 위치에 적용됩니다."
+          }
+        }
+      }
+    },
+    "rows: %@ is not an array" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rows: %@은(는) 배열이 아닙니다"
+          }
+        }
+      }
+    },
+    "rows: %@ names a path, but the output is not JSON" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rows: %@은(는) 경로를 지정하지만 출력이 JSON이 아닙니다"
+          }
+        }
+      }
+    },
+    "show the password for “%@”" : {
+      "comment" : "Touch ID reason. It completes the system sentence “Macterm is trying to …”.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”의 암호를 표시"
+          }
+        }
+      }
+    },
+    "type the password for “%@”" : {
+      "comment" : "Touch ID reason. macOS shows it after “Macterm is trying to”.",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”의 암호를 입력"
+          }
+        }
+      }
+    },
+    "zmx path (optional)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "zmx 경로(선택 사항)"
+          }
+        }
+      }
+    },
+    "“%@” is a reserved name for the pinned tabs. Select another name." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”은(는) 고정된 탭에 예약된 이름입니다. 다른 이름을 선택하십시오."
+          }
+        }
+      }
+    },
+    "“%@” is not in the projects directory." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”은(는) 프로젝트 디렉토리에 없습니다."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

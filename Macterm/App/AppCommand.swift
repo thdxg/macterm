@@ -77,7 +77,20 @@ enum AppCommand: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    /// The title in the user's language. Every place that shows a command —
+    /// the palette, the menu bar, Keymaps, the Dock menu — reads this.
+    var title: String { String(localized: titleResource) }
+
+    /// The title in English, the language the source is written in. The
+    /// palette also matches a query against it, so a command can be found
+    /// by its English name under any language.
+    var englishTitle: String {
+        var resource = titleResource
+        resource.locale = Locale(identifier: "en")
+        return String(localized: resource)
+    }
+
+    private var titleResource: LocalizedStringResource {
         switch self {
         case .newTab: "New Tab"
         case .closePane: "Close Pane"
@@ -285,6 +298,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The raw value is an identifier, never shown: `title` is the label.
     enum Category: String {
         case palettes = "Palettes"
         case tabs = "Tabs"
@@ -292,6 +306,17 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case projects = "Projects"
         case window = "Window"
         case other = "Other"
+
+        var title: String {
+            switch self {
+            case .palettes: String(localized: "Palettes", comment: "Command category")
+            case .tabs: String(localized: "Tabs", comment: "Command category")
+            case .panes: String(localized: "Panes", comment: "Command category")
+            case .projects: String(localized: "Projects", comment: "Command category")
+            case .window: String(localized: "Window", comment: "Command category")
+            case .other: String(localized: "Other", comment: "Command category")
+            }
+        }
     }
 }
 

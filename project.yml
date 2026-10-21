@@ -124,6 +124,12 @@ targets:
         # explicitly since the target now compiles an .m file.
         SWIFT_OBJC_BRIDGING_HEADER: Macterm/Macterm-Bridging-Header.h
         CLANG_ENABLE_OBJC_ARC: YES
+        # Localization. The compiler extracts every localizable literal
+        # (SwiftUI `Text("…")`, `String(localized:)`, `LocalizedStringResource`)
+        # into Macterm/Localizable.xcstrings, and the build compiles that
+        # catalog into one `<lang>.lproj` for each language in it.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # Display name (menu bar / Finder "Get Info") — wired into
         # Info.plist's CFBundleName and CFBundleDisplayName.
         PRODUCT_DISPLAY_NAME: Macterm
@@ -266,6 +272,10 @@ schemes:
       config: Debug
     test:
       config: Debug
+      # The tests pin English text (command titles, search ranking), so they
+      # run in English whatever the language of the Mac is.
+      language: en
+      region: US
       targets:
         - MactermTests
     archive:

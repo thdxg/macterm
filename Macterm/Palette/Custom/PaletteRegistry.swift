@@ -304,7 +304,9 @@ final class PaletteRegistry {
         let status: Int
         let ref: String
         var errorDescription: String? {
-            status == 404 ? "Macterm's repository has no extensions at \(ref)." : "GitHub answered \(status)."
+            status == 404
+                ? String(localized: "Macterm's repository has no extensions at \(ref).")
+                : String(localized: "GitHub answered \(status).", comment: "The value is the HTTP status code of the answer from GitHub")
         }
     }
 
@@ -315,10 +317,10 @@ final class PaletteRegistry {
         case unreadable(String)
         var errorDescription: String? {
             switch self {
-            case let .alreadyInstalled(id): "You already have a palette named \(id)."
-            case let .notInstalled(id): "\(id) is not installed."
-            case let .inProgress(id): "Macterm is already writing \(id)."
-            case let .unreadable(reason): "This version of Macterm cannot read it: \(reason)"
+            case let .alreadyInstalled(id): String(localized: "You already have a palette named \(id).")
+            case let .notInstalled(id): String(localized: "\(id) is not installed.")
+            case let .inProgress(id): String(localized: "Macterm is already writing \(id).")
+            case let .unreadable(reason): String(localized: "This version of Macterm cannot read it: \(reason)")
             }
         }
     }
@@ -476,7 +478,7 @@ enum ExtensionGalleryItem: Identifiable, Equatable {
     var summary: String {
         switch self {
         case let .installed(installed, _): installed.problem ?? installed.description ?? installed.id
-        case let .available(entry): entry.failure.map { "Cannot be read by this version: \($0.localizedDescription)" }
+        case let .available(entry): entry.failure.map { String(localized: "Cannot be read by this version: \($0.localizedDescription)") }
             ?? entry.description ?? entry.readme.flatMap(MactermExtension.summary(readme:)) ?? ""
         }
     }

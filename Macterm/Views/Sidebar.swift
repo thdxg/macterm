@@ -1293,7 +1293,7 @@ private struct SidebarProjectRow: View {
     @ViewBuilder
     private var titleContent: some View {
         if isInteractive, presentation.isRenaming(renameTarget) {
-            TextField("", text: $presentation.renameText)
+            TextField(String(), text: $presentation.renameText)
                 .textFieldStyle(.plain)
                 .focused($focused)
                 .onSubmit { commit() }

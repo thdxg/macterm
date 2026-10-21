@@ -573,9 +573,13 @@ extension AppState {
         logger.error("widgets.yaml auto-save suspended: \(reason, privacy: .public)")
         presentLayoutError(
             verb: "save",
-            message: "\(reason)\n\nWidget auto-save is paused so your edits are not overwritten. "
-                + "Fix the file, or delete it, to start auto-save again.",
-            title: "Widget layout file problem"
+            message: String(localized: """
+            \(reason)
+
+            Widget auto-save is paused so your edits are not overwritten. \
+            Fix the file, or delete it, to start auto-save again.
+            """),
+            title: String(localized: "Widget layout file problem")
         )
     }
 

@@ -141,7 +141,10 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().setNotificationCategories([
             UNNotificationCategory(
                 identifier: Self.categoryIdentifier,
-                actions: [UNNotificationAction(identifier: Self.showActionIdentifier, title: "Show")],
+                actions: [UNNotificationAction(
+                    identifier: Self.showActionIdentifier,
+                    title: String(localized: "Show", comment: "Notification action that shows the pane")
+                )],
                 intentIdentifiers: [],
                 options: [.customDismissAction]
             ),

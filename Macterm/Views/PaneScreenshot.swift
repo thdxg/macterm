@@ -19,7 +19,10 @@ enum PaneScreenshot {
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else {
             logger.info("capture pane: no rendered frame")
-            appState.presentToast("Cannot capture the pane", subtitle: "The pane has no frame yet. Try again.")
+            appState.presentToast(
+                String(localized: "Cannot capture the pane"),
+                subtitle: String(localized: "The pane has no frame yet. Try again.")
+            )
             return
         }
         let rep = NSBitmapImageRep(cgImage: cgImage)
@@ -29,13 +32,16 @@ enum PaneScreenshot {
         guard let png = rep.representation(using: .png, properties: [:]),
               let tiff = rep.tiffRepresentation
         else {
-            appState.presentToast("Cannot capture the pane", subtitle: "Macterm could not encode the image.")
+            appState.presentToast(
+                String(localized: "Cannot capture the pane"),
+                subtitle: String(localized: "Macterm could not encode the image.")
+            )
             return
         }
         let pasteboard = NSPasteboard.general
         pasteboard.declareTypes([.png, .tiff], owner: nil)
         pasteboard.setData(png, forType: .png)
         pasteboard.setData(tiff, forType: .tiff)
-        appState.presentToast("Pane copied to the clipboard")
+        appState.presentToast(String(localized: "Pane copied to the clipboard"))
     }
 }

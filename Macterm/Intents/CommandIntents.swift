@@ -168,7 +168,9 @@ struct InvokeMactermKeybindIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard let action = keybind.hotkeyAction else {
-            throw MactermIntentError.badInput("\"\(keybind.rawValue)\" is not an action in \(appDisplayName) now.")
+            throw MactermIntentError.badInput(
+                String(localized: "\"\(keybind.rawValue)\" is not an action in \(appDisplayName) now.")
+            )
         }
         guard let delegate = ctx.appState.appDelegate else {
             throw MactermIntentError.appUnavailable

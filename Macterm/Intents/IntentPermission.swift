@@ -41,9 +41,9 @@ enum ShortcutsAccess: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .ask: "Ask"
-        case .allow: "Allow"
-        case .deny: "Deny"
+        case .ask: String(localized: "Ask", comment: "A value of the macos-shortcuts setting")
+        case .allow: String(localized: "Allow", comment: "A value of the macos-shortcuts setting")
+        case .deny: String(localized: "Deny", comment: "A value of the macos-shortcuts setting")
         }
     }
 }
@@ -147,12 +147,14 @@ final class IntentPermissionGate {
         // same shape as `QuitConfirmation.runModal`.
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Allow Shortcuts to control \(appDisplayName)?"
-        alert.informativeText = "A shortcut wants to run an action in \(appDisplayName). "
-            + "It can create projects and tabs. It can also type into your terminals."
+        alert.messageText = String(localized: "Allow Shortcuts to control \(appDisplayName)?")
+        alert.informativeText = String(localized: """
+        A shortcut wants to run an action in \(appDisplayName). \
+        It can create projects and tabs. It can also type into your terminals.
+        """)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Allow")
-        alert.addButton(withTitle: "Don't Allow")
+        alert.addButton(withTitle: String(localized: "Allow", comment: "Button of the Shortcuts permission alert"))
+        alert.addButton(withTitle: String(localized: "Don't Allow", comment: "Button of the Shortcuts permission alert"))
         return alert.runModal() == .alertFirstButtonReturn
     }
 }

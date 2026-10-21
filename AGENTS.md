@@ -934,6 +934,19 @@ The release notes come from the generator of GitHub (`.github/release.yml`). A p
 - The skill has no copy of the official dictionary of ASD. It checks sentence structure, not approved words. Do not claim that text complies with the dictionary.
 - Keep every fact, condition and hedge. Do not change a product term, a command, a key name, a file path or a code identifier to make a sentence simpler.
 
+### Localization
+
+The GUI text is in two String Catalogs: `Macterm/Localizable.xcstrings` (the app) and `Macterm/InfoPlist.xcstrings` (the permission prompts of `Info.plist`). The source language is English. Korean (`ko`) is the first translation. `TRANSLATING.md` is the guide for translators, with the word table for each language.
+
+- **Write a `String` that the GUI shows as `String(localized: "…")` where the code defines it.** A SwiftUI literal (`Text("…")`, `Button("…")`) is localizable as it is. `Text(someString)` is not: it shows the `String` verbatim. Write a whole sentence in one string, with interpolations. Never join localized fragments into a sentence. Add `comment:` to a short string whose meaning is not clear.
+- **Use `Text(verbatim:)` for text that is not language**: a path, a config key, a number, a symbol.
+- **Never compare, persist or parse a localized string.** Split the value: an English or raw value for the logic, and a localized display property. `HotkeyRegistry.isUnbound` replaced a comparison of `displayString` against "None". A raw value is an identifier. `AppCommand.Category.title` is its label.
+- **These stay English**: the CLI and the control socket, agent skills, logs, `macterm tutor`, the first-run seed, the YAML validator errors (`macterm palette list` prints them), ghostty config text, and text that Macterm types into a pane or matches against its output.
+- **The palette and Keymaps also match a command by its English title** (`AppCommand.englishTitle`), so `split` finds the row in every language.
+- **xcodebuild does not update the catalog**. `mise run strings` (`scripts/strings.sh`) builds Debug, merges the `.stringsdata` of the compiler into the catalog with `xcstringstool sync`, and removes unused entries. It writes the exact format of Xcode, so a build in the IDE does not rewrite the file. CI runs `mise run strings --check --no-build` after the unit tests.
+- `LocalizationTests` requires a translation of every entry in every language of a catalog, with the placeholders of the English string. The test scheme runs in English (`language: en` in `project.yml`), because tests pin English text.
+- The user selects the language in **System Settings → General → Language & Region → Applications**. Macterm has no language setting of its own.
+
 ### Code style
 
 - SwiftFormat and SwiftLint are enforced. Run `mise run format`, `lint` and `test` before you commit. swiftformat owns trailing commas. Never write `static weak var` (the two tools fight).

@@ -11,7 +11,7 @@ import AppKit
 final class PasswordPaletteScope: PaletteScope {
     let vault: PasswordVault
 
-    let placeholder = "Search by command or prompt..."
+    let placeholder = String(localized: "Search by command or prompt...")
 
     init(vault: PasswordVault = .shared) {
         self.vault = vault
@@ -21,11 +21,11 @@ final class PasswordPaletteScope: PaletteScope {
         let canFill = Self.targetPane(context.appState) != nil
         guard !query.isEmpty else {
             var sections = [PaletteSection(header: nil, items: [
-                addItem(id: "password-add", title: "Add Password…", request: .new(), context: context),
+                addItem(id: "password-add", title: String(localized: "Add Password…"), request: .new(), context: context),
             ])]
             if !vault.entries.isEmpty {
                 let items = vault.entries.map { item(for: $0, score: 0, canFill: canFill, context: context) }
-                sections.append(PaletteSection(header: "Saved Passwords", items: items))
+                sections.append(PaletteSection(header: String(localized: "Saved Passwords"), items: items))
             }
             return sections
         }
@@ -40,16 +40,19 @@ final class PasswordPaletteScope: PaletteScope {
 
         var sections: [PaletteSection] = []
         if !matches.isEmpty {
-            sections.append(PaletteSection(header: "Saved Passwords", items: matches))
+            sections.append(PaletteSection(header: String(localized: "Saved Passwords"), items: matches))
         }
-        sections.append(PaletteSection(header: "Add", items: [
-            addItem(
-                id: "password-add-command",
-                title: "Add Password for Command: \(text)",
-                request: .new(command: text),
-                context: context
-            ),
-        ]))
+        sections.append(PaletteSection(
+            header: String(localized: "Add", comment: "Command palette, Password Manager: the section of rows that add a password"),
+            items: [
+                addItem(
+                    id: "password-add-command",
+                    title: String(localized: "Add Password for Command: \(text)"),
+                    request: .new(command: text),
+                    context: context
+                ),
+            ]
+        ))
         return sections
     }
 
@@ -67,11 +70,14 @@ final class PasswordPaletteScope: PaletteScope {
 
     private func item(for entry: SavedPassword, score: Int, canFill: Bool, context: PaletteContext) -> PaletteItem {
         let subtitle: String? = if !canFill {
-            "No terminal pane to type into"
+            String(localized: "No terminal pane to type into")
         } else if entry.id.isOnDemandOnly {
             nil
         } else if entry.id.command == nil {
-            "\(entry.id.prompt) — any command"
+            String(
+                localized: "\(entry.id.prompt) — any command",
+                comment: "Command palette, Password Manager: a saved password that answers its prompt for every command"
+            )
         } else {
             entry.id.prompt
         }

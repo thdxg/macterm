@@ -51,6 +51,8 @@ final class TerminalTab: Identifiable {
         return splitRoot.allPanes().first?.id
     }
 
+    /// The fallback "Terminal" stays English: `tab list` reports this title
+    /// and `tab select` matches it, so it is CLI output too.
     var autoTitle: String {
         let panes = splitRoot.allPanes()
         if panes.isEmpty { return "Terminal" }
@@ -66,7 +68,9 @@ final class TerminalTab: Identifiable {
     var sidebarRowTitle: String {
         if customTitle == nil {
             let paneCount = splitRoot.allPanes().count
-            if paneCount >= 4 { return "\(paneCount) panes" }
+            if paneCount >= 4 {
+                return String(localized: "\(paneCount) panes", comment: "Sidebar title of a tab with four or more panes")
+            }
         }
         return sidebarTitle
     }

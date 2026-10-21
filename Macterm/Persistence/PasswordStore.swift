@@ -17,8 +17,9 @@ enum PasswordStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .keychain(status):
-            let message = SecCopyErrorMessageString(status, nil) as String? ?? "error \(status)"
-            return "Keychain: \(message)"
+            let message = SecCopyErrorMessageString(status, nil) as String?
+                ?? String(localized: "error \(status)", comment: "A keychain error with no message. The argument is a status code.")
+            return String(localized: "Keychain: \(message)", comment: "A keychain error. The argument is the system message.")
         }
     }
 }

@@ -95,7 +95,7 @@ struct PasswordEditorSheet: View {
                 } header: {
                     if entry == nil { Text("New Password") }
                 } footer: {
-                    Text(problem ?? caption)
+                    Text(verbatim: problem ?? caption)
                         .foregroundStyle(problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(MactermTheme.failure))
                 }
             }
@@ -120,17 +120,21 @@ struct PasswordEditorSheet: View {
         }
     }
 
-    private static let rule = "Macterm offers Autofill when both the command and the prompt match. "
-        + "With no prompt, Macterm never offers the password at a prompt. Select it in Password Manager "
-        + "in the command palette."
-
     private var caption: String {
-        if isPromptOnly { return "Saved for this prompt from any command. " + Self.rule }
+        if isPromptOnly {
+            return String(localized: """
+            Saved for this prompt from any command. Macterm offers Autofill when both the command and the prompt match. \
+            With no prompt, Macterm never offers the password at a prompt. Select it in Password Manager in the command palette.
+            """)
+        }
         // A key passphrase prompt files under the key, whatever command was typed.
         if !command.trimmingCharacters(in: .whitespaces).isEmpty, proposedID.command == nil {
-            return "Macterm saves a key passphrase from its prompt. Type it there one time and save it."
+            return String(localized: "Macterm saves a key passphrase from its prompt. Type it there one time and save it.")
         }
-        return Self.rule
+        return String(localized: """
+        Macterm offers Autofill when both the command and the prompt match. \
+        With no prompt, Macterm never offers the password at a prompt. Select it in Password Manager in the command palette.
+        """)
     }
 
     /// An entry detection filed under its prompt alone, being edited.
@@ -219,7 +223,10 @@ struct PasswordEditorSheet: View {
         Task { @MainActor in
             defer { busy = false }
             let authorized = await PasswordAuthenticator.shared.authorize(
-                reason: "show the password for “\(entry.id.title)”"
+                reason: String(
+                    localized: "show the password for “\(entry.id.title)”",
+                    comment: "Touch ID reason. It completes the system sentence “Macterm is trying to …”."
+                )
             )
             guard authorized, let secret = vault.password(for: entry.id) else { return }
             storedPassword = secret
@@ -232,14 +239,14 @@ struct PasswordEditorSheet: View {
     private func save() {
         let newID = proposedID
         if newID != entry?.id, vault.contains(newID) {
-            problem = "A password is already saved for that command and prompt."
+            problem = String(localized: "A password is already saved for that command and prompt.")
             return
         }
         guard let entry else {
             if vault.save(password ?? "", for: newID) {
                 dismiss()
             } else {
-                problem = vault.lastError ?? "Macterm could not save the password."
+                problem = vault.lastError ?? String(localized: "Macterm could not save the password.")
             }
             return
         }
@@ -251,10 +258,13 @@ struct PasswordEditorSheet: View {
                 secret = password
             } else {
                 let authorized = await PasswordAuthenticator.shared.authorize(
-                    reason: "change the saved password entry for “\(entry.id.title)”"
+                    reason: String(
+                        localized: "change the saved password entry for “\(entry.id.title)”",
+                        comment: "Touch ID reason. It completes the system sentence “Macterm is trying to …”."
+                    )
                 )
                 guard authorized, let stored = vault.password(for: entry.id) else {
-                    problem = vault.lastError ?? "Macterm could not read the saved password."
+                    problem = vault.lastError ?? String(localized: "Macterm could not read the saved password.")
                     return
                 }
                 secret = stored
@@ -262,7 +272,7 @@ struct PasswordEditorSheet: View {
             if vault.update(entry.id, to: newID, password: secret) {
                 dismiss()
             } else {
-                problem = vault.lastError ?? "Macterm could not save the changes."
+                problem = vault.lastError ?? String(localized: "Macterm could not save the changes.")
             }
         }
     }

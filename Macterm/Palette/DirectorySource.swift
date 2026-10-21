@@ -8,6 +8,10 @@ import Foundation
 /// (a directory is not an identity; it can back several projects).
 @MainActor
 struct DirectorySource: PaletteSource {
+    private static var category: String {
+        String(localized: "Directories", comment: "Command palette: the section of folder rows in path mode")
+    }
+
     func items(query: String, context: PaletteContext) -> [PaletteItem] {
         // A typed remote spec offers add/switch, mirroring local directories
         // (#104). No filesystem browsing — the host isn't consulted; the
@@ -120,8 +124,8 @@ struct DirectorySource: PaletteSource {
             let switchItem = PaletteItem(
                 id: "remote-switch:\(spec)",
                 title: existing.name,
-                subtitle: "Switch to remote project: \(spec)",
-                category: "Directories",
+                subtitle: String(localized: "Switch to remote project: \(spec)"),
+                category: Self.category,
                 score: 0
             ) { [appState = context.appState] in
                 appState.selectProject(existing)
@@ -131,8 +135,8 @@ struct DirectorySource: PaletteSource {
         let addItem = PaletteItem(
             id: "remote-open:\(spec)",
             title: name,
-            subtitle: "Add remote project: \(spec)",
-            category: "Directories",
+            subtitle: String(localized: "Add remote project: \(spec)"),
+            category: Self.category,
             score: 0
         ) { [appState = context.appState, projectStore = context.projectStore] in
             let project = projectStore.findOrCreate(
@@ -155,8 +159,8 @@ struct DirectorySource: PaletteSource {
             return PaletteItem(
                 id: "dir-switch:\(fullPath)",
                 title: existing.name,
-                subtitle: "Switch to project: \(fullPath)",
-                category: "Directories",
+                subtitle: String(localized: "Switch to project: \(fullPath)"),
+                category: Self.category,
                 score: score
             ) { [appState = context.appState] in
                 appState.selectProject(existing)
@@ -165,8 +169,8 @@ struct DirectorySource: PaletteSource {
         return PaletteItem(
             id: "dir-open:\(fullPath)",
             title: name,
-            subtitle: "Open as new project: \(fullPath)",
-            category: "Directories",
+            subtitle: String(localized: "Open as new project: \(fullPath)"),
+            category: Self.category,
             score: score
         ) { [appState = context.appState, projectStore = context.projectStore] in
             let project = projectStore.findOrCreate(
@@ -190,8 +194,8 @@ struct DirectorySource: PaletteSource {
         PaletteItem(
             id: "dir-new:\(fullPath)",
             title: name,
-            subtitle: "Add another project: \(fullPath)",
-            category: "Directories",
+            subtitle: String(localized: "Add another project: \(fullPath)"),
+            category: Self.category,
             score: score
         ) { [appState = context.appState, projectStore = context.projectStore] in
             let project = projectStore.create(

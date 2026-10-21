@@ -156,7 +156,9 @@ struct TabStatusGlyph: View {
                         )
                         .offset(x: 2.5 * size.glyphScale, y: 2.5 * size.glyphScale)
                 }
-                .help(failed ? "Failed" : "Done")
+                .help(failed
+                    ? String(localized: "Failed", comment: "Tooltip of a tab whose command failed")
+                    : String(localized: "Done", comment: "Tooltip of a tab whose command finished"))
         case .idle:
             TabRowIcon(symbol: symbol, index: index, agent: agent, agentTint: tint)
                 .foregroundStyle(iconStyle)
@@ -259,7 +261,7 @@ private struct NumberGlyph: View {
 
     var body: some View {
         if variant == Preferences.numberIconPlain {
-            Text("\(index)")
+            Text(verbatim: "\(index)")
                 .font(digitFont)
         } else if let suffix = shapeSuffix, (1 ... 50).contains(index) {
             // SF Symbols ships `1.<shape>` through `50.<shape>`; beyond that,
@@ -267,7 +269,7 @@ private struct NumberGlyph: View {
             Image(systemName: "\(index).\(suffix)")
                 .imageScale(size.imageScale)
         } else {
-            Text("\(index)")
+            Text(verbatim: "\(index)")
                 .font(digitFont)
         }
     }

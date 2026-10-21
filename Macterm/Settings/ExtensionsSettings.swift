@@ -38,7 +38,7 @@ struct ExtensionsSettings: View {
                 HStack(spacing: 10) {
                     SettingsSearchField(text: $query, prompt: "Search extensions")
                     Picker("Show", selection: $filter) {
-                        ForEach(ExtensionGalleryItem.Filter.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(ExtensionGalleryItem.Filter.allCases) { Text(Self.title(of: $0)).tag($0) }
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
@@ -115,11 +115,24 @@ struct ExtensionsSettings: View {
                     try appState.customPalettes.uninstall(extensionID: installed.id)
                     problem = nil
                 } catch {
-                    problem = "Cannot uninstall \(installed.name): \(error.localizedDescription)"
+                    problem = String(localized: "Cannot uninstall \(installed.name): \(error.localizedDescription)")
                 }
             }
         } message: { installed in
             Text(installed.uninstallMessage)
+        }
+    }
+
+    /// The label of a filter in the Show menu. The raw value is an
+    /// identifier, not a label.
+    private static func title(of filter: ExtensionGalleryItem.Filter) -> String {
+        switch filter {
+        case .all: String(localized: "All", comment: "Settings → Extensions: the filter that shows every extension")
+        case .installed: String(localized: "Installed", comment: "Settings → Extensions: the filter that shows installed extensions")
+        case .notInstalled: String(
+                localized: "Not Installed",
+                comment: "Settings → Extensions: the filter that shows extensions that are not installed"
+            )
         }
     }
 
@@ -132,7 +145,7 @@ struct ExtensionsSettings: View {
                 try await appState.paletteRegistry.install(entry, into: appState.customPalettes)
                 problem = nil
             } catch {
-                problem = "Cannot install \(entry.name): \(error.localizedDescription)"
+                problem = String(localized: "Cannot install \(entry.name): \(error.localizedDescription)")
             }
             installingIDs.remove(entry.id)
         }
@@ -146,7 +159,7 @@ struct ExtensionsSettings: View {
                 try await appState.paletteRegistry.update(entry, into: appState.customPalettes)
                 problem = nil
             } catch {
-                problem = "Cannot update \(entry.name): \(error.localizedDescription)"
+                problem = String(localized: "Cannot update \(entry.name): \(error.localizedDescription)")
             }
             installingIDs.remove(entry.id)
         }
@@ -259,8 +272,9 @@ private struct ExtensionCard: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(available.entry.failure != nil || isInstalling)
-                    .help(available.entry.failure.map { "This version of Macterm cannot read the update: \($0.localizedDescription)" }
-                        ?? "Update to the version in the Macterm repository")
+                    .help(available.entry.failure
+                        .map { String(localized: "This version of Macterm cannot read the update: \($0.localizedDescription)") }
+                        ?? String(localized: "Update to the version in the Macterm repository"))
                 }
                 Button { uninstall(installed) } label: {
                     ButtonLabel(title: "Installed", systemImage: "checkmark.circle.fill")
@@ -280,7 +294,9 @@ private struct ExtensionCard: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(entry.failure != nil || isInstalling)
-            .help(entry.failure.map { "This version of Macterm cannot read it: \($0.localizedDescription)" } ?? "Install it")
+            .help(entry.failure
+                .map { String(localized: "This version of Macterm cannot read it: \($0.localizedDescription)") } ??
+                String(localized: "Install it"))
         }
     }
 }
@@ -291,7 +307,7 @@ private struct ExtensionCard: View {
 /// padding of the bezel. That padding is for a wide push button, and it made
 /// these small buttons mostly empty.
 private struct ButtonLabel: View {
-    let title: String?
+    let title: LocalizedStringKey?
     let systemImage: String?
 
     var body: some View {

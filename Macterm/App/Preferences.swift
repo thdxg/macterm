@@ -46,8 +46,8 @@ enum TextFilePlacement: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .split: "New split"
-        case .tab: "New tab"
+        case .split: String(localized: "New split", comment: "Opening text files: open the editor in a new split")
+        case .tab: String(localized: "New tab", comment: "Opening text files: open the editor in a new tab")
         }
     }
 }
@@ -62,9 +62,9 @@ enum TabSwitcherVisibility: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .always: "Always"
-        case .whenMultiple: "When multiple tabs"
-        case .hidden: "Hidden"
+        case .always: String(localized: "Always")
+        case .whenMultiple: String(localized: "When multiple tabs")
+        case .hidden: String(localized: "Hidden")
         }
     }
 }
@@ -101,8 +101,8 @@ enum PasswordAutofillAuthentication: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .untilLocked: "Once per app launch"
-        case .everyTime: "Every time"
+        case .untilLocked: String(localized: "Once per app launch")
+        case .everyTime: String(localized: "Every time")
         }
     }
 }
@@ -118,9 +118,9 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .stable: "Stable"
-        case .beta: "Beta"
-        case .tip: "Tip"
+        case .stable: String(localized: "Stable", comment: "Update channel")
+        case .beta: String(localized: "Beta", comment: "Update channel")
+        case .tip: String(localized: "Tip", comment: "Update channel: a build of every commit")
         }
     }
 
@@ -129,9 +129,9 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
     /// admits the default channel beside `Updater.allowedChannels`.
     var summary: String {
         switch self {
-        case .stable: "Stable releases only."
-        case .beta: "Betas of the next release and stable releases."
-        case .tip: "A build of every commit that passes CI, and stable releases. Tip builds get no release tests."
+        case .stable: String(localized: "Stable releases only.")
+        case .beta: String(localized: "Betas of the next release and stable releases.")
+        case .tip: String(localized: "A build of every commit that passes CI, and stable releases. Tip builds get no release tests.")
         }
     }
 
@@ -166,9 +166,9 @@ enum SidebarIconSize: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .small: "Small"
-        case .medium: "Medium"
-        case .large: "Large"
+        case .small: String(localized: "Small", comment: "Sidebar icon size")
+        case .medium: String(localized: "Medium", comment: "Sidebar icon size")
+        case .large: String(localized: "Large", comment: "Sidebar icon size")
         }
     }
 
@@ -199,8 +199,8 @@ enum QuickTerminalAdjustMode: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .fixed: "Fixed"
-        case .dynamic: "Dynamic"
+        case .fixed: String(localized: "Fixed", comment: "Quick terminal position or size: from the Settings sliders")
+        case .dynamic: String(localized: "Dynamic", comment: "Quick terminal position or size: remembered from the panel")
         }
     }
 }
@@ -213,8 +213,8 @@ enum TabSwitcherPosition: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .leading: "Left"
-        case .trailing: "Right"
+        case .leading: String(localized: "Left", comment: "Tab switcher position")
+        case .trailing: String(localized: "Right", comment: "Tab switcher position")
         }
     }
 }
@@ -229,8 +229,8 @@ enum WindowGlassStyle: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .regular: "Regular"
-        case .clear: "Clear"
+        case .regular: String(localized: "Regular", comment: "Liquid glass style")
+        case .clear: String(localized: "Clear", comment: "Liquid glass style: transparent")
         }
     }
 }
@@ -246,8 +246,8 @@ enum SidebarPeekStyle: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .resizeTerminal: "Resize terminal"
-        case .overlayTerminal: "Overlay terminal"
+        case .resizeTerminal: String(localized: "Resize terminal")
+        case .overlayTerminal: String(localized: "Overlay terminal")
         }
     }
 }

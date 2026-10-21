@@ -14,7 +14,7 @@ enum UpdateNotice {
     /// The toast title for this launch, or nil when the version did not change.
     static func title(previous: String?, current: String) -> String? {
         guard let previous, !previous.isEmpty, previous != current else { return nil }
-        return "Macterm updated to v\(current)"
+        return String(localized: "Macterm updated to v\(current)")
     }
 }
 

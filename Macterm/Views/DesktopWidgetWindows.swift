@@ -112,7 +112,7 @@ final class DesktopWidgetPanel: NSPanel {
         self.appState = appState
         widgetContent = DesktopWidgetContentView(widget: widget)
         super.init(contentRect: widget.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        title = "Desktop Widget"
+        title = String(localized: "Desktop Widget")
         level = Self.desktopLevel
         // On the desktop of every Space, left in place by Mission Control and
         // Show Desktop, and out of the ⌘` window cycle — a widget is part of
@@ -251,17 +251,17 @@ final class DesktopWidgetPanel: NSPanel {
         menu.autoenablesItems = false
         guard let appState, appState.desktopWidget(id: widgetID) != nil else { return menu }
         if isEditing {
-            menu.addItem(item("Done Editing", #selector(finishEditingFromMenu)))
+            menu.addItem(item(String(localized: "Done Editing"), #selector(finishEditingFromMenu)))
         } else {
-            let edit = item("Edit Widget", #selector(startEditingFromMenu))
+            let edit = item(String(localized: "Edit Widget"), #selector(startEditingFromMenu))
             // One widget at a time: the one being edited has to be locked
             // before another can be unlocked.
             edit.isEnabled = appState.canEditDesktopWidget(id: widgetID)
-            if !edit.isEnabled { edit.toolTip = "Finish editing the other widget first." }
+            if !edit.isEnabled { edit.toolTip = String(localized: "Finish editing the other widget first.") }
             menu.addItem(edit)
         }
         menu.addItem(.separator())
-        menu.addItem(item("Remove Widget", #selector(removeWidget)))
+        menu.addItem(item(String(localized: "Remove Widget"), #selector(removeWidget)))
         return menu
     }
 
@@ -295,11 +295,11 @@ enum DesktopWidgetRemoval {
     static func confirmAndRemove(_ id: UUID, in appState: AppState) {
         if appState.desktopWidgetNeedsConfirmRemove(id: id) {
             let alert = NSAlert()
-            alert.messageText = "Remove widget?"
-            alert.informativeText = "A process is still running in this widget. Remove the widget anyway?"
+            alert.messageText = String(localized: "Remove widget?")
+            alert.informativeText = String(localized: "A process is still running in this widget. Remove the widget anyway?")
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "Remove")
-            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: String(localized: "Remove"))
+            alert.addButton(withTitle: String(localized: "Cancel"))
             // A widget's menu is used while another app is in front — widgets
             // never activate Macterm — and a modal alert in an inactive app
             // never comes forward: it sat unseen behind the frontmost app,
@@ -347,7 +347,11 @@ final class DesktopWidgetContentView: NSView {
 
     private let shield = DesktopWidgetShieldView()
     private let viewState = DesktopWidgetViewState()
-    private let doneButton = NSButton(title: "Done", target: nil, action: nil)
+    private let doneButton = NSButton(
+        title: String(localized: "Done", comment: "Button on a desktop widget that ends editing"),
+        target: nil,
+        action: nil
+    )
     /// Polls for the release that ends a window-server drag — the drag runs
     /// out of process, so no mouseUp ever reaches this view.
     private var dragReleaseTimer: Timer?

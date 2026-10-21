@@ -115,7 +115,7 @@ final class FilesPaletteScope: PaletteScope {
     /// project has thousands of files.
     static let shownLimit = 50
 
-    let placeholder = "Search files by name or path..."
+    let placeholder = String(localized: "Search files by name or path...")
     private(set) var loading: PaletteLoading?
     private(set) var failure: PaletteFailure?
     private var entries: [FileIndexEntry]?
@@ -161,12 +161,12 @@ final class FilesPaletteScope: PaletteScope {
     private func startScan() {
         guard let context else { return }
         guard let (project, root) = Self.projectRoot(context) else {
-            failure = PaletteFailure(title: "No local project to search", detail: nil)
+            failure = PaletteFailure(title: String(localized: "No local project to search"), detail: nil)
             onChange?()
             return
         }
         self.root = root
-        loading = PaletteLoading(message: "Indexing \(project.name)…")
+        loading = PaletteLoading(message: String(localized: "Indexing \(project.name)…"))
         onChange?()
         let scan = scan
         task = Task { @MainActor [weak self] in
@@ -210,7 +210,7 @@ final class FilesPaletteScope: PaletteScope {
             subtitle: entry.parent.isEmpty ? nil : entry.parent,
             score: -Int(match.score),
             icon: entry.isDirectory ? "folder" : "doc",
-            alt: PaletteAltAction(title: "Open with Default App") {
+            alt: PaletteAltAction(title: String(localized: "Open with Default App")) {
                 NSWorkspace.shared.open(url)
             },
             highlights: match.highlights

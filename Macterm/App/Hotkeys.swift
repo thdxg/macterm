@@ -71,9 +71,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
     /// Settings don't drift apart.
     var title: String { appCommand.title }
 
-    /// What Settings → Keymaps' search looks in (`Search`): the title,
-    /// the section it sits in, and the chord both as shown (`⌘D`, `None` when
-    /// unbound) and as written (`cmd+d`).
+    /// What Settings → Keymaps' search looks in (`Search`): the title, its
+    /// English form, the section it sits in, and the chord both as shown
+    /// (`⌘D`, `None` when unbound) and as written (`cmd+d`).
     /// Every bindable action in the order the command palette lists its
     /// commands (`AppCommand.allCases`), so Settings → Keymaps sections run
     /// in the palette's order — Palettes first — rather than in this enum's.
@@ -83,7 +83,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
 
     func searchFields(shortcut: String) -> [String] {
         let shown = HotkeyRegistry.displayString(for: shortcut)
-        var fields = [title, appCommand.category.rawValue, shown]
+        var fields = [title, appCommand.category.title, shown]
+        // The English title too, so a search finds the row under any language.
+        if appCommand.englishTitle != title { fields.append(appCommand.englishTitle) }
         if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
         return fields
     }
@@ -490,9 +492,18 @@ enum HotkeyRegistry {
         return parts.joined(separator: "+")
     }
 
+    /// The shortcut as one shown string, or "None" (localized) when it is
+    /// unbound. Do not compare the result against a word: ask `isUnbound`.
     static func displayString(for shortcut: String) -> String {
         let symbols = displaySymbols(for: shortcut)
-        return symbols.isEmpty ? "None" : symbols.joined()
+        return symbols.isEmpty ? String(localized: "None", comment: "A keybind that has no key") : symbols.joined()
+    }
+
+    /// Whether `shortcut` names no chord (empty, `none` or `disabled`), in
+    /// any language — the question a comparison of `displayString` against
+    /// "None" asks.
+    static func isUnbound(_ shortcut: String) -> Bool {
+        displaySymbols(for: shortcut).isEmpty
     }
 
     /// The shortcut's modifier glyphs and key label as separate elements, in

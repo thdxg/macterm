@@ -294,7 +294,7 @@ extension AppCommand {
         case .reloadGhosttyConfig:
             return {
                 guard GhosttyApp.shared.reloadAndReport() else { return }
-                ctx.appState.presentToast("Ghostty config reloaded")
+                ctx.appState.presentToast(String(localized: "Ghostty config reloaded"))
             }
         case .openMactermConfig:
             // The user's own file, in their terminal editor, the way a text
@@ -307,7 +307,7 @@ extension AppCommand {
                 MactermConfigFile.seedIfMissing(at: url)
                 if !MactermConfigFile.isListed(url, in: Preferences.shared.ghosttyConfigSelection) {
                     ctx.appState.presentToast(
-                        "This file is not in your config files. Add it in Settings → General → Ghostty Config."
+                        String(localized: "This file is not in your config files. Add it in Settings → General → Ghostty Config.")
                     )
                 }
                 ctx.appState.appDelegate?.finderServices.openTextFiles([url.path])
@@ -349,7 +349,7 @@ extension AppCommand {
     func paletteDisabledHint(in ctx: AppCommandContext) -> String? {
         // Off by the master switch: say where it is rather than vanish.
         if self == .passwordManager {
-            return Preferences.shared.passwordManagerEnabled ? nil : "Turned off in Settings → Password Manager"
+            return Preferences.shared.passwordManagerEnabled ? nil : String(localized: "Turned off in Settings → Password Manager")
         }
         if self == .files { return unavailableNotice(in: ctx) }
         guard self == .applyLayout,
@@ -358,9 +358,9 @@ extension AppCommand {
         else { return nil }
         switch ctx.appState.projectFiles.applyState(forProjectPath: current.path, preferredSlug: ProjectSlug.slug(from: current.name)) {
         case .none:
-            return "No layout file for this project"
+            return String(localized: "No layout file for this project")
         case .emptyTabs:
-            return "The layout file declares no tabs"
+            return String(localized: "The layout file declares no tabs")
         case .applicable,
              .invalid:
             return nil
@@ -384,7 +384,7 @@ extension AppCommand {
     /// walks the local file system, which a remote project's files aren't on.
     @MainActor
     static func filesUnavailableReason(for project: Project) -> String? {
-        project.isRemote ? "The Files screen is not available for remote projects" : nil
+        project.isRemote ? String(localized: "The Files screen is not available for remote projects") : nil
     }
 
     /// Secondary line for an *enabled* palette row. Only "Apply Layout" uses
@@ -404,6 +404,6 @@ extension AppCommand {
             .filter { ProjectSlug.owns(filename: $0.url.lastPathComponent, slug: slug) }
         guard mine.count > 1 else { return nil }
         let ignored = mine.dropFirst().map(\.url.lastPathComponent).joined(separator: ", ")
-        return "Using \(mine[0].url.lastPathComponent) and ignoring the duplicate \(ignored)"
+        return String(localized: "Using \(mine[0].url.lastPathComponent) and ignoring the duplicate \(ignored)")
     }
 }

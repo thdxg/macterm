@@ -9,15 +9,15 @@ struct AppCommandMenuItem: View {
     let command: AppCommand
     let appState: AppState
     let projectStore: ProjectStore
-    /// Optional title override. Defaults to `command.title` (sentence-cased),
-    /// but the menu bar prefers title-cased entries to match macOS standard
-    /// menus (e.g. "New Tab" rather than "New tab").
-    var titleOverride: String?
+    /// Optional title override. Defaults to `command.title`, but the menu
+    /// bar can name an item for its menu (e.g. "Open Project…" with an
+    /// ellipsis). A literal at the call site is localizable.
+    var titleOverride: LocalizedStringResource?
 
     var body: some View {
         let ctx = AppCommandContext(appState: appState, projectStore: projectStore)
         let action = command.action(in: ctx)
-        let title = titleOverride ?? command.title
+        let title = titleOverride.map { String(localized: $0) } ?? command.title
         Button(title) {
             action?()
         }

@@ -637,7 +637,7 @@ struct CustomPaletteScopeTests {
             "broken.yml": "name: Broken\nnodes: { root: { list: ls } }",
         ])
         let rows = { CommandSource().emptyItems(context: context) ?? [] }
-        let palettes = rows().filter { $0.category == AppCommand.Category.palettes.rawValue }
+        let palettes = rows().filter { $0.category == AppCommand.Category.palettes.title }
         #expect(
             palettes.map(\.title) == ["Password Manager", "Files", "Broken", "Kubernetes"],
             "custom palettes follow the built-in screens"

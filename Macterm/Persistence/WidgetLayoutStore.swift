@@ -147,13 +147,13 @@ struct WidgetLayoutStore {
         do {
             text = try String(contentsOf: fileURL, encoding: .utf8)
         } catch {
-            return .invalid("could not read \(Self.filename): \(error.localizedDescription)")
+            return .invalid(String(localized: "could not read \(Self.filename): \(error.localizedDescription)"))
         }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .absent }
         do {
             return try .file(widgets: WidgetLayoutFile.parse(yaml: text).widgets ?? [], text: text)
         } catch {
-            return .invalid("\(Self.filename) is not valid: \(error.localizedDescription)")
+            return .invalid(String(localized: "\(Self.filename) is not valid: \(error.localizedDescription)"))
         }
     }
 

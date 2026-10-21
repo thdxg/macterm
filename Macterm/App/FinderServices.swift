@@ -93,7 +93,7 @@ final class FinderServiceProvider: NSObject {
         ) as? [URL] ?? []
         let paths = FinderServiceRequest.projectPaths(from: urls)
         guard !paths.isEmpty else {
-            error.pointee = "Select a folder in Finder to make it a \(appDisplayName) project." as NSString
+            error.pointee = String(localized: "Select a folder in Finder to make it a \(appDisplayName) project.") as NSString
             return
         }
         open(paths: paths)

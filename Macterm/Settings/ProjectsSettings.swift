@@ -118,10 +118,10 @@ struct ProjectsSettings: View {
             Button("Remove", role: .destructive) { confirmDeletion() }
                 .keyboardShortcut(.defaultAction)
         } message: {
-            Text(
-                "Macterm deletes “\(layoutPendingDeletion?.filename ?? "")”. "
-                    + "The projects that use it stay, but they lose their saved layout."
-            )
+            Text("""
+            Macterm deletes “\(layoutPendingDeletion?.filename ?? "")”. The projects that use it stay, \
+            but they lose their saved layout.
+            """)
         }
         .alert(
             "Cannot remove the layout file",
@@ -380,12 +380,15 @@ private struct LayoutRow: View {
 
     private var subtitle: String {
         if layout.isInvalid {
-            return "Invalid file. Fix it in an editor to use it."
+            return String(localized: "Invalid file. Fix it in an editor to use it.")
         }
         guard let path = layout.declaredPath else {
-            return "No path declared."
+            return String(localized: "No path declared.")
         }
-        let tabs = layout.tabCount == 1 ? "1 tab" : "\(layout.tabCount) tabs"
-        return layout.tabCount == 0 ? "\(path) — no tabs" : "\(path) — \(tabs)"
+        return switch layout.tabCount {
+        case 0: String(localized: "\(path) — no tabs", comment: "Settings → Layouts: a layout file's path and tab count")
+        case 1: String(localized: "\(path) — 1 tab", comment: "Settings → Layouts: a layout file's path and tab count")
+        default: String(localized: "\(path) — \(layout.tabCount) tabs", comment: "Settings → Layouts: a layout file's path and tab count")
+        }
     }
 }

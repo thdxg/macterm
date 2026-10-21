@@ -24,7 +24,7 @@ import SwiftUI
 final class ToolbarMenu: NSObject, NSMenuDelegate {
     static let shared = ToolbarMenu()
 
-    let menu = NSMenu(title: "Toolbar")
+    let menu = NSMenu(title: String(localized: "Toolbar"))
     private weak var appState: AppState?
     private var monitor: Any?
 
@@ -72,16 +72,18 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         let prefs = Preferences.shared
 
-        let hide = NSMenuItem(title: "Hide Toolbar", action: #selector(hideToolbar(_:)), keyEquivalent: "")
+        let hide = NSMenuItem(title: String(localized: "Hide Toolbar"), action: #selector(hideToolbar(_:)), keyEquivalent: "")
         hide.target = self
         menu.addItem(hide)
         menu.addItem(.separator())
 
         // One submenu, two sections — the same two settings as Settings →
         // Appearance → Toolbar, headed the way the Settings pickers label them.
-        let switcher = NSMenu(title: "Tab Switcher")
+        let switcher = NSMenu(title: String(localized: "Tab Switcher"))
         switcher.autoenablesItems = false
-        switcher.addItem(.sectionHeader(title: "Show"))
+        switcher.addItem(.sectionHeader(
+            title: String(localized: "Show", comment: "Heading of the tab switcher visibility options in the toolbar menu")
+        ))
         addOptions(
             TabSwitcherVisibility.allCases,
             selected: prefs.tabSwitcherVisibility,
@@ -90,7 +92,9 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
             to: switcher
         )
         switcher.addItem(.separator())
-        switcher.addItem(.sectionHeader(title: "Position"))
+        switcher.addItem(.sectionHeader(
+            title: String(localized: "Position", comment: "Heading of the tab switcher position options in the toolbar menu")
+        ))
         addOptions(
             TabSwitcherPosition.allCases,
             selected: prefs.tabSwitcherPosition,
@@ -98,7 +102,7 @@ final class ToolbarMenu: NSObject, NSMenuDelegate {
             action: #selector(setTabSwitcherPosition(_:)),
             to: switcher
         )
-        let parent = NSMenuItem(title: "Tab Switcher", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: String(localized: "Tab Switcher"), action: nil, keyEquivalent: "")
         parent.submenu = switcher
         menu.addItem(parent)
     }

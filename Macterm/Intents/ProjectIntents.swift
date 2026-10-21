@@ -38,12 +38,12 @@ struct NewMactermProjectIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<MactermProjectEntity> {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard let url = folder.fileURL else {
-            throw MactermIntentError.badInput("That is not a folder on the disk.")
+            throw MactermIntentError.badInput(String(localized: "That is not a folder on the disk."))
         }
         let path = ProjectPath.canonicalLocal(url.path(percentEncoded: false))
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            throw MactermIntentError.badInput("There is no folder at \(path).")
+            throw MactermIntentError.badInput(String(localized: "There is no folder at \(path)."))
         }
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         // A typed name is refused like the CLI's `--name`; the folder's own

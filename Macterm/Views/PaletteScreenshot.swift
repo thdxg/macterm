@@ -43,7 +43,7 @@ enum PaletteScreenshot {
 
     private static func captureAndSave(windowState: WindowState, appState: AppState) async {
         guard let anchor = windowState.paletteAnchor, let window = anchor.window, let screen = window.screen else {
-            appState.presentToast("Open the command palette to capture it")
+            appState.presentToast(String(localized: "Open the command palette to capture it"))
             return
         }
         let palette = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
@@ -59,12 +59,12 @@ enum PaletteScreenshot {
             // instruction the system dialog does not give: a switch that is
             // already on names another build, and only a new row fixes that.
             appState.presentToast(
-                "Allow Screen Recording for Macterm in Privacy & Security",
-                subtitle: "If it is on, remove Macterm from the list. Then try again."
+                String(localized: "Allow Screen Recording for Macterm in Privacy & Security"),
+                subtitle: String(localized: "If it is on, remove Macterm from the list. Then try again.")
             )
         } catch {
             logger.error("palette screenshot: \(error.localizedDescription, privacy: .public)")
-            appState.presentToast("Cannot capture the palette", subtitle: error.localizedDescription)
+            appState.presentToast(String(localized: "Cannot capture the palette"), subtitle: error.localizedDescription)
         }
     }
 
@@ -140,7 +140,7 @@ enum PaletteScreenshot {
     private static func save(_ png: Data, suggestedFolder: URL, appState: AppState) {
         try? FileManager.default.createDirectory(at: suggestedFolder, withIntermediateDirectories: true)
         let panel = NSSavePanel()
-        panel.title = "Save Palette Screenshot"
+        panel.title = String(localized: "Save Palette Screenshot")
         panel.allowedContentTypes = [.png]
         panel.directoryURL = suggestedFolder
         panel.nameFieldStringValue = MactermExtension.nextScreenshotName(in: suggestedFolder)
@@ -151,9 +151,9 @@ enum PaletteScreenshot {
             MainActor.assumeIsolated {
                 do {
                     try png.write(to: url, options: .atomic)
-                    appState.presentToast("Screenshot saved", subtitle: url.lastPathComponent)
+                    appState.presentToast(String(localized: "Screenshot saved"), subtitle: url.lastPathComponent)
                 } catch {
-                    appState.presentToast("Cannot save the screenshot", subtitle: error.localizedDescription)
+                    appState.presentToast(String(localized: "Cannot save the screenshot"), subtitle: error.localizedDescription)
                 }
             }
         }
@@ -164,8 +164,8 @@ enum PaletteScreenshot {
         case encoding
         var errorDescription: String? {
             switch self {
-            case .noDisplay: "Macterm cannot capture the display of the palette."
-            case .encoding: "Macterm could not write the capture as a PNG."
+            case .noDisplay: String(localized: "Macterm cannot capture the display of the palette.")
+            case .encoding: String(localized: "Macterm could not write the capture as a PNG.")
             }
         }
     }

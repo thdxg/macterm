@@ -13,7 +13,12 @@ struct ProjectSource: PaletteSource {
         let query = SearchQuery(query)
         return context.projectStore.projects.compactMap { project in
             guard let match = Search.match(query, fields: [project.name, project.path]) else { return nil }
-            return makeItem(project: project, category: "Project", score: 0, context: context).with(match, boost: projectBoost)
+            return makeItem(
+                project: project,
+                category: String(localized: "Project", comment: "Command palette: the section of a project row"),
+                score: 0,
+                context: context
+            ).with(match, boost: projectBoost)
         }
     }
 
@@ -27,7 +32,8 @@ struct ProjectSource: PaletteSource {
             ? context.projectStore.projects.filter { $0.id != context.appState.activeProjectID }
             : recent
 
-        let items = pool.prefix(5).map { makeItem(project: $0, category: "Recent", score: 0, context: context) }
+        let category = String(localized: "Recent", comment: "Command palette: the section of recently visited projects")
+        let items = pool.prefix(5).map { makeItem(project: $0, category: category, score: 0, context: context) }
         return items.isEmpty ? nil : Array(items)
     }
 

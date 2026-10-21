@@ -52,7 +52,7 @@ struct RunCommandInMactermPaneIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard !command.isEmpty else {
-            throw MactermIntentError.badInput("The command is empty.")
+            throw MactermIntentError.badInput(String(localized: "The command is empty."))
         }
         let target = try IntentTargets.pane(session: pane.id, in: ctx)
         guard let view = target.pane.nsView,
@@ -111,7 +111,9 @@ struct SendKeyToMactermPaneIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         let ctx = try await MactermIntentHost.shared.authorizedContext()
         guard let shortcut = HotkeyRegistry.parseShortcut(key) else {
-            throw MactermIntentError.badInput("\"\(key)\" is not a key combination. Try ctrl+c, escape or up.")
+            throw MactermIntentError.badInput(
+                String(localized: "\"\(key)\" is not a key combination. Try ctrl+c, escape or up.")
+            )
         }
         let target = try IntentTargets.pane(session: pane.id, in: ctx)
         guard let view = target.pane.nsView,

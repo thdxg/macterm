@@ -807,14 +807,14 @@ final class GhosttyCallbacks: @unchecked Sendable {
                 Self.clipboardConfirmInFlight = true
                 defer { Self.clipboardConfirmInFlight = false }
                 let alert = NSAlert()
-                alert.messageText = "Allow clipboard write?"
-                alert.informativeText = """
+                alert.messageText = String(localized: "Allow clipboard write?")
+                alert.informativeText = String(localized: """
                 A terminal program wants to replace your clipboard with:
 
                 \(Self.clipboardPreview(string))
-                """
-                alert.addButton(withTitle: "Allow")
-                alert.addButton(withTitle: "Deny")
+                """)
+                alert.addButton(withTitle: String(localized: "Allow", comment: "Button of the clipboard write alert"))
+                alert.addButton(withTitle: String(localized: "Deny", comment: "Button of the clipboard write alert"))
                 if alert.runModal() == .alertFirstButtonReturn {
                     Self.setPasteboardString(string)
                 }

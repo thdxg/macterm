@@ -21,13 +21,17 @@ enum CopyModeKeymap: String, CaseIterable, Identifiable, PreferenceValue {
     func label(for state: CopyModeState) -> String {
         switch self {
         case .helix:
-            state.selectMode ? "Select Mode" : "Copy Mode"
+            if state.selectMode {
+                String(localized: "Select Mode", comment: "Pill on a pane in Helix copy mode")
+            } else {
+                String(localized: "Copy Mode", comment: "Pill on a pane in copy mode")
+            }
         case .vim:
             switch state.visual {
-            case .none: "Copy Mode"
-            case .char: "Visual"
-            case .line: "Visual Line"
-            case .block: "Visual Block"
+            case .none: String(localized: "Copy Mode", comment: "Pill on a pane in copy mode")
+            case .char: String(localized: "Visual", comment: "Pill on a pane in Vim visual mode")
+            case .line: String(localized: "Visual Line", comment: "Pill on a pane in Vim visual line mode")
+            case .block: String(localized: "Visual Block", comment: "Pill on a pane in Vim visual block mode")
             }
         }
     }

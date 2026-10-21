@@ -206,4 +206,25 @@ enum LayoutFileError: Error, LocalizedError {
         case let .outsideProjectsDirectory(filename): "“\(filename)” is not in the projects directory."
         }
     }
+
+    /// The message of the alert in the GUI, in the user's language.
+    /// `errorDescription` stays English, because `layout apply` and
+    /// `layout save` return it to the CLI.
+    var displayMessage: String {
+        switch self {
+        case let .parse(underlying):
+            String(localized: "The layout file is invalid and was not applied.\n\n\(underlying.localizedDescription)")
+        case let .noProjectFile(projectPath):
+            String(localized: "No layout file declares \(projectPath). Use “Save Layout” to create one.")
+        case .noTabs:
+            String(localized: "The layout file declares no tabs, so there is no layout to apply.")
+        case let .outsideProjectsDirectory(filename):
+            String(localized: "“\(filename)” is not in the projects directory.")
+        }
+    }
+
+    /// The message of the alert for any error that a layout action returns.
+    static func displayMessage(for error: Error) -> String {
+        (error as? LayoutFileError)?.displayMessage ?? error.localizedDescription
+    }
 }

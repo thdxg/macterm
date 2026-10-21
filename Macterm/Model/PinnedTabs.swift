@@ -38,7 +38,11 @@ enum PinnedTabs {
 
     /// Why a typed name was refused, as the app says it. The CLI words its
     /// `bad_request` the same (`ControlHandler.reservedNameError`).
-    static let reservedNameMessage = "“\(displayName)” is a reserved name for the pinned tabs. Select another name."
+    /// `displayName` stays as it is in every language, because it is the
+    /// name that the user must not type.
+    static let reservedNameMessage = String(
+        localized: "“\(displayName)” is a reserved name for the pinned tabs. Select another name."
+    )
 
     /// The reserved `path:` literal that marks `pinned.yaml` as the pinned
     /// set rather than a project declaration. The angle brackets make the
@@ -92,7 +96,7 @@ struct PinnedTabRecord: Identifiable, Equatable {
         if let cwd = panes.compactMap(\.cwd).first(where: { !$0.isEmpty }) {
             return (cwd as NSString).lastPathComponent
         }
-        return "Pinned Tab"
+        return String(localized: "Pinned Tab", comment: "Sidebar title of a pinned tab that has no name")
     }
 
     private static func leaves(of node: LayoutNode) -> [LayoutPane] {

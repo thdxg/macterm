@@ -163,7 +163,7 @@ struct PinnedLayoutStore {
         do {
             text = try String(contentsOf: url, encoding: .utf8)
         } catch {
-            return .invalid("could not read \(Self.filename): \(error.localizedDescription)")
+            return .invalid(String(localized: "could not read \(Self.filename): \(error.localizedDescription)"))
         }
         // An empty file is a transient editor state (truncate-then-write), not
         // a request to unpin everything.
@@ -172,10 +172,12 @@ struct PinnedLayoutStore {
         do {
             file = try ProjectFile.parse(yaml: text)
         } catch {
-            return .invalid("\(Self.filename) is not valid YAML: \(error.localizedDescription)")
+            return .invalid(String(localized: "\(Self.filename) is not valid YAML: \(error.localizedDescription)"))
         }
         guard file.path.trimmingCharacters(in: .whitespaces).lowercased() == PinnedTabs.pathMarker else {
-            return .invalid("\(Self.filename) is missing the `path: \(PinnedTabs.pathMarker)` marker. Macterm does not touch it")
+            return .invalid(String(
+                localized: "\(Self.filename) is missing the `path: \(PinnedTabs.pathMarker)` marker. Macterm does not touch it"
+            ))
         }
         return .file(tabs: file.tabs ?? [], text: text)
     }

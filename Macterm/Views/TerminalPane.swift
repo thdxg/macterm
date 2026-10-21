@@ -70,7 +70,11 @@ struct TerminalPane: View {
                     // Read-Only pill: libghostty sends no input to the pty.
                     // A click turns read-only off.
                     if pane.isReadOnly {
-                        ModePill(title: "Read-Only", systemImage: "eye", help: "Turn off read-only") { [weak pane] in
+                        ModePill(
+                            title: String(localized: "Read-Only"),
+                            systemImage: "eye",
+                            help: String(localized: "Turn off read-only")
+                        ) { [weak pane] in
                             pane?.nsView?.sendBindingAction("toggle_readonly")
                         }
                     }
@@ -81,7 +85,7 @@ struct TerminalPane: View {
                         ModePill(
                             title: label,
                             systemImage: "character.cursor.ibeam",
-                            help: "Leave copy mode"
+                            help: String(localized: "Leave copy mode")
                         ) { [weak pane] in
                             pane?.nsView?.copyMode.exit()
                         }
@@ -488,28 +492,30 @@ private struct TerminalSurface: NSViewRepresentable {
             }
             guard !(NSApp.isActive && view?.isFocused == true) else { return }
             let durationSec = Double(durationNs) / 1_000_000_000
+            let duration = Self.formatDuration(durationSec)
             let body = if exitCode < 0 {
-                String(format: "Completed in %@", Self.formatDuration(durationSec))
+                String(localized: "Completed in \(duration)")
             } else {
-                String(format: "Exited with code %d (%@)", exitCode, Self.formatDuration(durationSec))
+                String(localized: "Exited with code \(Int(exitCode)) (\(duration))")
             }
-            NotificationHandler.shared.post(pane: pane, title: "Command Finished", body: body)
+            NotificationHandler.shared.post(pane: pane, title: String(localized: "Command Finished"), body: body)
         }
     }
 
     private static func formatDuration(_ seconds: Double) -> String {
         if seconds < 60 {
-            return String(format: "%.1fs", seconds)
+            let value = String(format: "%.1f", seconds)
+            return String(localized: "\(value)s", comment: "A duration in seconds, as in 4.2s")
         } else if seconds < 3600 {
             let rounded = Int(seconds.rounded())
             let mins = rounded / 60
             let secs = rounded % 60
-            return String(format: "%dm %ds", mins, secs)
+            return String(localized: "\(mins)m \(secs)s", comment: "A duration in minutes and seconds, as in 3m 20s")
         } else {
             let rounded = Int(seconds.rounded())
             let hours = rounded / 3600
             let mins = (rounded % 3600) / 60
-            return String(format: "%dh %dm", hours, mins)
+            return String(localized: "\(hours)h \(mins)m", comment: "A duration in hours and minutes, as in 2h 5m")
         }
     }
 }

@@ -436,7 +436,7 @@ final class PasswordPromptMonitor {
             if vault.save(offer.secret, for: offer.id) {
                 tracker.offers.removeFirst()
             } else {
-                offer.problem = vault.lastError ?? "Cannot save to the keychain."
+                offer.problem = vault.lastError ?? String(localized: "Cannot save to the keychain.")
                 tracker.offers[0] = offer
             }
             return true
@@ -495,7 +495,11 @@ final class PasswordPromptMonitor {
         refreshBubble(tracker)
         let id = prompt.id
         Task { @MainActor [weak view] in
-            let authorized = await probes.authorize("autofill the password for “\(id.title)”")
+            let reason = String(
+                localized: "autofill the password for “\(id.title)”",
+                comment: "Touch ID reason. macOS shows it after “Macterm is trying to”."
+            )
+            let authorized = await probes.authorize(reason)
             guard let view else { return }
             self.finishAutofill(in: view, id: id, authorized: authorized)
         }
@@ -566,7 +570,11 @@ final class PasswordPromptMonitor {
     func performOnDemandFill(_ id: PasswordEntryID, in view: GhosttyTerminalNSView) async -> Bool {
         guard let pane = view.owningPane else { return false }
         let wasVerified = probes.lineMode(pane) == .password
-        let authorized = await probes.authorize("type the password for “\(id.title)”")
+        let reason = String(
+            localized: "type the password for “\(id.title)”",
+            comment: "Touch ID reason. macOS shows it after “Macterm is trying to”."
+        )
+        let authorized = await probes.authorize(reason)
         guard authorized, let pane = view.owningPane else { return false }
         // Authentication took a moment; plan for the pane as it is now. A read
         // that was up when the entry was picked must still be: one that ended

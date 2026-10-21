@@ -82,7 +82,7 @@ final class CustomPaletteScope: PaletteScope {
 
     var placeholder: String {
         if let context, let placeholder = node(context)?.placeholder { return placeholder }
-        return "Search \(target.pill.title)..."
+        return String(localized: "Search \(target.pill.title)...")
     }
 
     func activate(context: PaletteContext, onChange: @escaping @MainActor () -> Void) {
@@ -101,7 +101,7 @@ final class CustomPaletteScope: PaletteScope {
         let (environment, cwd) = Self.commandContext(for: target, context: context)
         let runner = conditionRunner
         gated = true
-        loading = PaletteLoading(message: "Checking \(palette.name)…")
+        loading = PaletteLoading(message: String(localized: "Checking \(palette.name)…"))
         onChange?()
         checks = Task { @MainActor [weak self] in
             let verdicts = await CustomPaletteConditions.evaluate(
@@ -114,7 +114,7 @@ final class CustomPaletteScope: PaletteScope {
             if verdicts[condition.command] == true {
                 proceed()
             } else {
-                failure = PaletteFailure(title: "\(palette.name) is not available", detail: condition.reason)
+                failure = PaletteFailure(title: String(localized: "\(palette.name) is not available"), detail: condition.reason)
                 onChange?()
             }
         }
@@ -153,11 +153,14 @@ final class CustomPaletteScope: PaletteScope {
     /// entering a broken palette shows what is wrong with it.
     private func fileReads(_ context: PaletteContext) -> Bool {
         guard let entry = context.appState.customPalettes.entry(id: target.paletteID) else {
-            failure = PaletteFailure(title: "This palette's file is gone", detail: nil)
+            failure = PaletteFailure(title: String(localized: "This palette's file is gone"), detail: nil)
             return false
         }
         if let error = entry.failure {
-            failure = PaletteFailure(title: "Cannot read \(entry.fileURL.lastPathComponent)", detail: error.localizedDescription)
+            failure = PaletteFailure(
+                title: String(localized: "Cannot read \(entry.fileURL.lastPathComponent)"),
+                detail: error.localizedDescription
+            )
             return false
         }
         return true
@@ -193,7 +196,7 @@ final class CustomPaletteScope: PaletteScope {
         let requires = palette.requires
         let runner = runner
         let title = target.pill.title
-        loading = PaletteLoading(message: "Listing \(title)…")
+        loading = PaletteLoading(message: String(localized: "Listing \(title)…"))
         onChange?()
         task = Task { @MainActor [weak self] in
             var outcome: Result<[CustomPaletteRow], PaletteFailure>
@@ -206,18 +209,20 @@ final class CustomPaletteScope: PaletteScope {
                     )
                     if !missing.isEmpty {
                         outcome = .failure(PaletteFailure(
-                            title: "Cannot list \(title)",
+                            title: String(localized: "Cannot list \(title)"),
                             detail: CustomPaletteRequirements.message(missing: missing)
                         ))
                     }
                 }
             } catch is CustomPaletteRunner.TimedOut {
                 outcome = .failure(PaletteFailure(
-                    title: "Cannot list \(title)",
-                    detail: "The command did not finish within \(CustomPaletteRunner.timeout.components.seconds) seconds."
+                    title: String(localized: "Cannot list \(title)"),
+                    detail: String(
+                        localized: "The command did not finish within \(CustomPaletteRunner.timeout.components.seconds) seconds."
+                    )
                 ))
             } catch {
-                outcome = .failure(PaletteFailure(title: "Cannot list \(title)", detail: error.localizedDescription))
+                outcome = .failure(PaletteFailure(title: String(localized: "Cannot list \(title)"), detail: error.localizedDescription))
             }
             guard let self, !Task.isCancelled else { return }
             self.task = nil
@@ -240,22 +245,25 @@ final class CustomPaletteScope: PaletteScope {
         let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         guard result.status == 0 else {
             return .failure(PaletteFailure(
-                title: "Cannot list \(title)",
-                detail: stderr.isEmpty ? "The command exited with status \(result.status)." : stderr
+                title: String(localized: "Cannot list \(title)"),
+                detail: stderr.isEmpty ? String(localized: "The command exited with status \(result.status).") : stderr
             ))
         }
         do {
             return try .success(CustomPaletteRows.parse(output: result.stdout, listing: listing))
         } catch let failure as CustomPaletteRows.Failure {
             let detail = switch failure {
-            case let .notJSON(reason): "Output is not JSON: \(reason)"
-            case let .rowsNotFound(path): "Nothing at rows: \(path) in the output"
-            case let .rowsNotAnArray(path): "rows: \(path) is not an array"
-            case let .plainOutputWithRowsPath(path): "rows: \(path) names a path, but the output is not JSON"
+            case let .notJSON(reason): String(localized: "Output is not JSON: \(reason)")
+            case let .rowsNotFound(path): String(localized: "Nothing at rows: \(path) in the output")
+            case let .rowsNotAnArray(path): String(localized: "rows: \(path) is not an array")
+            case let .plainOutputWithRowsPath(path): String(localized: "rows: \(path) names a path, but the output is not JSON")
             }
-            return .failure(PaletteFailure(title: "Cannot read \(title)", detail: stderr.isEmpty ? detail : "\(detail)\n\(stderr)"))
+            return .failure(PaletteFailure(
+                title: String(localized: "Cannot read \(title)"),
+                detail: stderr.isEmpty ? detail : "\(detail)\n\(stderr)"
+            ))
         } catch {
-            return .failure(PaletteFailure(title: "Cannot read \(title)", detail: error.localizedDescription))
+            return .failure(PaletteFailure(title: String(localized: "Cannot read \(title)"), detail: error.localizedDescription))
         }
     }
 
@@ -266,8 +274,8 @@ final class CustomPaletteScope: PaletteScope {
             return [PaletteSection(header: nil, items: [
                 PaletteItem(
                     id: "custom-missing-node",
-                    title: "No node named \(target.node)",
-                    subtitle: "Check the palette's file",
+                    title: String(localized: "No node named \(target.node)"),
+                    subtitle: String(localized: "Check the palette's file"),
                     isEnabled: false,
                     action: {}
                 ),
@@ -456,7 +464,7 @@ enum CustomPaletteActions {
         switch action {
         case let .run(command, place, cwd):
             guard let projectID = appState.activeProjectID else {
-                appState.presentToast("No project to run in")
+                appState.presentToast(String(localized: "No project to run in"))
                 return
             }
             // A pinned tab belongs to no project. A tab born in the pinned
@@ -464,7 +472,7 @@ enum CustomPaletteActions {
             // beside the focused pane there, as a clicked text file does.
             if projectID == PinnedTabs.projectID {
                 guard let pane = appState.focusedPane(for: projectID) else {
-                    appState.presentToast("No pane to run beside")
+                    appState.presentToast(String(localized: "No pane to run beside"))
                     return
                 }
                 var env = CustomPaletteEnvironment.make(projectName: nil, projectDirectory: nil, exports: exports)
@@ -486,7 +494,7 @@ enum CustomPaletteActions {
                 return
             }
             guard let project = projects.first(where: { $0.id == projectID }) else {
-                appState.presentToast("No project to run in")
+                appState.presentToast(String(localized: "No project to run in"))
                 return
             }
             var env = CustomPaletteEnvironment.make(
@@ -503,7 +511,7 @@ enum CustomPaletteActions {
                 // A `cwd:` is a directory on this Mac, where every listing
                 // runs. A remote project's terminals are on the host.
                 guard !project.isRemote else {
-                    appState.presentToast("A remote project cannot open a directory on this Mac")
+                    appState.presentToast(String(localized: "A remote project cannot open a directory on this Mac"))
                     return
                 }
                 guard let directory = directory(operand, base: project.path, appState: appState) else { return }
@@ -556,7 +564,7 @@ enum CustomPaletteActions {
     /// none or the directory is not there.
     static func directory(_ operand: String?, base: String, appState: AppState) -> String? {
         guard let operand, !operand.isEmpty else {
-            appState.presentToast("The row has no directory")
+            appState.presentToast(String(localized: "The row has no directory"))
             return nil
         }
         let path = operand.hasPrefix("/") || operand.hasPrefix("~")
@@ -564,7 +572,7 @@ enum CustomPaletteActions {
             : ProjectPath.canonicalLocal(ProjectPath.canonicalLocal(base) + "/" + operand)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            appState.presentToast("No directory at \(path)")
+            appState.presentToast(String(localized: "No directory at \(path)"))
             return nil
         }
         return path
