@@ -16,6 +16,12 @@
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 AppleScript를 사용하려고 합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要使用 AppleScript。"
+          }
         }
       }
     },
@@ -33,6 +39,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 Bluetooth를 사용하려고 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要使用蓝牙。"
           }
         }
       }
@@ -52,6 +64,12 @@
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 캘린더에 접근하려고 합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要访问你的日历。"
+          }
         }
       }
     },
@@ -69,6 +87,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 카메라를 사용하려고 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要使用相机。"
           }
         }
       }
@@ -88,6 +112,12 @@
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 연락처에 접근하려고 합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要访问你的通讯录。"
+          }
         }
       }
     },
@@ -105,6 +135,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 로컬 네트워크에 접근하려고 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要访问本地网络。"
           }
         }
       }
@@ -124,6 +160,12 @@
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 위치 정보에 접근하려고 합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要访问你的位置信息。"
+          }
         }
       }
     },
@@ -141,6 +183,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 마이크를 사용하려고 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要使用你的麦克风。"
           }
         }
       }
@@ -160,6 +208,12 @@
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 동작 데이터에 접근하려고 합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要访问运动数据。"
+          }
         }
       }
     },
@@ -177,6 +231,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 사진 보관함에 접근하려고 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要访问你的照片图库。"
           }
         }
       }
@@ -196,6 +256,12 @@
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 미리 알림에 접근하려고 합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要访问你的提醒事项。"
+          }
         }
       }
     },
@@ -214,6 +280,12 @@
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램이 음성 인식을 사용하려고 합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序想要使用语音识别。"
+          }
         }
       }
     },
@@ -231,6 +303,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 터미널의 프로그램에 관리자 권한이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 终端中的程序需要更高的权限。"
           }
         }
       }

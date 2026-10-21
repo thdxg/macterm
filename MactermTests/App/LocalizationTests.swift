@@ -133,16 +133,21 @@ struct LocalizationTests {
         }
     }
 
-    /// The bundle carries each language, so macOS offers it and the menus
-    /// that AppKit adds (Edit, Window, Help) follow the language too.
+    /// The bundle carries each language of the catalog, so macOS offers it
+    /// and the menus that AppKit adds (Edit, Window, Help) follow it too.
+    /// Settings → General → Language lists the same languages.
     @Test
-    func the_bundle_carries_korean() throws {
-        #expect(Bundle.main.localizations.contains("ko"))
-        let path = try #require(Bundle.main.path(forResource: "ko", ofType: "lproj"))
-        let korean = try #require(Bundle(path: path))
-        #expect(korean.localizedString(forKey: "New Tab", value: nil, table: nil) != "New Tab")
-        let services = "New Macterm Debug Project Here"
-        #expect(korean.localizedString(forKey: services, value: nil, table: "ServicesMenu") != services)
+    func the_bundle_carries_each_language() throws {
+        let languages = try Catalog("Localizable").languages
+        #expect(Set(AppLanguage.available) == languages.union(["en"]))
+        for language in languages {
+            #expect(Bundle.main.localizations.contains(language))
+            let path = try #require(Bundle.main.path(forResource: language, ofType: "lproj"), "\(language)")
+            let bundle = try #require(Bundle(path: path))
+            #expect(bundle.localizedString(forKey: "New Tab", value: nil, table: nil) != "New Tab", "\(language)")
+            let services = "New Macterm Debug Project Here"
+            #expect(bundle.localizedString(forKey: services, value: nil, table: "ServicesMenu") != services, "\(language)")
+        }
     }
 
     /// `AppCommand.englishTitle` sets the locale of a `LocalizedStringResource`

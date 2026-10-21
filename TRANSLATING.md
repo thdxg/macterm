@@ -104,3 +104,60 @@ Korean text follows the terms of macOS in Korean, so that the menus of Macterm a
 | toggle | 전환 | "Toggle Sidebar" is "사이드바 전환". |
 | agent | 에이전트 | |
 | Shortcuts (the app) | 단축어 | The name of the app in Korean. |
+
+## Simplified Chinese
+
+Simplified Chinese (`zh-Hans`) text follows the terms of macOS in Simplified Chinese, so that the menus of Macterm agree with the menus that macOS adds (**编辑**, **窗口**, **帮助**).
+
+- Write menu items, buttons and titles as short phrases: "新建标签页", "关闭标签页".
+- Write descriptions and messages as plain, complete sentences: "关闭标签页并结束其会话。"
+- Write a question in an alert as "要……吗？": "要退出 Macterm 吗？"
+- Use full-width punctuation in Chinese text: "，", "。", "：", "？", "（）". Keep "…" for an ellipsis.
+- Put a space between Chinese text and a Latin word or a number: "在 Ghostty 设置中", "%lld 个标签页".
+- Keep product names, file names, commands, config keys and key names in English: Macterm, Ghostty, zmx, SSH, `config.ghostty`.
+
+| English | Simplified Chinese | Note |
+|---|---|---|
+| project | 项目 | |
+| tab | 标签页 | |
+| pane | 窗格 | |
+| split | 拆分 | "Split Right" is "向右拆分". |
+| window | 窗口 | |
+| session | 会话 | |
+| pinned tab | 固定的标签页 | Pin is "固定", unpin is "取消固定". |
+| unload | 停止 | Not 卸载: that is "uninstall". The row stays. |
+| layout | 布局 | |
+| remote project | 远程项目 | |
+| quick terminal | 快速终端 | |
+| desktop widget | 桌面小组件 | |
+| command palette | 命令面板 | |
+| palette | 面板 | |
+| screen (of the palette) | 屏幕 | |
+| extension | 扩展 | |
+| keybind | 快捷键 | |
+| keymap | 键位映射 | |
+| app | App | As in macOS. 应用 is "apply". |
+| item | 项 | Not 项目: that is "project". |
+| rename | 重新命名 | |
+| capture | 捕捉 | |
+| sidebar | 边栏 | |
+| settings | 设置 | |
+| Appearance (the Settings pane) | 外观 | |
+| password manager | 密码管理器 | |
+| password | 密码 | |
+| autofill | 自动填充 | |
+| copy (an action) | 拷贝 | As in the **编辑** menu of macOS. |
+| save | 存储 | As in the **文件** menu of macOS. |
+| copy mode | 拷贝模式 | |
+| select mode | 选择模式 | |
+| read-only mode | 只读模式 | |
+| zoom (a pane) | 放大 | |
+| focus | 聚焦 | |
+| scrollback | 回滚缓冲区 | |
+| shell | shell | |
+| prompt (of a shell) | 提示符 | |
+| config file | 配置文件 | "Ghostty config" is "Ghostty 配置". |
+| reload | 重新载入 | |
+| toggle | 切换 | "Toggle Sidebar" is "切换边栏". |
+| agent | 智能体 | |
+| Shortcuts (the app) | 快捷指令 | The name of the app in Simplified Chinese. |

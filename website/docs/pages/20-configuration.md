@@ -75,7 +75,7 @@ Macterm draws the window chrome itself. It ignores or forces these keys:
 
 ## Language
 
-Macterm is in English and Korean. By default, it uses the language of macOS. To use another language for Macterm only, select it in **Settings → General → Language**, then quit Macterm and start it again. **System** uses the language of macOS. **System Settings → General → Language & Region → Applications** sets the same choice.
+Macterm is in English, Korean and Simplified Chinese. By default, it uses the language of macOS. To use another language for Macterm only, select it in **Settings → General → Language**, then quit Macterm and start it again. **System** uses the language of macOS. **System Settings → General → Language & Region → Applications** sets the same choice.
 
 The CLI, its error messages and the logs are always in English.
 

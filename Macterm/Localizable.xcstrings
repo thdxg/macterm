@@ -8,6 +8,12 @@
             "state" : "translated",
             "value" : "“%@”은(는) 키 조합이 아닙니다. ctrl+c, escape 또는 up을 사용해 보십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”不是键组合。请尝试 ctrl+c、escape 或 up。"
+          }
         }
       }
     },
@@ -24,6 +30,12 @@
             "state" : "translated",
             "value" : "“%1$@”은(는) 현재 %2$@의 동작이 아닙니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%1$@”目前不是 %2$@ 中的操作。"
+          }
         }
       }
     },
@@ -37,6 +49,12 @@
             "state" : "translated",
             "value" : "%@\n\n편집한 내용을 덮어쓰지 않도록 고정된 탭 자동 저장을 일시 정지했습니다. 자동 저장을 다시 시작하려면 파일을 수정하거나 삭제하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@\n\n为避免覆盖你的编辑，固定的标签页自动存储已暂停。修复或删除该文件即可重新开始自动存储。"
+          }
         }
       }
     },
@@ -47,6 +65,12 @@
             "state" : "translated",
             "value" : "%@\n\n편집한 내용을 덮어쓰지 않도록 위젯 자동 저장을 일시 정지했습니다. 자동 저장을 다시 시작하려면 파일을 수정하거나 삭제하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@\n\n为避免覆盖你的编辑，小组件自动存储已暂停。修复或删除该文件即可重新开始自动存储。"
+          }
         }
       }
     },
@@ -56,6 +80,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@이(가) 이 링크를 차단함"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已阻止此链接"
           }
         }
       }
@@ -73,6 +103,12 @@
             "state" : "translated",
             "value" : "%@ 및 %@이(가) 삭제됩니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 和 %2$@ 将被删除。"
+          }
         }
       }
     },
@@ -83,6 +119,12 @@
             "state" : "translated",
             "value" : "%@에서 지금 해당 항목을 찾을 수 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 现在找不到该项。"
+          }
         }
       }
     },
@@ -92,6 +134,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@에서 단축어를 허용하지 않습니다. Ghostty 설정에서 macos-shortcuts = allow를 설정하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不允许快捷指令。请在 Ghostty 配置中设置 macos-shortcuts = allow。"
           }
         }
       }
@@ -109,6 +157,12 @@
             "state" : "translated",
             "value" : "%@에 `path: %@` 표시가 없습니다. Macterm은 이 파일을 변경하지 않습니다"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 缺少 `path: %2$@` 标记。Macterm 不会更改它"
+          }
         }
       }
     },
@@ -118,6 +172,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@을(를) 사용할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不可用"
           }
         }
       }
@@ -129,6 +189,12 @@
             "state" : "translated",
             "value" : "%@이(가) 설치되어 있지 않습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 未安装。"
+          }
         }
       }
     },
@@ -138,6 +204,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@이(가) 아직 준비되지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 尚未就绪。"
           }
         }
       }
@@ -155,6 +227,12 @@
             "state" : "translated",
             "value" : "%@은(는) 올바른 YAML이 아닙니다: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 不是有效的 YAML：%2$@"
+          }
         }
       }
     },
@@ -171,6 +249,12 @@
             "state" : "translated",
             "value" : "%@이(가) 올바르지 않습니다: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 无效：%2$@"
+          }
         }
       }
     },
@@ -181,6 +265,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 팔레트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 面板"
           }
         }
       }
@@ -198,6 +288,12 @@
             "state" : "translated",
             "value" : "%1$@ 프로젝트가 이 프로젝트와 폴더 및 레이아웃 파일 “%2$@”을(를) 공유합니다. 저장하면서 해당 프로젝트의 레이아웃을 대체했습니다. 저장할 때마다 이전 레이아웃이 대체됩니다. 레이아웃 파일을 따로 유지하려면 프로젝트 이름을 다르게 지정하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 与此项目共用此文件夹和布局文件“%2$@”。你的存储替换了它们的布局。每次存储都会替换上一次的布局。为项目设置不同的名称，即可保留各自的布局文件。"
+          }
         }
       }
     },
@@ -207,6 +303,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@이(가) 삭제됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 将被删除。"
           }
         }
       }
@@ -225,6 +327,12 @@
             "state" : "translated",
             "value" : "%@ — 탭 %lld개"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ — %2$lld 个标签页"
+          }
         }
       }
     },
@@ -235,6 +343,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ — 탭 1개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 1 个标签页"
           }
         }
       }
@@ -247,6 +361,12 @@
             "state" : "translated",
             "value" : "%@ — 모든 명령"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 任意命令"
+          }
         }
       }
     },
@@ -257,6 +377,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ — 탭 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 无标签页"
           }
         }
       }
@@ -274,6 +400,12 @@
             "state" : "translated",
             "value" : "%@, %@ 및 기능 %lld개가 더 삭제됩니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@、%2$@ 以及另外 %3$lld 项功能将被删除。"
+          }
         }
       }
     },
@@ -290,6 +422,12 @@
             "state" : "translated",
             "value" : "%@, %@ 및 기능 1개가 더 삭제됩니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@、%2$@ 以及另外 1 项功能将被删除。"
+          }
         }
       }
     },
@@ -300,6 +438,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@초"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 秒"
           }
         }
       }
@@ -312,6 +456,12 @@
             "state" : "translated",
             "value" : "페인 %lld개"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个窗格"
+          }
         }
       }
     },
@@ -321,6 +471,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로세스 %lld개가 아직 실행 중입니다. 그래도 종료하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍有 %lld 个进程在运行。仍要退出吗？"
           }
         }
       }
@@ -339,6 +495,12 @@
             "state" : "translated",
             "value" : "%lld시간 %lld분"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 小时 %2$lld 分"
+          }
         }
       }
     },
@@ -356,6 +518,12 @@
             "state" : "translated",
             "value" : "%lld분 %lld초"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 分 %2$lld 秒"
+          }
         }
       }
     },
@@ -365,6 +533,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로세스 1개가 아직 실행 중입니다. 그래도 종료하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍有 1 个进程在运行。仍要退出吗？"
           }
         }
       }
@@ -376,6 +550,12 @@
             "state" : "translated",
             "value" : "CI를 통과한 모든 커밋의 빌드와 안정 버전을 받습니다. Tip 빌드는 릴리스 테스트를 거치지 않습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 CI 的每个提交的构建版本，以及稳定版。Tip 构建版本不经过发布测试。"
+          }
         }
       }
     },
@@ -385,6 +565,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "커서가 크게 이동하면 사라지는 자취가 따라갑니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标大幅移动时，会有一道渐隐的拖尾跟随。"
           }
         }
       }
@@ -396,6 +582,12 @@
             "state" : "translated",
             "value" : "ctrl+c, escape 또는 up 같은 키 조합, 또는 j 같은 출력 가능한 키 하나입니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "键组合，例如 ctrl+c、escape 或 up，或者单个可打印键，例如 j。"
+          }
         }
       }
     },
@@ -405,6 +597,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TUI로 전달이 선택된 단축키는 이 프로그램으로 전달됩니다. 동작은 실행되지 않습니다. 이름은 쉼표로 구분하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选中了“传递给 TUI”的快捷键会发送给这些程序，不执行操作。用逗号分隔名称。"
           }
         }
       }
@@ -416,6 +614,12 @@
             "state" : "translated",
             "value" : "해당 위치의 페인에서 프로그램이 실행 중입니다. 대신 %@에서 닫으십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "那里的一个窗格中有正在运行的程序。请改为在 %@ 中关闭它。"
+          }
         }
       }
     },
@@ -425,6 +629,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "해당 명령과 프롬프트에 대한 암호가 이미 저장되어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已为该命令和提示符存储了密码。"
           }
         }
       }
@@ -436,6 +646,12 @@
             "state" : "translated",
             "value" : "이 프롬프트에 대해 저장된 암호가 있습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已为此提示符存储密码。"
+          }
         }
       }
     },
@@ -445,6 +661,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "선택한 항목 중 하나에서 프로세스가 아직 실행 중입니다. 제거하면 탭의 모든 프로세스가 종료됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选项中有一项仍有进程正在运行。移除它们会结束其标签页中的所有进程。"
           }
         }
       }
@@ -456,6 +678,12 @@
             "state" : "translated",
             "value" : "이 페인에서 프로세스가 아직 실행 중입니다. 그래도 페인을 닫으시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此窗格中仍有进程正在运行。仍要关闭窗格吗？"
+          }
         }
       }
     },
@@ -465,6 +693,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 프로젝트에서 프로세스가 아직 실행 중입니다. 제거하면 탭의 모든 프로세스가 종료됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目中仍有进程正在运行。移除项目会结束其标签页中的所有进程。"
           }
         }
       }
@@ -476,6 +710,12 @@
             "state" : "translated",
             "value" : "이 프로젝트에서 프로세스가 아직 실행 중입니다. 언로드하면 탭의 모든 프로세스가 종료됩니다. Macterm은 레이아웃을 유지합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目中仍有进程正在运行。停止会结束其标签页中的所有进程。Macterm 会保留布局。"
+          }
         }
       }
     },
@@ -485,6 +725,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 탭에서 프로세스가 아직 실행 중입니다. 탭을 닫으면 프로세스가 종료됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此标签页中仍有进程正在运行。关闭标签页会结束该进程。"
           }
         }
       }
@@ -496,6 +742,12 @@
             "state" : "translated",
             "value" : "이 위젯에서 프로세스가 아직 실행 중입니다. 그래도 위젯을 제거하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此小组件中仍有进程在运行。仍要移除小组件吗？"
+          }
         }
       }
     },
@@ -505,6 +757,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "원격 프로젝트는 이 Mac의 디렉토리를 열 수 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程项目无法打开这台 Mac 上的目录"
           }
         }
       }
@@ -516,6 +774,12 @@
             "state" : "translated",
             "value" : "단축어가 %@에서 동작을 실행하려고 합니다. 단축어는 프로젝트와 탭을 만들 수 있습니다. 터미널에 입력할 수도 있습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个快捷指令想在 %@ 中运行操作。它可以创建项目和标签页，也可以在你的终端中输入内容。"
+          }
         }
       }
     },
@@ -525,6 +789,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "터미널 프로그램이 클립보드의 내용을 다음으로 바꾸려고 합니다:\n\n%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个终端程序想用以下内容替换剪贴板：\n\n%@"
           }
         }
       }
@@ -536,6 +806,12 @@
             "state" : "translated",
             "value" : "위젯은 데스크탑에 있는 터미널입니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小组件是桌面上的终端。"
+          }
         }
       }
     },
@@ -546,6 +822,12 @@
             "state" : "translated",
             "value" : "동작"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作"
+          }
         }
       }
     },
@@ -555,6 +837,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "적응형 배경"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自适应背景"
           }
         }
       }
@@ -567,6 +855,12 @@
             "state" : "translated",
             "value" : "추가"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
         }
       }
     },
@@ -576,6 +870,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "설정 파일 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加配置文件"
           }
         }
       }
@@ -587,6 +887,12 @@
             "state" : "translated",
             "value" : "암호 추가"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加密码"
+          }
         }
       }
     },
@@ -596,6 +902,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령에 대한 암호 추가: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为命令添加密码：%@"
           }
         }
       }
@@ -607,6 +919,12 @@
             "state" : "translated",
             "value" : "암호 추가…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加密码…"
+          }
         }
       }
     },
@@ -616,6 +934,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加项目"
           }
         }
       }
@@ -627,6 +951,12 @@
             "state" : "translated",
             "value" : "설정 파일 추가"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加配置文件"
+          }
         }
       }
     },
@@ -636,6 +966,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "폴더를 프로젝트로 추가하고 선택합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将文件夹添加为项目并选择它。"
           }
         }
       }
@@ -647,6 +983,12 @@
             "state" : "translated",
             "value" : "암호 추가"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加密码"
+          }
         }
       }
     },
@@ -656,6 +998,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加项目"
           }
         }
       }
@@ -667,6 +1015,12 @@
             "state" : "translated",
             "value" : "탭을 옮길 프로젝트를 먼저 추가하십시오"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先添加一个项目以移入此标签页"
+          }
         }
       }
     },
@@ -676,6 +1030,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "데스크탑 가운데에 위젯 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在桌面中央添加小组件"
           }
         }
       }
@@ -687,6 +1047,12 @@
             "state" : "translated",
             "value" : "다른 프로젝트 추가: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加另一个项目：%@"
+          }
         }
       }
     },
@@ -696,6 +1062,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "원격 프로젝트 추가: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加远程项目：%@"
           }
         }
       }
@@ -708,6 +1080,12 @@
             "state" : "translated",
             "value" : "모두"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
+          }
         }
       }
     },
@@ -719,6 +1097,12 @@
             "state" : "translated",
             "value" : "허용"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许"
+          }
         }
       }
     },
@@ -728,6 +1112,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "개인정보 보호 및 보안에서 Macterm의 화면 기록을 허용하십시오"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“隐私与安全性”中允许 Macterm 进行屏幕录制"
           }
         }
       }
@@ -739,6 +1129,12 @@
             "state" : "translated",
             "value" : "단축어가 %@을(를) 제어하도록 허용하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要允许快捷指令控制 %@ 吗？"
+          }
         }
       }
     },
@@ -748,6 +1144,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "클립보드 쓰기를 허용하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要允许写入剪贴板吗？"
           }
         }
       }
@@ -759,6 +1161,12 @@
             "state" : "translated",
             "value" : "항상"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终"
+          }
         }
       }
     },
@@ -768,6 +1176,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "업데이트를 사용할 수 있습니다. 클릭하여 설치하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有可用更新。点按以安装。"
           }
         }
       }
@@ -779,6 +1193,12 @@
             "state" : "translated",
             "value" : "업데이트가 준비되었습니다. 클릭하면 Macterm을 재시작하고 업데이트를 설치합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新已就绪。点按以重新启动 Macterm 并安装更新。"
+          }
         }
       }
     },
@@ -788,6 +1208,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "분할 애니메이션"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拆分动画"
           }
         }
       }
@@ -800,6 +1226,12 @@
             "state" : "translated",
             "value" : "애니메이션"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "动画"
+          }
         }
       }
     },
@@ -809,6 +1241,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "모든 명령"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任意命令"
           }
         }
       }
@@ -821,6 +1259,12 @@
             "state" : "translated",
             "value" : "스타일"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外观"
+          }
         }
       }
     },
@@ -830,6 +1274,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "적용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用"
           }
         }
       }
@@ -841,6 +1291,12 @@
             "state" : "translated",
             "value" : "레이아웃 적용"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用布局"
+          }
         }
       }
     },
@@ -850,6 +1306,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "레이아웃을 적용하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要应用布局吗？"
           }
         }
       }
@@ -862,6 +1324,12 @@
             "state" : "translated",
             "value" : "묻기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "询问"
+          }
         }
       }
     },
@@ -871,6 +1339,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장된 암호를 입력하거나 표시하기 전에 Touch ID 또는 로그인 암호를 요청합니다. Macterm은 암호를 로그인 키체인에 저장합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在填充或显示已存储的密码之前，要求 Touch ID 或你的登录密码。Macterm 将密码存储在你的登录钥匙串中。"
           }
         }
       }
@@ -882,6 +1356,12 @@
             "state" : "translated",
             "value" : "프로젝트 색상 자동 지정"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动分配项目颜色"
+          }
         }
       }
     },
@@ -891,6 +1371,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인 자동 배치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动平铺窗格"
           }
         }
       }
@@ -902,6 +1388,12 @@
             "state" : "translated",
             "value" : "자동 완성"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动填充"
+          }
         }
       }
     },
@@ -911,6 +1403,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "암호 자동 완성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动填充密码"
           }
         }
       }
@@ -922,6 +1420,12 @@
             "state" : "translated",
             "value" : "자동 업데이트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动更新"
+          }
         }
       }
     },
@@ -931,6 +1435,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "백그라운드 SSH 연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台 SSH 连接"
           }
         }
       }
@@ -942,6 +1452,12 @@
             "state" : "translated",
             "value" : "배경 흐림 효과"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景模糊"
+          }
         }
       }
     },
@@ -951,6 +1467,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "배경 불투명도"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景不透明度"
           }
         }
       }
@@ -963,6 +1485,12 @@
             "state" : "translated",
             "value" : "베타"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试版"
+          }
         }
       }
     },
@@ -972,6 +1500,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "다음 릴리스의 베타와 안정 버전을 받습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一版本的测试版和稳定版。"
           }
         }
       }
@@ -984,6 +1518,12 @@
             "state" : "translated",
             "value" : "파란색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蓝色"
+          }
         }
       }
     },
@@ -994,6 +1534,12 @@
             "state" : "translated",
             "value" : "흐림 효과와 Liquid Glass는 불투명도가 100% 미만일 때만 작동합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模糊和 Liquid Glass 仅在不透明度低于 100% 时生效。"
+          }
         }
       }
     },
@@ -1003,6 +1549,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "흐림 효과는 불투명도가 100% 미만일 때만 작동합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模糊仅在不透明度低于 100% 时生效。"
           }
         }
       }
@@ -1015,6 +1567,12 @@
             "state" : "translated",
             "value" : "아래"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "底部"
+          }
         }
       }
     },
@@ -1024,6 +1582,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 프로젝트의 파일 및 폴더 탐색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览此项目中的文件和文件夹"
           }
         }
       }
@@ -1035,6 +1599,12 @@
             "state" : "translated",
             "value" : "취소"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
         }
       }
     },
@@ -1044,6 +1614,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "레이아웃을 적용할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法应用布局"
           }
         }
       }
@@ -1055,6 +1631,12 @@
             "state" : "translated",
             "value" : "이 버전에서 읽을 수 없음: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本无法读取：%@"
+          }
         }
       }
     },
@@ -1065,6 +1647,12 @@
             "state" : "translated",
             "value" : "팔레트를 캡처할 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法捕捉面板"
+          }
         }
       }
     },
@@ -1074,6 +1662,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인을 캡처할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法捕捉窗格"
           }
         }
       }
@@ -1091,6 +1685,12 @@
             "state" : "translated",
             "value" : "%@을(를) 설치할 수 없음: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安装 %1$@：%2$@"
+          }
         }
       }
     },
@@ -1100,6 +1700,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 목록을 가져올 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法列出 %@"
           }
         }
       }
@@ -1111,6 +1717,12 @@
             "state" : "translated",
             "value" : "%@을(를) 읽을 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取 %@"
+          }
         }
       }
     },
@@ -1120,6 +1732,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm의 확장 프로그램을 읽을 수 없음: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取 Macterm 的扩展：%@"
           }
         }
       }
@@ -1131,6 +1749,12 @@
             "state" : "translated",
             "value" : "레이아웃 파일을 제거할 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法移除布局文件"
+          }
         }
       }
     },
@@ -1140,6 +1764,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 이름을 변경할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法重新命名项目"
           }
         }
       }
@@ -1151,6 +1781,12 @@
             "state" : "translated",
             "value" : "레이아웃을 저장할 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法存储布局"
+          }
         }
       }
     },
@@ -1161,6 +1797,12 @@
             "state" : "translated",
             "value" : "스크린샷을 저장할 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法存储截图"
+          }
         }
       }
     },
@@ -1170,6 +1812,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "키체인에 저장할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法存储到钥匙串。"
           }
         }
       }
@@ -1187,6 +1835,12 @@
             "state" : "translated",
             "value" : "%@을(를) 제거할 수 없음: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法卸载 %1$@：%2$@"
+          }
         }
       }
     },
@@ -1196,6 +1850,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "고정 해제할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法取消固定"
           }
         }
       }
@@ -1213,6 +1873,12 @@
             "state" : "translated",
             "value" : "%@을(를) 업데이트할 수 없음: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法更新 %1$@：%2$@"
+          }
         }
       }
     },
@@ -1223,6 +1889,12 @@
             "state" : "translated",
             "value" : "팔레트 캡처"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捕捉面板"
+          }
         }
       }
     },
@@ -1232,6 +1904,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인 캡처"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捕捉窗格"
           }
         }
       }
@@ -1244,6 +1922,12 @@
             "state" : "translated",
             "value" : "가운데"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "居中"
+          }
         }
       }
     },
@@ -1253,6 +1937,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "행의 메뉴에서 순서를 변경합니다. 순서는 사이드바와 같습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在行的菜单中更改顺序。顺序与边栏中的相同。"
           }
         }
       }
@@ -1264,6 +1954,12 @@
             "state" : "translated",
             "value" : "채널"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "频道"
+          }
         }
       }
     },
@@ -1273,6 +1969,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "업데이트 확인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新"
           }
         }
       }
@@ -1284,6 +1986,12 @@
             "state" : "translated",
             "value" : "지금 업데이트 확인"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即检查更新"
+          }
         }
       }
     },
@@ -1293,6 +2001,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "업데이트 확인…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新…"
           }
         }
       }
@@ -1304,6 +2018,12 @@
             "state" : "translated",
             "value" : "팔레트의 파일을 확인하십시오"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查面板的文件"
+          }
         }
       }
     },
@@ -1314,6 +2034,12 @@
             "state" : "translated",
             "value" : "%@ 확인 중…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查 %@…"
+          }
         }
       }
     },
@@ -1323,6 +2049,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "파일 선택…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件…"
           }
         }
       }
@@ -1335,6 +2067,12 @@
             "state" : "translated",
             "value" : "투명"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "透明"
+          }
         }
       }
     },
@@ -1344,6 +2082,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "여기에서 작업하려면 클릭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点按以在此处工作"
           }
         }
       }
@@ -1355,6 +2099,12 @@
             "state" : "translated",
             "value" : "클릭한 다음 키를 누르십시오. 단축키를 지우려면 Delete를 누르십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点按，然后按下按键。按 Delete 键清除快捷键。"
+          }
         }
       }
     },
@@ -1364,6 +2114,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "닫기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
           }
         }
       }
@@ -1375,6 +2131,12 @@
             "state" : "translated",
             "value" : "${tab} 닫기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭 ${tab}"
+          }
         }
       }
     },
@@ -1384,6 +2146,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭 %lld개 닫기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭 %lld 个标签页"
           }
         }
       }
@@ -1395,6 +2163,12 @@
             "state" : "translated",
             "value" : "페인 닫기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭窗格"
+          }
         }
       }
     },
@@ -1404,6 +2178,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭 닫기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭标签页"
           }
         }
       }
@@ -1415,6 +2195,12 @@
             "state" : "translated",
             "value" : "윈도우 닫기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭窗口"
+          }
         }
       }
     },
@@ -1424,6 +2210,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭을 닫고 해당 세션을 종료합니다. 프로그램이 실행 중이면 동작이 실패합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭标签页并结束其会话。如果有程序正在运行，该操作会失败。"
           }
         }
       }
@@ -1435,6 +2227,12 @@
             "state" : "translated",
             "value" : "실행 중인 프로세스를 닫으시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要关闭正在运行的进程吗？"
+          }
         }
       }
     },
@@ -1444,6 +2242,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "실행 중인 프로세스를 닫으시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要关闭正在运行的进程吗？"
           }
         }
       }
@@ -1455,6 +2259,12 @@
             "state" : "translated",
             "value" : "Cmd+1…%lld로 탭 전환"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cmd+1…%lld 切换标签页"
+          }
         }
       }
     },
@@ -1464,6 +2274,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "색상"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "颜色"
           }
         }
       }
@@ -1475,6 +2291,12 @@
             "state" : "translated",
             "value" : "명령"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令"
+          }
         }
       }
     },
@@ -1484,6 +2306,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령 완료"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令已完成"
           }
         }
       }
@@ -1495,6 +2323,12 @@
             "state" : "translated",
             "value" : "명령 팔레트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令面板"
+          }
         }
       }
     },
@@ -1504,6 +2338,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령 팔레트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令面板"
           }
         }
       }
@@ -1515,6 +2355,12 @@
             "state" : "translated",
             "value" : "%@ 만에 완료"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用时 %@ 完成"
+          }
         }
       }
     },
@@ -1524,6 +2370,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "설정 파일 경로"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置文件路径"
           }
         }
       }
@@ -1535,6 +2387,12 @@
             "state" : "translated",
             "value" : "%@와(과) 충돌"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与 %@ 冲突"
+          }
         }
       }
     },
@@ -1544,6 +2402,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mac을 깨우거나 앱으로 돌아오면 연결이 끊어진 페인을 세션에 다시 연결합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "唤醒 Mac 或返回 App 时，将断开连接的窗格重新连接到其会话。"
           }
         }
       }
@@ -1556,6 +2420,12 @@
             "state" : "translated",
             "value" : "복사"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝"
+          }
         }
       }
     },
@@ -1565,6 +2435,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "링크 복사"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝链接"
           }
         }
       }
@@ -1577,6 +2453,12 @@
             "state" : "translated",
             "value" : "복사 모드"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝模式"
+          }
         }
       }
     },
@@ -1586,6 +2468,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "암호 복사"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝密码"
           }
         }
       }
@@ -1597,6 +2485,12 @@
             "state" : "translated",
             "value" : "경로 복사"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝路径"
+          }
         }
       }
     },
@@ -1606,6 +2500,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "세션 ID 복사"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝会话 ID"
           }
         }
       }
@@ -1617,6 +2517,12 @@
             "state" : "translated",
             "value" : "다른 프로젝트 생성"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建另一个项目"
+          }
         }
       }
     },
@@ -1626,6 +2532,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建项目"
           }
         }
       }
@@ -1637,6 +2549,12 @@
             "state" : "translated",
             "value" : "현재 버전"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前版本"
+          }
         }
       }
     },
@@ -1647,6 +2565,12 @@
             "state" : "translated",
             "value" : "커서"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标"
+          }
         }
       }
     },
@@ -1656,6 +2580,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "커서 자취"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标拖尾"
           }
         }
       }
@@ -1668,6 +2598,12 @@
             "state" : "translated",
             "value" : "청록색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "青色"
+          }
         }
       }
     },
@@ -1679,6 +2615,12 @@
             "state" : "translated",
             "value" : "거부"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拒绝"
+          }
         }
       }
     },
@@ -1688,6 +2630,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "데스크탑 위젯"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面小组件"
           }
         }
       }
@@ -1699,6 +2647,12 @@
             "state" : "translated",
             "value" : "세부 정보"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "详细信息"
+          }
         }
       }
     },
@@ -1708,6 +2662,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "세부 정보…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "详细信息…"
           }
         }
       }
@@ -1720,6 +2680,12 @@
             "state" : "translated",
             "value" : "디렉토리"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目录"
+          }
         }
       }
     },
@@ -1729,6 +2695,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "디렉토리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目录"
           }
         }
       }
@@ -1741,6 +2713,12 @@
             "state" : "translated",
             "value" : "허용 안 함"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不允许"
+          }
         }
       }
     },
@@ -1752,6 +2730,12 @@
             "state" : "translated",
             "value" : "완료"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成"
+          }
         }
       }
     },
@@ -1761,6 +2745,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "편집 완료"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成编辑"
           }
         }
       }
@@ -1773,6 +2763,12 @@
             "state" : "translated",
             "value" : "동적"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "动态"
+          }
         }
       }
     },
@@ -1782,6 +2778,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "각 페인은 ssh를 통해 연결된 호스트의 영구 zmx 세션입니다. 호스트에 zmx가 설치되어 있어야 합니다. Macterm이 zmx를 찾지 못하면 ~/bin/zmx 또는 /usr/local/bin/zmx와 같은 절대 경로를 설정하십시오. 포트, ID 및 ControlMaster는 ~/.ssh/config에서 가져옵니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个窗格都是通过 ssh 连接的主机上的持久 zmx 会话。主机上必须安装 zmx。如果 Macterm 找不到它，请设置绝对路径，例如 ~/bin/zmx 或 /usr/local/bin/zmx。端口、身份和 ControlMaster 来自 ~/.ssh/config。"
           }
         }
       }
@@ -1793,6 +2795,12 @@
             "state" : "translated",
             "value" : "경로 편집"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑路径"
+          }
         }
       }
     },
@@ -1802,6 +2810,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "위젯 편집"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑小组件"
           }
         }
       }
@@ -1813,6 +2827,12 @@
             "state" : "translated",
             "value" : "실시간 탭 이름과 닫기 경고를 사용하려면 켜십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用后可实时显示标签页名称并在关闭时发出警告。"
+          }
         }
       }
     },
@@ -1822,6 +2842,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "암호 관리자 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用密码管理器"
           }
         }
       }
@@ -1833,6 +2859,12 @@
             "state" : "translated",
             "value" : "경로 입력…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入路径…"
+          }
         }
       }
     },
@@ -1843,6 +2875,12 @@
             "state" : "translated",
             "value" : "매번"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次"
+          }
         }
       }
     },
@@ -1852,6 +2890,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "확대 종료"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出放大"
           }
         }
       }
@@ -1869,6 +2913,12 @@
             "state" : "translated",
             "value" : "코드 %lld(으)로 종료(%@)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已退出，代码 %1$lld（%2$@）"
+          }
         }
       }
     },
@@ -1878,6 +2928,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "확장 프로그램을 업데이트했습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已更新扩展"
           }
         }
       }
@@ -1890,6 +2946,12 @@
             "state" : "translated",
             "value" : "확장 프로그램"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扩展"
+          }
         }
       }
     },
@@ -1900,6 +2962,12 @@
             "state" : "translated",
             "value" : "확장 프로그램은 명령 팔레트에 화면을 추가합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扩展会向命令面板添加屏幕。"
+          }
         }
       }
     },
@@ -1909,6 +2977,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "확장 프로그램을 업데이트했습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已更新扩展"
           }
         }
       }
@@ -1921,6 +2995,12 @@
             "state" : "translated",
             "value" : "실패"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败"
+          }
         }
       }
     },
@@ -1930,6 +3010,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "파일이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到文件。"
           }
         }
       }
@@ -1942,6 +3028,12 @@
             "state" : "translated",
             "value" : "파일을 찾을 수 없음: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到文件：%@"
+          }
         }
       }
     },
@@ -1951,6 +3043,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "파일"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件"
           }
         }
       }
@@ -1962,6 +3060,12 @@
             "state" : "translated",
             "value" : "명령 팔레트에서만 입력"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅从命令面板填充"
+          }
         }
       }
     },
@@ -1971,6 +3075,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "먼저 다른 위젯의 편집을 완료하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先完成另一个小组件的编辑。"
           }
         }
       }
@@ -1983,6 +3093,12 @@
             "state" : "translated",
             "value" : "고정"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "固定"
+          }
         }
       }
     },
@@ -1992,6 +3108,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${pane}에 포커스"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦 ${pane}"
           }
         }
       }
@@ -2003,6 +3125,12 @@
             "state" : "translated",
             "value" : "${project}에 포커스"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦 ${project}"
+          }
         }
       }
     },
@@ -2012,6 +3140,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${tab}에 포커스"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦 ${tab}"
           }
         }
       }
@@ -2023,6 +3157,12 @@
             "state" : "translated",
             "value" : "아래로 포커스 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦下方"
+          }
         }
       }
     },
@@ -2032,6 +3172,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "왼쪽으로 포커스 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦左侧"
           }
         }
       }
@@ -2043,6 +3189,12 @@
             "state" : "translated",
             "value" : "페인에 포커스"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦窗格"
+          }
         }
       }
     },
@@ -2052,6 +3204,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트에 포커스"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦项目"
           }
         }
       }
@@ -2063,6 +3221,12 @@
             "state" : "translated",
             "value" : "오른쪽으로 포커스 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦右侧"
+          }
         }
       }
     },
@@ -2072,6 +3236,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭에 포커스"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦标签页"
           }
         }
       }
@@ -2083,6 +3253,12 @@
             "state" : "translated",
             "value" : "위로 포커스 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦上方"
+          }
         }
       }
     },
@@ -2092,6 +3268,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "폴더"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
           }
         }
       }
@@ -2103,6 +3285,12 @@
             "state" : "translated",
             "value" : "포그라운드 프로세스"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前台进程"
+          }
         }
       }
     },
@@ -2112,6 +3300,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "전체 디스크 접근 권한이 꺼져 있음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完全磁盘访问权限已关闭"
           }
         }
       }
@@ -2124,6 +3318,12 @@
             "state" : "translated",
             "value" : "일반"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用"
+          }
         }
       }
     },
@@ -2133,6 +3333,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${pane}에서 ${detail} 가져오기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 ${pane} 获取 ${detail}"
           }
         }
       }
@@ -2144,6 +3350,12 @@
             "state" : "translated",
             "value" : "페인 내용 가져오기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取窗格内容"
+          }
         }
       }
     },
@@ -2153,6 +3365,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인 세부 정보 가져오기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取窗格详细信息"
           }
         }
       }
@@ -2164,6 +3382,12 @@
             "state" : "translated",
             "value" : "${pane}의 내용 가져오기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取 ${pane} 的内容"
+          }
         }
       }
     },
@@ -2173,6 +3397,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ghostty 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 配置"
           }
         }
       }
@@ -2184,6 +3414,12 @@
             "state" : "translated",
             "value" : "Ghostty 설정 파일을 찾을 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到 Ghostty 配置文件"
+          }
         }
       }
     },
@@ -2193,6 +3429,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ghostty 설정을 다시 불러왔습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已重新载入 Ghostty 配置"
           }
         }
       }
@@ -2204,6 +3446,12 @@
             "state" : "translated",
             "value" : "Ghostty 설정 파일을 찾을 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到 Ghostty 配置文件"
+          }
         }
       }
     },
@@ -2213,6 +3461,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ghostty 기본값"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 默认"
           }
         }
       }
@@ -2225,6 +3479,12 @@
             "state" : "translated",
             "value" : "GitHub의 응답: %lld"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 返回了 %lld。"
+          }
         }
       }
     },
@@ -2234,6 +3494,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인을 분할하거나 닫을 때 모든 페인을 같은 크기로 맞춥니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拆分或关闭窗格时，使所有窗格大小相同。"
           }
         }
       }
@@ -2246,6 +3512,12 @@
             "state" : "translated",
             "value" : "전역"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局"
+          }
         }
       }
     },
@@ -2257,6 +3529,12 @@
             "state" : "translated",
             "value" : "초록색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "绿色"
+          }
         }
       }
     },
@@ -2266,6 +3544,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "높이"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高度"
           }
         }
       }
@@ -2277,6 +3561,12 @@
             "state" : "translated",
             "value" : "숨김"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏"
+          }
         }
       }
     },
@@ -2286,6 +3576,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "가리기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏"
           }
         }
       }
@@ -2297,6 +3593,12 @@
             "state" : "translated",
             "value" : "도구 막대 가리기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏工具栏"
+          }
         }
       }
     },
@@ -2306,6 +3608,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "호스트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机"
           }
         }
       }
@@ -2320,6 +3628,12 @@
             "state" : "translated",
             "value" : "아이콘 크기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图标大小"
+          }
         }
       }
     },
@@ -2329,6 +3643,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "유휴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空闲"
           }
         }
       }
@@ -2340,6 +3660,12 @@
             "state" : "translated",
             "value" : "이미 켜져 있으면 목록에서 Macterm을 제거한 다음 다시 시도하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果已打开，请从列表中移除 Macterm，然后重试。"
+          }
         }
       }
     },
@@ -2349,6 +3675,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 레이아웃을 적용하면 Macterm이 일부 페인을 닫고 그 안의 프로세스를 종료합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果应用此布局，Macterm 会关闭部分窗格并结束其中的进程。"
           }
         }
       }
@@ -2360,6 +3692,12 @@
             "state" : "translated",
             "value" : "스크롤백 포함"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包括回滚缓冲区"
+          }
         }
       }
     },
@@ -2369,6 +3707,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 색인 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在为 %@ 建立索引…"
           }
         }
       }
@@ -2380,6 +3724,12 @@
             "state" : "translated",
             "value" : "설치"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装"
+          }
         }
       }
     },
@@ -2389,6 +3739,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "설치하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装"
           }
         }
       }
@@ -2401,6 +3757,12 @@
             "state" : "translated",
             "value" : "설치됨"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装"
+          }
         }
       }
     },
@@ -2410,6 +3772,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "설치 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在安装"
           }
         }
       }
@@ -2421,6 +3789,12 @@
             "state" : "translated",
             "value" : "잘못된 파일입니다. 사용하려면 편집기에서 수정하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件无效。请在编辑器中修复后再使用。"
+          }
         }
       }
     },
@@ -2430,6 +3804,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${keybind} 실행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调用 ${keybind}"
           }
         }
       }
@@ -2441,6 +3821,12 @@
             "state" : "translated",
             "value" : "단축키 실행"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调用快捷键"
+          }
         }
       }
     },
@@ -2450,6 +3836,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ghostty 설정의 문제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的 Ghostty 配置存在问题"
           }
         }
       }
@@ -2461,6 +3853,12 @@
             "state" : "translated",
             "value" : "맨 아래로 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳到底部"
+          }
         }
       }
     },
@@ -2470,6 +3868,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "맨 위로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳到顶部"
           }
         }
       }
@@ -2481,6 +3885,12 @@
             "state" : "translated",
             "value" : "키"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按键"
+          }
         }
       }
     },
@@ -2490,6 +3900,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "단축키 동작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键操作"
           }
         }
       }
@@ -2501,6 +3917,12 @@
             "state" : "translated",
             "value" : "단축키 옵션"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键选项"
+          }
         }
       }
     },
@@ -2510,6 +3932,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "단축키"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键"
           }
         }
       }
@@ -2522,6 +3950,12 @@
             "state" : "translated",
             "value" : "키체인: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钥匙串：%@"
+          }
         }
       }
     },
@@ -2531,6 +3965,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "키맵"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "键位映射"
           }
         }
       }
@@ -2543,6 +3983,12 @@
             "state" : "translated",
             "value" : "키맵"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "键位映射"
+          }
         }
       }
     },
@@ -2552,6 +3998,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "언어"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
           }
         }
       }
@@ -2564,6 +4016,12 @@
             "state" : "translated",
             "value" : "크게"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大"
+          }
         }
       }
     },
@@ -2573,6 +4031,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "레이아웃"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局"
           }
         }
       }
@@ -2584,6 +4048,12 @@
             "state" : "translated",
             "value" : "레이아웃을 적용했습니다"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已应用布局"
+          }
         }
       }
     },
@@ -2593,6 +4063,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "레이아웃 파일"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局文件"
           }
         }
       }
@@ -2604,6 +4080,12 @@
             "state" : "translated",
             "value" : "다른 프로젝트와 공유하는 레이아웃 파일"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与另一个项目共用的布局文件"
+          }
         }
       }
     },
@@ -2613,6 +4095,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "레이아웃을 저장했습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存储布局"
           }
         }
       }
@@ -2624,6 +4112,12 @@
             "state" : "translated",
             "value" : "충돌이 있는 상태로 레이아웃을 저장했습니다"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存储布局，但存在冲突"
+          }
         }
       }
     },
@@ -2634,6 +4128,12 @@
             "state" : "translated",
             "value" : "레이아웃"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局"
+          }
         }
       }
     },
@@ -2643,6 +4143,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "복사 모드 종료"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出拷贝模式"
           }
         }
       }
@@ -2655,12 +4161,24 @@
             "state" : "translated",
             "value" : "왼쪽"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左"
+          }
         }
       }
     },
     "Liquid Glass" : {
       "localizations" : {
         "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liquid Glass"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Liquid Glass"
@@ -2675,6 +4193,12 @@
             "state" : "translated",
             "value" : "%@ 목록을 가져오는 중…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在列出 %@…"
+          }
         }
       }
     },
@@ -2684,6 +4208,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ghostty의 기본 설정 파일 불러오기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "载入 Ghostty 的默认配置文件"
           }
         }
       }
@@ -2695,6 +4225,12 @@
             "state" : "translated",
             "value" : "로컬 폴더…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地文件夹…"
+          }
         }
       }
     },
@@ -2704,6 +4240,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "다음에 이 프롬프트가 나타나면 Macterm이 암호를 자동으로 입력할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下次出现此提示时，Macterm 可以填充密码。"
           }
         }
       }
@@ -2715,6 +4257,12 @@
             "state" : "translated",
             "value" : "Macterm이 팔레트가 있는 디스플레이를 캡처할 수 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法捕捉面板所在的显示器。"
+          }
         }
       }
     },
@@ -2724,6 +4272,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm이 이미지를 인코딩하지 못했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法编码图像。"
           }
         }
       }
@@ -2735,6 +4289,12 @@
             "state" : "translated",
             "value" : "Macterm이 저장된 암호를 읽을 수 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法读取已存储的密码。"
+          }
         }
       }
     },
@@ -2744,6 +4304,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm이 변경 사항을 저장할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法存储更改。"
           }
         }
       }
@@ -2755,6 +4321,12 @@
             "state" : "translated",
             "value" : "Macterm이 암호를 저장할 수 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法存储密码。"
+          }
         }
       }
     },
@@ -2764,6 +4336,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm이 캡처를 PNG로 저장하지 못했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 无法将捕捉内容写入为 PNG。"
           }
         }
       }
@@ -2775,6 +4353,12 @@
             "state" : "translated",
             "value" : "Macterm이 “%@”을(를) 삭제합니다. 이 파일을 사용하는 프로젝트는 유지되지만 저장된 레이아웃을 잃습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 将删除“%@”。使用它的项目会保留，但会失去已存储的布局。"
+          }
         }
       }
     },
@@ -2784,6 +4368,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm에 알림 권한이 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 没有通知权限"
           }
         }
       }
@@ -2795,6 +4385,12 @@
             "state" : "translated",
             "value" : "Macterm이 이미 %@에 쓰는 중입니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 已在写入 %@。"
+          }
         }
       }
     },
@@ -2804,6 +4400,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm은 위에서 아래 순서로 파일을 불러옵니다. 뒤에 있는 파일이 앞에 있는 파일보다 우선합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 从上到下载入这些文件。后面的文件会覆盖前面的文件。"
           }
         }
       }
@@ -2815,6 +4417,12 @@
             "state" : "translated",
             "value" : "명령과 프롬프트가 모두 일치하면 Macterm이 자동 완성을 제안합니다. 프롬프트가 없으면 Macterm은 프롬프트에서 암호를 제안하지 않습니다. 명령 팔레트의 암호 관리자에서 선택하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当命令和提示符都匹配时，Macterm 会提供自动填充。没有提示符时，Macterm 不会在提示符处提供此密码。请在命令面板的密码管理器中选择它。"
+          }
         }
       }
     },
@@ -2824,6 +4432,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm이 키체인에서 “%@”의 암호를 제거합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 将从你的钥匙串中移除“%@”的密码。"
           }
         }
       }
@@ -2841,6 +4455,12 @@
             "state" : "translated",
             "value" : "Macterm이 레이아웃을 “%1$@”에 저장했습니다. 다음 파일도 이 프로젝트의 경로를 선언하며, Macterm은 이 파일을 무시합니다: %2$@. 프로젝트 폴더에서 이 파일을 제거하거나 병합하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 已将布局存储到“%1$@”。其他这些文件也声明了此项目的路径，Macterm 会忽略它们：%2$@。请在项目文件夹中移除或合并它们。"
+          }
         }
       }
     },
@@ -2850,6 +4470,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm은 키 암호문을 해당 프롬프트에서 저장합니다. 프롬프트에 한 번 입력하고 저장하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 从提示符中存储密钥密码短语。请在提示符处输入一次并存储。"
           }
         }
       }
@@ -2861,6 +4487,12 @@
             "state" : "translated",
             "value" : "셸이 시작될 때 Macterm이 새로운 탭의 셸에 이 내용을 입력합니다. 일반 셸을 사용하려면 비워 두십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "shell 启动时，Macterm 会将此内容输入到新标签页的 shell 中。留空则使用普通 shell。"
+          }
         }
       }
     },
@@ -2870,6 +4502,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm이 v%@(으)로 업데이트되었습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 已更新到 v%@"
           }
         }
       }
@@ -2881,6 +4519,12 @@
             "state" : "translated",
             "value" : "Macterm 저장소의 %@에 확장 프로그램이 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macterm 的仓库中在 %@ 没有扩展。"
+          }
         }
       }
     },
@@ -2891,6 +4535,12 @@
             "state" : "translated",
             "value" : "${folder}(으)로 프로젝트 만들기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 ${folder} 创建项目"
+          }
         }
       }
     },
@@ -2900,6 +4550,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "암호 관리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理密码"
           }
         }
       }
@@ -2912,6 +4568,12 @@
             "state" : "translated",
             "value" : "중간"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中"
+          }
         }
       }
     },
@@ -2921,6 +4583,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "모드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模式"
           }
         }
       }
@@ -2932,6 +4600,12 @@
             "state" : "translated",
             "value" : "아래로 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下移"
+          }
         }
       }
     },
@@ -2941,6 +4615,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인을 아래로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向下移动窗格"
           }
         }
       }
@@ -2952,6 +4632,12 @@
             "state" : "translated",
             "value" : "페인을 왼쪽으로 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向左移动窗格"
+          }
         }
       }
     },
@@ -2961,6 +4647,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인을 오른쪽으로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向右移动窗格"
           }
         }
       }
@@ -2972,6 +4664,12 @@
             "state" : "translated",
             "value" : "페인을 위로 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向上移动窗格"
+          }
         }
       }
     },
@@ -2981,6 +4679,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭을 아래로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下移标签页"
           }
         }
       }
@@ -2992,6 +4696,12 @@
             "state" : "translated",
             "value" : "탭을 위로 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上移标签页"
+          }
         }
       }
     },
@@ -3001,6 +4711,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "위로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上移"
           }
         }
       }
@@ -3012,6 +4728,12 @@
             "state" : "translated",
             "value" : "프로젝트로 이동"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移到项目"
+          }
         }
       }
     },
@@ -3021,6 +4743,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이름"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称"
           }
         }
       }
@@ -3032,6 +4760,12 @@
             "state" : "translated",
             "value" : "새로운 데스크탑 위젯"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建桌面小组件"
+          }
         }
       }
     },
@@ -3041,6 +4775,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새로운 암호"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新密码"
           }
         }
       }
@@ -3052,6 +4792,12 @@
             "state" : "translated",
             "value" : "새로운 프로젝트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建项目"
+          }
         }
       }
     },
@@ -3061,6 +4807,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새로운 프로젝트…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建项目…"
           }
         }
       }
@@ -3072,6 +4824,12 @@
             "state" : "translated",
             "value" : "새로운 원격 프로젝트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建远程项目"
+          }
         }
       }
     },
@@ -3081,6 +4839,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새로운 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建标签页"
           }
         }
       }
@@ -3092,6 +4856,12 @@
             "state" : "translated",
             "value" : "%@에 새로운 탭"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 中新建标签页"
+          }
         }
       }
     },
@@ -3102,6 +4872,12 @@
             "state" : "translated",
             "value" : "새로운 위젯"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建小组件"
+          }
         }
       }
     },
@@ -3111,6 +4887,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새로운 윈도우"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建窗口"
           }
         }
       }
@@ -3123,6 +4905,12 @@
             "state" : "translated",
             "value" : "새로운 분할"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建拆分"
+          }
         }
       }
     },
@@ -3134,6 +4922,12 @@
             "state" : "translated",
             "value" : "새로운 탭"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建标签页"
+          }
         }
       }
     },
@@ -3143,6 +4937,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${project}에 새로운 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 ${project} 中新建标签页"
           }
         }
       }
@@ -3154,6 +4954,12 @@
             "state" : "translated",
             "value" : "다음 페인"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个窗格"
+          }
         }
       }
     },
@@ -3163,6 +4969,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "다음 프로젝트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个项目"
           }
         }
       }
@@ -3174,6 +4986,12 @@
             "state" : "translated",
             "value" : "다음 탭"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个标签页"
+          }
         }
       }
     },
@@ -3183,6 +5001,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트의 다음 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目中的下一个标签页"
           }
         }
       }
@@ -3194,6 +5018,12 @@
             "state" : "translated",
             "value" : "추가 설정 파일이 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有其他配置文件。"
+          }
         }
       }
     },
@@ -3203,6 +5033,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "기본 설정 파일이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到默认配置文件。"
           }
         }
       }
@@ -3214,6 +5050,12 @@
             "state" : "translated",
             "value" : "%@에 디렉토리가 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 处没有目录"
+          }
         }
       }
     },
@@ -3223,6 +5065,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "일치하는 확장 프로그램이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的扩展。"
           }
         }
       }
@@ -3234,6 +5082,12 @@
             "state" : "translated",
             "value" : "확장 프로그램이 아직 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有扩展。"
+          }
         }
       }
     },
@@ -3243,6 +5097,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@”와(과) 일치하는 단축키가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有与“%@”匹配的快捷键。"
           }
         }
       }
@@ -3254,6 +5114,12 @@
             "state" : "translated",
             "value" : "%@을(를) 선언하는 레이아웃 파일이 없습니다. “레이아웃 저장”을 사용하여 만드십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有布局文件声明 %@。请使用“存储布局”创建一个。"
+          }
         }
       }
     },
@@ -3263,6 +5129,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 프로젝트의 레이아웃 파일 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目没有布局文件"
           }
         }
       }
@@ -3274,6 +5146,12 @@
             "state" : "translated",
             "value" : "레이아웃 파일이 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有布局文件。"
+          }
         }
       }
     },
@@ -3283,6 +5161,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "검색할 로컬 프로젝트가 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可搜索的本地项目"
           }
         }
       }
@@ -3294,6 +5178,12 @@
             "state" : "translated",
             "value" : "%@(이)라는 이름의 노드가 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有名为 %@ 的节点"
+          }
         }
       }
     },
@@ -3303,6 +5193,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "옆에서 실행할 페인이 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旁边没有可运行的窗格"
           }
         }
       }
@@ -3314,6 +5210,12 @@
             "state" : "translated",
             "value" : "선언된 경로가 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未声明路径。"
+          }
         }
       }
     },
@@ -3323,6 +5225,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "선택한 프로젝트 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未选择项目"
           }
         }
       }
@@ -3334,6 +5242,12 @@
             "state" : "translated",
             "value" : "실행할 프로젝트가 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可在其中运行的项目"
+          }
         }
       }
     },
@@ -3343,6 +5257,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有项目。"
           }
         }
       }
@@ -3354,6 +5274,12 @@
             "state" : "translated",
             "value" : "“%@”와(과) 일치하는 저장된 암호가 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有与“%@”匹配的已存储密码。"
+          }
         }
       }
     },
@@ -3363,6 +5289,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장된 암호가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有已存储的密码。"
           }
         }
       }
@@ -3374,6 +5306,12 @@
             "state" : "translated",
             "value" : "입력할 터미널 페인이 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可输入的终端窗格"
+          }
         }
       }
     },
@@ -3383,6 +5321,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "위젯이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有小组件。"
           }
         }
       }
@@ -3395,6 +5339,12 @@
             "state" : "translated",
             "value" : "없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无"
+          }
         }
       }
     },
@@ -3404,6 +5354,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "없음 — 팔레트에서만 입력"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无 — 仅从面板填充"
           }
         }
       }
@@ -3416,6 +5372,12 @@
             "state" : "translated",
             "value" : "설치 안 됨"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未安装"
+          }
         }
       }
     },
@@ -3425,6 +5387,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "나중에"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后"
           }
         }
       }
@@ -3436,6 +5404,12 @@
             "state" : "translated",
             "value" : "파일이 아닙니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不是文件。"
+          }
         }
       }
     },
@@ -3445,6 +5419,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "전역 아님: 시스템 전역 단축키에는 보조 키가 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非全局：系统级快捷键需要修饰键。"
           }
         }
       }
@@ -3456,6 +5436,12 @@
             "state" : "translated",
             "value" : "전역 아님: 시스템이 거부했습니다(오류 %d)."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非全局：系统拒绝了此快捷键（错误 %d）。"
+          }
         }
       }
     },
@@ -3465,6 +5451,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "전역 아님: 이 단축키는 대신 프로그램으로 전달됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非全局：此快捷键会传给程序。"
           }
         }
       }
@@ -3476,6 +5468,12 @@
             "state" : "translated",
             "value" : "전역 아님: 이 단축키는 이미 사용 중입니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非全局：此快捷键已被占用。"
+          }
         }
       }
     },
@@ -3485,6 +5483,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "실행 중이 아닙니다. 선택하면 프로젝트를 다시 불러옵니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未运行。选择它以重新载入项目。"
           }
         }
       }
@@ -3496,6 +5500,12 @@
             "state" : "translated",
             "value" : "실행 중이 아닙니다. 선택하면 저장된 레이아웃에서 복원합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未运行。选择它以从存储的布局恢复。"
+          }
         }
       }
     },
@@ -3505,6 +5515,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "출력에서 rows: %@에 아무것도 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输出中的 rows: %@ 处没有内容"
           }
         }
       }
@@ -3516,6 +5532,12 @@
             "state" : "translated",
             "value" : "숫자"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数字"
+          }
         }
       }
     },
@@ -3525,6 +5547,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "숫자 — 원"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数字 — 圆"
           }
         }
       }
@@ -3536,6 +5564,12 @@
             "state" : "translated",
             "value" : "숫자 — 채워진 원"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数字 — 实心圆"
+          }
         }
       }
     },
@@ -3545,6 +5579,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "숫자 — 채워진 사각형"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数字 — 实心方块"
           }
         }
       }
@@ -3556,6 +5596,12 @@
             "state" : "translated",
             "value" : "숫자 — 사각형"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数字 — 方块"
+          }
         }
       }
     },
@@ -3565,6 +5611,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "확인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好"
           }
         }
       }
@@ -3576,6 +5628,12 @@
             "state" : "translated",
             "value" : "끄면 텍스트를 셸 프롬프트에 남겨 두고 실행하지 않습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭时文本留在 shell 提示符处，不会运行。"
+          }
         }
       }
     },
@@ -3585,6 +5643,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "끄면 화면의 텍스트만 읽습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭时只读取屏幕上的文本。"
           }
         }
       }
@@ -3596,6 +5660,12 @@
             "state" : "translated",
             "value" : "암호 프롬프트에 입력한 암호가 작동하면 저장을 제안하고, 다음에 그 프롬프트가 나타나면 자동으로 입력합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在密码提示符处输入的密码生效后，提供存储它的选项，并在下次出现该提示符时填充它。"
+          }
         }
       }
     },
@@ -3605,6 +5675,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "앱을 실행할 때마다 한 번"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次启动 App 时一次"
           }
         }
       }
@@ -3617,6 +5693,12 @@
             "state" : "translated",
             "value" : "열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开"
+          }
         }
       }
     },
@@ -3626,6 +5708,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령 팔레트 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开命令面板"
           }
         }
       }
@@ -3637,6 +5725,12 @@
             "state" : "translated",
             "value" : "링크 열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开链接"
+          }
         }
       }
     },
@@ -3646,6 +5740,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "터미널 출력의 링크를 여시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要打开终端输出中的链接吗？"
           }
         }
       }
@@ -3657,6 +5757,12 @@
             "state" : "translated",
             "value" : "Macterm 설정 파일 열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Macterm 配置"
+          }
         }
       }
     },
@@ -3666,6 +5772,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目"
           }
         }
       }
@@ -3677,6 +5789,12 @@
             "state" : "translated",
             "value" : "프로젝트 열기…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目…"
+          }
         }
       }
     },
@@ -3686,6 +5804,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "시스템 설정 열기…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开系统设置…"
           }
         }
       }
@@ -3697,6 +5821,12 @@
             "state" : "translated",
             "value" : "프로젝트 열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目"
+          }
         }
       }
     },
@@ -3706,6 +5836,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트에 탭을 엽니다. 탭에서 명령을 실행할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在项目中打开标签页。你可以在其中运行命令。"
           }
         }
       }
@@ -3717,6 +5853,12 @@
             "state" : "translated",
             "value" : "다른 프로젝트 열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开另一个项目"
+          }
         }
       }
     },
@@ -3726,6 +5868,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새로운 프로젝트로 열기: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作为新项目打开：%@"
           }
         }
       }
@@ -3737,6 +5885,12 @@
             "state" : "translated",
             "value" : "폴더를 새로운 프로젝트로 열기..."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将文件夹作为新项目打开..."
+          }
         }
       }
     },
@@ -3746,6 +5900,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "열 위치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开位置"
           }
         }
       }
@@ -3757,6 +5917,12 @@
             "state" : "translated",
             "value" : "새로운 탭에서 열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新标签页中打开"
+          }
         }
       }
     },
@@ -3766,6 +5932,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "분할에서 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在拆分窗格中打开"
           }
         }
       }
@@ -3777,6 +5949,12 @@
             "state" : "translated",
             "value" : "맨 앞 윈도우에서 명령 팔레트를 엽니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在最前面的窗口中打开命令面板。"
+          }
         }
       }
     },
@@ -3786,6 +5964,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "캡처하려면 명령 팔레트를 여십시오"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开命令面板以进行捕捉"
           }
         }
       }
@@ -3797,6 +5981,12 @@
             "state" : "translated",
             "value" : "이 섹션의 문서 열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开此部分的文档"
+          }
         }
       }
     },
@@ -3806,6 +5996,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "기본 앱으로 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用默认 App 打开"
           }
         }
       }
@@ -3817,6 +6013,12 @@
             "state" : "translated",
             "value" : "텍스트 파일 열기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文本文件"
+          }
         }
       }
     },
@@ -3826,6 +6028,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 로컬 대상을 열면 코드가 실행될 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开此本地目标可能会执行代码。"
           }
         }
       }
@@ -3838,6 +6046,12 @@
             "state" : "translated",
             "value" : "주황색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "橙色"
+          }
         }
       }
     },
@@ -3849,6 +6063,12 @@
             "state" : "translated",
             "value" : "기타"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其他"
+          }
         }
       }
     },
@@ -3859,6 +6079,12 @@
             "state" : "translated",
             "value" : "출력이 JSON이 아닙니다: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输出不是 JSON：%@"
+          }
         }
       }
     },
@@ -3868,6 +6094,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "터미널 위에 겹치기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "覆盖终端"
           }
         }
       }
@@ -3880,6 +6112,12 @@
             "state" : "translated",
             "value" : "팔레트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面板"
+          }
         }
       }
     },
@@ -3889,6 +6127,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗格"
           }
         }
       }
@@ -3900,6 +6144,12 @@
             "state" : "translated",
             "value" : "페인 세부 정보"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗格详细信息"
+          }
         }
       }
     },
@@ -3909,6 +6159,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인을 클립보드에 복사했습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将窗格拷贝到剪贴板"
           }
         }
       }
@@ -3921,6 +6177,12 @@
             "state" : "translated",
             "value" : "페인"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗格"
+          }
         }
       }
     },
@@ -3932,6 +6194,12 @@
             "state" : "translated",
             "value" : "TUI로 전달"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传递给 TUI"
+          }
         }
       }
     },
@@ -3942,6 +6210,12 @@
             "state" : "translated",
             "value" : "전달할 프로그램"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直通程序"
+          }
         }
       }
     },
@@ -3951,6 +6225,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "암호"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码"
           }
         }
       }
@@ -3963,6 +6243,12 @@
             "state" : "translated",
             "value" : "암호 관리자"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码管理器"
+          }
         }
       }
     },
@@ -3972,6 +6258,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "암호 프롬프트 감지됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测到密码提示"
           }
         }
       }
@@ -3983,6 +6275,12 @@
             "state" : "translated",
             "value" : "붙여넣기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴"
+          }
         }
       }
     },
@@ -3992,6 +6290,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "경로"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路径"
           }
         }
       }
@@ -4003,6 +6307,12 @@
             "state" : "translated",
             "value" : "가려진 사이드바 미리 보기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏时可预览边栏"
+          }
         }
       }
     },
@@ -4013,6 +6323,12 @@
             "state" : "translated",
             "value" : "미리 보기 스타일"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览样式"
+          }
         }
       }
     },
@@ -4022,6 +6338,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭 고정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "固定标签页"
           }
         }
       }
@@ -4034,6 +6356,12 @@
             "state" : "translated",
             "value" : "분홍색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粉色"
+          }
         }
       }
     },
@@ -4045,6 +6373,12 @@
             "state" : "translated",
             "value" : "고정된 탭"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "固定的标签页"
+          }
         }
       }
     },
@@ -4054,6 +6388,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "고정된 탭 레이아웃 파일 문제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "固定的标签页布局文件有问题"
           }
         }
       }
@@ -4066,6 +6406,12 @@
             "state" : "translated",
             "value" : "위치"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
+          }
         }
       }
     },
@@ -4077,6 +6423,12 @@
             "state" : "translated",
             "value" : "키를 누르십시오..."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请按键..."
+          }
         }
       }
     },
@@ -4086,6 +6438,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이전 페인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个窗格"
           }
         }
       }
@@ -4097,6 +6455,12 @@
             "state" : "translated",
             "value" : "이전 프로젝트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个项目"
+          }
         }
       }
     },
@@ -4106,6 +6470,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이전 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个标签页"
           }
         }
       }
@@ -4117,6 +6487,12 @@
             "state" : "translated",
             "value" : "프로젝트의 이전 탭"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目中的上一个标签页"
+          }
         }
       }
     },
@@ -4127,6 +6503,12 @@
             "state" : "translated",
             "value" : "프로세스"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进程"
+          }
         }
       }
     },
@@ -4136,6 +6518,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로그램"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "程序"
           }
         }
       }
@@ -4148,6 +6536,12 @@
             "state" : "translated",
             "value" : "프로젝트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目"
+          }
         }
       }
     },
@@ -4157,6 +6551,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 아이콘"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目图标"
           }
         }
       }
@@ -4169,6 +6569,12 @@
             "state" : "translated",
             "value" : "프로젝트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目"
+          }
         }
       }
     },
@@ -4178,6 +6584,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프롬프트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提示符"
           }
         }
       }
@@ -4190,6 +6602,12 @@
             "state" : "translated",
             "value" : "보라색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "紫色"
+          }
         }
       }
     },
@@ -4201,6 +6619,12 @@
             "state" : "translated",
             "value" : "빠른 터미널"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速终端"
+          }
         }
       }
     },
@@ -4210,6 +6634,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "종료"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出"
           }
         }
       }
@@ -4221,6 +6651,12 @@
             "state" : "translated",
             "value" : "%@ 종료"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出 %@"
+          }
         }
       }
     },
@@ -4230,6 +6666,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@을(를) 종료하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要退出 %@ 吗？"
           }
         }
       }
@@ -4241,6 +6683,12 @@
             "state" : "translated",
             "value" : "페인의 ID, 세션, 디렉토리, 프로세스 또는 크기를 읽습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取窗格的 ID、会话、目录、进程或大小。"
+          }
         }
       }
     },
@@ -4250,6 +6698,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인에 표시된 텍스트를 읽습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取窗格显示的文本。"
           }
         }
       }
@@ -4261,6 +6715,12 @@
             "state" : "translated",
             "value" : "Ghostty 설정을 다시 읽습니다. 다른 앱에서 편집한 내용을 저장한 후 클릭하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新读取你的 Ghostty 配置。在其他 App 中存储编辑后点按此按钮。"
+          }
         }
       }
     },
@@ -4270,6 +6730,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "읽기 전용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只读"
           }
         }
       }
@@ -4281,6 +6747,12 @@
             "state" : "translated",
             "value" : "읽기 전용 모드"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只读模式"
+          }
         }
       }
     },
@@ -4290,6 +6762,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 저장소에서 확장 프로그램을 읽는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从 Macterm 仓库读取扩展…"
           }
         }
       }
@@ -4302,6 +6780,12 @@
             "state" : "translated",
             "value" : "최근 항목"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近"
+          }
         }
       }
     },
@@ -4311,6 +6795,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "최근 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近的标签页"
           }
         }
       }
@@ -4322,6 +6812,12 @@
             "state" : "translated",
             "value" : "최근 탭 개수 제한"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近标签页数量上限"
+          }
         }
       }
     },
@@ -4331,6 +6827,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "연결이 끊어진 후 페인 다시 연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接断开后重新连接窗格"
           }
         }
       }
@@ -4343,6 +6845,12 @@
             "state" : "translated",
             "value" : "빨간색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "红色"
+          }
         }
       }
     },
@@ -4352,6 +6860,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 단축키를 시스템 전체에 등록하여 다른 앱이 앞에 있을 때도 동작을 실행합니다. 그러면 이 단축키는 어디서나 Macterm에 속하며, 다른 앱은 이 단축키를 받을 수 없고 프로그램으로 전달할 수도 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在系统范围内注册此快捷键，使其在其他 App 位于最前面时也能执行操作。此后此快捷键在任何地方都归 Macterm 所有 — 其他 App 无法接收它，它也无法再传递给程序。"
           }
         }
       }
@@ -4364,6 +6878,12 @@
             "state" : "translated",
             "value" : "일반"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "常规"
+          }
         }
       }
     },
@@ -4373,6 +6893,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "다시 불러오기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新载入"
           }
         }
       }
@@ -4384,6 +6910,12 @@
             "state" : "translated",
             "value" : "Ghostty 설정 다시 불러오기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新载入 Ghostty 配置"
+          }
         }
       }
     },
@@ -4393,6 +6925,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "원격 컴퓨터…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程电脑…"
           }
         }
       }
@@ -4404,6 +6942,12 @@
             "state" : "translated",
             "value" : "원격 프로젝트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程项目"
+          }
         }
       }
     },
@@ -4413,6 +6957,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "제거"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除"
           }
         }
       }
@@ -4424,6 +6974,12 @@
             "state" : "translated",
             "value" : "항목 %lld개 제거"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 %lld 项"
+          }
         }
       }
     },
@@ -4433,6 +6989,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 %lld개 제거"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 %lld 个项目"
           }
         }
       }
@@ -4444,6 +7006,12 @@
             "state" : "translated",
             "value" : "현재 프로젝트 제거"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除当前项目"
+          }
         }
       }
     },
@@ -4453,6 +7021,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 제거"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除项目"
           }
         }
       }
@@ -4464,6 +7038,12 @@
             "state" : "translated",
             "value" : "저장된 암호 제거"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除存储的密码"
+          }
         }
       }
     },
@@ -4473,6 +7053,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "위젯 제거"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除小组件"
           }
         }
       }
@@ -4484,6 +7070,12 @@
             "state" : "translated",
             "value" : "실행 중인 프로세스가 있는 항목을 제거하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除有进程正在运行的所选项吗？"
+          }
         }
       }
     },
@@ -4493,6 +7085,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "레이아웃 파일을 제거하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除布局文件吗？"
           }
         }
       }
@@ -4504,6 +7102,12 @@
             "state" : "translated",
             "value" : "실행 중인 프로세스가 있는 프로젝트를 제거하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除有进程正在运行的项目吗？"
+          }
         }
       }
     },
@@ -4513,6 +7117,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장된 암호를 제거하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除已存储的密码吗？"
           }
         }
       }
@@ -4524,6 +7134,12 @@
             "state" : "translated",
             "value" : "위젯을 제거하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除小组件吗？"
+          }
         }
       }
     },
@@ -4533,6 +7149,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "제거…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除…"
           }
         }
       }
@@ -4544,6 +7166,12 @@
             "state" : "translated",
             "value" : "레이아웃을 제거하면 해당 파일이 삭제됩니다. 프로젝트는 유지됩니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除布局会删除其文件。项目会保留。"
+          }
         }
       }
     },
@@ -4553,6 +7181,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "현재 프로젝트 이름 변경"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新命名当前项目"
           }
         }
       }
@@ -4564,6 +7198,12 @@
             "state" : "translated",
             "value" : "현재 탭 이름 변경"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新命名当前标签页"
+          }
         }
       }
     },
@@ -4573,6 +7213,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 이름 변경"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新命名项目"
           }
         }
       }
@@ -4584,6 +7230,12 @@
             "state" : "translated",
             "value" : "프로젝트 이름 변경…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新命名项目…"
+          }
         }
       }
     },
@@ -4593,6 +7245,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭 이름 변경"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新命名标签页"
           }
         }
       }
@@ -4604,6 +7262,12 @@
             "state" : "translated",
             "value" : "프로젝트 경로를 현재 디렉토리로 대체"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将项目路径替换为当前目录"
+          }
         }
       }
     },
@@ -4613,6 +7277,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "인증 요구"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要认证"
           }
         }
       }
@@ -4624,6 +7294,12 @@
             "state" : "translated",
             "value" : "필수"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必填"
+          }
         }
       }
     },
@@ -4633,6 +7309,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인 크기를 아래로 조절"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向下调整窗格大小"
           }
         }
       }
@@ -4644,6 +7326,12 @@
             "state" : "translated",
             "value" : "페인 크기를 왼쪽으로 조절"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向左调整窗格大小"
+          }
         }
       }
     },
@@ -4653,6 +7341,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "페인 크기를 오른쪽으로 조절"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向右调整窗格大小"
           }
         }
       }
@@ -4664,6 +7358,12 @@
             "state" : "translated",
             "value" : "페인 크기를 위로 조절"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向上调整窗格大小"
+          }
         }
       }
     },
@@ -4673,6 +7373,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "터미널 크기 조절"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调整终端大小"
           }
         }
       }
@@ -4684,6 +7390,12 @@
             "state" : "translated",
             "value" : "실제 경로: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实际路径：%@"
+          }
         }
       }
     },
@@ -4693,6 +7405,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "재시작하여 업데이트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新启动以更新"
           }
         }
       }
@@ -4704,6 +7422,12 @@
             "state" : "translated",
             "value" : "페인 복원"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复窗格"
+          }
         }
       }
     },
@@ -4713,6 +7437,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "다시 시도"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试"
           }
         }
       }
@@ -4725,6 +7455,12 @@
             "state" : "translated",
             "value" : "오른쪽"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右"
+          }
         }
       }
     },
@@ -4734,6 +7470,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${pane}에서 ${command} 실행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 ${pane} 中运行 ${command}"
           }
         }
       }
@@ -4745,6 +7487,12 @@
             "state" : "translated",
             "value" : "페인에서 명령 실행"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在窗格中运行命令"
+          }
         }
       }
     },
@@ -4754,6 +7502,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새로운 탭에서 실행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新标签页中运行"
           }
         }
       }
@@ -4765,6 +7519,12 @@
             "state" : "translated",
             "value" : "분할에서 실행"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在拆分窗格中运行"
+          }
         }
       }
     },
@@ -4774,6 +7534,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm의 단축키 동작 중 하나를 실행합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行 Macterm 的一个快捷键操作。"
           }
         }
       }
@@ -4785,6 +7551,12 @@
             "state" : "translated",
             "value" : "실행 중"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在运行"
+          }
         }
       }
     },
@@ -4794,6 +7566,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储"
           }
         }
       }
@@ -4805,6 +7583,12 @@
             "state" : "translated",
             "value" : "레이아웃 저장"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储布局"
+          }
         }
       }
     },
@@ -4814,6 +7598,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "팔레트 스크린샷 저장"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储面板截图"
           }
         }
       }
@@ -4825,6 +7615,12 @@
             "state" : "translated",
             "value" : "암호를 저장하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要存储密码吗？"
+          }
         }
       }
     },
@@ -4834,6 +7630,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存储"
           }
         }
       }
@@ -4845,6 +7647,12 @@
             "state" : "translated",
             "value" : "저장된 암호가 맞지 않음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储的密码无效"
+          }
         }
       }
     },
@@ -4854,6 +7662,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장된 암호"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存储的密码"
           }
         }
       }
@@ -4865,6 +7679,12 @@
             "state" : "translated",
             "value" : "모든 명령에서 이 프롬프트에 대해 저장됩니다. 명령과 프롬프트가 모두 일치하면 Macterm이 자동 완성을 제안합니다. 프롬프트가 없으면 Macterm은 프롬프트에서 암호를 제안하지 않습니다. 명령 팔레트의 암호 관리자에서 선택하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已为来自任意命令的此提示符存储。当命令和提示符都匹配时，Macterm 会提供自动填充。没有提示符时，Macterm 不会在提示符处提供此密码。请在命令面板的密码管理器中选择它。"
+          }
         }
       }
     },
@@ -4874,6 +7694,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "스크린샷을 저장했습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存储截图"
           }
         }
       }
@@ -4885,6 +7711,12 @@
             "state" : "translated",
             "value" : "스크롤"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "滚动"
+          }
         }
       }
     },
@@ -4894,6 +7726,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "스크롤하면 한 번에 한 행씩 이동합니다. 각 행이 미끄러지듯 제자리로 들어갑니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "滚动时每次移动一整行。每行会滑动到位。"
           }
         }
       }
@@ -4905,6 +7743,12 @@
             "state" : "translated",
             "value" : "검색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索"
+          }
         }
       }
     },
@@ -4914,6 +7758,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 검색..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索 %@..."
           }
         }
       }
@@ -4925,6 +7775,12 @@
             "state" : "translated",
             "value" : "동작 또는 단축키로 검색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按操作或快捷键搜索"
+          }
         }
       }
     },
@@ -4934,6 +7790,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령 또는 프롬프트로 검색..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按命令或提示符搜索..."
           }
         }
       }
@@ -4945,6 +7807,12 @@
             "state" : "translated",
             "value" : "확장 프로그램 검색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索扩展"
+          }
         }
       }
     },
@@ -4954,6 +7822,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이름 또는 경로로 파일 검색..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按名称或路径搜索文件..."
           }
         }
       }
@@ -4965,6 +7839,12 @@
             "state" : "translated",
             "value" : "프로젝트 또는 명령 검색..."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索项目或命令..."
+          }
         }
       }
     },
@@ -4974,6 +7854,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장된 암호 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索已存储的密码"
           }
         }
       }
@@ -4985,6 +7871,12 @@
             "state" : "translated",
             "value" : "보안 키보드 입력이 켜져 있습니다"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全键盘输入已启用"
+          }
         }
       }
     },
@@ -4994,6 +7886,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GitHub에서 파일과 README 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上查看其文件和 README"
           }
         }
       }
@@ -5006,6 +7904,12 @@
             "state" : "translated",
             "value" : "선택 모드"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择模式"
+          }
         }
       }
     },
@@ -5015,6 +7919,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Finder에서 폴더를 선택하면 %@ 프로젝트로 만들 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“访达”中选择一个文件夹，将其设为 %@ 项目。"
           }
         }
       }
@@ -5026,6 +7936,12 @@
             "state" : "translated",
             "value" : "프로젝트 폴더 선택"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择项目文件夹"
+          }
         }
       }
     },
@@ -5035,6 +7951,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${pane}에 ${key} 보내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向 ${pane} 发送 ${key}"
           }
         }
       }
@@ -5046,6 +7968,12 @@
             "state" : "translated",
             "value" : "키 보내기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送按键"
+          }
         }
       }
     },
@@ -5055,6 +7983,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ctrl+c, escape 또는 up 같은 키 조합 하나를 페인에 보냅니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向窗格发送一个键组合，例如 ctrl+c、escape 或 up。"
           }
         }
       }
@@ -5066,6 +8000,12 @@
             "state" : "translated",
             "value" : "모든 페인 분리"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分离所有窗格"
+          }
         }
       }
     },
@@ -5075,6 +8015,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "현재 페인 분리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分离当前窗格"
           }
         }
       }
@@ -5086,6 +8032,12 @@
             "state" : "translated",
             "value" : "페인 분리"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分离窗格"
+          }
         }
       }
     },
@@ -5095,6 +8047,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "세션 이름"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话名称"
           }
         }
       }
@@ -5106,6 +8064,12 @@
             "state" : "translated",
             "value" : "세션 유지"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话保留"
+          }
         }
       }
     },
@@ -5115,6 +8079,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "세션 유지가 꺼져 있습니다. 앱에 zmx 바이너리가 없습니다. `mise run setup`을 실행하고 다시 빌드하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话保留已关闭。App 中没有 zmx 二进制文件。请运行 `mise run setup` 并重新构建。"
           }
         }
       }
@@ -5126,6 +8096,12 @@
             "state" : "translated",
             "value" : "세션 유지가 꺼져 있습니다. 이 시스템의 zmx 소켓 경로가 너무 깁니다. 터미널이 세션 유지 없이 실행됩니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话保留已关闭。此系统的 zmx 套接字路径过长。终端将在不保留会话的情况下运行。"
+          }
         }
       }
     },
@@ -5135,6 +8111,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 경로를 현재 디렉토리로 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将项目路径设为当前目录"
           }
         }
       }
@@ -5146,6 +8128,12 @@
             "state" : "translated",
             "value" : "흐림 효과를 끄려면 0으로 설정하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将模糊设为 0 即可关闭。"
+          }
         }
       }
     },
@@ -5155,6 +8143,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "단축키"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键"
           }
         }
       }
@@ -5167,6 +8161,12 @@
             "state" : "translated",
             "value" : "보기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示"
+          }
         }
       }
     },
@@ -5176,6 +8176,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "AI 에이전트 아이콘 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 AI 智能体图标"
           }
         }
       }
@@ -5187,6 +8193,12 @@
             "state" : "translated",
             "value" : "도구 막대 보기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示工具栏"
+          }
         }
       }
     },
@@ -5196,6 +8208,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "윈도우 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示窗口"
           }
         }
       }
@@ -5207,6 +8225,12 @@
             "state" : "translated",
             "value" : "페인을 보여주고 키보드 입력을 해당 페인으로 보냅니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示窗格并将键盘输入移到其中。"
+          }
         }
       }
     },
@@ -5216,6 +8240,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트를 보여주고 해당 윈도우를 앞으로 가져옵니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示项目并将其窗口移到前面。"
           }
         }
       }
@@ -5227,6 +8257,12 @@
             "state" : "translated",
             "value" : "탭을 보여주고 해당 윈도우를 앞으로 가져옵니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示标签页并将其窗口移到前面。"
+          }
         }
       }
     },
@@ -5236,6 +8272,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새로운 프로젝트 버튼 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示新建项目按钮"
           }
         }
       }
@@ -5247,6 +8289,12 @@
             "state" : "translated",
             "value" : "프로젝트에 새로운 탭 버튼 표시"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在项目上显示新建标签页按钮"
+          }
         }
       }
     },
@@ -5256,6 +8304,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "빠른 터미널 오버레이를 보이거나 가립니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏快速终端浮层。"
           }
         }
       }
@@ -5267,6 +8321,12 @@
             "state" : "translated",
             "value" : "에이전트 아이콘 위에 스피너 표시"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在智能体图标上显示旋转指示器"
+          }
         }
       }
     },
@@ -5276,6 +8336,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭 미리 보기 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示标签页预览"
           }
         }
       }
@@ -5287,6 +8353,12 @@
             "state" : "translated",
             "value" : "탭 상태 표시기 표시"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示标签页状态指示器"
+          }
         }
       }
     },
@@ -5296,6 +8368,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "도구 막대 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示工具栏"
           }
         }
       }
@@ -5307,6 +8385,12 @@
             "state" : "translated",
             "value" : "다른 윈도우에 표시 중"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在另一个窗口中显示"
+          }
         }
       }
     },
@@ -5316,6 +8400,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령이 실행되는 동안 스피너를 표시합니다. 명령이 끝나면 점을 표시합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令运行时显示旋转指示器。命令结束时显示圆点。"
           }
         }
       }
@@ -5327,6 +8417,12 @@
             "state" : "translated",
             "value" : "사이드바"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "边栏"
+          }
         }
       }
     },
@@ -5336,6 +8432,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "크기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大小"
           }
         }
       }
@@ -5348,6 +8450,12 @@
             "state" : "translated",
             "value" : "작게"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小"
+          }
         }
       }
     },
@@ -5357,6 +8465,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "부드러운 커서"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平滑光标"
           }
         }
       }
@@ -5368,6 +8482,12 @@
             "state" : "translated",
             "value" : "부드러운 스크롤"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平滑滚动"
+          }
         }
       }
     },
@@ -5377,6 +8497,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "행 단위로 맞추기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按整行对齐"
           }
         }
       }
@@ -5388,6 +8514,12 @@
             "state" : "translated",
             "value" : "자동으로 분할"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动拆分"
+          }
         }
       }
     },
@@ -5397,6 +8529,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "아래로 분할"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向下拆分"
           }
         }
       }
@@ -5408,6 +8546,12 @@
             "state" : "translated",
             "value" : "왼쪽으로 분할"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向左拆分"
+          }
         }
       }
     },
@@ -5417,6 +8561,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "오른쪽으로 분할"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向右拆分"
           }
         }
       }
@@ -5428,6 +8578,12 @@
             "state" : "translated",
             "value" : "위로 분할"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向上拆分"
+          }
         }
       }
     },
@@ -5437,6 +8593,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "분할"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拆分"
           }
         }
       }
@@ -5449,6 +8611,12 @@
             "state" : "translated",
             "value" : "안정 버전"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稳定版"
+          }
         }
       }
     },
@@ -5458,6 +8626,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "안정 버전만 받습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅稳定版。"
           }
         }
       }
@@ -5469,6 +8643,12 @@
             "state" : "translated",
             "value" : "실행"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行"
+          }
         }
       }
     },
@@ -5479,6 +8659,12 @@
             "state" : "translated",
             "value" : "프로젝트로 전환: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到项目：%@"
+          }
         }
       }
     },
@@ -5488,6 +8674,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "원격 프로젝트로 전환: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到远程项目：%@"
           }
         }
       }
@@ -5500,6 +8692,12 @@
             "state" : "translated",
             "value" : "시스템"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统"
+          }
         }
       }
     },
@@ -5509,6 +8707,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页"
           }
         }
       }
@@ -5520,6 +8724,12 @@
             "state" : "translated",
             "value" : "탭 전환기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页切换器"
+          }
         }
       }
     },
@@ -5529,6 +8739,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页切换"
           }
         }
       }
@@ -5540,6 +8756,12 @@
             "state" : "translated",
             "value" : "탭 아이콘"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页图标"
+          }
         }
       }
     },
@@ -5550,6 +8772,12 @@
             "state" : "translated",
             "value" : "탭 전환기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页切换器"
+          }
         }
       }
     },
@@ -5559,6 +8787,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "탭 전환기 위치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页切换器位置"
           }
         }
       }
@@ -5571,6 +8805,12 @@
             "state" : "translated",
             "value" : "탭"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页"
+          }
         }
       }
     },
@@ -5582,6 +8822,12 @@
             "state" : "translated",
             "value" : "터미널"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
         }
       }
     },
@@ -5591,6 +8837,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "터미널 콘텐츠 영역"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端内容区域"
           }
         }
       }
@@ -5602,6 +8854,12 @@
             "state" : "translated",
             "value" : "디스크에 있는 폴더가 아닙니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "那不是磁盘上的文件夹。"
+          }
         }
       }
     },
@@ -5611,6 +8869,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "원격 프로젝트에서는 파일 화면을 사용할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程项目不可使用“文件”屏幕"
           }
         }
       }
@@ -5622,6 +8886,12 @@
             "state" : "translated",
             "value" : "배경이 각 전체 화면 프로그램의 색상에 맞춰집니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景会匹配每个全屏程序的颜色。"
+          }
         }
       }
     },
@@ -5631,6 +8901,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령이 %lld초 안에 완료되지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令未在 %lld 秒内完成。"
           }
         }
       }
@@ -5642,6 +8918,12 @@
             "state" : "translated",
             "value" : "명령이 상태 %d(으)로 종료되었습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令以状态 %d 退出。"
+          }
         }
       }
     },
@@ -5651,6 +8933,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "명령이 비어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令为空。"
           }
         }
       }
@@ -5662,6 +8950,12 @@
             "state" : "translated",
             "value" : "커서가 위치 사이를 부드럽게 이동합니다. 건너뛰지 않습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标在位置之间平滑移动，不会跳动。"
+          }
         }
       }
     },
@@ -5671,6 +8965,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "기본값은 폴더의 이름입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认为文件夹的名称。"
           }
         }
       }
@@ -5682,6 +8982,12 @@
             "state" : "translated",
             "value" : "파일 대상이 다른 컴퓨터를 가리키거나 쿼리 또는 프래그먼트를 포함합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件目标指向另一台电脑，或包含查询或片段。"
+          }
         }
       }
     },
@@ -5691,6 +8997,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "복사 모드에서 커서를 이동하고 텍스트를 선택하는 키입니다. 변경 사항은 다음에 모드를 시작할 때 적용됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在拷贝模式中移动光标和选择文本的按键。更改会在下次进入该模式时生效。"
           }
         }
       }
@@ -5702,6 +9014,12 @@
             "state" : "translated",
             "value" : "레이아웃 파일에 탭이 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局文件未声明标签页"
+          }
         }
       }
     },
@@ -5711,6 +9029,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "레이아웃 파일에 탭이 선언되어 있지 않아 적용할 레이아웃이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局文件未声明任何标签页，因此没有可应用的布局。"
           }
         }
       }
@@ -5722,6 +9046,12 @@
             "state" : "translated",
             "value" : "레이아웃 파일이 유효하지 않아 적용하지 않았습니다.\n\n%@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局文件无效，未应用。\n\n%@"
+          }
         }
       }
     },
@@ -5731,6 +9061,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "로컬 대상이 없거나 일반 파일 또는 디렉토리가 아닙니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地目标不存在，或不是常规文件或目录。"
           }
         }
       }
@@ -5742,6 +9078,12 @@
             "state" : "translated",
             "value" : "페인에 아직 프레임이 없습니다. 다시 시도하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗格尚无画面。请重试。"
+          }
         }
       }
     },
@@ -5751,6 +9093,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 행에 디렉토리가 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该行没有目录"
           }
         }
       }
@@ -5762,6 +9110,12 @@
             "state" : "translated",
             "value" : "대상에 보이지 않는 문자나 줄바꿈 문자가 있습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标包含不可见字符或换行字符。"
+          }
         }
       }
     },
@@ -5771,6 +9125,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "대상이 스킴을 포함한 절대 URL이 아닙니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标不是带有协议的绝对 URL。"
           }
         }
       }
@@ -5782,6 +9142,12 @@
             "state" : "translated",
             "value" : "해당 페인의 터미널이 아직 실행되지 않았습니다. 해당 탭을 한 번 선택한 다음 다시 시도하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该窗格的终端尚未运行。请先选择一次它的标签页，然后重试。"
+          }
         }
       }
     },
@@ -5791,6 +9157,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "웹 대상에 유효한 호스트가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网页目标不包含有效的主机。"
           }
         }
       }
@@ -5802,6 +9174,12 @@
             "state" : "translated",
             "value" : "%@에 폴더가 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 处没有文件夹。"
+          }
         }
       }
     },
@@ -5811,6 +9189,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 파일은 설정 파일 목록에 없습니다. 설정 → 일반 → Ghostty 설정에서 추가하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件不在你的配置文件中。请在“设置”→“通用”→“Ghostty 配置”中添加。"
           }
         }
       }
@@ -5822,6 +9206,12 @@
             "state" : "translated",
             "value" : "이 링크는 기본 애플리케이션에서 열립니다. 대상을 알고 신뢰하는 경우에만 계속하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此链接将在默认 App 中打开。仅当你了解并信任目标时才继续。"
+          }
         }
       }
     },
@@ -5831,6 +9221,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 링크는 “%@”에서 열립니다. 대상을 알고 신뢰하는 경우에만 계속하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此链接将在“%@”中打开。仅当你了解并信任目标时才继续。"
           }
         }
       }
@@ -5849,6 +9245,12 @@
             "state" : "translated",
             "value" : "이 팔레트에는 %@ 및 %@이(가) 필요하지만 PATH에 없습니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此面板需要 %1$@ 和 %2$@，但它们不在你的 PATH 中。"
+          }
         }
       }
     },
@@ -5858,6 +9260,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 팔레트에는 %@이(가) 필요하지만 PATH에 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此面板需要 %@，但它不在你的 PATH 中。"
           }
         }
       }
@@ -5869,6 +9277,12 @@
             "state" : "translated",
             "value" : "이 팔레트의 파일이 없습니다"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此面板的文件已不存在"
+          }
         }
       }
     },
@@ -5878,6 +9292,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 버전의 Macterm은 이 항목을 읽을 수 없습니다: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Macterm 无法读取它：%@"
           }
         }
       }
@@ -5889,6 +9309,12 @@
             "state" : "translated",
             "value" : "이 버전의 Macterm은 업데이트를 읽을 수 없습니다: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Macterm 无法读取此更新：%@"
+          }
         }
       }
     },
@@ -5896,6 +9322,12 @@
       "comment" : "Update channel: a build of every commit",
       "localizations" : {
         "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tip"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tip"
@@ -5910,6 +9342,12 @@
             "state" : "translated",
             "value" : "제목"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标题"
+          }
         }
       }
     },
@@ -5919,6 +9357,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "빠른 터미널 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换快速终端"
           }
         }
       }
@@ -5930,6 +9374,12 @@
             "state" : "translated",
             "value" : "사이드바 전환"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换边栏"
+          }
         }
       }
     },
@@ -5940,6 +9390,12 @@
             "state" : "translated",
             "value" : "사이드바 전환"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换边栏"
+          }
         }
       }
     },
@@ -5949,6 +9405,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "도구 막대"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具栏"
           }
         }
       }
@@ -5961,6 +9423,12 @@
             "state" : "translated",
             "value" : "위"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顶部"
+          }
         }
       }
     },
@@ -5970,6 +9438,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "읽기 전용 끄기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭只读"
           }
         }
       }
@@ -5981,6 +9455,12 @@
             "state" : "translated",
             "value" : "설정 → 암호 관리자에서 꺼져 있음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已在“设置”→“密码管理器”中关闭"
+          }
         }
       }
     },
@@ -5991,6 +9471,12 @@
             "state" : "translated",
             "value" : "페인의 셸에 명령을 입력합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在窗格的 shell 中输入命令。"
+          }
         }
       }
     },
@@ -6000,6 +9486,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "암호를 입력하십시오. 암호가 맞으면 Macterm이 저장된 암호를 업데이트할지 묻습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入密码。密码有效后，Macterm 会提议更新存储的密码。"
           }
         }
       }
@@ -6012,6 +9504,12 @@
             "state" : "translated",
             "value" : "사용할 수 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不可用"
+          }
         }
       }
     },
@@ -6021,6 +9519,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "제거"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卸载"
           }
         }
       }
@@ -6032,6 +9536,12 @@
             "state" : "translated",
             "value" : "%@을(를) 제거하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要卸载 %@ 吗？"
+          }
         }
       }
     },
@@ -6041,6 +9551,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "제거하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卸载"
           }
         }
       }
@@ -6052,6 +9568,12 @@
             "state" : "translated",
             "value" : "제한 없음"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无限制"
+          }
         }
       }
     },
@@ -6061,6 +9583,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "언로드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
           }
         }
       }
@@ -6072,6 +9600,12 @@
             "state" : "translated",
             "value" : "현재 프로젝트 언로드"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止当前项目"
+          }
         }
       }
     },
@@ -6081,6 +9615,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "프로젝트 언로드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止项目"
           }
         }
       }
@@ -6092,6 +9632,12 @@
             "state" : "translated",
             "value" : "실행 중인 프로세스가 있는 프로젝트를 언로드하시겠습니까?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要停止有进程正在运行的项目吗？"
+          }
         }
       }
     },
@@ -6101,6 +9647,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "언로드됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已停止"
           }
         }
       }
@@ -6112,6 +9664,12 @@
             "state" : "translated",
             "value" : "탭 고정 해제"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消固定标签页"
+          }
         }
       }
     },
@@ -6121,6 +9679,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "고정 해제하여 프로젝트로 이동"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消固定并移到项目"
           }
         }
       }
@@ -6132,6 +9696,12 @@
             "state" : "translated",
             "value" : "업데이트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
         }
       }
     },
@@ -6141,6 +9711,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@을(를) 업데이트하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要更新 %@ 吗？"
           }
         }
       }
@@ -6152,6 +9728,12 @@
             "state" : "translated",
             "value" : "업데이트 사용 가능"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有可用更新"
+          }
         }
       }
     },
@@ -6161,6 +9743,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장된 암호를 업데이트하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要更新存储的密码吗？"
           }
         }
       }
@@ -6172,6 +9760,12 @@
             "state" : "translated",
             "value" : "자동으로 업데이트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动更新"
+          }
         }
       }
     },
@@ -6181,6 +9775,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "업데이트 채널"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新频道"
           }
         }
       }
@@ -6192,6 +9792,12 @@
             "state" : "translated",
             "value" : "확장 프로그램 자동 업데이트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动更新扩展"
+          }
         }
       }
     },
@@ -6201,6 +9807,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Macterm 저장소의 버전으로 업데이트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新到 Macterm 仓库中的版本"
           }
         }
       }
@@ -6212,6 +9824,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "업데이트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
           }
         }
       }
@@ -6229,6 +9847,12 @@
             "state" : "translated",
             "value" : "%1$@ 사용 중, 중복된 %2$@ 무시"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在使用 %1$@，已忽略重复的 %2$@"
+          }
         }
       }
     },
@@ -6238,6 +9862,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "버전"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本"
           }
         }
       }
@@ -6250,6 +9880,12 @@
             "state" : "translated",
             "value" : "비주얼"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可视"
+          }
         }
       }
     },
@@ -6260,6 +9896,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "비주얼 블록"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可视块"
           }
         }
       }
@@ -6272,6 +9914,12 @@
             "state" : "translated",
             "value" : "비주얼 라인"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可视行"
+          }
         }
       }
     },
@@ -6282,6 +9930,12 @@
             "state" : "translated",
             "value" : "탭이 여러 개일 때"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有多个标签页时"
+          }
         }
       }
     },
@@ -6291,6 +9945,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 탭 상단에 나열된 프로그램 중 하나가 포커스된 페인에서 실행 중이면, 동작을 실행하는 대신 이 단축키를 해당 프로그램으로 보냅니다. 그 외의 경우에는 동작이 그대로 실행됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当此标签页顶部列出的某个程序正在聚焦的窗格中运行时，将此快捷键发送给该程序，而不执行操作。在其他地方，操作仍会执行。"
           }
         }
       }
@@ -6303,6 +9963,12 @@
             "state" : "translated",
             "value" : "위젯 %lld"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小组件 %lld"
+          }
         }
       }
     },
@@ -6312,6 +9978,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "위젯 레이아웃 파일 문제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小组件布局文件有问题"
           }
         }
       }
@@ -6324,6 +9996,12 @@
             "state" : "translated",
             "value" : "위젯"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小组件"
+          }
         }
       }
     },
@@ -6333,6 +10011,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "너비"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宽度"
           }
         }
       }
@@ -6345,6 +10029,12 @@
             "state" : "translated",
             "value" : "윈도우"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗口"
+          }
         }
       }
     },
@@ -6354,6 +10044,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "작업 디렉토리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作目录"
           }
         }
       }
@@ -6365,6 +10061,12 @@
             "state" : "translated",
             "value" : "Macterm이 활성 앱이 아닐 때도 작동합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Macterm 不是活跃 App 时也可使用。"
+          }
         }
       }
     },
@@ -6374,6 +10076,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "워크트리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树"
           }
         }
       }
@@ -6392,6 +10100,12 @@
             "state" : "translated",
             "value" : "노란색"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黄色"
+          }
         }
       }
     },
@@ -6401,6 +10115,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@(이)라는 이름의 팔레트가 이미 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已有名为 %@ 的面板。"
           }
         }
       }
@@ -6412,6 +10132,12 @@
             "state" : "translated",
             "value" : "Finder에서 텍스트 파일을 여는 기본 앱으로 Macterm을 설정할 수 있습니다. Macterm은 셸의 $VISUAL 또는 $EDITOR가 지정하는 편집기에서 파일을 엽니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你可以将 Macterm 设为从“访达”打开文本文件的默认 App。Macterm 会在 shell 中 $VISUAL 或 $EDITOR 指定的编辑器中打开它们。"
+          }
         }
       }
     },
@@ -6421,6 +10147,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@을(를) 변경했습니다. 변경한 사본은 휴지통으로 이동합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已更改 %@。你更改过的副本将移到废纸篓。"
           }
         }
       }
@@ -6432,6 +10164,12 @@
             "state" : "translated",
             "value" : "Ghostty 설정이 알림을 요청합니다."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的 Ghostty 配置请求了通知。"
+          }
         }
       }
     },
@@ -6441,6 +10179,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@의 사본이 Macterm 저장소의 버전과 다릅니다. 사본은 휴지통으로 이동합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的 %@ 副本与 Macterm 仓库中的版本不同。你的副本将移到废纸篓。"
           }
         }
       }
@@ -6452,6 +10196,12 @@
             "state" : "translated",
             "value" : "페인 확대"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放大窗格"
+          }
         }
       }
     },
@@ -6462,6 +10212,12 @@
             "state" : "translated",
             "value" : "확대됨"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已放大"
+          }
         }
       }
     },
@@ -6471,6 +10227,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "[user@]host 또는 ssh 별칭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[user@]host 或 ssh 别名"
           }
         }
       }
@@ -6483,6 +10245,12 @@
             "state" : "translated",
             "value" : "“%@”의 암호를 자동 완성"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动填充“%@”的密码"
+          }
         }
       }
     },
@@ -6494,6 +10262,12 @@
             "state" : "translated",
             "value" : "“%@”의 저장된 암호 항목을 변경"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改“%@”的已存储密码项"
+          }
         }
       }
     },
@@ -6504,6 +10278,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@”의 암호를 복사"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝“%@”的密码"
           }
         }
       }
@@ -6521,6 +10301,12 @@
             "state" : "translated",
             "value" : "%@을(를) 읽을 수 없음: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取 %1$@：%2$@"
+          }
         }
       }
     },
@@ -6531,6 +10317,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "오류 %d"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "错误 %d"
           }
         }
       }
@@ -6550,6 +10342,12 @@
             "state" : "translated",
             "value" : "표시"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示"
+          }
         }
       }
     },
@@ -6560,6 +10358,12 @@
             "state" : "translated",
             "value" : "PATH에서 찾기"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 PATH 中查找"
+          }
         }
       }
     },
@@ -6569,6 +10373,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "터미널 명령이 문서, 다운로드 또는 기타 보호된 위치를 읽을 때 macOS가 폴더마다 묻습니다. 전체 디스크 접근 권한을 한 번 허용하면 모든 위치에 적용됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当终端命令读取“文稿”“下载”或其他受保护的位置时，macOS 会针对每个文件夹询问。授予一次完全磁盘访问权限即可涵盖所有位置。"
           }
         }
       }
@@ -6588,6 +10398,12 @@
             "state" : "translated",
             "value" : "추가"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
         }
       }
     },
@@ -6598,6 +10414,12 @@
             "state" : "translated",
             "value" : "rows: %@은(는) 배열이 아닙니다"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rows: %@ 不是数组"
+          }
         }
       }
     },
@@ -6607,6 +10429,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "rows: %@은(는) 경로를 지정하지만 출력이 JSON이 아닙니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rows: %@ 指定了路径，但输出不是 JSON"
           }
         }
       }
@@ -6626,6 +10454,12 @@
             "state" : "translated",
             "value" : "허용"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许"
+          }
         }
       }
     },
@@ -6644,6 +10478,12 @@
             "state" : "translated",
             "value" : "거부"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拒绝"
+          }
         }
       }
     },
@@ -6654,6 +10494,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@”의 암호를 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示“%@”的密码"
           }
         }
       }
@@ -6673,6 +10519,12 @@
             "state" : "translated",
             "value" : "완료됨"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成"
+          }
         }
       }
     },
@@ -6690,6 +10542,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "왼쪽"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧"
           }
         }
       }
@@ -6709,6 +10567,12 @@
             "state" : "translated",
             "value" : "오른쪽"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧"
+          }
         }
       }
     },
@@ -6727,6 +10591,12 @@
             "state" : "translated",
             "value" : "표시"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示"
+          }
         }
       }
     },
@@ -6738,6 +10608,12 @@
             "state" : "translated",
             "value" : "“%@”의 암호를 입력"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入“%@”的密码"
+          }
         }
       }
     },
@@ -6747,6 +10623,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "zmx 경로(선택 사항)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "zmx 路径（可选）"
           }
         }
       }
@@ -6758,6 +10640,12 @@
             "state" : "translated",
             "value" : "“%@”은(는) 고정된 탭에 예약된 이름입니다. 다른 이름을 선택하십시오."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”是固定的标签页的保留名称。请选择其他名称。"
+          }
         }
       }
     },
@@ -6767,6 +10655,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@”은(는) 프로젝트 디렉토리에 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”不在项目目录中。"
           }
         }
       }

@@ -16,6 +16,12 @@
             "state" : "translated",
             "value" : "여기에서 새로운 Macterm Debug 프로젝트"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此处新建 Macterm Debug 项目"
+          }
         }
       }
     },
@@ -33,6 +39,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "여기에서 새로운 Macterm 프로젝트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此处新建 Macterm 项目"
           }
         }
       }
