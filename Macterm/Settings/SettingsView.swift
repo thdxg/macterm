@@ -1732,6 +1732,7 @@ private struct KeymapSettings: View {
     var body: some View {
         let context = rowContext()
         return Form {
+            copyModeSection
             passthroughSection
 
             // One block: the search at its top, then every category as a
@@ -1793,6 +1794,26 @@ private struct KeymapSettings: View {
         .onDisappear {
             capturingActionID = nil
             HotkeyCaptureState.shared.isCapturing = false
+        }
+    }
+
+    private var copyModeSection: some View {
+        Section {
+            Picker(
+                "Keymap",
+                selection: Binding(
+                    get: { Preferences.shared.copyModeKeymap },
+                    set: { Preferences.shared.copyModeKeymap = $0 }
+                )
+            ) {
+                ForEach(CopyModeKeymap.allCases) { keymap in
+                    Text(keymap.displayName).tag(keymap)
+                }
+            }
+            Text("The keys that move the cursor and select text in copy mode. A change applies the next time the mode starts.")
+                .settingsCaption()
+        } header: {
+            DocsSectionHeader("Copy Mode", docs: .copyMode)
         }
     }
 

@@ -584,6 +584,12 @@ final class Preferences {
         didSet { Keys.tabSwitcherPosition.write(tabSwitcherPosition, to: defaults) }
     }
 
+    /// The keys of copy mode: Helix or Vim. `CopyModeController.enter` reads
+    /// it, so a change applies to the next time the mode starts.
+    var copyModeKeymap: CopyModeKeymap {
+        didSet { Keys.copyModeKeymap.write(copyModeKeymap, to: defaults) }
+    }
+
     /// Sentinel for "no icon" — sidebar rows skip the leading glyph when set.
     static let noIcon = "none"
     /// Sentinels for "show 1-based top-down position" — sidebar rows render a number glyph.
@@ -975,6 +981,7 @@ final class Preferences {
         updateChannel = Keys.updateChannel.read(defaults)
         tabSwitcherVisibility = Keys.tabSwitcherVisibility.read(defaults)
         tabSwitcherPosition = Keys.tabSwitcherPosition.read(defaults)
+        copyModeKeymap = Keys.copyModeKeymap.read(defaults)
         Self.runOneTimeMigrations(defaults: defaults)
     }
 
@@ -1155,6 +1162,7 @@ final class Preferences {
             "macterm.toolbar.tabSwitcherVisibility", default: TabSwitcherVisibility.whenMultiple
         )
         static let tabSwitcherPosition = PreferenceStorageKey("macterm.toolbar.tabSwitcherPosition", default: TabSwitcherPosition.trailing)
+        static let copyModeKeymap = PreferenceStorageKey("macterm.copyMode.keymap", default: CopyModeKeymap.helix)
 
         static let loadsDefaultGhosttyConfigFiles = "macterm.ghostty.loadsDefaultConfigFiles"
         static let customGhosttyConfigPaths = "macterm.ghostty.customConfigPaths"

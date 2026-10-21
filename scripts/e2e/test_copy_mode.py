@@ -138,3 +138,45 @@ def test_a_key_in_copy_mode_does_not_reach_the_shell(app, live_pane):
     app.pane_run(f'/bin/sh -c "printf after-{nonce}; echo"', pane=pane_id)
     wait_for(lambda: f"after-{nonce}" in (app.pane_text(pane=pane_id) or ""), message="the shell prompt")
     assert "zz" not in (app.pane_text(pane=pane_id) or "")
+
+
+def test_vim_keys_select_lines_with_visual_line_mode(app, live_pane):
+    """The Vim keymap, named on enter so the setting stays as it is: `V`
+    takes the line, `k` grows the selection up a line (the direction is
+    kept, which `select_line_bounds` of fork patch 0015 gives), `y` copies
+    and leaves."""
+    pane_id = live_pane["id"]
+    nonce = uuid.uuid4().hex[:8]
+    alpha, bravo, charlie = (f"{name}-{nonce}" for name in ("alpha", "bravo", "charlie"))
+    app.pane_run(
+        f'/bin/sh -c "printf {alpha}; echo; printf {bravo}; echo; printf {charlie}; echo"',
+        pane=pane_id,
+    )
+    wait_for(lambda: charlie in (app.pane_text(pane=pane_id) or ""), message="the marker lines")
+
+    rows = _rows(app, pane_id)
+    charlie_row = next(i for i, row in enumerate(rows) if row.startswith(charlie))
+    cursor_row = max(i for i, row in enumerate(rows) if row.strip())
+
+    state = app.cli_json("pane", "copy-mode", "enter", "--keymap", "vim", "--pane", pane_id)["copyMode"]
+    assert state["active"]
+
+    for _ in range(cursor_row - charlie_row):
+        _key(app, pane_id, "k")
+    _key(app, pane_id, "shift+v")
+    assert _state(app, pane_id)["selection"].strip() == charlie
+
+    # Up a line in visual line mode: both lines, whole.
+    _key(app, pane_id, "k")
+    selection = _state(app, pane_id)["selection"]
+    assert bravo in selection and charlie in selection
+    assert alpha not in selection
+
+    # And one more: the head still moves up.
+    _key(app, pane_id, "k")
+    assert alpha in _state(app, pane_id)["selection"]
+
+    _key(app, pane_id, "y")
+    state = _state(app, pane_id)
+    assert not state["active"]
+    assert state["selection"] is None

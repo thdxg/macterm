@@ -51,13 +51,39 @@ A number before a motion repeats it: <kbd>5</kbd><kbd>j</kbd> moves down five ro
 
 A word is a run of letters, or a run of punctuation. Spaces and the end of a line separate words. The characters in the Ghostty key `selection-word-chars` count as punctuation.
 
+## Vim keys
+
+Go to **Settings → Keymaps → Copy Mode** and select **Vim**. The change applies the next time copy mode starts. With Vim keys, copy mode works as the vi copy mode of tmux:
+
+| Key | Motion |
+|---|---|
+| <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd>, arrows | One cell left or right, one row up or down |
+| <kbd>w</kbd> <kbd>e</kbd> <kbd>b</kbd> | The start of the next word, the end of the word, the start of the word |
+| <kbd>0</kbd> <kbd>^</kbd> <kbd>$</kbd>, <kbd>Home</kbd> <kbd>End</kbd> | The start of the row, the last character of the row |
+| <kbd>g</kbd><kbd>g</kbd> <kbd>G</kbd> | The top of the scrollback, the last character on the screen |
+| <kbd>⌃</kbd><kbd>u</kbd> <kbd>⌃</kbd><kbd>d</kbd> <kbd>⌃</kbd><kbd>b</kbd> <kbd>⌃</kbd><kbd>f</kbd>, <kbd>Page Up</kbd> <kbd>Page Down</kbd> | Half a screen, a screen |
+
+A number before a motion repeats it.
+
+| Key | Selection |
+|---|---|
+| <kbd>v</kbd> | Start or stop visual mode. The pill says **Visual** |
+| <kbd>V</kbd> | Visual line mode: whole lines. The pill says **Visual Line** |
+| <kbd>⌃</kbd><kbd>v</kbd> | Visual block mode: a rectangle. The pill says **Visual Block** |
+| <kbd>o</kbd> | Swap the two ends of the selection |
+| <kbd>y</kbd> | In visual mode: copy the selection and leave copy mode |
+| <kbd>y</kbd><kbd>y</kbd> <kbd>Y</kbd> | Copy the line of the cursor and leave copy mode |
+| <kbd>/</kbd> <kbd>n</kbd> <kbd>N</kbd> | Search, the next match, the previous match |
+| <kbd>Esc</kbd> | Leave visual mode, then leave copy mode |
+| <kbd>q</kbd> | Leave copy mode |
+
 The mouse still works. A drag makes a selection, and the next motion continues from it.
 
 ## The keybind
 
 **Copy Mode** is a row in Settings → Keymaps. Change its keys there. It is also in the command palette and in the View menu.
 
-For now, you cannot change the keys inside copy mode. A later version adds a Vim keymap as a choice in Settings.
+The keys inside copy mode are the Helix keys or the Vim keys (**Settings → Keymaps → Copy Mode**). You cannot change single keys.
 
 ## Notes
 

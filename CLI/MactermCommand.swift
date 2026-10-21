@@ -921,12 +921,16 @@ struct PaneCommand: ParsableCommand {
         @Argument(help: "enter or exit. Omit it to read the state.")
         var action: String?
 
+        @Option(help: "The keymap for enter: helix or vim. The default is the setting.")
+        var keymap: String?
+
         @OptionGroup var target: PaneTarget
         @OptionGroup var options: ConnectionOptions
 
         func run() throws {
             var args = target.controlArgs()
             args.copyMode = action
+            args.keymap = keymap
             try runControlCommand(command: "pane.copy-mode", args: args, options: options)
         }
     }

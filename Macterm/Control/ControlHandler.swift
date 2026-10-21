@@ -1127,7 +1127,14 @@ final class ControlHandler {
         }
         switch args.copyMode {
         case nil: break
-        case "enter": view.copyMode.enter()
+        case "enter":
+            let keymap: CopyModeKeymap? = try args.keymap.map { name in
+                guard let keymap = CopyModeKeymap(rawValue: name) else {
+                    throw ControlError(code: .badRequest, message: "keymap must be helix or vim")
+                }
+                return keymap
+            }
+            view.copyMode.enter(keymap: keymap)
         case "exit": view.copyMode.exit()
         default: throw ControlError(code: .badRequest, message: "copy-mode takes enter or exit")
         }

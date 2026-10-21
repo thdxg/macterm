@@ -32,14 +32,19 @@ final class CopyModeController {
 
     var label: String? {
         guard isActive else { return nil }
-        return state.selectMode ? "Select Mode" : "Copy Mode"
+        return keymap.label(for: state)
     }
 
     /// Turn the mode on. The selection starts at the terminal cursor, and the
     /// renderer draws the cursor on its head from then on (fork patch 0014),
     /// so the cursor shows there at once and the program's cursor goes away.
-    func enter() {
+    ///
+    /// The keymap is the setting (Settings → Keymaps → Copy Mode) unless the
+    /// caller names one; the DEBUG verb does, so the e2e suite can drive
+    /// both keymaps without a change of the setting.
+    func enter(keymap chosen: CopyModeKeymap? = nil) {
         guard !isActive else { return }
+        keymap = chosen ?? Preferences.shared.copyModeKeymap
         state = CopyModeState()
         isActive = true
         send("start_selection")
@@ -76,6 +81,7 @@ final class CopyModeController {
         guard isActive else { return false }
         let commands: [CopyModeCommand]? = switch keymap {
         case .helix: HelixKeymap.resolve(key, state: &state)
+        case .vim: VimKeymap.resolve(key, state: &state)
         }
         guard let commands else { return false }
         for command in commands {

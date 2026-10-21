@@ -125,6 +125,9 @@ struct ControlArgs: Codable, Equatable {
     /// Turn the pane's copy mode on or off (debug-only `pane.copy-mode`):
     /// `enter` or `exit`. Nil just reads the state.
     var copyMode: String?
+    /// The keymap for `enter` (debug-only `pane.copy-mode`): `helix` or
+    /// `vim`. Nil uses the setting.
+    var keymap: String?
     /// Destination pane selector for `pane.move` (same tab); nil = the
     /// workspace edge (a root-level move).
     var dest: String?
