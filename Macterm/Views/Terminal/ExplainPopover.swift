@@ -4,12 +4,15 @@ import SwiftUI
 /// The popover of Explain Output: Apple's on-device model explains the
 /// selection, or the output of the last command, at the text it explains.
 ///
-/// An `NSPopover` with `.transient` behavior. It takes key when it opens, so
-/// Escape closes it, ⌘C copies a selection of its text, and the Copy button
-/// works with one click. When it closes, key goes back to the terminal's
-/// window, whose first responder is still the pane. Closing it stops the
-/// model. One popover for each pane view: a second request replaces the
-/// first.
+/// An `NSPopover` with `.transient` behavior: a click outside closes it.
+/// It does not take key when it opens, so the pane keeps typing, and the
+/// pane's `keyDown` closes it on Escape (`closesOnEscape`). A click in its
+/// text makes it key; then its own `cancelOperation` closes it on Escape, and
+/// its close gives key back to the terminal's window, whose first responder
+/// is still the pane. A `makeKey` right after `show` did not take: the
+/// popover's window was still opening, and Escape went to the shell.
+/// Closing it stops the model. One popover for each pane view: a second
+/// request replaces the first.
 ///
 /// A new popover never opens while the old one is still closing: it waits
 /// for `popoverDidClose`. When the old popover's window gave key back to the
@@ -82,6 +85,16 @@ final class ExplainPopover: NSObject, NSPopoverDelegate {
         popover?.performClose(nil)
     }
 
+    /// Close the popover for an Escape that the pane received. True when
+    /// the key was the popover's: a bare Escape while it is up.
+    func closesOnEscape(_ event: NSEvent) -> Bool {
+        guard isShown, event.keyCode == 53,
+              event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift])
+        else { return false }
+        close()
+        return true
+    }
+
     /// Run the current request's `onClose` now, and not again at close.
     /// Explain clears the selection that it made before it reads the next
     /// one, so that a second Explain does not take it for the user's.
@@ -101,11 +114,11 @@ final class ExplainPopover: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        let host = NSHostingController(rootView: ExplainPopoverView(model: model))
+        let host = ExplainHostingController(rootView: ExplainPopoverView(model: model))
         host.sizingOptions = .preferredContentSize
+        host.onCancel = { [weak self] in self?.close() }
         popover.contentViewController = host
         popover.show(relativeTo: anchor, of: view, preferredEdge: edge)
-        popover.contentViewController?.view.window?.makeKey()
         self.popover = popover
         anchorView = view
     }
@@ -154,6 +167,16 @@ final class ExplainPopover: NSObject, NSPopoverDelegate {
              nil:
             String(localized: "Macterm could not explain this text. Try again.")
         }
+    }
+}
+
+/// The popover's content. Escape reaches `cancelOperation` while the
+/// popover is key (after a click in its text), and closes it.
+private final class ExplainHostingController: NSHostingController<ExplainPopoverView> {
+    var onCancel: (() -> Void)?
+
+    override func cancelOperation(_: Any?) {
+        onCancel?()
     }
 }
 

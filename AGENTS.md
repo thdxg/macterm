@@ -232,7 +232,7 @@ Copy mode is a keyboard cursor over the scrollback, with the keys of Vim by defa
   - The IME point (`ghostty_surface_ime_point`) and `ghostty_text_s.tl_px_y` are both the **bottom** edge of the cell, from the top of the view.
   - Without shell integration a triple-click selects one line, and Explain falls back to the text guess with no selection. The guess finds the last two prompt lines by their prompt mark, and drops the first line of a two-line prompt when it is the same above both marks.
   - The popover's close clears the selection, if it is still the one that Explain made.
-- **The popover** (`ExplainPopover`) is an `NSPopover` with `.transient` behavior that takes key, so Escape closes it and ⌘C copies its text. Its close gives key back to the terminal only when the popover held it.
+- **The popover** (`ExplainPopover`) is an `NSPopover` with `.transient` behavior. **It does not take key**: the pane keeps typing, and the pane's `keyDown` closes it on a bare Escape (`closesOnEscape`, before the password bubble and copy mode). A `makeKey` right after `show` did not take, because the popover's window was still opening, and Escape went to the shell. A click in its text makes it key; then its own `cancelOperation` closes it on Escape. Its close gives key back to the terminal only when the popover held it.
   - **A new popover waits for the old one to close** (`pending`). When the old window gave key back after the new one took it, AppKit closed the new transient popover at once.
   - Explain Output goes below the prompt, so it does not cover the output. A selection's popover asks for the space above its first row.
   - It has no disclaimer line.

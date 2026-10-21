@@ -565,7 +565,16 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     /// The popover of Explain Output (`explainOutput`). Made on first use.
-    private(set) lazy var explainPopover = ExplainPopover()
+    var explainPopover: ExplainPopover {
+        if let madeExplainPopover { return madeExplainPopover }
+        let made = ExplainPopover()
+        madeExplainPopover = made
+        return made
+    }
+
+    /// The popover if Explain ever ran in this pane: what the key path reads,
+    /// so a keystroke never makes one.
+    private(set) var madeExplainPopover: ExplainPopover?
     /// Where the last right click landed, in view coordinates: the menu's
     /// Explain item points its popover there.
     private var contextMenuPoint: NSPoint?
@@ -1246,6 +1255,8 @@ final class GhosttyTerminalNSView: NSView {
             return
         }
         if processExited { exitAcknowledgedByKey = true }
+        // Escape closes the Explain popover, which never keeps key.
+        if madeExplainPopover?.closesOnEscape(event) == true { return }
         // A Return or Escape the password bubble answers is consumed here and
         // never reaches libghostty. Everything else is reported to the
         // password monitor at the point it is actually sent, below, as the
