@@ -39,6 +39,24 @@ def _rows(app, pane_id):
     return text.split("\n")
 
 
+def _settled_rows(app, pane_id, below):
+    """The pane rows once the shell has drawn its prompt again under the
+    output row `below`: the last row with text is under it, and it did not
+    move between two reads. nushell draws its two prompt rows a moment after
+    the output. A count of rows that is read in between puts the cursor on
+    the wrong row, and every `k` after it lands one row short."""
+    last = [-1]
+
+    def settled():
+        rows = _rows(app, pane_id)
+        bottom = max((i for i, row in enumerate(rows) if row.strip()), default=-1)
+        ok = bottom > below and bottom == last[0]
+        last[0] = bottom
+        return rows if ok else None
+
+    return wait_for(settled, message="the prompt under the output")
+
+
 def test_copy_mode_selects_lines_with_helix_keys(app, live_pane):
     pane_id = live_pane["id"]
     nonce = uuid.uuid4().hex[:8]
@@ -51,8 +69,9 @@ def test_copy_mode_selects_lines_with_helix_keys(app, live_pane):
 
     rows = _rows(app, pane_id)
     bravo_row = next(i for i, row in enumerate(rows) if row.startswith(bravo))
+    charlie_row = next(i for i, row in enumerate(rows) if row.startswith(charlie))
+    rows = _settled_rows(app, pane_id, charlie_row)
     cursor_row = max(i for i, row in enumerate(rows) if row.strip())
-    assert cursor_row > bravo_row
 
     state = _state(app, pane_id, "enter", keymap="helix")
     assert state["active"] and not state["selectMode"]
@@ -94,6 +113,7 @@ def test_a_repeated_w_moves_word_by_word(app, live_pane):
 
     rows = _rows(app, pane_id)
     line_row = next(i for i, row in enumerate(rows) if row.startswith(line))
+    rows = _settled_rows(app, pane_id, line_row)
     cursor_row = max(i for i, row in enumerate(rows) if row.strip())
 
     _state(app, pane_id, "enter", keymap="helix")
@@ -174,6 +194,7 @@ def test_vim_keys_select_lines_with_visual_line_mode(app, live_pane):
 
     rows = _rows(app, pane_id)
     charlie_row = next(i for i, row in enumerate(rows) if row.startswith(charlie))
+    rows = _settled_rows(app, pane_id, charlie_row)
     cursor_row = max(i for i, row in enumerate(rows) if row.strip())
 
     state = app.cli_json("pane", "copy-mode", "enter", "--keymap", "vim", "--pane", pane_id)["copyMode"]
