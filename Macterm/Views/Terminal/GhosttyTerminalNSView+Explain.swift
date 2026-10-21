@@ -19,7 +19,8 @@ extension GhosttyTerminalNSView {
         // A selection that the last Explain made is not the user's.
         explainPopover.dropOnClose()
         let language = OnDeviceModel.replyLanguage
-        let guess = readText(area: GHOSTTY_POINT_ACTIVE).flatMap(OutputExplanation.lastCommand(in:))
+        let active = readText(area: GHOSTTY_POINT_ACTIVE) ?? ""
+        let guess = OutputExplanation.lastCommand(in: active)
         let explanation: OutputExplanation
         var textAnchor: NSRect?
         var edge = NSRectEdge.minY
@@ -31,7 +32,14 @@ extension GhosttyTerminalNSView {
         } else if selectLastCommandOutput(rowsUp: guess.map { [$0.linesBelowOutput] } ?? [1, 2, 3]),
                   let output = selectedText()
         {
-            explanation = OutputExplanation(source: .output, command: guess?.command, text: output, replyLanguage: language)
+            // The selection says where the output starts, so the whole
+            // command is above it, also on more than one line. A long output
+            // pushes the command into the scrollback.
+            let command = OutputExplanation.command(in: active, before: output)
+                ?? readText(area: GHOSTTY_POINT_SCREEN).flatMap { OutputExplanation.command(in: $0, before: output) }
+                ?? guess?.command
+            logger.debug("explain output: command of \(command.map { $0.split(separator: "\n").count } ?? 0, privacy: .public) lines")
+            explanation = OutputExplanation(source: .output, command: command, text: output, replyLanguage: language)
             onClose = { [weak self] in
                 guard let self, selectedText() == output else { return }
                 sendBindingAction("clear_selection")

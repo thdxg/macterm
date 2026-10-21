@@ -63,7 +63,10 @@ struct OutputExplanation: Equatable {
         case .selection:
             lines.append("Explain this text that the developer selected in the terminal.")
         case .output:
-            if let command {
+            if let command, command.contains("\n") {
+                lines.append("Explain the output of this command:")
+                lines.append(command)
+            } else if let command {
                 lines.append("Explain the output of the command `\(command)`.")
             } else {
                 lines.append("Explain this command output from the terminal.")
@@ -153,6 +156,44 @@ struct OutputExplanation: Equatable {
             searchStart = range.upperBound
         }
         return nil
+    }
+
+    /// The whole command above `output` on `screen`, also when it takes
+    /// more than one line (a `\` continuation, a heredoc, a multiline editor):
+    /// the text after the prompt mark on the command's prompt line, then
+    /// every line down to the line before the output, as the screen shows
+    /// them.
+    ///
+    /// `output` is the selection that ghostty made from the OSC 133 marks,
+    /// so where it starts is known. The output is the last block of lines on
+    /// the screen that is equal to it. The command's prompt line is the
+    /// last line above that block with the prompt mark of the cursor's prompt
+    /// line. nil when either is not on `screen`: the caller then reads the
+    /// scrollback, or uses the guess of `lastCommand(in:)`.
+    static func command(in screen: String, before output: String) -> String? {
+        var lines = trimmedLines(screen)
+        guard let promptLine = lines.popLast(), let mark = promptMark(in: promptLine) else { return nil }
+        let outputLines = trimmedLines(output)
+        guard !outputLines.isEmpty, outputLines.count <= lines.count else { return nil }
+        let starts = (0 ... lines.count - outputLines.count).reversed()
+        guard let start = starts.first(where: { lines[$0 ..< $0 + outputLines.count].elementsEqual(outputLines) })
+        else { return nil }
+        for index in (0 ..< start).reversed() {
+            guard let first = command(in: lines[index], after: mark) else { continue }
+            return ([first] + lines[(index + 1) ..< start]).joined(separator: "\n")
+        }
+        return nil
+    }
+
+    /// `text` as lines with no trailing spaces, and no blank lines at its end.
+    private static func trimmedLines(_ text: String) -> [String] {
+        var lines = text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { String($0.reversed().drop(while: \.isWhitespace).reversed()) }
+        while let last = lines.last, last.isEmpty {
+            lines.removeLast()
+        }
+        return lines
     }
 
     /// The end of a screen with no command line found: every line but the

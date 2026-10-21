@@ -81,6 +81,54 @@ struct OutputExplanationTests {
         #expect(OutputExplanation.screenWithoutPrompt("").isEmpty)
     }
 
+    // MARK: - The command above a selected output
+
+    @Test
+    func command_takes_every_line_of_a_continued_command() {
+        let screen = """
+        ❯ ls
+        a
+        ❯ cargo build \\
+          --release
+           Compiling x v0.1.0
+        error: could not compile `x`
+        ❯
+        """
+        let output = "   Compiling x v0.1.0\nerror: could not compile `x`"
+        #expect(OutputExplanation.command(in: screen, before: output) == "cargo build \\\n  --release")
+    }
+
+    @Test
+    func command_takes_a_heredoc() {
+        let screen = "$ cat <<EOF\n> a\n> EOF\na\n$ "
+        #expect(OutputExplanation.command(in: screen, before: "a") == "cat <<EOF\n> a\n> EOF")
+    }
+
+    @Test
+    func command_of_one_line_is_that_line() {
+        let screen = "~\n❯ git status\nnothing to commit\n~\n❯"
+        #expect(OutputExplanation.command(in: screen, before: "nothing to commit") == "git status")
+    }
+
+    @Test
+    func command_uses_the_last_copy_of_an_output_that_repeats() {
+        let screen = "$ true\nok\n$ make\nok\n$"
+        #expect(OutputExplanation.command(in: screen, before: "ok") == "make")
+    }
+
+    @Test
+    func command_is_nil_when_the_output_or_the_prompt_is_not_on_screen() {
+        #expect(OutputExplanation.command(in: "$ make\nlater lines\n$", before: "earlier output") == nil)
+        #expect(OutputExplanation.command(in: "no prompt\nok", before: "ok") == nil)
+        #expect(OutputExplanation.command(in: "", before: "ok") == nil)
+    }
+
+    @Test
+    func prompt_puts_a_multiline_command_on_its_own_lines() {
+        let explanation = OutputExplanation(source: .output, command: "cat <<EOF\n> a\n> EOF", text: "a")
+        #expect(explanation.prompt.hasPrefix("Explain the output of this command:\ncat <<EOF\n> a\n> EOF\n<<<\n"))
+    }
+
     // MARK: - Budget
 
     @Test
