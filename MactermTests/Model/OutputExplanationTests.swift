@@ -129,6 +129,23 @@ struct OutputExplanationTests {
         #expect(explanation.prompt.hasPrefix("Explain the output of this command:\ncat <<EOF\n> a\n> EOF\n<<<\n"))
     }
 
+    @Test
+    func cursor_prompt_mark_is_the_mark_of_the_last_line() {
+        #expect(OutputExplanation.cursorPromptMark(in: "~\n❯ ls\na\n~\n❯\n\n") == "❯")
+        #expect(OutputExplanation.cursorPromptMark(in: "no prompt") == nil)
+    }
+
+    @Test
+    func selection_starts_at_the_command_on_its_prompt_line() {
+        let selection = "❯ loop { seq 1 10; sleep 1sec; }\n^CError: nu::shell::error"
+        #expect(OutputExplanation.selection(selection, startsAtCommand: "loop { seq 1 10; sleep 1sec; }", mark: "❯"))
+        // One row short: the selection starts in the output.
+        #expect(!OutputExplanation.selection("^CError: x", startsAtCommand: "loop { }", mark: "❯"))
+        // A wrapped or continued command line is not its prompt line.
+        #expect(!OutputExplanation.selection("  --release\nok", startsAtCommand: "cargo build \\", mark: "❯"))
+        #expect(!OutputExplanation.selection("", startsAtCommand: "ls", mark: "❯"))
+    }
+
     // MARK: - Budget
 
     @Test

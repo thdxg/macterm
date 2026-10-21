@@ -185,6 +185,22 @@ struct OutputExplanation: Equatable {
         return nil
     }
 
+    /// The prompt mark of the cursor's prompt line: the last line of `screen`
+    /// that is not empty.
+    static func cursorPromptMark(in screen: String) -> String? {
+        trimmedLines(screen).last.flatMap(promptMark(in:))
+    }
+
+    /// Whether `selection` starts on the prompt line of a command whose
+    /// first line is `commandFirstLine`. This is where Explain stops when it
+    /// grows its output selection up to the command. The selection's first
+    /// line starts at the start of a screen row, so it is that prompt line
+    /// when the text after its prompt mark is the command's first line.
+    static func selection(_ selection: String, startsAtCommand commandFirstLine: String, mark: String) -> Bool {
+        guard let first = selection.split(separator: "\n", omittingEmptySubsequences: false).first else { return false }
+        return command(in: String(first), after: mark) == commandFirstLine
+    }
+
     /// `text` as lines with no trailing spaces, and no blank lines at its end.
     private static func trimmedLines(_ text: String) -> [String] {
         var lines = text

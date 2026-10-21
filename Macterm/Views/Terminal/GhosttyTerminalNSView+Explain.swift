@@ -12,9 +12,11 @@ extension GhosttyTerminalNSView {
     /// above a selection, and below the output, at the prompt, so it does not
     /// cover the text it explains.
     ///
-    /// With no selection, Explain first selects the output, so the user sees
-    /// what it explains (`selectLastCommandOutput`). The selection goes when
-    /// the popover closes, if it is still the one that Explain made.
+    /// With no selection, Explain first selects the last command and its
+    /// output, so the user sees what it explains (`selectLastCommandOutput`,
+    /// then `extendSelectionToCommand`). The selection goes when the popover
+    /// closes, if it is still the one that Explain made. The model gets the
+    /// output as the text and the command beside it.
     func explainOutput(at point: NSPoint? = nil) {
         // A selection that the last Explain made is not the user's.
         explainPopover.dropOnClose()
@@ -38,10 +40,17 @@ extension GhosttyTerminalNSView {
             let command = OutputExplanation.command(in: active, before: output)
                 ?? readText(area: GHOSTTY_POINT_SCREEN).flatMap { OutputExplanation.command(in: $0, before: output) }
                 ?? guess?.command
-            logger.debug("explain output: command of \(command.map { $0.split(separator: "\n").count } ?? 0, privacy: .public) lines")
+            let reachedCommand = command.map { command in
+                OutputExplanation.cursorPromptMark(in: active).map { extendSelectionToCommand(command, mark: $0) } ?? false
+            } ?? false
+            logger.debug("""
+            explain output: command of \(command.map { $0.split(separator: "\n").count } ?? 0, privacy: .public) lines, \
+            selected \(reachedCommand ? "with" : "without", privacy: .public) it
+            """)
             explanation = OutputExplanation(source: .output, command: command, text: output, replyLanguage: language)
+            let selected = selectedText()
             onClose = { [weak self] in
-                guard let self, selectedText() == output else { return }
+                guard let self, selectedText() == selected else { return }
                 sendBindingAction("clear_selection")
             }
         } else {
@@ -91,6 +100,36 @@ extension GhosttyTerminalNSView {
             }
             ghostty_surface_mouse_pos(surface, 1, y, GHOSTTY_MODS_NONE)
             if ghostty_surface_has_selection(surface) { return true }
+        }
+        return false
+    }
+
+    /// The most rows that `extendSelectionToCommand` grows the selection by.
+    private static let maximumCommandRows = 60
+
+    /// Grow the output selection up to the start of the command's prompt
+    /// line, so the highlight shows the command with its output.
+    ///
+    /// ghostty's output gesture selects output only, and the C API cannot set
+    /// a selection. The fork's selection actions can grow one: the head
+    /// goes to the top of the output (`flip_selection`), then up a row at a
+    /// time (`extend_selection:up`) until the selection starts on the
+    /// command's prompt line. It checks the selected text, not a count of
+    /// rows, so a command on more than one row, or one long row that wraps,
+    /// is all included. When the prompt line is not found within
+    /// `maximumCommandRows`, the selection goes back to the output alone.
+    private func extendSelectionToCommand(_ command: String, mark: String) -> Bool {
+        guard let firstLine = command.split(separator: "\n").first.map(String.init) else { return false }
+        sendBindingAction("flip_selection")
+        var steps = 0
+        while steps < Self.maximumCommandRows {
+            sendBindingAction("extend_selection:up")
+            steps += 1
+            guard let text = selectedText() else { break }
+            if OutputExplanation.selection(text, startsAtCommand: firstLine, mark: mark) { return true }
+        }
+        for _ in 0 ..< steps {
+            sendBindingAction("extend_selection:down")
         }
         return false
     }
