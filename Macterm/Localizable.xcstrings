@@ -2939,7 +2939,7 @@
       }
     },
     "Extensions" : {
-      "comment" : "Settings pane",
+      "comment" : "Settings pane\nSettings → Keymaps: the group of the keybinds of extension palettes",
       "localizations" : {
         "ko" : {
           "stringUnit" : {

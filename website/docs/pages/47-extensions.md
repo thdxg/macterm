@@ -78,7 +78,7 @@ If the file is missing or has a different size, Macterm shows the default icon. 
 ## Keybinds and Settings
 
 - **Settings → Extensions** lists every extension in one grid, installed or not. On a card, **Installed** offers to uninstall the extension. The prompt names the features that go with it. **Uninstall** moves its folder to the Trash. This is how you remove an extension.
-- **Settings → Keymaps** has a **Palettes** group at the top. It has <kbd>⌘P</kbd> and a row for every palette. No palette has a keybind by default. The keybind of a palette opens the command palette on that palette. Press it again on the first screen of the palette to close the command palette. Press it on a deeper screen to go back to that first screen.
+- **Settings → Keymaps** has an **Extensions** group at the bottom. It has a row for every palette of your extensions. No palette has a keybind by default. The keybind of a palette opens the command palette on that palette. Press it again on the first screen of the palette to close the command palette. Press it on a deeper screen to go back to that first screen.
 - **Any palette keybind can be Global or Pass to TUI.** This applies to built-in palettes and to the palettes of extensions. These are the two options in the **⋯** menu of its row. A **Global** keybind works from any app. It brings the window of Macterm forward with the palette open on it. **Pass to TUI** gives the keybind to the program in the focused pane when that program is in your list under Passthrough Programs.
 
 ## Sharing an extension

@@ -1618,6 +1618,25 @@ private struct KeymapSettings: View {
     private var capturingActionID: String?
     @State
     private var query = ""
+    /// The blocks the user folded. A search folds in its own set, cleared
+    /// with each change of the query, so its matches always show and the
+    /// folds of the plain list come back when the search ends.
+    @State
+    private var collapsed: Set<KeymapGroup> = []
+    @State
+    private var collapsedInSearch: Set<KeymapGroup> = []
+
+    /// A block of the table that folds: one command category, or the
+    /// palettes of the installed extensions.
+    private enum KeymapGroup: Hashable {
+        case category(AppCommand.Category)
+        case extensions
+    }
+
+    private static let extensionsTitle = String(
+        localized: "Extensions",
+        comment: "Settings → Keymaps: the group of the keybinds of extension palettes"
+    )
 
     /// Observed so a chord the system refuses to register shows its reason
     /// under the row the moment the toggle or the rebind lands.
@@ -1639,6 +1658,8 @@ private struct KeymapSettings: View {
     private static let menuColumn: CGFloat = 24
     private static let warningColumn: CGFloat = 16
     private static let trailingColumn: CGFloat = menuColumn + warningColumn
+    /// How far the rows of a category sit in from its header row.
+    private static let groupIndent: CGFloat = 16
 
     /// Short enough for a menu item; the precise rule lives in the item's
     /// tooltip rather than a description line under every row.
@@ -1703,14 +1724,14 @@ private struct KeymapSettings: View {
         return (table[key] ?? []).filter { $0.rowID != rowID }.map(\.title)
     }
 
-    /// The custom palettes the search matches, best first (`Search.rank`,
-    /// as every Settings list), listed under Palettes after the built-in
-    /// screens.
+    /// The extension palettes the search matches, best first (`Search.rank`,
+    /// as every Settings list), in their own Extensions block after every
+    /// category.
     private var matchingCustomPalettes: [CustomPaletteStore.Entry] {
         Search.rank(appState.customPalettes.entries, by: query) { entry in
             let rowID = PaletteHotkeys.rowID(paletteID: entry.id)
             let shortcut = values[rowID] ?? "disabled"
-            var fields = [entry.pill.title, AppCommand.Category.palettes.title, HotkeyRegistry.displayString(for: shortcut)]
+            var fields = [entry.pill.title, Self.extensionsTitle, HotkeyRegistry.displayString(for: shortcut)]
             if !HotkeyRegistry.displaySymbols(for: shortcut).isEmpty { fields.append(shortcut) }
             return fields
         }
@@ -1733,11 +1754,6 @@ private struct KeymapSettings: View {
             let category = action.appCommand.category
             if grouped[category] == nil { order.append(category) }
             grouped[category, default: []].append(action)
-        }
-        // A custom palette alone matching the search still needs its group.
-        if !matchingCustomPalettes.isEmpty, grouped[.palettes] == nil {
-            order.insert(.palettes, at: 0)
-            grouped[.palettes] = []
         }
         return order.map { ($0, grouped[$0] ?? []) }
     }
@@ -1784,23 +1800,34 @@ private struct KeymapSettings: View {
             copyModeSection
             passthroughSection
 
+            let groups = actionsByCategory
+            let palettes = matchingCustomPalettes
             // One block: the search at its top, then every category as a
-            // run of rows under its own column header, so the list reads as
-            // a single table divided rather than as separate tables.
+            // row that folds open on its keybinds, so the list reads as one
+            // table and a long one can be read a category at a time.
             Section {
                 SettingsSearchField(text: $query, prompt: "Search by action or keybind")
-                if isSearching, actionsByCategory.isEmpty {
+                if isSearching, groups.isEmpty, palettes.isEmpty {
                     Text("No keybinds match “\(query.trimmingCharacters(in: .whitespaces))”.")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(actionsByCategory, id: \.category) { group in
-                    sectionLabel(group.category.title)
-                    ForEach(group.actions) { action in
-                        hotkeyRow(action, context: context)
+                ForEach(groups, id: \.category) { group in
+                    let expanded = isExpanded(.category(group.category))
+                    groupHeader(group.category.title, isExpanded: expanded)
+                    if expanded.wrappedValue {
+                        ForEach(group.actions) { action in
+                            hotkeyRow(action, context: context)
+                                .padding(.leading, Self.groupIndent)
+                        }
                     }
-                    if group.category == .palettes {
-                        ForEach(matchingCustomPalettes) { entry in
+                }
+                if !palettes.isEmpty {
+                    let expanded = isExpanded(.extensions)
+                    groupHeader(Self.extensionsTitle, isExpanded: expanded)
+                    if expanded.wrappedValue {
+                        ForEach(palettes) { entry in
                             customPaletteRow(entry, context: context)
+                                .padding(.leading, Self.groupIndent)
                         }
                     }
                 }
@@ -1809,6 +1836,7 @@ private struct KeymapSettings: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: query) { collapsedInSearch = [] }
         .background(
             HotkeyCaptureView(
                 capturingActionID: $capturingActionID,
@@ -1883,13 +1911,43 @@ private struct KeymapSettings: View {
         }
     }
 
-    /// A category's divider inside the block: its name alone, small and
-    /// gray, where the rows' titles go.
-    private func sectionLabel(_ category: String) -> some View {
-        Text(category)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    /// The row that folds a category: its name in the weight of a header,
+    /// and a chevron after it that points down while the category is open.
+    /// A row of its own and not a `DisclosureGroup`: inside a grouped form,
+    /// a disclosure group draws no separators between its rows and does not
+    /// indent them.
+    private func groupHeader(_ title: String, isExpanded: Binding<Bool>) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Text(verbatim: title)
+                    .fontWeight(.semibold)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Whether the block `group` shows its rows. A search reads and writes
+    /// its own folds (`collapsedInSearch`).
+    private func isExpanded(_ group: KeymapGroup) -> Binding<Bool> {
+        let searching = isSearching
+        return Binding(
+            get: { !(searching ? collapsedInSearch : collapsed).contains(group) },
+            set: { expanded in
+                if searching {
+                    if expanded { collapsedInSearch.remove(group) } else { collapsedInSearch.insert(group) }
+                } else {
+                    if expanded { collapsed.remove(group) } else { collapsed.insert(group) }
+                }
+            }
+        )
     }
 
     private func passthroughBinding(_ action: HotkeyAction) -> Binding<Bool> {
