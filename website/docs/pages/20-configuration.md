@@ -82,7 +82,7 @@ Each row has a **⋯** menu with two options. The options are available only whe
 - **Pass to TUI** gives the keys to the program in the focused pane. The action does not run. List the programs under **Passthrough Programs** at the top of the tab. Separate them with commas. Use the name that the tab shows.
 - **Global** registers the keys for the whole system, so the action runs when another app is in front. Macterm does not need the Accessibility permission. If another app already uses the keys, the row says so.
 
-**Copy Mode** (<kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>) is one of the rows. It starts a keyboard selection over the scrollback with the keys of Helix. See [Copy Mode](/docs/copy-mode).
+**Copy Mode** (<kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>) is one of the rows. It starts a keyboard selection over the scrollback with the keys of Vim, or of Helix. See [Copy Mode](/docs/copy-mode).
 
 Macterm owns the splits, so Ghostty's split keybinds (`toggle_split_zoom`, `new_split`, `goto_split`, `resize_split` and `equalize_splits`) do nothing in Macterm. Bind the split commands under **Settings → Keymaps**.
 
