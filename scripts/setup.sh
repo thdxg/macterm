@@ -70,7 +70,11 @@ XCFRAMEWORK_DIR="GhosttyKit.xcframework"
 # `select_word:next|end|prev` action selects what a Helix word motion moves
 # over, as Helix does, and the word motions of move_selection and
 # extend_selection stop where the cursor of Helix stops. No C API change.
-GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-731a782}"
+# build-2026-10-21-a72ef69: upstream 521cf2c5d (the sync had stopped at
+# 2026-10-19 on patch 0001, thdxg/ghostty#35) with the same 17 patches.
+# Upstream builds with Zig 0.17 now, so the fork's build follows
+# build.zig.zon (thdxg/ghostty#36, #37). See the API review in the PR.
+GHOSTTYKIT_TAG="${GHOSTTYKIT_TAG:-build-2026-10-21-a72ef69}"
 # The zmx release supplying the bundled session multiplexer. Pinned for the same
 # reason GhosttyKit is: thdxg/zmx publishes a build-YYYY-MM-DD release on every
 # push to its main, so tracking `latest` meant two builds of ONE Macterm commit
